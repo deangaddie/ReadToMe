@@ -1,0 +1,137 @@
+@using System.IO
+@inject ProjectService ProjectService
+
+<style>
+    .cover-container {
+        position: relative;
+        display: inline-block;
+        line-height: 0;
+    }
+
+    .cover-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        border-radius: 4px;
+    }
+
+    .cover-container:hover .cover-overlay {
+        opacity: 1;
+    }
+</style>
+
+<MudExpansionPanels Class="mb-6">
+    <MudExpansionPanel Text="Project Details">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="9">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Title</MudText>
+                        <MudText Typo="Typo.body1">@_project?.Title</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Author</MudText>
+                        <MudText Typo="Typo.body1">@_project?.Author</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Filename</MudText>
+                        <MudText Typo="Typo.body1">@_project?.Filename</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Type</MudText>
+                        <MudText Typo="Typo.body1">@_project?.Type</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudItem>
+            <MudItem xs="12" sm="3" Style="display:flex; flex-direction:column; align-items:flex-end">
+                @if (_project?.CoverImage != null)
+                {
+                    <div class="cover-container">
+                        <img src="/workspace/@FolderName/@_project.CoverImage"
+                             alt="Cover" style="height:200px; border-radius:4px" />
+                        <div class="cover-overlay">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Style="color:white" Size="Size.Medium"
+                                           HtmlTag="label" for="cover-image-input" title="Change cover" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Color="Color.Error" Size="Size.Medium"
+                                           OnClick="DeleteCoverAsync" title="Remove cover" />
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Outlined"
+                               StartIcon="@Icons.Material.Filled.AddPhotoAlternate"
+                               HtmlTag="label" for="cover-image-input" Style="cursor:pointer">
+                        Add Cover Image
+                    </MudButton>
+                }
+                <InputFile id="cover-image-input" OnChange="OnCoverImageChangedAsync"
+                           accept=".jpg,.jpeg,.png,.webp" style="display:none" />
+                @if (_coverError != null)
+                {
+                    <MudText Color="Color.Error" Typo="Typo.caption" Class="mt-1 d-block">@_coverError</MudText>
+                }
+            </MudItem>
+        </MudGrid>
+    </MudExpansionPanel>
+</MudExpansionPanels>
+
+@code {
+    [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+
+    Read2Me.Data.Entities.Project? _project;
+    string? _coverError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        _project = await ProjectService.GetProjectAsync(FolderName);
+    }
+
+    async Task OnCoverImageChangedAsync(InputFileChangeEventArgs e)
+    {
+        _coverError = null;
+        var ext = Path.GetExtension(e.File.Name).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp"))
+        {
+            _coverError = "Unsupported format. Use .jpg, .png, or .webp.";
+            return;
+        }
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            await ProjectService.SaveCoverImageAsync(FolderName, e.File.Name, stream);
+            await LoadAsync();
+        }
+        catch
+        {
+            _coverError = "Failed to save cover image.";
+        }
+    }
+
+    async Task DeleteCoverAsync()
+    {
+        _coverError = null;
+        try
+        {
+            await ProjectService.DeleteCoverImageAsync(FolderName);
+            await LoadAsync();
+        }
+        catch
+        {
+            _coverError = "Failed to delete cover image.";
+        }
+    }
+}

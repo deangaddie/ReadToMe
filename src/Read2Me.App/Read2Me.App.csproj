@@ -16,7 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Read2Me.Core\Read2Me.Core.csproj" />
+    <ProjectReference Include="..\Read2Me.Services\Read2Me.Services.csproj" />
     <ProjectReference Include="..\Read2Me.AppData\Read2Me.AppData.csproj" />
+    <ProjectReference Include="..\Read2Me.Data\Read2Me.Data.csproj" />
   </ItemGroup>
 
 </Project>

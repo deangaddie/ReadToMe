@@ -16,7 +16,7 @@ namespace Read2Me.AppData.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
 
-            modelBuilder.Entity("Read2Me.AppData.Entities.AppSettings", b =>
+            modelBuilder.Entity("Read2Me.Core.Entities.AppSettings", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -30,7 +30,7 @@ namespace Read2Me.AppData.Migrations
                     b.ToTable("Settings");
                 });
 
-            modelBuilder.Entity("Read2Me.AppData.Entities.AppTheme", b =>
+            modelBuilder.Entity("Read2Me.Core.Entities.AppTheme", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()

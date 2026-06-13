@@ -1,0 +1,29 @@
+@page "/project/{FolderName}"
+@inject ProjectService ProjectService
+
+<PageTitle>@_title | Read2Me</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">@_title</MudText>
+
+<ProjectDetailsPanel FolderName="@FolderName" />
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
+    <MudTabPanel Text="Book" Class="pa-4">
+        <BookTab FolderName="@FolderName" />
+    </MudTabPanel>
+    <MudTabPanel Text="Test" Class="pa-4">
+        <TestTab FolderName="@FolderName" />
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    [Parameter] public string FolderName { get; set; } = "";
+
+    string _title = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var project = await ProjectService.GetProjectAsync(FolderName);
+        _title = project?.Title ?? FolderName;
+    }
+}

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using Read2Me.App.Configuration;
+using Read2Me.Core.Configuration;
 using Read2Me.AppData;
 using Serilog;
 

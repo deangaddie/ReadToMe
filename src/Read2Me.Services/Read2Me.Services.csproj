@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FractionalIndexing" Version="1.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageReference Include="MudBlazor" Version="9.5.0" />
+    <PackageReference Include="VersOne.Epub" Version="3.3.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Read2Me.Core\Read2Me.Core.csproj" />
+    <ProjectReference Include="..\Read2Me.AppData\Read2Me.AppData.csproj" />
+    <ProjectReference Include="..\Read2Me.Data\Read2Me.Data.csproj" />
+  </ItemGroup>
+
+</Project>

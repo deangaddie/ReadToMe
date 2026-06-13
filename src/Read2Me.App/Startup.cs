@@ -4,11 +4,15 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
-using Read2Me.App.Configuration;
-using Read2Me.App.Services;
+using Read2Me.Core.Configuration;
+using Read2Me.Core.IO;
+using Read2Me.Services;
+using Read2Me.Services.Books;
+using Read2Me.Services.IO;
 using Read2Me.AppData;
 
 namespace Read2Me.App
@@ -27,9 +31,14 @@ namespace Read2Me.App
         public void ConfigureServices(IServiceCollection services)
         {
             services.Configure<WorkspaceOptions>(Configuration.GetSection(WorkspaceOptions.SectionName));
-            services.AddScoped<ThemeService>();
+            services.AddSingleton<ThemeService>();
+            services.AddSingleton<IFileSystem, FileSystemService>();
+            services.AddScoped<ProjectService>();
+            services.AddScoped<BookReadingService>();
+            services.AddSingleton<EpubFileReader>();
+            services.AddSingleton<TextFileReader>();
 
-            services.AddDbContext<Read2MeDbContext>((sp, options) =>
+            services.AddDbContextFactory<Read2MeDbContext>((sp, options) =>
             {
                 var workspace = sp.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
                 var dbPath = Path.Combine(workspace.FolderPath, "app.db");
@@ -42,7 +51,7 @@ namespace Read2Me.App
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IOptions<WorkspaceOptions> workspaceOptions)
         {
             if (env.IsDevelopment())
             {
@@ -57,6 +66,14 @@ namespace Read2Me.App
 
             app.UseHttpsRedirection();
             app.UseStaticFiles();
+
+            var workspacePath = workspaceOptions.Value.FolderPath;
+            Directory.CreateDirectory(workspacePath);
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(workspacePath),
+                RequestPath = "/workspace"
+            });
 
             app.UseRouting();
 

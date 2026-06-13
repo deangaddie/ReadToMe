@@ -1,4 +1,8 @@
 <Solution>
   <Project Path="Read2Me.App/Read2Me.App.csproj" />
   <Project Path="Read2Me.AppData/Read2Me.AppData.csproj" />
+  <Project Path="Read2Me.Data/Read2Me.Data.csproj" />
+  <Project Path="Read2Me.Core/Read2Me.Core.csproj" />
+  <Project Path="Read2Me.Services/Read2Me.Services.csproj" />
+  <Project Path="Read2Me.Tests/Read2Me.Tests.csproj" />
 </Solution>

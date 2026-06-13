@@ -1,4 +1,92 @@
 @page "/"
+@inject ProjectService ProjectService
+@inject NavigationManager Nav
+@inject IDialogService DialogService
 
-<MudText Typo="Typo.h4" GutterBottom="true">Welcome to Read2Me</MudText>
-<MudText Typo="Typo.body1">AI-powered audiobook production.</MudText>
+<MudMessageBox @ref="_deleteConfirm" Title="Delete Project" CancelText="Cancel">
+    <MessageContent>
+        Delete <b>@_projectToDelete</b> and all its contents? This cannot be undone.
+    </MessageContent>
+    <YesButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error">Delete</MudButton>
+    </YesButton>
+</MudMessageBox>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Projects</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenAddDialogAsync">Add Project</MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_projects.Count == 0)
+{
+    <MudText Typo="Typo.body1" Color="Color.Secondary">No projects yet. Create one to get started.</MudText>
+}
+else
+{
+    <MudGrid>
+        @foreach (var project in _projects)
+        {
+            var p = project;
+            <MudItem xs="12" sm="6" md="4" lg="3">
+                <MudCard Elevation="2" Style="cursor:pointer">
+                    <MudCardHeader @onclick="@(() => Nav.NavigateTo($"/project/{p.FolderName}"))">
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">@p.Title</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                   OnClick="@(() => Nav.NavigateTo($"/project/{p.FolderName}"))">Open</MudButton>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                       OnClick="@(() => DeleteProjectAsync(p))" />
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    List<ProjectSummary> _projects = [];
+    bool _loading = true;
+    string _projectToDelete = "";
+    MudMessageBox? _deleteConfirm;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProjectsAsync();
+    }
+
+    async Task LoadProjectsAsync()
+    {
+        _loading = true;
+        _projects = [.. await ProjectService.GetProjectSummariesAsync()];
+        _loading = false;
+    }
+
+    async Task OpenAddDialogAsync()
+    {
+        var dialog = await DialogService.ShowAsync<AddProjectDialog>("New Project");
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+            await LoadProjectsAsync();
+    }
+
+    async Task DeleteProjectAsync(ProjectSummary project)
+    {
+        _projectToDelete = project.Title;
+        var confirmed = await _deleteConfirm!.ShowAsync();
+        if (confirmed == true)
+        {
+            ProjectService.DeleteProject(project.FolderName);
+            await LoadProjectsAsync();
+        }
+    }
+}

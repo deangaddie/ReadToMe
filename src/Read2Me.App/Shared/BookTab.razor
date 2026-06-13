@@ -1,0 +1,216 @@
+@using Read2Me.App.State
+@inject ProjectService ProjectService
+@inject BookReadingService BookReadingService
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Class="ma-4" />
+}
+else if (!_hasContent)
+{
+    <div style="display:flex; align-items:center; justify-content:center; min-height:300px">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="font-size:4rem; opacity:0.3" />
+            <MudText Typo="Typo.body1" Color="Color.Secondary">Book has not been read in yet.</MudText>
+            @if (_filename != null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@_filename</MudText>
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.AutoStories"
+                       OnClick="ReadBookAsync" Disabled="_busy">
+                @if (_busy)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Read Book
+            </MudButton>
+            @if (_error != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+            }
+        </MudStack>
+    </div>
+}
+else
+{
+    <MudStack Spacing="3" Class="pa-3">
+        <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider)">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudStack Spacing="0">
+                    @if (_project != null)
+                    {
+                        <MudText Typo="Typo.h6">@_project.BookTitle</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@_project.Author</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_filename</MudText>
+                    }
+                </MudStack>
+                <MudStack Spacing="1" AlignItems="AlignItems.End">
+                    @if (_confirmReread)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning">Delete all book data and reprocess?</MudText>
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                                       OnClick="ConfirmRereadeBookAsync" Disabled="_busy">
+                                @if (_busy)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" />
+                                }
+                                Confirm
+                            </MudButton>
+                            <MudButton Variant="Variant.Text" Size="Size.Small"
+                                       OnClick="@(() => _confirmReread = false)">
+                                Cancel
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@(() => _confirmReread = true)" Disabled="_busy">
+                            Reread Book
+                        </MudButton>
+                    }
+                    @if (_error != null)
+                    {
+                        <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <MudExpansionPanels MultiExpansion="true">
+            @foreach (var volume in _volumes)
+            {
+                var vol = volume;
+                <MudExpansionPanel Text="@vol.Title" ExpandedChanged="@VolumeExpandCb(vol)">
+                    @if (_tree.LoadingIds.Contains(vol.Id))
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                    }
+                    else if (_tree.LoadedParts.TryGetValue(vol.Id, out var parts))
+                    {
+                        <MudExpansionPanels MultiExpansion="true">
+                            @foreach (var part in parts)
+                            {
+                                var p = part;
+                                <MudExpansionPanel Text="@(p.Title ?? "Part")" ExpandedChanged="@PartExpandCb(p)">
+                                    @if (_tree.LoadingIds.Contains(p.Id))
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                                    }
+                                    else if (_tree.LoadedChapters.TryGetValue(p.Id, out var chapters))
+                                    {
+                                        <MudExpansionPanels MultiExpansion="true">
+                                            @foreach (var chapter in chapters)
+                                            {
+                                                var ch = chapter;
+                                                <MudExpansionPanel Text="@(ch.Title ?? "Chapter")" ExpandedChanged="@ChapterExpandCb(ch)">
+                                                    @if (_tree.LoadingIds.Contains(ch.Id))
+                                                    {
+                                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                                                    }
+                                                    else if (_tree.LoadedParagraphs.TryGetValue(ch.Id, out var paragraphs))
+                                                    {
+                                                        <MudStack Spacing="2" Class="py-1">
+                                                            @foreach (var para in paragraphs)
+                                                            {
+                                                                <MudText Typo="Typo.body2">@string.Join(" ", para.Items.Select(i => i.Text))</MudText>
+                                                            }
+                                                        </MudStack>
+                                                    }
+                                                </MudExpansionPanel>
+                                            }
+                                        </MudExpansionPanels>
+                                    }
+                                </MudExpansionPanel>
+                            }
+                        </MudExpansionPanels>
+                    }
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+
+    bool _loading = true;
+    bool _hasContent;
+    bool _busy;
+    bool _confirmReread;
+    string? _filename;
+    string? _error;
+    Read2Me.Data.Entities.Project? _project;
+    List<Read2Me.Data.Entities.Volume> _volumes = [];
+    BookTreeState _tree = null!;
+
+    EventCallback<bool> VolumeExpandCb(Read2Me.Data.Entities.Volume v) =>
+        EventCallback.Factory.Create<bool>(this, (bool b) => _tree.OnVolumeExpandedAsync(v, b, StateHasChanged));
+
+    EventCallback<bool> PartExpandCb(Read2Me.Data.Entities.Part p) =>
+        EventCallback.Factory.Create<bool>(this, (bool b) => _tree.OnPartExpandedAsync(p, b, StateHasChanged));
+
+    EventCallback<bool> ChapterExpandCb(Read2Me.Data.Entities.Chapter c) =>
+        EventCallback.Factory.Create<bool>(this, (bool b) => _tree.OnChapterExpandedAsync(c, b, StateHasChanged));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        _loading = true;
+        _tree = new BookTreeState(ProjectService, FolderName);
+        _confirmReread = false;
+
+        _project = await ProjectService.GetProjectAsync(FolderName);
+        _filename = _project?.Filename;
+        _hasContent = await ProjectService.HasBookContentAsync(FolderName);
+        _volumes = _hasContent ? await ProjectService.GetVolumesAsync(FolderName) : [];
+
+        _loading = false;
+    }
+
+    async Task ReadBookAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await BookReadingService.ReadBookAsync(FolderName);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    async Task ConfirmRereadeBookAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await ProjectService.ClearBookContentAsync(FolderName);
+            await BookReadingService.ReadBookAsync(FolderName);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

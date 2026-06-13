@@ -1,0 +1,123 @@
+@using System.IO
+@inject ProjectService ProjectService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">New Project</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_title" Label="Project Title" Variant="Variant.Outlined"
+                          Required="true" Immediate="true" />
+            <MudTextField @bind-Value="_bookTitle" Label="Book Title" Variant="Variant.Outlined"
+                          Required="true" Immediate="true" />
+            <MudTextField @bind-Value="_author" Label="Author" Variant="Variant.Outlined"
+                          Required="true" Immediate="true" />
+
+            <div>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AttachFile"
+                           HtmlTag="label" for="add-project-book-file" Style="cursor:pointer">
+                    @(_file == null ? "Choose Book File" : _file.Name)
+                </MudButton>
+                <InputFile id="add-project-book-file" OnChange="OnFileChanged"
+                           accept=".epub,.txt" style="display:none" />
+
+                @if (_file != null)
+                {
+                    <div class="mt-1">
+                        @if (_detectedType != null)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                <MudText Typo="Typo.caption" Color="Color.Success">@_detectedType.Value</MudText>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                                <MudText Typo="Typo.caption" Color="Color.Error">Unsupported type. Use .epub or .txt</MudText>
+                            </MudStack>
+                        }
+                    </div>
+                }
+            </div>
+
+            @if (_error != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())" Disabled="_busy">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="@(!IsValid || _busy)" OnClick="Submit">
+            @if (_busy)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    string _title = "";
+    string _bookTitle = "";
+    string _author = "";
+    IBrowserFile? _file;
+    BookFileType? _detectedType;
+    string? _error;
+    bool _busy;
+
+    bool IsValid =>
+        !string.IsNullOrWhiteSpace(_title) &&
+        !string.IsNullOrWhiteSpace(_bookTitle) &&
+        !string.IsNullOrWhiteSpace(_author) &&
+        _file != null &&
+        _detectedType != null;
+
+    void OnFileChanged(InputFileChangeEventArgs e)
+    {
+        _file = e.File;
+        _detectedType = null;
+        _error = null;
+
+        _detectedType = Path.GetExtension(e.File.Name).ToLowerInvariant() switch
+        {
+            ".epub" => BookFileType.Epub,
+            ".txt"  => BookFileType.Text,
+            _       => null,
+        };
+    }
+
+    async Task Submit()
+    {
+        if (!IsValid) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await using var stream = _file!.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+            await ProjectService.CreateProjectAsync(
+                _title, _bookTitle, _author,
+                _file.Name, stream, _detectedType!.Value);
+            MudDialog.Close();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+        }
+        catch
+        {
+            _error = "Failed to create project. Please try again.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

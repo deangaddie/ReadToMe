@@ -1,4 +1,4 @@
-namespace Read2Me.App.Configuration
+namespace Read2Me.Core.Configuration
 {
     public class WorkspaceOptions
     {
