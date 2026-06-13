@@ -14,17 +14,25 @@ using ProjectEntity = Read2Me.Data.Entities.Project;
 
 namespace Read2Me.Services
 {
-    public class ProjectService : IProjectReader, IProjectWriter
+    public class ProjectService : IProjectReader, IProjectWriter, IAsyncDisposable
     {
         private readonly IFileSystem _fs;
         private readonly IProjectDbContextFactory _dbFactory;
         private readonly ILogger<ProjectService> _logger;
+        private readonly Dictionary<string, ProjectDbContext> _contextCache = new(StringComparer.OrdinalIgnoreCase);
 
         public ProjectService(IFileSystem fs, IProjectDbContextFactory dbFactory, ILogger<ProjectService> logger)
         {
             _fs = fs;
             _dbFactory = dbFactory;
             _logger = logger;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            foreach (var ctx in _contextCache.Values)
+                await ctx.DisposeAsync();
+            _contextCache.Clear();
         }
 
         public IReadOnlyList<string> GetProjects()
@@ -81,7 +89,7 @@ namespace Read2Me.Services
             await _fs.WriteFileAsync(destFile, fileStream);
             _logger.LogDebug("Saved book file: {File}", destFile);
 
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
 
             db.Projects.Add(new ProjectEntity
             {
@@ -118,14 +126,14 @@ namespace Read2Me.Services
                 return null;
             }
 
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             return await db.Projects.FirstOrDefaultAsync();
         }
 
         public async Task SaveCoverImageAsync(string folderName, string filename, Stream stream)
         {
             _logger.LogInformation("Saving cover image '{File}' for project '{Folder}'", filename, folderName);
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             var entity = await db.Projects.FirstOrDefaultAsync();
             if (entity == null)
             {
@@ -153,7 +161,7 @@ namespace Read2Me.Services
         public async Task DeleteCoverImageAsync(string folderName)
         {
             _logger.LogInformation("Deleting cover image for project '{Folder}'", folderName);
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             var entity = await db.Projects.FirstOrDefaultAsync();
             if (entity?.CoverImage == null)
             {
@@ -179,31 +187,31 @@ namespace Read2Me.Services
             if (!_fs.FileExists(dbPath))
                 return false;
 
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             return await db.Volumes.AnyAsync();
         }
 
         public async Task<List<Read2Me.Data.Entities.Volume>> GetVolumesAsync(string folderName)
         {
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             return await db.Volumes.OrderBy(v => v.Order).ToListAsync();
         }
 
         public async Task<List<Read2Me.Data.Entities.Part>> GetPartsAsync(string folderName, Guid volumeId)
         {
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             return await db.Parts.Where(p => p.VolumeId == volumeId).OrderBy(p => p.Order).ToListAsync();
         }
 
         public async Task<List<Read2Me.Data.Entities.Chapter>> GetChaptersAsync(string folderName, Guid partId)
         {
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             return await db.Chapters.Where(c => c.PartId == partId).OrderBy(c => c.Order).ToListAsync();
         }
 
         public async Task<List<Read2Me.Data.Entities.Paragraph>> GetChapterParagraphsAsync(string folderName, Guid chapterId)
         {
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             return await db.Paragraphs
                 .Where(p => p.ChapterId == chapterId)
                 .OrderBy(p => p.Order)
@@ -213,7 +221,7 @@ namespace Read2Me.Services
 
         public async Task ClearBookContentAsync(string folderName)
         {
-            await using var db = await OpenProjectDbAsync(folderName);
+            var db = await OpenProjectDbAsync(folderName);
             await using var tx = await db.Database.BeginTransactionAsync();
             await db.ParagraphItems.ExecuteDeleteAsync();
             await db.Paragraphs.ExecuteDeleteAsync();
@@ -225,6 +233,9 @@ namespace Read2Me.Services
 
         public void DeleteProject(string folderName)
         {
+            if (_contextCache.Remove(folderName, out var ctx))
+                ctx.Dispose();
+
             if (_fs.ProjectFolderExists(folderName))
             {
                 _logger.LogInformation("Deleting project '{Folder}'", folderName);
@@ -237,11 +248,15 @@ namespace Read2Me.Services
             }
         }
 
-        private Task<ProjectDbContext> OpenProjectDbAsync(string folderName)
+        private async Task<ProjectDbContext> OpenProjectDbAsync(string folderName)
         {
             var folderPath = _fs.GetProjectFolderPath(folderName);
+            if (_contextCache.TryGetValue(folderName, out var cached))
+                return cached;
             _logger.LogDebug("Opening project DB: {FolderPath}", folderPath);
-            return _dbFactory.CreateAsync(folderPath);
+            var ctx = await _dbFactory.CreateAsync(folderPath);
+            _contextCache[folderName] = ctx;
+            return ctx;
         }
     }
 }
