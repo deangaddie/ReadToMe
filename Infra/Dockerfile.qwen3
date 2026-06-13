@@ -1,0 +1,38 @@
+# Stage 1: deps — only rebuilds when requirements.txt changes
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime AS deps
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg=7:* \
+    libsndfile1=1.* \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY qwen3/requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall -y torchvision || true
+
+# Stage 2: app — rebuilds on every app.py change, deps layer reused
+FROM deps AS app
+
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/logs /cache && \
+    chown -R appuser:appuser /app /cache
+
+ARG APP_MODULE=app
+ARG APP_PORT=8100
+
+COPY --chown=appuser:appuser qwen3/app.py qwen3/app_base.py ./
+
+ENV APP_MODULE=${APP_MODULE}
+ENV APP_PORT=${APP_PORT}
+
+USER appuser
+
+EXPOSE ${APP_PORT}
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:'+'${APP_PORT}'+'/health', timeout=5).raise_for_status()" || exit 1
+
+CMD ["sh", "-c", "uvicorn ${APP_MODULE}:app --host 0.0.0.0 --port ${APP_PORT}"]

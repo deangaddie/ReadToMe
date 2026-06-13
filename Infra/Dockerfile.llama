@@ -1,0 +1,57 @@
+ARG UBUNTU_VERSION=24.04
+ARG CUDA_VERSION=12.8.1
+ARG BASE_CUDA_DEV_CONTAINER=nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
+ARG BASE_CUDA_RUN_CONTAINER=nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
+
+FROM ${BASE_CUDA_DEV_CONTAINER} AS builder
+
+ARG CUDA_DOCKER_ARCH=default
+
+RUN apt-get update && \
+    apt-get install -y gcc-14 g++-14 build-essential cmake python3 python3-pip git libssl-dev libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CC=gcc-14 CXX=g++-14 CUDAHOSTCXX=g++-14
+
+WORKDIR /build
+
+RUN git clone --depth=1 --branch feature/turboquant-kv-cache \
+    https://github.com/TheTom/llama-cpp-turboquant.git .
+
+RUN if [ "${CUDA_DOCKER_ARCH}" != "default" ]; then \
+        export CMAKE_ARGS="-DCMAKE_CUDA_ARCHITECTURES=${CUDA_DOCKER_ARCH}"; \
+    fi && \
+    cmake -B build \
+        -DGGML_NATIVE=OFF \
+        -DGGML_CUDA=ON \
+        -DLLAMA_BUILD_TESTS=OFF \
+        -DLLAMA_BUILD_SERVER=ON \
+        -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined \
+        -DCMAKE_BUILD_TYPE=Release \
+        ${CMAKE_ARGS} . && \
+    cmake --build build --config Release -j$(nproc) --target llama-server --target llama-bench && \
+    mkdir -p /build/lib && \
+    find build -name "*.so*" -exec cp -P {} /build/lib/ \;
+
+FROM ${BASE_CUDA_RUN_CONTAINER} AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libgomp1 python3 ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/build/bin/llama-server /usr/local/bin/llama-server
+COPY --from=builder /build/build/bin/llama-bench /usr/local/bin/llama-bench
+COPY --from=builder /build/lib/ /usr/local/lib/
+COPY llama/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh && ldconfig
+
+WORKDIR /app
+VOLUME ["/models", "/config", "/logs"]
+EXPOSE 8080
+
+HEALTHCHECK CMD [ "curl", "-f", "http://localhost:8080/health" ]
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

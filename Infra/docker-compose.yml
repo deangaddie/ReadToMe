@@ -1,0 +1,151 @@
+services:
+  llama:
+    build:
+      context: .
+      dockerfile: Dockerfile.llama
+      target: runtime
+    image: read2me-llama
+    container_name: read2me-llama
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models:ro
+      - ./llama/config:/config:ro
+      - ./logs:/logs
+    cap_add:
+      - IPC_LOCK
+    ulimits:
+      memlock: -1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      LLAMA_HOST: 0.0.0.0
+      LLAMA_PORT: 8080
+      LLAMA_MODELS_FILE: /config/models.ini
+      LLAMA_DEFAULT_MODEL: gemma-26b
+
+  chatterbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.chatterbox
+    image: read2me-chatterbox
+    container_name: read2me-chatterbox
+    ports:
+      - "8000:8000"
+    environment:
+      - HF_HOME=/cache
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    volumes:
+      - chatterbox_cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  chatterbox-turbo:
+    build:
+      context: .
+      dockerfile: Dockerfile.chatterbox
+      args:
+        APP_MODULE: app_turbo
+    image: read2me-chatterbox-turbo
+    container_name: read2me-chatterbox-turbo
+    ports:
+      - "8001:8000"
+    environment:
+      - HF_HOME=/cache
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    volumes:
+      - chatterbox_turbo_cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  qwen3-tts:
+    build:
+      context: .
+      dockerfile: Dockerfile.qwen3
+    image: read2me-qwen3-tts
+    container_name: read2me-qwen3-tts
+    ports:
+      - "8100:8100"
+    environment:
+      - HF_HOME=/cache
+    volumes:
+      - qwen3_cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  qwen3-tts-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.qwen3
+      args:
+        APP_MODULE: app_base
+        APP_PORT: "8101"
+    image: read2me-qwen3-tts-base
+    container_name: read2me-qwen3-tts-base
+    ports:
+      - "8101:8101"
+    environment:
+      - HF_HOME=/cache
+      - APP_PORT=8101
+    volumes:
+      - qwen3_base_cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    container_name: read2me-whisper
+    ports:
+      - "9000:9000"
+    environment:
+      - ASR_ENGINE=openai_whisper
+      - ASR_MODEL=base.en
+      - ASR_MODEL_PATH=/root/.cache/whisper
+      - ASR_DEVICE=cuda
+    volumes:
+      - whisper_cache:/root/.cache/whisper
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  chatterbox_cache:
+  chatterbox_turbo_cache:
+  qwen3_cache:
+  qwen3_base_cache:
+  whisper_cache:
