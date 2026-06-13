@@ -1,9 +1,15 @@
+using System.IO;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using MudBlazor.Services;
+using Read2Me.App.Configuration;
+using Read2Me.App.Services;
+using Read2Me.AppData;
 
 namespace Read2Me.App
 {
@@ -20,6 +26,16 @@ namespace Read2Me.App
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
+            services.Configure<WorkspaceOptions>(Configuration.GetSection(WorkspaceOptions.SectionName));
+            services.AddScoped<ThemeService>();
+
+            services.AddDbContext<Read2MeDbContext>((sp, options) =>
+            {
+                var workspace = sp.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
+                var dbPath = Path.Combine(workspace.FolderPath, "app.db");
+                options.UseSqlite($"Data Source={dbPath}");
+            });
+
             services.AddRazorPages();
             services.AddServerSideBlazor();
             services.AddMudServices();

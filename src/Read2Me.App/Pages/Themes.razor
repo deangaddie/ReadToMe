@@ -1,0 +1,142 @@
+@page "/themes"
+@inject ThemeService ThemeService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5">
+    <MudText Typo="Typo.h4">Themes</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenAddDialog">
+        New Theme
+    </MudButton>
+</MudStack>
+
+@if (_themes == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        @foreach (var theme in _themes)
+        {
+            var t = theme;
+            <MudItem xs="12" sm="6" md="4" lg="3">
+                <MudCard Outlined="true" Style="overflow:hidden;">
+                    <div style="height:8px;background:linear-gradient(to right,@t.Primary,@t.Secondary);"></div>
+                    <MudCardContent Class="pb-0">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.h6">@t.Name</MudText>
+                            @if (t.IsBuiltIn)
+                            {
+                                <MudTooltip Text="Built-in theme — cannot be deleted">
+                                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2" Spacing="1">
+                            <MudTooltip Text="Primary">
+                                <div style="width:20px;height:20px;border-radius:50%;background:@t.Primary;border:1px solid rgba(128,128,128,0.3);"></div>
+                            </MudTooltip>
+                            <MudTooltip Text="Secondary">
+                                <div style="width:20px;height:20px;border-radius:50%;background:@t.Secondary;border:1px solid rgba(128,128,128,0.3);"></div>
+                            </MudTooltip>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1">
+                                @(t.IsDark ? "Dark" : "Light")
+                            </MudChip>
+                        </MudStack>
+                    </MudCardContent>
+                    <MudCardActions>
+                        @if (_selectedThemeId == t.Id)
+                        {
+                            <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle"
+                                     Size="Size.Small" Variant="Variant.Filled">Active</MudChip>
+                        }
+                        else
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                       OnClick="() => SelectThemeAsync(t.Id)">Apply</MudButton>
+                        }
+                        <MudSpacer />
+                        @if (!t.IsBuiltIn)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           OnClick="() => OpenEditDialog(t)" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                           Color="Color.Error" OnClick="() => DeleteThemeAsync(t.Id)" />
+                        }
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    List<AppTheme>? _themes;
+    int? _selectedThemeId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        _themes = await ThemeService.GetAllThemesAsync();
+        _selectedThemeId = await ThemeService.GetSelectedThemeIdAsync();
+    }
+
+    async Task SelectThemeAsync(int themeId)
+    {
+        await ThemeService.SetSelectedThemeAsync(themeId);
+        _selectedThemeId = themeId;
+        Snackbar.Add("Theme applied", Severity.Success);
+    }
+
+    async Task OpenAddDialog()
+    {
+        var theme = new AppTheme { Primary = "#594AE2", Secondary = "#FF4081" };
+        var dialog = await DialogService.ShowAsync<ThemeFormDialog>(
+            "Add Theme",
+            new DialogParameters<ThemeFormDialog> { { x => x.Theme, theme } });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: AppTheme saved })
+        {
+            await ThemeService.CreateThemeAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Theme created", Severity.Success);
+        }
+    }
+
+    async Task OpenEditDialog(AppTheme theme)
+    {
+        var copy = new AppTheme
+        {
+            Id = theme.Id,
+            Name = theme.Name,
+            Primary = theme.Primary,
+            Secondary = theme.Secondary,
+            IsDark = theme.IsDark,
+            IsBuiltIn = theme.IsBuiltIn,
+        };
+        var dialog = await DialogService.ShowAsync<ThemeFormDialog>(
+            "Edit Theme",
+            new DialogParameters<ThemeFormDialog> { { x => x.Theme, copy } });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: AppTheme saved })
+        {
+            await ThemeService.UpdateThemeAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Theme updated", Severity.Success);
+        }
+    }
+
+    async Task DeleteThemeAsync(int themeId)
+    {
+        await ThemeService.DeleteThemeAsync(themeId);
+        await LoadAsync();
+        Snackbar.Add("Theme deleted", Severity.Info);
+    }
+}

@@ -1,0 +1,39 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Theme.Id == 0 ? "Add Theme" : "Edit Theme")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="Theme.Name" Label="Name" Required="true" Immediate="true" Class="mb-4" />
+
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Primary Color</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <input type="color" @bind="Theme.Primary"
+                   style="width:48px;height:36px;border:none;cursor:pointer;border-radius:6px;padding:2px;" />
+            <MudText Typo="Typo.caption">@Theme.Primary</MudText>
+            <div style="width:32px;height:32px;border-radius:6px;background:@Theme.Primary;border:1px solid rgba(128,128,128,0.3);"></div>
+        </MudStack>
+
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Secondary Color</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <input type="color" @bind="Theme.Secondary"
+                   style="width:48px;height:36px;border:none;cursor:pointer;border-radius:6px;padding:2px;" />
+            <MudText Typo="Typo.caption">@Theme.Secondary</MudText>
+            <div style="width:32px;height:32px;border-radius:6px;background:@Theme.Secondary;border:1px solid rgba(128,128,128,0.3);"></div>
+        </MudStack>
+
+        <MudSwitch @bind-Value="Theme.IsDark" Label="Dark Mode" Color="Color.Primary" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
+                   Disabled="@string.IsNullOrWhiteSpace(Theme.Name)">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public AppTheme Theme { get; set; } = new();
+
+    void Cancel() => MudDialog.Cancel();
+    void Submit() => MudDialog.Close(DialogResult.Ok(Theme));
+}

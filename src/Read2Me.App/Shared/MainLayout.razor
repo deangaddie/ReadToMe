@@ -1,6 +1,8 @@
 @inherits LayoutComponentBase
+@inject ThemeService ThemeService
+@implements IDisposable
 
-<MudThemeProvider />
+<MudThemeProvider Theme="_theme" IsDarkMode="_isDark" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -8,24 +10,41 @@
 <MudLayout>
     <MudAppBar Elevation="1">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
-                       OnClick="@((e) => DrawerToggle())" />
-        <MudText Typo="Typo.h5" Class="ml-3">Application</MudText>
+                       OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+        <MudText Typo="Typo.h5" Class="ml-3">Read2Me</MudText>
         <MudSpacer />
-        <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" Edge="Edge.End" />
+        <MudIconButton Icon="@Icons.Material.Filled.Palette" Color="Color.Inherit" Edge="Edge.End"
+                       Href="/themes" />
     </MudAppBar>
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
         <NavMenu />
     </MudDrawer>
     <MudMainContent>
-        @Body
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-6">
+            @Body
+        </MudContainer>
     </MudMainContent>
 </MudLayout>
 
 @code {
+    MudTheme _theme = new();
+    bool _isDark;
     bool _drawerOpen = true;
 
-    void DrawerToggle()
+    protected override async Task OnInitializedAsync()
     {
-        _drawerOpen = !_drawerOpen;
+        ThemeService.OnThemeChanged += HandleThemeChanged;
+        (_theme, _isDark) = await ThemeService.GetCurrentThemeAsync();
+    }
+
+    private async void HandleThemeChanged()
+    {
+        (_theme, _isDark) = await ThemeService.GetCurrentThemeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
     }
 }
