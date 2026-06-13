@@ -13,7 +13,10 @@ using Read2Me.Core.IO;
 using Read2Me.Services;
 using Read2Me.Services.Books;
 using Read2Me.Services.IO;
+using Read2Me.Services.UseCases;
+using Read2Me.App.State;
 using Read2Me.AppData;
+using Read2Me.Data;
 
 namespace Read2Me.App
 {
@@ -26,15 +29,24 @@ namespace Read2Me.App
 
         public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
-        // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
             services.Configure<WorkspaceOptions>(Configuration.GetSection(WorkspaceOptions.SectionName));
             services.AddSingleton<ThemeService>();
             services.AddSingleton<IFileSystem, FileSystemService>();
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+
             services.AddScoped<ProjectService>();
+            services.AddScoped<IProjectReader>(sp => sp.GetRequiredService<ProjectService>());
+            services.AddScoped<IProjectWriter>(sp => sp.GetRequiredService<ProjectService>());
+
+            services.AddScoped<IBookContentPersister, BookContentPersister>();
             services.AddScoped<BookReadingService>();
+            services.AddScoped<ProjectUseCases>();
+            services.AddScoped<BookUseCases>();
+            services.AddScoped<BookHierarchyLoader>();
+            services.AddScoped<BookTreeState>();
+
             services.AddSingleton<EpubFileReader>();
             services.AddSingleton<TextFileReader>();
 
@@ -50,7 +62,6 @@ namespace Read2Me.App
             services.AddMudServices();
         }
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IOptions<WorkspaceOptions> workspaceOptions)
         {
             if (env.IsDevelopment())
@@ -60,7 +71,6 @@ namespace Read2Me.App
             else
             {
                 app.UseExceptionHandler("/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
                 app.UseHsts();
             }
 

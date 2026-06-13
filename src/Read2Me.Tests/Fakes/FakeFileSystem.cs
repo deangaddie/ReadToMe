@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -9,52 +8,35 @@ namespace Read2Me.Tests.Fakes
 {
     public class FakeFileSystem : IFileSystem
     {
-        private readonly HashSet<string> _directories = new(StringComparer.OrdinalIgnoreCase);
+        private const string FakeRoot = "C:\\fake-workspace";
+
+        private readonly HashSet<string> _folders = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, byte[]> _files = new(StringComparer.OrdinalIgnoreCase);
 
-        public void Seed(params string[] paths)
+        public void SeedFolder(params string[] names)
         {
-            foreach (var p in paths)
-                _directories.Add(p);
+            foreach (var n in names)
+                _folders.Add(n);
         }
 
-        public bool DirectoryExists(string path) => _directories.Contains(path);
+        public IReadOnlyList<string> ListProjectFolders() =>
+            _folders.OrderBy(n => n).ToList();
+
+        public bool ProjectFolderExists(string name) => _folders.Contains(name);
+
+        public string GetProjectFolderPath(string name) => Path.Combine(FakeRoot, name);
+
+        public void CreateProjectFolder(string name) => _folders.Add(name);
+
+        public void DeleteProjectFolder(string name)
+        {
+            _folders.Remove(name);
+            var prefix = GetProjectFolderPath(name) + Path.DirectorySeparatorChar;
+            foreach (var f in _files.Keys.Where(f => f.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList())
+                _files.Remove(f);
+        }
 
         public bool FileExists(string path) => _files.ContainsKey(path);
-
-        public string[] GetDirectories(string path)
-        {
-            return _directories
-                .Where(d => string.Equals(
-                    Path.GetDirectoryName(d), path, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-        }
-
-        public void CreateDirectory(string path) => _directories.Add(path);
-
-        public void DeleteDirectory(string path, bool recursive)
-        {
-            if (recursive)
-            {
-                var prefix = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                    + Path.DirectorySeparatorChar;
-                var dirsToRemove = _directories
-                    .Where(d => d.Equals(path, StringComparison.OrdinalIgnoreCase)
-                             || d.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                foreach (var d in dirsToRemove) _directories.Remove(d);
-
-                var filesToRemove = _files.Keys
-                    .Where(f => f.Equals(path, StringComparison.OrdinalIgnoreCase)
-                             || f.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                foreach (var f in filesToRemove) _files.Remove(f);
-            }
-            else
-            {
-                _directories.Remove(path);
-            }
-        }
 
         public void DeleteFile(string path) => _files.Remove(path);
 

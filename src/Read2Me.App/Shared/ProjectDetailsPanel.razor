@@ -1,5 +1,6 @@
 @using System.IO
-@inject ProjectService ProjectService
+@inject Read2Me.Services.IProjectReader ProjectReader
+@inject Read2Me.Services.UseCases.ProjectUseCases ProjectUseCases
 
 <style>
     .cover-container {
@@ -97,7 +98,7 @@
 
     async Task LoadAsync()
     {
-        _project = await ProjectService.GetProjectAsync(FolderName);
+        _project = await ProjectReader.GetProjectAsync(FolderName);
     }
 
     async Task OnCoverImageChangedAsync(InputFileChangeEventArgs e)
@@ -109,29 +110,21 @@
             _coverError = "Unsupported format. Use .jpg, .png, or .webp.";
             return;
         }
-        try
-        {
-            await using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-            await ProjectService.SaveCoverImageAsync(FolderName, e.File.Name, stream);
+        await using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+        var result = await ProjectUseCases.SaveCoverImageAsync(FolderName, e.File.Name, stream);
+        if (!result.IsSuccess)
+            _coverError = result.Error;
+        else
             await LoadAsync();
-        }
-        catch
-        {
-            _coverError = "Failed to save cover image.";
-        }
     }
 
     async Task DeleteCoverAsync()
     {
         _coverError = null;
-        try
-        {
-            await ProjectService.DeleteCoverImageAsync(FolderName);
+        var result = await ProjectUseCases.DeleteCoverImageAsync(FolderName);
+        if (!result.IsSuccess)
+            _coverError = result.Error;
+        else
             await LoadAsync();
-        }
-        catch
-        {
-            _coverError = "Failed to delete cover image.";
-        }
     }
 }

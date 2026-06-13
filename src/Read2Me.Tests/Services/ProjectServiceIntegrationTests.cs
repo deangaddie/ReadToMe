@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,14 +21,12 @@ namespace Read2Me.Tests.Services
     public class ProjectServiceIntegrationTests : IDisposable
     {
         private readonly string _tempDir;
-        private readonly FileSystemService _fs;
         private readonly ProjectService _svc;
 
         public ProjectServiceIntegrationTests()
         {
             _tempDir = Path.Combine(Path.GetTempPath(), "Read2MeTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempDir);
-            _fs = new FileSystemService();
             _svc = CreateService(_tempDir);
         }
 
@@ -35,11 +36,11 @@ namespace Read2Me.Tests.Services
                 Directory.Delete(_tempDir, recursive: true);
         }
 
-        private ProjectService CreateService(string workspaceDir) =>
-            new(
-                Options.Create(new WorkspaceOptions { FolderPath = workspaceDir }),
-                _fs,
-                NullLogger<ProjectService>.Instance);
+        private static ProjectService CreateService(string workspaceDir)
+        {
+            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = workspaceDir }));
+            return new ProjectService(fs, new ProjectDbContextProvider(), NullLogger<ProjectService>.Instance);
+        }
 
         private static async Task<ProjectDbContext> OpenDbAsync(string folderPath)
         {
@@ -138,7 +139,6 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetProjectAsync_WhenNoDb_ReturnsNull()
         {
-            // Create folder but no DB
             Directory.CreateDirectory(Path.Combine(_tempDir, "empty-project"));
 
             var result = await _svc.GetProjectAsync("empty-project");
@@ -162,12 +162,10 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetProjectAsync_MigratesExistingDb()
         {
-            // Create, then re-read — migration should be idempotent
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _svc.CreateProjectAsync(
                 "Migrate Test", "Title", "Author", "file.txt", stream, BookFileType.Text);
 
-            // Re-read via a fresh service instance
             var svc2 = CreateService(_tempDir);
             var project = await svc2.GetProjectAsync(folderName);
 
@@ -236,7 +234,7 @@ namespace Read2Me.Tests.Services
             var folderName = await _svc.CreateProjectAsync(
                 "Cover Book", "Title", "Author", "file.txt", bookStream, BookFileType.Text);
 
-            var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF }; // fake JPEG header
+            var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF };
             await _svc.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream(imageBytes));
 
             var folderPath = Path.Combine(_tempDir, folderName);

@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using Read2Me.Core.Configuration;
 using Read2Me.Services;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -12,11 +10,8 @@ namespace Read2Me.Tests.Services
     /// </summary>
     public class ProjectServiceSanitizeTests
     {
-        private static ProjectService CreateService()
-        {
-            var opts = Options.Create(new WorkspaceOptions { FolderPath = "C:\\workspace" });
-            return new ProjectService(opts, new FakeFileSystem(), NullLogger<ProjectService>.Instance);
-        }
+        private static ProjectService CreateService() =>
+            new(new FakeFileSystem(), new ProjectDbContextProvider(), NullLogger<ProjectService>.Instance);
 
         [Theory]
         [InlineData("My Book", "my-book")]
@@ -36,7 +31,6 @@ namespace Read2Me.Tests.Services
         public void SanitizeName_UnicodeTitleLowercased_ValidCharsKept()
         {
             var svc = CreateService();
-            // Lowercase letters kept, accented chars kept (they are word chars in .NET \w)
             var result = svc.SanitizeName("Ëpic Tïtle");
             Assert.Equal("ëpic-tïtle", result);
         }

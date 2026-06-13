@@ -1,5 +1,5 @@
 @page "/"
-@inject ProjectService ProjectService
+@inject Read2Me.Services.UseCases.ProjectUseCases ProjectUseCases
 @inject NavigationManager Nav
 @inject IDialogService DialogService
 
@@ -67,7 +67,8 @@ else
     async Task LoadProjectsAsync()
     {
         _loading = true;
-        _projects = [.. await ProjectService.GetProjectSummariesAsync()];
+        var result = await ProjectUseCases.GetSummariesAsync();
+        _projects = result.IsSuccess ? [.. result.Value] : [];
         _loading = false;
     }
 
@@ -85,7 +86,7 @@ else
         var confirmed = await _deleteConfirm!.ShowAsync();
         if (confirmed == true)
         {
-            ProjectService.DeleteProject(project.FolderName);
+            ProjectUseCases.DeleteProject(project.FolderName);
             await LoadProjectsAsync();
         }
     }

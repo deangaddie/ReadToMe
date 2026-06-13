@@ -1,6 +1,7 @@
 @using Read2Me.App.State
-@inject ProjectService ProjectService
-@inject BookReadingService BookReadingService
+@inject Read2Me.Services.IProjectReader ProjectReader
+@inject Read2Me.Services.UseCases.BookUseCases BookUseCases
+@inject BookTreeState TreeState
 
 @if (_loading)
 {
@@ -145,7 +146,7 @@ else
     string? _error;
     Read2Me.Data.Entities.Project? _project;
     List<Read2Me.Data.Entities.Volume> _volumes = [];
-    BookTreeState _tree = null!;
+    PerFolderState _tree = null!;
 
     EventCallback<bool> VolumeExpandCb(Read2Me.Data.Entities.Volume v) =>
         EventCallback.Factory.Create<bool>(this, (bool b) => _tree.OnVolumeExpandedAsync(v, b, StateHasChanged));
@@ -164,13 +165,13 @@ else
     async Task LoadAsync()
     {
         _loading = true;
-        _tree = new BookTreeState(ProjectService, FolderName);
+        _tree = TreeState.For(FolderName);
         _confirmReread = false;
 
-        _project = await ProjectService.GetProjectAsync(FolderName);
+        _project = await ProjectReader.GetProjectAsync(FolderName);
         _filename = _project?.Filename;
-        _hasContent = await ProjectService.HasBookContentAsync(FolderName);
-        _volumes = _hasContent ? await ProjectService.GetVolumesAsync(FolderName) : [];
+        _hasContent = await ProjectReader.HasBookContentAsync(FolderName);
+        _volumes = _hasContent ? await ProjectReader.GetVolumesAsync(FolderName) : [];
 
         _loading = false;
     }
@@ -179,38 +180,23 @@ else
     {
         _busy = true;
         _error = null;
-        try
-        {
-            await BookReadingService.ReadBookAsync(FolderName);
-            await LoadAsync();
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        var result = await BookUseCases.ImportAsync(FolderName);
+        _error = result.IsSuccess ? null : result.Error;
+        if (result.IsSuccess) await LoadAsync();
+        _busy = false;
     }
 
     async Task ConfirmRereadeBookAsync()
     {
         _busy = true;
         _error = null;
-        try
+        var result = await BookUseCases.ImportAsync(FolderName, reread: true);
+        _error = result.IsSuccess ? null : result.Error;
+        if (result.IsSuccess)
         {
-            await ProjectService.ClearBookContentAsync(FolderName);
-            await BookReadingService.ReadBookAsync(FolderName);
+            _tree.Reset();
             await LoadAsync();
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        _busy = false;
     }
 }

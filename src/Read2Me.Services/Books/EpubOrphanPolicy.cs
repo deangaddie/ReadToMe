@@ -13,40 +13,29 @@ namespace Read2Me.Services.Books
         {
             var referencedPaths = new HashSet<string>(CollectNavPaths(navPoints));
 
-            var orphans = readingOrder
-                .Select((f, i) => (file: f, index: i))
-                .Where(x => !referencedPaths.Contains(x.file.FilePath) &&
-                            contentByPath.TryGetValue(x.file.FilePath, out var ch) &&
+            var orphanEntries = readingOrder
+                .Select((f, spineIndex) => (f, spineIndex))
+                .Where(x => !referencedPaths.Contains(x.f.FilePath) &&
+                            contentByPath.TryGetValue(x.f.FilePath, out var ch) &&
                             ch.Paragraphs.Count > 0)
+                .Select(x =>
+                {
+                    var ch = contentByPath[x.f.FilePath];
+                    return (vol: new VolumeContent(ch.Title ?? string.Empty, [new PartContent(null, [ch])]),
+                            x.spineIndex);
+                })
                 .ToList();
 
-            if (orphans.Count == 0) return navVolumes;
+            if (orphanEntries.Count == 0) return navVolumes;
 
-            var sectionFirstIndex = navPoints
-                .Select((p, si) => (si, FirstReadingIndex(p, readingOrder)))
+            var navEntries = navVolumes
+                .Select((vol, i) => (vol, spineIndex: FirstReadingIndex(navPoints[i], readingOrder)));
+
+            return navEntries
+                .Concat(orphanEntries.Select(o => (o.vol, o.spineIndex)))
+                .OrderBy(x => x.spineIndex)
+                .Select(x => x.vol)
                 .ToList();
-
-            var result = new List<VolumeContent>(navVolumes);
-
-            foreach (var (orphanFile, orphanIdx) in orphans.OrderByDescending(o => o.index))
-            {
-                var ch = contentByPath[orphanFile.FilePath];
-                var orphanVol = new VolumeContent(ch.Title ?? string.Empty,
-                    [new PartContent(null, [ch])]);
-
-                var insertAt = sectionFirstIndex
-                    .Where(s => s.Item2 > orphanIdx)
-                    .Select(s => s.si)
-                    .DefaultIfEmpty(result.Count)
-                    .Min();
-
-                result.Insert(insertAt, orphanVol);
-                sectionFirstIndex = sectionFirstIndex
-                    .Select(s => s.si >= insertAt ? (s.si + 1, s.Item2) : s)
-                    .ToList();
-            }
-
-            return result;
         }
 
         internal static IEnumerable<string> CollectNavPaths(IEnumerable<EpubNavigationItem> items)

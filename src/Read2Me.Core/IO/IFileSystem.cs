@@ -1,15 +1,18 @@
 using System.IO;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace Read2Me.Core.IO
 {
     public interface IFileSystem
     {
-        bool DirectoryExists(string path);
+        IReadOnlyList<string> ListProjectFolders();
+        bool ProjectFolderExists(string name);
+        string GetProjectFolderPath(string name);
+        void CreateProjectFolder(string name);
+        void DeleteProjectFolder(string name);
+
         bool FileExists(string path);
-        string[] GetDirectories(string path);
-        void CreateDirectory(string path);
-        void DeleteDirectory(string path, bool recursive);
         void DeleteFile(string path);
         Task WriteFileAsync(string path, Stream source);
     }

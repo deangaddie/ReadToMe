@@ -2,31 +2,41 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Read2Me.Data.Entities;
-using Read2Me.Services;
 
 namespace Read2Me.App.State
 {
-    public class BookTreeState
+    public class BookTreeState(BookHierarchyLoader loader)
     {
-        private readonly ProjectService _projectService;
+        private readonly Dictionary<string, PerFolderState> _states = new(StringComparer.OrdinalIgnoreCase);
+
+        public PerFolderState For(string folderName)
+        {
+            if (!_states.TryGetValue(folderName, out var state))
+                _states[folderName] = state = new PerFolderState(loader, folderName);
+            return state;
+        }
+    }
+
+    public class PerFolderState
+    {
+        private readonly BookHierarchyLoader _loader;
         private readonly string _folderName;
 
-        public Dictionary<Guid, List<Part>> LoadedParts { get; } = new();
-        public Dictionary<Guid, List<Chapter>> LoadedChapters { get; } = new();
-        public Dictionary<Guid, List<Paragraph>> LoadedParagraphs { get; } = new();
         public HashSet<Guid> LoadingIds { get; } = new();
 
-        public BookTreeState(ProjectService projectService, string folderName)
+        public Dictionary<Guid, List<Part>> LoadedParts => _loader.For(_folderName).Parts;
+        public Dictionary<Guid, List<Chapter>> LoadedChapters => _loader.For(_folderName).Chapters;
+        public Dictionary<Guid, List<Paragraph>> LoadedParagraphs => _loader.For(_folderName).Paragraphs;
+
+        public PerFolderState(BookHierarchyLoader loader, string folderName)
         {
-            _projectService = projectService;
+            _loader = loader;
             _folderName = folderName;
         }
 
         public void Reset()
         {
-            LoadedParts.Clear();
-            LoadedChapters.Clear();
-            LoadedParagraphs.Clear();
+            _loader.Reset(_folderName);
             LoadingIds.Clear();
         }
 
@@ -36,26 +46,26 @@ namespace Read2Me.App.State
             {
                 LoadingIds.Add(volume.Id);
                 notifyChanged();
-                var parts = await _projectService.GetPartsAsync(_folderName, volume.Id);
-                LoadedParts[volume.Id] = parts;
+                await _loader.LoadPartsAsync(_folderName, volume.Id);
                 LoadingIds.Remove(volume.Id);
                 notifyChanged();
             }
             else
             {
-                if (LoadedParts.TryGetValue(volume.Id, out var parts))
+                var cache = _loader.For(_folderName);
+                if (cache.Parts.TryGetValue(volume.Id, out var parts))
                 {
                     foreach (var part in parts)
                     {
-                        if (LoadedChapters.TryGetValue(part.Id, out var chapters))
+                        if (cache.Chapters.TryGetValue(part.Id, out var chapters))
                         {
                             foreach (var ch in chapters)
-                                LoadedParagraphs.Remove(ch.Id);
-                            LoadedChapters.Remove(part.Id);
+                                cache.Paragraphs.Remove(ch.Id);
+                            cache.Chapters.Remove(part.Id);
                         }
                     }
+                    cache.Parts.Remove(volume.Id);
                 }
-                LoadedParts.Remove(volume.Id);
             }
         }
 
@@ -65,18 +75,18 @@ namespace Read2Me.App.State
             {
                 LoadingIds.Add(part.Id);
                 notifyChanged();
-                var chapters = await _projectService.GetChaptersAsync(_folderName, part.Id);
-                LoadedChapters[part.Id] = chapters;
+                await _loader.LoadChaptersAsync(_folderName, part.Id);
                 LoadingIds.Remove(part.Id);
                 notifyChanged();
             }
             else
             {
-                if (LoadedChapters.TryGetValue(part.Id, out var chapters))
+                var cache = _loader.For(_folderName);
+                if (cache.Chapters.TryGetValue(part.Id, out var chapters))
                 {
                     foreach (var ch in chapters)
-                        LoadedParagraphs.Remove(ch.Id);
-                    LoadedChapters.Remove(part.Id);
+                        cache.Paragraphs.Remove(ch.Id);
+                    cache.Chapters.Remove(part.Id);
                 }
             }
         }
@@ -87,14 +97,13 @@ namespace Read2Me.App.State
             {
                 LoadingIds.Add(chapter.Id);
                 notifyChanged();
-                var paragraphs = await _projectService.GetChapterParagraphsAsync(_folderName, chapter.Id);
-                LoadedParagraphs[chapter.Id] = paragraphs;
+                await _loader.LoadParagraphsAsync(_folderName, chapter.Id);
                 LoadingIds.Remove(chapter.Id);
                 notifyChanged();
             }
             else
             {
-                LoadedParagraphs.Remove(chapter.Id);
+                _loader.For(_folderName).Paragraphs.Remove(chapter.Id);
             }
         }
     }

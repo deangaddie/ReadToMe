@@ -1,16 +1,21 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using FractionalIndexing;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
-using Read2Me.Data.Enums;
 using Read2Me.Services.Books;
 
 namespace Read2Me.Services
 {
-    internal static class BookContentPersister
+    public class BookContentPersister : IBookContentPersister
     {
-        internal static async Task PersistAsync(ProjectDbContext db, BookContent content, CancellationToken cancellationToken = default)
+        public async Task PersistAsync(ProjectDbContext db, BookContent content, CancellationToken cancellationToken = default)
         {
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+
             var volKeys = GenerateKeys(content.Volumes.Count);
             for (int vi = 0; vi < content.Volumes.Count; vi++)
             {
@@ -39,17 +44,18 @@ namespace Read2Me.Services
                             db.Paragraphs.Add(paragraph);
 
                             var segments = ParagraphSplitter.Split(ch.Paragraphs[pri].Text);
-                            var segKeys = GenerateKeys(segments.Count);
-                            for (int si = 0; si < segments.Count; si++)
+                            var attributed = NarrationClassifier.Classify(segments);
+                            var segKeys = GenerateKeys(attributed.Count);
+                            for (int si = 0; si < attributed.Count; si++)
                             {
-                                var seg = segments[si];
+                                var seg = attributed[si];
                                 db.ParagraphItems.Add(new ParagraphItem
                                 {
                                     Id = Guid.NewGuid(),
                                     ParagraphId = paragraph.Id,
                                     Order = segKeys[si],
-                                    ItemType = seg.Type == SegmentType.Narration ? ParagraphItemType.Narration : ParagraphItemType.Character,
-                                    CharacterId = seg.Type == SegmentType.Narration ? ProjectDbContext.NarratorId : null,
+                                    ItemType = seg.ItemType,
+                                    CharacterId = seg.CharacterId,
                                     Text = seg.Text
                                 });
                             }
@@ -59,6 +65,7 @@ namespace Read2Me.Services
             }
 
             await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
         }
 
         private static List<string> GenerateKeys(int count)

@@ -1,7 +1,4 @@
-using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using Read2Me.Core.Configuration;
 using Read2Me.Services;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -10,18 +7,13 @@ namespace Read2Me.Tests.Services
 {
     public class ProjectServiceTests
     {
-        private const string Workspace = "C:\\workspace";
-
-        private static ProjectService CreateService(FakeFileSystem fs, string? workspace = null)
-        {
-            var opts = Options.Create(new WorkspaceOptions { FolderPath = workspace ?? Workspace });
-            return new ProjectService(opts, fs, NullLogger<ProjectService>.Instance);
-        }
+        private static ProjectService CreateService(FakeFileSystem fs) =>
+            new(fs, new ProjectDbContextProvider(), NullLogger<ProjectService>.Instance);
 
         // GetProjects
 
         [Fact]
-        public void GetProjects_WorkspaceDoesNotExist_ReturnsEmpty()
+        public void GetProjects_WorkspaceEmpty_ReturnsEmpty()
         {
             var fs = new FakeFileSystem();
             var svc = CreateService(fs);
@@ -35,33 +27,12 @@ namespace Read2Me.Tests.Services
         public void GetProjects_ReturnsDirectoryNamesAlphabetically()
         {
             var fs = new FakeFileSystem();
-            fs.Seed(
-                Workspace,
-                Path.Combine(Workspace, "zebra"),
-                Path.Combine(Workspace, "alpha"),
-                Path.Combine(Workspace, "mango")
-            );
+            fs.SeedFolder("zebra", "alpha", "mango");
             var svc = CreateService(fs);
 
             var result = svc.GetProjects();
 
             Assert.Equal(["alpha", "mango", "zebra"], result);
-        }
-
-        [Fact]
-        public void GetProjects_IgnoresNestedDirectories()
-        {
-            var fs = new FakeFileSystem();
-            fs.Seed(
-                Workspace,
-                Path.Combine(Workspace, "project-a"),
-                Path.Combine(Workspace, "project-a", "nested")
-            );
-            var svc = CreateService(fs);
-
-            var result = svc.GetProjects();
-
-            Assert.Equal(["project-a"], result);
         }
 
         // SanitizeName
@@ -87,20 +58,19 @@ namespace Read2Me.Tests.Services
         public void CreateProject_CreatesDirectoryAndReturnsTrue()
         {
             var fs = new FakeFileSystem();
-            fs.Seed(Workspace);
             var svc = CreateService(fs);
 
             var result = svc.CreateProject("My Project");
 
             Assert.True(result);
-            Assert.True(fs.DirectoryExists(Path.Combine(Workspace, "my-project")));
+            Assert.True(fs.ProjectFolderExists("my-project"));
         }
 
         [Fact]
         public void CreateProject_ReturnsFalse_WhenAlreadyExists()
         {
             var fs = new FakeFileSystem();
-            fs.Seed(Workspace, Path.Combine(Workspace, "my-project"));
+            fs.SeedFolder("my-project");
             var svc = CreateService(fs);
 
             var result = svc.CreateProject("my-project");
@@ -112,7 +82,6 @@ namespace Read2Me.Tests.Services
         public void CreateProject_ReturnsFalse_WhenNameSanitizesToEmpty()
         {
             var fs = new FakeFileSystem();
-            fs.Seed(Workspace);
             var svc = CreateService(fs);
 
             var result = svc.CreateProject("!!!");
@@ -126,20 +95,18 @@ namespace Read2Me.Tests.Services
         public void DeleteProject_RemovesDirectory()
         {
             var fs = new FakeFileSystem();
-            var projectPath = Path.Combine(Workspace, "my-project");
-            fs.Seed(Workspace, projectPath);
+            fs.SeedFolder("my-project");
             var svc = CreateService(fs);
 
             svc.DeleteProject("my-project");
 
-            Assert.False(fs.DirectoryExists(projectPath));
+            Assert.False(fs.ProjectFolderExists("my-project"));
         }
 
         [Fact]
         public void DeleteProject_DoesNotThrow_WhenDirectoryDoesNotExist()
         {
             var fs = new FakeFileSystem();
-            fs.Seed(Workspace);
             var svc = CreateService(fs);
 
             var ex = Record.Exception(() => svc.DeleteProject("nonexistent"));
@@ -148,18 +115,15 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void DeleteProject_RemovesNestedContents()
+        public void DeleteProject_RemovesProjectAndFiles()
         {
             var fs = new FakeFileSystem();
-            var projectPath = Path.Combine(Workspace, "my-project");
-            var nestedPath = Path.Combine(projectPath, "chapter-1");
-            fs.Seed(Workspace, projectPath, nestedPath);
+            fs.SeedFolder("my-project");
             var svc = CreateService(fs);
 
             svc.DeleteProject("my-project");
 
-            Assert.False(fs.DirectoryExists(projectPath));
-            Assert.False(fs.DirectoryExists(nestedPath));
+            Assert.False(fs.ProjectFolderExists("my-project"));
         }
     }
 }
