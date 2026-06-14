@@ -129,14 +129,14 @@ namespace Read2Me.Services
             }
 
             var db = await OpenProjectDbAsync(folderName);
-            return await db.Projects.FirstOrDefaultAsync();
+            return await db.Projects.SingleOrDefaultAsync();
         }
 
         public async Task SaveCoverImageAsync(string folderName, string filename, Stream stream)
         {
             _logger.LogInformation("Saving cover image '{File}' for project '{Folder}'", filename, folderName);
             var db = await OpenProjectDbAsync(folderName);
-            var entity = await db.Projects.FirstOrDefaultAsync();
+            var entity = await db.Projects.SingleOrDefaultAsync();
             if (entity == null)
             {
                 _logger.LogWarning("SaveCoverImageAsync: project record not found for '{Folder}'", folderName);
@@ -164,7 +164,7 @@ namespace Read2Me.Services
         {
             _logger.LogInformation("Deleting cover image for project '{Folder}'", folderName);
             var db = await OpenProjectDbAsync(folderName);
-            var entity = await db.Projects.FirstOrDefaultAsync();
+            var entity = await db.Projects.SingleOrDefaultAsync();
             if (entity?.CoverImage == null)
             {
                 _logger.LogDebug("DeleteCoverImageAsync: no cover image set for '{Folder}'", folderName);

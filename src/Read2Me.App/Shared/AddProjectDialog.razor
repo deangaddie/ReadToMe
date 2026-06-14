@@ -7,9 +7,10 @@
     </TitleContent>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudTextField @bind-Value="_title" Label="Project Title" Variant="Variant.Outlined"
-                          Required="true" Immediate="true" />
             <MudTextField @bind-Value="_bookTitle" Label="Book Title" Variant="Variant.Outlined"
+                          Required="true" Immediate="true"
+                          OnBlur="OnBookTitleBlur" />
+            <MudTextField @bind-Value="_title" Label="Project Title" Variant="Variant.Outlined"
                           Required="true" Immediate="true" />
             <MudTextField @bind-Value="_author" Label="Author" Variant="Variant.Outlined"
                           Required="true" Immediate="true" />
@@ -79,6 +80,12 @@
         !string.IsNullOrWhiteSpace(_author) &&
         _file != null &&
         _detectedType != null;
+
+    void OnBookTitleBlur(FocusEventArgs _)
+    {
+        if (string.IsNullOrWhiteSpace(_title))
+            _title = _bookTitle;
+    }
 
     void OnFileChanged(InputFileChangeEventArgs e)
     {

@@ -41,13 +41,13 @@ namespace Read2Me.Services
                 await using var db = await _dbFactory.CreateDbContextAsync();
                 await EnsureSeededAsync(db);
 
-                var settings = await db.Settings.FirstOrDefaultAsync();
+                var settings = await db.Settings.SingleOrDefaultAsync();
                 AppTheme? theme = null;
 
                 if (settings?.SelectedThemeId != null)
                     theme = await db.Themes.FindAsync(settings.SelectedThemeId);
 
-                theme ??= await db.Themes.FirstAsync();
+                theme ??= await db.Themes.OrderBy(t => t.Id).FirstAsync();
 
                 _logger.LogDebug("Loaded theme '{Name}' (dark={IsDark})", theme.Name, theme.IsDark);
                 _cachedAppTheme = theme;
@@ -73,7 +73,7 @@ namespace Read2Me.Services
         public async Task<int?> GetSelectedThemeIdAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
-            var settings = await db.Settings.FirstOrDefaultAsync();
+            var settings = await db.Settings.SingleOrDefaultAsync();
             return settings?.SelectedThemeId;
         }
 
@@ -81,7 +81,7 @@ namespace Read2Me.Services
         {
             _logger.LogInformation("Setting selected theme to ID {ThemeId}", themeId);
             await using var db = await _dbFactory.CreateDbContextAsync();
-            var settings = await db.Settings.FirstOrDefaultAsync();
+            var settings = await db.Settings.SingleOrDefaultAsync();
             if (settings == null)
             {
                 db.Settings.Add(new AppSettings { SelectedThemeId = themeId });
@@ -144,7 +144,7 @@ namespace Read2Me.Services
             _logger.LogInformation("Deleting theme '{Name}' (ID {Id})", theme.Name, themeId);
             db.Themes.Remove(theme);
 
-            var settings = await db.Settings.FirstOrDefaultAsync();
+            var settings = await db.Settings.SingleOrDefaultAsync();
             if (settings?.SelectedThemeId == themeId)
             {
                 _logger.LogDebug("Clearing selected theme setting — deleted theme was active");

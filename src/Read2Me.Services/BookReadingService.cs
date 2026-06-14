@@ -25,7 +25,7 @@ namespace Read2Me.Services
             var folderPath = fs.GetProjectFolderPath(folderName);
             await using var db = await dbFactory.CreateAsync(folderPath);
 
-            var project = await db.Projects.FirstOrDefaultAsync(cancellationToken)
+            var project = await db.Projects.SingleOrDefaultAsync(cancellationToken)
                 ?? throw new InvalidOperationException($"No project record found in '{folderName}'.");
 
             var bookFilePath = Path.Combine(folderPath, project.Filename);

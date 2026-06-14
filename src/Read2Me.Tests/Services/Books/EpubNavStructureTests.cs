@@ -11,9 +11,9 @@ public class EpubNavStructureTests
     // Helpers
     // ---------------------------------------------------------------
 
-    private static EpubNavigationItem LeafItem(string title, string filePath) =>
+    private static EpubNavigationItem LeafItem(string title, string filePath, string anchor = "") =>
         new(EpubNavigationItemType.LINK, title,
-            new EpubNavigationItemLink(filePath, string.Empty),
+            new EpubNavigationItemLink(filePath, filePath, anchor),
             null, []);
 
     private static EpubNavigationItem GroupItem(string title, List<EpubNavigationItem> children) =>
@@ -40,7 +40,7 @@ public class EpubNavStructureTests
         };
         var content = Content("ch1.html", "ch2.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "My Book", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "My Book", NoReadingOrder);
 
         Assert.Null(result);
     }
@@ -48,9 +48,37 @@ public class EpubNavStructureTests
     [Fact]
     public void EmptyNav_ReturnsNull()
     {
-        var result = EpubFileReader.TryBuildFromNav([], new Dictionary<string, ChapterContent>(), "My Book", NoReadingOrder);
+        var empty = new Dictionary<string, ChapterContent>();
+        var result = EpubFileReader.TryBuildFromNav([], empty, empty, "My Book", NoReadingOrder);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public void FlatNav_WithAnchors_ReturnsSingleVolume()
+    {
+        var nav = new List<EpubNavigationItem>
+        {
+            LeafItem("Chapter I.", "book.html", "ch1"),
+            LeafItem("Chapter II.", "book.html", "ch2"),
+        };
+        var ch1 = new ChapterContent("Chapter I.", [new ParagraphContent("Ch1 text")]);
+        var ch2 = new ChapterContent("Chapter II.", [new ParagraphContent("Ch2 text")]);
+        var anchored = new Dictionary<string, ChapterContent>
+        {
+            ["book.html"] = new("Book", [new ParagraphContent("Ch1 text"), new ParagraphContent("Ch2 text")]),
+            ["book.html#ch1"] = ch1,
+            ["book.html#ch2"] = ch2,
+        };
+
+        var result = EpubFileReader.TryBuildFromNav(nav, anchored, anchored, "Pride and Prejudice", NoReadingOrder);
+
+        Assert.NotNull(result);
+        Assert.Single(result.Volumes);
+        Assert.Single(result.Volumes[0].Parts);
+        Assert.Equal(2, result.Volumes[0].Parts[0].Chapters.Count);
+        Assert.Equal("Chapter I.", result.Volumes[0].Parts[0].Chapters[0].Title);
+        Assert.Equal("Chapter II.", result.Volumes[0].Parts[0].Chapters[1].Title);
     }
 
     // ---------------------------------------------------------------
@@ -67,7 +95,7 @@ public class EpubNavStructureTests
         };
         var content = Content("ch1.html", "ch2.html", "ch3.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "My Book", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "My Book", NoReadingOrder);
 
         Assert.NotNull(result);
         Assert.Single(result.Volumes);
@@ -82,7 +110,7 @@ public class EpubNavStructureTests
         };
         var content = Content("ch1.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "Magician", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Magician", NoReadingOrder);
 
         Assert.Equal("Magician", result!.Volumes[0].Title);
     }
@@ -98,7 +126,7 @@ public class EpubNavStructureTests
         };
         var content = Content("ch0.html", "ch1.html", "ch2.html", "ch3.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "Magician", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Magician", NoReadingOrder);
 
         Assert.NotNull(result);
         Assert.Equal(3, result.Volumes[0].Parts.Count);
@@ -116,7 +144,7 @@ public class EpubNavStructureTests
         };
         var content = Content("ch1.html", "ch2.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "Book", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Book", NoReadingOrder);
 
         var chapters = result!.Volumes[0].Parts[0].Chapters;
         Assert.Equal(2, chapters.Count);
@@ -133,7 +161,7 @@ public class EpubNavStructureTests
         };
         var content = Content("title.html", "ch1.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "Book", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Book", NoReadingOrder);
 
         Assert.NotNull(result);
         Assert.Single(result.Volumes);
@@ -159,7 +187,7 @@ public class EpubNavStructureTests
         };
         var content = Content("ch1.html", "ch2.html", "ch3.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "Series", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Series", NoReadingOrder);
 
         Assert.NotNull(result);
         Assert.Equal(2, result.Volumes.Count);
@@ -179,7 +207,7 @@ public class EpubNavStructureTests
         };
         var content = Content("ch1.html", "ch2.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "Series", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Series", NoReadingOrder);
 
         Assert.Equal("Volume One", result!.Volumes[0].Title);
         Assert.Equal("Volume Two", result.Volumes[1].Title);
@@ -197,7 +225,7 @@ public class EpubNavStructureTests
         };
         var content = Content("ch1.html", "ch2.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, "Book", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Book", NoReadingOrder);
 
         Assert.Equal(2, result!.Volumes[0].Parts.Count);
         Assert.Equal("Part A", result.Volumes[0].Parts[0].Title);
