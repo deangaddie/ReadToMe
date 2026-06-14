@@ -23,5 +23,14 @@ namespace Read2Me.Services
         Task UpdatePartTitleAsync(string folderName, Guid partId, string title);
         Task UpdateChapterTitleAsync(string folderName, Guid chapterId, string title);
         Task UpdateParagraphItemTextAsync(string folderName, Guid itemId, string text);
+        Task SplitVolumeAsync(string folderName, Guid partId, string? newTitle);
+        Task SplitPartAsync(string folderName, Guid chapterId, string? newTitle);
+        Task SplitChapterAsync(string folderName, Guid paragraphId, string? newTitle);
+        Task SplitParagraphAsync(string folderName, Guid itemId, string? newTitle);
+        Task SplitParagraphItemAsync(string folderName, Guid itemId);
+        Task AddBookTitleAsync(string folderName);
+        Task AddVolumeTitlesAsync(string folderName);
+        Task AddPartTitlesAsync(string folderName);
+        Task AddChapterTitlesAsync(string folderName);
     }
 }

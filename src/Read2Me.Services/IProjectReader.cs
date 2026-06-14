@@ -17,5 +17,7 @@ namespace Read2Me.Services
         Task<List<Chapter>> GetChaptersAsync(string folderName, Guid partId);
         Task<List<Paragraph>> GetChapterParagraphsAsync(string folderName, Guid chapterId);
         Task<List<Character>> GetCharactersAsync(string folderName);
+        Task<int> GetTotalPartCountAsync(string folderName);
+        Task<int> GetTotalChapterCountAsync(string folderName);
     }
 }

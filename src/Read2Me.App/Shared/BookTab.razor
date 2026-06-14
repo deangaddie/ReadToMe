@@ -49,6 +49,14 @@ else
                          OnClick="@(() => EditParagraphItemAsync(item))">
                 Edit Text
             </MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                         OnClick="@(() => SplitParagraphAsync(item))">
+                Split Paragraph
+            </MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                         OnClick="@(() => SplitLineAsync(item))">
+                Split Line
+            </MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                          OnClick="@(() => DeleteParagraphItemAsync(item))">
                 Delete Item
@@ -59,6 +67,10 @@ else
         @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
                   AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
                   @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                         OnClick="@(() => SplitChapterAsync(para))">
+                Split Chapter
+            </MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                          OnClick="@(() => DeleteParagraphAsync(para))">
                 Delete Paragraph
@@ -74,6 +86,10 @@ else
                          OnClick="@(() => EditChapterAsync(ch))">
                 Edit Title
             </MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                         OnClick="@(() => SplitPartAsync(ch))">
+                Split Part
+            </MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                          OnClick="@(() => DeleteChapterAsync(ch))">
                 Delete Chapter
@@ -87,6 +103,10 @@ else
             <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
                          OnClick="@(() => EditPartAsync(part))">
                 Edit Title
+            </MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                         OnClick="@(() => SplitVolumeAsync(part))">
+                Split Volume
             </MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                          OnClick="@(() => DeletePartAsync(part))">
@@ -276,6 +296,31 @@ else
                                  OnClick="ManualRereadBookAsync" Disabled="_busy">
                         Manual Reread Book
                     </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Title" IconColor="Color.Secondary"
+                                 OnClick="AddBookTitleAsync" Disabled="_busy">
+                        Add book title
+                    </MudMenuItem>
+                    @if (_volumes.Count > 1)
+                    {
+                        <MudMenuItem Icon="@Icons.Material.Filled.LibraryBooks" IconColor="Color.Secondary"
+                                     OnClick="AddVolumeTitlesAsync" Disabled="_busy">
+                            Add volume titles
+                        </MudMenuItem>
+                    }
+                    @if (_totalParts > _volumes.Count)
+                    {
+                        <MudMenuItem Icon="@Icons.Material.Filled.BookmarkBorder" IconColor="Color.Secondary"
+                                     OnClick="AddPartTitlesAsync" Disabled="_busy">
+                            Add part titles
+                        </MudMenuItem>
+                    }
+                    @if (_totalChapters > _totalParts)
+                    {
+                        <MudMenuItem Icon="@Icons.Material.Filled.MenuBook" IconColor="Color.Secondary"
+                                     OnClick="AddChapterTitlesAsync" Disabled="_busy">
+                            Add chapter titles
+                        </MudMenuItem>
+                    }
                 </MudMenu>
             }
         </MudStack>
@@ -411,6 +456,8 @@ else
     Read2Me.Data.Entities.Project? _project;
     List<Read2Me.Data.Entities.Volume> _volumes = [];
     List<Read2Me.Data.Entities.Character> _characters = [];
+    int _totalParts;
+    int _totalChapters;
     PerFolderState _tree = null!;
 
     EventCallback<bool> VolumeExpandCb(Read2Me.Data.Entities.Volume v) =>
@@ -438,6 +485,8 @@ else
         _hasContent = await ProjectReader.HasBookContentAsync(FolderName);
         _volumes = _hasContent ? await ProjectReader.GetVolumesAsync(FolderName) : [];
         _characters = _hasContent ? await ProjectReader.GetCharactersAsync(FolderName) : [];
+        _totalParts = _hasContent ? await ProjectReader.GetTotalPartCountAsync(FolderName) : 0;
+        _totalChapters = _hasContent ? await ProjectReader.GetTotalChapterCountAsync(FolderName) : 0;
 
         if (_volumes.Count == 1)
         {
@@ -668,5 +717,107 @@ else
             foreach (var para in list)
                 para.Items.Remove(item);
         StateHasChanged();
+    }
+
+    async Task SplitVolumeAsync(Read2Me.Data.Entities.Part part)
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("New Volume Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, "" },
+            }, _editDialogOptions);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var title = result.Data as string;
+        await ProjectWriter.SplitVolumeAsync(FolderName, part.Id, string.IsNullOrWhiteSpace(title) ? null : title);
+        _tree.Reset();
+        await LoadAsync();
+    }
+
+    async Task SplitPartAsync(Read2Me.Data.Entities.Chapter chapter)
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("New Part Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, "" },
+            }, _editDialogOptions);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var title = result.Data as string;
+        await ProjectWriter.SplitPartAsync(FolderName, chapter.Id, string.IsNullOrWhiteSpace(title) ? null : title);
+        _tree.Reset();
+        await LoadAsync();
+    }
+
+    async Task SplitChapterAsync(Read2Me.Data.Entities.Paragraph paragraph)
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("New Chapter Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, "" },
+            }, _editDialogOptions);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var title = result.Data as string;
+        await ProjectWriter.SplitChapterAsync(FolderName, paragraph.Id, string.IsNullOrWhiteSpace(title) ? null : title);
+        _tree.Reset();
+        await LoadAsync();
+    }
+
+    async Task SplitParagraphAsync(Read2Me.Data.Entities.ParagraphItem item)
+    {
+        await ProjectWriter.SplitParagraphAsync(FolderName, item.Id, null);
+        _tree.Reset();
+        await LoadAsync();
+    }
+
+    async Task SplitLineAsync(Read2Me.Data.Entities.ParagraphItem item)
+    {
+        await ProjectWriter.SplitParagraphItemAsync(FolderName, item.Id);
+        _tree.Reset();
+        await LoadAsync();
+    }
+
+    async Task AddBookTitleAsync()
+    {
+        _busy = true;
+        _error = null;
+        await ProjectWriter.AddBookTitleAsync(FolderName);
+        _tree.Reset();
+        await LoadAsync();
+        _busy = false;
+    }
+
+    async Task AddVolumeTitlesAsync()
+    {
+        _busy = true;
+        _error = null;
+        await ProjectWriter.AddVolumeTitlesAsync(FolderName);
+        _tree.Reset();
+        await LoadAsync();
+        _busy = false;
+    }
+
+    async Task AddPartTitlesAsync()
+    {
+        _busy = true;
+        _error = null;
+        await ProjectWriter.AddPartTitlesAsync(FolderName);
+        _tree.Reset();
+        await LoadAsync();
+        _busy = false;
+    }
+
+    async Task AddChapterTitlesAsync()
+    {
+        _busy = true;
+        _error = null;
+        await ProjectWriter.AddChapterTitlesAsync(FolderName);
+        _tree.Reset();
+        await LoadAsync();
+        _busy = false;
     }
 }

@@ -228,6 +228,18 @@ namespace Read2Me.Services
             return await db.Characters.OrderBy(c => c.IsNarrator ? 0 : 1).ThenBy(c => c.Name).ToListAsync();
         }
 
+        public async Task<int> GetTotalPartCountAsync(string folderName)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            return await db.Parts.CountAsync();
+        }
+
+        public async Task<int> GetTotalChapterCountAsync(string folderName)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            return await db.Chapters.CountAsync();
+        }
+
         public async Task SetParagraphItemCharacterAsync(string folderName, Guid itemId, Guid? characterId)
         {
             var db = await OpenProjectDbAsync(folderName);
@@ -318,6 +330,357 @@ namespace Read2Me.Services
             var entity = await db.ParagraphItems.FindAsync(itemId);
             if (entity == null) return;
             entity.Text = text;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SplitVolumeAsync(string folderName, Guid partId, string? newTitle)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+
+            var part = await db.Parts.FindAsync(partId);
+            if (part == null) return;
+
+            var volumes = await db.Volumes.OrderBy(v => v.Order).ToListAsync();
+            var currentVolume = volumes.FirstOrDefault(v => v.Id == part.VolumeId);
+            if (currentVolume == null) return;
+
+            var currentIdx = volumes.IndexOf(currentVolume);
+            var nextOrder = currentIdx < volumes.Count - 1 ? volumes[currentIdx + 1].Order : null;
+
+            var newVolume = new Volume
+            {
+                Id = Guid.NewGuid(),
+                Title = newTitle ?? currentVolume.Title,
+                Order = OrderKeyGenerator.GenerateKeyBetween(currentVolume.Order, nextOrder),
+            };
+            db.Volumes.Add(newVolume);
+
+            var siblings = await db.Parts.Where(p => p.VolumeId == part.VolumeId).OrderBy(p => p.Order).ToListAsync();
+            var splitIdx = siblings.FindIndex(p => p.Id == partId);
+            foreach (var p in siblings.Skip(splitIdx))
+                p.VolumeId = newVolume.Id;
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SplitPartAsync(string folderName, Guid chapterId, string? newTitle)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+
+            var chapter = await db.Chapters.Include(c => c.Part).FirstOrDefaultAsync(c => c.Id == chapterId);
+            if (chapter == null) return;
+
+            var parts = await db.Parts.Where(p => p.VolumeId == chapter.Part.VolumeId).OrderBy(p => p.Order).ToListAsync();
+            var currentPart = chapter.Part;
+            var currentIdx = parts.IndexOf(currentPart);
+            var nextOrder = currentIdx < parts.Count - 1 ? parts[currentIdx + 1].Order : null;
+
+            var newPart = new Part
+            {
+                Id = Guid.NewGuid(),
+                VolumeId = currentPart.VolumeId,
+                Title = newTitle ?? currentPart.Title,
+                Order = OrderKeyGenerator.GenerateKeyBetween(currentPart.Order, nextOrder),
+            };
+            db.Parts.Add(newPart);
+
+            var siblings = await db.Chapters.Where(c => c.PartId == chapter.PartId).OrderBy(c => c.Order).ToListAsync();
+            var splitIdx = siblings.FindIndex(c => c.Id == chapterId);
+            foreach (var c in siblings.Skip(splitIdx))
+                c.PartId = newPart.Id;
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SplitChapterAsync(string folderName, Guid paragraphId, string? newTitle)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+
+            var paragraph = await db.Paragraphs.Include(p => p.Chapter).ThenInclude(c => c.Part).FirstOrDefaultAsync(p => p.Id == paragraphId);
+            if (paragraph == null) return;
+
+            var currentChapter = paragraph.Chapter;
+            var chapters = await db.Chapters.Where(c => c.PartId == currentChapter.PartId).OrderBy(c => c.Order).ToListAsync();
+            var currentIdx = chapters.IndexOf(currentChapter);
+            var nextOrder = currentIdx < chapters.Count - 1 ? chapters[currentIdx + 1].Order : null;
+
+            var newChapter = new Chapter
+            {
+                Id = Guid.NewGuid(),
+                PartId = currentChapter.PartId,
+                Title = newTitle ?? currentChapter.Title,
+                Order = OrderKeyGenerator.GenerateKeyBetween(currentChapter.Order, nextOrder),
+            };
+            db.Chapters.Add(newChapter);
+
+            var siblings = await db.Paragraphs.Where(p => p.ChapterId == paragraph.ChapterId).OrderBy(p => p.Order).ToListAsync();
+            var splitIdx = siblings.FindIndex(p => p.Id == paragraphId);
+            foreach (var p in siblings.Skip(splitIdx))
+                p.ChapterId = newChapter.Id;
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SplitParagraphAsync(string folderName, Guid itemId, string? newTitle)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+
+            var item = await db.ParagraphItems.Include(i => i.Paragraph).ThenInclude(p => p.Chapter).FirstOrDefaultAsync(i => i.Id == itemId);
+            if (item == null) return;
+
+            var currentParagraph = item.Paragraph;
+            var paragraphs = await db.Paragraphs.Where(p => p.ChapterId == currentParagraph.ChapterId).OrderBy(p => p.Order).ToListAsync();
+            var currentIdx = paragraphs.IndexOf(currentParagraph);
+            var nextOrder = currentIdx < paragraphs.Count - 1 ? paragraphs[currentIdx + 1].Order : null;
+
+            var newParagraph = new Paragraph
+            {
+                Id = Guid.NewGuid(),
+                ChapterId = currentParagraph.ChapterId,
+                Order = OrderKeyGenerator.GenerateKeyBetween(currentParagraph.Order, nextOrder),
+            };
+            db.Paragraphs.Add(newParagraph);
+
+            var siblings = await db.ParagraphItems.Where(i => i.ParagraphId == item.ParagraphId).OrderBy(i => i.Order).ToListAsync();
+            var splitIdx = siblings.FindIndex(i => i.Id == itemId);
+            foreach (var i in siblings.Skip(splitIdx))
+                i.ParagraphId = newParagraph.Id;
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SplitParagraphItemAsync(string folderName, Guid itemId)
+        {
+            // Split Line: same as SplitParagraph — splits the paragraph at this item boundary
+            await SplitParagraphAsync(folderName, itemId, null);
+        }
+
+        public async Task AddBookTitleAsync(string folderName)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+
+            var project = await db.Projects.SingleOrDefaultAsync();
+            if (project == null) return;
+
+            var volumes = await db.Volumes.OrderBy(v => v.Order).ToListAsync();
+            if (volumes.Count == 0) return;
+
+            Guid chapterId;
+
+            if (volumes.Count > 1)
+            {
+                var firstVolume = volumes[0];
+                var newVolume = new Volume
+                {
+                    Id = Guid.NewGuid(),
+                    Title = string.Empty,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, firstVolume.Order),
+                };
+                db.Volumes.Add(newVolume);
+
+                var newPart = new Part
+                {
+                    Id = Guid.NewGuid(),
+                    VolumeId = newVolume.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                };
+                db.Parts.Add(newPart);
+
+                var newChapter = new Chapter
+                {
+                    Id = Guid.NewGuid(),
+                    PartId = newPart.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                };
+                db.Chapters.Add(newChapter);
+                chapterId = newChapter.Id;
+            }
+            else
+            {
+                var volume = volumes[0];
+                var parts = await db.Parts.Where(p => p.VolumeId == volume.Id).OrderBy(p => p.Order).ToListAsync();
+
+                if (parts.Count > 1)
+                {
+                    var firstPart = parts[0];
+                    var newPart = new Part
+                    {
+                        Id = Guid.NewGuid(),
+                        VolumeId = volume.Id,
+                        Order = OrderKeyGenerator.GenerateKeyBetween(null, firstPart.Order),
+                    };
+                    db.Parts.Add(newPart);
+
+                    var newChapter = new Chapter
+                    {
+                        Id = Guid.NewGuid(),
+                        PartId = newPart.Id,
+                        Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                    };
+                    db.Chapters.Add(newChapter);
+                    chapterId = newChapter.Id;
+                }
+                else
+                {
+                    var part = parts[0];
+                    var chapters = await db.Chapters.Where(c => c.PartId == part.Id).OrderBy(c => c.Order).ToListAsync();
+                    var firstChapter = chapters.FirstOrDefault();
+
+                    var newChapter = new Chapter
+                    {
+                        Id = Guid.NewGuid(),
+                        PartId = part.Id,
+                        Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                    };
+                    db.Chapters.Add(newChapter);
+                    chapterId = newChapter.Id;
+                }
+            }
+
+            var titlePara = new Paragraph
+            {
+                Id = Guid.NewGuid(),
+                ChapterId = chapterId,
+                Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+            };
+            db.Paragraphs.Add(titlePara);
+            db.ParagraphItems.Add(new ParagraphItem
+            {
+                Id = Guid.NewGuid(),
+                ParagraphId = titlePara.Id,
+                ItemType = ParagraphItemType.Narration,
+                Text = project.BookTitle,
+                Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+            });
+
+            var byPara = new Paragraph
+            {
+                Id = Guid.NewGuid(),
+                ChapterId = chapterId,
+                Order = OrderKeyGenerator.GenerateKeyBetween(titlePara.Order, null),
+            };
+            db.Paragraphs.Add(byPara);
+            db.ParagraphItems.Add(new ParagraphItem
+            {
+                Id = Guid.NewGuid(),
+                ParagraphId = byPara.Id,
+                ItemType = ParagraphItemType.Narration,
+                Text = $"By {project.Author}",
+                Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task AddVolumeTitlesAsync(string folderName)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var volumes = await db.Volumes.OrderBy(v => v.Order).ToListAsync();
+
+            foreach (var volume in volumes)
+            {
+                if (string.IsNullOrWhiteSpace(volume.Title)) continue;
+
+                var firstPart = await db.Parts.Where(p => p.VolumeId == volume.Id).OrderBy(p => p.Order).FirstOrDefaultAsync();
+                if (firstPart == null) continue;
+
+                var firstChapter = await db.Chapters.Where(c => c.PartId == firstPart.Id).OrderBy(c => c.Order).FirstOrDefaultAsync();
+
+                var newChapter = new Chapter
+                {
+                    Id = Guid.NewGuid(),
+                    PartId = firstPart.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                };
+                db.Chapters.Add(newChapter);
+
+                var para = new Paragraph
+                {
+                    Id = Guid.NewGuid(),
+                    ChapterId = newChapter.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                };
+                db.Paragraphs.Add(para);
+                db.ParagraphItems.Add(new ParagraphItem
+                {
+                    Id = Guid.NewGuid(),
+                    ParagraphId = para.Id,
+                    ItemType = ParagraphItemType.Narration,
+                    Text = volume.Title,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task AddPartTitlesAsync(string folderName)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var parts = await db.Parts.OrderBy(p => p.Order).ToListAsync();
+
+            foreach (var part in parts)
+            {
+                if (string.IsNullOrWhiteSpace(part.Title)) continue;
+
+                var firstChapter = await db.Chapters.Where(c => c.PartId == part.Id).OrderBy(c => c.Order).FirstOrDefaultAsync();
+
+                var newChapter = new Chapter
+                {
+                    Id = Guid.NewGuid(),
+                    PartId = part.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                };
+                db.Chapters.Add(newChapter);
+
+                var para = new Paragraph
+                {
+                    Id = Guid.NewGuid(),
+                    ChapterId = newChapter.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                };
+                db.Paragraphs.Add(para);
+                db.ParagraphItems.Add(new ParagraphItem
+                {
+                    Id = Guid.NewGuid(),
+                    ParagraphId = para.Id,
+                    ItemType = ParagraphItemType.Narration,
+                    Text = part.Title,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task AddChapterTitlesAsync(string folderName)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var chapters = await db.Chapters.OrderBy(c => c.Order).ToListAsync();
+
+            foreach (var chapter in chapters)
+            {
+                if (string.IsNullOrWhiteSpace(chapter.Title)) continue;
+
+                var firstParagraph = await db.Paragraphs.Where(p => p.ChapterId == chapter.Id).OrderBy(p => p.Order).FirstOrDefaultAsync();
+
+                var para = new Paragraph
+                {
+                    Id = Guid.NewGuid(),
+                    ChapterId = chapter.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, firstParagraph?.Order),
+                };
+                db.Paragraphs.Add(para);
+                db.ParagraphItems.Add(new ParagraphItem
+                {
+                    Id = Guid.NewGuid(),
+                    ParagraphId = para.Id,
+                    ItemType = ParagraphItemType.Narration,
+                    Text = chapter.Title,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                });
+            }
+
             await db.SaveChangesAsync();
         }
 
