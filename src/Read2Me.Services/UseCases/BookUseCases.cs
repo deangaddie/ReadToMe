@@ -21,5 +21,19 @@ namespace Read2Me.Services.UseCases
             catch (InvalidOperationException ex) { return Result.Fail(ex.Message); }
             catch (Exception) { return Result.Fail("Failed to import book. Please try again."); }
         }
+
+        public async Task<Result> ImportManuallyAsync(string folderName, ManualReadOptions options, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var lines = await bookReadingService.FlattenFromFileAsync(folderName, cancellationToken);
+                await projectWriter.ClearBookContentAsync(folderName);
+                await bookReadingService.ReadBookManuallyAsync(folderName, lines, options, cancellationToken);
+                return Result.Ok();
+            }
+            catch (FileNotFoundException ex) { return Result.Fail(ex.Message); }
+            catch (InvalidOperationException ex) { return Result.Fail(ex.Message); }
+            catch (Exception) { return Result.Fail("Failed to manually reread book. Please try again."); }
+        }
     }
 }

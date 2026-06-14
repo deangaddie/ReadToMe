@@ -1,0 +1,145 @@
+@using Read2Me.Core.Models
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Manual Reread Book</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="4">
+
+            <MudText Typo="Typo.subtitle2">Book Structure</MudText>
+            <MudStack Spacing="1">
+                <MudSwitch @bind-Value="_hasVolumes" Label="Book has multiple volumes" Color="Color.Primary" />
+                <MudSwitch @bind-Value="_hasParts" Label="@(_hasVolumes ? "Each volume has multiple parts" : "Book has multiple parts")" Color="Color.Primary" />
+                </MudStack>
+
+            <MudDivider />
+
+            @if (_hasVolumes)
+            {
+                <MudText Typo="Typo.subtitle2">Volume Detection</MudText>
+                <MudStack Spacing="2" Class="ml-2">
+                    <MudRadioGroup @bind-Value="_volumeMode">
+                        <MudRadio Value="SplitDetectionMode.Prefix" Color="Color.Primary">Text prefix</MudRadio>
+                        <MudRadio Value="SplitDetectionMode.Number" Color="Color.Primary">Number (Arabic)</MudRadio>
+                        <MudRadio Value="SplitDetectionMode.RomanNumeral" Color="Color.Primary">Roman numerals</MudRadio>
+                    </MudRadioGroup>
+                    @if (_volumeMode == SplitDetectionMode.Prefix)
+                    {
+                        <MudTextField @bind-Value="_volumePrefix" Label="Prefix (e.g. Volume, Book)"
+                                      Variant="Variant.Outlined" Immediate="true" Class="ml-4" />
+                    }
+                </MudStack>
+                <MudDivider />
+            }
+
+            @if (_hasParts)
+            {
+                <MudText Typo="Typo.subtitle2">Part Detection</MudText>
+                <MudStack Spacing="2" Class="ml-2">
+                    <MudRadioGroup @bind-Value="_partMode">
+                        <MudRadio Value="SplitDetectionMode.Prefix" Color="Color.Primary">Text prefix</MudRadio>
+                        <MudRadio Value="SplitDetectionMode.Number" Color="Color.Primary">Number (Arabic)</MudRadio>
+                        <MudRadio Value="SplitDetectionMode.RomanNumeral" Color="Color.Primary">Roman numerals</MudRadio>
+                    </MudRadioGroup>
+                    @if (_partMode == SplitDetectionMode.Prefix)
+                    {
+                        <MudTextField @bind-Value="_partPrefix" Label="Prefix (e.g. Part)"
+                                      Variant="Variant.Outlined" Immediate="true" Class="ml-4" />
+                    }
+                </MudStack>
+                <MudDivider />
+            }
+
+            <MudText Typo="Typo.subtitle2">Chapter Detection</MudText>
+            <MudStack Spacing="2" Class="ml-2">
+                <MudRadioGroup @bind-Value="_chapterMode">
+                    <MudRadio Value="SplitDetectionMode.Prefix" Color="Color.Primary">Text prefix</MudRadio>
+                    <MudRadio Value="SplitDetectionMode.Number" Color="Color.Primary">Number (Arabic)</MudRadio>
+                    <MudRadio Value="SplitDetectionMode.RomanNumeral" Color="Color.Primary">Roman numerals</MudRadio>
+                </MudRadioGroup>
+                @if (_chapterMode == SplitDetectionMode.Prefix)
+                {
+                    <MudTextField @bind-Value="_chapterPrefix" Label="Prefix (e.g. Chapter)"
+                                  Variant="Variant.Outlined" Immediate="true" Class="ml-4" />
+                }
+            </MudStack>
+
+            @if (_error != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+            }
+
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_processing">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_processing">
+            @if (_processing)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Reread
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    bool _hasVolumes;
+    bool _hasParts;
+    bool _processing;
+
+    SplitDetectionMode _volumeMode = SplitDetectionMode.Prefix;
+    string _volumePrefix = "";
+
+    SplitDetectionMode _partMode = SplitDetectionMode.Prefix;
+    string _partPrefix = "";
+
+    SplitDetectionMode _chapterMode = SplitDetectionMode.Prefix;
+    string _chapterPrefix = "";
+
+    string? _error;
+
+    void Cancel() => MudDialog.Cancel();
+
+    async Task Submit()
+    {
+        _error = null;
+
+        if (_hasVolumes && _volumeMode == SplitDetectionMode.Prefix && string.IsNullOrWhiteSpace(_volumePrefix))
+        {
+            _error = "Volume prefix cannot be empty.";
+            return;
+        }
+        if (_hasParts && _partMode == SplitDetectionMode.Prefix && string.IsNullOrWhiteSpace(_partPrefix))
+        {
+            _error = "Part prefix cannot be empty.";
+            return;
+        }
+        if (_chapterMode == SplitDetectionMode.Prefix && string.IsNullOrWhiteSpace(_chapterPrefix))
+        {
+            _error = "Chapter prefix cannot be empty.";
+            return;
+        }
+
+        _processing = true;
+        StateHasChanged();
+        await Task.Yield();
+
+        var options = new ManualReadOptions(
+            HasVolumes: _hasVolumes,
+            HasParts: _hasParts,
+            VolumeRule: _hasVolumes
+                ? new SectionSplitRule(_volumeMode, _volumeMode == SplitDetectionMode.Prefix ? _volumePrefix.Trim() : null)
+                : null,
+            PartRule: _hasParts
+                ? new SectionSplitRule(_partMode, _partMode == SplitDetectionMode.Prefix ? _partPrefix.Trim() : null)
+                : null,
+            ChapterRule: new SectionSplitRule(_chapterMode, _chapterMode == SplitDetectionMode.Prefix ? _chapterPrefix.Trim() : null)
+        );
+
+        MudDialog.Close(DialogResult.Ok(options));
+    }
+}

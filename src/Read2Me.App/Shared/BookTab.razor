@@ -1,9 +1,11 @@
 @using Read2Me.App.State
+@using Read2Me.Core.Models
 @using Read2Me.Data.Enums
 @inject Read2Me.Services.IProjectReader ProjectReader
 @inject Read2Me.Services.IProjectWriter ProjectWriter
 @inject Read2Me.Services.UseCases.BookUseCases BookUseCases
 @inject BookTreeState TreeState
+@inject IDialogService DialogService
 
 @if (_loading)
 {
@@ -65,20 +67,25 @@ else
                                             var it = item;
                                             @if (it.ItemType == ParagraphItemType.Character)
                                             {
-                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                                    <MudSelect T="Guid?" Value="@it.CharacterId"
-                                                               ValueChanged="@((Guid? v) => SetItemCharacterAsync(it, v))"
-                                                               Dense="true" Margin="Margin.Dense" Variant="Variant.Text"
-                                                               Style="min-width:120px; max-width:180px"
-                                                               Placeholder="@(it.Character?.Name ?? "Unknown")"
-                                                               AnchorOrigin="Origin.BottomLeft">
-                                                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">Unknown</MudSelectItem>
-                                                        @foreach (var ch2 in _characters)
-                                                        {
-                                                            var c = ch2;
-                                                            <MudSelectItem T="Guid?" Value="@((Guid?)c.Id)">@c.Name</MudSelectItem>
-                                                        }
-                                                    </MudSelect>
+                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
+                                                    <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
+                                                        <ActivatorContent>
+                                                            <MudChip T="string" Size="Size.Small"
+                                                                     Color="@(it.Character == null ? Color.Warning : Color.Primary)"
+                                                                     Variant="Variant.Filled" Class="mt-0"
+                                                                     OnClick="@(() => {})">
+                                                                @(it.Character?.Name ?? "Unknown")
+                                                            </MudChip>
+                                                        </ActivatorContent>
+                                                        <ChildContent>
+                                                            <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, null))">Unknown</MudMenuItem>
+                                                            @foreach (var ch2 in _characters)
+                                                            {
+                                                                var c = ch2;
+                                                                <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, c.Id))">@c.Name</MudMenuItem>
+                                                            }
+                                                        </ChildContent>
+                                                    </MudMenu>
                                                     <MudText Typo="Typo.body2">@it.Text</MudText>
                                                 </MudStack>
                                             }
@@ -136,6 +143,10 @@ else
                     <MudMenuItem Icon="@Icons.Material.Filled.Refresh" IconColor="Color.Warning"
                                  OnClick="@(() => _confirmReread = true)" Disabled="_busy">
                         Reread Book
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.EditNote" IconColor="Color.Info"
+                                 OnClick="ManualRereadBookAsync" Disabled="_busy">
+                        Manual Reread Book
                     </MudMenuItem>
                 </MudMenu>
             }
@@ -303,6 +314,27 @@ else
         var result = await BookUseCases.ImportAsync(FolderName, reread: true);
         _error = result.IsSuccess ? null : result.Error;
         if (result.IsSuccess)
+        {
+            _tree.Reset();
+            await LoadAsync();
+        }
+        _busy = false;
+    }
+
+    async Task ManualRereadBookAsync()
+    {
+        var dialog = await DialogService.ShowAsync<ManualRereadDialog>("Manual Reread Book");
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        var options = result.Data as ManualReadOptions;
+        if (options is null) return;
+
+        _busy = true;
+        _error = null;
+        var importResult = await BookUseCases.ImportManuallyAsync(FolderName, options);
+        _error = importResult.IsSuccess ? null : importResult.Error;
+        if (importResult.IsSuccess)
         {
             _tree.Reset();
             await LoadAsync();
