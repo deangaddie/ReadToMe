@@ -16,44 +16,38 @@ namespace Read2Me.Services
         {
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
-            var volKeys = GenerateKeys(content.Volumes.Count);
-            for (int vi = 0; vi < content.Volumes.Count; vi++)
+            string? prev = null;
+            string NextKey() => prev = OrderKeyGenerator.GenerateKeyBetween(prev, null);
+
+            foreach (var vol in content.Volumes)
             {
-                var vol = content.Volumes[vi];
-                var volume = new Volume { Id = Guid.NewGuid(), Title = vol.Title, Order = volKeys[vi] };
+                var volume = new Volume { Id = Guid.NewGuid(), Title = vol.Title, Order = NextKey() };
                 db.Volumes.Add(volume);
 
-                var partKeys = GenerateKeys(vol.Parts.Count);
-                for (int pi = 0; pi < vol.Parts.Count; pi++)
+                foreach (var part in vol.Parts)
                 {
-                    var part = vol.Parts[pi];
-                    var partEntity = new Part { Id = Guid.NewGuid(), VolumeId = volume.Id, Title = part.Title, Order = partKeys[pi] };
+                    var partEntity = new Part { Id = Guid.NewGuid(), VolumeId = volume.Id, Title = part.Title, Order = NextKey() };
                     db.Parts.Add(partEntity);
 
-                    var chKeys = GenerateKeys(part.Chapters.Count);
-                    for (int ci = 0; ci < part.Chapters.Count; ci++)
+                    foreach (var ch in part.Chapters)
                     {
-                        var ch = part.Chapters[ci];
-                        var chapter = new Chapter { Id = Guid.NewGuid(), PartId = partEntity.Id, Title = ch.Title, Order = chKeys[ci] };
+                        var chapter = new Chapter { Id = Guid.NewGuid(), PartId = partEntity.Id, Title = ch.Title, Order = NextKey() };
                         db.Chapters.Add(chapter);
 
-                        var paraKeys = GenerateKeys(ch.Paragraphs.Count);
-                        for (int pri = 0; pri < ch.Paragraphs.Count; pri++)
+                        foreach (var para in ch.Paragraphs)
                         {
-                            var paragraph = new Paragraph { Id = Guid.NewGuid(), ChapterId = chapter.Id, Order = paraKeys[pri] };
+                            var paragraph = new Paragraph { Id = Guid.NewGuid(), ChapterId = chapter.Id, Order = NextKey() };
                             db.Paragraphs.Add(paragraph);
 
-                            var segments = ParagraphSplitter.Split(ch.Paragraphs[pri].Text);
+                            var segments = ParagraphSplitter.Split(para.Text);
                             var attributed = NarrationClassifier.Classify(segments);
-                            var segKeys = GenerateKeys(attributed.Count);
-                            for (int si = 0; si < attributed.Count; si++)
+                            foreach (var seg in attributed)
                             {
-                                var seg = attributed[si];
                                 db.ParagraphItems.Add(new ParagraphItem
                                 {
                                     Id = Guid.NewGuid(),
                                     ParagraphId = paragraph.Id,
-                                    Order = segKeys[si],
+                                    Order = NextKey(),
                                     ItemType = seg.ItemType,
                                     CharacterId = seg.CharacterId,
                                     Text = seg.Text
@@ -66,18 +60,6 @@ namespace Read2Me.Services
 
             await db.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
-        }
-
-        private static List<string> GenerateKeys(int count)
-        {
-            var keys = new List<string>(count);
-            string? prev = null;
-            for (int i = 0; i < count; i++)
-            {
-                prev = OrderKeyGenerator.GenerateKeyBetween(prev, null);
-                keys.Add(prev);
-            }
-            return keys;
         }
     }
 }

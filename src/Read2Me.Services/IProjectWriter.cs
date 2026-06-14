@@ -13,5 +13,6 @@ namespace Read2Me.Services
         Task DeleteCoverImageAsync(string folderName);
         Task ClearBookContentAsync(string folderName);
         void DeleteProject(string folderName);
+        Task SetParagraphItemCharacterAsync(string folderName, Guid itemId, Guid? characterId);
     }
 }

@@ -1,5 +1,7 @@
 @using Read2Me.App.State
+@using Read2Me.Data.Enums
 @inject Read2Me.Services.IProjectReader ProjectReader
+@inject Read2Me.Services.IProjectWriter ProjectWriter
 @inject Read2Me.Services.UseCases.BookUseCases BookUseCases
 @inject BookTreeState TreeState
 
@@ -36,102 +38,200 @@ else if (!_hasContent)
 else
 {
     <MudStack Spacing="3" Class="pa-3">
-        <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider)">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                <MudStack Spacing="0">
-                    @if (_project != null)
-                    {
-                        <MudText Typo="Typo.h6">@_project.BookTitle</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">@_project.Author</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_filename</MudText>
-                    }
-                </MudStack>
-                <MudStack Spacing="1" AlignItems="AlignItems.End">
-                    @if (_confirmReread)
-                    {
-                        <MudText Typo="Typo.caption" Color="Color.Warning">Delete all book data and reprocess?</MudText>
-                        <MudStack Row="true" Spacing="1">
-                            <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
-                                       OnClick="ConfirmRereadeBookAsync" Disabled="_busy">
-                                @if (_busy)
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" />
-                                }
-                                Confirm
-                            </MudButton>
-                            <MudButton Variant="Variant.Text" Size="Size.Small"
-                                       OnClick="@(() => _confirmReread = false)">
-                                Cancel
-                            </MudButton>
-                        </MudStack>
-                    }
-                    else
-                    {
-                        <MudButton Variant="Variant.Outlined" Color="Color.Warning"
-                                   StartIcon="@Icons.Material.Filled.Refresh"
-                                   OnClick="@(() => _confirmReread = true)" Disabled="_busy">
-                            Reread Book
-                        </MudButton>
-                    }
-                    @if (_error != null)
-                    {
-                        <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
-                    }
-                </MudStack>
-            </MudStack>
-        </MudPaper>
-
-        <MudExpansionPanels MultiExpansion="true">
-            @foreach (var volume in _volumes)
+    @{
+        RenderFragment<List<Read2Me.Data.Entities.Chapter>> renderChapters = chapters =>
+        @<MudExpansionPanels MultiExpansion="true">
+            @foreach (var chapter in chapters)
             {
-                var vol = volume;
-                <MudExpansionPanel Text="@vol.Title" ExpandedChanged="@VolumeExpandCb(vol)">
-                    @if (_tree.LoadingIds.Contains(vol.Id))
+                var ch = chapter;
+                <MudExpansionPanel Text="@(ch.Title ?? "Chapter")" ExpandedChanged="@ChapterExpandCb(ch)">
+                    @if (_tree.LoadingIds.Contains(ch.Id))
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
                     }
-                    else if (_tree.LoadedParts.TryGetValue(vol.Id, out var parts))
+                    else if (_tree.LoadedParagraphs.TryGetValue(ch.Id, out var paragraphs))
                     {
-                        <MudExpansionPanels MultiExpansion="true">
-                            @foreach (var part in parts)
+                        <MudStack Spacing="2" Class="py-1">
+                            @foreach (var para in paragraphs)
                             {
-                                var p = part;
-                                <MudExpansionPanel Text="@(p.Title ?? "Part")" ExpandedChanged="@PartExpandCb(p)">
-                                    @if (_tree.LoadingIds.Contains(p.Id))
-                                    {
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                    }
-                                    else if (_tree.LoadedChapters.TryGetValue(p.Id, out var chapters))
-                                    {
-                                        <MudExpansionPanels MultiExpansion="true">
-                                            @foreach (var chapter in chapters)
+                                var hasUnknown = _splitView && para.Items.Any(i =>
+                                    i.ItemType == ParagraphItemType.Character && i.Character == null);
+                                @if (_splitView)
+                                {
+                                    <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
+                                              Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : "var(--mud-palette-divider)")};{(hasUnknown ? " background: rgba(var(--mud-palette-warning-rgb), 0.06);" : "")}")">
+                                        @foreach (var item in para.Items)
+                                        {
+                                            var it = item;
+                                            @if (it.ItemType == ParagraphItemType.Character)
                                             {
-                                                var ch = chapter;
-                                                <MudExpansionPanel Text="@(ch.Title ?? "Chapter")" ExpandedChanged="@ChapterExpandCb(ch)">
-                                                    @if (_tree.LoadingIds.Contains(ch.Id))
-                                                    {
-                                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                                    }
-                                                    else if (_tree.LoadedParagraphs.TryGetValue(ch.Id, out var paragraphs))
-                                                    {
-                                                        <MudStack Spacing="2" Class="py-1">
-                                                            @foreach (var para in paragraphs)
-                                                            {
-                                                                <MudText Typo="Typo.body2">@string.Join(" ", para.Items.Select(i => i.Text))</MudText>
-                                                            }
-                                                        </MudStack>
-                                                    }
-                                                </MudExpansionPanel>
+                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                    <MudSelect T="Guid?" Value="@it.CharacterId"
+                                                               ValueChanged="@((Guid? v) => SetItemCharacterAsync(it, v))"
+                                                               Dense="true" Margin="Margin.Dense" Variant="Variant.Text"
+                                                               Style="min-width:120px; max-width:180px"
+                                                               Placeholder="@(it.Character?.Name ?? "Unknown")"
+                                                               AnchorOrigin="Origin.BottomLeft">
+                                                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">Unknown</MudSelectItem>
+                                                        @foreach (var ch2 in _characters)
+                                                        {
+                                                            var c = ch2;
+                                                            <MudSelectItem T="Guid?" Value="@((Guid?)c.Id)">@c.Name</MudSelectItem>
+                                                        }
+                                                    </MudSelect>
+                                                    <MudText Typo="Typo.body2">@it.Text</MudText>
+                                                </MudStack>
                                             }
-                                        </MudExpansionPanels>
-                                    }
-                                </MudExpansionPanel>
+                                            else
+                                            {
+                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text" Class="mt-0">@it.ItemType.ToString()</MudChip>
+                                                    <MudText Typo="Typo.body2">@it.Text</MudText>
+                                                </MudStack>
+                                            }
+                                        }
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2">@string.Join(" ", para.Items.Select(i => i.Text))</MudText>
+                                }
                             }
-                        </MudExpansionPanels>
+                        </MudStack>
                     }
                 </MudExpansionPanel>
             }
-        </MudExpansionPanels>
+        </MudExpansionPanels>;
+    }
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="1">
+            @if (_error != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+            }
+            <MudToggleIconButton Toggled="_splitView" ToggledChanged="@((v) => _splitView = v)"
+                                 Icon="@Icons.Material.Filled.ViewStream"
+                                 ToggledIcon="@Icons.Material.Filled.Subject"
+                                 Title="Show split items"
+                                 ToggledTitle="Show original paragraphs"
+                                 Size="Size.Small" />
+            @if (_confirmReread)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Warning">Delete all book data and reprocess?</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                           OnClick="ConfirmRereadeBookAsync" Disabled="_busy">
+                    @if (_busy)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" />
+                    }
+                    Confirm
+                </MudButton>
+                <MudButton Variant="Variant.Text" Size="Size.Small"
+                           OnClick="@(() => _confirmReread = false)">
+                    Cancel
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <MudMenuItem Icon="@Icons.Material.Filled.Refresh" IconColor="Color.Warning"
+                                 OnClick="@(() => _confirmReread = true)" Disabled="_busy">
+                        Reread Book
+                    </MudMenuItem>
+                </MudMenu>
+            }
+        </MudStack>
+
+        @if (_volumes.Count == 1)
+        {
+            var vol = _volumes[0];
+            @if (_tree.LoadingIds.Contains(vol.Id))
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+            }
+            else if (_tree.LoadedParts.TryGetValue(vol.Id, out var svParts))
+            {
+                @if (svParts.Count == 1)
+                {
+                    var p = svParts[0];
+                    @if (_tree.LoadingIds.Contains(p.Id))
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                    }
+                    else if (_tree.LoadedChapters.TryGetValue(p.Id, out var svspChapters))
+                    {
+                        @renderChapters(svspChapters)
+                    }
+                }
+                else
+                {
+                    <MudExpansionPanels MultiExpansion="true">
+                        @foreach (var part in svParts)
+                        {
+                            var p = part;
+                            <MudExpansionPanel Text="@(p.Title ?? "Part")" ExpandedChanged="@PartExpandCb(p)">
+                                @if (_tree.LoadingIds.Contains(p.Id))
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                                }
+                                else if (_tree.LoadedChapters.TryGetValue(p.Id, out var svmpChapters))
+                                {
+                                    @renderChapters(svmpChapters)
+                                }
+                            </MudExpansionPanel>
+                        }
+                    </MudExpansionPanels>
+                }
+            }
+        }
+        else
+        {
+            <MudExpansionPanels MultiExpansion="true">
+                @foreach (var volume in _volumes)
+                {
+                    var vol = volume;
+                    <MudExpansionPanel Text="@vol.Title" ExpandedChanged="@VolumeExpandCb(vol)">
+                        @if (_tree.LoadingIds.Contains(vol.Id))
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                        }
+                        else if (_tree.LoadedParts.TryGetValue(vol.Id, out var mvParts))
+                        {
+                            @if (mvParts.Count == 1)
+                            {
+                                var p = mvParts[0];
+                                @if (_tree.LoadingIds.Contains(p.Id))
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                                }
+                                else if (_tree.LoadedChapters.TryGetValue(p.Id, out var mvspChapters))
+                                {
+                                    @renderChapters(mvspChapters)
+                                }
+                            }
+                            else
+                            {
+                                <MudExpansionPanels MultiExpansion="true">
+                                    @foreach (var part in mvParts)
+                                    {
+                                        var p = part;
+                                        <MudExpansionPanel Text="@(p.Title ?? "Part")" ExpandedChanged="@PartExpandCb(p)">
+                                            @if (_tree.LoadingIds.Contains(p.Id))
+                                            {
+                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                                            }
+                                            else if (_tree.LoadedChapters.TryGetValue(p.Id, out var mvmpChapters))
+                                            {
+                                                @renderChapters(mvmpChapters)
+                                            }
+                                        </MudExpansionPanel>
+                                    }
+                                </MudExpansionPanels>
+                            }
+                        }
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        }
     </MudStack>
 }
 
@@ -142,10 +242,12 @@ else
     bool _hasContent;
     bool _busy;
     bool _confirmReread;
+    bool _splitView;
     string? _filename;
     string? _error;
     Read2Me.Data.Entities.Project? _project;
     List<Read2Me.Data.Entities.Volume> _volumes = [];
+    List<Read2Me.Data.Entities.Character> _characters = [];
     PerFolderState _tree = null!;
 
     EventCallback<bool> VolumeExpandCb(Read2Me.Data.Entities.Volume v) =>
@@ -172,6 +274,14 @@ else
         _filename = _project?.Filename;
         _hasContent = await ProjectReader.HasBookContentAsync(FolderName);
         _volumes = _hasContent ? await ProjectReader.GetVolumesAsync(FolderName) : [];
+        _characters = _hasContent ? await ProjectReader.GetCharactersAsync(FolderName) : [];
+
+        if (_volumes.Count == 1)
+        {
+            await _tree.OnVolumeExpandedAsync(_volumes[0], true, () => { });
+            if (_tree.LoadedParts.TryGetValue(_volumes[0].Id, out var parts) && parts.Count == 1)
+                await _tree.OnPartExpandedAsync(parts[0], true, () => { });
+        }
 
         _loading = false;
     }
@@ -198,5 +308,13 @@ else
             await LoadAsync();
         }
         _busy = false;
+    }
+
+    async Task SetItemCharacterAsync(Read2Me.Data.Entities.ParagraphItem item, Guid? characterId)
+    {
+        await ProjectWriter.SetParagraphItemCharacterAsync(FolderName, item.Id, characterId);
+        item.CharacterId = characterId;
+        item.Character = characterId.HasValue ? _characters.FirstOrDefault(c => c.Id == characterId.Value) : null;
+        StateHasChanged();
     }
 }

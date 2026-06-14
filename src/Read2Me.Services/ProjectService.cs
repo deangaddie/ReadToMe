@@ -4,11 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data;
+using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using ProjectEntity = Read2Me.Data.Entities.Project;
 
@@ -216,7 +218,26 @@ namespace Read2Me.Services
                 .Where(p => p.ChapterId == chapterId)
                 .OrderBy(p => p.Order)
                 .Include(p => p.Items.OrderBy(i => i.Order))
+                    .ThenInclude(i => i.Character)
                 .ToListAsync();
+        }
+
+        public async Task<List<Read2Me.Data.Entities.Character>> GetCharactersAsync(string folderName)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            return await db.Characters.OrderBy(c => c.IsNarrator ? 0 : 1).ThenBy(c => c.Name).ToListAsync();
+        }
+
+        public async Task SetParagraphItemCharacterAsync(string folderName, Guid itemId, Guid? characterId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var item = await db.ParagraphItems.Include(i => i.Character).FirstOrDefaultAsync(i => i.Id == itemId);
+            if (item == null) return;
+            item.CharacterId = characterId;
+            item.Character = characterId.HasValue
+                ? await db.Characters.FindAsync(characterId.Value)
+                : null;
+            await db.SaveChangesAsync();
         }
 
         public async Task ClearBookContentAsync(string folderName)

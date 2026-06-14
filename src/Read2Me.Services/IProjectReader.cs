@@ -16,5 +16,6 @@ namespace Read2Me.Services
         Task<List<Part>> GetPartsAsync(string folderName, Guid volumeId);
         Task<List<Chapter>> GetChaptersAsync(string folderName, Guid partId);
         Task<List<Paragraph>> GetChapterParagraphsAsync(string folderName, Guid chapterId);
+        Task<List<Character>> GetCharactersAsync(string folderName);
     }
 }
