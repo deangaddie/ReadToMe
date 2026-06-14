@@ -240,6 +240,51 @@ namespace Read2Me.Services
             await db.SaveChangesAsync();
         }
 
+        public async Task DeleteVolumeAsync(string folderName, Guid volumeId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.Volumes.FindAsync(volumeId);
+            if (entity == null) return;
+            db.Volumes.Remove(entity);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task DeletePartAsync(string folderName, Guid partId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.Parts.FindAsync(partId);
+            if (entity == null) return;
+            db.Parts.Remove(entity);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task DeleteChapterAsync(string folderName, Guid chapterId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.Chapters.FindAsync(chapterId);
+            if (entity == null) return;
+            db.Chapters.Remove(entity);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task DeleteParagraphAsync(string folderName, Guid paragraphId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.Paragraphs.FindAsync(paragraphId);
+            if (entity == null) return;
+            db.Paragraphs.Remove(entity);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task DeleteParagraphItemAsync(string folderName, Guid itemId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.ParagraphItems.FindAsync(itemId);
+            if (entity == null) return;
+            db.ParagraphItems.Remove(entity);
+            await db.SaveChangesAsync();
+        }
+
         public async Task ClearBookContentAsync(string folderName)
         {
             var db = await OpenProjectDbAsync(folderName);

@@ -41,71 +41,138 @@ else
 {
     <MudStack Spacing="3" Class="pa-3">
     @{
+        RenderFragment<Read2Me.Data.Entities.ParagraphItem> renderItemMenu = item =>
+        @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                  AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                  @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                         OnClick="@(() => DeleteParagraphItemAsync(item))">
+                Delete Item
+            </MudMenuItem>
+        </MudMenu>;
+
+        RenderFragment<Read2Me.Data.Entities.Paragraph> renderParagraphMenu = para =>
+        @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                  AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                  @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                         OnClick="@(() => DeleteParagraphAsync(para))">
+                Delete Paragraph
+            </MudMenuItem>
+        </MudMenu>;
+
+        RenderFragment<Read2Me.Data.Entities.Chapter> renderChapterMenu = ch =>
+        @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                  AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                  @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                         OnClick="@(() => DeleteChapterAsync(ch))">
+                Delete Chapter
+            </MudMenuItem>
+        </MudMenu>;
+
+        RenderFragment<Read2Me.Data.Entities.Part> renderPartMenu = part =>
+        @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                  AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                  @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                         OnClick="@(() => DeletePartAsync(part))">
+                Delete Part
+            </MudMenuItem>
+        </MudMenu>;
+
+        RenderFragment<Read2Me.Data.Entities.Volume> renderVolumeMenu = vol =>
+        @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                  AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                  @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                         OnClick="@(() => DeleteVolumeAsync(vol))">
+                Delete Volume
+            </MudMenuItem>
+        </MudMenu>;
+
         RenderFragment<List<Read2Me.Data.Entities.Chapter>> renderChapters = chapters =>
         @<MudExpansionPanels MultiExpansion="true">
             @foreach (var chapter in chapters)
             {
                 var ch = chapter;
-                <MudExpansionPanel Text="@(ch.Title ?? "Chapter")" ExpandedChanged="@ChapterExpandCb(ch)">
-                    @if (_tree.LoadingIds.Contains(ch.Id))
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                    }
-                    else if (_tree.LoadedParagraphs.TryGetValue(ch.Id, out var paragraphs))
-                    {
-                        <MudStack Spacing="2" Class="py-1">
-                            @foreach (var para in paragraphs)
-                            {
-                                var hasUnknown = _splitView && para.Items.Any(i =>
-                                    i.ItemType == ParagraphItemType.Character && i.Character == null);
-                                @if (_splitView)
-                                {
-                                    <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
-                                              Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : "var(--mud-palette-divider)")};{(hasUnknown ? " background: rgba(var(--mud-palette-warning-rgb), 0.06);" : "")}")">
-                                        @foreach (var item in para.Items)
-                                        {
-                                            var it = item;
-                                            @if (it.ItemType == ParagraphItemType.Character)
-                                            {
-                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
-                                                    <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
-                                                        <ActivatorContent>
-                                                            <MudChip T="string" Size="Size.Small"
-                                                                     Color="@(it.Character == null ? Color.Warning : Color.Primary)"
-                                                                     Variant="Variant.Filled" Class="mt-0"
-                                                                     OnClick="@(() => {})">
-                                                                @(it.Character?.Name ?? "Unknown")
-                                                            </MudChip>
-                                                        </ActivatorContent>
-                                                        <ChildContent>
-                                                            <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, null))">Unknown</MudMenuItem>
-                                                            @foreach (var ch2 in _characters)
-                                                            {
-                                                                var c = ch2;
-                                                                <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, c.Id))">@c.Name</MudMenuItem>
-                                                            }
-                                                        </ChildContent>
-                                                    </MudMenu>
-                                                    <MudText Typo="Typo.body2">@it.Text</MudText>
-                                                </MudStack>
-                                            }
-                                            else
-                                            {
-                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
-                                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text" Class="mt-0">@it.ItemType.ToString()</MudChip>
-                                                    <MudText Typo="Typo.body2">@it.Text</MudText>
-                                                </MudStack>
-                                            }
-                                        }
-                                    </MudStack>
-                                }
-                                else
-                                {
-                                    <MudText Typo="Typo.body2">@string.Join(" ", para.Items.Select(i => i.Text))</MudText>
-                                }
-                            }
+                <MudExpansionPanel ExpandedChanged="@ChapterExpandCb(ch)">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                            <MudText Style="flex:1">@(ch.Title ?? "Chapter")</MudText>
+                            @renderChapterMenu(ch)
                         </MudStack>
-                    }
+                    </TitleContent>
+                    <ChildContent>
+                        @if (_tree.LoadingIds.Contains(ch.Id))
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                        }
+                        else if (_tree.LoadedParagraphs.TryGetValue(ch.Id, out var paragraphs))
+                        {
+                            <MudStack Spacing="2" Class="py-1">
+                                @foreach (var para in paragraphs)
+                                {
+                                    var p = para;
+                                    var hasUnknown = _splitView && p.Items.Any(i =>
+                                        i.ItemType == ParagraphItemType.Character && i.Character == null);
+                                    @if (_splitView)
+                                    {
+                                        <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
+                                                  Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : "var(--mud-palette-divider)")};{(hasUnknown ? " background: rgba(var(--mud-palette-warning-rgb), 0.06);" : "")}")">
+                                            @foreach (var item in p.Items)
+                                            {
+                                                var it = item;
+                                                @if (it.ItemType == ParagraphItemType.Character)
+                                                {
+                                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
+                                                        <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
+                                                            <ActivatorContent>
+                                                                <MudChip T="string" Size="Size.Small"
+                                                                         Color="@(it.Character == null ? Color.Warning : Color.Primary)"
+                                                                         Variant="Variant.Filled" Class="mt-0"
+                                                                         OnClick="@(() => {})">
+                                                                    @(it.Character?.Name ?? "Unknown")
+                                                                </MudChip>
+                                                            </ActivatorContent>
+                                                            <ChildContent>
+                                                                <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, null))">Unknown</MudMenuItem>
+                                                                @foreach (var ch2 in _characters)
+                                                                {
+                                                                    var c = ch2;
+                                                                    <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, c.Id))">@c.Name</MudMenuItem>
+                                                                }
+                                                            </ChildContent>
+                                                        </MudMenu>
+                                                        <MudText Typo="Typo.body2" Style="flex:1">@it.Text</MudText>
+                                                        @renderItemMenu(it)
+                                                    </MudStack>
+                                                }
+                                                else
+                                                {
+                                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text" Class="mt-0">@it.ItemType.ToString()</MudChip>
+                                                        <MudText Typo="Typo.body2" Style="flex:1">@it.Text</MudText>
+                                                        @renderItemMenu(it)
+                                                    </MudStack>
+                                                }
+                                            }
+                                            <MudStack Row="true" Justify="Justify.FlexEnd">
+                                                @renderParagraphMenu(p)
+                                            </MudStack>
+                                        </MudStack>
+                                    }
+                                    else
+                                    {
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudText Typo="Typo.body2" Style="flex:1">@string.Join(" ", p.Items.Select(i => i.Text))</MudText>
+                                            @renderParagraphMenu(p)
+                                        </MudStack>
+                                    }
+                                }
+                            </MudStack>
+                        }
+                    </ChildContent>
                 </MudExpansionPanel>
             }
         </MudExpansionPanels>;
@@ -179,15 +246,23 @@ else
                         @foreach (var part in svParts)
                         {
                             var p = part;
-                            <MudExpansionPanel Text="@(p.Title ?? "Part")" ExpandedChanged="@PartExpandCb(p)">
-                                @if (_tree.LoadingIds.Contains(p.Id))
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                }
-                                else if (_tree.LoadedChapters.TryGetValue(p.Id, out var svmpChapters))
-                                {
-                                    @renderChapters(svmpChapters)
-                                }
+                            <MudExpansionPanel ExpandedChanged="@PartExpandCb(p)">
+                                <TitleContent>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                                        <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
+                                        @renderPartMenu(p)
+                                    </MudStack>
+                                </TitleContent>
+                                <ChildContent>
+                                    @if (_tree.LoadingIds.Contains(p.Id))
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                                    }
+                                    else if (_tree.LoadedChapters.TryGetValue(p.Id, out var svmpChapters))
+                                    {
+                                        @renderChapters(svmpChapters)
+                                    }
+                                </ChildContent>
                             </MudExpansionPanel>
                         }
                     </MudExpansionPanels>
@@ -200,45 +275,61 @@ else
                 @foreach (var volume in _volumes)
                 {
                     var vol = volume;
-                    <MudExpansionPanel Text="@vol.Title" ExpandedChanged="@VolumeExpandCb(vol)">
-                        @if (_tree.LoadingIds.Contains(vol.Id))
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                        }
-                        else if (_tree.LoadedParts.TryGetValue(vol.Id, out var mvParts))
-                        {
-                            @if (mvParts.Count == 1)
+                    <MudExpansionPanel ExpandedChanged="@VolumeExpandCb(vol)">
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                                <MudText Style="flex:1">@vol.Title</MudText>
+                                @renderVolumeMenu(vol)
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            @if (_tree.LoadingIds.Contains(vol.Id))
                             {
-                                var p = mvParts[0];
-                                @if (_tree.LoadingIds.Contains(p.Id))
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                }
-                                else if (_tree.LoadedChapters.TryGetValue(p.Id, out var mvspChapters))
-                                {
-                                    @renderChapters(mvspChapters)
-                                }
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
                             }
-                            else
+                            else if (_tree.LoadedParts.TryGetValue(vol.Id, out var mvParts))
                             {
-                                <MudExpansionPanels MultiExpansion="true">
-                                    @foreach (var part in mvParts)
+                                @if (mvParts.Count == 1)
+                                {
+                                    var p = mvParts[0];
+                                    @if (_tree.LoadingIds.Contains(p.Id))
                                     {
-                                        var p = part;
-                                        <MudExpansionPanel Text="@(p.Title ?? "Part")" ExpandedChanged="@PartExpandCb(p)">
-                                            @if (_tree.LoadingIds.Contains(p.Id))
-                                            {
-                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                            }
-                                            else if (_tree.LoadedChapters.TryGetValue(p.Id, out var mvmpChapters))
-                                            {
-                                                @renderChapters(mvmpChapters)
-                                            }
-                                        </MudExpansionPanel>
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
                                     }
-                                </MudExpansionPanels>
+                                    else if (_tree.LoadedChapters.TryGetValue(p.Id, out var mvspChapters))
+                                    {
+                                        @renderChapters(mvspChapters)
+                                    }
+                                }
+                                else
+                                {
+                                    <MudExpansionPanels MultiExpansion="true">
+                                        @foreach (var part in mvParts)
+                                        {
+                                            var p = part;
+                                            <MudExpansionPanel ExpandedChanged="@PartExpandCb(p)">
+                                                <TitleContent>
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                                                        <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
+                                                        @renderPartMenu(p)
+                                                    </MudStack>
+                                                </TitleContent>
+                                                <ChildContent>
+                                                    @if (_tree.LoadingIds.Contains(p.Id))
+                                                    {
+                                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                                                    }
+                                                    else if (_tree.LoadedChapters.TryGetValue(p.Id, out var mvmpChapters))
+                                                    {
+                                                        @renderChapters(mvmpChapters)
+                                                    }
+                                                </ChildContent>
+                                            </MudExpansionPanel>
+                                        }
+                                    </MudExpansionPanels>
+                                }
                             }
-                        }
+                        </ChildContent>
                     </MudExpansionPanel>
                 }
             </MudExpansionPanels>
@@ -347,6 +438,103 @@ else
         await ProjectWriter.SetParagraphItemCharacterAsync(FolderName, item.Id, characterId);
         item.CharacterId = characterId;
         item.Character = characterId.HasValue ? _characters.FirstOrDefault(c => c.Id == characterId.Value) : null;
+        StateHasChanged();
+    }
+
+    async Task DeleteVolumeAsync(Read2Me.Data.Entities.Volume volume)
+    {
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Volume",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Volume" },
+                { d => d.ItemName, volume.Title },
+                { d => d.HasChildren, true },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        await ProjectWriter.DeleteVolumeAsync(FolderName, volume.Id);
+        _tree.Reset();
+        await LoadAsync();
+    }
+
+    async Task DeletePartAsync(Read2Me.Data.Entities.Part part)
+    {
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Part",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Part" },
+                { d => d.ItemName, part.Title ?? "Part" },
+                { d => d.HasChildren, true },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        await ProjectWriter.DeletePartAsync(FolderName, part.Id);
+        _tree.Reset();
+        await LoadAsync();
+    }
+
+    async Task DeleteChapterAsync(Read2Me.Data.Entities.Chapter chapter)
+    {
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Chapter",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Chapter" },
+                { d => d.ItemName, chapter.Title ?? "Chapter" },
+                { d => d.HasChildren, true },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        await ProjectWriter.DeleteChapterAsync(FolderName, chapter.Id);
+        _tree.Reset();
+        await LoadAsync();
+    }
+
+    async Task DeleteParagraphAsync(Read2Me.Data.Entities.Paragraph paragraph)
+    {
+        var preview = _tree.LoadedParagraphs.Values
+            .SelectMany(l => l)
+            .FirstOrDefault(p => p.Id == paragraph.Id);
+        var label = preview != null
+            ? string.Join(" ", preview.Items.Select(i => i.Text)) is var t && t.Length > 60 ? t[..60] + "…" : t
+            : "this paragraph";
+
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Paragraph",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Paragraph" },
+                { d => d.ItemName, label },
+                { d => d.HasChildren, false },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        await ProjectWriter.DeleteParagraphAsync(FolderName, paragraph.Id);
+        foreach (var list in _tree.LoadedParagraphs.Values)
+            list.RemoveAll(p => p.Id == paragraph.Id);
+        StateHasChanged();
+    }
+
+    async Task DeleteParagraphItemAsync(Read2Me.Data.Entities.ParagraphItem item)
+    {
+        var label = item.Text?.Length > 60 ? item.Text[..60] + "…" : item.Text ?? "this item";
+
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Item",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Item" },
+                { d => d.ItemName, label },
+                { d => d.HasChildren, false },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        await ProjectWriter.DeleteParagraphItemAsync(FolderName, item.Id);
+        foreach (var list in _tree.LoadedParagraphs.Values)
+            foreach (var para in list)
+                para.Items.Remove(item);
         StateHasChanged();
     }
 }

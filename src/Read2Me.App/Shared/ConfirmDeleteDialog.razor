@@ -1,0 +1,20 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Delete @ItemType</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>Delete <strong>@ItemName</strong>?@(HasChildren ? " This will also delete all contents it contains." : "") This cannot be undone.</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="@(() => MudDialog.Close(DialogResult.Ok(true)))">Delete</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string ItemType { get; set; } = "Item";
+    [Parameter] public string ItemName { get; set; } = "";
+    [Parameter] public bool HasChildren { get; set; }
+}
