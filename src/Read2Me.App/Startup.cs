@@ -39,6 +39,7 @@ namespace Read2Me.App
             services.AddScoped<ProjectService>();
             services.AddScoped<IProjectReader>(sp => sp.GetRequiredService<ProjectService>());
             services.AddScoped<IProjectWriter>(sp => sp.GetRequiredService<ProjectService>());
+            services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<ProjectService>());
 
             services.AddScoped<IBookContentPersister, BookContentPersister>();
             services.AddScoped<BookReadingService>();
@@ -46,6 +47,7 @@ namespace Read2Me.App
             services.AddScoped<BookUseCases>();
             services.AddScoped<BookHierarchyLoader>();
             services.AddScoped<BookTreeState>();
+            services.AddScoped<BookHierarchyPresenter>();
 
             services.AddSingleton<EpubFileReader>();
             services.AddSingleton<TextFileReader>();

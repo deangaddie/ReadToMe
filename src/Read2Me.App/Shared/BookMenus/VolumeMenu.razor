@@ -1,5 +1,6 @@
 @using Read2Me.Data.Entities
-@inject Read2Me.Services.IProjectWriter ProjectWriter
+@using Read2Me.Core.Models
+@inject Read2Me.Services.IBookCommandHandler CommandHandler
 @inject IDialogService DialogService
 
 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
@@ -26,7 +27,11 @@
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public Guid? PreviousSiblingId { get; set; }
+    [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
 
     static readonly DialogOptions _editOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
 
@@ -42,21 +47,27 @@
         if (result?.Canceled != false) return;
         var text = result.Data as string;
         if (string.IsNullOrWhiteSpace(text)) return;
-        await ProjectWriter.UpdateVolumeTitleAsync(FolderName, Volume.Id, text);
+        await CommandHandler.ExecuteAsync(new UpdateVolumeTitleCommand(FolderName, Volume.Id, text));
         Volume.Title = text;
         await OnChanged.InvokeAsync();
     }
 
     async Task MergeWithPreviousAsync()
     {
-        await ProjectWriter.MergeVolumeWithPreviousAsync(FolderName, Volume.Id);
-        await OnChanged.InvokeAsync();
+        await CommandHandler.ExecuteAsync(new MergeVolumeCommand(FolderName, Volume.Id, MergeDirection.Previous));
+        if (PreviousSiblingId.HasValue)
+            await OnMerged.InvokeAsync((PreviousSiblingId.Value, Volume.Id));
+        else
+            await OnReset.InvokeAsync();
     }
 
     async Task MergeWithNextAsync()
     {
-        await ProjectWriter.MergeVolumeWithNextAsync(FolderName, Volume.Id);
-        await OnChanged.InvokeAsync();
+        await CommandHandler.ExecuteAsync(new MergeVolumeCommand(FolderName, Volume.Id, MergeDirection.Next));
+        if (NextSiblingId.HasValue)
+            await OnMerged.InvokeAsync((Volume.Id, NextSiblingId.Value));
+        else
+            await OnReset.InvokeAsync();
     }
 
     async Task DeleteAsync()
@@ -70,7 +81,7 @@
             });
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
-        await ProjectWriter.DeleteVolumeAsync(FolderName, Volume.Id);
-        await OnChanged.InvokeAsync();
+        await CommandHandler.ExecuteAsync(new DeleteVolumeCommand(FolderName, Volume.Id));
+        await OnReset.InvokeAsync();
     }
 }

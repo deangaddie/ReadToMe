@@ -1,5 +1,6 @@
 @using Read2Me.Data.Entities
-@inject Read2Me.Services.IProjectWriter ProjectWriter
+@using Read2Me.Core.Models
+@inject Read2Me.Services.IBookCommandHandler CommandHandler
 @inject IDialogService DialogService
 
 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
@@ -28,8 +29,12 @@
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public Guid? PreviousSiblingId { get; set; }
+    [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
+    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplit { get; set; }
 
     static readonly DialogOptions _editOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
 
@@ -45,7 +50,7 @@
         if (result?.Canceled != false) return;
         var text = result.Data as string;
         if (string.IsNullOrWhiteSpace(text)) return;
-        await ProjectWriter.UpdateChapterTitleAsync(FolderName, Chapter.Id, text);
+        await CommandHandler.ExecuteAsync(new UpdateChapterTitleCommand(FolderName, Chapter.Id, text));
         Chapter.Title = text;
         await OnChanged.InvokeAsync();
     }
@@ -61,20 +66,27 @@
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
         var title = result.Data as string;
-        await ProjectWriter.SplitPartAsync(FolderName, Chapter.Id, string.IsNullOrWhiteSpace(title) ? null : title);
-        await OnReset.InvokeAsync();
+        var command = new SplitAtChapterCommand(FolderName, Chapter.Id, string.IsNullOrWhiteSpace(title) ? null : title);
+        // New Part is created; source parent panel is the Part holding this Chapter.
+        await OnSplit.InvokeAsync((command, Chapter.PartId));
     }
 
     async Task MergeWithPreviousAsync()
     {
-        await ProjectWriter.MergeChapterWithPreviousAsync(FolderName, Chapter.Id);
-        await OnReset.InvokeAsync();
+        await CommandHandler.ExecuteAsync(new MergeChapterCommand(FolderName, Chapter.Id, MergeDirection.Previous));
+        if (PreviousSiblingId.HasValue)
+            await OnMerged.InvokeAsync((PreviousSiblingId.Value, Chapter.Id));
+        else
+            await OnReset.InvokeAsync();
     }
 
     async Task MergeWithNextAsync()
     {
-        await ProjectWriter.MergeChapterWithNextAsync(FolderName, Chapter.Id);
-        await OnReset.InvokeAsync();
+        await CommandHandler.ExecuteAsync(new MergeChapterCommand(FolderName, Chapter.Id, MergeDirection.Next));
+        if (NextSiblingId.HasValue)
+            await OnMerged.InvokeAsync((Chapter.Id, NextSiblingId.Value));
+        else
+            await OnReset.InvokeAsync();
     }
 
     async Task DeleteAsync()
@@ -88,7 +100,7 @@
             });
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
-        await ProjectWriter.DeleteChapterAsync(FolderName, Chapter.Id);
+        await CommandHandler.ExecuteAsync(new DeleteChapterCommand(FolderName, Chapter.Id));
         await OnReset.InvokeAsync();
     }
 }

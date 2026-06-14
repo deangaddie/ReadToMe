@@ -1,5 +1,6 @@
 @using Read2Me.Data.Entities
-@inject Read2Me.Services.IProjectWriter ProjectWriter
+@using Read2Me.Core.Models
+@inject Read2Me.Services.IBookCommandHandler CommandHandler
 @inject IDialogService DialogService
 
 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
@@ -28,8 +29,12 @@
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public Guid? PreviousSiblingId { get; set; }
+    [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
+    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplit { get; set; }
 
     static readonly DialogOptions _editOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
 
@@ -45,7 +50,7 @@
         if (result?.Canceled != false) return;
         var text = result.Data as string;
         if (string.IsNullOrWhiteSpace(text)) return;
-        await ProjectWriter.UpdatePartTitleAsync(FolderName, Part.Id, text);
+        await CommandHandler.ExecuteAsync(new UpdatePartTitleCommand(FolderName, Part.Id, text));
         Part.Title = text;
         await OnChanged.InvokeAsync();
     }
@@ -61,20 +66,27 @@
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
         var title = result.Data as string;
-        await ProjectWriter.SplitVolumeAsync(FolderName, Part.Id, string.IsNullOrWhiteSpace(title) ? null : title);
-        await OnReset.InvokeAsync();
+        var command = new SplitAtPartCommand(FolderName, Part.Id, string.IsNullOrWhiteSpace(title) ? null : title);
+        // New Volume is created; source parent panel is the Volume holding this Part.
+        await OnSplit.InvokeAsync((command, Part.VolumeId));
     }
 
     async Task MergeWithPreviousAsync()
     {
-        await ProjectWriter.MergePartWithPreviousAsync(FolderName, Part.Id);
-        await OnReset.InvokeAsync();
+        await CommandHandler.ExecuteAsync(new MergePartCommand(FolderName, Part.Id, MergeDirection.Previous));
+        if (PreviousSiblingId.HasValue)
+            await OnMerged.InvokeAsync((PreviousSiblingId.Value, Part.Id));
+        else
+            await OnReset.InvokeAsync();
     }
 
     async Task MergeWithNextAsync()
     {
-        await ProjectWriter.MergePartWithNextAsync(FolderName, Part.Id);
-        await OnReset.InvokeAsync();
+        await CommandHandler.ExecuteAsync(new MergePartCommand(FolderName, Part.Id, MergeDirection.Next));
+        if (NextSiblingId.HasValue)
+            await OnMerged.InvokeAsync((Part.Id, NextSiblingId.Value));
+        else
+            await OnReset.InvokeAsync();
     }
 
     async Task DeleteAsync()
@@ -88,7 +100,7 @@
             });
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
-        await ProjectWriter.DeletePartAsync(FolderName, Part.Id);
+        await CommandHandler.ExecuteAsync(new DeletePartCommand(FolderName, Part.Id));
         await OnReset.InvokeAsync();
     }
 }

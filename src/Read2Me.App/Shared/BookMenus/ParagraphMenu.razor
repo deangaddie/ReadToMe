@@ -1,5 +1,6 @@
 @using Read2Me.Data.Entities
-@inject Read2Me.Services.IProjectWriter ProjectWriter
+@using Read2Me.Core.Models
+@inject Read2Me.Services.IBookCommandHandler CommandHandler
 @inject IDialogService DialogService
 
 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
@@ -28,6 +29,7 @@
     [Parameter, EditorRequired] public bool IsLast { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplit { get; set; }
 
     static readonly DialogOptions _editOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
 
@@ -42,19 +44,20 @@
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
         var title = result.Data as string;
-        await ProjectWriter.SplitChapterAsync(FolderName, Paragraph.Id, string.IsNullOrWhiteSpace(title) ? null : title);
-        await OnReset.InvokeAsync();
+        var command = new SplitAtParagraphCommand(FolderName, Paragraph.Id, string.IsNullOrWhiteSpace(title) ? null : title);
+        // New Chapter is created; source parent panel is the Chapter holding this Paragraph.
+        await OnSplit.InvokeAsync((command, Paragraph.ChapterId));
     }
 
     async Task MergeWithPreviousAsync()
     {
-        await ProjectWriter.MergeParagraphWithPreviousAsync(FolderName, Paragraph.Id);
+        await CommandHandler.ExecuteAsync(new MergeParagraphCommand(FolderName, Paragraph.Id, MergeDirection.Previous));
         await OnReset.InvokeAsync();
     }
 
     async Task MergeWithNextAsync()
     {
-        await ProjectWriter.MergeParagraphWithNextAsync(FolderName, Paragraph.Id);
+        await CommandHandler.ExecuteAsync(new MergeParagraphCommand(FolderName, Paragraph.Id, MergeDirection.Next));
         await OnReset.InvokeAsync();
     }
 
@@ -73,7 +76,7 @@
             });
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
-        await ProjectWriter.DeleteParagraphAsync(FolderName, Paragraph.Id);
+        await CommandHandler.ExecuteAsync(new DeleteParagraphCommand(FolderName, Paragraph.Id));
         await OnChanged.InvokeAsync();
     }
 }

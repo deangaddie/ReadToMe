@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 
@@ -8,34 +9,34 @@ namespace Read2Me.App.State
 {
     public class BookHierarchyLoader(IProjectReader reader)
     {
-        private readonly Dictionary<string, FolderCache> _caches = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<ProjectFolderId, FolderCache> _caches = new();
 
-        public FolderCache For(string folderName)
+        public FolderCache For(ProjectFolderId folderId)
         {
-            if (!_caches.TryGetValue(folderName, out var cache))
-                _caches[folderName] = cache = new FolderCache();
+            if (!_caches.TryGetValue(folderId, out var cache))
+                _caches[folderId] = cache = new FolderCache();
             return cache;
         }
 
-        public async Task LoadPartsAsync(string folderName, Guid volumeId)
+        public async Task LoadPartsAsync(ProjectFolderId folderId, Guid volumeId)
         {
-            var parts = await reader.GetPartsAsync(folderName, volumeId);
-            For(folderName).Parts[volumeId] = parts;
+            var parts = await reader.GetPartsAsync(folderId, volumeId);
+            For(folderId).Parts[volumeId] = parts;
         }
 
-        public async Task LoadChaptersAsync(string folderName, Guid partId)
+        public async Task LoadChaptersAsync(ProjectFolderId folderId, Guid partId)
         {
-            var chapters = await reader.GetChaptersAsync(folderName, partId);
-            For(folderName).Chapters[partId] = chapters;
+            var chapters = await reader.GetChaptersAsync(folderId, partId);
+            For(folderId).Chapters[partId] = chapters;
         }
 
-        public async Task LoadParagraphsAsync(string folderName, Guid chapterId)
+        public async Task LoadParagraphsAsync(ProjectFolderId folderId, Guid chapterId)
         {
-            var paragraphs = await reader.GetChapterParagraphsAsync(folderName, chapterId);
-            For(folderName).Paragraphs[chapterId] = paragraphs;
+            var paragraphs = await reader.GetChapterParagraphsAsync(folderId, chapterId);
+            For(folderId).Paragraphs[chapterId] = paragraphs;
         }
 
-        public void Reset(string folderName) => _caches.Remove(folderName);
+        public void Reset(ProjectFolderId folderId) => _caches.Remove(folderId);
     }
 
     public class FolderCache

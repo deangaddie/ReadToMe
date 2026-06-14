@@ -10,14 +10,14 @@ namespace Read2Me.Services
     {
         IReadOnlyList<string> GetProjects();
         Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync();
-        Task<Project?> GetProjectAsync(string folderName);
-        Task<bool> HasBookContentAsync(string folderName);
-        Task<List<Volume>> GetVolumesAsync(string folderName);
-        Task<List<Part>> GetPartsAsync(string folderName, Guid volumeId);
-        Task<List<Chapter>> GetChaptersAsync(string folderName, Guid partId);
-        Task<List<Paragraph>> GetChapterParagraphsAsync(string folderName, Guid chapterId);
-        Task<List<Character>> GetCharactersAsync(string folderName);
-        Task<int> GetTotalPartCountAsync(string folderName);
-        Task<int> GetTotalChapterCountAsync(string folderName);
+        Task<Project?> GetProjectAsync(ProjectFolderId folderId);
+        Task<bool> HasBookContentAsync(ProjectFolderId folderId);
+        Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId);
+        Task<List<Part>> GetPartsAsync(ProjectFolderId folderId, Guid volumeId);
+        Task<List<Chapter>> GetChaptersAsync(ProjectFolderId folderId, Guid partId);
+        Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId folderId, Guid chapterId);
+        Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId);
+        Task<int> GetTotalPartCountAsync(ProjectFolderId folderId);
+        Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId);
     }
 }

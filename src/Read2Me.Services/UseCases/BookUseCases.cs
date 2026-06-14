@@ -6,14 +6,14 @@ using Read2Me.Core.Models;
 
 namespace Read2Me.Services.UseCases
 {
-    public class BookUseCases(BookReadingService bookReadingService, IProjectWriter projectWriter)
+    public class BookUseCases(BookReadingService bookReadingService, IBookCommandHandler commandHandler)
     {
-        public async Task<Result> ImportAsync(string folderName, bool reread = false, CancellationToken cancellationToken = default)
+        public virtual async Task<Result> ImportAsync(string folderName, bool reread = false, CancellationToken cancellationToken = default)
         {
             try
             {
                 if (reread)
-                    await projectWriter.ClearBookContentAsync(folderName);
+                    await commandHandler.ExecuteAsync(new ClearBookContentCommand(folderName), cancellationToken);
                 await bookReadingService.ReadBookAsync(folderName, cancellationToken);
                 return Result.Ok();
             }
@@ -22,12 +22,12 @@ namespace Read2Me.Services.UseCases
             catch (Exception) { return Result.Fail("Failed to import book. Please try again."); }
         }
 
-        public async Task<Result> ImportManuallyAsync(string folderName, ManualReadOptions options, CancellationToken cancellationToken = default)
+        public virtual async Task<Result> ImportManuallyAsync(string folderName, ManualReadOptions options, CancellationToken cancellationToken = default)
         {
             try
             {
                 var lines = await bookReadingService.FlattenFromFileAsync(folderName, cancellationToken);
-                await projectWriter.ClearBookContentAsync(folderName);
+                await commandHandler.ExecuteAsync(new ClearBookContentCommand(folderName), cancellationToken);
                 await bookReadingService.ReadBookManuallyAsync(folderName, lines, options, cancellationToken);
                 return Result.Ok();
             }

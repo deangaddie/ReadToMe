@@ -14,6 +14,7 @@ namespace Read2Me.Services
 
         public async Task<ProjectDbContext> CreateAsync(string folderPath)
         {
+            Directory.CreateDirectory(folderPath);
             var dbPath = Path.Combine(folderPath, DbFileName);
             var options = new DbContextOptionsBuilder<ProjectDbContext>()
                 .UseSqlite($"Data Source={dbPath};Pooling=false")
