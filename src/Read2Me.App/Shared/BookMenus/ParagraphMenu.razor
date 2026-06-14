@@ -1,0 +1,79 @@
+@using Read2Me.Data.Entities
+@inject Read2Me.Services.IProjectWriter ProjectWriter
+@inject IDialogService DialogService
+
+<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+         @onclick:stopPropagation="true">
+    <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                 OnClick="SplitChapterAsync">Split Chapter</MudMenuItem>
+    @if (!IsFirst)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithPreviousAsync">Merge with Previous</MudMenuItem>
+    }
+    @if (!IsLast)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithNextAsync">Merge with Next</MudMenuItem>
+    }
+    <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                 OnClick="DeleteAsync">Delete Paragraph</MudMenuItem>
+</MudMenu>
+
+@code {
+    [Parameter, EditorRequired] public Paragraph Paragraph { get; set; } = null!;
+    [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    static readonly DialogOptions _editOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task SplitChapterAsync()
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("New Chapter Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, "" },
+            }, _editOpts);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var title = result.Data as string;
+        await ProjectWriter.SplitChapterAsync(FolderName, Paragraph.Id, string.IsNullOrWhiteSpace(title) ? null : title);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task MergeWithPreviousAsync()
+    {
+        await ProjectWriter.MergeParagraphWithPreviousAsync(FolderName, Paragraph.Id);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task MergeWithNextAsync()
+    {
+        await ProjectWriter.MergeParagraphWithNextAsync(FolderName, Paragraph.Id);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task DeleteAsync()
+    {
+        var label = string.Join(" ", Paragraph.Items.Select(i => i.Text)) is var t && t.Length > 60
+            ? t[..60] + "…" : t;
+        if (string.IsNullOrWhiteSpace(label)) label = "this paragraph";
+
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Paragraph",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Paragraph" },
+                { d => d.ItemName, label },
+                { d => d.HasChildren, false },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        await ProjectWriter.DeleteParagraphAsync(FolderName, Paragraph.Id);
+        await OnChanged.InvokeAsync();
+    }
+}

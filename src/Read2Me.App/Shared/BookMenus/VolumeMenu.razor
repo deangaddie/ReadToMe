@@ -1,0 +1,76 @@
+@using Read2Me.Data.Entities
+@inject Read2Me.Services.IProjectWriter ProjectWriter
+@inject IDialogService DialogService
+
+<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+         @onclick:stopPropagation="true">
+    <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
+                 OnClick="EditAsync">Edit Title</MudMenuItem>
+    @if (!IsFirst)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithPreviousAsync">Merge with Previous</MudMenuItem>
+    }
+    @if (!IsLast)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithNextAsync">Merge with Next</MudMenuItem>
+    }
+    <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                 OnClick="DeleteAsync">Delete Volume</MudMenuItem>
+</MudMenu>
+
+@code {
+    [Parameter, EditorRequired] public Volume Volume { get; set; } = null!;
+    [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    static readonly DialogOptions _editOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task EditAsync()
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("Edit Volume Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, Volume.Title },
+            }, _editOpts);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var text = result.Data as string;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await ProjectWriter.UpdateVolumeTitleAsync(FolderName, Volume.Id, text);
+        Volume.Title = text;
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task MergeWithPreviousAsync()
+    {
+        await ProjectWriter.MergeVolumeWithPreviousAsync(FolderName, Volume.Id);
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task MergeWithNextAsync()
+    {
+        await ProjectWriter.MergeVolumeWithNextAsync(FolderName, Volume.Id);
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task DeleteAsync()
+    {
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Volume",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Volume" },
+                { d => d.ItemName, Volume.Title },
+                { d => d.HasChildren, true },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        await ProjectWriter.DeleteVolumeAsync(FolderName, Volume.Id);
+        await OnChanged.InvokeAsync();
+    }
+}

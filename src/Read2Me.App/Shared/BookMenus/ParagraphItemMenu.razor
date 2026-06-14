@@ -1,0 +1,95 @@
+@using Read2Me.Data.Entities
+@inject Read2Me.Services.IProjectWriter ProjectWriter
+@inject IDialogService DialogService
+
+<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+         @onclick:stopPropagation="true">
+    <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
+                 OnClick="EditAsync">Edit Text</MudMenuItem>
+    <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                 OnClick="SplitParagraphAsync">Split Paragraph</MudMenuItem>
+    <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                 OnClick="SplitLineAsync">Split Line</MudMenuItem>
+    @if (!IsFirst)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithPreviousAsync">Merge with Previous</MudMenuItem>
+    }
+    @if (!IsLast)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithNextAsync">Merge with Next</MudMenuItem>
+    }
+    <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                 OnClick="DeleteAsync">Delete Item</MudMenuItem>
+</MudMenu>
+
+@code {
+    [Parameter, EditorRequired] public ParagraphItem Item { get; set; } = null!;
+    [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    static readonly DialogOptions _editOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task EditAsync()
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("Edit Item Text",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Text" },
+                { d => d.InitialValue, Item.Text ?? "" },
+                { d => d.Lines, 4 },
+            }, _editOpts);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var text = result.Data as string;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await ProjectWriter.UpdateParagraphItemTextAsync(FolderName, Item.Id, text);
+        Item.Text = text;
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task SplitParagraphAsync()
+    {
+        await ProjectWriter.SplitParagraphAsync(FolderName, Item.Id, null);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task SplitLineAsync()
+    {
+        await ProjectWriter.SplitParagraphItemAsync(FolderName, Item.Id);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task MergeWithPreviousAsync()
+    {
+        await ProjectWriter.MergeParagraphItemWithPreviousAsync(FolderName, Item.Id);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task MergeWithNextAsync()
+    {
+        await ProjectWriter.MergeParagraphItemWithNextAsync(FolderName, Item.Id);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task DeleteAsync()
+    {
+        var label = Item.Text?.Length > 60 ? Item.Text[..60] + "…" : Item.Text ?? "this item";
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Item",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Item" },
+                { d => d.ItemName, label },
+                { d => d.HasChildren, false },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        await ProjectWriter.DeleteParagraphItemAsync(FolderName, Item.Id);
+        await OnChanged.InvokeAsync();
+    }
+}

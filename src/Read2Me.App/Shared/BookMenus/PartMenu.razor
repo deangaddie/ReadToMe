@@ -1,0 +1,94 @@
+@using Read2Me.Data.Entities
+@inject Read2Me.Services.IProjectWriter ProjectWriter
+@inject IDialogService DialogService
+
+<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+         @onclick:stopPropagation="true">
+    <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
+                 OnClick="EditAsync">Edit Title</MudMenuItem>
+    <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                 OnClick="SplitVolumeAsync">Split Volume</MudMenuItem>
+    @if (!IsFirst)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithPreviousAsync">Merge with Previous</MudMenuItem>
+    }
+    @if (!IsLast)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithNextAsync">Merge with Next</MudMenuItem>
+    }
+    <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                 OnClick="DeleteAsync">Delete Part</MudMenuItem>
+</MudMenu>
+
+@code {
+    [Parameter, EditorRequired] public Part Part { get; set; } = null!;
+    [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    static readonly DialogOptions _editOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task EditAsync()
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("Edit Part Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, Part.Title ?? "" },
+            }, _editOpts);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var text = result.Data as string;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await ProjectWriter.UpdatePartTitleAsync(FolderName, Part.Id, text);
+        Part.Title = text;
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task SplitVolumeAsync()
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("New Volume Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, "" },
+            }, _editOpts);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var title = result.Data as string;
+        await ProjectWriter.SplitVolumeAsync(FolderName, Part.Id, string.IsNullOrWhiteSpace(title) ? null : title);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task MergeWithPreviousAsync()
+    {
+        await ProjectWriter.MergePartWithPreviousAsync(FolderName, Part.Id);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task MergeWithNextAsync()
+    {
+        await ProjectWriter.MergePartWithNextAsync(FolderName, Part.Id);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task DeleteAsync()
+    {
+        var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Part",
+            new DialogParameters<ConfirmDeleteDialog>
+            {
+                { d => d.ItemType, "Part" },
+                { d => d.ItemName, Part.Title ?? "Part" },
+                { d => d.HasChildren, true },
+            });
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        await ProjectWriter.DeletePartAsync(FolderName, Part.Id);
+        await OnReset.InvokeAsync();
+    }
+}

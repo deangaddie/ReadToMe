@@ -684,6 +684,156 @@ namespace Read2Me.Services
             await db.SaveChangesAsync();
         }
 
+        public async Task MergeVolumeWithPreviousAsync(string folderName, Guid volumeId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var volumes = await db.Volumes.OrderBy(v => v.Order).ToListAsync();
+            var idx = volumes.FindIndex(v => v.Id == volumeId);
+            if (idx <= 0) return;
+            var prev = volumes[idx - 1];
+            var self = volumes[idx];
+            var parts = await db.Parts.Where(p => p.VolumeId == self.Id).ToListAsync();
+            foreach (var p in parts) p.VolumeId = prev.Id;
+            db.Volumes.Remove(self);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergeVolumeWithNextAsync(string folderName, Guid volumeId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var volumes = await db.Volumes.OrderBy(v => v.Order).ToListAsync();
+            var idx = volumes.FindIndex(v => v.Id == volumeId);
+            if (idx < 0 || idx >= volumes.Count - 1) return;
+            var self = volumes[idx];
+            var next = volumes[idx + 1];
+            var parts = await db.Parts.Where(p => p.VolumeId == next.Id).ToListAsync();
+            foreach (var p in parts) p.VolumeId = self.Id;
+            db.Volumes.Remove(next);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergePartWithPreviousAsync(string folderName, Guid partId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var part = await db.Parts.FindAsync(partId);
+            if (part == null) return;
+            var siblings = await db.Parts.Where(p => p.VolumeId == part.VolumeId).OrderBy(p => p.Order).ToListAsync();
+            var idx = siblings.FindIndex(p => p.Id == partId);
+            if (idx <= 0) return;
+            var prev = siblings[idx - 1];
+            var chapters = await db.Chapters.Where(c => c.PartId == part.Id).ToListAsync();
+            foreach (var c in chapters) c.PartId = prev.Id;
+            db.Parts.Remove(part);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergePartWithNextAsync(string folderName, Guid partId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var part = await db.Parts.FindAsync(partId);
+            if (part == null) return;
+            var siblings = await db.Parts.Where(p => p.VolumeId == part.VolumeId).OrderBy(p => p.Order).ToListAsync();
+            var idx = siblings.FindIndex(p => p.Id == partId);
+            if (idx < 0 || idx >= siblings.Count - 1) return;
+            var next = siblings[idx + 1];
+            var chapters = await db.Chapters.Where(c => c.PartId == next.Id).ToListAsync();
+            foreach (var c in chapters) c.PartId = part.Id;
+            db.Parts.Remove(next);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergeChapterWithPreviousAsync(string folderName, Guid chapterId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var chapter = await db.Chapters.FindAsync(chapterId);
+            if (chapter == null) return;
+            var siblings = await db.Chapters.Where(c => c.PartId == chapter.PartId).OrderBy(c => c.Order).ToListAsync();
+            var idx = siblings.FindIndex(c => c.Id == chapterId);
+            if (idx <= 0) return;
+            var prev = siblings[idx - 1];
+            var paragraphs = await db.Paragraphs.Where(p => p.ChapterId == chapter.Id).ToListAsync();
+            foreach (var p in paragraphs) p.ChapterId = prev.Id;
+            db.Chapters.Remove(chapter);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergeChapterWithNextAsync(string folderName, Guid chapterId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var chapter = await db.Chapters.FindAsync(chapterId);
+            if (chapter == null) return;
+            var siblings = await db.Chapters.Where(c => c.PartId == chapter.PartId).OrderBy(c => c.Order).ToListAsync();
+            var idx = siblings.FindIndex(c => c.Id == chapterId);
+            if (idx < 0 || idx >= siblings.Count - 1) return;
+            var next = siblings[idx + 1];
+            var paragraphs = await db.Paragraphs.Where(p => p.ChapterId == next.Id).ToListAsync();
+            foreach (var p in paragraphs) p.ChapterId = chapter.Id;
+            db.Chapters.Remove(next);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergeParagraphWithPreviousAsync(string folderName, Guid paragraphId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var paragraph = await db.Paragraphs.FindAsync(paragraphId);
+            if (paragraph == null) return;
+            var siblings = await db.Paragraphs.Where(p => p.ChapterId == paragraph.ChapterId).OrderBy(p => p.Order).ToListAsync();
+            var idx = siblings.FindIndex(p => p.Id == paragraphId);
+            if (idx <= 0) return;
+            var prev = siblings[idx - 1];
+            var items = await db.ParagraphItems.Where(i => i.ParagraphId == paragraph.Id).ToListAsync();
+            foreach (var i in items) i.ParagraphId = prev.Id;
+            db.Paragraphs.Remove(paragraph);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergeParagraphWithNextAsync(string folderName, Guid paragraphId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var paragraph = await db.Paragraphs.FindAsync(paragraphId);
+            if (paragraph == null) return;
+            var siblings = await db.Paragraphs.Where(p => p.ChapterId == paragraph.ChapterId).OrderBy(p => p.Order).ToListAsync();
+            var idx = siblings.FindIndex(p => p.Id == paragraphId);
+            if (idx < 0 || idx >= siblings.Count - 1) return;
+            var next = siblings[idx + 1];
+            var items = await db.ParagraphItems.Where(i => i.ParagraphId == next.Id).ToListAsync();
+            foreach (var i in items) i.ParagraphId = paragraph.Id;
+            db.Paragraphs.Remove(next);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergeParagraphItemWithPreviousAsync(string folderName, Guid itemId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var item = await db.ParagraphItems.FindAsync(itemId);
+            if (item == null) return;
+            var siblings = await db.ParagraphItems.Where(i => i.ParagraphId == item.ParagraphId).OrderBy(i => i.Order).ToListAsync();
+            var idx = siblings.FindIndex(i => i.Id == itemId);
+            if (idx <= 0) return;
+            var prev = siblings[idx - 1];
+            prev.Text = string.IsNullOrWhiteSpace(prev.Text)
+                ? item.Text
+                : string.IsNullOrWhiteSpace(item.Text) ? prev.Text : prev.Text + " " + item.Text;
+            db.ParagraphItems.Remove(item);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task MergeParagraphItemWithNextAsync(string folderName, Guid itemId)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var item = await db.ParagraphItems.FindAsync(itemId);
+            if (item == null) return;
+            var siblings = await db.ParagraphItems.Where(i => i.ParagraphId == item.ParagraphId).OrderBy(i => i.Order).ToListAsync();
+            var idx = siblings.FindIndex(i => i.Id == itemId);
+            if (idx < 0 || idx >= siblings.Count - 1) return;
+            var next = siblings[idx + 1];
+            item.Text = string.IsNullOrWhiteSpace(item.Text)
+                ? next.Text
+                : string.IsNullOrWhiteSpace(next.Text) ? item.Text : item.Text + " " + next.Text;
+            db.ParagraphItems.Remove(next);
+            await db.SaveChangesAsync();
+        }
+
         public async Task ClearBookContentAsync(string folderName)
         {
             var db = await OpenProjectDbAsync(folderName);
