@@ -285,6 +285,42 @@ namespace Read2Me.Services
             await db.SaveChangesAsync();
         }
 
+        public async Task UpdateVolumeTitleAsync(string folderName, Guid volumeId, string title)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.Volumes.FindAsync(volumeId);
+            if (entity == null) return;
+            entity.Title = title;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task UpdatePartTitleAsync(string folderName, Guid partId, string title)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.Parts.FindAsync(partId);
+            if (entity == null) return;
+            entity.Title = title;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task UpdateChapterTitleAsync(string folderName, Guid chapterId, string title)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.Chapters.FindAsync(chapterId);
+            if (entity == null) return;
+            entity.Title = title;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task UpdateParagraphItemTextAsync(string folderName, Guid itemId, string text)
+        {
+            var db = await OpenProjectDbAsync(folderName);
+            var entity = await db.ParagraphItems.FindAsync(itemId);
+            if (entity == null) return;
+            entity.Text = text;
+            await db.SaveChangesAsync();
+        }
+
         public async Task ClearBookContentAsync(string folderName)
         {
             var db = await OpenProjectDbAsync(folderName);

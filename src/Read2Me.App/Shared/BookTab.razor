@@ -45,6 +45,10 @@ else
         @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
                   AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
                   @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
+                         OnClick="@(() => EditParagraphItemAsync(item))">
+                Edit Text
+            </MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                          OnClick="@(() => DeleteParagraphItemAsync(item))">
                 Delete Item
@@ -61,10 +65,15 @@ else
             </MudMenuItem>
         </MudMenu>;
 
+
         RenderFragment<Read2Me.Data.Entities.Chapter> renderChapterMenu = ch =>
         @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
                   AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
                   @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
+                         OnClick="@(() => EditChapterAsync(ch))">
+                Edit Title
+            </MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                          OnClick="@(() => DeleteChapterAsync(ch))">
                 Delete Chapter
@@ -75,6 +84,10 @@ else
         @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
                   AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
                   @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
+                         OnClick="@(() => EditPartAsync(part))">
+                Edit Title
+            </MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                          OnClick="@(() => DeletePartAsync(part))">
                 Delete Part
@@ -85,6 +98,10 @@ else
         @<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
                   AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
                   @onclick:stopPropagation="true">
+            <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
+                         OnClick="@(() => EditVolumeAsync(vol))">
+                Edit Title
+            </MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                          OnClick="@(() => DeleteVolumeAsync(vol))">
                 Delete Volume
@@ -118,49 +135,93 @@ else
                                         i.ItemType == ParagraphItemType.Character && i.Character == null);
                                     @if (_splitView)
                                     {
-                                        <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
-                                                  Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : "var(--mud-palette-divider)")};{(hasUnknown ? " background: rgba(var(--mud-palette-warning-rgb), 0.06);" : "")}")">
-                                            @foreach (var item in p.Items)
+                                        var firstItem = p.Items.FirstOrDefault();
+                                        var isPauseParagraph = p.Items.Count == 0
+                                            || (p.Items.Count == 1
+                                                && firstItem!.ItemType != ParagraphItemType.Character
+                                                && firstItem!.ItemType != ParagraphItemType.Narration);
+                                        @if (isPauseParagraph)
+                                        {
+                                            var pauseLabel = firstItem?.ItemType switch
                                             {
-                                                var it = item;
-                                                @if (it.ItemType == ParagraphItemType.Character)
-                                                {
-                                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
-                                                        <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
-                                                            <ActivatorContent>
-                                                                <MudChip T="string" Size="Size.Small"
-                                                                         Color="@(it.Character == null ? Color.Warning : Color.Primary)"
-                                                                         Variant="Variant.Filled" Class="mt-0"
-                                                                         OnClick="@(() => {})">
-                                                                    @(it.Character?.Name ?? "Unknown")
-                                                                </MudChip>
-                                                            </ActivatorContent>
-                                                            <ChildContent>
-                                                                <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, null))">Unknown</MudMenuItem>
-                                                                @foreach (var ch2 in _characters)
-                                                                {
-                                                                    var c = ch2;
-                                                                    <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, c.Id))">@c.Name</MudMenuItem>
-                                                                }
-                                                            </ChildContent>
-                                                        </MudMenu>
-                                                        <MudText Typo="Typo.body2" Style="flex:1">@it.Text</MudText>
-                                                        @renderItemMenu(it)
-                                                    </MudStack>
-                                                }
-                                                else
-                                                {
-                                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
-                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text" Class="mt-0">@it.ItemType.ToString()</MudChip>
-                                                        <MudText Typo="Typo.body2" Style="flex:1">@it.Text</MudText>
-                                                        @renderItemMenu(it)
-                                                    </MudStack>
-                                                }
-                                            }
-                                            <MudStack Row="true" Justify="Justify.FlexEnd">
-                                                @renderParagraphMenu(p)
+                                                ParagraphItemType.ParagraphPause => "Paragraph pause",
+                                                ParagraphItemType.ChapterPause   => "Chapter pause",
+                                                ParagraphItemType.PartPause      => "Part pause",
+                                                ParagraphItemType.VolumePause    => "Volume pause",
+                                                ParagraphItemType.Pause          => "Pause",
+                                                null                             => "Paragraph pause",
+                                                _                                => firstItem!.ItemType.ToString(),
+                                            };
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
+                                                      Style="opacity:0.45;">
+                                                <MudText Typo="Typo.caption" Style="flex:1; font-style:italic;">@pauseLabel</MudText>
                                             </MudStack>
-                                        </MudStack>
+                                        }
+                                        else
+                                        {
+                                            <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
+                                                      Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : "var(--mud-palette-divider)")};{(hasUnknown ? " background: rgba(var(--mud-palette-warning-rgb), 0.06);" : "")}")">
+                                                @foreach (var item in p.Items)
+                                                {
+                                                    var it = item;
+                                                    @if (it.ItemType == ParagraphItemType.Character)
+                                                    {
+                                                        <div style="display:grid; grid-template-columns:120px 1fr auto; align-items:start; gap:4px;">
+                                                            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
+                                                                <ActivatorContent>
+                                                                    <MudChip T="string" Size="Size.Small"
+                                                                             Color="@(it.Character == null ? Color.Warning : Color.Primary)"
+                                                                             Variant="Variant.Filled" Class="mt-0"
+                                                                             Style="width:100%; justify-content:center;"
+                                                                             OnClick="@(() => {})">
+                                                                        @(it.Character?.Name ?? "Unknown")
+                                                                    </MudChip>
+                                                                </ActivatorContent>
+                                                                <ChildContent>
+                                                                    <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, null))">Unknown</MudMenuItem>
+                                                                    @foreach (var ch2 in _characters)
+                                                                    {
+                                                                        var c = ch2;
+                                                                        <MudMenuItem OnClick="@(() => SetItemCharacterAsync(it, c.Id))">@c.Name</MudMenuItem>
+                                                                    }
+                                                                </ChildContent>
+                                                            </MudMenu>
+                                                            <MudText Typo="Typo.body2">@it.Text</MudText>
+                                                            @renderItemMenu(it)
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        var (pauseIcon, pauseColor, pauseLabel2) = it.ItemType switch
+                                                        {
+                                                            ParagraphItemType.VolumePause    => (Icons.Material.Filled.Pause, Color.Secondary, "Volume Pause"),
+                                                            ParagraphItemType.PartPause      => (Icons.Material.Filled.Pause, Color.Secondary, "Part Pause"),
+                                                            ParagraphItemType.ChapterPause   => (Icons.Material.Filled.Pause, Color.Secondary, "Chapter Pause"),
+                                                            ParagraphItemType.ParagraphPause => (Icons.Material.Filled.PauseCircle, Color.Default, "Paragraph Pause"),
+                                                            ParagraphItemType.Pause          => (Icons.Material.Filled.PauseCircleOutline, Color.Default, "Pause"),
+                                                            ParagraphItemType.Narration      => (Icons.Material.Filled.RecordVoiceOver, Color.Info, "Narration"),
+                                                            _                                => (Icons.Material.Filled.HelpOutline, Color.Default, it.ItemType.ToString()),
+                                                        };
+                                                        <div style="@($"display:grid; grid-template-columns:120px 1fr auto; align-items:center; gap:4px; opacity:{(it.ItemType is ParagraphItemType.Narration ? "1" : "0.6")}; font-style:{(it.ItemType is ParagraphItemType.Narration ? "normal" : "italic")};")">
+                                                            <MudChip T="string" Size="Size.Small" Color="@pauseColor" Variant="Variant.Outlined"
+                                                                     Icon="@pauseIcon" Class="mt-0"
+                                                                     Style="width:100%; justify-content:center;">
+                                                                @pauseLabel2
+                                                            </MudChip>
+                                                            @if (!string.IsNullOrWhiteSpace(it.Text))
+                                                            {
+                                                                <MudText Typo="Typo.body2">@it.Text</MudText>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span></span>
+                                                            }
+                                                            @renderItemMenu(it)
+                                                        </div>
+                                                    }
+                                                }
+                                            </MudStack>
+                                        }
                                     }
                                     else
                                     {
@@ -514,6 +575,77 @@ else
         await ProjectWriter.DeleteParagraphAsync(FolderName, paragraph.Id);
         foreach (var list in _tree.LoadedParagraphs.Values)
             list.RemoveAll(p => p.Id == paragraph.Id);
+        StateHasChanged();
+    }
+
+    static readonly DialogOptions _editDialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task EditVolumeAsync(Read2Me.Data.Entities.Volume volume)
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("Edit Volume Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, volume.Title },
+            }, _editDialogOptions);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var text = result.Data as string;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await ProjectWriter.UpdateVolumeTitleAsync(FolderName, volume.Id, text);
+        volume.Title = text;
+        StateHasChanged();
+    }
+
+    async Task EditPartAsync(Read2Me.Data.Entities.Part part)
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("Edit Part Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, part.Title ?? "" },
+            }, _editDialogOptions);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var text = result.Data as string;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await ProjectWriter.UpdatePartTitleAsync(FolderName, part.Id, text);
+        part.Title = text;
+        StateHasChanged();
+    }
+
+    async Task EditChapterAsync(Read2Me.Data.Entities.Chapter chapter)
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("Edit Chapter Title",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Title" },
+                { d => d.InitialValue, chapter.Title ?? "" },
+            }, _editDialogOptions);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var text = result.Data as string;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await ProjectWriter.UpdateChapterTitleAsync(FolderName, chapter.Id, text);
+        chapter.Title = text;
+        StateHasChanged();
+    }
+
+    async Task EditParagraphItemAsync(Read2Me.Data.Entities.ParagraphItem item)
+    {
+        var dialog = await DialogService.ShowAsync<EditTextDialog>("Edit Item Text",
+            new DialogParameters<EditTextDialog>
+            {
+                { d => d.Label, "Text" },
+                { d => d.InitialValue, item.Text ?? "" },
+                { d => d.Lines, 4 },
+            }, _editDialogOptions);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        var text = result.Data as string;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await ProjectWriter.UpdateParagraphItemTextAsync(FolderName, item.Id, text);
+        item.Text = text;
         StateHasChanged();
     }
 

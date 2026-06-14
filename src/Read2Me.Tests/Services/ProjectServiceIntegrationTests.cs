@@ -290,5 +290,159 @@ namespace Read2Me.Tests.Services
 
             Assert.Null(ex);
         }
+
+        // ---------------------------------------------------------------
+        // UpdateVolumeTitleAsync
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task UpdateVolumeTitleAsync_UpdatesTitle()
+        {
+            var stream = new MemoryStream(new byte[] { 1 });
+            var folderName = await _svc.CreateProjectAsync("Vol Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderPath = Path.Combine(_tempDir, folderName);
+            var volumeId = Guid.NewGuid();
+            await using (var db = await OpenDbAsync(folderPath))
+            {
+                db.Volumes.Add(new Volume { Id = volumeId, Title = "Old Title", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                await db.SaveChangesAsync();
+            }
+
+            await _svc.UpdateVolumeTitleAsync(folderName, volumeId, "New Title");
+
+            await using var db2 = await OpenDbAsync(folderPath);
+            var vol = await db2.Volumes.FindAsync(volumeId);
+            Assert.Equal("New Title", vol!.Title);
+        }
+
+        [Fact]
+        public async Task UpdateVolumeTitleAsync_WhenNotFound_DoesNotThrow()
+        {
+            var stream = new MemoryStream(new byte[] { 1 });
+            var folderName = await _svc.CreateProjectAsync("Vol NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
+
+            var ex = await Record.ExceptionAsync(() => _svc.UpdateVolumeTitleAsync(folderName, Guid.NewGuid(), "X"));
+
+            Assert.Null(ex);
+        }
+
+        // ---------------------------------------------------------------
+        // UpdatePartTitleAsync
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task UpdatePartTitleAsync_UpdatesTitle()
+        {
+            var stream = new MemoryStream(new byte[] { 1 });
+            var folderName = await _svc.CreateProjectAsync("Part Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderPath = Path.Combine(_tempDir, folderName);
+            var volumeId = Guid.NewGuid();
+            var partId = Guid.NewGuid();
+            await using (var db = await OpenDbAsync(folderPath))
+            {
+                db.Volumes.Add(new Volume { Id = volumeId, Title = "V", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                db.Parts.Add(new Part { Id = partId, VolumeId = volumeId, Title = "Old Part", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                await db.SaveChangesAsync();
+            }
+
+            await _svc.UpdatePartTitleAsync(folderName, partId, "New Part");
+
+            await using var db2 = await OpenDbAsync(folderPath);
+            var part = await db2.Parts.FindAsync(partId);
+            Assert.Equal("New Part", part!.Title);
+        }
+
+        [Fact]
+        public async Task UpdatePartTitleAsync_WhenNotFound_DoesNotThrow()
+        {
+            var stream = new MemoryStream(new byte[] { 1 });
+            var folderName = await _svc.CreateProjectAsync("Part NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
+
+            var ex = await Record.ExceptionAsync(() => _svc.UpdatePartTitleAsync(folderName, Guid.NewGuid(), "X"));
+
+            Assert.Null(ex);
+        }
+
+        // ---------------------------------------------------------------
+        // UpdateChapterTitleAsync
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task UpdateChapterTitleAsync_UpdatesTitle()
+        {
+            var stream = new MemoryStream(new byte[] { 1 });
+            var folderName = await _svc.CreateProjectAsync("Ch Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderPath = Path.Combine(_tempDir, folderName);
+            var volumeId = Guid.NewGuid();
+            var partId = Guid.NewGuid();
+            var chapterId = Guid.NewGuid();
+            await using (var db = await OpenDbAsync(folderPath))
+            {
+                db.Volumes.Add(new Volume { Id = volumeId, Title = "V", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                db.Parts.Add(new Part { Id = partId, VolumeId = volumeId, Title = "P", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                db.Chapters.Add(new Chapter { Id = chapterId, PartId = partId, Title = "Old Chapter", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                await db.SaveChangesAsync();
+            }
+
+            await _svc.UpdateChapterTitleAsync(folderName, chapterId, "New Chapter");
+
+            await using var db2 = await OpenDbAsync(folderPath);
+            var ch = await db2.Chapters.FindAsync(chapterId);
+            Assert.Equal("New Chapter", ch!.Title);
+        }
+
+        [Fact]
+        public async Task UpdateChapterTitleAsync_WhenNotFound_DoesNotThrow()
+        {
+            var stream = new MemoryStream(new byte[] { 1 });
+            var folderName = await _svc.CreateProjectAsync("Ch NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
+
+            var ex = await Record.ExceptionAsync(() => _svc.UpdateChapterTitleAsync(folderName, Guid.NewGuid(), "X"));
+
+            Assert.Null(ex);
+        }
+
+        // ---------------------------------------------------------------
+        // UpdateParagraphItemTextAsync
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task UpdateParagraphItemTextAsync_UpdatesText()
+        {
+            var stream = new MemoryStream(new byte[] { 1 });
+            var folderName = await _svc.CreateProjectAsync("Item Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderPath = Path.Combine(_tempDir, folderName);
+            var volumeId = Guid.NewGuid();
+            var partId = Guid.NewGuid();
+            var chapterId = Guid.NewGuid();
+            var paragraphId = Guid.NewGuid();
+            var itemId = Guid.NewGuid();
+            await using (var db = await OpenDbAsync(folderPath))
+            {
+                db.Volumes.Add(new Volume { Id = volumeId, Title = "V", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                db.Parts.Add(new Part { Id = partId, VolumeId = volumeId, Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                db.Chapters.Add(new Chapter { Id = chapterId, PartId = partId, Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                db.Paragraphs.Add(new Paragraph { Id = paragraphId, ChapterId = chapterId, Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                db.ParagraphItems.Add(new ParagraphItem { Id = itemId, ParagraphId = paragraphId, Text = "Old text", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
+                await db.SaveChangesAsync();
+            }
+
+            await _svc.UpdateParagraphItemTextAsync(folderName, itemId, "New text");
+
+            await using var db2 = await OpenDbAsync(folderPath);
+            var item = await db2.ParagraphItems.FindAsync(itemId);
+            Assert.Equal("New text", item!.Text);
+        }
+
+        [Fact]
+        public async Task UpdateParagraphItemTextAsync_WhenNotFound_DoesNotThrow()
+        {
+            var stream = new MemoryStream(new byte[] { 1 });
+            var folderName = await _svc.CreateProjectAsync("Item NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
+
+            var ex = await Record.ExceptionAsync(() => _svc.UpdateParagraphItemTextAsync(folderName, Guid.NewGuid(), "X"));
+
+            Assert.Null(ex);
+        }
     }
 }

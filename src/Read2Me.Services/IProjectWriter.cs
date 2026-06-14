@@ -19,5 +19,9 @@ namespace Read2Me.Services
         Task DeleteChapterAsync(string folderName, Guid chapterId);
         Task DeleteParagraphAsync(string folderName, Guid paragraphId);
         Task DeleteParagraphItemAsync(string folderName, Guid itemId);
+        Task UpdateVolumeTitleAsync(string folderName, Guid volumeId, string title);
+        Task UpdatePartTitleAsync(string folderName, Guid partId, string title);
+        Task UpdateChapterTitleAsync(string folderName, Guid chapterId, string title);
+        Task UpdateParagraphItemTextAsync(string folderName, Guid itemId, string text);
     }
 }

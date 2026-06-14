@@ -1,0 +1,37 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit @Label</MudText>
+    </TitleContent>
+    <DialogContent>
+        <div style="overflow: visible;">
+            <textarea @bind="_text" rows="@Lines" autofocus
+                      style="width: 100%; min-width: 100%; box-sizing: border-box;
+                             resize: vertical; overflow: auto; min-height: 80px;
+                             padding: 12px; font-size: 1rem; font-family: inherit;
+                             border: 1px solid var(--mud-palette-lines-inputs);
+                             border-radius: 4px; background: transparent;
+                             color: var(--mud-palette-text-primary);
+                             outline-color: var(--mud-palette-primary);" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(_text)))"
+                   Disabled="@string.IsNullOrWhiteSpace(_text)">
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Label { get; set; } = "Text";
+    [Parameter] public string InitialValue { get; set; } = "";
+    [Parameter] public int Lines { get; set; } = 1;
+
+    string _text = "";
+
+    protected override void OnParametersSet() => _text = InitialValue;
+}
