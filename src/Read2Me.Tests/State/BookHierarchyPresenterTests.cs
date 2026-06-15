@@ -63,6 +63,12 @@ namespace Read2Me.Tests.State
                 .Returns(new List<CharacterParagraphRef>());
             reader.GetChapterCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
                 .Returns(new List<CharacterParagraphRef>());
+            reader.GetVolumeUnprocessedCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
+                .Returns(new List<CharacterParagraphRef>());
+            reader.GetPartUnprocessedCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
+                .Returns(new List<CharacterParagraphRef>());
+            reader.GetChapterUnprocessedCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
+                .Returns(new List<CharacterParagraphRef>());
             reader.GetVolumeCharacterParagraphCountAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
                 .Returns(0);
             reader.GetPartCharacterParagraphCountAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
@@ -75,7 +81,8 @@ namespace Read2Me.Tests.State
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, dialogService);
+            var selectionCoordinator = new SelectionCoordinator(reader);
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, selectionCoordinator, dialogService);
             return new Context(presenter, reader, commandHandler, bookUseCases, treeState);
         }
 

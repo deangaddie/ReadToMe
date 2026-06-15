@@ -1,0 +1,143 @@
+@using Read2Me.App.State
+@using Read2Me.App.Shared.BookMenus
+@using Read2Me.Core.Models
+@using Read2Me.Data.Entities
+@using Read2Me.Data.Enums
+@inject BookHierarchyPresenter Presenter
+
+@{
+    var hasUnknown = Presenter.SplitView && Para.Items.Any(i =>
+        i.ItemType == ParagraphItemType.Character && i.Character == null);
+    var isCharPara = Para.Items.Any(i => i.ItemType == ParagraphItemType.Character);
+}
+
+@if (Presenter.SplitView)
+{
+    var firstItem = Para.Items.FirstOrDefault();
+    var isPauseParagraph = ParagraphItemDisplay.IsPauseParagraph(Para);
+    @if (isPauseParagraph)
+    {
+        var pauseLabel = ParagraphItemDisplay.GetPauseLabel(firstItem?.ItemType);
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
+                  Style="opacity:0.45;">
+            <MudText Typo="Typo.caption" Style="flex:1; font-style:italic;">@pauseLabel</MudText>
+            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPauseParagraph(FolderId, Para)"
+                         IsFirst="false" IsLast="false"
+                         OnChanged="@(() => { Presenter.Tree.RemoveParagraph(Para.Id); OnChanged.InvokeAsync(); })"
+                         OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+        </MudStack>
+    }
+    else
+    {
+        var items = Para.Items.ToList();
+        var isSplitSelected = isCharPara && Presenter.Selection.IsParagraphSelected(Para.Id);
+        var splitBg = hasUnknown ? "rgba(var(--mud-palette-warning-rgb), 0.06)" : isSplitSelected ? "rgba(var(--mud-palette-primary-rgb), 0.10)" : "";
+        <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
+                  Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : isSplitSelected ? "var(--mud-palette-primary)" : "var(--mud-palette-divider)") };{(splitBg != "" ? $" background: {splitBg};" : "")}")">
+            @if (isCharPara)
+            {
+                <MudCheckBox T="bool" Value="@isSplitSelected"
+                             ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(FolderId, Para.Id, ChapterId, PartId, VolumeId, v))"
+                             Size="Size.Small" />
+            }
+            @foreach (var item in items)
+            {
+                var it = item;
+                @if (it.ItemType == ParagraphItemType.Character)
+                {
+                    <div style="display:grid; grid-template-columns:120px 1fr auto; align-items:start; gap:8px;">
+                        <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
+                            <ActivatorContent>
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(it.Character == null ? Color.Warning : Color.Primary)"
+                                         Variant="Variant.Filled" Class="mt-0"
+                                         Style="width:100%; justify-content:center;"
+                                         OnClick="@(() => {})">
+                                    @(it.Character?.Name ?? "Unknown")
+                                </MudChip>
+                            </ActivatorContent>
+                            <ChildContent>
+                                <MudMenuItem OnClick="@(() => Presenter.SetItemCharacterAsync(FolderId, it, null))">Unknown</MudMenuItem>
+                                @foreach (var ch2 in Presenter.Characters)
+                                {
+                                    var c = ch2;
+                                    <MudMenuItem OnClick="@(() => Presenter.SetItemCharacterAsync(FolderId, it, c.Id))">@c.Name</MudMenuItem>
+                                }
+                            </ChildContent>
+                        </MudMenu>
+                        <MudText Typo="Typo.body2">@it.Text</MudText>
+                        <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it)"
+                                           IsFirst="@(items[0].Id == it.Id)"
+                                           IsLast="@(items[^1].Id == it.Id)"
+                                           OnChanged="OnChanged"
+                                           OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                    </div>
+                }
+                else
+                {
+                    var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetItemDisplay(it.ItemType);
+                    <div style="@($"display:grid; grid-template-columns:120px 1fr auto; align-items:center; gap:8px; opacity:{(it.ItemType is ParagraphItemType.Narration ? "1" : "0.6")}; font-style:{(it.ItemType is ParagraphItemType.Narration ? "normal" : "italic")};")">
+                        <MudChip T="string" Size="Size.Small" Color="@pauseColor" Variant="Variant.Outlined"
+                                 Icon="@pauseIcon" Class="mt-0"
+                                 Style="width:100%; justify-content:center;">
+                            @pauseLabel2
+                        </MudChip>
+                        @if (!string.IsNullOrWhiteSpace(it.Text))
+                        {
+                            <MudText Typo="Typo.body2">@it.Text</MudText>
+                        }
+                        else
+                        {
+                            <span></span>
+                        }
+                        <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it)"
+                                           IsFirst="@(items[0].Id == it.Id)"
+                                           IsLast="@(items[^1].Id == it.Id)"
+                                           OnChanged="OnChanged"
+                                           OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                    </div>
+                }
+            }
+        </MudStack>
+    }
+}
+else
+{
+    var isPause = ParagraphItemDisplay.IsPauseParagraph(Para);
+    var isSelected = Presenter.Selection.IsParagraphSelected(Para.Id);
+    @if (!isPause)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
+                  Style="@($"border-radius: 4px; padding: 0 4px;{(isSelected ? " color: var(--mud-palette-primary-text); background: rgba(var(--mud-palette-primary-rgb), 0.12);" : "")}")">
+            @if (isCharPara)
+            {
+                <MudCheckBox T="bool" Value="@isSelected"
+                             ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(FolderId, Para.Id, ChapterId, PartId, VolumeId, v))"
+                             Size="Size.Small" />
+            }
+            else
+            {
+                <span style="display:inline-block; width:38px; flex-shrink:0;"></span>
+            }
+            <MudText Typo="Typo.body2" Style="flex:1">@string.Join(" ", Para.Items.Select(i => i.Text))</MudText>
+            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraph(FolderId, Para)"
+                           IsFirst="IsFirst"
+                           IsLast="IsLast"
+                           OnChanged="@(() => { Presenter.Tree.RemoveParagraph(Para.Id); OnChanged.InvokeAsync(); })"
+                           OnSplit="OnSplit"
+                           OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+        </MudStack>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public Paragraph Para { get; set; } = null!;
+    [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
+    [Parameter, EditorRequired] public Guid ChapterId { get; set; }
+    [Parameter, EditorRequired] public Guid PartId { get; set; }
+    [Parameter, EditorRequired] public Guid VolumeId { get; set; }
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplit { get; set; }
+}

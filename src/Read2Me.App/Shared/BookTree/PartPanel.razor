@@ -1,0 +1,109 @@
+@using Read2Me.App.State
+@using Read2Me.App.Shared.BookMenus
+@using Read2Me.Core.Models
+@using Read2Me.Data.Entities
+@inject BookHierarchyPresenter Presenter
+
+@if (Parts.Count == 1)
+{
+    var p = Parts[0];
+    @if (Presenter.Tree.LoadingIds.Contains(p.Id))
+    {
+        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+    }
+    else if (Presenter.Tree.GetChapters(p.Id) is { } singlePartChapters)
+    {
+        @RenderChapters(singlePartChapters, p.Id)
+    }
+}
+else
+{
+    <MudExpansionPanels MultiExpansion="true">
+        @for (int i = 0; i < Parts.Count; i++)
+        {
+            var p = Parts[i];
+            var idx = i;
+            <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
+                              ExpandedChanged="@PartExpandCb(p)">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                        @if (Presenter.IsNodeSelectable(p.Id))
+                        {
+                            var partState = Presenter.Selection.NodeState(p.Id);
+                            <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
+                                <MudCheckBox T="bool?" Value="@TriStateToNullBool(partState)"
+                                             ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Part, p.Id, v == true))"
+                                             Size="Size.Small" />
+                                <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                                               Size="Size.Small" title="Select unprocessed"
+                                               OnClick="@(() => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Part, p.Id, true, unprocessedOnly: true))" />
+                            </span>
+                        }
+                        <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
+                        <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPart(FolderId, p)"
+                                     IsFirst="@(idx == 0)"
+                                     IsLast="@(idx == Parts.Count - 1)"
+                                     PreviousSiblingId="@(idx > 0 ? Parts[idx - 1].Id : null)"
+                                     NextSiblingId="@(idx < Parts.Count - 1 ? Parts[idx + 1].Id : null)"
+                                     OnChanged="OnChanged"
+                                     OnMerged="OnMerged"
+                                     OnSplit="OnSplitVolume"
+                                     OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    @if (Presenter.Tree.LoadingIds.Contains(p.Id))
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                    }
+                    else if (Presenter.Tree.GetChapters(p.Id) is { } multiPartChapters)
+                    {
+                        @RenderChapters(multiPartChapters, p.Id)
+                    }
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@code {
+    [Parameter, EditorRequired] public List<Part> Parts { get; set; } = null!;
+    [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
+    [Parameter, EditorRequired] public Guid VolumeId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitVolume { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitPart { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitChapter { get; set; }
+
+    EventCallback<bool> PartExpandCb(Part p) =>
+        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnPartExpandedAsync(p, b));
+
+    RenderFragment RenderChapters(List<Chapter> chapters, Guid partId) =>
+        @<MudExpansionPanels MultiExpansion="true">
+            @for (int i = 0; i < chapters.Count; i++)
+            {
+                var ch = chapters[i];
+                var idx = i;
+                <ChapterPanel Chapter="@ch"
+                              FolderId="@FolderId"
+                              PartId="@partId"
+                              VolumeId="@VolumeId"
+                              IsFirst="@(idx == 0)"
+                              IsLast="@(idx == chapters.Count - 1)"
+                              PreviousSiblingId="@(idx > 0 ? chapters[idx - 1].Id : null)"
+                              NextSiblingId="@(idx < chapters.Count - 1 ? chapters[idx + 1].Id : null)"
+                              OnChanged="OnChanged"
+                              OnMerged="OnMerged"
+                              OnSplitPart="OnSplitPart"
+                              OnSplitChapter="OnSplitChapter" />
+            }
+        </MudExpansionPanels>;
+
+    static bool? TriStateToNullBool(TriState state) => state switch
+    {
+        TriState.Checked => true,
+        TriState.Unchecked => false,
+        _ => null
+    };
+}

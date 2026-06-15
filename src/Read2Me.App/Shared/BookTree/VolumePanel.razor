@@ -1,0 +1,88 @@
+@using Read2Me.App.State
+@using Read2Me.App.Shared.BookMenus
+@using Read2Me.Core.Models
+@using Read2Me.Data.Entities
+@inject BookHierarchyPresenter Presenter
+
+@if (IsSingleVolume)
+{
+    @RenderVolumeBody(Volume)
+}
+else
+{
+    <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedVolumeIds.Contains(Volume.Id)"
+                      ExpandedChanged="@VolumeExpandCb">
+        <TitleContent>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                @if (Presenter.IsNodeSelectable(Volume.Id))
+                {
+                    var volState = Presenter.Selection.NodeState(Volume.Id);
+                    <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
+                        <MudCheckBox T="bool?" Value="@TriStateToNullBool(volState)"
+                                     ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Volume, Volume.Id, v == true))"
+                                     Size="Size.Small" />
+                        <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                                       Size="Size.Small" title="Select unprocessed"
+                                       OnClick="@(() => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Volume, Volume.Id, true, unprocessedOnly: true))" />
+                    </span>
+                }
+                <MudText Style="flex:1">@Volume.Title</MudText>
+                <BookNodeMenu Spec="@BookNodeMenuSpecs.ForVolume(FolderId, Volume)"
+                             IsFirst="IsFirst"
+                             IsLast="IsLast"
+                             PreviousSiblingId="PreviousSiblingId"
+                             NextSiblingId="NextSiblingId"
+                             OnChanged="OnChanged"
+                             OnMerged="OnMerged"
+                             OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+            </MudStack>
+        </TitleContent>
+        <ChildContent>
+            @RenderVolumeBody(Volume)
+        </ChildContent>
+    </MudExpansionPanel>
+}
+
+@code {
+    [Parameter, EditorRequired] public Volume Volume { get; set; } = null!;
+    [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
+    [Parameter, EditorRequired] public bool IsSingleVolume { get; set; }
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public Guid? PreviousSiblingId { get; set; }
+    [Parameter] public Guid? NextSiblingId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitVolume { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitPart { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitChapter { get; set; }
+
+    EventCallback<bool> VolumeExpandCb =>
+        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnVolumeExpandedAsync(Volume, b));
+
+    RenderFragment RenderVolumeBody(Volume vol) =>
+        @<text>
+            @if (Presenter.Tree.LoadingIds.Contains(vol.Id))
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+            }
+            else if (Presenter.Tree.GetParts(vol.Id) is { } parts)
+            {
+                <PartPanel Parts="@parts"
+                           FolderId="@FolderId"
+                           VolumeId="@vol.Id"
+                           OnChanged="OnChanged"
+                           OnMerged="OnMerged"
+                           OnSplitVolume="OnSplitVolume"
+                           OnSplitPart="OnSplitPart"
+                           OnSplitChapter="OnSplitChapter" />
+            }
+        </text>;
+
+    static bool? TriStateToNullBool(TriState state) => state switch
+    {
+        TriState.Checked => true,
+        TriState.Unchecked => false,
+        _ => null
+    };
+}

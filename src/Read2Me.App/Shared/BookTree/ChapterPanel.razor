@@ -1,0 +1,86 @@
+@using Read2Me.App.State
+@using Read2Me.App.Shared.BookMenus
+@using Read2Me.Core.Models
+@using Read2Me.Data.Entities
+@inject BookHierarchyPresenter Presenter
+
+<MudExpansionPanel Expanded="@Presenter.Tree.ExpandedChapterIds.Contains(Chapter.Id)"
+                  ExpandedChanged="@ChapterExpandCb">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+            @if (Presenter.IsNodeSelectable(Chapter.Id))
+            {
+                var chState = Presenter.Selection.NodeState(Chapter.Id);
+                <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
+                    <MudCheckBox T="bool?" Value="@TriStateToNullBool(chState)"
+                                 ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Chapter, Chapter.Id, v == true))"
+                                 Size="Size.Small" />
+                    <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                                   Size="Size.Small" title="Select unprocessed"
+                                   OnClick="@(() => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Chapter, Chapter.Id, true, unprocessedOnly: true))" />
+                </span>
+            }
+            <MudText Style="flex:1">@(Chapter.Title ?? "Chapter")</MudText>
+            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForChapter(FolderId, Chapter)"
+                         IsFirst="IsFirst"
+                         IsLast="IsLast"
+                         PreviousSiblingId="PreviousSiblingId"
+                         NextSiblingId="NextSiblingId"
+                         OnChanged="OnChanged"
+                         OnMerged="OnMerged"
+                         OnSplit="OnSplitPart"
+                         OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+        </MudStack>
+    </TitleContent>
+    <ChildContent>
+        @if (Presenter.Tree.LoadingIds.Contains(Chapter.Id))
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+        }
+        else if (Presenter.Tree.GetParagraphs(Chapter.Id) is { } paragraphs)
+        {
+            <MudStack Spacing="2" Class="py-1">
+                @for (int i = 0; i < paragraphs.Count; i++)
+                {
+                    var para = paragraphs[i];
+                    var isFirst = i == 0;
+                    var isLast = i == paragraphs.Count - 1;
+                    <ParagraphRow Para="@para"
+                                  FolderId="@FolderId"
+                                  ChapterId="@Chapter.Id"
+                                  PartId="@PartId"
+                                  VolumeId="@VolumeId"
+                                  IsFirst="@isFirst"
+                                  IsLast="@isLast"
+                                  OnChanged="OnChanged"
+                                  OnSplit="OnSplitChapter" />
+                }
+            </MudStack>
+        }
+    </ChildContent>
+</MudExpansionPanel>
+
+@code {
+    [Parameter, EditorRequired] public Chapter Chapter { get; set; } = null!;
+    [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
+    [Parameter, EditorRequired] public Guid PartId { get; set; }
+    [Parameter, EditorRequired] public Guid VolumeId { get; set; }
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public Guid? PreviousSiblingId { get; set; }
+    [Parameter] public Guid? NextSiblingId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitPart { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitChapter { get; set; }
+
+    EventCallback<bool> ChapterExpandCb =>
+        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnChapterExpandedAsync(Chapter, b));
+
+    static bool? TriStateToNullBool(TriState state) => state switch
+    {
+        TriState.Checked => true,
+        TriState.Unchecked => false,
+        _ => null
+    };
+}

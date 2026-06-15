@@ -6,7 +6,7 @@
 
 <MudText Typo="Typo.h4" GutterBottom="true">@_title</MudText>
 
-<ProjectDetailsPanel FolderName="@FolderName" />
+<ProjectDetailsPanel FolderName="@FolderName" Project="@_project" OnProjectChanged="ReloadProjectAsync" />
 
 <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
     <MudTabPanel Text="Book" Class="pa-4">
@@ -23,10 +23,17 @@
     [Parameter] public string FolderName { get; set; } = "";
 
     string _title = "";
+    Read2Me.Data.Entities.Project? _project;
 
     protected override async Task OnParametersSetAsync()
     {
-        var project = await ProjectReader.GetProjectAsync(FolderName);
-        _title = project?.Title ?? FolderName;
+        await ReloadProjectAsync();
+    }
+
+    async Task ReloadProjectAsync()
+    {
+        _project = await ProjectReader.GetProjectAsync(FolderName);
+        _title = _project?.Title ?? FolderName;
+        StateHasChanged();
     }
 }

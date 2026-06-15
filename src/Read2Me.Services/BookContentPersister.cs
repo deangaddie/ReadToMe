@@ -40,7 +40,7 @@ namespace Read2Me.Services
                             db.Paragraphs.Add(paragraph);
 
                             var segments = ParagraphSplitter.Split(para.Text);
-                            var attributed = NarrationClassifier.Classify(segments);
+                            var attributed = NarrationClassifier.Classify(segments, ProjectDbContext.NarratorId);
                             foreach (var seg in attributed)
                             {
                                 db.ParagraphItems.Add(new ParagraphItem

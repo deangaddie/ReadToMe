@@ -3,7 +3,7 @@
 @inject BookHierarchyPresenter Presenter
 @implements IDisposable
 
-@if (Presenter.Selection is { } sel && sel.SelectedParagraphCount > 0)
+@if (Presenter.SelectedParagraphCount > 0)
 {
     <div style="position:fixed; bottom:0; left:0; right:0; z-index:1300;
                 background:var(--mud-palette-surface);
@@ -13,7 +13,7 @@
                 display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
 
         <MudText Typo="Typo.body2">
-            <b>@sel.SelectedParagraphCount</b> paragraph@(sel.SelectedParagraphCount == 1 ? "" : "s") selected
+            <b>@Presenter.SelectedParagraphCount</b> paragraph@(Presenter.SelectedParagraphCount == 1 ? "" : "s") selected
         </MudText>
 
         <MudSpacer />

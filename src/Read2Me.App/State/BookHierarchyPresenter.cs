@@ -16,6 +16,7 @@ namespace Read2Me.App.State
         BookUseCases bookUseCases,
         BookTreeState treeState,
         BookSelectionState selectionState,
+        SelectionCoordinator selectionCoordinator,
         IDialogService dialogService)
     {
         public bool IsLoading { get; private set; }
@@ -52,6 +53,8 @@ namespace Read2Me.App.State
 
             _lastFolder = folderId;
             Tree = treeState.For(folderId);
+            Tree.Changed -= NotifyStateChanged;
+            Tree.Changed += NotifyStateChanged;
             Selection = selectionState.For(folderId);
             ConfirmReread = false;
 
@@ -172,161 +175,19 @@ namespace Read2Me.App.State
             ProjectFolderId folderId, Guid paragraphId,
             Guid chapterId, Guid partId, Guid volumeId, bool on)
         {
-            if (on)
-            {
-                Selection.AddParagraph(paragraphId, new ParagraphSelection(volumeId, partId, chapterId));
-                await WalkUpAsync(folderId, chapterId, partId, volumeId);
-            }
-            else
-            {
-                Selection.RemoveParagraph(paragraphId);
-                Selection.RemoveNode(chapterId);
-                Selection.RemoveNode(partId);
-                Selection.RemoveNode(volumeId);
-            }
+            await selectionCoordinator.ToggleParagraphAsync(
+                Selection, folderId, paragraphId, chapterId, partId, volumeId, on);
             NotifyStateChanged();
         }
 
         public async Task SetNodeAsync(
             ProjectFolderId folderId, SelectionNodeKind kind, Guid id, bool on, bool unprocessedOnly = false)
         {
-            List<CharacterParagraphRef> refs = kind switch
-            {
-                SelectionNodeKind.Volume => await GetUnprocessedOrAll(folderId, id, kind, unprocessedOnly),
-                SelectionNodeKind.Part => await GetUnprocessedOrAll(folderId, id, kind, unprocessedOnly),
-                _ => await GetUnprocessedOrAll(folderId, id, kind, unprocessedOnly),
-            };
-
-            if (on)
-            {
-                Selection.AddParagraphs(refs);
-                Selection.AddNode(id);
-                // Mark every descendant node fully selected so child checkboxes
-                // render checked (not indeterminate) when a parent is selected.
-                MarkDescendantNodesComplete(kind, id, refs);
-                // Walk up from the selected node.
-                await WalkUpFromNodeAsync(folderId, kind, id, refs);
-            }
-            else
-            {
-                Selection.RemoveParagraphs(refs.Select(r => r.ParagraphId));
-                Selection.RemoveNode(id);
-                // Deselecting clears descendant completeness marks added on select.
-                RemoveDescendantNodes(kind, refs);
-                // Deselecting removes all ancestor completeness marks.
-                if (refs.Count > 0)
-                {
-                    var r = refs[0];
-                    if (kind == SelectionNodeKind.Chapter)
-                    {
-                        Selection.RemoveNode(r.PartId);
-                        Selection.RemoveNode(r.VolumeId);
-                    }
-                    else if (kind == SelectionNodeKind.Part)
-                    {
-                        Selection.RemoveNode(r.VolumeId);
-                    }
-                }
-            }
+            await selectionCoordinator.SetNodeAsync(Selection, folderId, kind, id, on, unprocessedOnly);
             NotifyStateChanged();
         }
 
         public int SelectedParagraphCount => Selection?.SelectedParagraphCount ?? 0;
-
-        // ---------------------------------------------------------------
-        // Private helpers
-        // ---------------------------------------------------------------
-
-        private Task<List<CharacterParagraphRef>> GetUnprocessedOrAll(
-            ProjectFolderId folderId, Guid id, SelectionNodeKind kind, bool unprocessedOnly)
-        {
-            // Today unprocessedOnly == all; filtering wired in later.
-            return kind switch
-            {
-                SelectionNodeKind.Volume => reader.GetVolumeCharacterParagraphsAsync(folderId, id),
-                SelectionNodeKind.Part => reader.GetPartCharacterParagraphsAsync(folderId, id),
-                _ => reader.GetChapterCharacterParagraphsAsync(folderId, id),
-            };
-        }
-
-        private async Task WalkUpAsync(ProjectFolderId folderId, Guid chapterId, Guid partId, Guid volumeId)
-        {
-            var chCount = await reader.GetChapterCharacterParagraphCountAsync(folderId, chapterId);
-            var chSelected = Selection.SelectedCountUnder(chapterId, SelectionNodeKind.Chapter);
-            if (chSelected >= chCount)
-            {
-                Selection.AddNode(chapterId);
-                var ptCount = await reader.GetPartCharacterParagraphCountAsync(folderId, partId);
-                var ptSelected = Selection.SelectedCountUnder(partId, SelectionNodeKind.Part);
-                if (ptSelected >= ptCount)
-                {
-                    Selection.AddNode(partId);
-                    var volCount = await reader.GetVolumeCharacterParagraphCountAsync(folderId, volumeId);
-                    var volSelected = Selection.SelectedCountUnder(volumeId, SelectionNodeKind.Volume);
-                    if (volSelected >= volCount)
-                        Selection.AddNode(volumeId);
-                }
-            }
-        }
-
-        // Selecting a node selects every paragraph beneath it. The descendant
-        // chapters/parts are therefore fully selected too — mark them so their
-        // checkboxes show Checked instead of Indeterminate.
-        private void MarkDescendantNodesComplete(
-            SelectionNodeKind kind, Guid id, List<CharacterParagraphRef> refs)
-        {
-            if (kind == SelectionNodeKind.Volume)
-            {
-                foreach (var partId in refs.Select(r => r.PartId).Distinct())
-                    Selection.AddNode(partId);
-                foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
-                    Selection.AddNode(chapterId);
-            }
-            else if (kind == SelectionNodeKind.Part)
-            {
-                foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
-                    Selection.AddNode(chapterId);
-            }
-        }
-
-        // Mirror of MarkDescendantNodesComplete: clear descendant node marks on deselect.
-        private void RemoveDescendantNodes(SelectionNodeKind kind, List<CharacterParagraphRef> refs)
-        {
-            if (kind == SelectionNodeKind.Volume)
-            {
-                foreach (var partId in refs.Select(r => r.PartId).Distinct())
-                    Selection.RemoveNode(partId);
-                foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
-                    Selection.RemoveNode(chapterId);
-            }
-            else if (kind == SelectionNodeKind.Part)
-            {
-                foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
-                    Selection.RemoveNode(chapterId);
-            }
-        }
-
-        private async Task WalkUpFromNodeAsync(
-            ProjectFolderId folderId, SelectionNodeKind kind, Guid id,
-            List<CharacterParagraphRef> refs)
-        {
-            if (refs.Count == 0) return;
-
-            if (kind == SelectionNodeKind.Chapter)
-            {
-                var r = refs[0];
-                await WalkUpAsync(folderId, id, r.PartId, r.VolumeId);
-            }
-            else if (kind == SelectionNodeKind.Part)
-            {
-                var r = refs[0];
-                var volCount = await reader.GetVolumeCharacterParagraphCountAsync(folderId, r.VolumeId);
-                var volSelected = Selection.SelectedCountUnder(r.VolumeId, SelectionNodeKind.Volume);
-                if (volSelected >= volCount)
-                    Selection.AddNode(r.VolumeId);
-            }
-            // Volume is top — no further walk.
-        }
 
         private async Task ExecuteAndReloadAsync(
             ProjectFolderId folderId,

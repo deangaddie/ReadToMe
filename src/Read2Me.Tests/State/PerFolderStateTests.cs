@@ -38,9 +38,9 @@ namespace Read2Me.Tests.State
             var partId = Id();
             var chId = Id();
 
-            Cache(loader).Parts[volId] = [new Part { Id = partId }];
-            Cache(loader).Chapters[partId] = [new Chapter { Id = chId }];
-            Cache(loader).Paragraphs[chId] = [new Paragraph { Id = Id() }];
+            Cache(loader).SetParts(volId, [new Part { Id = partId }]);
+            Cache(loader).SetChapters(partId, [new Chapter { Id = chId }]);
+            Cache(loader).SetParagraphs(chId, [new Paragraph { Id = Id() }]);
 
             state.CollapseVolume(volId);
 
@@ -62,7 +62,7 @@ namespace Read2Me.Tests.State
         {
             var (state, loader, _) = Create();
             var volId = Id();
-            Cache(loader).Parts[volId] = [];
+            Cache(loader).SetParts(volId, []);
 
             state.CollapseVolume(volId);
             var ex = Record.Exception(() => state.CollapseVolume(volId));
@@ -80,8 +80,8 @@ namespace Read2Me.Tests.State
             var partId = Id();
             var chId = Id();
 
-            Cache(loader).Chapters[partId] = [new Chapter { Id = chId }];
-            Cache(loader).Paragraphs[chId] = [new Paragraph { Id = Id() }];
+            Cache(loader).SetChapters(partId, [new Chapter { Id = chId }]);
+            Cache(loader).SetParagraphs(chId, [new Paragraph { Id = Id() }]);
 
             state.CollapsePart(partId);
 
@@ -108,8 +108,8 @@ namespace Read2Me.Tests.State
             var ch1Id = Id();
             var ch2Id = Id();
 
-            Cache(loader).Paragraphs[ch1Id] = [new Paragraph { Id = Id() }];
-            Cache(loader).Paragraphs[ch2Id] = [new Paragraph { Id = Id() }];
+            Cache(loader).SetParagraphs(ch1Id, [new Paragraph { Id = Id() }]);
+            Cache(loader).SetParagraphs(ch2Id, [new Paragraph { Id = Id() }]);
 
             state.CollapseChapter(ch1Id);
 
@@ -129,7 +129,7 @@ namespace Read2Me.Tests.State
             var para1Id = Id();
             var para2Id = Id();
 
-            Cache(loader).Paragraphs[chId] = [new Paragraph { Id = para1Id }, new Paragraph { Id = para2Id }];
+            Cache(loader).SetParagraphs(chId, [new Paragraph { Id = para1Id }, new Paragraph { Id = para2Id }]);
 
             state.RemoveParagraph(para1Id);
 
@@ -155,8 +155,8 @@ namespace Read2Me.Tests.State
             var ch2Id = Id();
             var paraId = Id();
 
-            Cache(loader).Paragraphs[ch1Id] = [new Paragraph { Id = Id() }];
-            Cache(loader).Paragraphs[ch2Id] = [new Paragraph { Id = paraId }, new Paragraph { Id = Id() }];
+            Cache(loader).SetParagraphs(ch1Id, [new Paragraph { Id = Id() }]);
+            Cache(loader).SetParagraphs(ch2Id, [new Paragraph { Id = paraId }, new Paragraph { Id = Id() }]);
 
             state.RemoveParagraph(paraId);
 
@@ -190,6 +190,37 @@ namespace Read2Me.Tests.State
         }
 
         // ---------------------------------------------------------------
+        // Changed event
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task OnVolumeExpanded_RaisesChangedEvent()
+        {
+            var (state, _, reader) = Create();
+            var volId = Id();
+            reader.GetPartsAsync(Folder, volId).Returns(new List<Part>());
+
+            int fireCount = 0;
+            state.Changed += () => fireCount++;
+
+            await state.OnVolumeExpandedAsync(new Volume { Id = volId }, expanded: true);
+
+            Assert.True(fireCount >= 1);
+        }
+
+        [Fact]
+        public async Task OnVolumeCollapsed_DoesNotThrow_AndRemovesFromExpanded()
+        {
+            var (state, _, _) = Create();
+            var volId = Id();
+            state.ExpandedVolumeIds.Add(volId);
+
+            await state.OnVolumeExpandedAsync(new Volume { Id = volId }, expanded: false);
+
+            Assert.DoesNotContain(volId, state.ExpandedVolumeIds);
+        }
+
+        // ---------------------------------------------------------------
         // LoadingIds: true between Add and Remove
         // ---------------------------------------------------------------
 
@@ -203,10 +234,10 @@ namespace Read2Me.Tests.State
             reader.GetPartsAsync(Folder, volId).Returns(tcs.Task);
 
             bool loadingDuringCallback = false;
+            state.Changed += () => loadingDuringCallback = state.LoadingIds.Contains(volId);
             var loadTask = state.OnVolumeExpandedAsync(
                 new Volume { Id = volId },
-                expanded: true,
-                notifyChanged: () => loadingDuringCallback = state.LoadingIds.Contains(volId));
+                expanded: true);
 
             // First notify (loading=true) happened synchronously before await
             Assert.True(loadingDuringCallback);

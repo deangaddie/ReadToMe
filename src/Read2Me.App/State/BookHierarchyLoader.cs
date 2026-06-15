@@ -21,19 +21,19 @@ namespace Read2Me.App.State
         public async Task LoadPartsAsync(ProjectFolderId folderId, Guid volumeId)
         {
             var parts = await reader.GetPartsAsync(folderId, volumeId);
-            For(folderId).Parts[volumeId] = parts;
+            For(folderId).SetParts(volumeId, parts);
         }
 
         public async Task LoadChaptersAsync(ProjectFolderId folderId, Guid partId)
         {
             var chapters = await reader.GetChaptersAsync(folderId, partId);
-            For(folderId).Chapters[partId] = chapters;
+            For(folderId).SetChapters(partId, chapters);
         }
 
         public async Task LoadParagraphsAsync(ProjectFolderId folderId, Guid chapterId)
         {
             var paragraphs = await reader.GetChapterParagraphsAsync(folderId, chapterId);
-            For(folderId).Paragraphs[chapterId] = paragraphs;
+            For(folderId).SetParagraphs(chapterId, paragraphs);
         }
 
         public void Reset(ProjectFolderId folderId) => _caches.Remove(folderId);
@@ -41,8 +41,28 @@ namespace Read2Me.App.State
 
     public class FolderCache
     {
-        public Dictionary<Guid, List<Part>> Parts { get; } = new();
-        public Dictionary<Guid, List<Chapter>> Chapters { get; } = new();
-        public Dictionary<Guid, List<Paragraph>> Paragraphs { get; } = new();
+        private readonly Dictionary<Guid, List<Part>> _parts = new();
+        private readonly Dictionary<Guid, List<Chapter>> _chapters = new();
+        private readonly Dictionary<Guid, List<Paragraph>> _paragraphs = new();
+
+        public List<Part>? GetParts(Guid volumeId) => _parts.GetValueOrDefault(volumeId);
+        public List<Chapter>? GetChapters(Guid partId) => _chapters.GetValueOrDefault(partId);
+        public List<Paragraph>? GetParagraphs(Guid chapterId) => _paragraphs.GetValueOrDefault(chapterId);
+
+        public void SetParts(Guid volumeId, List<Part> parts) => _parts[volumeId] = parts;
+        public void SetChapters(Guid partId, List<Chapter> chapters) => _chapters[partId] = chapters;
+        public void SetParagraphs(Guid chapterId, List<Paragraph> paragraphs) => _paragraphs[chapterId] = paragraphs;
+
+        public void RemoveVolume(Guid volumeId) => _parts.Remove(volumeId);
+        public void RemovePart(Guid partId) => _chapters.Remove(partId);
+        public void RemoveChapter(Guid chapterId) => _paragraphs.Remove(chapterId);
+
+        public bool HasParts(Guid volumeId) => _parts.ContainsKey(volumeId);
+
+        public void RemoveParagraphEverywhere(Guid paragraphId)
+        {
+            foreach (var list in _paragraphs.Values)
+                list.RemoveAll(p => p.Id == paragraphId);
+        }
     }
 }

@@ -1,5 +1,6 @@
 @using Read2Me.App.State
 @using Read2Me.App.Shared.BookMenus
+@using Read2Me.App.Shared.BookTree
 @using Read2Me.Core.Models
 @using Read2Me.Data.Entities
 @using Read2Me.Data.Enums
@@ -114,45 +115,36 @@ else
 
         @if (Presenter.Volumes.Count == 1)
         {
-            @RenderVolumeBody(Presenter.Volumes[0])
+            <VolumePanel Volume="@Presenter.Volumes[0]"
+                         FolderId="@_folderId"
+                         IsSingleVolume="true"
+                         IsFirst="true"
+                         IsLast="true"
+                         OnChanged="StateHasChanged"
+                         OnMerged="MergeAndResetAsync"
+                         OnSplitVolume="SplitVolumeAsync"
+                         OnSplitPart="SplitPartAsync"
+                         OnSplitChapter="SplitChapterAsync" />
         }
         else
         {
             <MudExpansionPanels MultiExpansion="true">
-                @foreach (var volume in Presenter.Volumes)
+                @for (int i = 0; i < Presenter.Volumes.Count; i++)
                 {
-                    var vol = volume;
-                    <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedVolumeIds.Contains(vol.Id)"
-                                      ExpandedChanged="@VolumeExpandCb(vol)">
-                        <TitleContent>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                                @if (Presenter.IsNodeSelectable(vol.Id))
-                                {
-                                    var volState = Presenter.Selection.NodeState(vol.Id);
-                                    <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-                                        <MudCheckBox T="bool?" Value="@TriStateToNullBool(volState)"
-                                                     ValueChanged="@((bool? v) => OnNodeCheckChanged(SelectionNodeKind.Volume, vol.Id, v))"
-                                                     Size="Size.Small" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
-                                                       Size="Size.Small" title="Select unprocessed"
-                                                       OnClick="@(() => Presenter.SetNodeAsync(_folderId, SelectionNodeKind.Volume, vol.Id, true, unprocessedOnly: true))" />
-                                    </span>
-                                }
-                                <MudText Style="flex:1">@vol.Title</MudText>
-                                <BookNodeMenu Spec="@BookNodeMenuSpecs.ForVolume(_folderId, vol)"
-                                             IsFirst="@(Presenter.Volumes[0].Id == vol.Id)"
-                                             IsLast="@(Presenter.Volumes[^1].Id == vol.Id)"
-                                             PreviousSiblingId="@(Presenter.Volumes.TakeWhile(v => v.Id != vol.Id).LastOrDefault()?.Id)"
-                                             NextSiblingId="@(Presenter.Volumes.SkipWhile(v => v.Id != vol.Id).Skip(1).FirstOrDefault()?.Id)"
-                                             OnChanged="StateHasChanged"
-                                             OnMerged="MergeAndResetAsync"
-                                             OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                            </MudStack>
-                        </TitleContent>
-                        <ChildContent>
-                            @RenderVolumeBody(vol)
-                        </ChildContent>
-                    </MudExpansionPanel>
+                    var vol = Presenter.Volumes[i];
+                    var idx = i;
+                    <VolumePanel Volume="@vol"
+                                 FolderId="@_folderId"
+                                 IsSingleVolume="false"
+                                 IsFirst="@(idx == 0)"
+                                 IsLast="@(idx == Presenter.Volumes.Count - 1)"
+                                 PreviousSiblingId="@(idx > 0 ? Presenter.Volumes[idx - 1].Id : null)"
+                                 NextSiblingId="@(idx < Presenter.Volumes.Count - 1 ? Presenter.Volumes[idx + 1].Id : null)"
+                                 OnChanged="StateHasChanged"
+                                 OnMerged="MergeAndResetAsync"
+                                 OnSplitVolume="SplitVolumeAsync"
+                                 OnSplitPart="SplitPartAsync"
+                                 OnSplitChapter="SplitChapterAsync" />
                 }
             </MudExpansionPanels>
         }
@@ -164,254 +156,6 @@ else
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
 
     ProjectFolderId _folderId;
-
-    RenderFragment RenderVolumeBody(Volume vol) =>
-        @<text>
-            @if (Presenter.Tree.LoadingIds.Contains(vol.Id))
-            {
-                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-            }
-            else if (Presenter.Tree.GetParts(vol.Id) is { } parts)
-            {
-                @RenderParts(parts, vol.Id)
-            }
-        </text>;
-
-    RenderFragment RenderParts(System.Collections.Generic.List<Part> parts, Guid volumeId) =>
-        @<text>
-            @if (parts.Count == 1)
-            {
-                var p = parts[0];
-                @if (Presenter.Tree.LoadingIds.Contains(p.Id))
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                }
-                else if (Presenter.Tree.GetChapters(p.Id) is { } singlePartChapters)
-                {
-                    @RenderChapters(singlePartChapters, p.Id, volumeId)
-                }
-            }
-            else
-            {
-                <MudExpansionPanels MultiExpansion="true">
-                    @foreach (var part in parts)
-                    {
-                        var p = part;
-                        var volId = volumeId;
-                        <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
-                                          ExpandedChanged="@PartExpandCb(p)">
-                            <TitleContent>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                                    @if (Presenter.IsNodeSelectable(p.Id))
-                                    {
-                                        var partState = Presenter.Selection.NodeState(p.Id);
-                                        <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-                                            <MudCheckBox T="bool?" Value="@TriStateToNullBool(partState)"
-                                                         ValueChanged="@((bool? v) => OnNodeCheckChanged(SelectionNodeKind.Part, p.Id, v))"
-                                                         Size="Size.Small" />
-                                            <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
-                                                           Size="Size.Small" title="Select unprocessed"
-                                                           OnClick="@(() => Presenter.SetNodeAsync(_folderId, SelectionNodeKind.Part, p.Id, true, unprocessedOnly: true))" />
-                                        </span>
-                                    }
-                                    <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
-                                    <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPart(_folderId, p)"
-                                                 IsFirst="@(parts[0].Id == p.Id)"
-                                                 IsLast="@(parts[^1].Id == p.Id)"
-                                                 PreviousSiblingId="@(parts.IndexOf(p) is var pi && pi > 0 ? parts[pi - 1].Id : null)"
-                                                 NextSiblingId="@(parts.IndexOf(p) is var pj && pj < parts.Count - 1 ? parts[pj + 1].Id : null)"
-                                                 OnChanged="StateHasChanged"
-                                                 OnMerged="MergeAndResetAsync"
-                                                 OnSplit="SplitVolumeAsync"
-                                                 OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                                </MudStack>
-                            </TitleContent>
-                            <ChildContent>
-                                @if (Presenter.Tree.LoadingIds.Contains(p.Id))
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                }
-                                else if (Presenter.Tree.GetChapters(p.Id) is { } multiPartChapters)
-                                {
-                                    @RenderChapters(multiPartChapters, p.Id, volId)
-                                }
-                            </ChildContent>
-                        </MudExpansionPanel>
-                    }
-                </MudExpansionPanels>
-            }
-        </text>;
-
-    RenderFragment RenderChapters(System.Collections.Generic.List<Read2Me.Data.Entities.Chapter> chapters, Guid partId, Guid volumeId) =>
-        @<MudExpansionPanels MultiExpansion="true">
-            @foreach (var chapter in chapters)
-            {
-                var ch = chapter;
-                var ptId = partId;
-                var volId = volumeId;
-                <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedChapterIds.Contains(ch.Id)"
-                                  ExpandedChanged="@ChapterExpandCb(ch)">
-                    <TitleContent>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                            @if (Presenter.IsNodeSelectable(ch.Id))
-                            {
-                                var chState = Presenter.Selection.NodeState(ch.Id);
-                                <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-                                    <MudCheckBox T="bool?" Value="@TriStateToNullBool(chState)"
-                                                 ValueChanged="@((bool? v) => OnNodeCheckChanged(SelectionNodeKind.Chapter, ch.Id, v))"
-                                                 Size="Size.Small" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
-                                                   Size="Size.Small" title="Select unprocessed"
-                                                   OnClick="@(() => Presenter.SetNodeAsync(_folderId, SelectionNodeKind.Chapter, ch.Id, true, unprocessedOnly: true))" />
-                                </span>
-                            }
-                            <MudText Style="flex:1">@(ch.Title ?? "Chapter")</MudText>
-                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForChapter(_folderId, ch)"
-                                         IsFirst="@(chapters[0].Id == ch.Id)"
-                                         IsLast="@(chapters[^1].Id == ch.Id)"
-                                         PreviousSiblingId="@(chapters.IndexOf(ch) is var ci && ci > 0 ? chapters[ci - 1].Id : null)"
-                                         NextSiblingId="@(chapters.IndexOf(ch) is var cj && cj < chapters.Count - 1 ? chapters[cj + 1].Id : null)"
-                                         OnChanged="StateHasChanged"
-                                         OnMerged="MergeAndResetAsync"
-                                         OnSplit="SplitPartAsync"
-                                         OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                        </MudStack>
-                    </TitleContent>
-                    <ChildContent>
-                        @if (Presenter.Tree.LoadingIds.Contains(ch.Id))
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                        }
-                        else if (Presenter.Tree.GetParagraphs(ch.Id) is { } paragraphs)
-                        {
-                            <MudStack Spacing="2" Class="py-1">
-                                @foreach (var para in paragraphs)
-                                {
-                                    var p = para;
-                                    var hasUnknown = Presenter.SplitView && p.Items.Any(i =>
-                                        i.ItemType == ParagraphItemType.Character && i.Character == null);
-                                    var isCharPara = p.Items.Any(i => i.ItemType == ParagraphItemType.Character);
-                                    @if (Presenter.SplitView)
-                                    {
-                                        var firstItem = p.Items.FirstOrDefault();
-                                        var isPauseParagraph = ParagraphItemDisplay.IsPauseParagraph(p);
-                                        @if (isPauseParagraph)
-                                        {
-                                            var pauseLabel = ParagraphItemDisplay.GetPauseLabel(firstItem?.ItemType);
-                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
-                                                      Style="opacity:0.45;">
-                                                <MudText Typo="Typo.caption" Style="flex:1; font-style:italic;">@pauseLabel</MudText>
-                                                <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPauseParagraph(_folderId, p)"
-                                                             IsFirst="false" IsLast="false"
-                                                             OnChanged="@(() => { Presenter.Tree.RemoveParagraph(p.Id); StateHasChanged(); })"
-                                                             OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                                            </MudStack>
-                                        }
-                                        else
-                                        {
-                                            var items = p.Items.ToList();
-                                            <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
-                                                      Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : "var(--mud-palette-divider)")};{(hasUnknown ? " background: rgba(var(--mud-palette-warning-rgb), 0.06);" : "")}")">
-                                                @if (isCharPara)
-                                                {
-                                                    var pId = p.Id;
-                                                    var chId = ch.Id;
-                                                    <MudCheckBox T="bool" Value="@Presenter.Selection.IsParagraphSelected(pId)"
-                                                                 ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(_folderId, pId, chId, ptId, volId, v))"
-                                                                 Size="Size.Small" />
-                                                }
-                                                @foreach (var item in items)
-                                                {
-                                                    var it = item;
-                                                    @if (it.ItemType == ParagraphItemType.Character)
-                                                    {
-                                                        <div style="display:grid; grid-template-columns:120px 1fr auto; align-items:start; gap:8px;">
-                                                            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
-                                                                <ActivatorContent>
-                                                                    <MudChip T="string" Size="Size.Small"
-                                                                             Color="@(it.Character == null ? Color.Warning : Color.Primary)"
-                                                                             Variant="Variant.Filled" Class="mt-0"
-                                                                             Style="width:100%; justify-content:center;"
-                                                                             OnClick="@(() => {})">
-                                                                        @(it.Character?.Name ?? "Unknown")
-                                                                    </MudChip>
-                                                                </ActivatorContent>
-                                                                <ChildContent>
-                                                                    <MudMenuItem OnClick="@(() => Presenter.SetItemCharacterAsync(_folderId, it, null))">Unknown</MudMenuItem>
-                                                                    @foreach (var ch2 in Presenter.Characters)
-                                                                    {
-                                                                        var c = ch2;
-                                                                        <MudMenuItem OnClick="@(() => Presenter.SetItemCharacterAsync(_folderId, it, c.Id))">@c.Name</MudMenuItem>
-                                                                    }
-                                                                </ChildContent>
-                                                            </MudMenu>
-                                                            <MudText Typo="Typo.body2">@it.Text</MudText>
-                                                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(_folderId, it)"
-                                                                               IsFirst="@(items[0].Id == it.Id)"
-                                                                               IsLast="@(items[^1].Id == it.Id)"
-                                                                               OnChanged="StateHasChanged"
-                                                                               OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                                                        </div>
-                                                    }
-                                                    else
-                                                    {
-                                                        var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetItemDisplay(it.ItemType);
-                                                        <div style="@($"display:grid; grid-template-columns:120px 1fr auto; align-items:center; gap:8px; opacity:{(it.ItemType is ParagraphItemType.Narration ? "1" : "0.6")}; font-style:{(it.ItemType is ParagraphItemType.Narration ? "normal" : "italic")};")">
-                                                            <MudChip T="string" Size="Size.Small" Color="@pauseColor" Variant="Variant.Outlined"
-                                                                     Icon="@pauseIcon" Class="mt-0"
-                                                                     Style="width:100%; justify-content:center;">
-                                                                @pauseLabel2
-                                                            </MudChip>
-                                                            @if (!string.IsNullOrWhiteSpace(it.Text))
-                                                            {
-                                                                <MudText Typo="Typo.body2">@it.Text</MudText>
-                                                            }
-                                                            else
-                                                            {
-                                                                <span></span>
-                                                            }
-                                                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(_folderId, it)"
-                                                                               IsFirst="@(items[0].Id == it.Id)"
-                                                                               IsLast="@(items[^1].Id == it.Id)"
-                                                                               OnChanged="StateHasChanged"
-                                                                               OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                                                        </div>
-                                                    }
-                                                }
-                                            </MudStack>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        var isPause = ParagraphItemDisplay.IsPauseParagraph(p);
-                                        @if (!isPause)
-                                        {
-                                            var pId = p.Id;
-                                            var chId = ch.Id;
-                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                @if (isCharPara)
-                                                {
-                                                    <MudCheckBox T="bool" Value="@Presenter.Selection.IsParagraphSelected(pId)"
-                                                                 ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(_folderId, pId, chId, ptId, volId, v))"
-                                                                 Size="Size.Small" />
-                                                }
-                                                <MudText Typo="Typo.body2" Style="flex:1">@string.Join(" ", p.Items.Select(i => i.Text))</MudText>
-                                                <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraph(_folderId, p)"
-                                                               IsFirst="@(paragraphs[0].Id == p.Id)"
-                                                               IsLast="@(paragraphs[^1].Id == p.Id)"
-                                                               OnChanged="@(() => { Presenter.Tree.RemoveParagraph(p.Id); StateHasChanged(); })"
-                                                               OnSplit="SplitChapterAsync"
-                                                               OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                                            </MudStack>
-                                        }
-                                    }
-                                }
-                            </MudStack>
-                        }
-                    </ChildContent>
-                </MudExpansionPanel>
-            }
-        </MudExpansionPanels>;
 
     async Task MergeAndResetAsync((Guid survivorId, Guid deletedId) merge)
     {
@@ -427,25 +171,6 @@ else
 
     Task SplitChapterAsync((BookCommand command, Guid sourceParentId) split) =>
         Presenter.SplitAndReloadAsync(_folderId, split.command, BookHierarchyPresenter.SplitLevel.Chapter, split.sourceParentId);
-
-    EventCallback<bool> VolumeExpandCb(Read2Me.Data.Entities.Volume v) =>
-        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnVolumeExpandedAsync(v, b, StateHasChanged));
-
-    EventCallback<bool> PartExpandCb(Read2Me.Data.Entities.Part p) =>
-        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnPartExpandedAsync(p, b, StateHasChanged));
-
-    EventCallback<bool> ChapterExpandCb(Read2Me.Data.Entities.Chapter c) =>
-        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnChapterExpandedAsync(c, b, StateHasChanged));
-
-    static bool? TriStateToNullBool(TriState state) => state switch
-    {
-        TriState.Checked => true,
-        TriState.Unchecked => false,
-        _ => null
-    };
-
-    Task OnNodeCheckChanged(SelectionNodeKind kind, Guid id, bool? value) =>
-        Presenter.SetNodeAsync(_folderId, kind, id, value == true);
 
     protected override async Task OnParametersSetAsync()
     {

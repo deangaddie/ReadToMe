@@ -1,5 +1,4 @@
 @using System.IO
-@inject Read2Me.Services.IProjectReader ProjectReader
 @inject Read2Me.Services.UseCases.ProjectUseCases ProjectUseCases
 
 <style>
@@ -34,27 +33,27 @@
                 <MudGrid Spacing="3">
                     <MudItem xs="12" sm="6">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Title</MudText>
-                        <MudText Typo="Typo.body1">@_project?.Title</MudText>
+                        <MudText Typo="Typo.body1">@Project?.Title</MudText>
                     </MudItem>
                     <MudItem xs="12" sm="6">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Author</MudText>
-                        <MudText Typo="Typo.body1">@_project?.Author</MudText>
+                        <MudText Typo="Typo.body1">@Project?.Author</MudText>
                     </MudItem>
                     <MudItem xs="12" sm="6">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Filename</MudText>
-                        <MudText Typo="Typo.body1">@_project?.Filename</MudText>
+                        <MudText Typo="Typo.body1">@Project?.Filename</MudText>
                     </MudItem>
                     <MudItem xs="12" sm="6">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Type</MudText>
-                        <MudText Typo="Typo.body1">@_project?.Type</MudText>
+                        <MudText Typo="Typo.body1">@Project?.Type</MudText>
                     </MudItem>
                 </MudGrid>
             </MudItem>
             <MudItem xs="12" sm="3" Style="display:flex; flex-direction:column; align-items:flex-end">
-                @if (_project?.CoverImage != null)
+                @if (Project?.CoverImage != null)
                 {
                     <div class="cover-container">
-                        <img src="/workspace/@FolderName/@_project.CoverImage"
+                        <img src="/workspace/@FolderName/@Project!.CoverImage"
                              alt="Cover" style="height:200px; border-radius:4px" />
                         <div class="cover-overlay">
                             <MudIconButton Icon="@Icons.Material.Filled.Edit"
@@ -87,19 +86,10 @@
 
 @code {
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+    [Parameter, EditorRequired] public Read2Me.Data.Entities.Project? Project { get; set; }
+    [Parameter] public EventCallback OnProjectChanged { get; set; }
 
-    Read2Me.Data.Entities.Project? _project;
     string? _coverError;
-
-    protected override async Task OnParametersSetAsync()
-    {
-        await LoadAsync();
-    }
-
-    async Task LoadAsync()
-    {
-        _project = await ProjectReader.GetProjectAsync(FolderName);
-    }
 
     async Task OnCoverImageChangedAsync(InputFileChangeEventArgs e)
     {
@@ -115,7 +105,7 @@
         if (!result.IsSuccess)
             _coverError = result.Error;
         else
-            await LoadAsync();
+            await OnProjectChanged.InvokeAsync();
     }
 
     async Task DeleteCoverAsync()
@@ -125,6 +115,6 @@
         if (!result.IsSuccess)
             _coverError = result.Error;
         else
-            await LoadAsync();
+            await OnProjectChanged.InvokeAsync();
     }
 }
