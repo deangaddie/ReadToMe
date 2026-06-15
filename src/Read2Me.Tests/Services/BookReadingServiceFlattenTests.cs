@@ -5,12 +5,15 @@ using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Books;
+using Read2Me.Services.IO;
 using Xunit;
 
 namespace Read2Me.Tests.Services;
@@ -36,7 +39,7 @@ public class BookReadingServiceFlattenTests : IAsyncDisposable
 {
     private readonly string _tempDir;
     private readonly ProjectDbContext _db;
-    private readonly ProjectDbContextProvider _dbFactory;
+    private readonly ProjectDbSession _session;
     private readonly BookReadingService _sut;
     private const string FolderName = "test";
 
@@ -52,11 +55,13 @@ public class BookReadingServiceFlattenTests : IAsyncDisposable
         _db = new ProjectDbContext(options);
         _db.Database.Migrate();
 
-        _dbFactory = new ProjectDbContextProvider();
+        _session = new ProjectDbSession(
+            new FixedPathFileSystem(_tempDir),
+            new ProjectDbContextProvider(),
+            NullLogger<ProjectDbSession>.Instance);
 
         _sut = new BookReadingService(
-            new FixedPathFileSystem(_tempDir),
-            _dbFactory,
+            _session,
             new EpubFileReader(NullLogger<EpubFileReader>.Instance),
             new TextFileReader(NullLogger<TextFileReader>.Instance),
             new BookContentPersister(),
@@ -65,6 +70,7 @@ public class BookReadingServiceFlattenTests : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await _session.DisposeAsync();
         await _db.DisposeAsync();
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, recursive: true);

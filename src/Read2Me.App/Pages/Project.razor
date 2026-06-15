@@ -1,5 +1,6 @@
 @page "/project/{FolderName}"
-@inject ProjectService ProjectService
+@using Read2Me.Services
+@inject IProjectReader ProjectReader
 
 <PageTitle>@_title | Read2Me</PageTitle>
 
@@ -23,7 +24,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        var project = await ProjectService.GetProjectAsync(FolderName);
+        var project = await ProjectReader.GetProjectAsync(FolderName);
         _title = project?.Title ?? FolderName;
     }
 }

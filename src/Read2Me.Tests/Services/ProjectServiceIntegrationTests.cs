@@ -9,25 +9,29 @@ using Read2Me.Core.Configuration;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.IO;
 using Xunit;
 
 namespace Read2Me.Tests.Services
 {
-    /// <summary>
-    /// Integration tests for ProjectService using real file system (temp dir) and real SQLite.
-    /// </summary>
     public class ProjectServiceIntegrationTests : IDisposable
     {
         private readonly string _tempDir;
-        private readonly ProjectService _svc;
+        private readonly ProjectService _writer;
+        private readonly ProjectReader _reader;
+        private readonly BookCommandHandler _cmd;
 
         public ProjectServiceIntegrationTests()
         {
             _tempDir = Path.Combine(Path.GetTempPath(), "Read2MeTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempDir);
-            _svc = CreateService(_tempDir);
+            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = _tempDir }));
+            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            _writer = new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
+            _reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
+            _cmd = new BookCommandHandler(session);
         }
 
         public void Dispose()
@@ -36,10 +40,11 @@ namespace Read2Me.Tests.Services
                 Directory.Delete(_tempDir, recursive: true);
         }
 
-        private static ProjectService CreateService(string workspaceDir)
+        private static ProjectReader CreateReader(string workspaceDir)
         {
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = workspaceDir }));
-            return new ProjectService(fs, new ProjectDbContextProvider(), NullLogger<ProjectService>.Instance);
+            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            return new ProjectReader(session, NullLogger<ProjectReader>.Instance);
         }
 
         private static async Task<ProjectDbContext> OpenDbAsync(string folderPath)
@@ -61,9 +66,9 @@ namespace Read2Me.Tests.Services
         public void GetProjects_WhenWorkspaceNotExist_ReturnsEmpty()
         {
             var nonExistentDir = Path.Combine(Path.GetTempPath(), "nonexistent_" + Guid.NewGuid().ToString("N"));
-            var svc = CreateService(nonExistentDir);
+            var reader = CreateReader(nonExistentDir);
 
-            var result = svc.GetProjects();
+            var result = reader.GetProjects();
 
             Assert.Empty(result);
         }
@@ -71,7 +76,7 @@ namespace Read2Me.Tests.Services
         [Fact]
         public void GetProjects_WhenEmpty_ReturnsEmpty()
         {
-            var result = _svc.GetProjects();
+            var result = _reader.GetProjects();
             Assert.Empty(result);
         }
 
@@ -82,7 +87,7 @@ namespace Read2Me.Tests.Services
             Directory.CreateDirectory(Path.Combine(_tempDir, "alpha"));
             Directory.CreateDirectory(Path.Combine(_tempDir, "mango"));
 
-            var result = _svc.GetProjects();
+            var result = _reader.GetProjects();
 
             Assert.Equal(["alpha", "mango", "zebra"], result);
         }
@@ -96,7 +101,7 @@ namespace Read2Me.Tests.Services
         {
             var stream = new MemoryStream(new byte[] { 1, 2, 3 });
 
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "My Book", "The Book Title", "Author Name",
                 "book.txt", stream, BookFileType.Text);
 
@@ -117,11 +122,11 @@ namespace Read2Me.Tests.Services
         public async Task CreateProjectAsync_WhenDuplicate_Throws()
         {
             var stream1 = new MemoryStream(new byte[] { 1 });
-            await _svc.CreateProjectAsync("My Book", "Title", "Author", "book.txt", stream1, BookFileType.Text);
+            await _writer.CreateProjectAsync("My Book", "Title", "Author", "book.txt", stream1, BookFileType.Text);
 
             var stream2 = new MemoryStream(new byte[] { 2 });
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _svc.CreateProjectAsync("My Book", "Title", "Author", "book.txt", stream2, BookFileType.Text));
+                _writer.CreateProjectAsync("My Book", "Title", "Author", "book.txt", stream2, BookFileType.Text));
         }
 
         [Fact]
@@ -129,7 +134,7 @@ namespace Read2Me.Tests.Services
         {
             var stream = new MemoryStream(new byte[] { 1 });
             await Assert.ThrowsAsync<ArgumentException>(() =>
-                _svc.CreateProjectAsync("!!!", "Title", "Author", "book.txt", stream, BookFileType.Text));
+                _writer.CreateProjectAsync("!!!", "Title", "Author", "book.txt", stream, BookFileType.Text));
         }
 
         // ---------------------------------------------------------------
@@ -141,7 +146,7 @@ namespace Read2Me.Tests.Services
         {
             Directory.CreateDirectory(Path.Combine(_tempDir, "empty-project"));
 
-            var result = await _svc.GetProjectAsync("empty-project");
+            var result = await _reader.GetProjectAsync("empty-project");
 
             Assert.Null(result);
         }
@@ -150,10 +155,10 @@ namespace Read2Me.Tests.Services
         public async Task GetProjectAsync_WhenExists_ReturnsProject()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "Existing Book", "Book Title", "Auth", "file.txt", stream, BookFileType.Text);
 
-            var project = await _svc.GetProjectAsync(folderName);
+            var project = await _reader.GetProjectAsync(folderName);
 
             Assert.NotNull(project);
             Assert.Equal("Existing Book", project.Title);
@@ -163,11 +168,11 @@ namespace Read2Me.Tests.Services
         public async Task GetProjectAsync_MigratesExistingDb()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "Migrate Test", "Title", "Author", "file.txt", stream, BookFileType.Text);
 
-            var svc2 = CreateService(_tempDir);
-            var project = await svc2.GetProjectAsync(folderName);
+            var reader2 = CreateReader(_tempDir);
+            var project = await reader2.GetProjectAsync(folderName);
 
             Assert.NotNull(project);
             Assert.Equal("Migrate Test", project.Title);
@@ -182,7 +187,7 @@ namespace Read2Me.Tests.Services
         {
             Directory.CreateDirectory(Path.Combine(_tempDir, "no-db-project"));
 
-            var result = await _svc.HasBookContentAsync("no-db-project");
+            var result = await _reader.HasBookContentAsync("no-db-project");
 
             Assert.False(result);
         }
@@ -191,10 +196,10 @@ namespace Read2Me.Tests.Services
         public async Task HasBookContentAsync_WhenNoVolumes_ReturnsFalse()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "Empty Content", "Title", "Author", "file.txt", stream, BookFileType.Text);
 
-            var result = await _svc.HasBookContentAsync(folderName);
+            var result = await _reader.HasBookContentAsync(folderName);
 
             Assert.False(result);
         }
@@ -203,7 +208,7 @@ namespace Read2Me.Tests.Services
         public async Task HasBookContentAsync_WhenHasVolumes_ReturnsTrue()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "Has Content", "Title", "Author", "file.txt", stream, BookFileType.Text);
 
             var folderPath = Path.Combine(_tempDir, folderName);
@@ -218,7 +223,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            var result = await _svc.HasBookContentAsync(folderName);
+            var result = await _reader.HasBookContentAsync(folderName);
 
             Assert.True(result);
         }
@@ -231,16 +236,16 @@ namespace Read2Me.Tests.Services
         public async Task SaveCoverImageAsync_SavesFileAndUpdatesDb()
         {
             var bookStream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "Cover Book", "Title", "Author", "file.txt", bookStream, BookFileType.Text);
 
             var imageBytes = new byte[] { 0xFF, 0xD8, 0xFF };
-            await _svc.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream(imageBytes));
+            await _writer.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream(imageBytes));
 
             var folderPath = Path.Combine(_tempDir, folderName);
             Assert.True(File.Exists(Path.Combine(folderPath, "cover.jpg")));
 
-            var project = await _svc.GetProjectAsync(folderName);
+            var project = await _reader.GetProjectAsync(folderName);
             Assert.Equal("cover.jpg", project!.CoverImage);
         }
 
@@ -248,17 +253,17 @@ namespace Read2Me.Tests.Services
         public async Task SaveCoverImageAsync_ReplacesExistingCover()
         {
             var bookStream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "Replace Cover", "Title", "Author", "file.txt", bookStream, BookFileType.Text);
 
-            await _svc.SaveCoverImageAsync(folderName, "cover1.jpg", new MemoryStream(new byte[] { 1 }));
-            await _svc.SaveCoverImageAsync(folderName, "cover2.jpg", new MemoryStream(new byte[] { 2 }));
+            await _writer.SaveCoverImageAsync(folderName, "cover1.jpg", new MemoryStream(new byte[] { 1 }));
+            await _writer.SaveCoverImageAsync(folderName, "cover2.jpg", new MemoryStream(new byte[] { 2 }));
 
             var folderPath = Path.Combine(_tempDir, folderName);
             Assert.False(File.Exists(Path.Combine(folderPath, "cover1.jpg")));
             Assert.True(File.Exists(Path.Combine(folderPath, "cover2.jpg")));
 
-            var project = await _svc.GetProjectAsync(folderName);
+            var project = await _reader.GetProjectAsync(folderName);
             Assert.Equal("cover2.jpg", project!.CoverImage);
         }
 
@@ -266,16 +271,16 @@ namespace Read2Me.Tests.Services
         public async Task DeleteCoverImageAsync_DeletesFileAndClearsDb()
         {
             var bookStream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "Delete Cover", "Title", "Author", "file.txt", bookStream, BookFileType.Text);
 
-            await _svc.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream(new byte[] { 1 }));
-            await _svc.DeleteCoverImageAsync(folderName);
+            await _writer.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream(new byte[] { 1 }));
+            await _writer.DeleteCoverImageAsync(folderName);
 
             var folderPath = Path.Combine(_tempDir, folderName);
             Assert.False(File.Exists(Path.Combine(folderPath, "cover.jpg")));
 
-            var project = await _svc.GetProjectAsync(folderName);
+            var project = await _reader.GetProjectAsync(folderName);
             Assert.Null(project!.CoverImage);
         }
 
@@ -283,10 +288,10 @@ namespace Read2Me.Tests.Services
         public async Task DeleteCoverImageAsync_WhenNoCover_DoesNotThrow()
         {
             var bookStream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync(
+            var folderName = await _writer.CreateProjectAsync(
                 "No Cover", "Title", "Author", "file.txt", bookStream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _svc.DeleteCoverImageAsync(folderName));
+            var ex = await Record.ExceptionAsync(() => _writer.DeleteCoverImageAsync(folderName));
 
             Assert.Null(ex);
         }
@@ -299,7 +304,7 @@ namespace Read2Me.Tests.Services
         public async Task UpdateVolumeTitleAsync_UpdatesTitle()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("Vol Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("Vol Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
             var volumeId = Guid.NewGuid();
             await using (var db = await OpenDbAsync(folderPath))
@@ -308,7 +313,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.UpdateVolumeTitleAsync(folderName, volumeId, "New Title");
+            await _cmd.ExecuteAsync(new UpdateVolumeTitleCommand(folderName, volumeId, "New Title"));
 
             await using var db2 = await OpenDbAsync(folderPath);
             var vol = await db2.Volumes.FindAsync(volumeId);
@@ -319,9 +324,9 @@ namespace Read2Me.Tests.Services
         public async Task UpdateVolumeTitleAsync_WhenNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("Vol NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("Vol NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _svc.UpdateVolumeTitleAsync(folderName, Guid.NewGuid(), "X"));
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new UpdateVolumeTitleCommand(folderName, Guid.NewGuid(), "X")));
 
             Assert.Null(ex);
         }
@@ -334,7 +339,7 @@ namespace Read2Me.Tests.Services
         public async Task UpdatePartTitleAsync_UpdatesTitle()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("Part Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("Part Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
             var volumeId = Guid.NewGuid();
             var partId = Guid.NewGuid();
@@ -345,7 +350,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.UpdatePartTitleAsync(folderName, partId, "New Part");
+            await _cmd.ExecuteAsync(new UpdatePartTitleCommand(folderName, partId, "New Part"));
 
             await using var db2 = await OpenDbAsync(folderPath);
             var part = await db2.Parts.FindAsync(partId);
@@ -356,9 +361,9 @@ namespace Read2Me.Tests.Services
         public async Task UpdatePartTitleAsync_WhenNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("Part NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("Part NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _svc.UpdatePartTitleAsync(folderName, Guid.NewGuid(), "X"));
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new UpdatePartTitleCommand(folderName, Guid.NewGuid(), "X")));
 
             Assert.Null(ex);
         }
@@ -371,7 +376,7 @@ namespace Read2Me.Tests.Services
         public async Task UpdateChapterTitleAsync_UpdatesTitle()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("Ch Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("Ch Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
             var volumeId = Guid.NewGuid();
             var partId = Guid.NewGuid();
@@ -384,7 +389,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.UpdateChapterTitleAsync(folderName, chapterId, "New Chapter");
+            await _cmd.ExecuteAsync(new UpdateChapterTitleCommand(folderName, chapterId, "New Chapter"));
 
             await using var db2 = await OpenDbAsync(folderPath);
             var ch = await db2.Chapters.FindAsync(chapterId);
@@ -395,9 +400,9 @@ namespace Read2Me.Tests.Services
         public async Task UpdateChapterTitleAsync_WhenNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("Ch NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("Ch NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _svc.UpdateChapterTitleAsync(folderName, Guid.NewGuid(), "X"));
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new UpdateChapterTitleCommand(folderName, Guid.NewGuid(), "X")));
 
             Assert.Null(ex);
         }
@@ -410,7 +415,7 @@ namespace Read2Me.Tests.Services
         public async Task UpdateParagraphItemTextAsync_UpdatesText()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("Item Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("Item Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
             var volumeId = Guid.NewGuid();
             var partId = Guid.NewGuid();
@@ -427,7 +432,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.UpdateParagraphItemTextAsync(folderName, itemId, "New text");
+            await _cmd.ExecuteAsync(new UpdateParagraphItemTextCommand(folderName, itemId, "New text"));
 
             await using var db2 = await OpenDbAsync(folderPath);
             var item = await db2.ParagraphItems.FindAsync(itemId);
@@ -438,9 +443,9 @@ namespace Read2Me.Tests.Services
         public async Task UpdateParagraphItemTextAsync_WhenNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("Item NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("Item NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _svc.UpdateParagraphItemTextAsync(folderName, Guid.NewGuid(), "X"));
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new UpdateParagraphItemTextCommand(folderName, Guid.NewGuid(), "X")));
 
             Assert.Null(ex);
         }
@@ -460,7 +465,7 @@ namespace Read2Me.Tests.Services
         public async Task SplitVolumeAsync_CreatesNewVolume_MovesSelectedAndTrailingParts()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitVol", "T", "A", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("SplitVol", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
             Guid vol1Id, part1Id, part2Id, part3Id;
@@ -479,7 +484,7 @@ namespace Read2Me.Tests.Services
             }
 
             // Split at Part2: Vol1 keeps P1, new Volume gets P2 + P3
-            await _svc.SplitVolumeAsync(folderName, part2Id, "Vol2");
+            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, part2Id, "Vol2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
@@ -497,7 +502,7 @@ namespace Read2Me.Tests.Services
         public async Task SplitVolumeAsync_FirstPart_NewVolumeGetsAllParts()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitVolFirst", "T", "A", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("SplitVolFirst", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
             Guid vol1Id, part1Id, part2Id;
@@ -512,7 +517,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.SplitVolumeAsync(folderName, part1Id, "NewVol");
+            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, part1Id, "NewVol"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
@@ -526,8 +531,8 @@ namespace Read2Me.Tests.Services
         public async Task SplitVolumeAsync_WhenPartNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitVolNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _svc.SplitVolumeAsync(folderName, Guid.NewGuid(), null));
+            var folderName = await _writer.CreateProjectAsync("SplitVolNF", "T", "A", "f.txt", stream, BookFileType.Text);
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, Guid.NewGuid(), null)));
             Assert.Null(ex);
         }
 
@@ -539,7 +544,7 @@ namespace Read2Me.Tests.Services
         public async Task SplitPartAsync_CreatesNewPart_MovesSelectedAndTrailingChapters()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitPart", "T", "A", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("SplitPart", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
             Guid volId, part1Id, ch1Id, ch2Id, ch3Id;
@@ -559,7 +564,7 @@ namespace Read2Me.Tests.Services
             }
 
             // Split at Ch2: P1 keeps Ch1, new Part gets Ch2 + Ch3
-            await _svc.SplitPartAsync(folderName, ch2Id, "P2");
+            await _cmd.ExecuteAsync(new SplitAtChapterCommand(folderName, ch2Id, "P2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var parts = await verify.Parts.OrderBy(p => p.Order).ToListAsync();
@@ -577,8 +582,8 @@ namespace Read2Me.Tests.Services
         public async Task SplitPartAsync_WhenChapterNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitPartNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _svc.SplitPartAsync(folderName, Guid.NewGuid(), null));
+            var folderName = await _writer.CreateProjectAsync("SplitPartNF", "T", "A", "f.txt", stream, BookFileType.Text);
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtChapterCommand(folderName, Guid.NewGuid(), null)));
             Assert.Null(ex);
         }
 
@@ -590,7 +595,7 @@ namespace Read2Me.Tests.Services
         public async Task SplitChapterAsync_CreatesNewChapter_MovesSelectedAndTrailingParagraphs()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitCh", "T", "A", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("SplitCh", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
             Guid partId, ch1Id, pg1Id, pg2Id, pg3Id;
@@ -610,7 +615,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.SplitChapterAsync(folderName, pg2Id, "Ch2");
+            await _cmd.ExecuteAsync(new SplitAtParagraphCommand(folderName, pg2Id, "Ch2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var chapters = await verify.Chapters.OrderBy(c => c.Order).ToListAsync();
@@ -628,8 +633,8 @@ namespace Read2Me.Tests.Services
         public async Task SplitChapterAsync_WhenParagraphNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitChNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _svc.SplitChapterAsync(folderName, Guid.NewGuid(), null));
+            var folderName = await _writer.CreateProjectAsync("SplitChNF", "T", "A", "f.txt", stream, BookFileType.Text);
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtParagraphCommand(folderName, Guid.NewGuid(), null)));
             Assert.Null(ex);
         }
 
@@ -641,7 +646,7 @@ namespace Read2Me.Tests.Services
         public async Task SplitParagraphAsync_CreatesNewParagraph_MovesSelectedAndTrailingItems()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitPg", "T", "A", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("SplitPg", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
             Guid chapterId, pg1Id, item1Id, item2Id, item3Id;
@@ -663,7 +668,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.SplitParagraphAsync(folderName, item2Id, null);
+            await _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, item2Id));
 
             await using var verify = await OpenDbAsync(folderPath);
             var paragraphs = await verify.Paragraphs.OrderBy(p => p.Order).ToListAsync();
@@ -679,8 +684,8 @@ namespace Read2Me.Tests.Services
         public async Task SplitParagraphAsync_WhenItemNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitPgNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _svc.SplitParagraphAsync(folderName, Guid.NewGuid(), null));
+            var folderName = await _writer.CreateProjectAsync("SplitPgNF", "T", "A", "f.txt", stream, BookFileType.Text);
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, Guid.NewGuid())));
             Assert.Null(ex);
         }
 
@@ -692,7 +697,7 @@ namespace Read2Me.Tests.Services
         public async Task SplitParagraphItemAsync_BehavesSameAsSplitParagraph()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitLine", "T", "A", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("SplitLine", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
             Guid chapterId, pg1Id, item1Id, item2Id;
@@ -713,7 +718,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.SplitParagraphItemAsync(folderName, item2Id);
+            await _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, item2Id));
 
             await using var verify = await OpenDbAsync(folderPath);
             var paragraphs = await verify.Paragraphs.OrderBy(p => p.Order).ToListAsync();
@@ -728,8 +733,8 @@ namespace Read2Me.Tests.Services
         public async Task SplitParagraphItemAsync_WhenItemNotFound_DoesNotThrow()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitLineNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _svc.SplitParagraphItemAsync(folderName, Guid.NewGuid()));
+            var folderName = await _writer.CreateProjectAsync("SplitLineNF", "T", "A", "f.txt", stream, BookFileType.Text);
+            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, Guid.NewGuid())));
             Assert.Null(ex);
         }
 
@@ -741,7 +746,7 @@ namespace Read2Me.Tests.Services
         public async Task SplitVolumeAsync_NewVolumeOrder_IsAfterOriginal()
         {
             var stream = new MemoryStream(new byte[] { 1 });
-            var folderName = await _svc.CreateProjectAsync("SplitVolOrder", "T", "A", "f.txt", stream, BookFileType.Text);
+            var folderName = await _writer.CreateProjectAsync("SplitVolOrder", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
             Guid vol1Id, part1Id;
@@ -754,7 +759,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.SplitVolumeAsync(folderName, part1Id, "NewVol");
+            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, part1Id, "NewVol"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();

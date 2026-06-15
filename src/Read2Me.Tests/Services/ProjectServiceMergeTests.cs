@@ -10,6 +10,7 @@ using Read2Me.Core.Configuration;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.IO;
 using Xunit;
@@ -19,14 +20,17 @@ namespace Read2Me.Tests.Services
     public class ProjectServiceMergeTests : IDisposable
     {
         private readonly string _tempDir;
-        private readonly ProjectService _svc;
+        private readonly ProjectService _writer;
+        private readonly BookCommandHandler _svc;
 
         public ProjectServiceMergeTests()
         {
             _tempDir = Path.Combine(Path.GetTempPath(), "Read2MeMergeTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempDir);
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = _tempDir }));
-            _svc = new ProjectService(fs, new ProjectDbContextProvider(), NullLogger<ProjectService>.Instance);
+            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            _writer = new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
+            _svc = new BookCommandHandler(session);
         }
 
         public void Dispose()
@@ -50,7 +54,7 @@ namespace Read2Me.Tests.Services
 
         private async Task<string> CreateProjectAsync(string name)
         {
-            return await _svc.CreateProjectAsync(name, "T", "A", "f.txt",
+            return await _writer.CreateProjectAsync(name, "T", "A", "f.txt",
                 new MemoryStream(new byte[] { 1 }), BookFileType.Text);
         }
 
@@ -118,7 +122,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergeVolumeWithPreviousAsync(folder, ids.Vol2);
+            await _svc.ExecuteAsync(new MergeVolumeCommand(folder, ids.Vol2, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Volumes.CountAsync());
@@ -135,7 +139,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeVolumeWithPreviousAsync(folder, ids.Vol1);
+            await _svc.ExecuteAsync(new MergeVolumeCommand(folder, ids.Vol1, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.Volumes.CountAsync());
@@ -145,7 +149,7 @@ namespace Read2Me.Tests.Services
         public async Task MergeVolumeWithPrevious_WhenNotFound_NoOp()
         {
             var folder = await CreateProjectAsync("MergeVolPrevNF");
-            var ex = await Record.ExceptionAsync(() => _svc.MergeVolumeWithPreviousAsync(folder, Guid.NewGuid()));
+            var ex = await Record.ExceptionAsync(() => _svc.ExecuteAsync(new MergeVolumeCommand(folder, Guid.NewGuid(), MergeDirection.Previous)));
             Assert.Null(ex);
         }
 
@@ -166,7 +170,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergeVolumeWithNextAsync(folder, ids.Vol1);
+            await _svc.ExecuteAsync(new MergeVolumeCommand(folder, ids.Vol1, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Volumes.CountAsync());
@@ -181,7 +185,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeVolumeWithNextAsync(folder, ids.Vol2);
+            await _svc.ExecuteAsync(new MergeVolumeCommand(folder, ids.Vol2, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.Volumes.CountAsync());
@@ -205,7 +209,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergePartWithPreviousAsync(folder, ids.Part2);
+            await _svc.ExecuteAsync(new MergePartCommand(folder, ids.Part2, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Parts.CountAsync());
@@ -220,7 +224,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergePartWithPreviousAsync(folder, ids.Part1);
+            await _svc.ExecuteAsync(new MergePartCommand(folder, ids.Part1, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.Parts.CountAsync());
@@ -230,7 +234,7 @@ namespace Read2Me.Tests.Services
         public async Task MergePartWithPrevious_WhenNotFound_NoOp()
         {
             var folder = await CreateProjectAsync("MergePartPrevNF");
-            var ex = await Record.ExceptionAsync(() => _svc.MergePartWithPreviousAsync(folder, Guid.NewGuid()));
+            var ex = await Record.ExceptionAsync(() => _svc.ExecuteAsync(new MergePartCommand(folder, Guid.NewGuid(), MergeDirection.Previous)));
             Assert.Null(ex);
         }
 
@@ -251,7 +255,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergePartWithNextAsync(folder, ids.Part1);
+            await _svc.ExecuteAsync(new MergePartCommand(folder, ids.Part1, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Parts.CountAsync());
@@ -266,7 +270,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergePartWithNextAsync(folder, ids.Part2);
+            await _svc.ExecuteAsync(new MergePartCommand(folder, ids.Part2, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.Parts.CountAsync());
@@ -290,7 +294,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergeChapterWithPreviousAsync(folder, ids.Ch2);
+            await _svc.ExecuteAsync(new MergeChapterCommand(folder, ids.Ch2, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Chapters.CountAsync());
@@ -305,7 +309,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeChapterWithPreviousAsync(folder, ids.Ch1);
+            await _svc.ExecuteAsync(new MergeChapterCommand(folder, ids.Ch1, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.Chapters.CountAsync());
@@ -315,7 +319,7 @@ namespace Read2Me.Tests.Services
         public async Task MergeChapterWithPrevious_WhenNotFound_NoOp()
         {
             var folder = await CreateProjectAsync("MergeChPrevNF");
-            var ex = await Record.ExceptionAsync(() => _svc.MergeChapterWithPreviousAsync(folder, Guid.NewGuid()));
+            var ex = await Record.ExceptionAsync(() => _svc.ExecuteAsync(new MergeChapterCommand(folder, Guid.NewGuid(), MergeDirection.Previous)));
             Assert.Null(ex);
         }
 
@@ -336,7 +340,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergeChapterWithNextAsync(folder, ids.Ch1);
+            await _svc.ExecuteAsync(new MergeChapterCommand(folder, ids.Ch1, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Chapters.CountAsync());
@@ -351,7 +355,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeChapterWithNextAsync(folder, ids.Ch2);
+            await _svc.ExecuteAsync(new MergeChapterCommand(folder, ids.Ch2, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.Chapters.CountAsync());
@@ -375,7 +379,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergeParagraphWithPreviousAsync(folder, ids.Para2);
+            await _svc.ExecuteAsync(new MergeParagraphCommand(folder, ids.Para2, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Paragraphs.CountAsync());
@@ -390,7 +394,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeParagraphWithPreviousAsync(folder, ids.Para1);
+            await _svc.ExecuteAsync(new MergeParagraphCommand(folder, ids.Para1, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.Paragraphs.CountAsync());
@@ -400,7 +404,7 @@ namespace Read2Me.Tests.Services
         public async Task MergeParagraphWithPrevious_WhenNotFound_NoOp()
         {
             var folder = await CreateProjectAsync("MergeParaPrevNF");
-            var ex = await Record.ExceptionAsync(() => _svc.MergeParagraphWithPreviousAsync(folder, Guid.NewGuid()));
+            var ex = await Record.ExceptionAsync(() => _svc.ExecuteAsync(new MergeParagraphCommand(folder, Guid.NewGuid(), MergeDirection.Previous)));
             Assert.Null(ex);
         }
 
@@ -421,7 +425,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergeParagraphWithNextAsync(folder, ids.Para1);
+            await _svc.ExecuteAsync(new MergeParagraphCommand(folder, ids.Para1, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Paragraphs.CountAsync());
@@ -436,7 +440,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeParagraphWithNextAsync(folder, ids.Para2);
+            await _svc.ExecuteAsync(new MergeParagraphCommand(folder, ids.Para2, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.Paragraphs.CountAsync());
@@ -453,7 +457,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeParagraphItemWithPreviousAsync(folder, ids.Item2);
+            await _svc.ExecuteAsync(new MergeParagraphItemCommand(folder, ids.Item2, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.ParagraphItems.CountAsync());
@@ -469,7 +473,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeParagraphItemWithPreviousAsync(folder, ids.Item1);
+            await _svc.ExecuteAsync(new MergeParagraphItemCommand(folder, ids.Item1, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.ParagraphItems.CountAsync());
@@ -479,7 +483,7 @@ namespace Read2Me.Tests.Services
         public async Task MergeParagraphItemWithPrevious_WhenNotFound_NoOp()
         {
             var folder = await CreateProjectAsync("MergeItemPrevNF");
-            var ex = await Record.ExceptionAsync(() => _svc.MergeParagraphItemWithPreviousAsync(folder, Guid.NewGuid()));
+            var ex = await Record.ExceptionAsync(() => _svc.ExecuteAsync(new MergeParagraphItemCommand(folder, Guid.NewGuid(), MergeDirection.Previous)));
             Assert.Null(ex);
         }
 
@@ -494,7 +498,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeParagraphItemWithNextAsync(folder, ids.Item1);
+            await _svc.ExecuteAsync(new MergeParagraphItemCommand(folder, ids.Item1, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.ParagraphItems.CountAsync());
@@ -510,7 +514,7 @@ namespace Read2Me.Tests.Services
             var folderPath = Path.Combine(_tempDir, folder);
             var ids = await SeedTwoOfEachAsync(folderPath);
 
-            await _svc.MergeParagraphItemWithNextAsync(folder, ids.Item2);
+            await _svc.ExecuteAsync(new MergeParagraphItemCommand(folder, ids.Item2, MergeDirection.Next));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(2, await verify.ParagraphItems.CountAsync());
@@ -541,7 +545,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergeChapterWithPreviousAsync(folder, ch2Id);
+            await _svc.ExecuteAsync(new MergeChapterCommand(folder, ch2Id, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Chapters.CountAsync());
@@ -567,7 +571,7 @@ namespace Read2Me.Tests.Services
                 await db.SaveChangesAsync();
             }
 
-            await _svc.MergePartWithPreviousAsync(folder, partId);
+            await _svc.ExecuteAsync(new MergePartCommand(folder, partId, MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Parts.CountAsync());

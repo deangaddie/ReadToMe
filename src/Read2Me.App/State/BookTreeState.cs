@@ -30,20 +30,15 @@ namespace Read2Me.App.State
         public HashSet<Guid> ExpandedPartIds { get; } = new();
         public HashSet<Guid> ExpandedChapterIds { get; } = new();
 
-        // Read-only views — callers cannot mutate the underlying dictionaries.
-        public IReadOnlyList<Part>? GetParts(Guid volumeId) =>
+        // Callers get the list but not the dictionary — they cannot add/remove keys from the cache.
+        public List<Part>? GetParts(Guid volumeId) =>
             _loader.For(_folderId).Parts.TryGetValue(volumeId, out var v) ? v : null;
 
-        public IReadOnlyList<Chapter>? GetChapters(Guid partId) =>
+        public List<Chapter>? GetChapters(Guid partId) =>
             _loader.For(_folderId).Chapters.TryGetValue(partId, out var v) ? v : null;
 
-        public IReadOnlyList<Paragraph>? GetParagraphs(Guid chapterId) =>
+        public List<Paragraph>? GetParagraphs(Guid chapterId) =>
             _loader.For(_folderId).Paragraphs.TryGetValue(chapterId, out var v) ? v : null;
-
-        // Kept for backward-compat with BookTab rendering that uses TryGetValue directly.
-        public Dictionary<Guid, List<Part>> LoadedParts => _loader.For(_folderId).Parts;
-        public Dictionary<Guid, List<Chapter>> LoadedChapters => _loader.For(_folderId).Chapters;
-        public Dictionary<Guid, List<Paragraph>> LoadedParagraphs => _loader.For(_folderId).Paragraphs;
 
         public PerFolderState(BookHierarchyLoader loader, ProjectFolderId folderId)
         {

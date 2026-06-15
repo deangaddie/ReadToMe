@@ -19,7 +19,7 @@ namespace Read2Me.Tests.State
     {
         private Result _result = Result.Ok();
 
-        public FakeBookUseCases() : base(null!, null!) { }
+        public FakeBookUseCases() : base(null!, null!, null!) { }
 
         public void SetResult(Result r) => _result = r;
 
@@ -249,6 +249,28 @@ namespace Read2Me.Tests.State
                 sourcePartId);
 
             Assert.DoesNotContain(newPartId, ctx.Presenter.Tree.ExpandedPartIds);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterAsync_StaleCharacterList_RefreshesAndSetsCharacter()
+        {
+            var ctx = Create();
+            // Load with empty character list
+            await ctx.Presenter.LoadAsync(Folder);
+            Assert.Empty(ctx.Presenter.Characters);
+
+            var charId = Guid.NewGuid();
+            var character = new Character { Id = charId, Name = "NewChar" };
+
+            // Reader returns the character on refresh
+            ctx.Reader.GetCharactersAsync(Folder).Returns(new List<Character> { character });
+
+            var item = new ParagraphItem { Id = Guid.NewGuid(), Order = "a" };
+            await ctx.Presenter.SetItemCharacterAsync(Folder, item, charId);
+
+            Assert.Equal(charId, item.CharacterId);
+            Assert.Equal("NewChar", item.Character?.Name);
+            await ctx.Reader.Received().GetCharactersAsync(Folder);
         }
 
         // ---------------------------------------------------------------

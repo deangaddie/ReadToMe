@@ -7,8 +7,17 @@ namespace Read2Me.Tests.Services
 {
     public class ProjectServiceTests
     {
-        private static ProjectService CreateService(FakeFileSystem fs) =>
-            new(fs, new ProjectDbContextProvider(), NullLogger<ProjectService>.Instance);
+        private static ProjectService CreateService(FakeFileSystem fs)
+        {
+            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            return new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
+        }
+
+        private static ProjectReader CreateReader(FakeFileSystem fs)
+        {
+            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            return new ProjectReader(session, NullLogger<ProjectReader>.Instance);
+        }
 
         // GetProjects
 
@@ -16,9 +25,9 @@ namespace Read2Me.Tests.Services
         public void GetProjects_WorkspaceEmpty_ReturnsEmpty()
         {
             var fs = new FakeFileSystem();
-            var svc = CreateService(fs);
+            var reader = CreateReader(fs);
 
-            var result = svc.GetProjects();
+            var result = reader.GetProjects();
 
             Assert.Empty(result);
         }
@@ -28,9 +37,9 @@ namespace Read2Me.Tests.Services
         {
             var fs = new FakeFileSystem();
             fs.SeedFolder("zebra", "alpha", "mango");
-            var svc = CreateService(fs);
+            var reader = CreateReader(fs);
 
-            var result = svc.GetProjects();
+            var result = reader.GetProjects();
 
             Assert.Equal(["alpha", "mango", "zebra"], result);
         }

@@ -12,6 +12,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Books;
 using Read2Me.Services.IO;
 using Xunit;
 
@@ -20,7 +21,7 @@ namespace Read2Me.Tests.Services
     public class BookCommandHandlerTests : IDisposable
     {
         private readonly string _tempDir;
-        private readonly ProjectService _svc;
+        private readonly BookCommandHandler _svc;
         private readonly ProjectFolderId _folder;
 
         public BookCommandHandlerTests()
@@ -28,7 +29,8 @@ namespace Read2Me.Tests.Services
             _tempDir = Path.Combine(Path.GetTempPath(), "Read2MeCmdTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempDir);
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = _tempDir }));
-            _svc = new ProjectService(fs, new ProjectDbContextProvider(), NullLogger<ProjectService>.Instance);
+            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            _svc = new BookCommandHandler(session);
             _folder = new ProjectFolderId("test-book");
         }
 
@@ -275,6 +277,38 @@ namespace Read2Me.Tests.Services
         }
 
         private record UnknownTestCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
+
+        // ---------------------------------------------------------------
+        // ApplyMutationAsync — ToUpdate with detached entity
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task ApplyMutation_WithDetachedUpdatedEntity_PersistsFkChange()
+        {
+            await using var seed = await SeedProjectAsync();
+            var vol1 = new Volume { Id = Guid.NewGuid(), Title = "Vol 1", Order = Key() };
+            var vol2 = new Volume { Id = Guid.NewGuid(), Title = "Vol 2", Order = Key(vol1.Order) };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol1.Id, Order = Key() };
+            seed.Volumes.AddRange(vol1, vol2);
+            seed.Parts.Add(part);
+            await seed.SaveChangesAsync();
+            await seed.DisposeAsync();
+
+            await using var db = await OpenDbAsync();
+            var trackedPart = await db.Parts.FindAsync(part.Id);
+            db.Entry(trackedPart!).State = EntityState.Detached;
+
+            // Mutate FK in memory on the detached entity
+            trackedPart!.VolumeId = vol2.Id;
+
+            var mutation = new HierarchyMutation(ToAdd: [], ToDelete: [], ToUpdate: [trackedPart]);
+            await BookCommandHandler.ApplyMutationAsync(db, mutation);
+            await db.DisposeAsync();
+
+            await using var verify = await OpenDbAsync();
+            var saved = await verify.Parts.FindAsync(part.Id);
+            Assert.Equal(vol2.Id, saved!.VolumeId);
+        }
 
         // ---------------------------------------------------------------
         // Helpers

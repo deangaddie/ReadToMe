@@ -1,0 +1,102 @@
+@using Read2Me.Core.Models
+@inject MenuActions Menu
+
+<MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+         @onclick:stopPropagation="true">
+    @if (Spec.EditLabel != null)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
+                     OnClick="EditAsync">@Spec.EditLabel</MudMenuItem>
+    }
+    @foreach (var split in Spec.Splits)
+    {
+        var s = split;
+        <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                     OnClick="@(() => SplitAsync(s))">@s.Label</MudMenuItem>
+    }
+    @if (!IsFirst)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithPreviousAsync">Merge with Previous</MudMenuItem>
+    }
+    @if (!IsLast)
+    {
+        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                     OnClick="MergeWithNextAsync">Merge with Next</MudMenuItem>
+    }
+    <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                 OnClick="DeleteAsync">@Spec.DeleteLabel</MudMenuItem>
+</MudMenu>
+
+@code {
+    [Parameter, EditorRequired] public BookNodeMenuSpec Spec { get; set; } = null!;
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public Guid? PreviousSiblingId { get; set; }
+    [Parameter] public Guid? NextSiblingId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
+    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplit { get; set; }
+
+    async Task EditAsync()
+    {
+        if (Spec.EditAction == null) return;
+        var (command, updateLocal) = await Spec.EditAction(Menu);
+        if (command == null) return;
+        await Menu.ExecuteAsync(command);
+        updateLocal?.Invoke();
+        await OnChanged.InvokeAsync();
+    }
+
+    async Task SplitAsync(SplitSpec split)
+    {
+        if (split.BuildHierarchySplit != null)
+        {
+            var (command, parentId) = await split.BuildHierarchySplit(Menu);
+            if (command == null) return;
+            await OnSplit.InvokeAsync((command, parentId));
+        }
+        else if (split.BuildDirectCommand != null)
+        {
+            var command = await split.BuildDirectCommand(Menu);
+            if (command == null) return;
+            await Menu.ExecuteAsync(command);
+            await OnReset.InvokeAsync();
+        }
+    }
+
+    async Task MergeWithPreviousAsync()
+    {
+        await Menu.ExecuteAsync(MenuActions.BuildMerge(Spec.FolderId, Spec.Kind, Spec.EntityId, MergeDirection.Previous));
+        if (Spec.MergeResetsTree)
+            await OnReset.InvokeAsync();
+        else if (PreviousSiblingId.HasValue)
+            await OnMerged.InvokeAsync((PreviousSiblingId.Value, Spec.EntityId));
+        else
+            await OnReset.InvokeAsync();
+    }
+
+    async Task MergeWithNextAsync()
+    {
+        await Menu.ExecuteAsync(MenuActions.BuildMerge(Spec.FolderId, Spec.Kind, Spec.EntityId, MergeDirection.Next));
+        if (Spec.MergeResetsTree)
+            await OnReset.InvokeAsync();
+        else if (NextSiblingId.HasValue)
+            await OnMerged.InvokeAsync((Spec.EntityId, NextSiblingId.Value));
+        else
+            await OnReset.InvokeAsync();
+    }
+
+    async Task DeleteAsync()
+    {
+        var (itemType, itemName, hasChildren) = Spec.GetDeleteConfirmArgs();
+        if (!await Menu.ConfirmDeleteAsync(itemType, itemName, hasChildren)) return;
+        await Menu.ExecuteAsync(MenuActions.BuildDelete(Spec.FolderId, Spec.Kind, Spec.EntityId));
+        if (Spec.DeleteCallsChanged)
+            await OnChanged.InvokeAsync();
+        else
+            await OnReset.InvokeAsync();
+    }
+}

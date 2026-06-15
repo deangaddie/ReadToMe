@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FractionalIndexing;
+using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.Books
@@ -158,6 +159,263 @@ namespace Read2Me.Services.Books
                 ToAdd: [newParagraph],
                 ToDelete: [],
                 ToUpdate: movedItems.Cast<object>().ToList());
+        }
+
+        // ---------------------------------------------------------------
+        // PlanMerge* — pure merge planning, no DB access.
+        // Returns null when the operation is a no-op.
+        // ---------------------------------------------------------------
+
+        public HierarchyMutation? PlanMergeVolume(Guid volumeId, MergeDirection dir)
+        {
+            var idx = Volumes.FindIndex(v => v.Id == volumeId);
+            if (idx < 0) return null;
+            return dir == MergeDirection.Previous
+                ? MergeSiblings(Volumes, idx - 1, idx, v => v.Id,
+                    id => Parts.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    (child, winnerId) => ((Part)child).VolumeId = winnerId)
+                : MergeSiblings(Volumes, idx, idx + 1, v => v.Id,
+                    id => Parts.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    (child, winnerId) => ((Part)child).VolumeId = winnerId);
+        }
+
+        public HierarchyMutation? PlanMergePart(Guid partId, MergeDirection dir)
+        {
+            var (_, siblings) = FindParentAndSiblings(Parts, partId, p => p.Id);
+            var idx = siblings.FindIndex(p => p.Id == partId);
+            if (idx < 0) return null;
+            return dir == MergeDirection.Previous
+                ? MergeSiblings(siblings, idx - 1, idx, p => p.Id,
+                    id => Chapters.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    (child, winnerId) => ((Chapter)child).PartId = winnerId)
+                : MergeSiblings(siblings, idx, idx + 1, p => p.Id,
+                    id => Chapters.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    (child, winnerId) => ((Chapter)child).PartId = winnerId);
+        }
+
+        public HierarchyMutation? PlanMergeChapter(Guid chapterId, MergeDirection dir)
+        {
+            var (_, siblings) = FindParentAndSiblings(Chapters, chapterId, c => c.Id);
+            var idx = siblings.FindIndex(c => c.Id == chapterId);
+            if (idx < 0) return null;
+            return dir == MergeDirection.Previous
+                ? MergeSiblings(siblings, idx - 1, idx, c => c.Id,
+                    id => Paragraphs.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    (child, winnerId) => ((Paragraph)child).ChapterId = winnerId)
+                : MergeSiblings(siblings, idx, idx + 1, c => c.Id,
+                    id => Paragraphs.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    (child, winnerId) => ((Paragraph)child).ChapterId = winnerId);
+        }
+
+        public HierarchyMutation? PlanMergeParagraph(Guid paragraphId, MergeDirection dir)
+        {
+            var (_, siblings) = FindParentAndSiblings(Paragraphs, paragraphId, p => p.Id);
+            var idx = siblings.FindIndex(p => p.Id == paragraphId);
+            if (idx < 0) return null;
+            return dir == MergeDirection.Previous
+                ? MergeSiblings(siblings, idx - 1, idx, p => p.Id,
+                    id => Items.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    (child, winnerId) => ((ParagraphItem)child).ParagraphId = winnerId)
+                : MergeSiblings(siblings, idx, idx + 1, p => p.Id,
+                    id => Items.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    (child, winnerId) => ((ParagraphItem)child).ParagraphId = winnerId);
+        }
+
+        public HierarchyMutation? PlanMergeParagraphItem(Guid itemId, MergeDirection dir)
+        {
+            var (_, siblings) = FindParentAndSiblings(Items, itemId, i => i.Id);
+            var idx = siblings.FindIndex(i => i.Id == itemId);
+            if (idx < 0) return null;
+
+            int winnerIdx, loserIdx;
+            if (dir == MergeDirection.Previous)
+            {
+                winnerIdx = idx - 1;
+                loserIdx = idx;
+            }
+            else
+            {
+                winnerIdx = idx;
+                loserIdx = idx + 1;
+            }
+
+            if (winnerIdx < 0 || loserIdx >= siblings.Count) return null;
+
+            var winner = siblings[winnerIdx];
+            var loser = siblings[loserIdx];
+
+            winner.Text = string.IsNullOrWhiteSpace(winner.Text)
+                ? loser.Text
+                : string.IsNullOrWhiteSpace(loser.Text) ? winner.Text : winner.Text + " " + loser.Text;
+
+            return new HierarchyMutation(ToAdd: [], ToDelete: [loser], ToUpdate: [winner]);
+        }
+
+        private static HierarchyMutation? MergeSiblings<TEntity>(
+            List<TEntity> siblings,
+            int winnerIdx,
+            int loserIdx,
+            Func<TEntity, Guid> getId,
+            Func<Guid, List<object>> getChildren,
+            Action<object, Guid> reassign)
+        {
+            if (winnerIdx < 0 || loserIdx >= siblings.Count) return null;
+            var winner = siblings[winnerIdx];
+            var loser = siblings[loserIdx];
+            var children = getChildren(getId(loser));
+            foreach (var child in children) reassign(child, getId(winner));
+            return new HierarchyMutation(ToAdd: [], ToDelete: [loser!], ToUpdate: children);
+        }
+
+        // ---------------------------------------------------------------
+        // PlanFrontMatterInsert — pure planning for AddBookTitle.
+        // Returns the structural HierarchyMutation (new Volume/Part/Chapter if needed)
+        // and the target chapter id + the order key of the first existing paragraph
+        // (null if chapter is empty) so TitleInserter can place paragraphs.
+        // Returns null if there are no volumes.
+        // ---------------------------------------------------------------
+
+        public (HierarchyMutation Mutation, Guid ChapterId, string? FirstParagraphOrder)? PlanFrontMatterInsert()
+        {
+            if (Volumes.Count == 0) return null;
+
+            Guid chapterId;
+            var toAdd = new List<object>();
+
+            if (Volumes.Count > 1)
+            {
+                var firstVol = Volumes[0];
+                var newVol = new Volume
+                {
+                    Id = Guid.NewGuid(),
+                    Title = string.Empty,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, firstVol.Order),
+                };
+                var newPart = new Part
+                {
+                    Id = Guid.NewGuid(),
+                    VolumeId = newVol.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                };
+                var newChapter = new Chapter
+                {
+                    Id = Guid.NewGuid(),
+                    PartId = newPart.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                };
+                toAdd.AddRange([newVol, newPart, newChapter]);
+                chapterId = newChapter.Id;
+            }
+            else
+            {
+                var vol = Volumes[0];
+                var parts = Parts.TryGetValue(vol.Id, out var ps) ? ps : [];
+
+                if (parts.Count > 1)
+                {
+                    var firstPart = parts[0];
+                    var newPart = new Part
+                    {
+                        Id = Guid.NewGuid(),
+                        VolumeId = vol.Id,
+                        Order = OrderKeyGenerator.GenerateKeyBetween(null, firstPart.Order),
+                    };
+                    var newChapter = new Chapter
+                    {
+                        Id = Guid.NewGuid(),
+                        PartId = newPart.Id,
+                        Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                    };
+                    toAdd.AddRange([newPart, newChapter]);
+                    chapterId = newChapter.Id;
+                }
+                else
+                {
+                    var part = parts.Count > 0 ? parts[0] : null;
+                    if (part == null) return null;
+
+                    var chapters = Chapters.TryGetValue(part.Id, out var cs) ? cs : [];
+                    var firstChapter = chapters.Count > 0 ? chapters[0] : null;
+
+                    var newChapter = new Chapter
+                    {
+                        Id = Guid.NewGuid(),
+                        PartId = part.Id,
+                        Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                    };
+                    toAdd.Add(newChapter);
+                    chapterId = newChapter.Id;
+                }
+            }
+
+            var mutation = new HierarchyMutation(ToAdd: toAdd, ToDelete: [], ToUpdate: []);
+            return (mutation, chapterId, null);
+        }
+
+        // ---------------------------------------------------------------
+        // PlanTitleChapters — per titled Volume/Part, plan a new Chapter
+        // inserted before the first existing chapter in the first part.
+        // Returns one entry per node that has a non-blank title.
+        // ---------------------------------------------------------------
+
+        public List<(Guid NodeId, string Title, Chapter NewChapter, string? FirstChapterOrder)> PlanVolumeTitleChapters()
+        {
+            var results = new List<(Guid, string, Chapter, string?)>();
+            foreach (var vol in Volumes)
+            {
+                if (string.IsNullOrWhiteSpace(vol.Title)) continue;
+                var parts = Parts.TryGetValue(vol.Id, out var ps) ? ps : [];
+                var firstPart = parts.Count > 0 ? parts[0] : null;
+                if (firstPart == null) continue;
+                var chapters = Chapters.TryGetValue(firstPart.Id, out var cs) ? cs : [];
+                var firstChapter = chapters.Count > 0 ? chapters[0] : null;
+                var newChapter = new Chapter
+                {
+                    Id = Guid.NewGuid(),
+                    PartId = firstPart.Id,
+                    Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                };
+                results.Add((vol.Id, vol.Title, newChapter, firstChapter?.Order));
+            }
+            return results;
+        }
+
+        public List<(Guid NodeId, string Title, Chapter NewChapter, string? FirstChapterOrder)> PlanPartTitleChapters()
+        {
+            var results = new List<(Guid, string, Chapter, string?)>();
+            foreach (var partList in Parts.Values)
+            {
+                foreach (var part in partList)
+                {
+                    if (string.IsNullOrWhiteSpace(part.Title)) continue;
+                    var chapters = Chapters.TryGetValue(part.Id, out var cs) ? cs : [];
+                    var firstChapter = chapters.Count > 0 ? chapters[0] : null;
+                    var newChapter = new Chapter
+                    {
+                        Id = Guid.NewGuid(),
+                        PartId = part.Id,
+                        Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                    };
+                    results.Add((part.Id, part.Title, newChapter, firstChapter?.Order));
+                }
+            }
+            return results;
+        }
+
+        public List<(Guid ChapterId, string Title, string? FirstParagraphOrder)> PlanChapterTitleInsertions()
+        {
+            var results = new List<(Guid, string, string?)>();
+            foreach (var chapterList in Chapters.Values)
+            {
+                foreach (var ch in chapterList)
+                {
+                    if (string.IsNullOrWhiteSpace(ch.Title)) continue;
+                    var paragraphs = Paragraphs.TryGetValue(ch.Id, out var ps) ? ps : [];
+                    var firstParagraph = paragraphs.Count > 0 ? paragraphs[0] : null;
+                    results.Add((ch.Id, ch.Title, firstParagraph?.Order));
+                }
+            }
+            return results;
         }
 
         // ---------------------------------------------------------------

@@ -14,13 +14,15 @@ namespace Read2Me.Tests.State
     {
         private static readonly ProjectFolderId Folder = new("test-book");
 
-        private static (PerFolderState state, IProjectReader reader) Create()
+        private static (PerFolderState state, BookHierarchyLoader loader, IProjectReader reader) Create()
         {
             var reader = Substitute.For<IProjectReader>();
             var loader = new BookHierarchyLoader(reader);
             var state = new PerFolderState(loader, Folder);
-            return (state, reader);
+            return (state, loader, reader);
         }
+
+        private FolderCache Cache(BookHierarchyLoader loader) => loader.For(Folder);
 
         private static Guid Id() => Guid.NewGuid();
 
@@ -31,27 +33,26 @@ namespace Read2Me.Tests.State
         [Fact]
         public void CollapseVolume_RemovesParts_CascadesToChapters_AndParagraphs()
         {
-            var (state, _) = Create();
+            var (state, loader, _) = Create();
             var volId = Id();
             var partId = Id();
             var chId = Id();
 
-            var cache = state.LoadedParts; // trigger cache creation
-            state.LoadedParts[volId] = [new Part { Id = partId }];
-            state.LoadedChapters[partId] = [new Chapter { Id = chId }];
-            state.LoadedParagraphs[chId] = [new Paragraph { Id = Id() }];
+            Cache(loader).Parts[volId] = [new Part { Id = partId }];
+            Cache(loader).Chapters[partId] = [new Chapter { Id = chId }];
+            Cache(loader).Paragraphs[chId] = [new Paragraph { Id = Id() }];
 
             state.CollapseVolume(volId);
 
-            Assert.DoesNotContain(volId, state.LoadedParts.Keys);
-            Assert.DoesNotContain(partId, state.LoadedChapters.Keys);
-            Assert.DoesNotContain(chId, state.LoadedParagraphs.Keys);
+            Assert.Null(state.GetParts(volId));
+            Assert.Null(state.GetChapters(partId));
+            Assert.Null(state.GetParagraphs(chId));
         }
 
         [Fact]
         public void CollapseVolume_WhenNeverExpanded_IsNoOp()
         {
-            var (state, _) = Create();
+            var (state, _, _) = Create();
             var ex = Record.Exception(() => state.CollapseVolume(Id()));
             Assert.Null(ex);
         }
@@ -59,9 +60,9 @@ namespace Read2Me.Tests.State
         [Fact]
         public void CollapseVolume_Twice_IsNoOp()
         {
-            var (state, _) = Create();
+            var (state, loader, _) = Create();
             var volId = Id();
-            state.LoadedParts[volId] = [];
+            Cache(loader).Parts[volId] = [];
 
             state.CollapseVolume(volId);
             var ex = Record.Exception(() => state.CollapseVolume(volId));
@@ -75,23 +76,23 @@ namespace Read2Me.Tests.State
         [Fact]
         public void CollapsePart_RemovesChapters_CascadesToParagraphs()
         {
-            var (state, _) = Create();
+            var (state, loader, _) = Create();
             var partId = Id();
             var chId = Id();
 
-            state.LoadedChapters[partId] = [new Chapter { Id = chId }];
-            state.LoadedParagraphs[chId] = [new Paragraph { Id = Id() }];
+            Cache(loader).Chapters[partId] = [new Chapter { Id = chId }];
+            Cache(loader).Paragraphs[chId] = [new Paragraph { Id = Id() }];
 
             state.CollapsePart(partId);
 
-            Assert.DoesNotContain(partId, state.LoadedChapters.Keys);
-            Assert.DoesNotContain(chId, state.LoadedParagraphs.Keys);
+            Assert.Null(state.GetChapters(partId));
+            Assert.Null(state.GetParagraphs(chId));
         }
 
         [Fact]
         public void CollapsePart_WhenNeverExpanded_IsNoOp()
         {
-            var (state, _) = Create();
+            var (state, _, _) = Create();
             var ex = Record.Exception(() => state.CollapsePart(Id()));
             Assert.Null(ex);
         }
@@ -103,17 +104,17 @@ namespace Read2Me.Tests.State
         [Fact]
         public void CollapseChapter_RemovesParagraphsForThatChapter()
         {
-            var (state, _) = Create();
+            var (state, loader, _) = Create();
             var ch1Id = Id();
             var ch2Id = Id();
 
-            state.LoadedParagraphs[ch1Id] = [new Paragraph { Id = Id() }];
-            state.LoadedParagraphs[ch2Id] = [new Paragraph { Id = Id() }];
+            Cache(loader).Paragraphs[ch1Id] = [new Paragraph { Id = Id() }];
+            Cache(loader).Paragraphs[ch2Id] = [new Paragraph { Id = Id() }];
 
             state.CollapseChapter(ch1Id);
 
-            Assert.False(state.LoadedParagraphs.ContainsKey(ch1Id));
-            Assert.True(state.LoadedParagraphs.ContainsKey(ch2Id));
+            Assert.Null(state.GetParagraphs(ch1Id));
+            Assert.NotNull(state.GetParagraphs(ch2Id));
         }
 
         // ---------------------------------------------------------------
@@ -123,12 +124,12 @@ namespace Read2Me.Tests.State
         [Fact]
         public void RemoveParagraph_RemovesFromContainingChapterList()
         {
-            var (state, _) = Create();
+            var (state, loader, _) = Create();
             var chId = Id();
             var para1Id = Id();
             var para2Id = Id();
 
-            state.LoadedParagraphs[chId] = [new Paragraph { Id = para1Id }, new Paragraph { Id = para2Id }];
+            Cache(loader).Paragraphs[chId] = [new Paragraph { Id = para1Id }, new Paragraph { Id = para2Id }];
 
             state.RemoveParagraph(para1Id);
 
@@ -141,7 +142,7 @@ namespace Read2Me.Tests.State
         [Fact]
         public void RemoveParagraph_WhenNotInAnyList_IsNoOp()
         {
-            var (state, _) = Create();
+            var (state, _, _) = Create();
             var ex = Record.Exception(() => state.RemoveParagraph(Id()));
             Assert.Null(ex);
         }
@@ -149,18 +150,18 @@ namespace Read2Me.Tests.State
         [Fact]
         public void RemoveParagraph_ScansAllLoadedChapters()
         {
-            var (state, _) = Create();
+            var (state, loader, _) = Create();
             var ch1Id = Id();
             var ch2Id = Id();
             var paraId = Id();
 
-            state.LoadedParagraphs[ch1Id] = [new Paragraph { Id = Id() }];
-            state.LoadedParagraphs[ch2Id] = [new Paragraph { Id = paraId }, new Paragraph { Id = Id() }];
+            Cache(loader).Paragraphs[ch1Id] = [new Paragraph { Id = Id() }];
+            Cache(loader).Paragraphs[ch2Id] = [new Paragraph { Id = paraId }, new Paragraph { Id = Id() }];
 
             state.RemoveParagraph(paraId);
 
-            Assert.Single(state.LoadedParagraphs[ch1Id]);
-            Assert.Single(state.LoadedParagraphs[ch2Id]);
+            Assert.Single(state.GetParagraphs(ch1Id)!);
+            Assert.Single(state.GetParagraphs(ch2Id)!);
         }
 
         // ---------------------------------------------------------------
@@ -170,21 +171,21 @@ namespace Read2Me.Tests.State
         [Fact]
         public void GetParts_UnknownId_ReturnsNull()
         {
-            var (state, _) = Create();
+            var (state, _, _) = Create();
             Assert.Null(state.GetParts(Id()));
         }
 
         [Fact]
         public void GetChapters_UnknownId_ReturnsNull()
         {
-            var (state, _) = Create();
+            var (state, _, _) = Create();
             Assert.Null(state.GetChapters(Id()));
         }
 
         [Fact]
         public void GetParagraphs_UnknownId_ReturnsNull()
         {
-            var (state, _) = Create();
+            var (state, _, _) = Create();
             Assert.Null(state.GetParagraphs(Id()));
         }
 
@@ -195,7 +196,7 @@ namespace Read2Me.Tests.State
         [Fact]
         public async Task LoadingIds_TrueWhileLoading()
         {
-            var (state, reader) = Create();
+            var (state, _, reader) = Create();
             var volId = Id();
 
             var tcs = new TaskCompletionSource<List<Part>>();
@@ -214,6 +215,52 @@ namespace Read2Me.Tests.State
             await loadTask;
 
             Assert.DoesNotContain(volId, state.LoadingIds);
+        }
+
+        // ---------------------------------------------------------------
+        // RestoreExpandedAsync — single-child auto-expand
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task RestoreExpanded_AutoExpandsSinglePart()
+        {
+            var (state, _, reader) = Create();
+            var volId = Id();
+            var partId = Id();
+
+            state.ExpandedVolumeIds.Add(volId);
+            reader.GetPartsAsync(Folder, volId).Returns(new List<Part> { new Part { Id = partId } });
+            reader.GetChaptersAsync(Folder, partId).Returns(new List<Chapter>());
+
+            await state.RestoreExpandedAsync();
+
+            Assert.Contains(partId, state.ExpandedPartIds);
+            Assert.NotNull(state.GetChapters(partId));
+        }
+
+        [Fact]
+        public async Task RestoreExpanded_WithMultipleParts_OnlyExpandsTracked()
+        {
+            var (state, _, reader) = Create();
+            var volId = Id();
+            var part1Id = Id();
+            var part2Id = Id();
+
+            state.ExpandedVolumeIds.Add(volId);
+            state.ExpandedPartIds.Add(part1Id);
+            reader.GetPartsAsync(Folder, volId).Returns(new List<Part>
+            {
+                new Part { Id = part1Id },
+                new Part { Id = part2Id },
+            });
+            reader.GetChaptersAsync(Folder, part1Id).Returns(new List<Chapter>());
+
+            await state.RestoreExpandedAsync();
+
+            Assert.Contains(part1Id, state.ExpandedPartIds);
+            Assert.DoesNotContain(part2Id, state.ExpandedPartIds);
+            Assert.NotNull(state.GetChapters(part1Id));
+            Assert.Null(state.GetChapters(part2Id));
         }
     }
 }

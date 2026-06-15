@@ -10,8 +10,12 @@ namespace Read2Me.Tests.Services
     /// </summary>
     public class ProjectServiceSanitizeTests
     {
-        private static ProjectService CreateService() =>
-            new(new FakeFileSystem(), new ProjectDbContextProvider(), NullLogger<ProjectService>.Instance);
+        private static ProjectService CreateService()
+        {
+            var fs = new FakeFileSystem();
+            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            return new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
+        }
 
         [Theory]
         [InlineData("My Book", "my-book")]

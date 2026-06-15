@@ -4,9 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Read2Me.Core.IO;
 using Read2Me.Core.Models;
-using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Books;
 using VersOne.Epub;
@@ -14,8 +12,7 @@ using VersOne.Epub;
 namespace Read2Me.Services
 {
     public class BookReadingService(
-        IFileSystem fs,
-        IProjectDbContextFactory dbFactory,
+        ProjectDbSession session,
         EpubFileReader epubReader,
         TextFileReader textReader,
         IBookContentPersister persister,
@@ -25,14 +22,14 @@ namespace Read2Me.Services
         {
             logger.LogInformation("Starting book read for project '{Folder}'", folderName);
 
-            var folderPath = fs.GetProjectFolderPath(folderName);
-            await using var db = await dbFactory.CreateAsync(folderPath);
+            var db = await session.OpenAsync(folderName);
 
             var project = await db.Projects.SingleOrDefaultAsync(cancellationToken)
                 ?? throw new InvalidOperationException($"No project record found in '{folderName}'.");
 
+            var folderPath = session.FileSystem.GetProjectFolderPath(folderName);
             var bookFilePath = Path.Combine(folderPath, project.Filename);
-            if (!fs.FileExists(bookFilePath))
+            if (!session.FileSystem.FileExists(bookFilePath))
                 throw new FileNotFoundException($"Book file not found: {bookFilePath}");
 
             var content = project.Type switch
@@ -50,14 +47,14 @@ namespace Read2Me.Services
         {
             logger.LogInformation("Flattening book content from source file for '{Folder}'", folderName);
 
-            var folderPath = fs.GetProjectFolderPath(folderName);
-            await using var db = await dbFactory.CreateAsync(folderPath);
+            var db = await session.OpenAsync(folderName);
 
             var project = await db.Projects.SingleOrDefaultAsync(cancellationToken)
                 ?? throw new InvalidOperationException($"No project record found in '{folderName}'.");
 
+            var folderPath = session.FileSystem.GetProjectFolderPath(folderName);
             var bookFilePath = Path.Combine(folderPath, project.Filename);
-            if (!fs.FileExists(bookFilePath))
+            if (!session.FileSystem.FileExists(bookFilePath))
                 throw new FileNotFoundException($"Book file not found: {bookFilePath}");
 
             List<string> texts;
@@ -86,8 +83,7 @@ namespace Read2Me.Services
         {
             logger.LogInformation("Flattening existing book content from DB for '{Folder}'", folderName);
 
-            var folderPath = fs.GetProjectFolderPath(folderName);
-            await using var db = await dbFactory.CreateAsync(folderPath);
+            var db = await session.OpenAsync(folderName);
 
             // Pull ordered paragraphs across the full hierarchy, joining each paragraph's items back into one line
             var volumeIds = await db.Volumes.OrderBy(v => v.Order).Select(v => v.Id).ToListAsync(cancellationToken);
@@ -125,8 +121,7 @@ namespace Read2Me.Services
         {
             logger.LogInformation("Manual book read for project '{Folder}'", folderName);
 
-            var folderPath = fs.GetProjectFolderPath(folderName);
-            await using var db = await dbFactory.CreateAsync(folderPath);
+            var db = await session.OpenAsync(folderName);
 
             var content = ManualBookReader.Read(lines, options);
 

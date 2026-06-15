@@ -1,6 +1,7 @@
 @using Read2Me.App.State
 @using Read2Me.App.Shared.BookMenus
 @using Read2Me.Core.Models
+@using Read2Me.Data.Entities
 @using Read2Me.Data.Enums
 @inject BookHierarchyPresenter Presenter
 
@@ -106,62 +107,7 @@ else
 
         @if (Presenter.Volumes.Count == 1)
         {
-            var vol = Presenter.Volumes[0];
-            @if (Presenter.Tree.LoadingIds.Contains(vol.Id))
-            {
-                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-            }
-            else if (Presenter.Tree.LoadedParts.TryGetValue(vol.Id, out var svParts))
-            {
-                @if (svParts.Count == 1)
-                {
-                    var p = svParts[0];
-                    @if (Presenter.Tree.LoadingIds.Contains(p.Id))
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                    }
-                    else if (Presenter.Tree.LoadedChapters.TryGetValue(p.Id, out var svspChapters))
-                    {
-                        @RenderChapters(svspChapters)
-                    }
-                }
-                else
-                {
-                    <MudExpansionPanels MultiExpansion="true">
-                        @foreach (var part in svParts)
-                        {
-                            var p = part;
-                            <MudExpansionPanel IsExpanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
-                                              ExpandedChanged="@PartExpandCb(p)">
-                                <TitleContent>
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                                        <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
-                                        <PartMenu Part="p" FolderName="@FolderName"
-                                                  IsFirst="@(svParts[0].Id == p.Id)"
-                                                  IsLast="@(svParts[^1].Id == p.Id)"
-                                                  PreviousSiblingId="@(svParts.IndexOf(p) is var svi && svi > 0 ? svParts[svi - 1].Id : null)"
-                                                  NextSiblingId="@(svParts.IndexOf(p) is var svj && svj < svParts.Count - 1 ? svParts[svj + 1].Id : null)"
-                                                  OnChanged="StateHasChanged"
-                                                  OnMerged="MergeAndResetAsync"
-                                                  OnSplit="SplitVolumeAsync"
-                                                  OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                                    </MudStack>
-                                </TitleContent>
-                                <ChildContent>
-                                    @if (Presenter.Tree.LoadingIds.Contains(p.Id))
-                                    {
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                    }
-                                    else if (Presenter.Tree.LoadedChapters.TryGetValue(p.Id, out var svmpChapters))
-                                    {
-                                        @RenderChapters(svmpChapters)
-                                    }
-                                </ChildContent>
-                            </MudExpansionPanel>
-                        }
-                    </MudExpansionPanels>
-                }
-            }
+            @RenderVolumeBody(Presenter.Volumes[0])
         }
         else
         {
@@ -174,72 +120,18 @@ else
                         <TitleContent>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
                                 <MudText Style="flex:1">@vol.Title</MudText>
-                                <VolumeMenu Volume="vol" FolderName="@FolderName"
-                                            IsFirst="@(Presenter.Volumes[0].Id == vol.Id)"
-                                            IsLast="@(Presenter.Volumes[^1].Id == vol.Id)"
-                                            PreviousSiblingId="@(Presenter.Volumes.TakeWhile(v => v.Id != vol.Id).LastOrDefault()?.Id)"
-                                            NextSiblingId="@(Presenter.Volumes.SkipWhile(v => v.Id != vol.Id).Skip(1).FirstOrDefault()?.Id)"
-                                            OnChanged="StateHasChanged"
-                                            OnMerged="MergeAndResetAsync"
-                                            OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
+                                <BookNodeMenu Spec="@BookNodeMenuSpecs.ForVolume(_folderId, vol)"
+                                             IsFirst="@(Presenter.Volumes[0].Id == vol.Id)"
+                                             IsLast="@(Presenter.Volumes[^1].Id == vol.Id)"
+                                             PreviousSiblingId="@(Presenter.Volumes.TakeWhile(v => v.Id != vol.Id).LastOrDefault()?.Id)"
+                                             NextSiblingId="@(Presenter.Volumes.SkipWhile(v => v.Id != vol.Id).Skip(1).FirstOrDefault()?.Id)"
+                                             OnChanged="StateHasChanged"
+                                             OnMerged="MergeAndResetAsync"
+                                             OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
                             </MudStack>
                         </TitleContent>
                         <ChildContent>
-                            @if (Presenter.Tree.LoadingIds.Contains(vol.Id))
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                            }
-                            else if (Presenter.Tree.LoadedParts.TryGetValue(vol.Id, out var mvParts))
-                            {
-                                @if (mvParts.Count == 1)
-                                {
-                                    var p = mvParts[0];
-                                    @if (Presenter.Tree.LoadingIds.Contains(p.Id))
-                                    {
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                    }
-                                    else if (Presenter.Tree.LoadedChapters.TryGetValue(p.Id, out var mvspChapters))
-                                    {
-                                        @RenderChapters(mvspChapters)
-                                    }
-                                }
-                                else
-                                {
-                                    <MudExpansionPanels MultiExpansion="true">
-                                        @foreach (var part in mvParts)
-                                        {
-                                            var p = part;
-                                            <MudExpansionPanel IsExpanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
-                                                              ExpandedChanged="@PartExpandCb(p)">
-                                                <TitleContent>
-                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                                                        <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
-                                                        <PartMenu Part="p" FolderName="@FolderName"
-                                                                  IsFirst="@(mvParts[0].Id == p.Id)"
-                                                                  IsLast="@(mvParts[^1].Id == p.Id)"
-                                                                  PreviousSiblingId="@(mvParts.IndexOf(p) is var mvi && mvi > 0 ? mvParts[mvi - 1].Id : null)"
-                                                                  NextSiblingId="@(mvParts.IndexOf(p) is var mvj && mvj < mvParts.Count - 1 ? mvParts[mvj + 1].Id : null)"
-                                                                  OnChanged="StateHasChanged"
-                                                                  OnMerged="MergeAndResetAsync"
-                                                                  OnSplit="SplitVolumeAsync"
-                                                                  OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                                                    </MudStack>
-                                                </TitleContent>
-                                                <ChildContent>
-                                                    @if (Presenter.Tree.LoadingIds.Contains(p.Id))
-                                                    {
-                                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
-                                                    }
-                                                    else if (Presenter.Tree.LoadedChapters.TryGetValue(p.Id, out var mvmpChapters))
-                                                    {
-                                                        @RenderChapters(mvmpChapters)
-                                                    }
-                                                </ChildContent>
-                                            </MudExpansionPanel>
-                                        }
-                                    </MudExpansionPanels>
-                                }
-                            }
+                            @RenderVolumeBody(vol)
                         </ChildContent>
                     </MudExpansionPanel>
                 }
@@ -253,6 +145,70 @@ else
 
     ProjectFolderId _folderId;
 
+    RenderFragment RenderVolumeBody(Volume vol) =>
+        @<text>
+            @if (Presenter.Tree.LoadingIds.Contains(vol.Id))
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+            }
+            else if (Presenter.Tree.GetParts(vol.Id) is { } parts)
+            {
+                @RenderParts(parts)
+            }
+        </text>;
+
+    RenderFragment RenderParts(System.Collections.Generic.List<Part> parts) =>
+        @<text>
+            @if (parts.Count == 1)
+            {
+                var p = parts[0];
+                @if (Presenter.Tree.LoadingIds.Contains(p.Id))
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                }
+                else if (Presenter.Tree.GetChapters(p.Id) is { } singlePartChapters)
+                {
+                    @RenderChapters(singlePartChapters)
+                }
+            }
+            else
+            {
+                <MudExpansionPanels MultiExpansion="true">
+                    @foreach (var part in parts)
+                    {
+                        var p = part;
+                        <MudExpansionPanel IsExpanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
+                                          ExpandedChanged="@PartExpandCb(p)">
+                            <TitleContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                                    <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
+                                    <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPart(_folderId, p)"
+                                                 IsFirst="@(parts[0].Id == p.Id)"
+                                                 IsLast="@(parts[^1].Id == p.Id)"
+                                                 PreviousSiblingId="@(parts.IndexOf(p) is var pi && pi > 0 ? parts[pi - 1].Id : null)"
+                                                 NextSiblingId="@(parts.IndexOf(p) is var pj && pj < parts.Count - 1 ? parts[pj + 1].Id : null)"
+                                                 OnChanged="StateHasChanged"
+                                                 OnMerged="MergeAndResetAsync"
+                                                 OnSplit="SplitVolumeAsync"
+                                                 OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
+                                </MudStack>
+                            </TitleContent>
+                            <ChildContent>
+                                @if (Presenter.Tree.LoadingIds.Contains(p.Id))
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
+                                }
+                                else if (Presenter.Tree.GetChapters(p.Id) is { } multiPartChapters)
+                                {
+                                    @RenderChapters(multiPartChapters)
+                                }
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    }
+                </MudExpansionPanels>
+            }
+        </text>;
+
     RenderFragment RenderChapters(System.Collections.Generic.List<Read2Me.Data.Entities.Chapter> chapters) =>
         @<MudExpansionPanels MultiExpansion="true">
             @foreach (var chapter in chapters)
@@ -263,7 +219,7 @@ else
                     <TitleContent>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
                             <MudText Style="flex:1">@(ch.Title ?? "Chapter")</MudText>
-                            <ChapterMenu Chapter="ch" FolderName="@FolderName"
+                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForChapter(_folderId, ch)"
                                          IsFirst="@(chapters[0].Id == ch.Id)"
                                          IsLast="@(chapters[^1].Id == ch.Id)"
                                          PreviousSiblingId="@(chapters.IndexOf(ch) is var ci && ci > 0 ? chapters[ci - 1].Id : null)"
@@ -279,7 +235,7 @@ else
                         {
                             <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
                         }
-                        else if (Presenter.Tree.LoadedParagraphs.TryGetValue(ch.Id, out var paragraphs))
+                        else if (Presenter.Tree.GetParagraphs(ch.Id) is { } paragraphs)
                         {
                             <MudStack Spacing="2" Class="py-1">
                                 @foreach (var para in paragraphs)
@@ -312,7 +268,7 @@ else
                                                     var it = item;
                                                     @if (it.ItemType == ParagraphItemType.Character)
                                                     {
-                                                        <div style="display:grid; grid-template-columns:120px 1fr auto; align-items:start; gap:4px;">
+                                                        <div style="display:grid; grid-template-columns:120px 1fr auto; align-items:start; gap:8px;">
                                                             <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true">
                                                                 <ActivatorContent>
                                                                     <MudChip T="string" Size="Size.Small"
@@ -333,7 +289,7 @@ else
                                                                 </ChildContent>
                                                             </MudMenu>
                                                             <MudText Typo="Typo.body2">@it.Text</MudText>
-                                                            <ParagraphItemMenu Item="it" FolderName="@FolderName"
+                                                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(_folderId, it)"
                                                                                IsFirst="@(items[0].Id == it.Id)"
                                                                                IsLast="@(items[^1].Id == it.Id)"
                                                                                OnChanged="StateHasChanged"
@@ -343,7 +299,7 @@ else
                                                     else
                                                     {
                                                         var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetItemDisplay(it.ItemType);
-                                                        <div style="@($"display:grid; grid-template-columns:120px 1fr auto; align-items:center; gap:4px; opacity:{(it.ItemType is ParagraphItemType.Narration ? "1" : "0.6")}; font-style:{(it.ItemType is ParagraphItemType.Narration ? "normal" : "italic")};")">
+                                                        <div style="@($"display:grid; grid-template-columns:120px 1fr auto; align-items:center; gap:8px; opacity:{(it.ItemType is ParagraphItemType.Narration ? "1" : "0.6")}; font-style:{(it.ItemType is ParagraphItemType.Narration ? "normal" : "italic")};")">
                                                             <MudChip T="string" Size="Size.Small" Color="@pauseColor" Variant="Variant.Outlined"
                                                                      Icon="@pauseIcon" Class="mt-0"
                                                                      Style="width:100%; justify-content:center;">
@@ -357,7 +313,7 @@ else
                                                             {
                                                                 <span></span>
                                                             }
-                                                            <ParagraphItemMenu Item="it" FolderName="@FolderName"
+                                                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(_folderId, it)"
                                                                                IsFirst="@(items[0].Id == it.Id)"
                                                                                IsLast="@(items[^1].Id == it.Id)"
                                                                                OnChanged="StateHasChanged"
@@ -372,7 +328,7 @@ else
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                             <MudText Typo="Typo.body2" Style="flex:1">@string.Join(" ", p.Items.Select(i => i.Text))</MudText>
-                                            <ParagraphMenu Paragraph="p" FolderName="@FolderName"
+                                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraph(_folderId, p)"
                                                            IsFirst="@(paragraphs[0].Id == p.Id)"
                                                            IsLast="@(paragraphs[^1].Id == p.Id)"
                                                            OnChanged="@(() => { Presenter.Tree.RemoveParagraph(p.Id); StateHasChanged(); })"

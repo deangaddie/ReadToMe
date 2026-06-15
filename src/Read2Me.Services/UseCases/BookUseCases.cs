@@ -6,7 +6,7 @@ using Read2Me.Core.Models;
 
 namespace Read2Me.Services.UseCases
 {
-    public class BookUseCases(BookReadingService bookReadingService, IBookCommandHandler commandHandler)
+    public class BookUseCases(BookReadingService bookReadingService, IBookCommandHandler commandHandler, ProjectDbSession session)
     {
         public virtual async Task<Result> ImportAsync(string folderName, bool reread = false, CancellationToken cancellationToken = default)
         {
@@ -15,6 +15,7 @@ namespace Read2Me.Services.UseCases
                 if (reread)
                     await commandHandler.ExecuteAsync(new ClearBookContentCommand(folderName), cancellationToken);
                 await bookReadingService.ReadBookAsync(folderName, cancellationToken);
+                session.Evict(folderName);
                 return Result.Ok();
             }
             catch (FileNotFoundException ex) { return Result.Fail(ex.Message); }
@@ -29,6 +30,7 @@ namespace Read2Me.Services.UseCases
                 var lines = await bookReadingService.FlattenFromFileAsync(folderName, cancellationToken);
                 await commandHandler.ExecuteAsync(new ClearBookContentCommand(folderName), cancellationToken);
                 await bookReadingService.ReadBookManuallyAsync(folderName, lines, options, cancellationToken);
+                session.Evict(folderName);
                 return Result.Ok();
             }
             catch (FileNotFoundException ex) { return Result.Fail(ex.Message); }

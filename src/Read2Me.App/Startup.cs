@@ -15,6 +15,7 @@ using Read2Me.Services.Books;
 using Read2Me.Services.IO;
 using Read2Me.Services.UseCases;
 using Read2Me.App.State;
+using Read2Me.App.Shared.BookMenus;
 using Read2Me.AppData;
 using Read2Me.Data;
 
@@ -36,10 +37,13 @@ namespace Read2Me.App
             services.AddSingleton<IFileSystem, FileSystemService>();
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
 
+            services.AddScoped<ProjectDbSession>();
             services.AddScoped<ProjectService>();
-            services.AddScoped<IProjectReader>(sp => sp.GetRequiredService<ProjectService>());
             services.AddScoped<IProjectWriter>(sp => sp.GetRequiredService<ProjectService>());
-            services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<ProjectService>());
+            services.AddScoped<ProjectReader>();
+            services.AddScoped<IProjectReader>(sp => sp.GetRequiredService<ProjectReader>());
+            services.AddScoped<Read2Me.Services.BookCommandHandler>();
+            services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<Read2Me.Services.BookCommandHandler>());
 
             services.AddScoped<IBookContentPersister, BookContentPersister>();
             services.AddScoped<BookReadingService>();
@@ -48,6 +52,7 @@ namespace Read2Me.App
             services.AddScoped<BookHierarchyLoader>();
             services.AddScoped<BookTreeState>();
             services.AddScoped<BookHierarchyPresenter>();
+            services.AddScoped<MenuActions>();
 
             services.AddSingleton<EpubFileReader>();
             services.AddSingleton<TextFileReader>();

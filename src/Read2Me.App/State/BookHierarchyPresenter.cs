@@ -126,10 +126,16 @@ namespace Read2Me.App.State
         public async Task SetItemCharacterAsync(ProjectFolderId folderId, ParagraphItem item, Guid? characterId)
         {
             await commandHandler.ExecuteAsync(new SetItemCharacterCommand(folderId, item.Id, characterId));
+
+            var character = characterId.HasValue ? Characters.Find(c => c.Id == characterId.Value) : null;
+            if (characterId.HasValue && character is null)
+            {
+                Characters = await reader.GetCharactersAsync(folderId);
+                character = Characters.Find(c => c.Id == characterId.Value);
+            }
+
             item.CharacterId = characterId;
-            item.Character = characterId.HasValue
-                ? Characters.Find(c => c.Id == characterId.Value)
-                : null;
+            item.Character = character;
             NotifyStateChanged();
         }
 
