@@ -9,22 +9,54 @@
         <MudMenuItem Icon="@Icons.Material.Filled.Edit" IconColor="Color.Primary"
                      OnClick="EditAsync">@Spec.EditLabel</MudMenuItem>
     }
-    @foreach (var split in Spec.Splits)
+    @if (Spec.Splits.Count > 0)
     {
-        var s = split;
-        <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
-                     OnClick="@(() => SplitAsync(s))">@s.Label</MudMenuItem>
+        @if (Spec.EditLabel != null)
+        {
+            <MudDivider />
+        }
+        @foreach (var split in Spec.Splits)
+        {
+            var s = split;
+            <MudMenuItem Icon="@Icons.Material.Filled.CallSplit" IconColor="Color.Info"
+                         OnClick="@(() => SplitAsync(s))">@s.Label</MudMenuItem>
+        }
     }
-    @if (!IsFirst)
+    @if (!IsFirst || !IsLast)
     {
-        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
-                     OnClick="MergeWithPreviousAsync">Merge with Previous</MudMenuItem>
+        <MudDivider />
+        @if (!IsFirst)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                         OnClick="MergeWithPreviousAsync">Merge with Previous</MudMenuItem>
+        }
+        @if (!IsLast)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
+                         OnClick="MergeWithNextAsync">Merge with Next</MudMenuItem>
+        }
     }
-    @if (!IsLast)
+    @if (Spec.InsertPausesBefore.Count > 0)
     {
-        <MudMenuItem Icon="@Icons.Material.Filled.MergeType" IconColor="Color.Secondary"
-                     OnClick="MergeWithNextAsync">Merge with Next</MudMenuItem>
+        <MudDivider />
+        @foreach (var p in Spec.InsertPausesBefore)
+        {
+            var ps = p;
+            <MudMenuItem Icon="@Icons.Material.Filled.VerticalAlignTop" IconColor="Color.Tertiary"
+                         OnClick="@(() => InsertPauseAsync(ps, PauseInsertPosition.Before))">Insert @ps.Label Before</MudMenuItem>
+        }
     }
+    @if (Spec.InsertPausesAfter.Count > 0)
+    {
+        <MudDivider />
+        @foreach (var p in Spec.InsertPausesAfter)
+        {
+            var ps = p;
+            <MudMenuItem Icon="@Icons.Material.Filled.VerticalAlignBottom" IconColor="Color.Tertiary"
+                         OnClick="@(() => InsertPauseAsync(ps, PauseInsertPosition.After))">Insert @ps.Label After</MudMenuItem>
+        }
+    }
+    <MudDivider />
     <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
                  OnClick="DeleteAsync">@Spec.DeleteLabel</MudMenuItem>
 </MudMenu>
@@ -98,5 +130,11 @@
             await OnChanged.InvokeAsync();
         else
             await OnReset.InvokeAsync();
+    }
+
+    async Task InsertPauseAsync(InsertPauseSpec spec, PauseInsertPosition position)
+    {
+        await Menu.ExecuteAsync(new InsertPauseParagraphCommand(Spec.FolderId, Spec.EntityId, position, spec.PauseKind));
+        await OnReset.InvokeAsync();
     }
 }

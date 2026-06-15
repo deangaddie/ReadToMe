@@ -262,6 +262,150 @@ namespace Read2Me.Tests.Services
         private record UnknownTestCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 
         // ---------------------------------------------------------------
+        // AddPausesCommand
+        // ---------------------------------------------------------------
+
+        private async Task<(Chapter ch1, Chapter ch2, Paragraph paraA, Paragraph paraB)> SeedTwoChapterHierarchyAsync(ProjectDbContext db)
+        {
+            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
+            var ch1 = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch1", Order = Key() };
+            var ch2 = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch2", Order = Key(ch1.Order) };
+
+            var paraA = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch1.Id, Order = Key() };
+            var paraB = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch1.Id, Order = Key(paraA.Order) };
+            var itemA = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paraA.Id, ItemType = ParagraphItemType.Narration, Text = "A", Order = Key() };
+            var itemB = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paraB.Id, ItemType = ParagraphItemType.Narration, Text = "B", Order = Key() };
+            var paraC = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch2.Id, Order = Key() };
+            var itemC = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paraC.Id, ItemType = ParagraphItemType.Narration, Text = "C", Order = Key() };
+
+            db.Volumes.Add(vol);
+            db.Parts.Add(part);
+            db.Chapters.AddRange(ch1, ch2);
+            db.Paragraphs.AddRange(paraA, paraB, paraC);
+            db.ParagraphItems.AddRange(itemA, itemB, itemC);
+            await db.SaveChangesAsync();
+            return (ch1, ch2, paraA, paraB);
+        }
+
+        [Fact]
+        public async Task AddPausesCommand_InsertsPauseParagraphs()
+        {
+            await using var db = await SeedProjectAsync();
+            await SeedTwoChapterHierarchyAsync(db);
+            await db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new AddPausesCommand(_folder));
+
+            await using var verify = await OpenDbAsync();
+            Assert.True(await verify.ParagraphItems.AnyAsync(i => i.ItemType == ParagraphItemType.ParagraphPause));
+            Assert.True(await verify.ParagraphItems.AnyAsync(i => i.ItemType == ParagraphItemType.ChapterPause));
+        }
+
+        [Fact]
+        public async Task AddPausesCommand_IsIdempotent()
+        {
+            await using var db = await SeedProjectAsync();
+            await SeedTwoChapterHierarchyAsync(db);
+            await db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new AddPausesCommand(_folder));
+
+            await using var count1db = await OpenDbAsync();
+            var countAfterFirst = await count1db.ParagraphItems
+                .CountAsync(i => i.ItemType == ParagraphItemType.ParagraphPause || i.ItemType == ParagraphItemType.ChapterPause);
+            await count1db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new AddPausesCommand(_folder));
+
+            await using var count2db = await OpenDbAsync();
+            var countAfterSecond = await count2db.ParagraphItems
+                .CountAsync(i => i.ItemType == ParagraphItemType.ParagraphPause || i.ItemType == ParagraphItemType.ChapterPause);
+
+            Assert.Equal(countAfterFirst, countAfterSecond);
+        }
+
+        // ---------------------------------------------------------------
+        // InsertPauseParagraphCommand
+        // ---------------------------------------------------------------
+
+        [Theory]
+        [InlineData(PauseKind.Pause,          ParagraphItemType.Pause)]
+        [InlineData(PauseKind.ParagraphPause, ParagraphItemType.ParagraphPause)]
+        [InlineData(PauseKind.ChapterPause,   ParagraphItemType.ChapterPause)]
+        [InlineData(PauseKind.PartPause,      ParagraphItemType.PartPause)]
+        [InlineData(PauseKind.VolumePause,    ParagraphItemType.VolumePause)]
+        public async Task InsertPauseParagraphCommand_Before_InsertsCorrectPauseTypeBeforeParagraph(
+            PauseKind kind, ParagraphItemType expectedType)
+        {
+            await using var db = await SeedProjectAsync();
+            var (_, _, ch, para, item) = await SeedHierarchyAsync(db);
+            await db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, item.Id, PauseInsertPosition.Before, kind));
+
+            await using var verify = await OpenDbAsync();
+            var paragraphs = await verify.Paragraphs
+                .Where(p => p.ChapterId == ch.Id)
+                .OrderBy(p => p.Order)
+                .ToListAsync();
+            Assert.Equal(2, paragraphs.Count);
+            var pausePara = paragraphs[0];
+            Assert.NotEqual(para.Id, pausePara.Id);
+            var pauseItem = await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == pausePara.Id);
+            Assert.Equal(expectedType, pauseItem.ItemType);
+            Assert.Equal(para.Id, paragraphs[1].Id);
+        }
+
+        [Fact]
+        public async Task InsertPauseParagraphCommand_After_InsertsPauseAfterParagraph()
+        {
+            await using var db = await SeedProjectAsync();
+            var (_, _, ch, para, item) = await SeedHierarchyAsync(db);
+            await db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, item.Id, PauseInsertPosition.After, PauseKind.ParagraphPause));
+
+            await using var verify = await OpenDbAsync();
+            var paragraphs = await verify.Paragraphs
+                .Where(p => p.ChapterId == ch.Id)
+                .OrderBy(p => p.Order)
+                .ToListAsync();
+            Assert.Equal(2, paragraphs.Count);
+            Assert.Equal(para.Id, paragraphs[0].Id);
+            var pauseItem = await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == paragraphs[1].Id);
+            Assert.Equal(ParagraphItemType.ParagraphPause, pauseItem.ItemType);
+        }
+
+        [Fact]
+        public async Task InsertPauseParagraphCommand_Between_InsertsPauseBetweenExistingParagraphs()
+        {
+            await using var db = await SeedProjectAsync();
+            var (_, _, ch, para, item) = await SeedHierarchyAsync(db);
+            var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key(para.Order) };
+            var item2 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para2.Id, ItemType = ParagraphItemType.Narration, Text = "Second", Order = Key() };
+            db.Paragraphs.Add(para2);
+            db.ParagraphItems.Add(item2);
+            await db.SaveChangesAsync();
+            await db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, item.Id, PauseInsertPosition.After, PauseKind.ChapterPause));
+
+            await using var verify = await OpenDbAsync();
+            var paragraphs = await verify.Paragraphs
+                .Where(p => p.ChapterId == ch.Id)
+                .OrderBy(p => p.Order)
+                .ToListAsync();
+            Assert.Equal(3, paragraphs.Count);
+            Assert.Equal(para.Id,  paragraphs[0].Id);
+            Assert.Equal(para2.Id, paragraphs[2].Id);
+            var pauseItem = await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == paragraphs[1].Id);
+            Assert.Equal(ParagraphItemType.ChapterPause, pauseItem.ItemType);
+            Assert.True(string.Compare(paragraphs[0].Order, paragraphs[1].Order, StringComparison.Ordinal) < 0);
+            Assert.True(string.Compare(paragraphs[1].Order, paragraphs[2].Order, StringComparison.Ordinal) < 0);
+        }
+
+        // ---------------------------------------------------------------
         // ApplyMutationAsync — ToUpdate with detached entity
         // ---------------------------------------------------------------
 

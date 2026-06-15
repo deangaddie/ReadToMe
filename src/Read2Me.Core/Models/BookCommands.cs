@@ -41,5 +41,12 @@ public record AddVolumeTitlesCommand(ProjectFolderId FolderId) : BookCommand(Fol
 public record AddPartTitlesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 public record AddChapterTitlesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 
+// Pause insertion
+public record AddPausesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
+public record InsertPauseParagraphCommand(ProjectFolderId FolderId, Guid AnchorItemId, PauseInsertPosition Position, PauseKind PauseKind) : BookCommand(FolderId);
+
+public enum PauseInsertPosition { Before, After }
+public enum PauseKind { Pause, ParagraphPause, ChapterPause, PartPause, VolumePause }
+
 // Clear
 public record ClearBookContentCommand(ProjectFolderId FolderId) : BookCommand(FolderId);

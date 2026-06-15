@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
+using Read2Me.App.Shared;
+using static Read2Me.Core.Models.PauseKind;
 
 namespace Read2Me.App.Shared.BookMenus;
 
@@ -17,7 +20,11 @@ public sealed record BookNodeMenuSpec(
     bool DeleteCallsChanged,
     bool MergeResetsTree,
     Func<(string itemType, string itemName, bool hasChildren)> GetDeleteConfirmArgs
-);
+)
+{
+    public IReadOnlyList<InsertPauseSpec> InsertPausesBefore { get; init; } = [];
+    public IReadOnlyList<InsertPauseSpec> InsertPausesAfter { get; init; } = [];
+}
 
 /// <summary>
 /// Describes a split action for a node menu item.
@@ -40,6 +47,8 @@ public sealed record SplitSpec(
     public static SplitSpec Direct(string label, Func<MenuActions, Task<BookCommand?>> build) =>
         new(label, null, build);
 }
+
+public sealed record InsertPauseSpec(string Label, PauseKind PauseKind);
 
 public static class BookNodeMenuSpecs
 {
@@ -144,6 +153,33 @@ public static class BookNodeMenuSpecs
             }
         );
 
+    public static BookNodeMenuSpec ForPauseParagraph(ProjectFolderId folderId, Paragraph paragraph) =>
+        new(
+            FolderId: folderId,
+            Kind: NodeKind.Paragraph,
+            EntityId: paragraph.Id,
+            EditLabel: null,
+            EditAction: null,
+            Splits: [],
+            DeleteLabel: "Delete Pause",
+            DeleteCallsChanged: true,
+            MergeResetsTree: false,
+            GetDeleteConfirmArgs: () =>
+            {
+                var label = ParagraphItemDisplay.GetPauseLabel(paragraph.Items.FirstOrDefault()?.ItemType);
+                return ("Pause", label, false);
+            }
+        );
+
+    static readonly IReadOnlyList<InsertPauseSpec> PauseSpecs =
+    [
+        new("Pause",          PauseKind.Pause),
+        new("Paragraph Pause", PauseKind.ParagraphPause),
+        new("Chapter Pause",  PauseKind.ChapterPause),
+        new("Part Pause",     PauseKind.PartPause),
+        new("Volume Pause",   PauseKind.VolumePause),
+    ];
+
     public static BookNodeMenuSpec ForParagraphItem(ProjectFolderId folderId, ParagraphItem item) =>
         new(
             FolderId: folderId,
@@ -159,8 +195,6 @@ public static class BookNodeMenuSpecs
             Splits:
             [
                 SplitSpec.Direct("Split Paragraph", _ =>
-                    Task.FromResult<BookCommand?>(new SplitAtParagraphCommand(folderId, item.Id, null))),
-                SplitSpec.Direct("Split Line", _ =>
                     Task.FromResult<BookCommand?>(new SplitAtItemCommand(folderId, item.Id)))
             ],
             DeleteLabel: "Delete Item",
@@ -171,5 +205,5 @@ public static class BookNodeMenuSpecs
                 var label = item.Text?.Length > 60 ? item.Text[..60] + "…" : item.Text ?? "this item";
                 return ("Item", label, false);
             }
-        );
+        ) { InsertPausesBefore = PauseSpecs, InsertPausesAfter = PauseSpecs };
 }

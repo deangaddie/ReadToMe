@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using MudBlazor;
 using Read2Me.Core.Models;
@@ -14,6 +15,7 @@ namespace Read2Me.App.State
         IBookCommandHandler commandHandler,
         BookUseCases bookUseCases,
         BookTreeState treeState,
+        BookSelectionState selectionState,
         IDialogService dialogService)
     {
         public bool IsLoading { get; private set; }
@@ -28,13 +30,29 @@ namespace Read2Me.App.State
         public int TotalParts { get; private set; }
         public int TotalChapters { get; private set; }
         public PerFolderState Tree { get; private set; } = null!;
+        public FolderSelection Selection { get; private set; } = null!;
+
+        // Volume/part/chapter ids that contain at least one character paragraph.
+        // Nodes absent here are not selectable (no checkbox shown).
+        private HashSet<Guid> _selectableNodes = [];
+
+        public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
+
+        private ProjectFolderId? _lastFolder;
 
         public event Action? StateChanged;
 
         public async Task LoadAsync(ProjectFolderId folderId)
         {
             IsLoading = true;
+
+            // Clear selection when switching to a different project.
+            if (_lastFolder.HasValue && _lastFolder.Value.Value != folderId.Value)
+                selectionState.Reset(_lastFolder.Value);
+
+            _lastFolder = folderId;
             Tree = treeState.For(folderId);
+            Selection = selectionState.For(folderId);
             ConfirmReread = false;
 
             var project = await reader.GetProjectAsync(folderId);
@@ -44,6 +62,9 @@ namespace Read2Me.App.State
             Characters = HasContent ? await reader.GetCharactersAsync(folderId) : new List<Character>();
             TotalParts = HasContent ? await reader.GetTotalPartCountAsync(folderId) : 0;
             TotalChapters = HasContent ? await reader.GetTotalChapterCountAsync(folderId) : 0;
+            _selectableNodes = HasContent
+                ? await reader.GetNodesWithCharacterParagraphsAsync(folderId)
+                : [];
 
             // Single volume is always auto-expanded; seed it if not already tracked.
             if (Volumes.Count == 1)
@@ -57,6 +78,7 @@ namespace Read2Me.App.State
 
         public async Task ResetAndLoadAsync(ProjectFolderId folderId)
         {
+            selectionState.Reset(folderId);
             Tree?.Reset();
             await LoadAsync(folderId);
         }
@@ -127,6 +149,9 @@ namespace Read2Me.App.State
         public Task AddChapterTitlesAsync(ProjectFolderId folderId) =>
             ExecuteCommandAndReloadAsync(folderId, new AddChapterTitlesCommand(folderId));
 
+        public Task AddPausesAsync(ProjectFolderId folderId) =>
+            ExecuteCommandAndReloadAsync(folderId, new AddPausesCommand(folderId));
+
         public void RequestConfirmReread()
         {
             ConfirmReread = true;
@@ -137,6 +162,170 @@ namespace Read2Me.App.State
         {
             ConfirmReread = false;
             NotifyStateChanged();
+        }
+
+        // ---------------------------------------------------------------
+        // Selection mutators
+        // ---------------------------------------------------------------
+
+        public async Task ToggleParagraphAsync(
+            ProjectFolderId folderId, Guid paragraphId,
+            Guid chapterId, Guid partId, Guid volumeId, bool on)
+        {
+            if (on)
+            {
+                Selection.AddParagraph(paragraphId, new ParagraphSelection(volumeId, partId, chapterId));
+                await WalkUpAsync(folderId, chapterId, partId, volumeId);
+            }
+            else
+            {
+                Selection.RemoveParagraph(paragraphId);
+                Selection.RemoveNode(chapterId);
+                Selection.RemoveNode(partId);
+                Selection.RemoveNode(volumeId);
+            }
+            NotifyStateChanged();
+        }
+
+        public async Task SetNodeAsync(
+            ProjectFolderId folderId, SelectionNodeKind kind, Guid id, bool on, bool unprocessedOnly = false)
+        {
+            List<CharacterParagraphRef> refs = kind switch
+            {
+                SelectionNodeKind.Volume => await GetUnprocessedOrAll(folderId, id, kind, unprocessedOnly),
+                SelectionNodeKind.Part => await GetUnprocessedOrAll(folderId, id, kind, unprocessedOnly),
+                _ => await GetUnprocessedOrAll(folderId, id, kind, unprocessedOnly),
+            };
+
+            if (on)
+            {
+                Selection.AddParagraphs(refs);
+                Selection.AddNode(id);
+                // Mark every descendant node fully selected so child checkboxes
+                // render checked (not indeterminate) when a parent is selected.
+                MarkDescendantNodesComplete(kind, id, refs);
+                // Walk up from the selected node.
+                await WalkUpFromNodeAsync(folderId, kind, id, refs);
+            }
+            else
+            {
+                Selection.RemoveParagraphs(refs.Select(r => r.ParagraphId));
+                Selection.RemoveNode(id);
+                // Deselecting clears descendant completeness marks added on select.
+                RemoveDescendantNodes(kind, refs);
+                // Deselecting removes all ancestor completeness marks.
+                if (refs.Count > 0)
+                {
+                    var r = refs[0];
+                    if (kind == SelectionNodeKind.Chapter)
+                    {
+                        Selection.RemoveNode(r.PartId);
+                        Selection.RemoveNode(r.VolumeId);
+                    }
+                    else if (kind == SelectionNodeKind.Part)
+                    {
+                        Selection.RemoveNode(r.VolumeId);
+                    }
+                }
+            }
+            NotifyStateChanged();
+        }
+
+        public int SelectedParagraphCount => Selection?.SelectedParagraphCount ?? 0;
+
+        // ---------------------------------------------------------------
+        // Private helpers
+        // ---------------------------------------------------------------
+
+        private Task<List<CharacterParagraphRef>> GetUnprocessedOrAll(
+            ProjectFolderId folderId, Guid id, SelectionNodeKind kind, bool unprocessedOnly)
+        {
+            // Today unprocessedOnly == all; filtering wired in later.
+            return kind switch
+            {
+                SelectionNodeKind.Volume => reader.GetVolumeCharacterParagraphsAsync(folderId, id),
+                SelectionNodeKind.Part => reader.GetPartCharacterParagraphsAsync(folderId, id),
+                _ => reader.GetChapterCharacterParagraphsAsync(folderId, id),
+            };
+        }
+
+        private async Task WalkUpAsync(ProjectFolderId folderId, Guid chapterId, Guid partId, Guid volumeId)
+        {
+            var chCount = await reader.GetChapterCharacterParagraphCountAsync(folderId, chapterId);
+            var chSelected = Selection.SelectedCountUnder(chapterId, SelectionNodeKind.Chapter);
+            if (chSelected >= chCount)
+            {
+                Selection.AddNode(chapterId);
+                var ptCount = await reader.GetPartCharacterParagraphCountAsync(folderId, partId);
+                var ptSelected = Selection.SelectedCountUnder(partId, SelectionNodeKind.Part);
+                if (ptSelected >= ptCount)
+                {
+                    Selection.AddNode(partId);
+                    var volCount = await reader.GetVolumeCharacterParagraphCountAsync(folderId, volumeId);
+                    var volSelected = Selection.SelectedCountUnder(volumeId, SelectionNodeKind.Volume);
+                    if (volSelected >= volCount)
+                        Selection.AddNode(volumeId);
+                }
+            }
+        }
+
+        // Selecting a node selects every paragraph beneath it. The descendant
+        // chapters/parts are therefore fully selected too — mark them so their
+        // checkboxes show Checked instead of Indeterminate.
+        private void MarkDescendantNodesComplete(
+            SelectionNodeKind kind, Guid id, List<CharacterParagraphRef> refs)
+        {
+            if (kind == SelectionNodeKind.Volume)
+            {
+                foreach (var partId in refs.Select(r => r.PartId).Distinct())
+                    Selection.AddNode(partId);
+                foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
+                    Selection.AddNode(chapterId);
+            }
+            else if (kind == SelectionNodeKind.Part)
+            {
+                foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
+                    Selection.AddNode(chapterId);
+            }
+        }
+
+        // Mirror of MarkDescendantNodesComplete: clear descendant node marks on deselect.
+        private void RemoveDescendantNodes(SelectionNodeKind kind, List<CharacterParagraphRef> refs)
+        {
+            if (kind == SelectionNodeKind.Volume)
+            {
+                foreach (var partId in refs.Select(r => r.PartId).Distinct())
+                    Selection.RemoveNode(partId);
+                foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
+                    Selection.RemoveNode(chapterId);
+            }
+            else if (kind == SelectionNodeKind.Part)
+            {
+                foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
+                    Selection.RemoveNode(chapterId);
+            }
+        }
+
+        private async Task WalkUpFromNodeAsync(
+            ProjectFolderId folderId, SelectionNodeKind kind, Guid id,
+            List<CharacterParagraphRef> refs)
+        {
+            if (refs.Count == 0) return;
+
+            if (kind == SelectionNodeKind.Chapter)
+            {
+                var r = refs[0];
+                await WalkUpAsync(folderId, id, r.PartId, r.VolumeId);
+            }
+            else if (kind == SelectionNodeKind.Part)
+            {
+                var r = refs[0];
+                var volCount = await reader.GetVolumeCharacterParagraphCountAsync(folderId, r.VolumeId);
+                var volSelected = Selection.SelectedCountUnder(r.VolumeId, SelectionNodeKind.Volume);
+                if (volSelected >= volCount)
+                    Selection.AddNode(r.VolumeId);
+            }
+            // Volume is top — no further walk.
         }
 
         private async Task ExecuteAndReloadAsync(

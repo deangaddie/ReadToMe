@@ -1,0 +1,36 @@
+@using Read2Me.App.State
+@using Read2Me.Data.Entities
+@inject BookHierarchyPresenter Presenter
+@implements IDisposable
+
+@if (Presenter.Selection is { } sel && sel.SelectedParagraphCount > 0)
+{
+    <div style="position:fixed; bottom:0; left:0; right:0; z-index:1300;
+                background:var(--mud-palette-surface);
+                border-top:1px solid var(--mud-palette-divider);
+                box-shadow:0 -2px 8px rgba(0,0,0,0.15);
+                padding:8px 16px;
+                display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+
+        <MudText Typo="Typo.body2">
+            <b>@sel.SelectedParagraphCount</b> paragraph@(sel.SelectedParagraphCount == 1 ? "" : "s") selected
+        </MudText>
+
+        <MudSpacer />
+        <span><!-- action area placeholder --></span>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Presenter.StateChanged += Refresh;
+    }
+
+    void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Presenter.StateChanged -= Refresh;
+    }
+}

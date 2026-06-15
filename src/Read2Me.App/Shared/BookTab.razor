@@ -37,7 +37,8 @@ else if (!Presenter.HasContent)
 }
 else
 {
-    <MudStack Spacing="3" Class="pa-3">
+    @* Bottom padding reserves space so the fixed selection footer never hides content. *@
+    <MudStack Spacing="3" Class="pa-3" Style="@($"padding-bottom:{(Presenter.SelectedParagraphCount > 0 ? "72px" : "0")};")">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="1">
             @if (Presenter.Error != null)
             {
@@ -76,6 +77,7 @@ else
                                  OnClick="@(() => Presenter.ManualRereadAsync(_folderId))" Disabled="Presenter.IsBusy">
                         Manual Reread Book
                     </MudMenuItem>
+                    <MudDivider />
                     <MudMenuItem Icon="@Icons.Material.Filled.Title" IconColor="Color.Secondary"
                                  OnClick="@(() => Presenter.AddBookTitleAsync(_folderId))" Disabled="Presenter.IsBusy">
                         Add book title
@@ -101,6 +103,11 @@ else
                             Add chapter titles
                         </MudMenuItem>
                     }
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Filled.Pause" IconColor="Color.Secondary"
+                                 OnClick="@(() => Presenter.AddPausesAsync(_folderId))" Disabled="Presenter.IsBusy">
+                        Add pauses
+                    </MudMenuItem>
                 </MudMenu>
             }
         </MudStack>
@@ -119,6 +126,18 @@ else
                                       ExpandedChanged="@VolumeExpandCb(vol)">
                         <TitleContent>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                                @if (Presenter.IsNodeSelectable(vol.Id))
+                                {
+                                    var volState = Presenter.Selection.NodeState(vol.Id);
+                                    <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
+                                        <MudCheckBox T="bool?" Value="@TriStateToNullBool(volState)"
+                                                     ValueChanged="@((bool? v) => OnNodeCheckChanged(SelectionNodeKind.Volume, vol.Id, v))"
+                                                     Size="Size.Small" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                                                       Size="Size.Small" title="Select unprocessed"
+                                                       OnClick="@(() => Presenter.SetNodeAsync(_folderId, SelectionNodeKind.Volume, vol.Id, true, unprocessedOnly: true))" />
+                                    </span>
+                                }
                                 <MudText Style="flex:1">@vol.Title</MudText>
                                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForVolume(_folderId, vol)"
                                              IsFirst="@(Presenter.Volumes[0].Id == vol.Id)"
@@ -137,6 +156,7 @@ else
                 }
             </MudExpansionPanels>
         }
+
     </MudStack>
 }
 
@@ -153,11 +173,11 @@ else
             }
             else if (Presenter.Tree.GetParts(vol.Id) is { } parts)
             {
-                @RenderParts(parts)
+                @RenderParts(parts, vol.Id)
             }
         </text>;
 
-    RenderFragment RenderParts(System.Collections.Generic.List<Part> parts) =>
+    RenderFragment RenderParts(System.Collections.Generic.List<Part> parts, Guid volumeId) =>
         @<text>
             @if (parts.Count == 1)
             {
@@ -168,7 +188,7 @@ else
                 }
                 else if (Presenter.Tree.GetChapters(p.Id) is { } singlePartChapters)
                 {
-                    @RenderChapters(singlePartChapters)
+                    @RenderChapters(singlePartChapters, p.Id, volumeId)
                 }
             }
             else
@@ -177,10 +197,23 @@ else
                     @foreach (var part in parts)
                     {
                         var p = part;
+                        var volId = volumeId;
                         <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
                                           ExpandedChanged="@PartExpandCb(p)">
                             <TitleContent>
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                                    @if (Presenter.IsNodeSelectable(p.Id))
+                                    {
+                                        var partState = Presenter.Selection.NodeState(p.Id);
+                                        <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
+                                            <MudCheckBox T="bool?" Value="@TriStateToNullBool(partState)"
+                                                         ValueChanged="@((bool? v) => OnNodeCheckChanged(SelectionNodeKind.Part, p.Id, v))"
+                                                         Size="Size.Small" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                                                           Size="Size.Small" title="Select unprocessed"
+                                                           OnClick="@(() => Presenter.SetNodeAsync(_folderId, SelectionNodeKind.Part, p.Id, true, unprocessedOnly: true))" />
+                                        </span>
+                                    }
                                     <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
                                     <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPart(_folderId, p)"
                                                  IsFirst="@(parts[0].Id == p.Id)"
@@ -200,7 +233,7 @@ else
                                 }
                                 else if (Presenter.Tree.GetChapters(p.Id) is { } multiPartChapters)
                                 {
-                                    @RenderChapters(multiPartChapters)
+                                    @RenderChapters(multiPartChapters, p.Id, volId)
                                 }
                             </ChildContent>
                         </MudExpansionPanel>
@@ -209,15 +242,29 @@ else
             }
         </text>;
 
-    RenderFragment RenderChapters(System.Collections.Generic.List<Read2Me.Data.Entities.Chapter> chapters) =>
+    RenderFragment RenderChapters(System.Collections.Generic.List<Read2Me.Data.Entities.Chapter> chapters, Guid partId, Guid volumeId) =>
         @<MudExpansionPanels MultiExpansion="true">
             @foreach (var chapter in chapters)
             {
                 var ch = chapter;
+                var ptId = partId;
+                var volId = volumeId;
                 <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedChapterIds.Contains(ch.Id)"
                                   ExpandedChanged="@ChapterExpandCb(ch)">
                     <TitleContent>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+                            @if (Presenter.IsNodeSelectable(ch.Id))
+                            {
+                                var chState = Presenter.Selection.NodeState(ch.Id);
+                                <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
+                                    <MudCheckBox T="bool?" Value="@TriStateToNullBool(chState)"
+                                                 ValueChanged="@((bool? v) => OnNodeCheckChanged(SelectionNodeKind.Chapter, ch.Id, v))"
+                                                 Size="Size.Small" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                                                   Size="Size.Small" title="Select unprocessed"
+                                                   OnClick="@(() => Presenter.SetNodeAsync(_folderId, SelectionNodeKind.Chapter, ch.Id, true, unprocessedOnly: true))" />
+                                </span>
+                            }
                             <MudText Style="flex:1">@(ch.Title ?? "Chapter")</MudText>
                             <BookNodeMenu Spec="@BookNodeMenuSpecs.ForChapter(_folderId, ch)"
                                          IsFirst="@(chapters[0].Id == ch.Id)"
@@ -243,6 +290,7 @@ else
                                     var p = para;
                                     var hasUnknown = Presenter.SplitView && p.Items.Any(i =>
                                         i.ItemType == ParagraphItemType.Character && i.Character == null);
+                                    var isCharPara = p.Items.Any(i => i.ItemType == ParagraphItemType.Character);
                                     @if (Presenter.SplitView)
                                     {
                                         var firstItem = p.Items.FirstOrDefault();
@@ -253,6 +301,10 @@ else
                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
                                                       Style="opacity:0.45;">
                                                 <MudText Typo="Typo.caption" Style="flex:1; font-style:italic;">@pauseLabel</MudText>
+                                                <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPauseParagraph(_folderId, p)"
+                                                             IsFirst="false" IsLast="false"
+                                                             OnChanged="@(() => { Presenter.Tree.RemoveParagraph(p.Id); StateHasChanged(); })"
+                                                             OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
                                             </MudStack>
                                         }
                                         else
@@ -260,6 +312,14 @@ else
                                             var items = p.Items.ToList();
                                             <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
                                                       Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : "var(--mud-palette-divider)")};{(hasUnknown ? " background: rgba(var(--mud-palette-warning-rgb), 0.06);" : "")}")">
+                                                @if (isCharPara)
+                                                {
+                                                    var pId = p.Id;
+                                                    var chId = ch.Id;
+                                                    <MudCheckBox T="bool" Value="@Presenter.Selection.IsParagraphSelected(pId)"
+                                                                 ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(_folderId, pId, chId, ptId, volId, v))"
+                                                                 Size="Size.Small" />
+                                                }
                                                 @foreach (var item in items)
                                                 {
                                                     var it = item;
@@ -323,15 +383,27 @@ else
                                     }
                                     else
                                     {
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudText Typo="Typo.body2" Style="flex:1">@string.Join(" ", p.Items.Select(i => i.Text))</MudText>
-                                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraph(_folderId, p)"
-                                                           IsFirst="@(paragraphs[0].Id == p.Id)"
-                                                           IsLast="@(paragraphs[^1].Id == p.Id)"
-                                                           OnChanged="@(() => { Presenter.Tree.RemoveParagraph(p.Id); StateHasChanged(); })"
-                                                           OnSplit="SplitChapterAsync"
-                                                           OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
-                                        </MudStack>
+                                        var isPause = ParagraphItemDisplay.IsPauseParagraph(p);
+                                        @if (!isPause)
+                                        {
+                                            var pId = p.Id;
+                                            var chId = ch.Id;
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                @if (isCharPara)
+                                                {
+                                                    <MudCheckBox T="bool" Value="@Presenter.Selection.IsParagraphSelected(pId)"
+                                                                 ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(_folderId, pId, chId, ptId, volId, v))"
+                                                                 Size="Size.Small" />
+                                                }
+                                                <MudText Typo="Typo.body2" Style="flex:1">@string.Join(" ", p.Items.Select(i => i.Text))</MudText>
+                                                <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraph(_folderId, p)"
+                                                               IsFirst="@(paragraphs[0].Id == p.Id)"
+                                                               IsLast="@(paragraphs[^1].Id == p.Id)"
+                                                               OnChanged="@(() => { Presenter.Tree.RemoveParagraph(p.Id); StateHasChanged(); })"
+                                                               OnSplit="SplitChapterAsync"
+                                                               OnReset="@(() => Presenter.ResetAndLoadAsync(_folderId))" />
+                                            </MudStack>
+                                        }
                                     }
                                 }
                             </MudStack>
@@ -364,6 +436,16 @@ else
 
     EventCallback<bool> ChapterExpandCb(Read2Me.Data.Entities.Chapter c) =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnChapterExpandedAsync(c, b, StateHasChanged));
+
+    static bool? TriStateToNullBool(TriState state) => state switch
+    {
+        TriState.Checked => true,
+        TriState.Unchecked => false,
+        _ => null
+    };
+
+    Task OnNodeCheckChanged(SelectionNodeKind kind, Guid id, bool? value) =>
+        Presenter.SetNodeAsync(_folderId, kind, id, value == true);
 
     protected override async Task OnParametersSetAsync()
     {

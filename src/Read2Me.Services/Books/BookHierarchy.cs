@@ -4,6 +4,7 @@ using System.Linq;
 using FractionalIndexing;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 
 namespace Read2Me.Services.Books
 {
@@ -419,6 +420,89 @@ namespace Read2Me.Services.Books
         }
 
         // ---------------------------------------------------------------
+        // PlanPauseInsertions — pure planning for AddPauses.
+        // Returns every pause to create; callers pass results to PauseInserter.
+        // ---------------------------------------------------------------
+
+        public List<PlannedPause> PlanPauseInsertions()
+        {
+            var result = new List<PlannedPause>();
+
+            // Paragraph pauses — between adjacent content paragraphs within each chapter.
+            foreach (var (chapterId, paragraphs) in Paragraphs)
+            {
+                var contentParas = paragraphs.Where(p => !IsPauseParagraph(p)).ToList();
+                for (int i = 0; i < contentParas.Count - 1; i++)
+                {
+                    var prev = contentParas[i];
+                    var next = contentParas[i + 1];
+                    // Skip if a pause paragraph already sits between prev and next.
+                    var between = paragraphs
+                        .Where(p => string.Compare(p.Order, prev.Order, StringComparison.Ordinal) > 0
+                                 && string.Compare(p.Order, next.Order, StringComparison.Ordinal) < 0)
+                        .ToList();
+                    if (between.Any(IsPauseParagraph)) continue;
+                    result.Add(new PlannedPause(chapterId, ParagraphItemType.ParagraphPause, prev.Order, next.Order));
+                }
+            }
+
+            // Boundary pauses — walk hierarchy, one pause per chapter at boundary.
+            for (int vi = 0; vi < Volumes.Count; vi++)
+            {
+                var vol = Volumes[vi];
+                bool isLastVolume = vi == Volumes.Count - 1;
+                var parts = Parts.TryGetValue(vol.Id, out var ps) ? ps : [];
+
+                for (int pi2 = 0; pi2 < parts.Count; pi2++)
+                {
+                    var part = parts[pi2];
+                    bool isLastPartInVolume = pi2 == parts.Count - 1;
+                    var chapters = Chapters.TryGetValue(part.Id, out var cs) ? cs : [];
+
+                    for (int ci = 0; ci < chapters.Count; ci++)
+                    {
+                        var chapter = chapters[ci];
+                        bool isLastChapterInPart = ci == chapters.Count - 1;
+
+                        ParagraphItemType? pauseType = null;
+
+                        if (isLastChapterInPart && isLastPartInVolume && !isLastVolume)
+                            pauseType = ParagraphItemType.VolumePause;
+                        else if (isLastChapterInPart && !isLastPartInVolume)
+                            pauseType = ParagraphItemType.PartPause;
+                        else if (!isLastChapterInPart)
+                            pauseType = ParagraphItemType.ChapterPause;
+
+                        if (pauseType == null) continue;
+
+                        // Skip if chapter already ends with a pause of this exact type.
+                        var chapterParas = Paragraphs.TryGetValue(chapter.Id, out var cps) ? cps : [];
+                        var lastPara = chapterParas.Count > 0 ? chapterParas[^1] : null;
+                        if (lastPara != null && IsPauseParagraph(lastPara))
+                        {
+                            var items = Items.TryGetValue(lastPara.Id, out var its) ? its : [];
+                            if (items.Count == 1 && items[0].ItemType == pauseType.Value) continue;
+                        }
+
+                        var afterOrder = lastPara?.Order;
+                        result.Add(new PlannedPause(chapter.Id, pauseType.Value, afterOrder, null));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private bool IsPauseParagraph(Paragraph p)
+        {
+            var items = Items.TryGetValue(p.Id, out var list) ? list : [];
+            if (items.Count == 0) return true;
+            if (items.Count != 1) return false;
+            var t = items[0].ItemType;
+            return t != ParagraphItemType.Character && t != ParagraphItemType.Narration;
+        }
+
+        // ---------------------------------------------------------------
         // Helpers
         // ---------------------------------------------------------------
 
@@ -440,4 +524,6 @@ namespace Read2Me.Services.Books
         IReadOnlyList<object> ToAdd,
         IReadOnlyList<object> ToDelete,
         IReadOnlyList<object> ToUpdate);
+
+    public record PlannedPause(Guid ChapterId, ParagraphItemType PauseType, string? AfterOrder, string? BeforeOrder);
 }

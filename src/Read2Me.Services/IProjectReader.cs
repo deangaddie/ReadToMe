@@ -19,5 +19,15 @@ namespace Read2Me.Services
         Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId);
         Task<int> GetTotalPartCountAsync(ProjectFolderId folderId);
         Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId);
+
+        Task<List<CharacterParagraphRef>> GetVolumeCharacterParagraphsAsync(ProjectFolderId folderId, Guid volumeId);
+        Task<List<CharacterParagraphRef>> GetPartCharacterParagraphsAsync(ProjectFolderId folderId, Guid partId);
+        Task<List<CharacterParagraphRef>> GetChapterCharacterParagraphsAsync(ProjectFolderId folderId, Guid chapterId);
+        Task<int> GetVolumeCharacterParagraphCountAsync(ProjectFolderId folderId, Guid volumeId);
+        Task<int> GetPartCharacterParagraphCountAsync(ProjectFolderId folderId, Guid partId);
+        Task<int> GetChapterCharacterParagraphCountAsync(ProjectFolderId folderId, Guid chapterId);
+
+        // All volume/part/chapter node ids that contain at least one character paragraph.
+        Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);
     }
 }

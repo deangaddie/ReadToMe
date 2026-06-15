@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 using ProjectEntity = Read2Me.Data.Entities.Project;
 
 namespace Read2Me.Services
@@ -109,6 +110,104 @@ namespace Read2Me.Services
         {
             var db = await _session.OpenAsync(folderId);
             return await db.Chapters.CountAsync();
+        }
+
+        public async Task<List<CharacterParagraphRef>> GetVolumeCharacterParagraphsAsync(ProjectFolderId folderId, Guid volumeId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character
+                    && i.Paragraph.Chapter.Part.VolumeId == volumeId)
+                .Select(i => new CharacterParagraphRef(
+                    i.ParagraphId,
+                    i.Paragraph.ChapterId,
+                    i.Paragraph.Chapter.PartId,
+                    volumeId))
+                .Distinct()
+                .ToListAsync();
+        }
+
+        public async Task<List<CharacterParagraphRef>> GetPartCharacterParagraphsAsync(ProjectFolderId folderId, Guid partId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character
+                    && i.Paragraph.Chapter.PartId == partId)
+                .Select(i => new CharacterParagraphRef(
+                    i.ParagraphId,
+                    i.Paragraph.ChapterId,
+                    partId,
+                    i.Paragraph.Chapter.Part.VolumeId))
+                .Distinct()
+                .ToListAsync();
+        }
+
+        public async Task<List<CharacterParagraphRef>> GetChapterCharacterParagraphsAsync(ProjectFolderId folderId, Guid chapterId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character
+                    && i.Paragraph.ChapterId == chapterId)
+                .Select(i => new CharacterParagraphRef(
+                    i.ParagraphId,
+                    chapterId,
+                    i.Paragraph.Chapter.PartId,
+                    i.Paragraph.Chapter.Part.VolumeId))
+                .Distinct()
+                .ToListAsync();
+        }
+
+        public async Task<int> GetVolumeCharacterParagraphCountAsync(ProjectFolderId folderId, Guid volumeId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.Paragraphs
+                .Where(p => p.Chapter.Part.VolumeId == volumeId
+                    && p.Items.Any(i => i.ItemType == ParagraphItemType.Character))
+                .CountAsync();
+        }
+
+        public async Task<int> GetPartCharacterParagraphCountAsync(ProjectFolderId folderId, Guid partId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.Paragraphs
+                .Where(p => p.Chapter.PartId == partId
+                    && p.Items.Any(i => i.ItemType == ParagraphItemType.Character))
+                .CountAsync();
+        }
+
+        public async Task<int> GetChapterCharacterParagraphCountAsync(ProjectFolderId folderId, Guid chapterId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.Paragraphs
+                .Where(p => p.ChapterId == chapterId
+                    && p.Items.Any(i => i.ItemType == ParagraphItemType.Character))
+                .CountAsync();
+        }
+
+        public async Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            // Chapter/Part/Volume ids of every character-bearing paragraph, in one round trip.
+            var rows = await db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character)
+                .Select(i => new
+                {
+                    ChapterId = i.Paragraph.ChapterId,
+                    PartId = i.Paragraph.Chapter.PartId,
+                    VolumeId = i.Paragraph.Chapter.Part.VolumeId,
+                })
+                .Distinct()
+                .ToListAsync();
+
+            var nodes = new HashSet<Guid>();
+            foreach (var r in rows)
+            {
+                nodes.Add(r.ChapterId);
+                nodes.Add(r.PartId);
+                nodes.Add(r.VolumeId);
+            }
+            return nodes;
         }
     }
 }

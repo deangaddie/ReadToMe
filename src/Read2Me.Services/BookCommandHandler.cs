@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 using Read2Me.Services.Books;
 
 namespace Read2Me.Services
@@ -52,6 +53,8 @@ namespace Read2Me.Services
                 case AddVolumeTitlesCommand c: await AddVolumeTitlesAsync(c.FolderId); break;
                 case AddPartTitlesCommand c: await AddPartTitlesAsync(c.FolderId); break;
                 case AddChapterTitlesCommand c: await AddChapterTitlesAsync(c.FolderId); break;
+                case AddPausesCommand c: await AddPausesAsync(c.FolderId); break;
+                case InsertPauseParagraphCommand c: await InsertPauseParagraphAsync(c); break;
                 case ClearBookContentCommand c: await ClearBookContentAsync(c.FolderId); break;
                 default: throw new NotSupportedException($"Unhandled command type: {command.GetType().Name}");
             }
@@ -165,6 +168,59 @@ namespace Read2Me.Services
             var h = await LoadBookHierarchyAsync(db);
             foreach (var (chapterId, title, firstParagraphOrder) in h.PlanChapterTitleInsertions())
                 TitleInserter.AddTitleParagraph(db, chapterId, title, firstParagraphOrder);
+            await db.SaveChangesAsync();
+        }
+
+        private static ParagraphItemType MapPauseKind(PauseKind kind) => kind switch
+        {
+            PauseKind.Pause          => ParagraphItemType.Pause,
+            PauseKind.ParagraphPause => ParagraphItemType.ParagraphPause,
+            PauseKind.ChapterPause   => ParagraphItemType.ChapterPause,
+            PauseKind.PartPause      => ParagraphItemType.PartPause,
+            PauseKind.VolumePause    => ParagraphItemType.VolumePause,
+            _                        => ParagraphItemType.Pause,
+        };
+
+        private async Task InsertPauseParagraphAsync(InsertPauseParagraphCommand c)
+        {
+            var db = await _session.OpenAsync(c.FolderId);
+            var item = await db.ParagraphItems.FindAsync(c.AnchorItemId);
+            if (item == null) return;
+            var paragraph = await db.Paragraphs
+                .Include(p => p.Items)
+                .FirstOrDefaultAsync(p => p.Id == item.ParagraphId);
+            if (paragraph == null) return;
+
+            var siblings = await db.Paragraphs
+                .Where(p => p.ChapterId == paragraph.ChapterId)
+                .OrderBy(p => p.Order)
+                .ToListAsync();
+
+            var idx = siblings.FindIndex(p => p.Id == paragraph.Id);
+            if (idx < 0) return;
+
+            string? afterOrder, beforeOrder;
+            if (c.Position == PauseInsertPosition.Before)
+            {
+                afterOrder  = idx > 0 ? siblings[idx - 1].Order : null;
+                beforeOrder = paragraph.Order;
+            }
+            else
+            {
+                afterOrder  = paragraph.Order;
+                beforeOrder = idx < siblings.Count - 1 ? siblings[idx + 1].Order : null;
+            }
+
+            PauseInserter.AddPauseParagraph(db, paragraph.ChapterId, MapPauseKind(c.PauseKind), afterOrder, beforeOrder);
+            await db.SaveChangesAsync();
+        }
+
+        private async Task AddPausesAsync(ProjectFolderId folderId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var h = await LoadBookHierarchyAsync(db);
+            foreach (var p in h.PlanPauseInsertions())
+                PauseInserter.AddPauseParagraph(db, p.ChapterId, p.PauseType, p.AfterOrder, p.BeforeOrder);
             await db.SaveChangesAsync();
         }
 

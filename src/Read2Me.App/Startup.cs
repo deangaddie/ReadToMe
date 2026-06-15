@@ -51,6 +51,7 @@ namespace Read2Me.App
             services.AddScoped<BookUseCases>();
             services.AddScoped<BookHierarchyLoader>();
             services.AddScoped<BookTreeState>();
+            services.AddScoped<BookSelectionState>();
             services.AddScoped<BookHierarchyPresenter>();
             services.AddScoped<MenuActions>();
 
