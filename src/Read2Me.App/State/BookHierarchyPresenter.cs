@@ -61,29 +61,11 @@ namespace Read2Me.App.State
             await LoadAsync(folderId);
         }
 
-        public async Task ReadBookAsync(ProjectFolderId folderId)
-        {
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            var result = await bookUseCases.ImportAsync(folderId);
-            Error = result.IsSuccess ? null : result.Error;
-            if (result.IsSuccess) await LoadAsync(folderId);
-            IsBusy = false;
-            NotifyStateChanged();
-        }
+        public Task ReadBookAsync(ProjectFolderId folderId) =>
+            ExecuteAndReloadAsync(folderId, () => bookUseCases.ImportAsync(folderId), resetTree: false);
 
-        public async Task ConfirmRereadAsync(ProjectFolderId folderId)
-        {
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            var result = await bookUseCases.ImportAsync(folderId, reread: true);
-            Error = result.IsSuccess ? null : result.Error;
-            if (result.IsSuccess) await ResetAndLoadAsync(folderId);
-            IsBusy = false;
-            NotifyStateChanged();
-        }
+        public async Task ConfirmRereadAsync(ProjectFolderId folderId) =>
+            await ExecuteAndReloadAsync(folderId, () => bookUseCases.ImportAsync(folderId, reread: true), resetTree: true);
 
         public async Task ManualRereadAsync(ProjectFolderId folderId)
         {
@@ -94,14 +76,8 @@ namespace Read2Me.App.State
             var options = result.Data as ManualReadOptions;
             if (options is null) return;
 
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            var importResult = await bookUseCases.ImportManuallyAsync(folderId, options);
-            Error = importResult.IsSuccess ? null : importResult.Error;
-            if (importResult.IsSuccess) await ResetAndLoadAsync(folderId);
-            IsBusy = false;
-            NotifyStateChanged();
+            await ExecuteAndReloadAsync(folderId,
+                () => bookUseCases.ImportManuallyAsync(folderId, options), resetTree: true);
         }
 
         // Split levels mirror the new-parent entity that a split creates.
@@ -139,49 +115,17 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
-        public async Task AddBookTitleAsync(ProjectFolderId folderId)
-        {
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            await commandHandler.ExecuteAsync(new AddBookTitleCommand(folderId));
-            await ResetAndLoadAsync(folderId);
-            IsBusy = false;
-            NotifyStateChanged();
-        }
+        public Task AddBookTitleAsync(ProjectFolderId folderId) =>
+            ExecuteCommandAndReloadAsync(folderId, new AddBookTitleCommand(folderId));
 
-        public async Task AddVolumeTitlesAsync(ProjectFolderId folderId)
-        {
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            await commandHandler.ExecuteAsync(new AddVolumeTitlesCommand(folderId));
-            await ResetAndLoadAsync(folderId);
-            IsBusy = false;
-            NotifyStateChanged();
-        }
+        public Task AddVolumeTitlesAsync(ProjectFolderId folderId) =>
+            ExecuteCommandAndReloadAsync(folderId, new AddVolumeTitlesCommand(folderId));
 
-        public async Task AddPartTitlesAsync(ProjectFolderId folderId)
-        {
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            await commandHandler.ExecuteAsync(new AddPartTitlesCommand(folderId));
-            await ResetAndLoadAsync(folderId);
-            IsBusy = false;
-            NotifyStateChanged();
-        }
+        public Task AddPartTitlesAsync(ProjectFolderId folderId) =>
+            ExecuteCommandAndReloadAsync(folderId, new AddPartTitlesCommand(folderId));
 
-        public async Task AddChapterTitlesAsync(ProjectFolderId folderId)
-        {
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            await commandHandler.ExecuteAsync(new AddChapterTitlesCommand(folderId));
-            await ResetAndLoadAsync(folderId);
-            IsBusy = false;
-            NotifyStateChanged();
-        }
+        public Task AddChapterTitlesAsync(ProjectFolderId folderId) =>
+            ExecuteCommandAndReloadAsync(folderId, new AddChapterTitlesCommand(folderId));
 
         public void RequestConfirmReread()
         {
@@ -194,6 +138,29 @@ namespace Read2Me.App.State
             ConfirmReread = false;
             NotifyStateChanged();
         }
+
+        private async Task ExecuteAndReloadAsync(
+            ProjectFolderId folderId,
+            Func<Task<Result>> operation,
+            bool resetTree)
+        {
+            IsBusy = true;
+            Error = null;
+            NotifyStateChanged();
+            var result = await operation();
+            Error = result.IsSuccess ? null : result.Error;
+            if (result.IsSuccess)
+                await (resetTree ? ResetAndLoadAsync(folderId) : LoadAsync(folderId));
+            IsBusy = false;
+            NotifyStateChanged();
+        }
+
+        private Task ExecuteCommandAndReloadAsync(ProjectFolderId folderId, BookCommand command) =>
+            ExecuteAndReloadAsync(folderId, async () =>
+            {
+                await commandHandler.ExecuteAsync(command);
+                return Result.Ok();
+            }, resetTree: true);
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
     }

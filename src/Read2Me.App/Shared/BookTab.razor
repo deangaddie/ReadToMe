@@ -246,10 +246,7 @@ else
                                     @if (Presenter.SplitView)
                                     {
                                         var firstItem = p.Items.FirstOrDefault();
-                                        var isPauseParagraph = p.Items.Count == 0
-                                            || (p.Items.Count == 1
-                                                && firstItem!.ItemType != ParagraphItemType.Character
-                                                && firstItem!.ItemType != ParagraphItemType.Narration);
+                                        var isPauseParagraph = ParagraphItemDisplay.IsPauseParagraph(p);
                                         @if (isPauseParagraph)
                                         {
                                             var pauseLabel = ParagraphItemDisplay.GetPauseLabel(firstItem?.ItemType);

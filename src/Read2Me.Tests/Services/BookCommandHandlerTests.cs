@@ -1,6 +1,4 @@
 using System;
-using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
@@ -14,30 +12,22 @@ using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Books;
 using Read2Me.Services.IO;
+using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.Services
 {
-    public class BookCommandHandlerTests : IDisposable
+    public class BookCommandHandlerTests : ProjectDbTestBase
     {
-        private readonly string _tempDir;
         private readonly BookCommandHandler _svc;
         private readonly ProjectFolderId _folder;
 
         public BookCommandHandlerTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "Read2MeCmdTests_" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(_tempDir);
-            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = _tempDir }));
+            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
             var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
             _svc = new BookCommandHandler(session);
-            _folder = new ProjectFolderId("test-book");
-        }
-
-        public void Dispose()
-        {
-            if (Directory.Exists(_tempDir))
-                Directory.Delete(_tempDir, recursive: true);
+            _folder = new ProjectFolderId(FolderName);
         }
 
         private static string Key(string? prev = null, string? next = null) =>
@@ -45,14 +35,7 @@ namespace Read2Me.Tests.Services
 
         private async Task<ProjectDbContext> SeedProjectAsync()
         {
-            var folderPath = Path.Combine(_tempDir, _folder.Value);
-            Directory.CreateDirectory(folderPath);
-            var options = new DbContextOptionsBuilder<ProjectDbContext>()
-                .UseSqlite($"Data Source={Path.Combine(folderPath, "project.db")};Pooling=false")
-                .Options;
-            var db = new ProjectDbContext(options);
-            await db.Database.MigrateAsync();
-
+            var db = await OpenDbAsync();
             db.Projects.Add(new Project { Title = "Test Book", BookTitle = "The Book", Author = "Author", Filename = "test.epub", Type = BookFileType.Epub });
             await db.SaveChangesAsync();
             return db;
@@ -310,19 +293,5 @@ namespace Read2Me.Tests.Services
             Assert.Equal(vol2.Id, saved!.VolumeId);
         }
 
-        // ---------------------------------------------------------------
-        // Helpers
-        // ---------------------------------------------------------------
-
-        private async Task<ProjectDbContext> OpenDbAsync()
-        {
-            var folderPath = Path.Combine(_tempDir, _folder.Value);
-            var options = new DbContextOptionsBuilder<ProjectDbContext>()
-                .UseSqlite($"Data Source={Path.Combine(folderPath, "project.db")};Pooling=false")
-                .Options;
-            var db = new ProjectDbContext(options);
-            await db.Database.MigrateAsync();
-            return db;
-        }
     }
 }

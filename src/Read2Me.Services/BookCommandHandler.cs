@@ -24,29 +24,29 @@ namespace Read2Me.Services
         {
             switch (command)
             {
-                case DeleteVolumeCommand c: await DeleteVolumeAsync(c.FolderId, c.VolumeId); break;
-                case DeletePartCommand c: await DeletePartAsync(c.FolderId, c.PartId); break;
-                case DeleteChapterCommand c: await DeleteChapterAsync(c.FolderId, c.ChapterId); break;
-                case DeleteParagraphCommand c: await DeleteParagraphAsync(c.FolderId, c.ParagraphId); break;
-                case DeleteParagraphItemCommand c: await DeleteParagraphItemAsync(c.FolderId, c.ItemId); break;
-                case UpdateVolumeTitleCommand c: await UpdateVolumeTitleAsync(c.FolderId, c.VolumeId, c.Title); break;
-                case UpdatePartTitleCommand c: await UpdatePartTitleAsync(c.FolderId, c.PartId, c.Title); break;
-                case UpdateChapterTitleCommand c: await UpdateChapterTitleAsync(c.FolderId, c.ChapterId, c.Title); break;
-                case UpdateParagraphItemTextCommand c: await UpdateParagraphItemTextAsync(c.FolderId, c.ItemId, c.Text); break;
+                case DeleteVolumeCommand c: await DeleteEntityAsync<Volume>(c.FolderId, c.VolumeId); break;
+                case DeletePartCommand c: await DeleteEntityAsync<Part>(c.FolderId, c.PartId); break;
+                case DeleteChapterCommand c: await DeleteEntityAsync<Chapter>(c.FolderId, c.ChapterId); break;
+                case DeleteParagraphCommand c: await DeleteEntityAsync<Paragraph>(c.FolderId, c.ParagraphId); break;
+                case DeleteParagraphItemCommand c: await DeleteEntityAsync<ParagraphItem>(c.FolderId, c.ItemId); break;
+                case UpdateVolumeTitleCommand c: await UpdateTitleAsync<Volume>(c.FolderId, c.VolumeId, v => v.Title = c.Title); break;
+                case UpdatePartTitleCommand c: await UpdateTitleAsync<Part>(c.FolderId, c.PartId, p => p.Title = c.Title); break;
+                case UpdateChapterTitleCommand c: await UpdateTitleAsync<Chapter>(c.FolderId, c.ChapterId, ch => ch.Title = c.Title); break;
+                case UpdateParagraphItemTextCommand c: await UpdateTitleAsync<ParagraphItem>(c.FolderId, c.ItemId, i => i.Text = c.Text); break;
                 case SplitAtPartCommand c: return await SplitVolumeAsync(c.FolderId, c.PartId, c.NewVolumeTitle);
                 case SplitAtChapterCommand c: return await SplitPartAsync(c.FolderId, c.ChapterId, c.NewPartTitle);
                 case SplitAtParagraphCommand c: return await SplitChapterAsync(c.FolderId, c.ParagraphId, c.NewChapterTitle);
                 case SplitAtItemCommand c: return await SplitParagraphItemAsync(c.FolderId, c.ItemId);
-                case MergeVolumeCommand c when c.Direction == MergeDirection.Previous: await MergeVolumeWithPreviousAsync(c.FolderId, c.VolumeId); break;
-                case MergeVolumeCommand c: await MergeVolumeWithNextAsync(c.FolderId, c.VolumeId); break;
-                case MergePartCommand c when c.Direction == MergeDirection.Previous: await MergePartWithPreviousAsync(c.FolderId, c.PartId); break;
-                case MergePartCommand c: await MergePartWithNextAsync(c.FolderId, c.PartId); break;
-                case MergeChapterCommand c when c.Direction == MergeDirection.Previous: await MergeChapterWithPreviousAsync(c.FolderId, c.ChapterId); break;
-                case MergeChapterCommand c: await MergeChapterWithNextAsync(c.FolderId, c.ChapterId); break;
-                case MergeParagraphCommand c when c.Direction == MergeDirection.Previous: await MergeParagraphWithPreviousAsync(c.FolderId, c.ParagraphId); break;
-                case MergeParagraphCommand c: await MergeParagraphWithNextAsync(c.FolderId, c.ParagraphId); break;
-                case MergeParagraphItemCommand c when c.Direction == MergeDirection.Previous: await MergeParagraphItemWithPreviousAsync(c.FolderId, c.ItemId); break;
-                case MergeParagraphItemCommand c: await MergeParagraphItemWithNextAsync(c.FolderId, c.ItemId); break;
+                case MergeVolumeCommand c:
+                    await PlanAndApplyAsync(c.FolderId, h => h.PlanMergeVolume(c.VolumeId, c.Direction)); break;
+                case MergePartCommand c:
+                    await PlanAndApplyAsync(c.FolderId, h => h.PlanMergePart(c.PartId, c.Direction)); break;
+                case MergeChapterCommand c:
+                    await PlanAndApplyAsync(c.FolderId, h => h.PlanMergeChapter(c.ChapterId, c.Direction)); break;
+                case MergeParagraphCommand c:
+                    await PlanAndApplyAsync(c.FolderId, h => h.PlanMergeParagraph(c.ParagraphId, c.Direction)); break;
+                case MergeParagraphItemCommand c:
+                    await PlanAndApplyAsync(c.FolderId, h => h.PlanMergeParagraphItem(c.ItemId, c.Direction)); break;
                 case SetItemCharacterCommand c: await SetParagraphItemCharacterAsync(c.FolderId, c.ItemId, c.CharacterId); break;
                 case AddBookTitleCommand c: await AddBookTitleAsync(c.FolderId); break;
                 case AddVolumeTitlesCommand c: await AddVolumeTitlesAsync(c.FolderId); break;
@@ -58,6 +58,27 @@ namespace Read2Me.Services
             return null;
         }
 
+        private async Task DeleteEntityAsync<TEntity>(ProjectFolderId folderId, Guid id)
+            where TEntity : class
+        {
+            var db = await _session.OpenAsync(folderId);
+            var entity = await db.Set<TEntity>().FindAsync(id);
+            if (entity == null) return;
+            db.Set<TEntity>().Remove(entity);
+            await db.SaveChangesAsync();
+        }
+
+        private async Task UpdateTitleAsync<TEntity>(
+            ProjectFolderId folderId, Guid id, Action<TEntity> apply)
+            where TEntity : class
+        {
+            var db = await _session.OpenAsync(folderId);
+            var entity = await db.Set<TEntity>().FindAsync(id);
+            if (entity == null) return;
+            apply(entity);
+            await db.SaveChangesAsync();
+        }
+
         private async Task SetParagraphItemCharacterAsync(ProjectFolderId folderId, Guid itemId, Guid? characterId)
         {
             var db = await _session.OpenAsync(folderId);
@@ -67,87 +88,6 @@ namespace Read2Me.Services
             item.Character = characterId.HasValue
                 ? await db.Characters.FindAsync(characterId.Value)
                 : null;
-            await db.SaveChangesAsync();
-        }
-
-        private async Task DeleteVolumeAsync(ProjectFolderId folderId, Guid volumeId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.Volumes.FindAsync(volumeId);
-            if (entity == null) return;
-            db.Volumes.Remove(entity);
-            await db.SaveChangesAsync();
-        }
-
-        private async Task DeletePartAsync(ProjectFolderId folderId, Guid partId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.Parts.FindAsync(partId);
-            if (entity == null) return;
-            db.Parts.Remove(entity);
-            await db.SaveChangesAsync();
-        }
-
-        private async Task DeleteChapterAsync(ProjectFolderId folderId, Guid chapterId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.Chapters.FindAsync(chapterId);
-            if (entity == null) return;
-            db.Chapters.Remove(entity);
-            await db.SaveChangesAsync();
-        }
-
-        private async Task DeleteParagraphAsync(ProjectFolderId folderId, Guid paragraphId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.Paragraphs.FindAsync(paragraphId);
-            if (entity == null) return;
-            db.Paragraphs.Remove(entity);
-            await db.SaveChangesAsync();
-        }
-
-        private async Task DeleteParagraphItemAsync(ProjectFolderId folderId, Guid itemId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.ParagraphItems.FindAsync(itemId);
-            if (entity == null) return;
-            db.ParagraphItems.Remove(entity);
-            await db.SaveChangesAsync();
-        }
-
-        private async Task UpdateVolumeTitleAsync(ProjectFolderId folderId, Guid volumeId, string title)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.Volumes.FindAsync(volumeId);
-            if (entity == null) return;
-            entity.Title = title;
-            await db.SaveChangesAsync();
-        }
-
-        private async Task UpdatePartTitleAsync(ProjectFolderId folderId, Guid partId, string title)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.Parts.FindAsync(partId);
-            if (entity == null) return;
-            entity.Title = title;
-            await db.SaveChangesAsync();
-        }
-
-        private async Task UpdateChapterTitleAsync(ProjectFolderId folderId, Guid chapterId, string title)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.Chapters.FindAsync(chapterId);
-            if (entity == null) return;
-            entity.Title = title;
-            await db.SaveChangesAsync();
-        }
-
-        private async Task UpdateParagraphItemTextAsync(ProjectFolderId folderId, Guid itemId, string text)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.ParagraphItems.FindAsync(itemId);
-            if (entity == null) return;
-            entity.Text = text;
             await db.SaveChangesAsync();
         }
 
@@ -227,36 +167,6 @@ namespace Read2Me.Services
                 TitleInserter.AddTitleParagraph(db, chapterId, title, firstParagraphOrder);
             await db.SaveChangesAsync();
         }
-
-        private async Task MergeVolumeWithPreviousAsync(ProjectFolderId folderId, Guid volumeId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergeVolume(volumeId, MergeDirection.Previous));
-
-        private async Task MergeVolumeWithNextAsync(ProjectFolderId folderId, Guid volumeId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergeVolume(volumeId, MergeDirection.Next));
-
-        private async Task MergePartWithPreviousAsync(ProjectFolderId folderId, Guid partId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergePart(partId, MergeDirection.Previous));
-
-        private async Task MergePartWithNextAsync(ProjectFolderId folderId, Guid partId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergePart(partId, MergeDirection.Next));
-
-        private async Task MergeChapterWithPreviousAsync(ProjectFolderId folderId, Guid chapterId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergeChapter(chapterId, MergeDirection.Previous));
-
-        private async Task MergeChapterWithNextAsync(ProjectFolderId folderId, Guid chapterId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergeChapter(chapterId, MergeDirection.Next));
-
-        private async Task MergeParagraphWithPreviousAsync(ProjectFolderId folderId, Guid paragraphId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergeParagraph(paragraphId, MergeDirection.Previous));
-
-        private async Task MergeParagraphWithNextAsync(ProjectFolderId folderId, Guid paragraphId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergeParagraph(paragraphId, MergeDirection.Next));
-
-        private async Task MergeParagraphItemWithPreviousAsync(ProjectFolderId folderId, Guid itemId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergeParagraphItem(itemId, MergeDirection.Previous));
-
-        private async Task MergeParagraphItemWithNextAsync(ProjectFolderId folderId, Guid itemId)
-            => await PlanAndApplyAsync(folderId, h => h.PlanMergeParagraphItem(itemId, MergeDirection.Next));
 
         private async Task ClearBookContentAsync(ProjectFolderId folderId)
         {

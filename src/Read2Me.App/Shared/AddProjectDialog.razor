@@ -66,39 +66,25 @@
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
 
-    string _title = "";
-    string _bookTitle = "";
-    string _author = "";
+    readonly AddProjectForm _form = new();
     IBrowserFile? _file;
-    BookFileType? _detectedType;
     string? _error;
     bool _busy;
 
-    bool IsValid =>
-        !string.IsNullOrWhiteSpace(_title) &&
-        !string.IsNullOrWhiteSpace(_bookTitle) &&
-        !string.IsNullOrWhiteSpace(_author) &&
-        _file != null &&
-        _detectedType != null;
+    string _title { get => _form.Title; set => _form.Title = value; }
+    string _bookTitle { get => _form.BookTitle; set => _form.BookTitle = value; }
+    string _author { get => _form.Author; set => _form.Author = value; }
+    BookFileType? _detectedType => _form.DetectedType;
 
-    void OnBookTitleBlur(FocusEventArgs _)
-    {
-        if (string.IsNullOrWhiteSpace(_title))
-            _title = _bookTitle;
-    }
+    bool IsValid => _form.IsValid;
+
+    void OnBookTitleBlur(FocusEventArgs _) => _form.OnBookTitleBlur();
 
     void OnFileChanged(InputFileChangeEventArgs e)
     {
         _file = e.File;
-        _detectedType = null;
         _error = null;
-
-        _detectedType = Path.GetExtension(e.File.Name).ToLowerInvariant() switch
-        {
-            ".epub" => BookFileType.Epub,
-            ".txt"  => BookFileType.Text,
-            _       => null,
-        };
+        _form.SetFile(e.File.Name);
     }
 
     async Task Submit()
@@ -108,8 +94,8 @@
         _error = null;
         await using var stream = _file!.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
         var result = await ProjectUseCases.CreateAsync(
-            _title, _bookTitle, _author,
-            _file.Name, stream, _detectedType!.Value);
+            _form.Title, _form.BookTitle, _form.Author,
+            _file.Name, stream, _form.DetectedType!.Value);
         _busy = false;
         if (result.IsSuccess)
             MudDialog.Close();

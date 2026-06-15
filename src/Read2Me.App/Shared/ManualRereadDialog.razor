@@ -87,18 +87,20 @@
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
 
-    bool _hasVolumes;
-    bool _hasParts;
+    readonly ManualRereadForm _form = new();
     bool _processing;
 
-    SplitDetectionMode _volumeMode = SplitDetectionMode.Prefix;
-    string _volumePrefix = "";
+    bool _hasVolumes { get => _form.HasVolumes; set => _form.HasVolumes = value; }
+    bool _hasParts { get => _form.HasParts; set => _form.HasParts = value; }
 
-    SplitDetectionMode _partMode = SplitDetectionMode.Prefix;
-    string _partPrefix = "";
+    SplitDetectionMode _volumeMode { get => _form.VolumeMode; set => _form.VolumeMode = value; }
+    string _volumePrefix { get => _form.VolumePrefix; set => _form.VolumePrefix = value; }
 
-    SplitDetectionMode _chapterMode = SplitDetectionMode.Prefix;
-    string _chapterPrefix = "";
+    SplitDetectionMode _partMode { get => _form.PartMode; set => _form.PartMode = value; }
+    string _partPrefix { get => _form.PartPrefix; set => _form.PartPrefix = value; }
+
+    SplitDetectionMode _chapterMode { get => _form.ChapterMode; set => _form.ChapterMode = value; }
+    string _chapterPrefix { get => _form.ChapterPrefix; set => _form.ChapterPrefix = value; }
 
     string? _error;
 
@@ -106,40 +108,13 @@
 
     async Task Submit()
     {
-        _error = null;
-
-        if (_hasVolumes && _volumeMode == SplitDetectionMode.Prefix && string.IsNullOrWhiteSpace(_volumePrefix))
-        {
-            _error = "Volume prefix cannot be empty.";
-            return;
-        }
-        if (_hasParts && _partMode == SplitDetectionMode.Prefix && string.IsNullOrWhiteSpace(_partPrefix))
-        {
-            _error = "Part prefix cannot be empty.";
-            return;
-        }
-        if (_chapterMode == SplitDetectionMode.Prefix && string.IsNullOrWhiteSpace(_chapterPrefix))
-        {
-            _error = "Chapter prefix cannot be empty.";
-            return;
-        }
+        _error = _form.Validate();
+        if (_error != null) return;
 
         _processing = true;
         StateHasChanged();
         await Task.Yield();
 
-        var options = new ManualReadOptions(
-            HasVolumes: _hasVolumes,
-            HasParts: _hasParts,
-            VolumeRule: _hasVolumes
-                ? new SectionSplitRule(_volumeMode, _volumeMode == SplitDetectionMode.Prefix ? _volumePrefix.Trim() : null)
-                : null,
-            PartRule: _hasParts
-                ? new SectionSplitRule(_partMode, _partMode == SplitDetectionMode.Prefix ? _partPrefix.Trim() : null)
-                : null,
-            ChapterRule: new SectionSplitRule(_chapterMode, _chapterMode == SplitDetectionMode.Prefix ? _chapterPrefix.Trim() : null)
-        );
-
-        MudDialog.Close(DialogResult.Ok(options));
+        MudDialog.Close(DialogResult.Ok(_form.BuildOptions()));
     }
 }
