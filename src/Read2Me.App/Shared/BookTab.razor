@@ -115,7 +115,7 @@ else
                 @foreach (var volume in Presenter.Volumes)
                 {
                     var vol = volume;
-                    <MudExpansionPanel IsExpanded="@Presenter.Tree.ExpandedVolumeIds.Contains(vol.Id)"
+                    <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedVolumeIds.Contains(vol.Id)"
                                       ExpandedChanged="@VolumeExpandCb(vol)">
                         <TitleContent>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
@@ -177,7 +177,7 @@ else
                     @foreach (var part in parts)
                     {
                         var p = part;
-                        <MudExpansionPanel IsExpanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
+                        <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
                                           ExpandedChanged="@PartExpandCb(p)">
                             <TitleContent>
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
@@ -214,7 +214,7 @@ else
             @foreach (var chapter in chapters)
             {
                 var ch = chapter;
-                <MudExpansionPanel IsExpanded="@Presenter.Tree.ExpandedChapterIds.Contains(ch.Id)"
+                <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedChapterIds.Contains(ch.Id)"
                                   ExpandedChanged="@ChapterExpandCb(ch)">
                     <TitleContent>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
