@@ -1,0 +1,189 @@
+@page "/llm-prompts"
+@inject LlmPromptService PromptService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudText Typo="Typo.h4" Class="mb-6">LLM Prompts</MudText>
+
+@if (_characterPrompt == null || _voicePrompt == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    @* Book Character Prompt *@
+    <MudPaper Class="pa-5 mb-6" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-1">Book Character Prompt</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Sent to the LLM to identify which character is speaking a paragraph, and how the line should be voiced.
+        </MudText>
+
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
+            @foreach (var token in _characterTokens)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@("{{" + token + "}}")</MudChip>
+            }
+        </MudStack>
+
+        <MudTextField @bind-Value="_characterPrompt" Label="Prompt template" Variant="Variant.Outlined"
+                      Lines="14" Class="mb-3" />
+
+        <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@CharacterAttributionSchema.JsonExample</MudText>
+        </MudPaper>
+
+        <MudExpansionPanels Elevation="0" Class="mb-3">
+            <MudExpansionPanel Text="Preview with sample values">
+                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@RenderCharacterPreview()</MudText>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveCharacterPromptAsync">
+                Save
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.RestartAlt"
+                       OnClick="ResetCharacterPromptAsync">
+                Reset to default
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @* Character Voice Prompt *@
+    <MudPaper Class="pa-5" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-1">Character Voice Prompt</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Sent to the LLM to generate a voice-design prompt for a specific character. Expects a single plain-text response.
+        </MudText>
+
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
+            @foreach (var token in _voiceTokens)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@("{{" + token + "}}")</MudChip>
+            }
+        </MudStack>
+
+        <MudTextField @bind-Value="_voicePrompt" Label="Prompt template" Variant="Variant.Outlined"
+                      Lines="10" Class="mb-3" />
+
+        <MudExpansionPanels Elevation="0" Class="mb-3">
+            <MudExpansionPanel Text="Preview with sample values">
+                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@RenderVoicePreview()</MudText>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveVoicePromptAsync">
+                Save
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.RestartAlt"
+                       OnClick="ResetVoicePromptAsync">
+                Reset to default
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    string? _characterPrompt;
+    string? _voicePrompt;
+
+    static readonly string[] _characterTokens =
+    [
+        PromptTemplates.BookTitle,
+        PromptTemplates.BookAuthor,
+        PromptTemplates.KnownCharacters,
+        PromptTemplates.ContextJson,
+        PromptTemplates.ResponseFormat,
+    ];
+
+    static readonly string[] _voiceTokens =
+    [
+        PromptTemplates.BookTitle,
+        PromptTemplates.BookAuthor,
+        PromptTemplates.CharacterName,
+    ];
+
+    static readonly IReadOnlyDictionary<string, string> _sampleValues =
+        new Dictionary<string, string>
+        {
+            [PromptTemplates.BookTitle]       = "The Hobbit",
+            [PromptTemplates.BookAuthor]      = "J.R.R. Tolkien",
+            [PromptTemplates.KnownCharacters] = "[\"Bilbo\", \"Gandalf\", \"Thorin\"]",
+            [PromptTemplates.ContextJson]     = """
+                {
+                  "preceding": [
+                    { "paragraph": "The road goes ever on and on, down from the door where it began.", "speaker": "Narrator" },
+                    { "paragraph": "\"You are a very fine person, Mr. Baggins,\" said Gandalf.", "speaker": "Gandalf" }
+                  ],
+                  "query": { "paragraph": "\"I'm going on an adventure!\" he cried." },
+                  "following": [
+                    { "paragraph": "He paused and looked back. The sun was already westering." }
+                  ]
+                }
+                """,
+            [PromptTemplates.CharacterName]   = "Gandalf",
+            [PromptTemplates.ResponseFormat]  = CharacterAttributionSchema.JsonExample,
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        PromptService.OnChanged += HandleChanged;
+        await LoadAsync();
+    }
+
+    void HandleChanged() => InvokeAsync(LoadAsync);
+
+    async Task LoadAsync()
+    {
+        _characterPrompt = await PromptService.GetCharacterPromptAsync();
+        _voicePrompt = await PromptService.GetVoicePromptAsync();
+        StateHasChanged();
+    }
+
+    string RenderCharacterPreview() =>
+        _characterPrompt is null ? string.Empty : PromptTemplates.Render(_characterPrompt, _sampleValues);
+
+    string RenderVoicePreview() =>
+        _voicePrompt is null ? string.Empty : PromptTemplates.Render(_voicePrompt, _sampleValues);
+
+    async Task SaveCharacterPromptAsync()
+    {
+        await PromptService.SetCharacterPromptAsync(_characterPrompt ?? string.Empty);
+        Snackbar.Add("Character prompt saved", Severity.Success);
+    }
+
+    async Task ResetCharacterPromptAsync()
+    {
+        await PromptService.ResetCharacterPromptAsync();
+        await LoadAsync();
+        Snackbar.Add("Character prompt reset to default", Severity.Info);
+    }
+
+    async Task SaveVoicePromptAsync()
+    {
+        await PromptService.SetVoicePromptAsync(_voicePrompt ?? string.Empty);
+        Snackbar.Add("Voice prompt saved", Severity.Success);
+    }
+
+    async Task ResetVoicePromptAsync()
+    {
+        await PromptService.ResetVoicePromptAsync();
+        await LoadAsync();
+        Snackbar.Add("Voice prompt reset to default", Severity.Info);
+    }
+
+    public void Dispose()
+    {
+        PromptService.OnChanged -= HandleChanged;
+    }
+}

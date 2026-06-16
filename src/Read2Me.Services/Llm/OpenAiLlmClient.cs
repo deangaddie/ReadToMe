@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
 
 namespace Read2Me.Services.Llm
@@ -18,16 +19,20 @@ namespace Read2Me.Services.Llm
     public sealed class OpenAiLlmClient : ILlmClient
     {
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<OpenAiLlmClient> _logger;
 
-        public OpenAiLlmClient(IHttpClientFactory httpClientFactory)
+        public OpenAiLlmClient(IHttpClientFactory httpClientFactory, ILogger<OpenAiLlmClient> logger)
         {
             _httpClientFactory = httpClientFactory;
+            _logger = logger;
         }
 
         public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
             LlmServerConfig config, string prompt,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
+            _logger.LogTrace("LLM prompt:\n{Prompt}", prompt);
+
             var http = CreateClient(config);
 
             var body = OpenAiRequestBuilder.BuildChatBody(config, prompt, stream: true);
@@ -43,14 +48,29 @@ namespace Read2Me.Services.Llm
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var reader = new StreamReader(stream);
 
+            var thinkingBuilder = new StringBuilder();
+            var responseBuilder = new StringBuilder();
+
             while (await reader.ReadLineAsync(ct) is { } line)
             {
                 var result = OpenAiStreamParser.ParseLine(line);
                 if (result.Kind == OpenAiStreamParser.LineKind.Done)
                     break;
                 if (result.Kind == OpenAiStreamParser.LineKind.Chunk)
-                    yield return result.Chunk!;
+                {
+                    var chunk = result.Chunk!;
+                    if (chunk.Thinking is { } thinking)
+                        thinkingBuilder.Append(thinking);
+                    if (chunk.Content is { } content)
+                        responseBuilder.Append(content);
+                    yield return chunk;
+                }
             }
+
+            if (thinkingBuilder.Length > 0)
+                _logger.LogTrace("LLM thinking:\n{Thinking}", thinkingBuilder.ToString());
+
+            _logger.LogTrace("LLM response:\n{Response}", responseBuilder.ToString());
 
             yield return new LlmChatChunk(null, null, Done: true);
         }

@@ -9,6 +9,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Characters;
 using Read2Me.Services.UseCases;
 using Xunit;
 
@@ -82,7 +83,8 @@ namespace Read2Me.Tests.State
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
             var selectionCoordinator = new SelectionCoordinator(reader);
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, selectionCoordinator, dialogService);
+            var characterQueue = new CharacterQueueService();
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, selectionCoordinator, dialogService, characterQueue);
             return new Context(presenter, reader, commandHandler, bookUseCases, treeState);
         }
 
@@ -655,6 +657,43 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.ResetAndLoadAsync(Folder);
 
             Assert.Equal(0, ctx.Presenter.Selection.SelectedParagraphCount);
+        }
+
+        // ---------------------------------------------------------------
+        // SetItemCharacterAsync clears queue outcome
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task SetItemCharacterAsync_ClearsQueueOutcome()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            // Need access to the CharacterQueueService used by the presenter.
+            // Re-create the context keeping the same queue instance so we can inspect it.
+            var reader = ctx.Reader;
+            var commandHandler = ctx.CommandHandler;
+            var dialogService = Substitute.For<IDialogService>();
+            var queue = new CharacterQueueService();
+            var hierarchyLoader = new BookHierarchyLoader(reader);
+            var treeState = new BookTreeState(hierarchyLoader);
+            var selectionState = new BookSelectionState();
+            var selectionCoordinator = new SelectionCoordinator(reader);
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, new FakeBookUseCases(),
+                treeState, selectionState, selectionCoordinator, dialogService, queue);
+            await presenter.LoadAsync(Folder);
+
+            var paragraphId = Guid.NewGuid();
+            var queuedItem = new QueuedParagraph(Folder, paragraphId, "Preview", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            queue.Enqueue([queuedItem]);
+            queue.MarkProcessing(queuedItem);
+            queue.MarkFailed(queuedItem, "some error");
+            Assert.NotNull(queue.OutcomeOf(Folder, paragraphId));
+
+            var item = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paragraphId, Order = "a" };
+            await presenter.SetItemCharacterAsync(Folder, item, null);
+
+            Assert.Null(queue.OutcomeOf(Folder, paragraphId));
         }
     }
 }

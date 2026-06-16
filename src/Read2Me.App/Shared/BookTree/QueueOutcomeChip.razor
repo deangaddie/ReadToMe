@@ -1,0 +1,25 @@
+@using MudBlazor
+@using Read2Me.Services.Characters
+
+@if (Outcome.Kind == ParagraphOutcomeKind.Failed)
+{
+    <MudTooltip Text="@(Outcome.Reason ?? "Failed")" Placement="Placement.Top">
+        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text"
+                 Icon="@Icons.Material.Outlined.ErrorOutline" Class="mt-0"
+                 Style="pointer-events:none; opacity:0.75;">
+            Failed
+        </MudChip>
+    </MudTooltip>
+}
+else
+{
+    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+             Icon="@Icons.Material.Outlined.HelpOutline" Class="mt-0"
+             Style="pointer-events:none; opacity:0.75;">
+        Unknown
+    </MudChip>
+}
+
+@code {
+    [Parameter, EditorRequired] public ParagraphOutcome Outcome { get; set; } = null!;
+}

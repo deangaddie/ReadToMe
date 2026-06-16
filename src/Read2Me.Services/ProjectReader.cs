@@ -232,6 +232,80 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(
+            ProjectFolderId folderId, IEnumerable<Guid> paragraphIds)
+        {
+            var ids = paragraphIds.ToHashSet();
+            var db = await _session.OpenAsync(folderId);
+            return await db.Paragraphs
+                .Where(p => ids.Contains(p.Id))
+                .OrderBy(p => p.Chapter.Part.Volume.Order)
+                .ThenBy(p => p.Chapter.Part.Order)
+                .ThenBy(p => p.Chapter.Order)
+                .ThenBy(p => p.Order)
+                .Select(p => ValueTuple.Create(
+                    p.Id,
+                    p.Items
+                        .Where(i => i.ItemType == ParagraphItemType.Character)
+                        .OrderBy(i => i.Order)
+                        .Select(i => i.Text ?? "")
+                        .FirstOrDefault() ?? ""))
+                .ToListAsync();
+        }
+
+        public async Task<ParagraphContext?> GetParagraphContextAsync(
+            ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            var paragraphs = await db.Paragraphs
+                .Where(p => p.ChapterId == chapterId)
+                .OrderBy(p => p.Order)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.CharacterId,
+                    CharacterName = p.Character != null ? p.Character.Name : null,
+                    HasCharacterItem = p.Items.Any(i => i.ItemType == ParagraphItemType.Character),
+                    HasContentItem = p.Items.Any(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration),
+                    Text = string.Join(" ", p.Items
+                        .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                        .OrderBy(i => i.Order)
+                        .Select(i => i.Text ?? ""))
+                })
+                .ToListAsync();
+
+            var idx = paragraphs.FindIndex(p => p.Id == paragraphId);
+            if (idx < 0)
+                return null;
+
+            // CharacterId set -> known speaker name. No CharacterId + has Character item -> dialog unattributed -> null. No Character items -> narration.
+            static string? ResolveSpeaker(string? characterName, bool hasCharacterItem)
+                => characterName ?? (hasCharacterItem ? null : "Narrator");
+
+            var contentParagraphs = paragraphs.Where(p => p.HasContentItem).ToList();
+            var contentIdx = contentParagraphs.FindIndex(p => p.Id == paragraphId);
+
+            int precedingStart = Math.Max(0, contentIdx - before);
+            var preceding = contentParagraphs
+                .GetRange(precedingStart, contentIdx - precedingStart)
+                .Select(p => new ContextParagraph(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem)))
+                .ToList();
+
+            int followingStart = contentIdx + 1;
+            int followingCount = Math.Min(after, contentParagraphs.Count - followingStart);
+            var following = followingCount > 0
+                ? contentParagraphs.GetRange(followingStart, followingCount)
+                    .Select(p => new ContextParagraph(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem)))
+                    .ToList()
+                : new List<ContextParagraph>();
+
+            var q = paragraphs[idx];
+            return new ParagraphContext(
+                new ContextParagraph(q.Text, ResolveSpeaker(q.CharacterName, q.HasCharacterItem)),
+                preceding, following);
+        }
+
         public async Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);

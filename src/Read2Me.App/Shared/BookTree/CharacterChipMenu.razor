@@ -1,0 +1,43 @@
+@using Read2Me.App.State
+@using Read2Me.Data.Entities
+@inject BookHierarchyPresenter Presenter
+
+<MudMenu @bind-Open="_open" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="true"
+         PositionAtCursor="false">
+    <ActivatorContent>
+        <MudChip T="string" Size="Size.Small"
+                 Color="@Color"
+                 Variant="@Variant"
+                 Icon="@Icon"
+                 Class="mt-0"
+                 Style="@($"{Style} cursor:pointer;")"
+                 OnClick="@(() => _open = true)">
+            @Label
+        </MudChip>
+    </ActivatorContent>
+    <ChildContent>
+        <MudMenuItem OnClick="@(() => Select(null))">Unknown</MudMenuItem>
+        @foreach (var ch in Presenter.Characters)
+        {
+            var c = ch;
+            <MudMenuItem OnClick="@(() => Select(c.Id))">@c.Name</MudMenuItem>
+        }
+    </ChildContent>
+</MudMenu>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public Variant Variant { get; set; } = Variant.Filled;
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string Style { get; set; } = "";
+    [Parameter, EditorRequired] public EventCallback<Guid?> OnSelected { get; set; }
+
+    private bool _open;
+
+    private async Task Select(Guid? characterId)
+    {
+        _open = false;
+        await OnSelected.InvokeAsync(characterId);
+    }
+}

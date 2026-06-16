@@ -87,6 +87,12 @@ namespace Read2Me.App.State
         private bool IsChapterNode(Guid id) =>
             _selected.Values.Any(s => s?.ChapterId == id);
 
+        public IEnumerable<Guid> SelectedParagraphIds() =>
+            _selected.Where(kv => kv.Value is not null).Select(kv => kv.Key);
+
+        public ParagraphSelection? GetAncestry(Guid paragraphId) =>
+            _selected.TryGetValue(paragraphId, out var v) ? v : null;
+
         public void Clear() => _selected.Clear();
 
         // Count selected paragraphs whose ancestry matches a given node id.

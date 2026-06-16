@@ -49,6 +49,8 @@ namespace Read2Me.Services
                 case MergeParagraphItemCommand c:
                     await PlanAndApplyAsync(c.FolderId, h => h.PlanMergeParagraphItem(c.ItemId, c.Direction)); break;
                 case SetItemCharacterCommand c: await SetParagraphItemCharacterAsync(c.FolderId, c.ItemId, c.CharacterId); break;
+                case CreateCharacterCommand c: return await CreateCharacterAsync(c.FolderId, c.Name);
+                case SetParagraphCharacterCommand c: await SetParagraphCharacterAsync(c.FolderId, c.ParagraphId, c.CharacterId, c.VoiceInstructions); break;
                 case AddBookTitleCommand c: await AddBookTitleAsync(c.FolderId); break;
                 case AddVolumeTitlesCommand c: await AddVolumeTitlesAsync(c.FolderId); break;
                 case AddPartTitlesCommand c: await AddPartTitlesAsync(c.FolderId); break;
@@ -91,6 +93,33 @@ namespace Read2Me.Services
             item.Character = characterId.HasValue
                 ? await db.Characters.FindAsync(characterId.Value)
                 : null;
+            await db.SaveChangesAsync();
+        }
+
+        private async Task<Guid?> CreateCharacterAsync(ProjectFolderId folderId, string name)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var existing = await db.Characters.FirstOrDefaultAsync(c => c.Name == name);
+            if (existing != null) return existing.Id;
+            var character = new Character { Id = Guid.NewGuid(), Name = name };
+            db.Characters.Add(character);
+            await db.SaveChangesAsync();
+            return character.Id;
+        }
+
+        private async Task SetParagraphCharacterAsync(
+            ProjectFolderId folderId, Guid paragraphId, Guid characterId, string? voiceInstructions)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var items = await db.ParagraphItems
+                .Where(i => i.ParagraphId == paragraphId && i.ItemType == ParagraphItemType.Character)
+                .ToListAsync();
+            foreach (var item in items)
+            {
+                item.CharacterId = characterId;
+                if (voiceInstructions != null)
+                    item.VoiceInstructions = voiceInstructions;
+            }
             await db.SaveChangesAsync();
         }
 

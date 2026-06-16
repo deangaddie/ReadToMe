@@ -6,6 +6,14 @@ using Read2Me.Data.Entities;
 
 namespace Read2Me.Services
 {
+    public sealed record ContextParagraph(string Text, string? Speaker);
+
+    /// <summary>Text of a target paragraph plus its nearest neighbours within the same chapter.</summary>
+    public sealed record ParagraphContext(
+        ContextParagraph Query,
+        IReadOnlyList<ContextParagraph> Preceding,
+        IReadOnlyList<ContextParagraph> Following);
+
     public interface IProjectReader
     {
         IReadOnlyList<string> GetProjects();
@@ -32,5 +40,17 @@ namespace Read2Me.Services
 
         // All volume/part/chapter node ids that contain at least one character paragraph.
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);
+
+        // Returns paragraphs from the given id set ordered by book position (Volume→Part→Chapter→Paragraph order).
+        // Preview is the first character item's text, truncated.
+        Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds);
+
+        /// <summary>
+        /// Returns the text of <paramref name="paragraphId"/> plus up to <paramref name="before"/> preceding
+        /// and <paramref name="after"/> following paragraphs within the same chapter.
+        /// Returns null if the paragraph is not found.
+        /// </summary>
+        Task<ParagraphContext?> GetParagraphContextAsync(
+            ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after);
     }
 }

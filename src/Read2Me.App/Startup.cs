@@ -12,6 +12,8 @@ using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
 using Read2Me.Services;
 using Read2Me.Services.Books;
+using Read2Me.App.Characters;
+using Read2Me.Services.Characters;
 using Read2Me.Services.IO;
 using Read2Me.Services.UseCases;
 using Read2Me.App.State;
@@ -35,10 +37,15 @@ namespace Read2Me.App
             services.Configure<WorkspaceOptions>(Configuration.GetSection(WorkspaceOptions.SectionName));
             services.AddSingleton<ThemeService>();
             services.AddSingleton<IFileSystem, FileSystemService>();
+            services.AddSingleton<CharacterQueueService>();
+            services.AddSingleton<Read2Me.Services.Llm.LlmStreamBroadcaster>();
+            services.AddHostedService<CharacterQueueWorker>();
 
             services.AddHttpClient();
             services.AddScoped<LlmSettingsService>();
+            services.AddScoped<LlmPromptService>();
             services.AddScoped<Read2Me.Services.Llm.ILlmClient, Read2Me.Services.Llm.OpenAiLlmClient>();
+            services.AddScoped<Read2Me.Services.Characters.CharacterAttributionService>();
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
 
             services.AddScoped<ProjectDbSession>();

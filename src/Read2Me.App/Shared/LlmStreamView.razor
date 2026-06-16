@@ -1,0 +1,154 @@
+@using Read2Me.Services.Llm
+@using System.Text
+@inject LlmStreamBroadcaster Broadcaster
+@implements IDisposable
+
+<div @ref="_scrollContainer"
+     style="height:100%; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:4px;">
+    @if (_turns.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="padding:16px; text-align:center;">
+            Waiting for next LLM request...
+        </MudText>
+    }
+    @foreach (var turn in _turns)
+    {
+        <MudCard Outlined="true">
+            @if (!string.IsNullOrEmpty(turn.Preview))
+            {
+                <MudCardHeader Style="padding:8px 16px; background:var(--mud-palette-background-grey);">
+                    <CardHeaderContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Style="opacity:0.6;" />
+                            <MudText Typo="Typo.caption" Style="opacity:0.8; font-weight:600;">Request</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity:0.5;">— @turn.Preview</MudText>
+                        </MudStack>
+                    </CardHeaderContent>
+                </MudCardHeader>
+            }
+            @if (turn.Prompt.Length > 0)
+            {
+                <div style="padding:8px 16px; border-bottom:1px solid var(--mud-palette-divider);">
+                    <MudText Typo="Typo.caption"
+                             Style="white-space:pre-wrap; font-family:monospace; opacity:0.75; font-size:0.7rem; max-height:120px; overflow-y:auto; display:block;">
+                        @turn.Prompt</MudText>
+                </div>
+            }
+            @if (turn.Thinking.Length > 0)
+            {
+                <div
+                    style="padding:8px 16px; border-bottom:1px solid var(--mud-palette-divider); background:var(--mud-palette-background-grey); opacity:0.8;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="margin-bottom:4px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Style="opacity:0.6;" />
+                        <MudText Typo="Typo.caption" Style="opacity:0.6; font-style:italic;">Thinking</MudText>
+                    </MudStack>
+                    <div style="max-height:200px; overflow-y:auto;">
+                        <MudText Typo="Typo.caption"
+                                 Style="white-space:pre-wrap; font-family:monospace; font-style:italic; opacity:0.65; font-size:0.7rem;">
+                            @turn.Thinking.ToString()</MudText>
+                    </div>
+                </div>
+            }
+            @if (turn.Response.Length > 0 || turn.IsStreaming)
+            {
+                <div
+                    style="padding:8px 16px; @(turn.FailureReason != null ? "border-bottom:1px solid var(--mud-palette-divider);" : "")">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="margin-bottom:4px;">
+                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" Style="opacity:0.6;" />
+                        <MudText Typo="Typo.caption" Style="opacity:0.6;">Response</MudText>
+                        @if (turn.IsStreaming)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                                                 Style="width:10px;height:10px;opacity:0.6;" />
+                        }
+                    </MudStack>
+                    <div style="max-height:200px; overflow-y:auto;">
+                        <MudText Typo="Typo.body2"
+                                 Style="white-space:pre-wrap; font-family:monospace; font-size:0.78rem;">
+                            @turn.Response.ToString()</MudText>
+                    </div>
+                </div>
+            }
+            @if (turn.FailureReason != null)
+            {
+                <div style="padding:8px 16px;">
+                    <MudText Typo="Typo.caption" Color="Color.Error">@turn.FailureReason</MudText>
+                </div>
+            }
+            @if (turn.Stats != null)
+            {
+                <div style="padding:4px 16px 8px; opacity:0.5;">
+                    <MudText Typo="Typo.caption">
+                        @turn.Stats.TokensIn in · @turn.Stats.TokensOut out · @turn.Stats.ElapsedSeconds.ToString("F1")s
+                        · @turn.Stats.TokensPerSecond.ToString("F1") tok/s
+                    </MudText>
+                </div>
+            }
+        </MudCard>
+    }
+</div>
+
+@code {
+    private readonly List<StreamTurn> _turns = new();
+    private ElementReference _scrollContainer;
+
+    protected override void OnInitialized() => Broadcaster.Event += OnEvent;
+
+    private void OnEvent(LlmStreamEvent e)
+    {
+        InvokeAsync(() =>
+        {
+            Apply(e);
+            StateHasChanged();
+        });
+    }
+
+    private void Apply(LlmStreamEvent e)
+    {
+        switch (e)
+        {
+            case RequestStarted rs:
+                _turns.Add(new StreamTurn { Preview = rs.ParagraphPreview, Prompt = rs.Prompt });
+                break;
+
+            case ThinkingDelta td:
+                CurrentTurn?.Thinking.Append(td.Text);
+                break;
+
+            case ContentDelta cd:
+                CurrentTurn?.Response.Append(cd.Text);
+                break;
+
+            case StreamCompleted sc:
+                if (CurrentTurn is { } t)
+                {
+                    t.IsStreaming = false;
+                    t.Stats = sc;
+                }
+                break;
+
+            case StreamFailed sf:
+                if (CurrentTurn is { } ft)
+                {
+                    ft.IsStreaming = false;
+                    ft.FailureReason = sf.Reason;
+                }
+                break;
+        }
+    }
+
+    private StreamTurn? CurrentTurn => _turns.LastOrDefault();
+
+    public void Dispose() => Broadcaster.Event -= OnEvent;
+
+    private sealed class StreamTurn
+    {
+        public string Preview { get; init; } = string.Empty;
+        public string Prompt { get; init; } = string.Empty;
+        public StringBuilder Thinking { get; } = new();
+        public StringBuilder Response { get; } = new();
+        public bool IsStreaming { get; set; } = true;
+        public StreamCompleted? Stats { get; set; }
+        public string? FailureReason { get; set; }
+    }
+}

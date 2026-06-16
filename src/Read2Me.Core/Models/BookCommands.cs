@@ -34,6 +34,8 @@ public record MergeParagraphItemCommand(ProjectFolderId FolderId, Guid ItemId, M
 
 // Character
 public record SetItemCharacterCommand(ProjectFolderId FolderId, Guid ItemId, Guid? CharacterId) : BookCommand(FolderId);
+public record CreateCharacterCommand(ProjectFolderId FolderId, string Name) : BookCommand(FolderId);
+public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid ParagraphId, Guid CharacterId, string? VoiceInstructions = null) : BookCommand(FolderId);
 
 // Title insertion
 public record AddBookTitleCommand(ProjectFolderId FolderId) : BookCommand(FolderId);

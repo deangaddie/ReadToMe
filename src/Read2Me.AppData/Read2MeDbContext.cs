@@ -12,5 +12,6 @@ namespace Read2Me.AppData
         public DbSet<AppTheme> Themes => Set<AppTheme>();
         public DbSet<AppSettings> Settings => Set<AppSettings>();
         public DbSet<LlmServerConfig> LlmServerConfigs => Set<LlmServerConfig>();
+        public DbSet<LlmPromptSettings> PromptSettings => Set<LlmPromptSettings>();
     }
 }

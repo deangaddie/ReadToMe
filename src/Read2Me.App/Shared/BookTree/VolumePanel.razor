@@ -2,7 +2,10 @@
 @using Read2Me.App.Shared.BookMenus
 @using Read2Me.Core.Models
 @using Read2Me.Data.Entities
+@using Read2Me.Services.Characters
 @inject BookHierarchyPresenter Presenter
+@inject CharacterQueueService Queue
+@implements IDisposable
 
 @if (IsSingleVolume)
 {
@@ -13,6 +16,9 @@ else
     <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedVolumeIds.Contains(Volume.Id)"
                       ExpandedChanged="@VolumeExpandCb">
         <TitleContent>
+            @{
+                var volNodeSummary = Queue.SummaryForNode(FolderId, Volume.Id);
+            }
             <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
                 @if (Presenter.IsNodeSelectable(Volume.Id))
                 {
@@ -27,6 +33,17 @@ else
                     </span>
                 }
                 <MudText Style="flex:1">@Volume.Title</MudText>
+                @if (volNodeSummary.HasProcessing)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
+                             Icon="@Icons.Material.Filled.HourglassEmpty" Class="mt-0"
+                             Style="pointer-events:none;">Processing</MudChip>
+                }
+                @if (volNodeSummary.QueuedCount > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                             Class="mt-0" Style="pointer-events:none;">@volNodeSummary.QueuedCount queued</MudChip>
+                }
                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForVolume(FolderId, Volume)"
                              IsFirst="IsFirst"
                              IsLast="IsLast"
@@ -56,6 +73,12 @@ else
     [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitVolume { get; set; }
     [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitPart { get; set; }
     [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitChapter { get; set; }
+
+    protected override void OnInitialized() => Queue.Changed += Refresh;
+
+    void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Queue.Changed -= Refresh;
 
     EventCallback<bool> VolumeExpandCb =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnVolumeExpandedAsync(Volume, b));

@@ -1,11 +1,19 @@
 @using Read2Me.App.State
 @using Read2Me.Data.Entities
+@using Read2Me.Services.Characters
 @inject BookHierarchyPresenter Presenter
+@inject CharacterQueueService Queue
 @implements IDisposable
+
+@{
+    var snap = Queue.Snapshot();
+    var queueBarActive = snap.QueuedCount > 0 || snap.ProcessingCount > 0;
+    var bottomOffset = queueBarActive ? "38px" : "0";
+}
 
 @if (Presenter.SelectedParagraphCount > 0)
 {
-    <div style="position:fixed; bottom:0; left:0; right:0; z-index:1300;
+    <div style="position:fixed; bottom:@bottomOffset; left:0; right:0; z-index:1300;
                 background:var(--mud-palette-surface);
                 border-top:1px solid var(--mud-palette-divider);
                 box-shadow:0 -2px 8px rgba(0,0,0,0.15);
@@ -17,7 +25,13 @@
         </MudText>
 
         <MudSpacer />
-        <span><!-- action area placeholder --></span>
+        <MudButton StartIcon="@Icons.Material.Filled.Add"
+                   Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Size="Size.Small"
+                   OnClick="AddToQueue">
+            Add to Character queue
+        </MudButton>
     </div>
 }
 
@@ -26,6 +40,8 @@
     {
         Presenter.StateChanged += Refresh;
     }
+
+    Task AddToQueue() => Presenter.AddSelectionToCharacterQueue();
 
     void Refresh() => InvokeAsync(StateHasChanged);
 

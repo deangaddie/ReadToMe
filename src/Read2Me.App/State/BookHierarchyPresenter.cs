@@ -6,6 +6,7 @@ using MudBlazor;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Characters;
 using Read2Me.Services.UseCases;
 
 namespace Read2Me.App.State
@@ -17,7 +18,8 @@ namespace Read2Me.App.State
         BookTreeState treeState,
         BookSelectionState selectionState,
         SelectionCoordinator selectionCoordinator,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        CharacterQueueService characterQueue)
     {
         public bool IsLoading { get; private set; }
         public bool HasContent { get; private set; }
@@ -127,6 +129,7 @@ namespace Read2Me.App.State
         public async Task SetItemCharacterAsync(ProjectFolderId folderId, ParagraphItem item, Guid? characterId)
         {
             await commandHandler.ExecuteAsync(new SetItemCharacterCommand(folderId, item.Id, characterId));
+            characterQueue.ClearOutcome(folderId, item.ParagraphId);
 
             var character = characterId.HasValue ? Characters.Find(c => c.Id == characterId.Value) : null;
             if (characterId.HasValue && character is null)
@@ -137,6 +140,35 @@ namespace Read2Me.App.State
 
             item.CharacterId = characterId;
             item.Character = character;
+            NotifyStateChanged();
+        }
+
+        public async Task SetParagraphCharacterAsync(ProjectFolderId folderId, Paragraph paragraph, Guid? characterId)
+        {
+            characterQueue.ClearOutcome(folderId, paragraph.Id);
+
+            var character = characterId.HasValue ? Characters.Find(c => c.Id == characterId.Value) : null;
+
+            var charItems = paragraph.Items
+                .Where(i => i.ItemType == Data.Enums.ParagraphItemType.Character)
+                .ToList();
+
+            if (characterId.HasValue)
+            {
+                await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId.Value));
+            }
+            else
+            {
+                foreach (var item in charItems)
+                    await commandHandler.ExecuteAsync(new SetItemCharacterCommand(folderId, item.Id, null));
+            }
+
+            foreach (var item in charItems)
+            {
+                item.CharacterId = characterId;
+                item.Character = character;
+            }
+
             NotifyStateChanged();
         }
 
@@ -188,6 +220,28 @@ namespace Read2Me.App.State
         }
 
         public int SelectedParagraphCount => Selection?.SelectedParagraphCount ?? 0;
+
+        public ProjectFolderId? CurrentFolder => _lastFolder;
+
+        public async Task AddSelectionToCharacterQueue()
+        {
+            if (_lastFolder is not { } folder || Selection is null) return;
+
+            var selectedIds = Selection.SelectedParagraphIds().ToList();
+            if (selectedIds.Count == 0) return;
+
+            var ordered = await reader.GetOrderedParagraphsAsync(folder, selectedIds);
+            var items = ordered.Select(p =>
+            {
+                var anc = Selection.GetAncestry(p.ParagraphId);
+                return new QueuedParagraph(folder, p.ParagraphId, p.Preview,
+                    anc?.ChapterId ?? Guid.Empty, anc?.PartId ?? Guid.Empty, anc?.VolumeId ?? Guid.Empty);
+            });
+
+            characterQueue.Enqueue(items);
+            Selection.Clear();
+            NotifyStateChanged();
+        }
 
         private async Task ExecuteAndReloadAsync(
             ProjectFolderId folderId,
