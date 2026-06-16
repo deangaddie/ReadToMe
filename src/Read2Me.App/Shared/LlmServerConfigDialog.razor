@@ -1,0 +1,133 @@
+@inject ILlmClient LlmClient
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_form.Name" Label="Name" Variant="Variant.Outlined"
+                          Required="true" Immediate="true" />
+
+            <MudSelect T="LlmApiType" @bind-Value="_form.ApiType" Label="API Type" Variant="Variant.Outlined">
+                @foreach (var apiType in Enum.GetValues<LlmApiType>())
+                {
+                    <MudSelectItem Value="@apiType">@apiType</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
+                          Placeholder="http://localhost:8080" Required="true" Immediate="true"
+                          UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
+
+            <MudTextField @bind-Value="_form.ApiKey" Label="API Key (optional)" Variant="Variant.Outlined"
+                          InputType="InputType.Password"
+                          UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "new-password" })" />
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Download"
+                           OnClick="GetModelsAsync" Disabled="_loadingModels">
+                    @if (_loadingModels)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Get models
+                </MudButton>
+            </MudStack>
+
+            @if (_models is { Count: > 0 })
+            {
+                <MudSelect T="string" @bind-Value="_form.Model" Label="Model (optional)" Variant="Variant.Outlined"
+                           Clearable="true">
+                    @foreach (var model in _models)
+                    {
+                        <MudSelectItem Value="@model">@model</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else
+            {
+                <MudTextField @bind-Value="_form.Model" Label="Model (optional)" Variant="Variant.Outlined"
+                              HelperText="@_modelsHint" />
+            }
+
+            <MudExpansionPanels Elevation="0">
+                <MudExpansionPanel Text="Request parameters (optional)">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Leave blank to use the server default.
+                        </MudText>
+                        <MudTextField @bind-Value="_form.Temperature" Label="Temperature" Variant="Variant.Outlined" />
+                        <MudTextField @bind-Value="_form.TopP" Label="Top P" Variant="Variant.Outlined" />
+                        <MudTextField @bind-Value="_form.MaxTokens" Label="Max tokens" Variant="Variant.Outlined" />
+                        <MudTextField @bind-Value="_form.FrequencyPenalty" Label="Frequency penalty" Variant="Variant.Outlined" />
+                        <MudTextField @bind-Value="_form.PresencePenalty" Label="Presence penalty" Variant="Variant.Outlined" />
+                    </MudStack>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
+            @if (_error != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Existing config to edit; null for a new one.</summary>
+    [Parameter] public LlmServerConfig? Config { get; set; }
+
+    LlmServerConfigForm _form = new();
+    List<string>? _models;
+    string? _modelsHint;
+    bool _loadingModels;
+    string? _error;
+
+    protected override void OnInitialized()
+    {
+        _form = Config != null ? LlmServerConfigForm.FromConfig(Config) : new LlmServerConfigForm();
+    }
+
+    async Task GetModelsAsync()
+    {
+        _error = null;
+        _modelsHint = null;
+        _loadingModels = true;
+        try
+        {
+            var models = await LlmClient.GetModelsAsync(_form.BuildConfig());
+            if (models.Count > 0)
+            {
+                _models = [.. models];
+            }
+            else
+            {
+                _models = null;
+                _modelsHint = "Server returned no models — type one manually.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _models = null;
+            _modelsHint = $"Could not fetch models ({ex.Message}) — type one manually.";
+        }
+        finally
+        {
+            _loadingModels = false;
+        }
+    }
+
+    void Submit()
+    {
+        _error = _form.Validate();
+        if (_error != null) return;
+        MudDialog.Close(DialogResult.Ok(_form.BuildConfig()));
+    }
+
+    void Cancel() => MudDialog.Cancel();
+}

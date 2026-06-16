@@ -1,0 +1,271 @@
+@page "/llm-settings"
+@using System.Text
+@using System.Threading
+@inject LlmSettingsService SettingsService
+@inject ILlmClient LlmClient
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5">
+    <MudText Typo="Typo.h4">LLM Settings</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenAddDialog">
+        New Configuration
+    </MudButton>
+</MudStack>
+
+@if (_configs == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_configs.Count == 0)
+{
+    <MudText Typo="Typo.body1" Color="Color.Secondary">
+        No LLM configurations yet. Create one to get started.
+    </MudText>
+}
+else
+{
+    <MudGrid>
+        @foreach (var config in _configs)
+        {
+            var c = config;
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Outlined="true">
+                    <MudCardContent Class="pb-0">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.h6">@c.Name</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@c.ApiType</MudChip>
+                        </MudStack>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@c.BaseUrl</MudText>
+                        @if (!string.IsNullOrWhiteSpace(c.Model))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Model: @c.Model</MudText>
+                        }
+                    </MudCardContent>
+                    <MudCardActions>
+                        @if (_activeConfigId == c.Id)
+                        {
+                            <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle"
+                                     Size="Size.Small" Variant="Variant.Filled">Active</MudChip>
+                        }
+                        else
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                       OnClick="() => SelectConfigAsync(c.Id)">Apply</MudButton>
+                        }
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="() => OpenEditDialog(c)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                       Color="Color.Error" OnClick="() => DeleteConfigAsync(c.Id)" />
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@if (_activeConfig != null)
+{
+    <MudPaper Class="pa-4 mt-6" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-3">Test "@_activeConfig.Name"</MudText>
+        <MudTextField @bind-Value="_prompt" Label="Prompt" Variant="Variant.Outlined"
+                      Lines="3" Class="mb-3" Disabled="_streaming" />
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="SendAsync"
+                       Disabled="@(_streaming || string.IsNullOrWhiteSpace(_prompt))">
+                Send
+            </MudButton>
+            @if (_streaming)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Stop" OnClick="Stop">
+                    Stop
+                </MudButton>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @($"{_currentTps:F1} tok/s")
+                </MudText>
+            }
+            else if (_stats != null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @($"avg {_stats.AvgTps:F1} tok/s · ↑ {_stats.TokensIn} · ↓ {_stats.TokensOut} · {_stats.Elapsed.TotalSeconds:F1}s")
+                </MudText>
+            }
+        </MudStack>
+
+        @if (_thinking.Length > 0)
+        {
+            <MudExpansionPanels Elevation="0" Class="mb-2">
+                <MudExpansionPanel Text="Thinking" Expanded="true">
+                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap;opacity:0.7;">@_thinking.ToString()</MudText>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+
+        @if (_response.Length > 0)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Response</MudText>
+            <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_response.ToString()</MudText>
+        }
+
+        @if (_streaming && _thinking.Length == 0 && _response.Length == 0)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+        }
+    </MudPaper>
+}
+
+@code {
+    List<LlmServerConfig>? _configs;
+    int? _activeConfigId;
+    LlmServerConfig? _activeConfig;
+
+    string _prompt = "";
+    readonly StringBuilder _thinking = new();
+    readonly StringBuilder _response = new();
+    bool _streaming;
+    CancellationTokenSource? _cts;
+
+    double _currentTps;
+    StreamStats? _stats;
+
+    sealed record StreamStats(double AvgTps, int TokensIn, int TokensOut, TimeSpan Elapsed);
+
+    protected override async Task OnInitializedAsync()
+    {
+        SettingsService.OnChanged += HandleChanged;
+        await LoadAsync();
+    }
+
+    void HandleChanged() => InvokeAsync(LoadAsync);
+
+    async Task LoadAsync()
+    {
+        _configs = await SettingsService.GetAllConfigsAsync();
+        _activeConfigId = await SettingsService.GetActiveConfigIdAsync();
+        _activeConfig = _activeConfigId is { } id ? _configs.FirstOrDefault(c => c.Id == id) : null;
+        StateHasChanged();
+    }
+
+    async Task SelectConfigAsync(int configId)
+    {
+        await SettingsService.SetActiveConfigAsync(configId);
+        await LoadAsync();
+        Snackbar.Add("Configuration applied", Severity.Success);
+    }
+
+    static readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task OpenAddDialog()
+    {
+        var dialog = await DialogService.ShowAsync<LlmServerConfigDialog>("New Configuration", _dialogOptions);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: LlmServerConfig saved })
+        {
+            await SettingsService.CreateConfigAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Configuration created", Severity.Success);
+        }
+    }
+
+    async Task OpenEditDialog(LlmServerConfig config)
+    {
+        var dialog = await DialogService.ShowAsync<LlmServerConfigDialog>(
+            "Edit Configuration",
+            new DialogParameters<LlmServerConfigDialog> { { x => x.Config, config } },
+            _dialogOptions);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: LlmServerConfig saved })
+        {
+            await SettingsService.UpdateConfigAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Configuration updated", Severity.Success);
+        }
+    }
+
+    async Task DeleteConfigAsync(int configId)
+    {
+        await SettingsService.DeleteConfigAsync(configId);
+        await LoadAsync();
+        Snackbar.Add("Configuration deleted", Severity.Info);
+    }
+
+    async Task SendAsync()
+    {
+        if (_activeConfig == null) return;
+
+        _thinking.Clear();
+        _response.Clear();
+        _streaming = true;
+        _stats = null;
+        _currentTps = 0;
+        _cts = new CancellationTokenSource();
+
+        var metrics = new Read2Me.Services.Llm.StreamMetrics(_prompt);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        StateHasChanged();
+
+        try
+        {
+            await foreach (var chunk in LlmClient.StreamChatAsync(_activeConfig, _prompt, _cts.Token))
+            {
+                bool changed = false;
+                if (chunk.Thinking != null)
+                {
+                    _thinking.Append(chunk.Thinking);
+                    metrics.AddOutput(chunk.Thinking);
+                    changed = true;
+                }
+                if (chunk.Content != null)
+                {
+                    _response.Append(chunk.Content);
+                    metrics.AddOutput(chunk.Content);
+                    changed = true;
+                }
+                if (changed)
+                {
+                    _currentTps = metrics.TokensPerSecond(sw.Elapsed.TotalSeconds);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // User stopped the stream — keep whatever was received.
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Request failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            sw.Stop();
+            _stats = new StreamStats(
+                AvgTps: metrics.TokensPerSecond(sw.Elapsed.TotalSeconds),
+                TokensIn: metrics.TokensIn,
+                TokensOut: metrics.TokensOut,
+                Elapsed: sw.Elapsed);
+            _streaming = false;
+            _currentTps = 0;
+            _cts?.Dispose();
+            _cts = null;
+            StateHasChanged();
+        }
+    }
+
+    void Stop() => _cts?.Cancel();
+
+    public void Dispose()
+    {
+        SettingsService.OnChanged -= HandleChanged;
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

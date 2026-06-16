@@ -35,6 +35,10 @@ namespace Read2Me.App
             services.Configure<WorkspaceOptions>(Configuration.GetSection(WorkspaceOptions.SectionName));
             services.AddSingleton<ThemeService>();
             services.AddSingleton<IFileSystem, FileSystemService>();
+
+            services.AddHttpClient();
+            services.AddScoped<LlmSettingsService>();
+            services.AddScoped<Read2Me.Services.Llm.ILlmClient, Read2Me.Services.Llm.OpenAiLlmClient>();
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
 
             services.AddScoped<ProjectDbSession>();

@@ -1,0 +1,57 @@
+using Read2Me.AppData.Entities;
+using Read2Me.Services.Llm;
+using Xunit;
+
+namespace Read2Me.Tests.Services.Llm
+{
+    public class OpenAiRequestBuilderTests
+    {
+        [Fact]
+        public void BuildChatBody_OmitsModelWhenBlank()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true);
+            Assert.DoesNotContain("\"model\"", json);
+        }
+
+        [Fact]
+        public void BuildChatBody_IncludesModelWhenSet()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x", Model = "gemma-4b" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true);
+            Assert.Contains("\"model\"", json);
+            Assert.Contains("gemma-4b", json);
+        }
+
+        [Fact]
+        public void BuildChatBody_EmitsOnlySetNumericParams()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x", Temperature = 0.5 };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: false);
+            Assert.Contains("\"temperature\"", json);
+            Assert.DoesNotContain("top_p", json);
+            Assert.DoesNotContain("max_tokens", json);
+            Assert.DoesNotContain("frequency_penalty", json);
+            Assert.DoesNotContain("presence_penalty", json);
+        }
+
+        [Fact]
+        public void BuildChatBody_StreamBooleanAlwaysPresent()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var jsonTrue = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true);
+            var jsonFalse = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: false);
+            Assert.Contains("\"stream\":true", jsonTrue);
+            Assert.Contains("\"stream\":false", jsonFalse);
+        }
+
+        [Fact]
+        public void BuildChatBody_SingleUserMessageWithPrompt()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hello world", stream: false);
+            Assert.Contains("\"role\":\"user\"", json);
+            Assert.Contains("\"content\":\"hello world\"", json);
+        }
+    }
+}
