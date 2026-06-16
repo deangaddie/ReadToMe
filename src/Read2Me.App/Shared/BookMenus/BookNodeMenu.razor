@@ -70,7 +70,7 @@
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplit { get; set; }
+    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     async Task EditAsync()
     {
@@ -88,7 +88,7 @@
         {
             var (command, parentId) = await split.BuildHierarchySplit(Menu);
             if (command == null) return;
-            await OnSplit.InvokeAsync((command, parentId));
+            await OnSplit.InvokeAsync(new BookSplit(command, split.Level, parentId));
         }
         else if (split.BuildDirectCommand != null)
         {

@@ -11,14 +11,16 @@
                   ExpandedChanged="@ChapterExpandCb">
     <TitleContent>
         @{
-            var chNodeSummary = Queue.SummaryForNode(FolderId, Chapter.Id);
+            var row = NodeRowViewModel.For(
+                Presenter.IsNodeSelectable(Chapter.Id),
+                Presenter.Selection.NodeState(Chapter.Id),
+                Queue.SummaryForNode(FolderId, Chapter.Id));
         }
         <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-            @if (Presenter.IsNodeSelectable(Chapter.Id))
+            @if (row.ShowSelectionControls)
             {
-                var chState = Presenter.Selection.NodeState(Chapter.Id);
                 <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-                    <MudCheckBox T="bool?" Value="@TriStateToNullBool(chState)"
+                    <MudCheckBox T="bool?" Value="@row.CheckboxValue"
                                  ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Chapter, Chapter.Id, v == true))"
                                  Size="Size.Small" />
                     <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
@@ -27,16 +29,16 @@
                 </span>
             }
             <MudText Style="flex:1">@(Chapter.Title ?? "Chapter")</MudText>
-            @if (chNodeSummary.HasProcessing)
+            @if (row.ShowProcessingChip)
             {
                 <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
                          Icon="@Icons.Material.Filled.HourglassEmpty" Class="mt-0"
                          Style="pointer-events:none;">Processing</MudChip>
             }
-            @if (chNodeSummary.QueuedCount > 0)
+            @if (row.ShowQueuedChip)
             {
                 <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
-                         Class="mt-0" Style="pointer-events:none;">@chNodeSummary.QueuedCount queued</MudChip>
+                         Class="mt-0" Style="pointer-events:none;">@row.QueuedCount queued</MudChip>
             }
             <BookNodeMenu Spec="@BookNodeMenuSpecs.ForChapter(FolderId, Chapter)"
                          IsFirst="IsFirst"
@@ -45,7 +47,7 @@
                          NextSiblingId="NextSiblingId"
                          OnChanged="OnChanged"
                          OnMerged="OnMerged"
-                         OnSplit="OnSplitPart"
+                         OnSplit="OnSplit"
                          OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
         </MudStack>
     </TitleContent>
@@ -70,7 +72,7 @@
                                   IsFirst="@isFirst"
                                   IsLast="@isLast"
                                   OnChanged="OnChanged"
-                                  OnSplit="OnSplitChapter" />
+                                  OnSplit="OnSplit" />
                 }
             </MudStack>
         }
@@ -88,8 +90,7 @@
     [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitPart { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitChapter { get; set; }
+    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     protected override void OnInitialized() => Queue.Changed += Refresh;
 
@@ -100,10 +101,4 @@
     EventCallback<bool> ChapterExpandCb =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnChapterExpandedAsync(Chapter, b));
 
-    static bool? TriStateToNullBool(TriState state) => state switch
-    {
-        TriState.Checked => true,
-        TriState.Unchecked => false,
-        _ => null
-    };
 }

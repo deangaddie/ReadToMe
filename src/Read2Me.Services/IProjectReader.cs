@@ -6,6 +6,16 @@ using Read2Me.Data.Entities;
 
 namespace Read2Me.Services
 {
+    public sealed record BookOverview(
+        string? Filename,
+        bool HasContent,
+        IReadOnlyList<Volume> Volumes,
+        IReadOnlyList<Character> Characters,
+        int TotalParts,
+        int TotalChapters,
+        HashSet<Guid> SelectableNodeIds,
+        IReadOnlyDictionary<Guid, int> NodeCharacterParagraphCounts);
+
     public sealed record ContextParagraph(string Text, string? Speaker);
 
     /// <summary>Text of a target paragraph plus its nearest neighbours within the same chapter.</summary>
@@ -16,6 +26,7 @@ namespace Read2Me.Services
 
     public interface IProjectReader
     {
+        Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId);
         IReadOnlyList<string> GetProjects();
         Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync();
         Task<Project?> GetProjectAsync(ProjectFolderId folderId);

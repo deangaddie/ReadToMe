@@ -38,6 +38,7 @@ namespace Read2Me.App.State
         // Volume/part/chapter ids that contain at least one character paragraph.
         // Nodes absent here are not selectable (no checkbox shown).
         private HashSet<Guid> _selectableNodes = [];
+        private IReadOnlyDictionary<Guid, int> _nodeCounts = new Dictionary<Guid, int>();
 
         public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
 
@@ -60,16 +61,16 @@ namespace Read2Me.App.State
             Selection = selectionState.For(folderId);
             ConfirmReread = false;
 
-            var project = await reader.GetProjectAsync(folderId);
-            Filename = project?.Filename;
-            HasContent = await reader.HasBookContentAsync(folderId);
-            Volumes = HasContent ? await reader.GetVolumesAsync(folderId) : [];
-            Characters = HasContent ? await reader.GetCharactersAsync(folderId) : new List<Character>();
-            TotalParts = HasContent ? await reader.GetTotalPartCountAsync(folderId) : 0;
-            TotalChapters = HasContent ? await reader.GetTotalChapterCountAsync(folderId) : 0;
-            _selectableNodes = HasContent
-                ? await reader.GetNodesWithCharacterParagraphsAsync(folderId)
-                : [];
+            var overview = await reader.GetBookOverviewAsync(folderId);
+            Filename = overview.Filename;
+            HasContent = overview.HasContent;
+            Volumes = overview.Volumes;
+            Characters = overview.Characters.ToList();
+            TotalParts = overview.TotalParts;
+            TotalChapters = overview.TotalChapters;
+            _selectableNodes = overview.SelectableNodeIds;
+            _nodeCounts = overview.NodeCharacterParagraphCounts;
+            selectionCoordinator.SetNodeCounts(_nodeCounts);
 
             // Single volume is always auto-expanded; seed it if not already tracked.
             if (Volumes.Count == 1)

@@ -17,14 +17,16 @@ else
                       ExpandedChanged="@VolumeExpandCb">
         <TitleContent>
             @{
-                var volNodeSummary = Queue.SummaryForNode(FolderId, Volume.Id);
+                var row = NodeRowViewModel.For(
+                    Presenter.IsNodeSelectable(Volume.Id),
+                    Presenter.Selection.NodeState(Volume.Id),
+                    Queue.SummaryForNode(FolderId, Volume.Id));
             }
             <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                @if (Presenter.IsNodeSelectable(Volume.Id))
+                @if (row.ShowSelectionControls)
                 {
-                    var volState = Presenter.Selection.NodeState(Volume.Id);
                     <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-                        <MudCheckBox T="bool?" Value="@TriStateToNullBool(volState)"
+                        <MudCheckBox T="bool?" Value="@row.CheckboxValue"
                                      ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Volume, Volume.Id, v == true))"
                                      Size="Size.Small" />
                         <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
@@ -33,16 +35,16 @@ else
                     </span>
                 }
                 <MudText Style="flex:1">@Volume.Title</MudText>
-                @if (volNodeSummary.HasProcessing)
+                @if (row.ShowProcessingChip)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
                              Icon="@Icons.Material.Filled.HourglassEmpty" Class="mt-0"
                              Style="pointer-events:none;">Processing</MudChip>
                 }
-                @if (volNodeSummary.QueuedCount > 0)
+                @if (row.ShowQueuedChip)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
-                             Class="mt-0" Style="pointer-events:none;">@volNodeSummary.QueuedCount queued</MudChip>
+                             Class="mt-0" Style="pointer-events:none;">@row.QueuedCount queued</MudChip>
                 }
                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForVolume(FolderId, Volume)"
                              IsFirst="IsFirst"
@@ -70,9 +72,7 @@ else
     [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitVolume { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitPart { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitChapter { get; set; }
+    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     protected override void OnInitialized() => Queue.Changed += Refresh;
 
@@ -96,16 +96,8 @@ else
                            VolumeId="@vol.Id"
                            OnChanged="OnChanged"
                            OnMerged="OnMerged"
-                           OnSplitVolume="OnSplitVolume"
-                           OnSplitPart="OnSplitPart"
-                           OnSplitChapter="OnSplitChapter" />
+                           OnSplit="OnSplit" />
             }
         </text>;
 
-    static bool? TriStateToNullBool(TriState state) => state switch
-    {
-        TriState.Checked => true,
-        TriState.Unchecked => false,
-        _ => null
-    };
 }

@@ -30,14 +30,16 @@ else
                               ExpandedChanged="@PartExpandCb(p)">
                 <TitleContent>
                     @{
-                        var partNodeSummary = Queue.SummaryForNode(FolderId, p.Id);
+                        var row = NodeRowViewModel.For(
+                            Presenter.IsNodeSelectable(p.Id),
+                            Presenter.Selection.NodeState(p.Id),
+                            Queue.SummaryForNode(FolderId, p.Id));
                     }
                     <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                        @if (Presenter.IsNodeSelectable(p.Id))
+                        @if (row.ShowSelectionControls)
                         {
-                            var partState = Presenter.Selection.NodeState(p.Id);
                             <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-                                <MudCheckBox T="bool?" Value="@TriStateToNullBool(partState)"
+                                <MudCheckBox T="bool?" Value="@row.CheckboxValue"
                                              ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Part, p.Id, v == true))"
                                              Size="Size.Small" />
                                 <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
@@ -46,16 +48,16 @@ else
                             </span>
                         }
                         <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
-                        @if (partNodeSummary.HasProcessing)
+                        @if (row.ShowProcessingChip)
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
                                      Icon="@Icons.Material.Filled.HourglassEmpty" Class="mt-0"
                                      Style="pointer-events:none;">Processing</MudChip>
                         }
-                        @if (partNodeSummary.QueuedCount > 0)
+                        @if (row.ShowQueuedChip)
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
-                                     Class="mt-0" Style="pointer-events:none;">@partNodeSummary.QueuedCount queued</MudChip>
+                                     Class="mt-0" Style="pointer-events:none;">@row.QueuedCount queued</MudChip>
                         }
                         <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPart(FolderId, p)"
                                      IsFirst="@(idx == 0)"
@@ -64,7 +66,7 @@ else
                                      NextSiblingId="@(idx < Parts.Count - 1 ? Parts[idx + 1].Id : null)"
                                      OnChanged="OnChanged"
                                      OnMerged="OnMerged"
-                                     OnSplit="OnSplitVolume"
+                                     OnSplit="OnSplit"
                                      OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
                     </MudStack>
                 </TitleContent>
@@ -89,9 +91,7 @@ else
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitVolume { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitPart { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplitChapter { get; set; }
+    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     protected override void OnInitialized() => Queue.Changed += Refresh;
 
@@ -118,15 +118,8 @@ else
                               NextSiblingId="@(idx < chapters.Count - 1 ? chapters[idx + 1].Id : null)"
                               OnChanged="OnChanged"
                               OnMerged="OnMerged"
-                              OnSplitPart="OnSplitPart"
-                              OnSplitChapter="OnSplitChapter" />
+                              OnSplit="OnSplit" />
             }
         </MudExpansionPanels>;
 
-    static bool? TriStateToNullBool(TriState state) => state switch
-    {
-        TriState.Checked => true,
-        TriState.Unchecked => false,
-        _ => null
-    };
 }

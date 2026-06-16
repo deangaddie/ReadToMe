@@ -112,6 +112,8 @@ namespace Read2Me.Tests.Services.Characters
                 => Task.FromResult(_characters);
 
             // Unused members — not under test
+            public Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId) =>
+                Task.FromResult(new BookOverview(null, false, [], [], 0, 0, [], new System.Collections.Generic.Dictionary<System.Guid, int>()));
             public IReadOnlyList<string> GetProjects() => [];
             public Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync() => Task.FromResult<IReadOnlyList<ProjectSummary>>([]);
             public Task<bool> HasBookContentAsync(ProjectFolderId folderId) => Task.FromResult(false);

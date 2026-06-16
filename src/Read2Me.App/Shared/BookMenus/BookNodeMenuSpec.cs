@@ -5,9 +5,15 @@ using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.App.Shared;
+using Read2Me.App.State;
 using static Read2Me.Core.Models.PauseKind;
 
 namespace Read2Me.App.Shared.BookMenus;
+
+public readonly record struct BookSplit(
+    BookCommand Command,
+    BookHierarchyPresenter.SplitLevel Level,
+    Guid SourceParentId);
 
 public sealed record BookNodeMenuSpec(
     ProjectFolderId FolderId,
@@ -30,22 +36,26 @@ public sealed record BookNodeMenuSpec(
 /// Describes a split action for a node menu item.
 /// <para>
 /// When <see cref="BuildHierarchySplit"/> is non-null the split creates a new parent node;
-/// the component fires <c>OnSplit</c> with the resulting command and source parent id.
+/// the component fires <c>OnSplit</c> with a fully-formed <see cref="BookSplit"/>.
 /// When <see cref="BuildDirectCommand"/> is non-null the command is executed directly and
 /// <c>OnReset</c> is fired instead (used for ParagraphItem splits).
 /// </para>
 /// </summary>
 public sealed record SplitSpec(
     string Label,
+    BookHierarchyPresenter.SplitLevel Level,
     Func<MenuActions, Task<(BookCommand? command, Guid parentId)>>? BuildHierarchySplit,
     Func<MenuActions, Task<BookCommand?>>? BuildDirectCommand
 )
 {
-    public static SplitSpec Hierarchy(string label, Func<MenuActions, Task<(BookCommand?, Guid)>> build) =>
-        new(label, build, null);
+    public static SplitSpec Hierarchy(
+        string label,
+        BookHierarchyPresenter.SplitLevel level,
+        Func<MenuActions, Task<(BookCommand?, Guid)>> build) =>
+        new(label, level, build, null);
 
     public static SplitSpec Direct(string label, Func<MenuActions, Task<BookCommand?>> build) =>
-        new(label, null, build);
+        new(label, default, null, build);
 }
 
 public sealed record InsertPauseSpec(string Label, PauseKind PauseKind);
@@ -85,7 +95,7 @@ public static class BookNodeMenuSpecs
             },
             Splits:
             [
-                SplitSpec.Hierarchy("Split Volume", async menu =>
+                SplitSpec.Hierarchy("Split Volume", BookHierarchyPresenter.SplitLevel.Volume, async menu =>
                 {
                     var title = await menu.PromptTitleAsync("New Volume Title", "");
                     if (title == null) return (null, default);
@@ -112,7 +122,7 @@ public static class BookNodeMenuSpecs
             },
             Splits:
             [
-                SplitSpec.Hierarchy("Split Part", async menu =>
+                SplitSpec.Hierarchy("Split Part", BookHierarchyPresenter.SplitLevel.Part, async menu =>
                 {
                     var title = await menu.PromptTitleAsync("New Part Title", "");
                     if (title == null) return (null, default);
@@ -134,7 +144,7 @@ public static class BookNodeMenuSpecs
             EditAction: null,
             Splits:
             [
-                SplitSpec.Hierarchy("Split Chapter", async menu =>
+                SplitSpec.Hierarchy("Split Chapter", BookHierarchyPresenter.SplitLevel.Chapter, async menu =>
                 {
                     var title = await menu.PromptTitleAsync("New Chapter Title", "");
                     if (title == null) return (null, default);

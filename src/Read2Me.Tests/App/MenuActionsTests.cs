@@ -134,6 +134,31 @@ namespace Read2Me.Tests.App
         }
 
         // ---------------------------------------------------------------
+        // BookNodeMenuSpecs split levels
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public void ForPart_Split_HasVolumeLevel()
+        {
+            var spec = BookNodeMenuSpecs.ForPart(new ProjectFolderId("f"), new Read2Me.Data.Entities.Part { Id = Guid.NewGuid() });
+            Assert.Equal(Read2Me.App.State.BookHierarchyPresenter.SplitLevel.Volume, spec.Splits[0].Level);
+        }
+
+        [Fact]
+        public void ForChapter_Split_HasPartLevel()
+        {
+            var spec = BookNodeMenuSpecs.ForChapter(new ProjectFolderId("f"), new Read2Me.Data.Entities.Chapter { Id = Guid.NewGuid() });
+            Assert.Equal(Read2Me.App.State.BookHierarchyPresenter.SplitLevel.Part, spec.Splits[0].Level);
+        }
+
+        [Fact]
+        public void ForParagraph_Split_HasChapterLevel()
+        {
+            var spec = BookNodeMenuSpecs.ForParagraph(new ProjectFolderId("f"), new Read2Me.Data.Entities.Paragraph { Id = Guid.NewGuid() });
+            Assert.Equal(Read2Me.App.State.BookHierarchyPresenter.SplitLevel.Chapter, spec.Splits[0].Level);
+        }
+
+        // ---------------------------------------------------------------
         // BuildDelete
         // ---------------------------------------------------------------
 

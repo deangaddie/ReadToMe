@@ -9,16 +9,13 @@
 @implements IDisposable
 
 @{
-    var charItems = Para.Items.Where(i => i.ItemType == ParagraphItemType.Character).ToList();
-    var hasUnknown = Presenter.SplitView && charItems.Any(i => i.Character == null);
-    var isCharPara = charItems.Count > 0;
-    var distinctChars = charItems.Select(i => i.Character).DistinctBy(c => c?.Id).ToList();
-    var paraCharacter = distinctChars.Count == 1 ? distinctChars[0] : null;
-    var paraCharMixed = isCharPara && distinctChars.Count > 1;
     var queueStatus = Queue.StatusOf(FolderId, Para.Id);
-    var isBusy = queueStatus is not null;
-    var queueOutcome = !isBusy ? Queue.OutcomeOf(FolderId, Para.Id) : null;
-    if (!isBusy) ApplyResolvedCharacter();
+    var queueOutcome = queueStatus is null ? Queue.OutcomeOf(FolderId, Para.Id) : null;
+    if (queueStatus is null) ApplyResolvedCharacter();
+    var vm = ParagraphRowViewModel.For(Para, Presenter.SplitView, queueStatus, queueOutcome is not null);
+    var isBusy = vm.IsBusy;
+    var isCharPara = vm.IsCharacterParagraph;
+    var hasUnknown = vm.HasUnknownInSplit;
 }
 
 @if (Presenter.SplitView)
@@ -169,8 +166,15 @@ else
             }
             @if (isCharPara && !isBusy)
             {
-                <CharacterChipMenu Label="@(paraCharMixed ? "Mixed" : paraCharacter?.Name ?? "Unknown")"
-                                   Color="@(paraCharMixed ? Color.Default : paraCharacter == null ? Color.Warning : Color.Primary)"
+                var (chipColor, chipLabel) = vm.Chip switch
+                {
+                    ParaCharacterChip.Mixed   => (Color.Default, "Mixed"),
+                    ParaCharacterChip.Unknown => (Color.Warning, "Unknown"),
+                    ParaCharacterChip.Single  => (Color.Primary, vm.SingleCharacterName!),
+                    _                         => (Color.Default, "")
+                };
+                <CharacterChipMenu Label="@chipLabel"
+                                   Color="@chipColor"
                                    Variant="Variant.Filled"
                                    Style="flex-shrink:0;"
                                    OnSelected="@(id => Presenter.SetParagraphCharacterAsync(FolderId, Para, id))" />
@@ -198,7 +202,7 @@ else
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<(BookCommand command, Guid sourceParentId)> OnSplit { get; set; }
+    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     protected override void OnInitialized()
     {

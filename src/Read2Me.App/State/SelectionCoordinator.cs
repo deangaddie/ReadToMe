@@ -9,6 +9,10 @@ namespace Read2Me.App.State
 {
     public sealed class SelectionCoordinator(IProjectReader reader)
     {
+        private IReadOnlyDictionary<Guid, int> _nodeCounts = new Dictionary<Guid, int>();
+
+        public void SetNodeCounts(IReadOnlyDictionary<Guid, int> counts) => _nodeCounts = counts;
+
         public async Task ToggleParagraphAsync(
             FolderSelection sel, ProjectFolderId folder,
             Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, bool on)
@@ -82,22 +86,56 @@ namespace Read2Me.App.State
             FolderSelection sel, ProjectFolderId folder,
             Guid chapterId, Guid partId, Guid volumeId)
         {
-            var chCount = await reader.GetChapterCharacterParagraphCountAsync(folder, chapterId);
+            int chCount = await CountForAsync(chapterId, folder, SelectionNodeKind.Chapter);
             var chSelected = sel.SelectedCountUnder(chapterId, SelectionNodeKind.Chapter);
             if (chSelected >= chCount)
             {
                 sel.AddNode(chapterId);
-                var ptCount = await reader.GetPartCharacterParagraphCountAsync(folder, partId);
+                int ptCount = await CountForAsync(partId, folder, SelectionNodeKind.Part);
                 var ptSelected = sel.SelectedCountUnder(partId, SelectionNodeKind.Part);
                 if (ptSelected >= ptCount)
                 {
                     sel.AddNode(partId);
-                    var volCount = await reader.GetVolumeCharacterParagraphCountAsync(folder, volumeId);
+                    int volCount = await CountForAsync(volumeId, folder, SelectionNodeKind.Volume);
                     var volSelected = sel.SelectedCountUnder(volumeId, SelectionNodeKind.Volume);
                     if (volSelected >= volCount)
                         sel.AddNode(volumeId);
                 }
             }
+        }
+
+        private async Task WalkUpFromNodeAsync(
+            FolderSelection sel, ProjectFolderId folder,
+            SelectionNodeKind kind, Guid id, List<CharacterParagraphRef> refs)
+        {
+            if (refs.Count == 0) return;
+
+            if (kind == SelectionNodeKind.Chapter)
+            {
+                var r = refs[0];
+                await WalkUpAsync(sel, folder, id, r.PartId, r.VolumeId);
+            }
+            else if (kind == SelectionNodeKind.Part)
+            {
+                var r = refs[0];
+                int volCount = await CountForAsync(r.VolumeId, folder, SelectionNodeKind.Volume);
+                var volSelected = sel.SelectedCountUnder(r.VolumeId, SelectionNodeKind.Volume);
+                if (volSelected >= volCount)
+                    sel.AddNode(r.VolumeId);
+            }
+        }
+
+        // Returns count from in-memory map; falls back to reader if not yet loaded
+        // (e.g. before first LoadAsync or after a split/merge reload race).
+        private ValueTask<int> CountForAsync(Guid nodeId, ProjectFolderId folder, SelectionNodeKind kind)
+        {
+            if (_nodeCounts.TryGetValue(nodeId, out var c)) return ValueTask.FromResult(c);
+            return new ValueTask<int>(kind switch
+            {
+                SelectionNodeKind.Chapter => reader.GetChapterCharacterParagraphCountAsync(folder, nodeId),
+                SelectionNodeKind.Part    => reader.GetPartCharacterParagraphCountAsync(folder, nodeId),
+                _                         => reader.GetVolumeCharacterParagraphCountAsync(folder, nodeId),
+            });
         }
 
         private static void MarkDescendantNodesComplete(
@@ -131,27 +169,6 @@ namespace Read2Me.App.State
             {
                 foreach (var chapterId in refs.Select(r => r.ChapterId).Distinct())
                     sel.RemoveNode(chapterId);
-            }
-        }
-
-        private async Task WalkUpFromNodeAsync(
-            FolderSelection sel, ProjectFolderId folder,
-            SelectionNodeKind kind, Guid id, List<CharacterParagraphRef> refs)
-        {
-            if (refs.Count == 0) return;
-
-            if (kind == SelectionNodeKind.Chapter)
-            {
-                var r = refs[0];
-                await WalkUpAsync(sel, folder, id, r.PartId, r.VolumeId);
-            }
-            else if (kind == SelectionNodeKind.Part)
-            {
-                var r = refs[0];
-                var volCount = await reader.GetVolumeCharacterParagraphCountAsync(folder, r.VolumeId);
-                var volSelected = sel.SelectedCountUnder(r.VolumeId, SelectionNodeKind.Volume);
-                if (volSelected >= volCount)
-                    sel.AddNode(r.VolumeId);
             }
         }
     }

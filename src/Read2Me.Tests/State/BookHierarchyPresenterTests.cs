@@ -50,12 +50,9 @@ namespace Read2Me.Tests.State
             var dialogService = Substitute.For<IDialogService>();
 
             // Default reader returns
-            reader.GetProjectAsync(Folder).Returns((Project?)null);
-            reader.HasBookContentAsync(Folder).Returns(false);
-            reader.GetVolumesAsync(Folder).Returns(new List<Volume>());
-            reader.GetCharactersAsync(Folder).Returns(new List<Character>());
-            reader.GetTotalPartCountAsync(Folder).Returns(0);
-            reader.GetTotalChapterCountAsync(Folder).Returns(0);
+            reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: false, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
 
             // Selection-related reader defaults
             reader.GetVolumeCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
@@ -76,8 +73,6 @@ namespace Read2Me.Tests.State
                 .Returns(0);
             reader.GetChapterCharacterParagraphCountAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
                 .Returns(0);
-            reader.GetNodesWithCharacterParagraphsAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new HashSet<Guid>());
 
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
@@ -107,11 +102,10 @@ namespace Read2Me.Tests.State
         {
             var ctx = Create();
             var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol1", Order = "a" };
-            ctx.Reader.HasBookContentAsync(Folder).Returns(true);
-            ctx.Reader.GetVolumesAsync(Folder).Returns(new List<Volume> { vol });
-            ctx.Reader.GetCharactersAsync(Folder).Returns(new List<Character>());
-            ctx.Reader.GetTotalPartCountAsync(Folder).Returns(1);
-            ctx.Reader.GetTotalChapterCountAsync(Folder).Returns(1);
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: true,
+                Volumes: new List<Volume> { vol }, Characters: [],
+                TotalParts: 1, TotalChapters: 1, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
             ctx.Reader.GetPartsAsync(Folder, vol.Id).Returns(new List<Part>());
 
             await ctx.Presenter.LoadAsync(Folder);
@@ -218,11 +212,9 @@ namespace Read2Me.Tests.State
             var charId = Guid.NewGuid();
             var character = new Character { Id = charId, Name = "Alice" };
 
-            ctx.Reader.HasBookContentAsync(Folder).Returns(true);
-            ctx.Reader.GetVolumesAsync(Folder).Returns(new List<Volume>());
-            ctx.Reader.GetCharactersAsync(Folder).Returns(new List<Character> { character });
-            ctx.Reader.GetTotalPartCountAsync(Folder).Returns(0);
-            ctx.Reader.GetTotalChapterCountAsync(Folder).Returns(0);
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: true, Volumes: [], Characters: [character],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
             await ctx.Presenter.LoadAsync(Folder);
 
             var item = new ParagraphItem { Id = Guid.NewGuid(), Order = "a" };
@@ -351,12 +343,9 @@ namespace Read2Me.Tests.State
             var other = new ProjectFolderId("other-book");
 
             // Also stub the new folder
-            ctx.Reader.GetProjectAsync(other).Returns((Project?)null);
-            ctx.Reader.HasBookContentAsync(other).Returns(false);
-            ctx.Reader.GetVolumesAsync(other).Returns(new List<Volume>());
-            ctx.Reader.GetCharactersAsync(other).Returns(new List<Character>());
-            ctx.Reader.GetTotalPartCountAsync(other).Returns(0);
-            ctx.Reader.GetTotalChapterCountAsync(other).Returns(0);
+            ctx.Reader.GetBookOverviewAsync(other).Returns(new BookOverview(
+                Filename: null, HasContent: false, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
 
             await ctx.Presenter.LoadAsync(Folder);
 
@@ -616,10 +605,9 @@ namespace Read2Me.Tests.State
         {
             var ctx = Create();
             var nodeId = Guid.NewGuid();
-            ctx.Reader.HasBookContentAsync(Folder).Returns(true);
-            ctx.Reader.GetVolumesAsync(Folder).Returns(new List<Volume>());
-            ctx.Reader.GetNodesWithCharacterParagraphsAsync(Folder)
-                .Returns(new HashSet<Guid> { nodeId });
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: true, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [nodeId], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
 
             await ctx.Presenter.LoadAsync(Folder);
 
@@ -630,10 +618,9 @@ namespace Read2Me.Tests.State
         public async Task IsNodeSelectable_NodeWithoutCharacterParagraphs_False()
         {
             var ctx = Create();
-            ctx.Reader.HasBookContentAsync(Folder).Returns(true);
-            ctx.Reader.GetVolumesAsync(Folder).Returns(new List<Volume>());
-            ctx.Reader.GetNodesWithCharacterParagraphsAsync(Folder)
-                .Returns(new HashSet<Guid>());
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: true, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
 
             await ctx.Presenter.LoadAsync(Folder);
 

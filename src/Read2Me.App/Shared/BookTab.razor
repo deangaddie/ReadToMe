@@ -122,9 +122,7 @@ else
                          IsLast="true"
                          OnChanged="StateHasChanged"
                          OnMerged="MergeAndResetAsync"
-                         OnSplitVolume="SplitVolumeAsync"
-                         OnSplitPart="SplitPartAsync"
-                         OnSplitChapter="SplitChapterAsync" />
+                         OnSplit="HandleSplitAsync" />
         }
         else
         {
@@ -142,9 +140,7 @@ else
                                  NextSiblingId="@(idx < Presenter.Volumes.Count - 1 ? Presenter.Volumes[idx + 1].Id : null)"
                                  OnChanged="StateHasChanged"
                                  OnMerged="MergeAndResetAsync"
-                                 OnSplitVolume="SplitVolumeAsync"
-                                 OnSplitPart="SplitPartAsync"
-                                 OnSplitChapter="SplitChapterAsync" />
+                                 OnSplit="HandleSplitAsync" />
                 }
             </MudExpansionPanels>
         }
@@ -163,14 +159,8 @@ else
         await Presenter.ResetAndLoadAsync(_folderId);
     }
 
-    Task SplitVolumeAsync((BookCommand command, Guid sourceParentId) split) =>
-        Presenter.SplitAndReloadAsync(_folderId, split.command, BookHierarchyPresenter.SplitLevel.Volume, split.sourceParentId);
-
-    Task SplitPartAsync((BookCommand command, Guid sourceParentId) split) =>
-        Presenter.SplitAndReloadAsync(_folderId, split.command, BookHierarchyPresenter.SplitLevel.Part, split.sourceParentId);
-
-    Task SplitChapterAsync((BookCommand command, Guid sourceParentId) split) =>
-        Presenter.SplitAndReloadAsync(_folderId, split.command, BookHierarchyPresenter.SplitLevel.Chapter, split.sourceParentId);
+    Task HandleSplitAsync(BookSplit s) =>
+        Presenter.SplitAndReloadAsync(_folderId, s.Command, s.Level, s.SourceParentId);
 
     protected override async Task OnParametersSetAsync()
     {

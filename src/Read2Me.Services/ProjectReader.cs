@@ -42,6 +42,52 @@ namespace Read2Me.Services
             return summaries;
         }
 
+        public async Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId)
+        {
+            var dbPath = Path.Combine(_session.FileSystem.GetProjectFolderPath(folderId), "project.db");
+            if (!_session.FileSystem.FileExists(dbPath))
+                return new BookOverview(null, false, [], [], 0, 0, [], new Dictionary<Guid, int>());
+
+            var db = await _session.OpenAsync(folderId);
+            var project = await db.Projects.SingleOrDefaultAsync();
+            string? filename = project?.Filename;
+            bool hasContent = await db.Volumes.AnyAsync();
+            if (!hasContent)
+                return new BookOverview(filename, false, [], [], 0, 0, [], new Dictionary<Guid, int>());
+
+            var volumes = await db.Volumes.OrderBy(v => v.Order).ToListAsync();
+            var characters = await db.Characters.OrderBy(c => c.IsNarrator ? 0 : 1).ThenBy(c => c.Name).ToListAsync();
+            var totalParts = await db.Parts.CountAsync();
+            var totalChapters = await db.Chapters.CountAsync();
+
+            // One query: distinct character-paragraph refs for counting and selectable-node set.
+            var refs = await db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character)
+                .Select(i => new
+                {
+                    ParagraphId = i.ParagraphId,
+                    ChapterId = i.Paragraph.ChapterId,
+                    PartId = i.Paragraph.Chapter.PartId,
+                    VolumeId = i.Paragraph.Chapter.Part.VolumeId,
+                })
+                .Distinct()
+                .ToListAsync();
+
+            var nodes = new HashSet<Guid>();
+            var counts = new Dictionary<Guid, int>();
+            foreach (var r in refs)
+            {
+                nodes.Add(r.ChapterId);
+                nodes.Add(r.PartId);
+                nodes.Add(r.VolumeId);
+                counts.TryGetValue(r.ChapterId, out var c); counts[r.ChapterId] = c + 1;
+                counts.TryGetValue(r.PartId, out var p); counts[r.PartId] = p + 1;
+                counts.TryGetValue(r.VolumeId, out var v); counts[r.VolumeId] = v + 1;
+            }
+
+            return new BookOverview(filename, true, volumes, characters, totalParts, totalChapters, nodes, counts);
+        }
+
         public async Task<ProjectEntity?> GetProjectAsync(ProjectFolderId folderId)
         {
             var dbPath = Path.Combine(_session.FileSystem.GetProjectFolderPath(folderId), "project.db");
