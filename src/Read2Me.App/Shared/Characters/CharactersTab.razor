@@ -19,7 +19,7 @@ else if (Presenter.Characters.Count == 0)
 }
 else
 {
-    <MudGrid Spacing="2">
+    <MudGrid Spacing="2" Class="pa-4">
         <MudItem xs="12" sm="4" md="3">
             <MudStack Spacing="1">
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
@@ -41,10 +41,16 @@ else
                                     <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
                                 }
                                 <MudText Typo="Typo.body2">@c.Name</MudText>
+                                <MudSpacer />
                                 @if (c.Aliases.Count > 0)
                                 {
                                     <MudChip T="string" Size="Size.Small" Color="Color.Secondary"
-                                             Variant="Variant.Text" Class="ml-auto">@c.Aliases.Count</MudChip>
+                                             Variant="Variant.Text">@c.Aliases.Count</MudChip>
+                                }
+                                @if (c.Voices.Count > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info"
+                                             Variant="Variant.Text" Icon="@Icons.Material.Filled.RecordVoiceOver">@c.Voices.Count</MudChip>
                                 }
                             </MudStack>
                         </MudListItem>

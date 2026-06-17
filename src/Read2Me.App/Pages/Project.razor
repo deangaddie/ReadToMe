@@ -1,6 +1,7 @@
 @page "/project/{FolderName}"
 @using Read2Me.Services
 @inject IProjectReader ProjectReader
+@inject NavigationManager Nav
 
 <PageTitle>@_title | Read2Me</PageTitle>
 
@@ -8,7 +9,8 @@
 
 <ProjectDetailsPanel FolderName="@FolderName" Project="@_project" OnProjectChanged="ReloadProjectAsync" />
 
-<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true"
+         ActivePanelIndex="@_activeTab" ActivePanelIndexChanged="OnTabChanged">
     <MudTabPanel Text="Book" Class="pa-4">
         <BookTab FolderName="@FolderName" />
     </MudTabPanel>
@@ -24,10 +26,20 @@
 
     string _title = "";
     Read2Me.Data.Entities.Project? _project;
+    int _activeTab;
 
     protected override async Task OnParametersSetAsync()
     {
+        var uri = new Uri(Nav.Uri);
+        var qs = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        _activeTab = int.TryParse(qs["tab"], out var t) ? t : 0;
         await ReloadProjectAsync();
+    }
+
+    void OnTabChanged(int index)
+    {
+        _activeTab = index;
+        Nav.NavigateTo($"/project/{FolderName}?tab={index}", replace: true);
     }
 
     async Task ReloadProjectAsync()

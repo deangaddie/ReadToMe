@@ -60,12 +60,13 @@ namespace Read2Me.Services
                 case RemoveCharacterAliasCommand c: await RemoveCharacterAliasAsync(c.FolderId, c.AliasId); break;
                 case MergeCharactersCommand c: await MergeCharactersAsync(c.FolderId, c.SurvivorId, c.MergedId, c.AddNameAsAlias); break;
                 case DeleteCharacterCommand c: await DeleteCharacterAsync(c.FolderId, c.CharacterId); break;
-                case CreateVoiceCommand c: return await CreateVoiceAsync(c.FolderId, c.CharacterId, c.Name);
+                case CreateVoiceCommand c: return await CreateVoiceAsync(c.FolderId, c.CharacterId, c.Name, c.IsGenerated ? VoiceSource.Generated : VoiceSource.Uploaded);
                 case SetVoiceDefaultCommand c: await SetVoiceDefaultAsync(c.FolderId, c.VoiceId); break;
                 case UpdateVoiceCommand c: await UpdateVoiceAsync(c.FolderId, c.VoiceId, c.Name, c.Description); break;
                 case SetVoiceDesignPromptCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.DesignPrompt = c.Prompt); break;
                 case SetVoiceTranscriptCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.Transcript = c.Transcript); break;
                 case SetVoiceAudioCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.AudioFileName = c.AudioFileName); break;
+                case SetVoiceSourceCommand c: await SetVoiceSourceAsync(c.FolderId, c.VoiceId, c.IsGenerated ? VoiceSource.Generated : VoiceSource.Uploaded); break;
                 case DeleteVoiceCommand c: await DeleteVoiceAsync(c.FolderId, c.VoiceId); break;
                 case AddBookTitleCommand c: await AddBookTitleAsync(c.FolderId); break;
                 case AddVolumeTitlesCommand c: await AddVolumeTitlesAsync(c.FolderId); break;
@@ -392,7 +393,7 @@ namespace Read2Me.Services
             await tx.CommitAsync();
         }
 
-        private async Task<Guid?> CreateVoiceAsync(ProjectFolderId folderId, Guid characterId, string name)
+        private async Task<Guid?> CreateVoiceAsync(ProjectFolderId folderId, Guid characterId, string name, Data.Enums.VoiceSource source = Data.Enums.VoiceSource.Uploaded)
         {
             var db = await _session.OpenAsync(folderId);
             var character = await db.Characters
@@ -408,12 +409,36 @@ namespace Read2Me.Services
                 CharacterId = characterId,
                 Name = effectiveName,
                 IsDefault = isFirst,
-                Source = VoiceSource.Uploaded,
+                Source = source,
                 CreatedUtc = DateTime.UtcNow,
             };
             db.Voices.Add(voice);
             await db.SaveChangesAsync();
             return voice.Id;
+        }
+
+        private async Task SetVoiceSourceAsync(ProjectFolderId folderId, Guid voiceId, Data.Enums.VoiceSource source)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var voice = await db.Voices.FindAsync(voiceId);
+            if (voice == null) return;
+            voice.Source = source;
+            if (source == Data.Enums.VoiceSource.Uploaded)
+            {
+                voice.DesignPrompt = null;
+            }
+            else
+            {
+                if (voice.AudioFileName != null)
+                {
+                    var projectFolder = _fs.GetProjectFolderPath(folderId.Value);
+                    var audioPath = Path.Combine(projectFolder, voice.AudioFileName.Replace('/', Path.DirectorySeparatorChar));
+                    if (_fs.FileExists(audioPath))
+                        _fs.DeleteFile(audioPath);
+                    voice.AudioFileName = null;
+                }
+            }
+            await db.SaveChangesAsync();
         }
 
         private async Task SetVoiceDefaultAsync(ProjectFolderId folderId, Guid voiceId)

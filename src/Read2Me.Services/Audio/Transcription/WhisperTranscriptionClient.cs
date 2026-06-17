@@ -6,49 +6,45 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Audio.Transcription.Settings;
 
-namespace Read2Me.Services.Audio
+namespace Read2Me.Services.Audio.Transcription
 {
     /// <summary>
-    /// Whisper-compatible transcription client. POSTs audio to /v1/audio/transcriptions
-    /// using multipart form data (OpenAI Whisper API format).
+    /// Transcription client for <see cref="TranscriptionServiceType.LocalWhisper"/>,
+    /// targeting the ahmetoner/whisper-asr-webservice API. POSTs audio to
+    /// /asr as multipart form data (field <c>audio_file</c>) with
+    /// <c>output=txt</c>, returning the plain-text transcript body. Reads its
+    /// base URL from the config's <see cref="LocalWhisperSettings"/> blob.
     /// </summary>
     public sealed class WhisperTranscriptionClient(
         IHttpClientFactory httpClientFactory,
         ILogger<WhisperTranscriptionClient> logger) : ITranscriptionClient
     {
         public async Task<string> TranscribeAsync(
-            AudioServerConfig config,
+            TranscriptionServiceConfig config,
             Stream audio,
             string fileName,
             CancellationToken ct = default)
         {
-            logger.LogDebug("Sending {File} to Whisper at {Url}", fileName, config.BaseUrl);
+            var settings = JsonSerializer.Deserialize<LocalWhisperSettings>(config.SettingsJson)
+                ?? new LocalWhisperSettings();
 
-            var http = CreateClient(config);
+            logger.LogDebug("Sending {File} to Whisper at {Url}", fileName, settings.BaseUrl);
+
+            var http = httpClientFactory.CreateClient();
 
             using var content = new MultipartFormDataContent();
             var fileContent = new StreamContent(audio);
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(GetMimeType(fileName));
-            content.Add(fileContent, "file", fileName);
-            content.Add(new StringContent("whisper-1"), "model");
+            content.Add(fileContent, "audio_file", fileName);
 
-            var url = config.BaseUrl.TrimEnd('/') + "/v1/audio/transcriptions";
+            var url = settings.BaseUrl.TrimEnd('/') + "/asr?task=transcribe&output=txt";
             using var response = await http.PostAsync(url, content, ct);
             response.EnsureSuccessStatusCode();
 
-            var json = await response.Content.ReadAsStringAsync(ct);
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.GetProperty("text").GetString() ?? string.Empty;
-        }
-
-        private HttpClient CreateClient(AudioServerConfig config)
-        {
-            var http = httpClientFactory.CreateClient();
-            if (!string.IsNullOrWhiteSpace(config.ApiKey))
-                http.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", config.ApiKey);
-            return http;
+            var text = await response.Content.ReadAsStringAsync(ct);
+            return text.Trim();
         }
 
         private static string GetMimeType(string fileName) =>

@@ -48,7 +48,9 @@ namespace Read2Me.App
             services.AddScoped<Read2Me.Services.Llm.ILlmClient, Read2Me.Services.Llm.OpenAiLlmClient>();
             services.AddScoped<Read2Me.Services.Characters.CharacterAttributionService>();
             services.AddScoped<AudioSettingsService>();
-            services.AddScoped<Read2Me.Services.Audio.ITranscriptionClient, Read2Me.Services.Audio.WhisperTranscriptionClient>();
+            services.AddScoped<TranscriptionSettingsService>();
+            services.AddScoped<Read2Me.Services.Audio.Transcription.ITranscriptionClientResolver, Read2Me.Services.Audio.Transcription.TranscriptionClientResolver>();
+            services.AddKeyedScoped<Read2Me.Services.Audio.Transcription.ITranscriptionClient, Read2Me.Services.Audio.Transcription.WhisperTranscriptionClient>(Read2Me.AppData.Entities.TranscriptionServiceType.LocalWhisper);
             services.AddScoped<Read2Me.Services.Audio.IVoiceDesignClient, Read2Me.Services.Audio.Qwen3VoiceDesignClient>();
             services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, Read2Me.Services.Audio.FileAudioPipeline>();
             services.AddScoped<Read2Me.Services.Voice.VoiceDesignPromptService>();

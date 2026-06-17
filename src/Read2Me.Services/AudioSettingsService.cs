@@ -10,8 +10,9 @@ using Read2Me.AppData.Entities;
 namespace Read2Me.Services
 {
     /// <summary>
-    /// CRUD + active-selection for audio server configurations (transcription and voice design).
-    /// Mirrors LlmSettingsService.
+    /// CRUD + active-selection for voice-design audio server configurations.
+    /// Mirrors LlmSettingsService. (Transcription configs are managed by
+    /// <see cref="TranscriptionSettingsService"/>.)
     /// </summary>
     public class AudioSettingsService
     {
@@ -41,29 +42,12 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
-        public async Task<AudioServerConfig?> GetActiveTranscriptionConfigAsync()
-        {
-            await using var db = await _dbFactory.CreateDbContextAsync();
-            var settings = await db.Settings.SingleOrDefaultAsync();
-            if (settings?.ActiveTranscriptionConfigId is not { } id) return null;
-            return await db.AudioServerConfigs.FindAsync(id);
-        }
-
         public async Task<AudioServerConfig?> GetActiveVoiceDesignConfigAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var settings = await db.Settings.SingleOrDefaultAsync();
             if (settings?.ActiveVoiceDesignConfigId is not { } id) return null;
             return await db.AudioServerConfigs.FindAsync(id);
-        }
-
-        public async Task SetActiveTranscriptionConfigAsync(int configId)
-        {
-            _logger.LogInformation("Setting active transcription config to ID {ConfigId}", configId);
-            await using var db = await _dbFactory.CreateDbContextAsync();
-            await MutateSettingsAsync(db, s => s.ActiveTranscriptionConfigId = configId);
-            await db.SaveChangesAsync();
-            OnChanged?.Invoke();
         }
 
         public async Task SetActiveVoiceDesignConfigAsync(int configId)
@@ -84,13 +68,7 @@ namespace Read2Me.Services
             await db.SaveChangesAsync();
 
             var settings = await db.Settings.SingleOrDefaultAsync();
-            if (config.Role == AudioServerRole.Transcription && settings?.ActiveTranscriptionConfigId == null)
-            {
-                _logger.LogDebug("Auto-activating transcription config '{Name}'", config.Name);
-                await MutateSettingsAsync(db, s => s.ActiveTranscriptionConfigId = config.Id);
-                await db.SaveChangesAsync();
-            }
-            else if (config.Role == AudioServerRole.VoiceDesign && settings?.ActiveVoiceDesignConfigId == null)
+            if (config.Role == AudioServerRole.VoiceDesign && settings?.ActiveVoiceDesignConfigId == null)
             {
                 _logger.LogDebug("Auto-activating voice design config '{Name}'", config.Name);
                 await MutateSettingsAsync(db, s => s.ActiveVoiceDesignConfigId = config.Id);
@@ -129,15 +107,7 @@ namespace Read2Me.Services
             if (settings == null) return;
 
             bool changed = false;
-            if (role == AudioServerRole.Transcription && settings.ActiveTranscriptionConfigId == configId)
-            {
-                var remaining = await db.AudioServerConfigs
-                    .Where(c => c.Role == AudioServerRole.Transcription)
-                    .OrderBy(c => c.Name).ToListAsync();
-                settings.ActiveTranscriptionConfigId = remaining.Count == 1 ? remaining[0].Id : null;
-                changed = true;
-            }
-            else if (role == AudioServerRole.VoiceDesign && settings.ActiveVoiceDesignConfigId == configId)
+            if (role == AudioServerRole.VoiceDesign && settings.ActiveVoiceDesignConfigId == configId)
             {
                 var remaining = await db.AudioServerConfigs
                     .Where(c => c.Role == AudioServerRole.VoiceDesign)

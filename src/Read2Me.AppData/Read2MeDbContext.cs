@@ -14,6 +14,7 @@ namespace Read2Me.AppData
         public DbSet<LlmServerConfig> LlmServerConfigs => Set<LlmServerConfig>();
         public DbSet<LlmPromptSettings> PromptSettings => Set<LlmPromptSettings>();
         public DbSet<AudioServerConfig> AudioServerConfigs => Set<AudioServerConfig>();
+        public DbSet<TranscriptionServiceConfig> TranscriptionServiceConfigs => Set<TranscriptionServiceConfig>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -25,6 +26,14 @@ namespace Read2Me.AppData
                 e.Property(a => a.ApiKey).HasMaxLength(512);
                 e.Property(a => a.Model).HasMaxLength(250);
                 e.Property(a => a.Role).HasConversion<string>().IsRequired();
+            });
+
+            modelBuilder.Entity<TranscriptionServiceConfig>(e =>
+            {
+                e.HasKey(a => a.Id);
+                e.Property(a => a.Name).HasMaxLength(250).IsRequired();
+                e.Property(a => a.Type).HasConversion<string>().IsRequired();
+                e.Property(a => a.SettingsJson).IsRequired();
             });
         }
     }

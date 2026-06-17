@@ -152,6 +152,7 @@ namespace Read2Me.Services
             var db = await _session.OpenAsync(folderId);
             return await db.Characters
                 .Include(c => c.Aliases)
+                .Include(c => c.Voices)
                 .OrderBy(c => c.IsNarrator ? 0 : 1)
                 .ThenBy(c => c.Name)
                 .ToListAsync();

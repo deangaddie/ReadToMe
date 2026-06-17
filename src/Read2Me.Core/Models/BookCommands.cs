@@ -42,12 +42,13 @@ public record MergeCharactersCommand(ProjectFolderId FolderId, Guid SurvivorId, 
 public record DeleteCharacterCommand(ProjectFolderId FolderId, Guid CharacterId) : BookCommand(FolderId);
 
 // Voice
-public record CreateVoiceCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
+public record CreateVoiceCommand(ProjectFolderId FolderId, Guid CharacterId, string Name, bool IsGenerated = false) : BookCommand(FolderId);
 public record SetVoiceDefaultCommand(ProjectFolderId FolderId, Guid VoiceId) : BookCommand(FolderId);
 public record UpdateVoiceCommand(ProjectFolderId FolderId, Guid VoiceId, string Name, string? Description) : BookCommand(FolderId);
 public record SetVoiceDesignPromptCommand(ProjectFolderId FolderId, Guid VoiceId, string Prompt) : BookCommand(FolderId);
 public record SetVoiceTranscriptCommand(ProjectFolderId FolderId, Guid VoiceId, string Transcript) : BookCommand(FolderId);
 public record SetVoiceAudioCommand(ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : BookCommand(FolderId);
+public record SetVoiceSourceCommand(ProjectFolderId FolderId, Guid VoiceId, bool IsGenerated) : BookCommand(FolderId);
 public record DeleteVoiceCommand(ProjectFolderId FolderId, Guid VoiceId) : BookCommand(FolderId);
 
 // Title insertion

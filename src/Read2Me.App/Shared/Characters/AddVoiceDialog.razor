@@ -1,4 +1,3 @@
-@using System.IO
 @using Read2Me.App.State
 @using Read2Me.Data.Entities
 @inject CharacterPresenter Presenter
@@ -12,45 +11,15 @@
             <MudTextField @bind-Value="_name" Label="Voice name" Variant="Variant.Outlined"
                           Placeholder="@Character.Name" Immediate="true" />
 
-            <MudTabs Rounded="true" Border="true" @bind-ActivePanelIndex="_activeTab">
-                <MudTabPanel Text="Upload">
-                    <MudStack Spacing="2" Class="pt-3">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">WAV or AAC file required.</MudText>
-                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AttachFile"
-                                   HtmlTag="label" for="voice-upload-file" Style="cursor:pointer">
-                            @(_uploadFile?.Name ?? "Choose audio file")
-                        </MudButton>
-                        <InputFile id="voice-upload-file" OnChange="OnFileChanged"
-                                   accept=".wav,.aac" style="display:none" />
-                        <MudTextField @bind-Value="_transcript" Label="Transcript (optional)"
-                                      Variant="Variant.Outlined" Lines="3" Immediate="true" />
-                    </MudStack>
-                </MudTabPanel>
-                <MudTabPanel Text="Generate">
-                    <MudStack Spacing="2" Class="pt-3">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            Describe how the voice should sound, or generate a description from the LLM.
-                        </MudText>
-                        <MudTextField @bind-Value="_designPrompt" Label="Voice description prompt"
-                                      Variant="Variant.Outlined" Lines="4" Immediate="true" />
-                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AutoFixHigh"
-                                   OnClick="GeneratePromptAsync" Disabled="@_generatingPrompt">
-                            @(_generatingPrompt ? "Generating…" : "Generate with AI")
-                        </MudButton>
-                    </MudStack>
-                </MudTabPanel>
-            </MudTabs>
-
-            @if (_error != null)
-            {
-                <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
-            }
+            <MudToggleGroup T="bool" @bind-Value="_isGenerated" SelectionMode="SelectionMode.SingleSelection">
+                <MudToggleItem Value="false" Text="Reference Audio" />
+                <MudToggleItem Value="true" Text="Prompt" />
+            </MudToggleGroup>
         </MudStack>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
-                   Disabled="@(!CanSubmit)">Add</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Add</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -58,75 +27,16 @@
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter, EditorRequired] public Character Character { get; set; } = null!;
 
-    int _activeTab;
     string _name = "";
-    IBrowserFile? _uploadFile;
-    string _transcript = "";
-    string _designPrompt = "";
-    bool _generatingPrompt;
-    string? _error;
-
-    bool CanSubmit => _activeTab == 0 ? _uploadFile != null : !string.IsNullOrWhiteSpace(_designPrompt);
-
-    void OnFileChanged(InputFileChangeEventArgs e)
-    {
-        var ext = Path.GetExtension(e.File.Name).ToLowerInvariant();
-        if (ext is not (".wav" or ".aac"))
-        {
-            _error = "Only WAV and AAC files are accepted.";
-            _uploadFile = null;
-            return;
-        }
-        _error = null;
-        _uploadFile = e.File;
-    }
-
-    async Task GeneratePromptAsync()
-    {
-        _generatingPrompt = true;
-        _error = null;
-        StateHasChanged();
-        var prompt = await Presenter.GenerateDesignPromptTextAsync(Character.Id);
-        if (prompt != null)
-            _designPrompt = prompt;
-        else
-            _error = "Failed to generate prompt. Check LLM configuration.";
-        _generatingPrompt = false;
-    }
+    bool _isGenerated = false;
 
     void Cancel() => MudDialog.Cancel();
 
     void Submit()
     {
         var name = string.IsNullOrWhiteSpace(_name) ? Character.Name : _name.Trim();
-        if (_activeTab == 0)
-        {
-            if (_uploadFile == null) { _error = "Select an audio file."; return; }
-            MudDialog.Close(DialogResult.Ok(new VoiceDialogResult(
-                name,
-                Mode: VoiceMode.Upload,
-                UploadFile: _uploadFile,
-                Transcript: string.IsNullOrWhiteSpace(_transcript) ? null : _transcript.Trim(),
-                DesignPrompt: null)));
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(_designPrompt)) { _error = "Enter a voice description."; return; }
-            MudDialog.Close(DialogResult.Ok(new VoiceDialogResult(
-                name,
-                Mode: VoiceMode.Generate,
-                UploadFile: null,
-                Transcript: null,
-                DesignPrompt: _designPrompt.Trim())));
-        }
+        MudDialog.Close(DialogResult.Ok(new VoiceDialogResult(name, _isGenerated)));
     }
 
-    public enum VoiceMode { Upload, Generate }
-
-    public sealed record VoiceDialogResult(
-        string Name,
-        VoiceMode Mode,
-        IBrowserFile? UploadFile,
-        string? Transcript,
-        string? DesignPrompt);
+    public sealed record VoiceDialogResult(string Name, bool IsGenerated);
 }

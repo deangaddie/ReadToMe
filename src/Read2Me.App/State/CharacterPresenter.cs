@@ -9,6 +9,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Llm;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
@@ -18,10 +19,12 @@ namespace Read2Me.App.State
         IProjectReader reader,
         IBookCommandHandler commandHandler,
         IAudioPipeline audioPipeline,
-        ITranscriptionClient transcriptionClient,
+        ITranscriptionClientResolver transcriptionResolver,
         IVoiceDesignClient voiceDesignClient,
         AudioSettingsService audioSettings,
-        Read2Me.Services.Voice.VoiceDesignPromptService voiceDesignPromptService)
+        TranscriptionSettingsService transcriptionSettings,
+        Read2Me.Services.Voice.VoiceDesignPromptService voiceDesignPromptService,
+        Read2Me.Core.IO.IFileSystem fileSystem)
     {
         public bool IsLoading { get; private set; }
         public bool IsBusy { get; private set; }
@@ -92,7 +95,7 @@ namespace Read2Me.App.State
             ExecuteAndReloadAsync(new CreateVoiceCommand(_folderId!.Value, characterId, name));
 
         /// <summary>Creates a voice and returns its new ID without triggering a full reload.</summary>
-        public async Task<Guid?> AddVoiceAndGetIdAsync(Guid characterId, string name)
+        public async Task<Guid?> AddVoiceAndGetIdAsync(Guid characterId, string name, bool isGenerated = false)
         {
             if (_folderId is not { } folder) return null;
             IsBusy = true;
@@ -101,7 +104,27 @@ namespace Read2Me.App.State
             Guid? id = null;
             try
             {
-                id = await commandHandler.ExecuteAsync(new CreateVoiceCommand(folder, characterId, name));
+                id = await commandHandler.ExecuteAsync(new CreateVoiceCommand(folder, characterId, name, isGenerated));
+            }
+            catch (Exception ex)
+            {
+                Error = ex.Message;
+            }
+            IsBusy = false;
+            await LoadAsync(folder);
+            return id;
+        }
+
+        public async Task SetVoiceTranscriptDirectAsync(Guid voiceId, string transcript)
+        {
+            if (_folderId is not { } folder) return;
+            IsBusy = true;
+            Error = null;
+            NotifyStateChanged();
+            try
+            {
+                await commandHandler.ExecuteAsync(new SetVoiceTranscriptCommand(folder, voiceId, transcript));
+                UpdateVoiceInPlace(voiceId, v => v.Transcript = transcript);
             }
             catch (Exception ex)
             {
@@ -109,11 +132,13 @@ namespace Read2Me.App.State
             }
             IsBusy = false;
             NotifyStateChanged();
-            return id;
         }
 
-        public Task SetVoiceTranscriptDirectAsync(Guid voiceId, string transcript) =>
-            ExecuteAndReloadAsync(new SetVoiceTranscriptCommand(_folderId!.Value, voiceId, transcript));
+        public Task SetVoiceSourceAsync(Guid voiceId, bool isGenerated) =>
+            ExecuteAndReloadAsync(new SetVoiceSourceCommand(_folderId!.Value, voiceId, isGenerated));
+
+        public Task SetVoiceDesignPromptDirectAsync(Guid voiceId, string prompt) =>
+            ExecuteAndReloadAsync(new SetVoiceDesignPromptCommand(_folderId!.Value, voiceId, prompt));
 
         public Task SetVoiceDefaultAsync(Guid voiceId) =>
             ExecuteAndReloadAsync(new SetVoiceDefaultCommand(_folderId!.Value, voiceId));
@@ -163,13 +188,28 @@ namespace Read2Me.App.State
             await LoadAsync(folder);
         }
 
+        public Task ReplaceVoiceAudioAsync(
+            Guid characterId, Guid voiceId, string voiceName,
+            Stream audioStream, string extension,
+            CancellationToken ct = default) =>
+            UploadVoiceAudioAsync(characterId, voiceId, voiceName, audioStream, extension, ct);
+
+        public Stream? OpenVoiceAudioStream(VoiceEntity voice)
+        {
+            if (_folderId is not { } folder || voice.AudioFileName == null) return null;
+            var projectFolder = fileSystem.GetProjectFolderPath(folder.Value);
+            var path = System.IO.Path.Combine(projectFolder, voice.AudioFileName.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            if (!fileSystem.FileExists(path)) return null;
+            return File.OpenRead(path);
+        }
+
         public async Task TranscribeVoiceAsync(
             Guid voiceId, Stream audioStream, string fileName,
             CancellationToken ct = default)
         {
             if (_folderId is not { } folder) return;
 
-            var config = await audioSettings.GetActiveTranscriptionConfigAsync();
+            var config = await transcriptionSettings.GetActiveConfigAsync();
             if (config == null)
             {
                 Error = "No active transcription server configured.";
@@ -182,15 +222,33 @@ namespace Read2Me.App.State
             NotifyStateChanged();
             try
             {
+                var transcriptionClient = transcriptionResolver.Resolve(config.Type);
                 var transcript = await transcriptionClient.TranscribeAsync(config, audioStream, fileName, ct);
                 await commandHandler.ExecuteAsync(new SetVoiceTranscriptCommand(folder, voiceId, transcript), ct);
+                UpdateVoiceInPlace(voiceId, v => v.Transcript = transcript);
             }
             catch (Exception ex)
             {
                 Error = ex.Message;
             }
             IsBusy = false;
-            await LoadAsync(folder);
+            NotifyStateChanged();
+        }
+
+        /// <summary>
+        /// Applies a mutation to the in-memory <see cref="VoiceEntity"/> with the
+        /// given id (in both <see cref="Voices"/> and the selected character's voice
+        /// list) so a single-field change doesn't require reloading every character,
+        /// line, and voice from the database — which would replace all objects and
+        /// reset transient UI state (expanded panels, drafts).
+        /// </summary>
+        private void UpdateVoiceInPlace(Guid voiceId, Action<VoiceEntity> mutate)
+        {
+            var voice = Voices.Find(v => v.Id == voiceId);
+            if (voice is not null) mutate(voice);
+
+            var charVoice = SelectedCharacter?.Voices?.FirstOrDefault(v => v.Id == voiceId);
+            if (charVoice is not null && !ReferenceEquals(charVoice, voice)) mutate(charVoice);
         }
 
         /// <summary>
