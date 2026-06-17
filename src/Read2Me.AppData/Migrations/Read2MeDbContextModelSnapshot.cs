@@ -25,6 +25,12 @@ namespace Read2Me.AppData.Migrations
                     b.Property<int?>("ActiveLlmConfigId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("ActiveTranscriptionConfigId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ActiveVoiceDesignConfigId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("SelectedThemeId")
                         .HasColumnType("INTEGER");
 
@@ -60,6 +66,39 @@ namespace Read2Me.AppData.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Themes");
+                });
+
+            modelBuilder.Entity("Read2Me.AppData.Entities.AudioServerConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ApiKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AudioServerConfigs");
                 });
 
             modelBuilder.Entity("Read2Me.AppData.Entities.LlmPromptSettings", b =>

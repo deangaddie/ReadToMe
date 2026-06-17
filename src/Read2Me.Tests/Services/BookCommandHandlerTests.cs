@@ -26,7 +26,7 @@ namespace Read2Me.Tests.Services
         {
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
             var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _svc = new BookCommandHandler(session);
+            _svc = new BookCommandHandler(session, fs);
             _folder = new ProjectFolderId(FolderName);
         }
 

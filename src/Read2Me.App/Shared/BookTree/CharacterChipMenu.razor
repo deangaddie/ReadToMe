@@ -1,4 +1,5 @@
 @using Read2Me.App.State
+@using Read2Me.Core.Models
 @using Read2Me.Data.Entities
 @inject BookHierarchyPresenter Presenter
 
@@ -22,11 +23,14 @@
             var c = ch;
             <MudMenuItem OnClick="@(() => Select(c.Id))">@c.Name</MudMenuItem>
         }
+        <MudDivider />
+        <MudMenuItem Icon="@Icons.Material.Filled.Add" OnClick="AddCharacter">Add new character...</MudMenuItem>
     </ChildContent>
 </MudMenu>
 
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
     [Parameter] public Color Color { get; set; } = Color.Primary;
     [Parameter] public Variant Variant { get; set; } = Variant.Filled;
     [Parameter] public string? Icon { get; set; }
@@ -39,5 +43,13 @@
     {
         _open = false;
         await OnSelected.InvokeAsync(characterId);
+    }
+
+    private async Task AddCharacter()
+    {
+        _open = false;
+        var newId = await Presenter.AddCharacterAsync(FolderId);
+        if (newId is Guid id)
+            await OnSelected.InvokeAsync(id);
     }
 }

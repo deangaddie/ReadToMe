@@ -17,6 +17,7 @@ namespace Read2Me.Data
         public DbSet<Paragraph> Paragraphs => Set<Paragraph>();
         public DbSet<ParagraphItem> ParagraphItems => Set<ParagraphItem>();
         public DbSet<Voice> Voices => Set<Voice>();
+        public DbSet<CharacterAlias> CharacterAliases => Set<CharacterAlias>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -81,8 +82,21 @@ namespace Read2Me.Data
             modelBuilder.Entity<Voice>(e =>
             {
                 e.HasKey(v => v.Id);
-                e.Property(v => v.Title).HasMaxLength(250).IsRequired();
+                e.Property(v => v.Name).HasMaxLength(250).IsRequired();
+                e.Property(v => v.Description).HasMaxLength(1000);
+                e.Property(v => v.Source).HasConversion<string>().IsRequired();
+                e.Property(v => v.DesignPrompt).HasMaxLength(4000);
+                e.Property(v => v.Transcript).HasMaxLength(4000);
+                e.Property(v => v.AudioFileName).HasMaxLength(512);
                 e.HasOne(v => v.Character).WithMany(c => c.Voices).HasForeignKey(v => v.CharacterId);
+            });
+
+            modelBuilder.Entity<CharacterAlias>(e =>
+            {
+                e.HasKey(a => a.Id);
+                e.Property(a => a.Name).HasMaxLength(250).IsRequired();
+                e.HasOne(a => a.Character).WithMany(c => c.Aliases).HasForeignKey(a => a.CharacterId);
+                e.HasIndex(a => new { a.CharacterId, a.Name }).IsUnique();
             });
         }
     }

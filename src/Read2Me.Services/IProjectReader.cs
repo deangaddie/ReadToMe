@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
+using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Services
 {
@@ -36,18 +37,14 @@ namespace Read2Me.Services
         Task<List<Chapter>> GetChaptersAsync(ProjectFolderId folderId, Guid partId);
         Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId folderId, Guid chapterId);
         Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId);
+        Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId);
+        Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId);
+        Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId);
         Task<int> GetTotalPartCountAsync(ProjectFolderId folderId);
         Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId);
 
-        Task<List<CharacterParagraphRef>> GetVolumeCharacterParagraphsAsync(ProjectFolderId folderId, Guid volumeId);
-        Task<List<CharacterParagraphRef>> GetPartCharacterParagraphsAsync(ProjectFolderId folderId, Guid partId);
-        Task<List<CharacterParagraphRef>> GetChapterCharacterParagraphsAsync(ProjectFolderId folderId, Guid chapterId);
-        Task<List<CharacterParagraphRef>> GetVolumeUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid volumeId);
-        Task<List<CharacterParagraphRef>> GetPartUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid partId);
-        Task<List<CharacterParagraphRef>> GetChapterUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid chapterId);
-        Task<int> GetVolumeCharacterParagraphCountAsync(ProjectFolderId folderId, Guid volumeId);
-        Task<int> GetPartCharacterParagraphCountAsync(ProjectFolderId folderId, Guid partId);
-        Task<int> GetChapterCharacterParagraphCountAsync(ProjectFolderId folderId, Guid chapterId);
+        Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
+            ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false);
 
         // All volume/part/chapter node ids that contain at least one character paragraph.
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);

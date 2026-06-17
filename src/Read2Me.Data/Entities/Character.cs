@@ -7,5 +7,6 @@ namespace Read2Me.Data.Entities
         public bool IsNarrator { get; set; }
 
         public ICollection<Voice> Voices { get; set; } = [];
+        public ICollection<CharacterAlias> Aliases { get; set; } = [];
     }
 }

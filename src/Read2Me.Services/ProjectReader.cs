@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using VoiceEntity = Read2Me.Data.Entities.Voice;
 using ProjectEntity = Read2Me.Data.Entities.Project;
 
 namespace Read2Me.Services
@@ -146,6 +147,40 @@ namespace Read2Me.Services
             return await db.Characters.OrderBy(c => c.IsNarrator ? 0 : 1).ThenBy(c => c.Name).ToListAsync();
         }
 
+        public async Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.Characters
+                .Include(c => c.Aliases)
+                .OrderBy(c => c.IsNarrator ? 0 : 1)
+                .ThenBy(c => c.Name)
+                .ToListAsync();
+        }
+
+        public async Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.Voices
+                .Where(v => v.CharacterId == characterId)
+                .OrderByDescending(v => v.IsDefault)
+                .ThenBy(v => v.CreatedUtc)
+                .ToListAsync();
+        }
+
+        public async Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character && i.CharacterId == characterId)
+                .OrderBy(i => i.Paragraph.Chapter.Part.Volume.Order)
+                .ThenBy(i => i.Paragraph.Chapter.Part.Order)
+                .ThenBy(i => i.Paragraph.Chapter.Order)
+                .ThenBy(i => i.Paragraph.Order)
+                .ThenBy(i => i.Order)
+                .Select(i => new CharacterLine(i.Id, i.ParagraphId, i.Paragraph.ChapterId, i.Text ?? string.Empty))
+                .ToListAsync();
+        }
+
         public async Task<int> GetTotalPartCountAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);
@@ -158,120 +193,28 @@ namespace Read2Me.Services
             return await db.Chapters.CountAsync();
         }
 
-        public async Task<List<CharacterParagraphRef>> GetVolumeCharacterParagraphsAsync(ProjectFolderId folderId, Guid volumeId)
+        public async Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
+            ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
         {
             var db = await _session.OpenAsync(folderId);
-            return await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character
-                    && i.Paragraph.Chapter.Part.VolumeId == volumeId)
+
+            IQueryable<Data.Entities.ParagraphItem> q = db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character);
+
+            q = level switch
+            {
+                BookNodeLevel.Volume  => q.Where(i => i.Paragraph.Chapter.Part.VolumeId == nodeId),
+                BookNodeLevel.Part    => q.Where(i => i.Paragraph.Chapter.PartId == nodeId),
+                _                     => q.Where(i => i.Paragraph.ChapterId == nodeId),
+            };
+
+            if (unprocessedOnly)
+                q = q.Where(i => i.CharacterId == null);
+
+            return await q
                 .Select(i => new CharacterParagraphRef(
                     i.ParagraphId,
                     i.Paragraph.ChapterId,
-                    i.Paragraph.Chapter.PartId,
-                    volumeId))
-                .Distinct()
-                .ToListAsync();
-        }
-
-        public async Task<List<CharacterParagraphRef>> GetPartCharacterParagraphsAsync(ProjectFolderId folderId, Guid partId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            return await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character
-                    && i.Paragraph.Chapter.PartId == partId)
-                .Select(i => new CharacterParagraphRef(
-                    i.ParagraphId,
-                    i.Paragraph.ChapterId,
-                    partId,
-                    i.Paragraph.Chapter.Part.VolumeId))
-                .Distinct()
-                .ToListAsync();
-        }
-
-        public async Task<List<CharacterParagraphRef>> GetChapterCharacterParagraphsAsync(ProjectFolderId folderId, Guid chapterId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            return await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character
-                    && i.Paragraph.ChapterId == chapterId)
-                .Select(i => new CharacterParagraphRef(
-                    i.ParagraphId,
-                    chapterId,
-                    i.Paragraph.Chapter.PartId,
-                    i.Paragraph.Chapter.Part.VolumeId))
-                .Distinct()
-                .ToListAsync();
-        }
-
-        public async Task<int> GetVolumeCharacterParagraphCountAsync(ProjectFolderId folderId, Guid volumeId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            return await db.Paragraphs
-                .Where(p => p.Chapter.Part.VolumeId == volumeId
-                    && p.Items.Any(i => i.ItemType == ParagraphItemType.Character))
-                .CountAsync();
-        }
-
-        public async Task<int> GetPartCharacterParagraphCountAsync(ProjectFolderId folderId, Guid partId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            return await db.Paragraphs
-                .Where(p => p.Chapter.PartId == partId
-                    && p.Items.Any(i => i.ItemType == ParagraphItemType.Character))
-                .CountAsync();
-        }
-
-        public async Task<int> GetChapterCharacterParagraphCountAsync(ProjectFolderId folderId, Guid chapterId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            return await db.Paragraphs
-                .Where(p => p.ChapterId == chapterId
-                    && p.Items.Any(i => i.ItemType == ParagraphItemType.Character))
-                .CountAsync();
-        }
-
-        public async Task<List<CharacterParagraphRef>> GetVolumeUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid volumeId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            return await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character
-                    && i.CharacterId == null
-                    && i.Paragraph.Chapter.Part.VolumeId == volumeId)
-                .Select(i => new CharacterParagraphRef(
-                    i.ParagraphId,
-                    i.Paragraph.ChapterId,
-                    i.Paragraph.Chapter.PartId,
-                    volumeId))
-                .Distinct()
-                .ToListAsync();
-        }
-
-        public async Task<List<CharacterParagraphRef>> GetPartUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid partId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            return await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character
-                    && i.CharacterId == null
-                    && i.Paragraph.Chapter.PartId == partId)
-                .Select(i => new CharacterParagraphRef(
-                    i.ParagraphId,
-                    i.Paragraph.ChapterId,
-                    partId,
-                    i.Paragraph.Chapter.Part.VolumeId))
-                .Distinct()
-                .ToListAsync();
-        }
-
-        public async Task<List<CharacterParagraphRef>> GetChapterUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid chapterId)
-        {
-            var db = await _session.OpenAsync(folderId);
-            return await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character
-                    && i.CharacterId == null
-                    && i.Paragraph.ChapterId == chapterId)
-                .Select(i => new CharacterParagraphRef(
-                    i.ParagraphId,
-                    chapterId,
                     i.Paragraph.Chapter.PartId,
                     i.Paragraph.Chapter.Part.VolumeId))
                 .Distinct()
@@ -310,10 +253,12 @@ namespace Read2Me.Services
                 .Select(p => new
                 {
                     p.Id,
-                    p.CharacterId,
-                    CharacterName = p.Character != null ? p.Character.Name : null,
                     HasCharacterItem = p.Items.Any(i => i.ItemType == ParagraphItemType.Character),
                     HasContentItem = p.Items.Any(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration),
+                    CharacterName = p.Items
+                        .Where(i => i.ItemType == ParagraphItemType.Character && i.Character != null)
+                        .Select(i => i.Character!.Name)
+                        .FirstOrDefault(),
                     Text = string.Join(" ", p.Items
                         .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
                         .OrderBy(i => i.Order)

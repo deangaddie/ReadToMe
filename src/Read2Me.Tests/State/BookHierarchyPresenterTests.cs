@@ -42,44 +42,28 @@ namespace Read2Me.Tests.State
             FakeBookUseCases BookUseCases,
             BookTreeState TreeState);
 
-        private static Context Create()
+        private static Context Create(IReadOnlyDictionary<Guid, int>? nodeCounts = null)
         {
             var reader = Substitute.For<IProjectReader>();
             var commandHandler = Substitute.For<IBookCommandHandler>();
             var bookUseCases = new FakeBookUseCases();
             var dialogService = Substitute.For<IDialogService>();
 
-            // Default reader returns
             reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
                 Filename: null, HasContent: false, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
+                NodeCharacterParagraphCounts: nodeCounts ?? new Dictionary<Guid, int>()));
 
-            // Selection-related reader defaults
-            reader.GetVolumeCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
+            // Default: single method returns empty
+            reader.GetCharacterParagraphsAsync(
+                Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>());
-            reader.GetPartCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(new List<CharacterParagraphRef>());
-            reader.GetChapterCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(new List<CharacterParagraphRef>());
-            reader.GetVolumeUnprocessedCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(new List<CharacterParagraphRef>());
-            reader.GetPartUnprocessedCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(new List<CharacterParagraphRef>());
-            reader.GetChapterUnprocessedCharacterParagraphsAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(new List<CharacterParagraphRef>());
-            reader.GetVolumeCharacterParagraphCountAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(0);
-            reader.GetPartCharacterParagraphCountAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(0);
-            reader.GetChapterCharacterParagraphCountAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(0);
 
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
-            var selectionCoordinator = new SelectionCoordinator(reader);
             var characterQueue = new CharacterQueueService();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, selectionCoordinator, dialogService, characterQueue);
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, dialogService, characterQueue);
             return new Context(presenter, reader, commandHandler, bookUseCases, treeState);
         }
 
@@ -257,7 +241,6 @@ namespace Read2Me.Tests.State
 
             var sourcePartId = Guid.NewGuid();
             var newPartId = Guid.NewGuid();
-            // sourcePartId NOT in ExpandedPartIds
             ctx.CommandHandler.ExecuteAsync(Arg.Any<SplitAtChapterCommand>()).Returns(newPartId);
 
             await ctx.Presenter.SplitAndReloadAsync(
@@ -273,14 +256,12 @@ namespace Read2Me.Tests.State
         public async Task SetItemCharacterAsync_StaleCharacterList_RefreshesAndSetsCharacter()
         {
             var ctx = Create();
-            // Load with empty character list
             await ctx.Presenter.LoadAsync(Folder);
             Assert.Empty(ctx.Presenter.Characters);
 
             var charId = Guid.NewGuid();
             var character = new Character { Id = charId, Name = "NewChar" };
 
-            // Reader returns the character on refresh
             ctx.Reader.GetCharactersAsync(Folder).Returns(new List<Character> { character });
 
             var item = new ParagraphItem { Id = Guid.NewGuid(), Order = "a" };
@@ -325,12 +306,10 @@ namespace Read2Me.Tests.State
             var ctx = Create();
             await ctx.Presenter.LoadAsync(Folder);
 
-            // Manually add a paragraph to selection.
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             ctx.Presenter.Selection.AddParagraph(Guid.NewGuid(), new ParagraphSelection(volId, ptId, chId));
             Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
 
-            // Load the same folder again (tab switch simulation).
             await ctx.Presenter.LoadAsync(Folder);
 
             Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
@@ -342,7 +321,6 @@ namespace Read2Me.Tests.State
             var ctx = Create();
             var other = new ProjectFolderId("other-book");
 
-            // Also stub the new folder
             ctx.Reader.GetBookOverviewAsync(other).Returns(new BookOverview(
                 Filename: null, HasContent: false, Volumes: [], Characters: [],
                 TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
@@ -353,11 +331,7 @@ namespace Read2Me.Tests.State
             ctx.Presenter.Selection.AddParagraph(Guid.NewGuid(), new ParagraphSelection(volId, ptId, chId));
             Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
 
-            // Switch to different folder — previous folder selection clears.
             await ctx.Presenter.LoadAsync(other);
-
-            // Previous folder's selection is cleared (Reset was called).
-            // We can verify by switching back and checking.
             await ctx.Presenter.LoadAsync(Folder);
             Assert.Equal(0, ctx.Presenter.Selection.SelectedParagraphCount);
         }
@@ -394,20 +368,22 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
-        public async Task ToggleParagraphAsync_CompleteChapter_AddsChapterNode()
+        public async Task ToggleParagraphAsync_CompleteChapter_ChapterChecked()
         {
-            var ctx = Create();
+            var chId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var volId = Guid.NewGuid();
+            // Seed counts so NodeState can derive Checked
+            var counts = new Dictionary<Guid, int> { [chId] = 1 };
+            var ctx = Create(counts);
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: false, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
+                NodeCharacterParagraphCounts: counts));
             await ctx.Presenter.LoadAsync(Folder);
 
             var pId = Guid.NewGuid();
-            var chId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var volId = Guid.NewGuid();
-
-            // Chapter has exactly 1 character paragraph — selecting it completes the chapter.
-            ctx.Reader.GetChapterCharacterParagraphCountAsync(Folder, chId).Returns(1);
-
             await ctx.Presenter.ToggleParagraphAsync(Folder, pId, chId, ptId, volId, on: true);
 
-            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(chId));
+            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
         }
 
         // ---------------------------------------------------------------
@@ -423,14 +399,14 @@ namespace Read2Me.Tests.State
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId1 = Guid.NewGuid(); var pId2 = Guid.NewGuid();
 
-            ctx.Reader.GetChapterCharacterParagraphsAsync(Folder, chId)
+            ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Chapter, chId, Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>
                 {
                     new CharacterParagraphRef(pId1, chId, ptId, volId),
                     new CharacterParagraphRef(pId2, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Chapter, chId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true);
 
             Assert.True(ctx.Presenter.Selection.IsParagraphSelected(pId1));
             Assert.True(ctx.Presenter.Selection.IsParagraphSelected(pId2));
@@ -445,14 +421,14 @@ namespace Read2Me.Tests.State
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId = Guid.NewGuid();
 
-            ctx.Reader.GetChapterCharacterParagraphsAsync(Folder, chId)
+            ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Chapter, chId, Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>
                 {
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Chapter, chId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Chapter, chId, on: false);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: false);
 
             Assert.False(ctx.Presenter.Selection.IsParagraphSelected(pId));
         }
@@ -460,46 +436,60 @@ namespace Read2Me.Tests.State
         [Fact]
         public async Task SetNodeAsync_Volume_On_MarksDescendantChaptersAndPartsChecked()
         {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId1 = Guid.NewGuid(); var pId2 = Guid.NewGuid();
 
-            ctx.Reader.GetVolumeCharacterParagraphsAsync(Folder, volId)
+            // Seed counts so derived NodeState returns Checked
+            var counts = new Dictionary<Guid, int>
+            {
+                [volId] = 2,
+                [ptId] = 2,
+                [chId] = 2,
+            };
+            var ctx = Create(counts);
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: false, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
+                NodeCharacterParagraphCounts: counts));
+            await ctx.Presenter.LoadAsync(Folder);
+
+            ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Volume, volId, Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>
                 {
                     new CharacterParagraphRef(pId1, chId, ptId, volId),
                     new CharacterParagraphRef(pId2, chId, ptId, volId),
                 });
-            // Volume completeness so the volume node itself is marked.
-            ctx.Reader.GetVolumeCharacterParagraphCountAsync(Folder, volId).Returns(2);
 
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Volume, volId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Volume, volId, on: true);
 
-            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(volId));
-            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(ptId));
-            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(chId));
+            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Volume, volId));
+            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Part, ptId));
+            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
         }
 
         [Fact]
         public async Task SetNodeAsync_Part_On_MarksDescendantChaptersChecked()
         {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId = Guid.NewGuid();
 
-            ctx.Reader.GetPartCharacterParagraphsAsync(Folder, ptId)
+            var counts = new Dictionary<Guid, int> { [chId] = 1 };
+            var ctx = Create(counts);
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: false, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
+                NodeCharacterParagraphCounts: counts));
+            await ctx.Presenter.LoadAsync(Folder);
+
+            ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Part, ptId, Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>
                 {
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
 
-            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(chId));
+            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
         }
 
         [Fact]
@@ -511,17 +501,17 @@ namespace Read2Me.Tests.State
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId = Guid.NewGuid();
 
-            ctx.Reader.GetPartCharacterParagraphsAsync(Folder, ptId)
+            ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Part, ptId, Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>
                 {
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Part, ptId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Part, ptId, on: false);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: false);
 
-            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(chId));
-            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(ptId));
+            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
+            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Part, ptId));
         }
 
         [Fact]
@@ -533,20 +523,19 @@ namespace Read2Me.Tests.State
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId1 = Guid.NewGuid(); var pId2 = Guid.NewGuid();
 
-            ctx.Reader.GetVolumeCharacterParagraphsAsync(Folder, volId)
+            ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Volume, volId, Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>
                 {
                     new CharacterParagraphRef(pId1, chId, ptId, volId),
                     new CharacterParagraphRef(pId2, chId, ptId, volId),
                 });
-            ctx.Reader.GetVolumeCharacterParagraphCountAsync(Folder, volId).Returns(2);
 
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Volume, volId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Volume, volId, on: false);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Volume, volId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Volume, volId, on: false);
 
-            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(volId));
-            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(ptId));
-            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(chId));
+            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Volume, volId));
+            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Part, ptId));
+            Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
             Assert.False(ctx.Presenter.Selection.IsParagraphSelected(pId1));
             Assert.False(ctx.Presenter.Selection.IsParagraphSelected(pId2));
         }
@@ -560,14 +549,14 @@ namespace Read2Me.Tests.State
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId = Guid.NewGuid();
 
-            ctx.Reader.GetPartCharacterParagraphsAsync(Folder, ptId)
+            ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Part, ptId, Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>
                 {
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Part, ptId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Part, ptId, on: false);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: false);
 
             Assert.False(ctx.Presenter.Selection.IsParagraphSelected(pId));
             Assert.Equal(0, ctx.Presenter.Selection.SelectedParagraphCount);
@@ -576,28 +565,33 @@ namespace Read2Me.Tests.State
         [Fact]
         public async Task SetNodeAsync_Part_OnOffOn_ReselectsCleanly()
         {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId = Guid.NewGuid();
 
-            ctx.Reader.GetPartCharacterParagraphsAsync(Folder, ptId)
+            var counts = new Dictionary<Guid, int> { [chId] = 1 };
+            var ctx = Create(counts);
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: false, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
+                NodeCharacterParagraphCounts: counts));
+            await ctx.Presenter.LoadAsync(Folder);
+
+            ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Part, ptId, Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>
                 {
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Part, ptId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Part, ptId, on: false);
-            await ctx.Presenter.SetNodeAsync(Folder, SelectionNodeKind.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: false);
+            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
 
-            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(chId));
+            Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
             Assert.True(ctx.Presenter.Selection.IsParagraphSelected(pId));
         }
 
         // ---------------------------------------------------------------
-        // Selectable nodes (checkbox only shown for nodes with char paragraphs)
+        // Selectable nodes
         // ---------------------------------------------------------------
 
         [Fact]
@@ -654,10 +648,6 @@ namespace Read2Me.Tests.State
         public async Task SetItemCharacterAsync_ClearsQueueOutcome()
         {
             var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            // Need access to the CharacterQueueService used by the presenter.
-            // Re-create the context keeping the same queue instance so we can inspect it.
             var reader = ctx.Reader;
             var commandHandler = ctx.CommandHandler;
             var dialogService = Substitute.For<IDialogService>();
@@ -665,9 +655,8 @@ namespace Read2Me.Tests.State
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
-            var selectionCoordinator = new SelectionCoordinator(reader);
             var presenter = new BookHierarchyPresenter(reader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, selectionCoordinator, dialogService, queue);
+                treeState, selectionState, dialogService, queue);
             await presenter.LoadAsync(Folder);
 
             var paragraphId = Guid.NewGuid();

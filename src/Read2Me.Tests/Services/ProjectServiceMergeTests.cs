@@ -30,7 +30,7 @@ namespace Read2Me.Tests.Services
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = _tempDir }));
             var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
             _writer = new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
-            _svc = new BookCommandHandler(session);
+            _svc = new BookCommandHandler(session, fs);
         }
 
         public void Dispose()

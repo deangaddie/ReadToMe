@@ -11,6 +11,7 @@ using MudBlazor.Services;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Books;
 using Read2Me.App.Characters;
 using Read2Me.Services.Characters;
@@ -46,6 +47,11 @@ namespace Read2Me.App
             services.AddScoped<LlmPromptService>();
             services.AddScoped<Read2Me.Services.Llm.ILlmClient, Read2Me.Services.Llm.OpenAiLlmClient>();
             services.AddScoped<Read2Me.Services.Characters.CharacterAttributionService>();
+            services.AddScoped<AudioSettingsService>();
+            services.AddScoped<Read2Me.Services.Audio.ITranscriptionClient, Read2Me.Services.Audio.WhisperTranscriptionClient>();
+            services.AddScoped<Read2Me.Services.Audio.IVoiceDesignClient, Read2Me.Services.Audio.Qwen3VoiceDesignClient>();
+            services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, Read2Me.Services.Audio.FileAudioPipeline>();
+            services.AddScoped<Read2Me.Services.Voice.VoiceDesignPromptService>();
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
 
             services.AddScoped<ProjectDbSession>();
@@ -63,8 +69,8 @@ namespace Read2Me.App
             services.AddScoped<BookHierarchyLoader>();
             services.AddScoped<BookTreeState>();
             services.AddScoped<BookSelectionState>();
-            services.AddScoped<SelectionCoordinator>();
             services.AddScoped<BookHierarchyPresenter>();
+            services.AddScoped<CharacterPresenter>();
             services.AddScoped<MenuActions>();
 
             services.AddSingleton<EpubFileReader>();

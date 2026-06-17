@@ -109,9 +109,10 @@ namespace Read2Me.App.Characters
             string? voiceInstructions,
             CancellationToken ct)
         {
-            var characters = await reader.GetCharactersAsync(item.Folder);
+            var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
             var existing = characters.FirstOrDefault(c =>
-                string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+                string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase) ||
+                c.Aliases.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)));
 
             Guid charId;
             if (existing != null)

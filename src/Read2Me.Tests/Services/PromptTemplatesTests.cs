@@ -68,7 +68,7 @@ namespace Read2Me.Tests.Services
         public void DefaultContextWindowConstants_AreCorrect()
         {
             Assert.Equal(4, PromptTemplates.DefaultContextParagraphsBefore);
-            Assert.Equal(0, PromptTemplates.DefaultContextParagraphsAfter);
+            Assert.Equal(2, PromptTemplates.DefaultContextParagraphsAfter);
         }
 
         [Fact]

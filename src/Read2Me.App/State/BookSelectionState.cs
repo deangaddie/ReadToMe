@@ -11,43 +11,13 @@ namespace Read2Me.App.State
 
     public sealed class FolderSelection
     {
-        // paragraph IDs → ancestry; rolled-up node IDs → null
-        private readonly Dictionary<Guid, ParagraphSelection?> _selected = new();
+        private readonly Dictionary<Guid, ParagraphSelection> _selected = new();
+        private IReadOnlyDictionary<Guid, int> _counts = new Dictionary<Guid, int>();
 
-        public int SelectedParagraphCount => _selected.Count(kv => kv.Value is not null);
+        public void SetCounts(IReadOnlyDictionary<Guid, int> counts) => _counts = counts;
 
-        public bool IsParagraphSelected(Guid paragraphId) =>
-            _selected.TryGetValue(paragraphId, out var v) && v is not null;
-
-        public bool IsNodeFullySelected(Guid nodeId) =>
-            _selected.TryGetValue(nodeId, out var v) && v is null;
-
-        public TriState NodeState(Guid nodeId)
-        {
-            if (_selected.TryGetValue(nodeId, out var v) && v is null)
-                return TriState.Checked;
-
-            foreach (var sel in _selected.Values)
-            {
-                if (sel is null) continue;
-                if (sel.VolumeId == nodeId || sel.PartId == nodeId || sel.ChapterId == nodeId)
-                    return TriState.Indeterminate;
-            }
-
-            return TriState.Unchecked;
-        }
-
-        public void AddParagraph(Guid id, ParagraphSelection ancestry) =>
-            _selected[id] = ancestry;
-
-        public void RemoveParagraph(Guid id) =>
-            _selected.Remove(id);
-
-        public void AddNode(Guid id) =>
-            _selected[id] = null;
-
-        public void RemoveNode(Guid id) =>
-            _selected.Remove(id);
+        public void AddParagraph(Guid id, ParagraphSelection ancestry) => _selected[id] = ancestry;
+        public void RemoveParagraph(Guid id) => _selected.Remove(id);
 
         public void AddParagraphs(IEnumerable<CharacterParagraphRef> refs)
         {
@@ -57,56 +27,36 @@ namespace Read2Me.App.State
 
         public void RemoveParagraphs(IEnumerable<Guid> ids)
         {
-            foreach (var id in ids)
-                _selected.Remove(id);
+            foreach (var id in ids) _selected.Remove(id);
         }
-
-        public IEnumerable<Guid> FullySelectedVolumeIds() =>
-            _selected
-                .Where(kv => kv.Value is null && IsVolumeNode(kv.Key))
-                .Select(kv => kv.Key);
-
-        public IEnumerable<Guid> FullySelectedPartIds() =>
-            _selected
-                .Where(kv => kv.Value is null && IsPartNode(kv.Key))
-                .Select(kv => kv.Key);
-
-        public IEnumerable<Guid> FullySelectedChapterIds() =>
-            _selected
-                .Where(kv => kv.Value is null && IsChapterNode(kv.Key))
-                .Select(kv => kv.Key);
-
-        // Distinguish node kind by checking ancestry refs in the dict.
-        // A rolled-up node id is a volume if any paragraph ancestry has that id as VolumeId.
-        private bool IsVolumeNode(Guid id) =>
-            _selected.Values.Any(s => s?.VolumeId == id);
-
-        private bool IsPartNode(Guid id) =>
-            _selected.Values.Any(s => s?.PartId == id);
-
-        private bool IsChapterNode(Guid id) =>
-            _selected.Values.Any(s => s?.ChapterId == id);
-
-        public IEnumerable<Guid> SelectedParagraphIds() =>
-            _selected.Where(kv => kv.Value is not null).Select(kv => kv.Key);
-
-        public ParagraphSelection? GetAncestry(Guid paragraphId) =>
-            _selected.TryGetValue(paragraphId, out var v) ? v : null;
 
         public void Clear() => _selected.Clear();
 
-        // Count selected paragraphs whose ancestry matches a given node id.
-        public int SelectedCountUnder(Guid nodeId, SelectionNodeKind kind) =>
-            _selected.Values.Count(s => s is not null && kind switch
-            {
-                SelectionNodeKind.Volume => s.VolumeId == nodeId,
-                SelectionNodeKind.Part => s.PartId == nodeId,
-                SelectionNodeKind.Chapter => s.ChapterId == nodeId,
-                _ => false
-            });
-    }
+        public bool IsParagraphSelected(Guid paragraphId) => _selected.ContainsKey(paragraphId);
+        public IEnumerable<Guid> SelectedParagraphIds() => _selected.Keys;
+        public ParagraphSelection? GetAncestry(Guid paragraphId) =>
+            _selected.TryGetValue(paragraphId, out var v) ? v : null;
+        public int SelectedParagraphCount => _selected.Count;
 
-    public enum SelectionNodeKind { Volume, Part, Chapter }
+        public int SelectedCountUnder(BookNodeLevel level, Guid nodeId) =>
+            _selected.Values.Count(s => level switch
+            {
+                BookNodeLevel.Volume  => s.VolumeId == nodeId,
+                BookNodeLevel.Part    => s.PartId == nodeId,
+                _                     => s.ChapterId == nodeId,
+            });
+
+        public TriState NodeState(BookNodeLevel level, Guid nodeId)
+        {
+            var selected = SelectedCountUnder(level, nodeId);
+            if (selected == 0) return TriState.Unchecked;
+            var total = _counts.TryGetValue(nodeId, out var t) ? t : 0;
+            return total > 0 && selected >= total ? TriState.Checked : TriState.Indeterminate;
+        }
+
+        public bool IsNodeFullySelected(BookNodeLevel level, Guid nodeId) =>
+            NodeState(level, nodeId) == TriState.Checked;
+    }
 
     public sealed class BookSelectionState
     {

@@ -2,10 +2,7 @@
 @using Read2Me.App.Shared.BookMenus
 @using Read2Me.Core.Models
 @using Read2Me.Data.Entities
-@using Read2Me.Services.Characters
 @inject BookHierarchyPresenter Presenter
-@inject CharacterQueueService Queue
-@implements IDisposable
 
 @if (Parts.Count == 1)
 {
@@ -29,46 +26,19 @@ else
             <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
                               ExpandedChanged="@PartExpandCb(p)">
                 <TitleContent>
-                    @{
-                        var row = NodeRowViewModel.For(
-                            Presenter.IsNodeSelectable(p.Id),
-                            Presenter.Selection.NodeState(p.Id),
-                            Queue.SummaryForNode(FolderId, p.Id));
-                    }
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                        @if (row.ShowSelectionControls)
-                        {
-                            <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-                                <MudCheckBox T="bool?" Value="@row.CheckboxValue"
-                                             ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Part, p.Id, v == true))"
-                                             Size="Size.Small" />
-                                <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
-                                               Size="Size.Small" title="Select unprocessed"
-                                               OnClick="@(() => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Part, p.Id, true, unprocessedOnly: true))" />
-                            </span>
-                        }
-                        <MudText Style="flex:1">@(p.Title ?? "Part")</MudText>
-                        @if (row.ShowProcessingChip)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
-                                     Icon="@Icons.Material.Filled.HourglassEmpty" Class="mt-0"
-                                     Style="pointer-events:none;">Processing</MudChip>
-                        }
-                        @if (row.ShowQueuedChip)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
-                                     Class="mt-0" Style="pointer-events:none;">@row.QueuedCount queued</MudChip>
-                        }
-                        <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPart(FolderId, p)"
-                                     IsFirst="@(idx == 0)"
-                                     IsLast="@(idx == Parts.Count - 1)"
-                                     PreviousSiblingId="@(idx > 0 ? Parts[idx - 1].Id : null)"
-                                     NextSiblingId="@(idx < Parts.Count - 1 ? Parts[idx + 1].Id : null)"
-                                     OnChanged="OnChanged"
-                                     OnMerged="OnMerged"
-                                     OnSplit="OnSplit"
-                                     OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
-                    </MudStack>
+                    <NodeTitleRow FolderId="@FolderId"
+                                  NodeId="@p.Id"
+                                  Level="BookNodeLevel.Part"
+                                  Title="@(p.Title ?? "Part")"
+                                  Spec="@BookNodeMenuSpecs.ForPart(FolderId, p)"
+                                  IsFirst="@(idx == 0)"
+                                  IsLast="@(idx == Parts.Count - 1)"
+                                  PreviousSiblingId="@(idx > 0 ? Parts[idx - 1].Id : null)"
+                                  NextSiblingId="@(idx < Parts.Count - 1 ? Parts[idx + 1].Id : null)"
+                                  OnChanged="OnChanged"
+                                  OnMerged="OnMerged"
+                                  OnSplit="OnSplit"
+                                  OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
                 </TitleContent>
                 <ChildContent>
                     @if (Presenter.Tree.LoadingIds.Contains(p.Id))
@@ -92,12 +62,6 @@ else
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
     [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
-
-    protected override void OnInitialized() => Queue.Changed += Refresh;
-
-    void Refresh() => InvokeAsync(StateHasChanged);
-
-    public void Dispose() => Queue.Changed -= Refresh;
 
     EventCallback<bool> PartExpandCb(Part p) =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnPartExpandedAsync(p, b));

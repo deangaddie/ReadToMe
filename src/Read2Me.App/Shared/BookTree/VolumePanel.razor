@@ -2,10 +2,7 @@
 @using Read2Me.App.Shared.BookMenus
 @using Read2Me.Core.Models
 @using Read2Me.Data.Entities
-@using Read2Me.Services.Characters
 @inject BookHierarchyPresenter Presenter
-@inject CharacterQueueService Queue
-@implements IDisposable
 
 @if (IsSingleVolume)
 {
@@ -16,45 +13,19 @@ else
     <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedVolumeIds.Contains(Volume.Id)"
                       ExpandedChanged="@VolumeExpandCb">
         <TitleContent>
-            @{
-                var row = NodeRowViewModel.For(
-                    Presenter.IsNodeSelectable(Volume.Id),
-                    Presenter.Selection.NodeState(Volume.Id),
-                    Queue.SummaryForNode(FolderId, Volume.Id));
-            }
-            <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
-                @if (row.ShowSelectionControls)
-                {
-                    <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-                        <MudCheckBox T="bool?" Value="@row.CheckboxValue"
-                                     ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Volume, Volume.Id, v == true))"
-                                     Size="Size.Small" />
-                        <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
-                                       Size="Size.Small" title="Select unprocessed"
-                                       OnClick="@(() => Presenter.SetNodeAsync(FolderId, SelectionNodeKind.Volume, Volume.Id, true, unprocessedOnly: true))" />
-                    </span>
-                }
-                <MudText Style="flex:1">@Volume.Title</MudText>
-                @if (row.ShowProcessingChip)
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
-                             Icon="@Icons.Material.Filled.HourglassEmpty" Class="mt-0"
-                             Style="pointer-events:none;">Processing</MudChip>
-                }
-                @if (row.ShowQueuedChip)
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
-                             Class="mt-0" Style="pointer-events:none;">@row.QueuedCount queued</MudChip>
-                }
-                <BookNodeMenu Spec="@BookNodeMenuSpecs.ForVolume(FolderId, Volume)"
-                             IsFirst="IsFirst"
-                             IsLast="IsLast"
-                             PreviousSiblingId="PreviousSiblingId"
-                             NextSiblingId="NextSiblingId"
-                             OnChanged="OnChanged"
-                             OnMerged="OnMerged"
-                             OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
-            </MudStack>
+            <NodeTitleRow FolderId="@FolderId"
+                          NodeId="@Volume.Id"
+                          Level="BookNodeLevel.Volume"
+                          Title="@(Volume.Title ?? "Volume")"
+                          Spec="@BookNodeMenuSpecs.ForVolume(FolderId, Volume)"
+                          IsFirst="IsFirst"
+                          IsLast="IsLast"
+                          PreviousSiblingId="PreviousSiblingId"
+                          NextSiblingId="NextSiblingId"
+                          OnChanged="OnChanged"
+                          OnMerged="OnMerged"
+                          OnSplit="OnSplit"
+                          OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
         </TitleContent>
         <ChildContent>
             @RenderVolumeBody(Volume)
@@ -73,12 +44,6 @@ else
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
     [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
-
-    protected override void OnInitialized() => Queue.Changed += Refresh;
-
-    void Refresh() => InvokeAsync(StateHasChanged);
-
-    public void Dispose() => Queue.Changed -= Refresh;
 
     EventCallback<bool> VolumeExpandCb =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnVolumeExpandedAsync(Volume, b));

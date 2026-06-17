@@ -36,7 +36,7 @@ namespace Read2Me.Services.Llm
             - Return ONLY valid JSON. No markdown fences, no explanation.
             - JSON format: {{response_format}}
 
-            Known characters (JSON array of names): {{known_characters}}
+            Known characters (JSON array; each entry has a "name" and optional "aliases" — match either when identifying the speaker): {{known_characters}}
 
             Context paragraphs (JSON object):
             - "preceding": paragraphs before the target, in order
@@ -58,6 +58,13 @@ namespace Read2Me.Services.Llm
             passed to a voice-design model to synthesise this character's voice. Describe
             age, gender, accent, timbre, pace and emotional default in one paragraph.
             """;
+
+        /// <summary>
+        /// A neutral voice-test sentence used as the sample text sent to the voice-design AI.
+        /// Stored as the voice transcript for generated voices.
+        /// </summary>
+        public const string VoiceDesignSampleSentence =
+            "The quick brown fox jumps over the lazy dog near the riverbank at dusk.";
 
         private static readonly JsonSerializerOptions _jsonOptions = new()
         {

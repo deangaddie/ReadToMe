@@ -51,8 +51,8 @@ namespace Read2Me.Services.Characters
                 }
 
                 var project = await reader.GetProjectAsync(item.Folder);
-                var characters = await reader.GetCharactersAsync(item.Folder);
-                var characterNames = characters.Select(c => c.Name).ToList();
+                var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
+                var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
 
                 var template = await prompts.GetCharacterPromptAsync();
                 var prompt = PromptTemplates.Render(template, new Dictionary<string, string>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Read2Me.App.State;
 using Read2Me.Core.Models;
@@ -44,72 +45,93 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
-        public void SelectedParagraphCount_OnlyCountsParagraphs_NotNodes()
+        public void SelectedParagraphCount_CountsParagraphs()
         {
             var (sel, volId, ptId, chId) = MakeAncestry();
-            var pId1 = Id();
-            var pId2 = Id();
-            sel.AddParagraph(pId1, new ParagraphSelection(volId, ptId, chId));
-            sel.AddParagraph(pId2, new ParagraphSelection(volId, ptId, chId));
-            sel.AddNode(chId);
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
             Assert.Equal(2, sel.SelectedParagraphCount);
         }
 
         // ---------------------------------------------------------------
-        // NodeState — Checked
+        // NodeState — derived from selected count vs total count
         // ---------------------------------------------------------------
 
         [Fact]
-        public void NodeState_AddNode_Checked()
+        public void NodeState_NoParagraphsSelected_Unchecked()
         {
             var (sel, volId, ptId, chId) = MakeAncestry();
-            sel.AddNode(chId);
-            Assert.Equal(TriState.Checked, sel.NodeState(chId));
+            Assert.Equal(TriState.Unchecked, sel.NodeState(BookNodeLevel.Chapter, chId));
         }
-
-        [Fact]
-        public void NodeState_RemoveNode_Unchecked()
-        {
-            var (sel, volId, ptId, chId) = MakeAncestry();
-            sel.AddNode(chId);
-            sel.RemoveNode(chId);
-            Assert.Equal(TriState.Unchecked, sel.NodeState(chId));
-        }
-
-        // ---------------------------------------------------------------
-        // NodeState — Indeterminate
-        // ---------------------------------------------------------------
 
         [Fact]
         public void NodeState_SomeParagraphsSelected_ChapterIndeterminate()
         {
             var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.SetCounts(new Dictionary<Guid, int> { [chId] = 2 });
             sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
-            // chapter node NOT added → indeterminate
-            Assert.Equal(TriState.Indeterminate, sel.NodeState(chId));
+            Assert.Equal(TriState.Indeterminate, sel.NodeState(BookNodeLevel.Chapter, chId));
         }
 
         [Fact]
         public void NodeState_SomeParagraphsSelected_PartIndeterminate()
         {
             var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.SetCounts(new Dictionary<Guid, int> { [ptId] = 2 });
             sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
-            Assert.Equal(TriState.Indeterminate, sel.NodeState(ptId));
+            Assert.Equal(TriState.Indeterminate, sel.NodeState(BookNodeLevel.Part, ptId));
         }
 
         [Fact]
         public void NodeState_SomeParagraphsSelected_VolumeIndeterminate()
         {
             var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.SetCounts(new Dictionary<Guid, int> { [volId] = 2 });
             sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
-            Assert.Equal(TriState.Indeterminate, sel.NodeState(volId));
+            Assert.Equal(TriState.Indeterminate, sel.NodeState(BookNodeLevel.Volume, volId));
         }
 
         [Fact]
-        public void NodeState_NoParagraphsSelected_Unchecked()
+        public void NodeState_AllParagraphsSelected_ChapterChecked()
         {
             var (sel, volId, ptId, chId) = MakeAncestry();
-            Assert.Equal(TriState.Unchecked, sel.NodeState(chId));
+            sel.SetCounts(new Dictionary<Guid, int> { [chId] = 1 });
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            Assert.Equal(TriState.Checked, sel.NodeState(BookNodeLevel.Chapter, chId));
+        }
+
+        [Fact]
+        public void NodeState_AllParagraphsSelected_VolumeChecked()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.SetCounts(new Dictionary<Guid, int> { [volId] = 2 });
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            Assert.Equal(TriState.Checked, sel.NodeState(BookNodeLevel.Volume, volId));
+        }
+
+        [Fact]
+        public void NodeState_CountsNotSeeded_IndeterminateWhenAnySelected()
+        {
+            // When count not seeded (total=0), node stays Indeterminate even with selections
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            Assert.Equal(TriState.Indeterminate, sel.NodeState(BookNodeLevel.Chapter, chId));
+        }
+
+        // ---------------------------------------------------------------
+        // SelectedCountUnder
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public void SelectedCountUnder_Chapter_CountsMatchingParagraphs()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            var chId2 = Id();
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId2));
+            Assert.Equal(2, sel.SelectedCountUnder(BookNodeLevel.Chapter, chId));
         }
 
         // ---------------------------------------------------------------
@@ -145,58 +167,6 @@ namespace Read2Me.Tests.State
         }
 
         // ---------------------------------------------------------------
-        // FullySelected enumerations
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public void FullySelectedVolumeIds_ReturnsRolledUpVolumeNodeIds()
-        {
-            var (sel, volId, ptId, chId) = MakeAncestry();
-            var pId = Id();
-            sel.AddParagraph(pId, new ParagraphSelection(volId, ptId, chId));
-            sel.AddNode(volId);
-            var vols = sel.FullySelectedVolumeIds().ToList();
-            Assert.Contains(volId, vols);
-        }
-
-        [Fact]
-        public void FullySelectedPartIds_ReturnsRolledUpPartNodeIds()
-        {
-            var (sel, volId, ptId, chId) = MakeAncestry();
-            var pId = Id();
-            sel.AddParagraph(pId, new ParagraphSelection(volId, ptId, chId));
-            sel.AddNode(ptId);
-            var parts = sel.FullySelectedPartIds().ToList();
-            Assert.Contains(ptId, parts);
-        }
-
-        [Fact]
-        public void FullySelectedChapterIds_ReturnsRolledUpChapterNodeIds()
-        {
-            var (sel, volId, ptId, chId) = MakeAncestry();
-            var pId = Id();
-            sel.AddParagraph(pId, new ParagraphSelection(volId, ptId, chId));
-            sel.AddNode(chId);
-            var chapters = sel.FullySelectedChapterIds().ToList();
-            Assert.Contains(chId, chapters);
-        }
-
-        // ---------------------------------------------------------------
-        // SelectedCountUnder
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public void SelectedCountUnder_Chapter_CountsMatchingParagraphs()
-        {
-            var (sel, volId, ptId, chId) = MakeAncestry();
-            var chId2 = Id();
-            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
-            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
-            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId2));
-            Assert.Equal(2, sel.SelectedCountUnder(chId, SelectionNodeKind.Chapter));
-        }
-
-        // ---------------------------------------------------------------
         // Clear / BookSelectionState.Reset
         // ---------------------------------------------------------------
 
@@ -204,11 +174,11 @@ namespace Read2Me.Tests.State
         public void Clear_EmptiesAllSelection()
         {
             var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.SetCounts(new Dictionary<Guid, int> { [chId] = 1 });
             sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
-            sel.AddNode(chId);
             sel.Clear();
             Assert.Equal(0, sel.SelectedParagraphCount);
-            Assert.Equal(TriState.Unchecked, sel.NodeState(chId));
+            Assert.Equal(TriState.Unchecked, sel.NodeState(BookNodeLevel.Chapter, chId));
         }
 
         [Fact]
@@ -239,7 +209,7 @@ namespace Read2Me.Tests.State
         }
 
         // ---------------------------------------------------------------
-        // Collapse persistence: selection survives collapse (dict-only)
+        // Collapse persistence
         // ---------------------------------------------------------------
 
         [Fact]
@@ -248,10 +218,29 @@ namespace Read2Me.Tests.State
             var (sel, volId, ptId, chId) = MakeAncestry();
             var pId = Id();
             sel.AddParagraph(pId, new ParagraphSelection(volId, ptId, chId));
-
-            // Simulating collapse: selection dict is independent of tree cache.
-            // Just verify the paragraph is still selected after nothing touches it.
             Assert.True(sel.IsParagraphSelected(pId));
+        }
+
+        // ---------------------------------------------------------------
+        // SetCounts + IsNodeFullySelected
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public void IsNodeFullySelected_WhenSelectedEqualsCount_True()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.SetCounts(new Dictionary<Guid, int> { [chId] = 1 });
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            Assert.True(sel.IsNodeFullySelected(BookNodeLevel.Chapter, chId));
+        }
+
+        [Fact]
+        public void IsNodeFullySelected_WhenPartiallySelected_False()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.SetCounts(new Dictionary<Guid, int> { [chId] = 2 });
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            Assert.False(sel.IsNodeFullySelected(BookNodeLevel.Chapter, chId));
         }
     }
 }

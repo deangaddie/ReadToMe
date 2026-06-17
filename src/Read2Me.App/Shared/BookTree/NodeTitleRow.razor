@@ -1,0 +1,70 @@
+@using Read2Me.App.State
+@using Read2Me.App.Shared.BookMenus
+@using Read2Me.Core.Models
+@using Read2Me.Services.Characters
+@inject BookHierarchyPresenter Presenter
+@inject CharacterQueueService Queue
+@implements IDisposable
+
+@{
+    var row = NodeRowViewModel.For(
+        Presenter.IsNodeSelectable(NodeId),
+        Presenter.Selection.NodeState(Level, NodeId),
+        Queue.SummaryForNode(FolderId, NodeId));
+}
+<MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
+    @if (row.ShowSelectionControls)
+    {
+        <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
+            <MudCheckBox T="bool?" Value="@row.CheckboxValue"
+                         ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, Level, NodeId, v == true))"
+                         Size="Size.Small" />
+            <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                           Size="Size.Small" title="Select unprocessed"
+                           OnClick="@(() => Presenter.SetNodeAsync(FolderId, Level, NodeId, true, unprocessedOnly: true))" />
+        </span>
+    }
+    <MudText Style="flex:1">@Title</MudText>
+    @if (row.ShowProcessingChip)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
+                 Icon="@Icons.Material.Filled.HourglassEmpty" Class="mt-0"
+                 Style="pointer-events:none;">Processing</MudChip>
+    }
+    @if (row.ShowQueuedChip)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                 Class="mt-0" Style="pointer-events:none;">@row.QueuedCount queued</MudChip>
+    }
+    <BookNodeMenu Spec="@Spec"
+                 IsFirst="IsFirst"
+                 IsLast="IsLast"
+                 PreviousSiblingId="PreviousSiblingId"
+                 NextSiblingId="NextSiblingId"
+                 OnChanged="OnChanged"
+                 OnMerged="OnMerged"
+                 OnSplit="OnSplit"
+                 OnReset="OnReset" />
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter, EditorRequired] public BookNodeLevel Level { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public BookNodeMenuSpec Spec { get; set; } = null!;
+    [Parameter, EditorRequired] public bool IsFirst { get; set; }
+    [Parameter, EditorRequired] public bool IsLast { get; set; }
+    [Parameter] public Guid? PreviousSiblingId { get; set; }
+    [Parameter] public Guid? NextSiblingId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
+    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    protected override void OnInitialized() => Queue.Changed += Refresh;
+
+    void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Queue.Changed -= Refresh;
+}

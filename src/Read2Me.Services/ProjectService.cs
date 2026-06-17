@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -29,13 +28,7 @@ namespace Read2Me.Services
             await _session.DisposeAsync();
         }
 
-        public string SanitizeName(string name)
-        {
-            var s = name.ToLowerInvariant().Replace(' ', '-');
-            s = Regex.Replace(s, @"[^\w\-]", "");
-            s = Regex.Replace(s, @"-{2,}", "-").Trim('-');
-            return s;
-        }
+        public string SanitizeName(string name) => Core.Models.NameSanitizer.Sanitize(name);
 
         public bool CreateProject(string name)
         {

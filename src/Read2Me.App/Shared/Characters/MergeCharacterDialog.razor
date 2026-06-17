@@ -1,0 +1,58 @@
+@using Read2Me.Data.Entities
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Merge Characters</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2">
+                Merge <strong>@MergedCharacter.Name</strong> into another character.
+                All lines currently attributed to @MergedCharacter.Name will be re-attributed to the survivor.
+            </MudText>
+            <MudSelect T="Guid" @bind-Value="_survivorId" Label="Merge into" Variant="Variant.Outlined">
+                @foreach (var c in OtherCharacters)
+                {
+                    <MudSelectItem T="Guid" Value="c.Id">@c.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudCheckBox @bind-Value="_addAsAlias" Color="Color.Primary"
+                         Label=@($"Add \"{MergedCharacter.Name}\" as an alias of the survivor") />
+            @if (_error != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="Submit">Merge</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Character MergedCharacter { get; set; } = null!;
+    [Parameter, EditorRequired] public IReadOnlyList<Character> OtherCharacters { get; set; } = [];
+
+    Guid _survivorId;
+    bool _addAsAlias = true;
+    string? _error;
+
+    protected override void OnParametersSet()
+    {
+        if (_survivorId == Guid.Empty && OtherCharacters.Count > 0)
+            _survivorId = OtherCharacters[0].Id;
+    }
+
+    void Cancel() => MudDialog.Cancel();
+
+    void Submit()
+    {
+        if (_survivorId == Guid.Empty) { _error = "Select a character to merge into."; return; }
+        MudDialog.Close(DialogResult.Ok(new MergeResult(_survivorId, _addAsAlias)));
+    }
+
+    public sealed record MergeResult(Guid SurvivorId, bool AddNameAsAlias);
+}

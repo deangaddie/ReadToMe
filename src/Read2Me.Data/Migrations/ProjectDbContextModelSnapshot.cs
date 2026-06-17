@@ -70,6 +70,28 @@ namespace Read2Me.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Read2Me.Data.Entities.CharacterAlias", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("CharacterAliases");
+                });
+
             modelBuilder.Entity("Read2Me.Data.Entities.Paragraph", b =>
                 {
                     b.Property<Guid>("Id")
@@ -205,12 +227,38 @@ namespace Read2Me.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AudioFileName")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("CharacterId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Title")
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DesignPrompt")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Transcript")
+                        .HasMaxLength(4000)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -251,6 +299,17 @@ namespace Read2Me.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Part");
+                });
+
+            modelBuilder.Entity("Read2Me.Data.Entities.CharacterAlias", b =>
+                {
+                    b.HasOne("Read2Me.Data.Entities.Character", "Character")
+                        .WithMany("Aliases")
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
                 });
 
             modelBuilder.Entity("Read2Me.Data.Entities.Paragraph", b =>
@@ -316,6 +375,8 @@ namespace Read2Me.Data.Migrations
 
             modelBuilder.Entity("Read2Me.Data.Entities.Character", b =>
                 {
+                    b.Navigation("Aliases");
+
                     b.Navigation("Voices");
                 });
 

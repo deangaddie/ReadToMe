@@ -36,6 +36,19 @@ public record MergeParagraphItemCommand(ProjectFolderId FolderId, Guid ItemId, M
 public record SetItemCharacterCommand(ProjectFolderId FolderId, Guid ItemId, Guid? CharacterId) : BookCommand(FolderId);
 public record CreateCharacterCommand(ProjectFolderId FolderId, string Name) : BookCommand(FolderId);
 public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid ParagraphId, Guid CharacterId, string? VoiceInstructions = null) : BookCommand(FolderId);
+public record AddCharacterAliasCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
+public record RemoveCharacterAliasCommand(ProjectFolderId FolderId, Guid AliasId) : BookCommand(FolderId);
+public record MergeCharactersCommand(ProjectFolderId FolderId, Guid SurvivorId, Guid MergedId, bool AddNameAsAlias) : BookCommand(FolderId);
+public record DeleteCharacterCommand(ProjectFolderId FolderId, Guid CharacterId) : BookCommand(FolderId);
+
+// Voice
+public record CreateVoiceCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
+public record SetVoiceDefaultCommand(ProjectFolderId FolderId, Guid VoiceId) : BookCommand(FolderId);
+public record UpdateVoiceCommand(ProjectFolderId FolderId, Guid VoiceId, string Name, string? Description) : BookCommand(FolderId);
+public record SetVoiceDesignPromptCommand(ProjectFolderId FolderId, Guid VoiceId, string Prompt) : BookCommand(FolderId);
+public record SetVoiceTranscriptCommand(ProjectFolderId FolderId, Guid VoiceId, string Transcript) : BookCommand(FolderId);
+public record SetVoiceAudioCommand(ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : BookCommand(FolderId);
+public record DeleteVoiceCommand(ProjectFolderId FolderId, Guid VoiceId) : BookCommand(FolderId);
 
 // Title insertion
 public record AddBookTitleCommand(ProjectFolderId FolderId) : BookCommand(FolderId);

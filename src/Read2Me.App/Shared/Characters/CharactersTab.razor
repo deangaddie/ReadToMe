@@ -1,0 +1,106 @@
+@using Read2Me.App.State
+@using Read2Me.Core.Models
+@using Read2Me.Data.Entities
+@inject CharacterPresenter Presenter
+@inject IDialogService DialogService
+@implements IDisposable
+
+@if (Presenter.IsLoading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (Presenter.Characters.Count == 0)
+{
+    <MudStack Spacing="2" AlignItems="AlignItems.Center" Class="pa-8">
+        <MudText Typo="Typo.body1" Color="Color.Secondary">No characters yet.</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+                   OnClick="AddCharacterAsync">Add Character</MudButton>
+    </MudStack>
+}
+else
+{
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="4" md="3">
+            <MudStack Spacing="1">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                           OnClick="AddCharacterAsync">Add Character</MudButton>
+                <MudList T="Character" @bind-SelectedValue="_selectedCharacter" SelectionMode="SelectionMode.SingleSelection"
+                         Dense="true" Class="mt-1">
+                    @foreach (var character in Presenter.Characters)
+                    {
+                        var c = character;
+                        <MudListItem T="Character" Value="c" OnClick="@(() => SelectAsync(c))">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                @if (c.IsNarrator)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.MenuBook" Size="Size.Small" Color="Color.Secondary" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                }
+                                <MudText Typo="Typo.body2">@c.Name</MudText>
+                                @if (c.Aliases.Count > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary"
+                                             Variant="Variant.Text" Class="ml-auto">@c.Aliases.Count</MudChip>
+                                }
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudStack>
+        </MudItem>
+        <MudItem xs="12" sm="8" md="9">
+            @if (Presenter.SelectedCharacter is { } sel)
+            {
+                <CharacterDetailPanel Character="sel"
+                                      Lines="Presenter.Lines"
+                                      AllCharacters="Presenter.Characters"
+                                      FolderName="@FolderName" />
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Select a character.</MudText>
+            }
+        </MudItem>
+    </MudGrid>
+}
+
+@if (Presenter.Error is { } err)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-2">@err</MudAlert>
+}
+
+@code {
+    [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+
+    Character? _selectedCharacter;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Presenter.StateChanged += Refresh;
+        await Presenter.LoadAsync(new Core.Models.ProjectFolderId(FolderName));
+        _selectedCharacter = Presenter.SelectedCharacter;
+    }
+
+    async Task SelectAsync(Character c)
+    {
+        _selectedCharacter = c;
+        await Presenter.SelectCharacterAsync(c);
+    }
+
+    async Task AddCharacterAsync()
+    {
+        var dialog = await DialogService.ShowAsync<AddCharacterDialog>("Add Character");
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        if (result.Data is string name && !string.IsNullOrWhiteSpace(name))
+            await Presenter.AddCharacterAsync(name);
+    }
+
+    void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Presenter.StateChanged -= Refresh;
+}

@@ -11,7 +11,6 @@
 @{
     var queueStatus = Queue.StatusOf(FolderId, Para.Id);
     var queueOutcome = queueStatus is null ? Queue.OutcomeOf(FolderId, Para.Id) : null;
-    if (queueStatus is null) ApplyResolvedCharacter();
     var vm = ParagraphRowViewModel.For(Para, Presenter.SplitView, queueStatus, queueOutcome is not null);
     var isBusy = vm.IsBusy;
     var isCharPara = vm.IsCharacterParagraph;
@@ -74,6 +73,7 @@
                         : ParagraphItemDisplay.GetItemDisplay(it.ItemType) switch { var d => (d.icon, d.color, d.label) };
                     <div style="display:grid; grid-template-columns:120px 1fr auto; align-items:start; gap:8px;">
                         <CharacterChipMenu Label="@chipLabel"
+                                           FolderId="@FolderId"
                                            Color="@chipColor"
                                            Variant="@(isCharItem ? Variant.Filled : Variant.Outlined)"
                                            Icon="@(isCharItem ? null : chipIcon)"
@@ -174,6 +174,7 @@ else
                     _                         => (Color.Default, "")
                 };
                 <CharacterChipMenu Label="@chipLabel"
+                                   FolderId="@FolderId"
                                    Color="@chipColor"
                                    Variant="Variant.Filled"
                                    Style="flex-shrink:0;"
@@ -207,6 +208,7 @@ else
     protected override void OnInitialized()
     {
         Queue.Changed += Refresh;
+        ApplyResolvedCharacter();
     }
 
     // Worker writes the resolved character to the DB on a background scope; this
@@ -226,7 +228,11 @@ else
         }
     }
 
-    void Refresh() => InvokeAsync(StateHasChanged);
+    void Refresh() => InvokeAsync(() =>
+    {
+        ApplyResolvedCharacter();
+        StateHasChanged();
+    });
 
     public void Dispose()
     {

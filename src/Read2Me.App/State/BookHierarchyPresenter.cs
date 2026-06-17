@@ -17,7 +17,6 @@ namespace Read2Me.App.State
         BookUseCases bookUseCases,
         BookTreeState treeState,
         BookSelectionState selectionState,
-        SelectionCoordinator selectionCoordinator,
         IDialogService dialogService,
         CharacterQueueService characterQueue)
     {
@@ -35,8 +34,6 @@ namespace Read2Me.App.State
         public PerFolderState Tree { get; private set; } = null!;
         public FolderSelection Selection { get; private set; } = null!;
 
-        // Volume/part/chapter ids that contain at least one character paragraph.
-        // Nodes absent here are not selectable (no checkbox shown).
         private HashSet<Guid> _selectableNodes = [];
         private IReadOnlyDictionary<Guid, int> _nodeCounts = new Dictionary<Guid, int>();
 
@@ -50,7 +47,6 @@ namespace Read2Me.App.State
         {
             IsLoading = true;
 
-            // Clear selection when switching to a different project.
             if (_lastFolder.HasValue && _lastFolder.Value.Value != folderId.Value)
                 selectionState.Reset(_lastFolder.Value);
 
@@ -70,9 +66,8 @@ namespace Read2Me.App.State
             TotalChapters = overview.TotalChapters;
             _selectableNodes = overview.SelectableNodeIds;
             _nodeCounts = overview.NodeCharacterParagraphCounts;
-            selectionCoordinator.SetNodeCounts(_nodeCounts);
+            Selection.SetCounts(_nodeCounts);
 
-            // Single volume is always auto-expanded; seed it if not already tracked.
             if (Volumes.Count == 1)
                 Tree.ExpandedVolumeIds.Add(Volumes[0].Id);
 
@@ -108,11 +103,8 @@ namespace Read2Me.App.State
                 () => bookUseCases.ImportManuallyAsync(folderId, options), resetTree: true);
         }
 
-        // Split levels mirror the new-parent entity that a split creates.
         public enum SplitLevel { Volume, Part, Chapter, Paragraph }
 
-        // Execute a split, then reload. If the panel being split was expanded,
-        // both the original parent and the newly created parent are expanded.
         public async Task SplitAndReloadAsync(
             ProjectFolderId folderId, BookCommand command, SplitLevel level, Guid sourceParentId)
         {
@@ -173,6 +165,19 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
+        public async Task<Guid?> AddCharacterAsync(ProjectFolderId folderId)
+        {
+            var dialog = await dialogService.ShowAsync<Shared.Characters.AddCharacterDialog>("Add Character");
+            var result = await dialog.Result;
+            if (result?.Canceled != false) return null;
+            if (result.Data is not string name || string.IsNullOrWhiteSpace(name)) return null;
+
+            var newId = await commandHandler.ExecuteAsync(new CreateCharacterCommand(folderId, name.Trim()));
+            Characters = await reader.GetCharactersAsync(folderId);
+            NotifyStateChanged();
+            return newId as Guid?;
+        }
+
         public Task AddBookTitleAsync(ProjectFolderId folderId) =>
             ExecuteCommandAndReloadAsync(folderId, new AddBookTitleCommand(folderId));
 
@@ -204,19 +209,26 @@ namespace Read2Me.App.State
         // Selection mutators
         // ---------------------------------------------------------------
 
-        public async Task ToggleParagraphAsync(
+        public Task ToggleParagraphAsync(
             ProjectFolderId folderId, Guid paragraphId,
             Guid chapterId, Guid partId, Guid volumeId, bool on)
         {
-            await selectionCoordinator.ToggleParagraphAsync(
-                Selection, folderId, paragraphId, chapterId, partId, volumeId, on);
+            if (on)
+                Selection.AddParagraph(paragraphId, new ParagraphSelection(volumeId, partId, chapterId));
+            else
+                Selection.RemoveParagraph(paragraphId);
             NotifyStateChanged();
+            return Task.CompletedTask;
         }
 
         public async Task SetNodeAsync(
-            ProjectFolderId folderId, SelectionNodeKind kind, Guid id, bool on, bool unprocessedOnly = false)
+            ProjectFolderId folderId, BookNodeLevel level, Guid id, bool on, bool unprocessedOnly = false)
         {
-            await selectionCoordinator.SetNodeAsync(Selection, folderId, kind, id, on, unprocessedOnly);
+            var refs = await reader.GetCharacterParagraphsAsync(folderId, level, id, unprocessedOnly);
+            if (on)
+                Selection.AddParagraphs(refs);
+            else
+                Selection.RemoveParagraphs(refs.Select(r => r.ParagraphId));
             NotifyStateChanged();
         }
 

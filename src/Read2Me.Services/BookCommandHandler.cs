@@ -1,24 +1,29 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Books;
+using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Services
 {
     public class BookCommandHandler : IBookCommandHandler
     {
         private readonly ProjectDbSession _session;
+        private readonly IFileSystem _fs;
 
-        public BookCommandHandler(ProjectDbSession session)
+        public BookCommandHandler(ProjectDbSession session, IFileSystem fs)
         {
             _session = session;
+            _fs = fs;
         }
 
         public async Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
@@ -51,6 +56,17 @@ namespace Read2Me.Services
                 case SetItemCharacterCommand c: await SetParagraphItemCharacterAsync(c.FolderId, c.ItemId, c.CharacterId); break;
                 case CreateCharacterCommand c: return await CreateCharacterAsync(c.FolderId, c.Name);
                 case SetParagraphCharacterCommand c: await SetParagraphCharacterAsync(c.FolderId, c.ParagraphId, c.CharacterId, c.VoiceInstructions); break;
+                case AddCharacterAliasCommand c: await AddCharacterAliasAsync(c.FolderId, c.CharacterId, c.Name); break;
+                case RemoveCharacterAliasCommand c: await RemoveCharacterAliasAsync(c.FolderId, c.AliasId); break;
+                case MergeCharactersCommand c: await MergeCharactersAsync(c.FolderId, c.SurvivorId, c.MergedId, c.AddNameAsAlias); break;
+                case DeleteCharacterCommand c: await DeleteCharacterAsync(c.FolderId, c.CharacterId); break;
+                case CreateVoiceCommand c: return await CreateVoiceAsync(c.FolderId, c.CharacterId, c.Name);
+                case SetVoiceDefaultCommand c: await SetVoiceDefaultAsync(c.FolderId, c.VoiceId); break;
+                case UpdateVoiceCommand c: await UpdateVoiceAsync(c.FolderId, c.VoiceId, c.Name, c.Description); break;
+                case SetVoiceDesignPromptCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.DesignPrompt = c.Prompt); break;
+                case SetVoiceTranscriptCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.Transcript = c.Transcript); break;
+                case SetVoiceAudioCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.AudioFileName = c.AudioFileName); break;
+                case DeleteVoiceCommand c: await DeleteVoiceAsync(c.FolderId, c.VoiceId); break;
                 case AddBookTitleCommand c: await AddBookTitleAsync(c.FolderId); break;
                 case AddVolumeTitlesCommand c: await AddVolumeTitlesAsync(c.FolderId); break;
                 case AddPartTitlesCommand c: await AddPartTitlesAsync(c.FolderId); break;
@@ -263,6 +279,211 @@ namespace Read2Me.Services
             await db.Parts.ExecuteDeleteAsync();
             await db.Volumes.ExecuteDeleteAsync();
             await tx.CommitAsync();
+        }
+
+        private async Task AddCharacterAliasAsync(ProjectFolderId folderId, Guid characterId, string name)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var character = await db.Characters
+                .Include(c => c.Aliases)
+                .FirstOrDefaultAsync(c => c.Id == characterId);
+            if (character == null) return;
+
+            var alreadyExists =
+                string.Equals(character.Name, name, StringComparison.OrdinalIgnoreCase) ||
+                character.Aliases.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (alreadyExists) return;
+
+            db.CharacterAliases.Add(new CharacterAlias { Id = Guid.NewGuid(), CharacterId = characterId, Name = name });
+            await db.SaveChangesAsync();
+        }
+
+        private async Task RemoveCharacterAliasAsync(ProjectFolderId folderId, Guid aliasId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var alias = await db.CharacterAliases.FindAsync(aliasId);
+            if (alias == null) return;
+            db.CharacterAliases.Remove(alias);
+            await db.SaveChangesAsync();
+        }
+
+        private async Task MergeCharactersAsync(ProjectFolderId folderId, Guid survivorId, Guid mergedId, bool addNameAsAlias)
+        {
+            if (mergedId == ProjectDbContext.NarratorId || survivorId == ProjectDbContext.NarratorId) return;
+
+            var db = await _session.OpenAsync(folderId);
+            await using var tx = await db.Database.BeginTransactionAsync();
+
+            var merged = await db.Characters.Include(c => c.Aliases).FirstOrDefaultAsync(c => c.Id == mergedId);
+            if (merged == null) { await tx.RollbackAsync(); return; }
+
+            await db.ParagraphItems
+                .Where(i => i.CharacterId == mergedId)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.CharacterId, survivorId));
+
+            await db.Paragraphs
+                .Where(p => p.CharacterId == mergedId)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.CharacterId, survivorId));
+
+            // Move aliases to survivor
+            await db.CharacterAliases
+                .Where(a => a.CharacterId == mergedId)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.CharacterId, survivorId));
+
+            if (addNameAsAlias)
+            {
+                // Re-query survivor aliases from DB (ExecuteUpdateAsync above already moved merged aliases there).
+                var survivorAliasNames = await db.CharacterAliases
+                    .Where(a => a.CharacterId == survivorId)
+                    .Select(a => a.Name.ToLower())
+                    .ToListAsync();
+                var survivorNameLower = (await db.Characters.Where(c => c.Id == survivorId).Select(c => c.Name).FirstAsync()).ToLower();
+
+                void AddIfAbsent(string name)
+                {
+                    if (!string.Equals(survivorNameLower, name, StringComparison.OrdinalIgnoreCase) &&
+                        !survivorAliasNames.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        db.CharacterAliases.Add(new CharacterAlias { Id = Guid.NewGuid(), CharacterId = survivorId, Name = name });
+                        survivorAliasNames.Add(name.ToLower());
+                    }
+                }
+
+                AddIfAbsent(merged.Name);
+                foreach (var alias in merged.Aliases)
+                    AddIfAbsent(alias.Name);
+
+                await db.SaveChangesAsync();
+            }
+
+            // Use bulk delete to avoid EF tracker conflicts after ExecuteUpdateAsync moved the aliases.
+            await db.Characters
+                .Where(c => c.Id == mergedId)
+                .ExecuteDeleteAsync();
+
+            await tx.CommitAsync();
+        }
+
+        private async Task DeleteCharacterAsync(ProjectFolderId folderId, Guid characterId)
+        {
+            if (characterId == ProjectDbContext.NarratorId) return;
+
+            var db = await _session.OpenAsync(folderId);
+            if (!await db.Characters.AnyAsync(c => c.Id == characterId)) return;
+
+            await using var tx = await db.Database.BeginTransactionAsync();
+
+            await db.ParagraphItems
+                .Where(i => i.CharacterId == characterId)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.CharacterId, (Guid?)null));
+
+            await db.Paragraphs
+                .Where(p => p.CharacterId == characterId)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.CharacterId, (Guid?)null));
+
+            await db.CharacterAliases
+                .Where(a => a.CharacterId == characterId)
+                .ExecuteDeleteAsync();
+
+            await db.Characters
+                .Where(c => c.Id == characterId)
+                .ExecuteDeleteAsync();
+
+            await tx.CommitAsync();
+        }
+
+        private async Task<Guid?> CreateVoiceAsync(ProjectFolderId folderId, Guid characterId, string name)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var character = await db.Characters
+                .Include(c => c.Voices)
+                .FirstOrDefaultAsync(c => c.Id == characterId);
+            if (character == null) return null;
+
+            var isFirst = !character.Voices.Any();
+            var effectiveName = string.IsNullOrWhiteSpace(name) ? character.Name : name.Trim();
+            var voice = new VoiceEntity
+            {
+                Id = Guid.NewGuid(),
+                CharacterId = characterId,
+                Name = effectiveName,
+                IsDefault = isFirst,
+                Source = VoiceSource.Uploaded,
+                CreatedUtc = DateTime.UtcNow,
+            };
+            db.Voices.Add(voice);
+            await db.SaveChangesAsync();
+            return voice.Id;
+        }
+
+        private async Task SetVoiceDefaultAsync(ProjectFolderId folderId, Guid voiceId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var voice = await db.Voices.FindAsync(voiceId);
+            if (voice == null) return;
+
+            await db.Voices
+                .Where(v => v.CharacterId == voice.CharacterId && v.IsDefault)
+                .ExecuteUpdateAsync(s => s.SetProperty(v => v.IsDefault, false));
+
+            voice.IsDefault = true;
+            db.Voices.Update(voice);
+            await db.SaveChangesAsync();
+        }
+
+        private async Task UpdateVoiceAsync(ProjectFolderId folderId, Guid voiceId, string name, string? description)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var voice = await db.Voices.FindAsync(voiceId);
+            if (voice == null) return;
+            voice.Name = name.Trim();
+            voice.Description = description?.Trim();
+            await db.SaveChangesAsync();
+        }
+
+        private async Task UpdateVoiceFieldAsync(ProjectFolderId folderId, Guid voiceId, Action<VoiceEntity> apply)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var voice = await db.Voices.FindAsync(voiceId);
+            if (voice == null) return;
+            apply(voice);
+            await db.SaveChangesAsync();
+        }
+
+        private async Task DeleteVoiceAsync(ProjectFolderId folderId, Guid voiceId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var voice = await db.Voices
+                .Include(v => v.Character)
+                .FirstOrDefaultAsync(v => v.Id == voiceId);
+            if (voice == null) return;
+
+            var wasDefault = voice.IsDefault;
+            var characterId = voice.CharacterId;
+
+            if (voice.AudioFileName != null)
+            {
+                var projectFolder = _fs.GetProjectFolderPath(folderId.Value);
+                var audioPath = Path.Combine(projectFolder, voice.AudioFileName.Replace('/', Path.DirectorySeparatorChar));
+                if (_fs.FileExists(audioPath))
+                    _fs.DeleteFile(audioPath);
+            }
+
+            db.Voices.Remove(voice);
+            await db.SaveChangesAsync();
+
+            if (wasDefault)
+            {
+                var firstRemaining = await db.Voices
+                    .Where(v => v.CharacterId == characterId)
+                    .OrderBy(v => v.CreatedUtc)
+                    .FirstOrDefaultAsync();
+                if (firstRemaining != null)
+                {
+                    firstRemaining.IsDefault = true;
+                    await db.SaveChangesAsync();
+                }
+            }
         }
 
         private static async Task<BookHierarchy> LoadBookHierarchyAsync(ProjectDbContext db)

@@ -1,0 +1,94 @@
+@using Read2Me.App.State
+@using Read2Me.Core.Models
+@using Read2Me.Services
+@inject CharacterPresenter Presenter
+
+<MudStack Spacing="1" Class="pa-1">
+    @if (_context is null && !_loading)
+    {
+        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="LoadContextAsync">Load context</MudButton>
+    }
+    else if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_context is not null)
+    {
+        @foreach (var p in _context.Preceding)
+        {
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                         Style="min-width:90px; justify-content:center; flex-shrink:0;">
+                    @(p.Speaker ?? "—")
+                </MudChip>
+                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">@p.Text</MudText>
+            </MudStack>
+        }
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start"
+                  Style="background:rgba(var(--mud-palette-primary-rgb),0.08); border-radius:4px; padding:2px 4px;">
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                     Style="min-width:90px; justify-content:center; flex-shrink:0;">
+                @(_context.Query.Speaker ?? "?")
+            </MudChip>
+            <MudText Typo="Typo.body2">@_context.Query.Text</MudText>
+        </MudStack>
+        @foreach (var p in _context.Following)
+        {
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                         Style="min-width:90px; justify-content:center; flex-shrink:0;">
+                    @(p.Speaker ?? "—")
+                </MudChip>
+                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">@p.Text</MudText>
+            </MudStack>
+        }
+        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" Class="mt-1">
+            @if (_before < 10)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="LoadMoreBeforeAsync">+ previous</MudButton>
+            }
+            @if (_after < 10)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="LoadMoreAfterAsync">+ next</MudButton>
+            }
+        </MudStack>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public CharacterLine Line { get; set; }
+
+    ParagraphContext? _context;
+    bool _loading;
+    int _before = 3;
+    int _after = 2;
+
+    protected override void OnParametersSet()
+    {
+        _context = null;
+        _loading = false;
+        _before = 3;
+        _after = 2;
+    }
+
+    async Task LoadContextAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+        _context = await Presenter.GetLineContextAsync(Line, _before, _after);
+        _loading = false;
+        StateHasChanged();
+    }
+
+    async Task LoadMoreBeforeAsync()
+    {
+        _before = Math.Min(_before + 3, 10);
+        await LoadContextAsync();
+    }
+
+    async Task LoadMoreAfterAsync()
+    {
+        _after = Math.Min(_after + 2, 10);
+        await LoadContextAsync();
+    }
+}

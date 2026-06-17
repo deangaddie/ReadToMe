@@ -1,0 +1,32 @@
+@using Read2Me.App.State
+@using Read2Me.Core.Models
+@using Read2Me.Services
+@inject CharacterPresenter Presenter
+
+@if (Lines.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-2">No lines attributed to this character.</MudText>
+}
+else
+{
+    <MudExpansionPanels MultiExpansion="true">
+        @foreach (var line in Lines)
+        {
+            var l = line;
+            <MudExpansionPanel @key="l.ItemId">
+                <TitleContent>
+                    <MudText Typo="Typo.body2" Style="font-style:italic; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        @l.Text
+                    </MudText>
+                </TitleContent>
+                <ChildContent>
+                    <LineContextView Line="l" />
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CharacterLine> Lines { get; set; } = [];
+}

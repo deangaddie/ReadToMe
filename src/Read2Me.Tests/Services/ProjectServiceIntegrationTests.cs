@@ -31,7 +31,7 @@ namespace Read2Me.Tests.Services
             var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
             _writer = new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
             _reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
-            _cmd = new BookCommandHandler(session);
+            _cmd = new BookCommandHandler(session, fs);
         }
 
         public void Dispose()

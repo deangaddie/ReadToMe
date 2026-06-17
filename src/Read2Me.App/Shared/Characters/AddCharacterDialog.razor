@@ -1,0 +1,34 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add Character</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined"
+                      Immediate="true" AutoFocus="true" />
+        @if (_error != null)
+        {
+            <MudText Color="Color.Error" Typo="Typo.caption" Class="mt-1">@_error</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
+                   Disabled="@string.IsNullOrWhiteSpace(_name)">Add</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    string _name = "";
+    string? _error;
+
+    void Cancel() => MudDialog.Cancel();
+
+    void Submit()
+    {
+        var name = _name.Trim();
+        if (string.IsNullOrEmpty(name)) { _error = "Name required."; return; }
+        MudDialog.Close(DialogResult.Ok(name));
+    }
+}

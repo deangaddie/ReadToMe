@@ -111,6 +111,12 @@ namespace Read2Me.Tests.Services.Characters
             public Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId)
                 => Task.FromResult(_characters);
 
+            public Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId)
+                => Task.FromResult(_characters);
+
+            public Task<List<Read2Me.Core.Models.CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId)
+                => Task.FromResult(new List<Read2Me.Core.Models.CharacterLine>());
+
             // Unused members — not under test
             public Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId) =>
                 Task.FromResult(new BookOverview(null, false, [], [], 0, 0, [], new System.Collections.Generic.Dictionary<System.Guid, int>()));
@@ -123,17 +129,12 @@ namespace Read2Me.Tests.Services.Characters
             public Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId folderId, Guid chapterId) => Task.FromResult(new List<Paragraph>());
             public Task<int> GetTotalPartCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
             public Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
-            public Task<List<CharacterParagraphRef>> GetVolumeCharacterParagraphsAsync(ProjectFolderId folderId, Guid volumeId) => Task.FromResult(new List<CharacterParagraphRef>());
-            public Task<List<CharacterParagraphRef>> GetPartCharacterParagraphsAsync(ProjectFolderId folderId, Guid partId) => Task.FromResult(new List<CharacterParagraphRef>());
-            public Task<List<CharacterParagraphRef>> GetChapterCharacterParagraphsAsync(ProjectFolderId folderId, Guid chapterId) => Task.FromResult(new List<CharacterParagraphRef>());
-            public Task<List<CharacterParagraphRef>> GetVolumeUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid volumeId) => Task.FromResult(new List<CharacterParagraphRef>());
-            public Task<List<CharacterParagraphRef>> GetPartUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid partId) => Task.FromResult(new List<CharacterParagraphRef>());
-            public Task<List<CharacterParagraphRef>> GetChapterUnprocessedCharacterParagraphsAsync(ProjectFolderId folderId, Guid chapterId) => Task.FromResult(new List<CharacterParagraphRef>());
-            public Task<int> GetVolumeCharacterParagraphCountAsync(ProjectFolderId folderId, Guid volumeId) => Task.FromResult(0);
-            public Task<int> GetPartCharacterParagraphCountAsync(ProjectFolderId folderId, Guid partId) => Task.FromResult(0);
-            public Task<int> GetChapterCharacterParagraphCountAsync(ProjectFolderId folderId, Guid chapterId) => Task.FromResult(0);
+            public Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
+                ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
+                => Task.FromResult(new List<CharacterParagraphRef>());
             public Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
             public Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) => Task.FromResult(new List<(Guid, string)>());
+            public Task<List<Read2Me.Data.Entities.Voice>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<Read2Me.Data.Entities.Voice>());
         }
 
         private static ParagraphContext DefaultContext() =>
@@ -261,7 +262,7 @@ namespace Read2Me.Tests.Services.Characters
             await svc.AttributeAsync(TestItem, CancellationToken.None);
 
             Assert.Equal(4, fakeReader.ReceivedBefore);
-            Assert.Equal(0, fakeReader.ReceivedAfter);
+            Assert.Equal(2, fakeReader.ReceivedAfter);
         }
 
         [Fact]
