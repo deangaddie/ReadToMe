@@ -36,6 +36,7 @@ namespace Read2Me.App.State
         public List<Part>? GetParts(Guid volumeId) => _loader.For(_folderId).GetParts(volumeId);
         public List<Chapter>? GetChapters(Guid partId) => _loader.For(_folderId).GetChapters(partId);
         public List<Paragraph>? GetParagraphs(Guid chapterId) => _loader.For(_folderId).GetParagraphs(chapterId);
+        public IEnumerable<Paragraph> AllParagraphs() => _loader.For(_folderId).AllParagraphs();
 
         public PerFolderState(BookHierarchyLoader loader, ProjectFolderId folderId)
         {

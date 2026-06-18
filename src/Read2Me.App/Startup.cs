@@ -122,9 +122,7 @@ namespace Read2Me.App
                 // regenerated voice plays the new audio without a server restart.
                 OnPrepareResponse = ctx =>
                 {
-                    ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
-                    ctx.Context.Response.Headers.Pragma = "no-cache";
-                    ctx.Context.Response.Headers.Expires = "0";
+                    ctx.Context.Response.Headers.CacheControl = "no-cache, must-revalidate";
                 }
             });
 

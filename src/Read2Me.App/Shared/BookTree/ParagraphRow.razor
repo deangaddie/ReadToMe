@@ -210,16 +210,7 @@ else
         Queue.Changed += Refresh;
     }
 
-    void Refresh() => InvokeAsync(() =>
-    {
-        var resolved = Queue.ResolvedOf(FolderId, Para.Id);
-        if (resolved is not null)
-            ParagraphCharacterStamp.Apply(
-                Para.Items,
-                resolved.CharacterId,
-                ParagraphCharacterStamp.PlaceholderFor(resolved.CharacterId, resolved.Name));
-        StateHasChanged();
-    });
+    void Refresh() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {

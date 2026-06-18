@@ -18,7 +18,7 @@ namespace Read2Me.App.State
         BookTreeState treeState,
         BookSelectionState selectionState,
         IDialogService dialogService,
-        CharacterQueueService characterQueue)
+        CharacterQueueService characterQueue) : IDisposable
     {
         public bool IsLoading { get; private set; }
         public bool HasContent { get; private set; }
@@ -40,12 +40,19 @@ namespace Read2Me.App.State
         public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
 
         private ProjectFolderId? _lastFolder;
+        private bool _queueSubscribed;
 
         public event Action? StateChanged;
 
         public async Task LoadAsync(ProjectFolderId folderId)
         {
             IsLoading = true;
+
+            if (!_queueSubscribed)
+            {
+                characterQueue.Changed += OnQueueChanged;
+                _queueSubscribed = true;
+            }
 
             if (_lastFolder.HasValue && _lastFolder.Value.Value != folderId.Value)
                 selectionState.Reset(_lastFolder.Value);
@@ -262,5 +269,28 @@ namespace Read2Me.App.State
             }, resetTree: true);
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
+
+        private void OnQueueChanged()
+        {
+            if (_lastFolder is not { } folder) return;
+            foreach (var para in Tree.AllParagraphs())
+            {
+                var resolved = characterQueue.ResolvedOf(folder, para.Id);
+                if (resolved is not null)
+                    ParagraphCharacterStamp.Apply(
+                        para.Items,
+                        resolved.CharacterId,
+                        ParagraphCharacterStamp.PlaceholderFor(resolved.CharacterId, resolved.Name));
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_queueSubscribed)
+            {
+                characterQueue.Changed -= OnQueueChanged;
+                _queueSubscribed = false;
+            }
+        }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MudBlazor;
@@ -698,6 +699,80 @@ namespace Read2Me.Tests.State
             await ctx.CommandHandler.Received(1).ExecuteAsync(
                 Arg.Is<SetParagraphCharacterCommand>(c => c.ParagraphId == paragraph.Id && c.CharacterId == null));
             await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetItemCharacterCommand>());
+        }
+
+        // ---------------------------------------------------------------
+        // OnQueueChanged — presenter stamps resolved character onto tree
+        // ---------------------------------------------------------------
+
+        private static async Task<(Context ctx, CharacterQueueService queue, Paragraph para, QueuedParagraph queued)>
+            CreateWithLoadedParagraph()
+        {
+            var chapterId = Guid.NewGuid();
+            var para = new Paragraph
+            {
+                Id = Guid.NewGuid(),
+                Items =
+                [
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a" },
+                ]
+            };
+
+            var reader = Substitute.For<IProjectReader>();
+            var commandHandler = Substitute.For<IBookCommandHandler>();
+            var bookUseCases = new FakeBookUseCases();
+            var dialogService = Substitute.For<IDialogService>();
+
+            reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: true, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
+                .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
+
+            var hierarchyLoader = new BookHierarchyLoader(reader);
+            var treeState = new BookTreeState(hierarchyLoader);
+            var selectionState = new BookSelectionState();
+            var queue = new CharacterQueueService();
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, dialogService, queue);
+
+            await presenter.LoadAsync(Folder);
+            // Expand chapter so paragraphs are loaded into the cache.
+            await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
+
+            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState);
+            var queuedPara = new QueuedParagraph(Folder, para.Id, "preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
+            return (ctx, queue, para, queuedPara);
+        }
+
+        [Fact]
+        public async Task OnQueueChanged_StampsResolvedCharacterOntoTreeParagraph()
+        {
+            var (ctx, queue, para, queued) = await CreateWithLoadedParagraph();
+
+            var charId = Guid.NewGuid();
+            var resolved = new ResolvedCharacter(charId, "Alice");
+
+            queue.Enqueue([queued]);
+            queue.MarkProcessing(queued);
+            queue.MarkComplete(queued, elapsedSeconds: 1.0, resolved);
+
+            var item = para.Items.First();
+            Assert.Equal(charId, item.CharacterId);
+            Assert.Equal("Alice", item.Character?.Name);
+        }
+
+        [Fact]
+        public async Task OnQueueChanged_ParagraphNotInTree_DoesNotThrow()
+        {
+            var (ctx, queue, _, _) = await CreateWithLoadedParagraph();
+
+            // Resolve a paragraph not present in the tree.
+            var foreignPara = new QueuedParagraph(Folder, Guid.NewGuid(), "x", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            queue.Enqueue([foreignPara]);
+            queue.MarkProcessing(foreignPara);
+            var ex = Record.Exception(() => queue.MarkComplete(foreignPara, 1.0, new ResolvedCharacter(Guid.NewGuid(), "Bob")));
+
+            Assert.Null(ex);
         }
     }
 }

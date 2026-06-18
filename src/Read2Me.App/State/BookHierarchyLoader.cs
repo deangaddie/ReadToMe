@@ -59,6 +59,13 @@ namespace Read2Me.App.State
 
         public bool HasParts(Guid volumeId) => _parts.ContainsKey(volumeId);
 
+        public IEnumerable<Paragraph> AllParagraphs()
+        {
+            foreach (var list in _paragraphs.Values)
+                foreach (var p in list)
+                    yield return p;
+        }
+
         public void RemoveParagraphEverywhere(Guid paragraphId)
         {
             foreach (var list in _paragraphs.Values)
