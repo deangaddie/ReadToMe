@@ -88,7 +88,7 @@ namespace Read2Me.Tests.Services.Books
             // Original keys still present, no anchored keys added
             Assert.True(result.ContainsKey("ch1.html"));
             Assert.True(result.ContainsKey("ch2.html"));
-            Assert.False(result.Keys.Any(k => k.Contains('#')));
+            Assert.DoesNotContain(result.Keys, k => k.Contains('#'));
         }
 
         [Fact]

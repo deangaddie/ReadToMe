@@ -14,8 +14,7 @@ namespace Read2Me.App.Characters
 {
     public sealed class CharacterQueueWorker(
         CharacterQueueService queue,
-        IServiceScopeFactory scopeFactory,
-        ILogger<CharacterQueueWorker> logger) : BackgroundService
+        IServiceScopeFactory scopeFactory) : BackgroundService
     {
         protected override async Task ExecuteAsync(CancellationToken ct)
         {

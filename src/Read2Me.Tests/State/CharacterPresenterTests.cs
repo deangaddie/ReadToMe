@@ -33,8 +33,6 @@ namespace Read2Me.Tests.State
                 cmd,
                 pipeline,
                 transcriptionResolver: null!,
-                voiceDesignResolver: null!,
-                voiceDesignSettings: null!,
                 voiceAudioGenerator: null!,
                 transcriptionSettings: null!,
                 voiceDesignPromptService: null!,

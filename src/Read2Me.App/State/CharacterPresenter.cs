@@ -20,8 +20,6 @@ namespace Read2Me.App.State
         IBookCommandHandler commandHandler,
         IAudioPipeline audioPipeline,
         ITranscriptionClientResolver transcriptionResolver,
-        IVoiceDesignClientResolver voiceDesignResolver,
-        VoiceDesignSettingsService voiceDesignSettings,
         VoiceAudioGenerator voiceAudioGenerator,
         TranscriptionSettingsService transcriptionSettings,
         Read2Me.Services.Voice.VoiceDesignPromptService voiceDesignPromptService,

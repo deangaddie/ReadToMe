@@ -77,7 +77,7 @@ namespace Read2Me.Tests.Services.Books
 
             var plan = h.PlanPauseInsertions();
 
-            Assert.Empty(plan.Where(p => p.PauseType == ParagraphItemType.ParagraphPause));
+            Assert.DoesNotContain(plan, p => p.PauseType == ParagraphItemType.ParagraphPause);
         }
 
         // ── Test 3: two chapters → ChapterPause on first ─────────────────────
@@ -113,7 +113,7 @@ namespace Read2Me.Tests.Services.Books
             Assert.Equal(pg1.Order, chapterPauses[0].AfterOrder);
             Assert.Null(chapterPauses[0].BeforeOrder);
 
-            Assert.Empty(plan.Where(p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.ChapterPause));
+            Assert.DoesNotContain(plan, p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.ChapterPause);
         }
 
         // ── Test 4: two parts → PartPause on last chapter of first part ──────
@@ -148,7 +148,7 @@ namespace Read2Me.Tests.Services.Books
             Assert.Single(partPauses);
             Assert.Equal(c1.Id, partPauses[0].ChapterId);
 
-            Assert.Empty(plan.Where(p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.PartPause));
+            Assert.DoesNotContain(plan, p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.PartPause);
         }
 
         // ── Test 5: two volumes → VolumePause on last chapter of first volume ─
@@ -184,7 +184,7 @@ namespace Read2Me.Tests.Services.Books
             Assert.Single(volPauses);
             Assert.Equal(c1.Id, volPauses[0].ChapterId);
 
-            Assert.Empty(plan.Where(p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.VolumePause));
+            Assert.DoesNotContain(plan, p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.VolumePause);
         }
 
         // ── Test 6: highest boundary wins (worked example from plan) ─────────
@@ -232,15 +232,15 @@ namespace Read2Me.Tests.Services.Books
             // C3 → VolumePause (last chapter of last part of V1, V1 not last volume)
             Assert.Single(plan, p => p.ChapterId == c3.Id && p.PauseType == ParagraphItemType.VolumePause);
             // C4 → nothing (last chapter of last part of last volume)
-            Assert.Empty(plan.Where(p => p.ChapterId == c4.Id && p.PauseType != ParagraphItemType.ParagraphPause));
+            Assert.DoesNotContain(plan, p => p.ChapterId == c4.Id && p.PauseType != ParagraphItemType.ParagraphPause);
 
             // No duplicate boundary types on the same chapter
-            Assert.Empty(plan.Where(p => p.ChapterId == c1.Id && p.PauseType == ParagraphItemType.PartPause));
-            Assert.Empty(plan.Where(p => p.ChapterId == c1.Id && p.PauseType == ParagraphItemType.VolumePause));
-            Assert.Empty(plan.Where(p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.ChapterPause));
-            Assert.Empty(plan.Where(p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.VolumePause));
-            Assert.Empty(plan.Where(p => p.ChapterId == c3.Id && p.PauseType == ParagraphItemType.ChapterPause));
-            Assert.Empty(plan.Where(p => p.ChapterId == c3.Id && p.PauseType == ParagraphItemType.PartPause));
+            Assert.DoesNotContain(plan, p => p.ChapterId == c1.Id && p.PauseType == ParagraphItemType.PartPause);
+            Assert.DoesNotContain(plan, p => p.ChapterId == c1.Id && p.PauseType == ParagraphItemType.VolumePause);
+            Assert.DoesNotContain(plan, p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.ChapterPause);
+            Assert.DoesNotContain(plan, p => p.ChapterId == c2.Id && p.PauseType == ParagraphItemType.VolumePause);
+            Assert.DoesNotContain(plan, p => p.ChapterId == c3.Id && p.PauseType == ParagraphItemType.ChapterPause);
+            Assert.DoesNotContain(plan, p => p.ChapterId == c3.Id && p.PauseType == ParagraphItemType.PartPause);
         }
 
         // ── Test 7: skip when pause already present ───────────────────────────
@@ -283,13 +283,13 @@ namespace Read2Me.Tests.Services.Books
             var plan = h.PlanPauseInsertions();
 
             // ParagraphPause between pA and pB already present — must not re-emit.
-            Assert.Empty(plan.Where(p =>
+            Assert.DoesNotContain(plan, p =>
                 p.PauseType == ParagraphItemType.ParagraphPause &&
-                p.AfterOrder == pA.Order && p.BeforeOrder == pB.Order));
+                p.AfterOrder == pA.Order && p.BeforeOrder == pB.Order);
 
             // PartPause at end of c1 already present — must not re-emit.
-            Assert.Empty(plan.Where(p =>
-                p.ChapterId == c1.Id && p.PauseType == ParagraphItemType.PartPause));
+            Assert.DoesNotContain(plan, p =>
+                p.ChapterId == c1.Id && p.PauseType == ParagraphItemType.PartPause);
         }
     }
 }
