@@ -12,211 +12,198 @@
         <MudStack Row="true" Spacing="1">
             @if (!Character.IsNarrator)
             {
-                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
-                           OnClick="OpenMergeAsync">Merge</MudButton>
-                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
-                           OnClick="ConfirmDeleteAsync">Delete</MudButton>
-            }
-        </MudStack>
-    </MudStack>
-
-    @if (!Character.IsNarrator)
-    {
-        <MudStack Spacing="1">
-            <MudText Typo="Typo.subtitle2">Aliases</MudText>
-            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
-                @foreach (var alias in Character.Aliases)
-                {
-                    var a = alias;
-                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
-                             CloseIcon="@Icons.Material.Filled.Close" OnClose="@(() => RemoveAliasAsync(a.Id))">
-                        @a.Name
-                    </MudChip>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" OnClick="OpenMergeAsync">Merge
+                </MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="ConfirmDeleteAsync">
+                    Delete</MudButton>
                 }
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    @if (_addingAlias)
-                    {
-                        <MudTextField @bind-Value="_newAlias" Placeholder="Alias name" Variant="Variant.Outlined"
-                                      Margin="Margin.Dense" Style="width:160px;" Immediate="true"
-                                      OnKeyDown="OnAliasKeyDownAsync" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small"
-                                       Color="Color.Primary" OnClick="CommitAliasAsync" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                       OnClick="CancelAlias" />
-                    }
-                    else
-                    {
-                        <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
-                                   OnClick="@(() => _addingAlias = true)">Add alias</MudButton>
-                    }
-                </MudStack>
             </MudStack>
         </MudStack>
 
-        <MudDivider />
-    }
+        @if (!Character.IsNarrator)
+        {
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.subtitle2">Aliases</MudText>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                    @foreach (var alias in Character.Aliases)
+                    {
+                        var a = alias;
+                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                                 CloseIcon="@Icons.Material.Filled.Close" OnClose="@(() => RemoveAliasAsync(a.Id))">
+                            @a.Name
+                        </MudChip>
+                    }
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        @if (_addingAlias)
+                        {
+                            <MudTextField @bind-Value="_newAlias" Placeholder="Alias name" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" Style="width:160px;" Immediate="true" OnKeyDown="OnAliasKeyDownAsync" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary"
+                                           OnClick="CommitAliasAsync" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelAlias" />
+                        }
+                        else
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
+                                       OnClick="@(() => _addingAlias = true)">Add alias</MudButton>
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudStack>
 
-    <MudStack Spacing="1">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-            <MudText Typo="Typo.subtitle2">Voices (@Presenter.Voices.Count)</MudText>
-            <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="AddVoiceAsync">Add voice</MudButton>
-        </MudStack>
+            <MudDivider />
+        }
 
-        <MudExpansionPanels MultiExpansion="true">
-            @foreach (var voice in Presenter.Voices)
-            {
-                var v = voice;
-                <MudExpansionPanel @key="v.Id">
-                    <TitleContent>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            @if (v.IsDefault)
-                            {
-                                <MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Small"
-                                         Color="Color.Warning" Title="Default voice" />
-                            }
-                            else
-                            {
-                                <MudTooltip Text="Set as default">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.StarBorder" Size="Size.Small"
-                                                   OnClick="@(() => Presenter.SetVoiceDefaultAsync(v.Id))" />
-                                </MudTooltip>
-                            }
-                            <MudText Typo="Typo.body1">@v.Name</MudText>
-                            <MudSpacer />
-                            <MudChip T="string" Size="Size.Small" Color="@(v.Source == VoiceSource.Uploaded ? Color.Info : Color.Secondary)"
-                                     Variant="Variant.Outlined">
-                                @(v.Source == VoiceSource.Uploaded ? "Reference" : "Prompt")
-                            </MudChip>
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
-                                           Color="Color.Error"
-                                           OnClick="@(() => ConfirmDeleteVoiceAsync(v))" />
-                        </MudStack>
-                    </TitleContent>
-                    <ChildContent>
-                        <MudStack Spacing="3" Class="pt-2">
+        <MudStack Spacing="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.subtitle2">Voices (@Presenter.Voices.Count)</MudText>
+                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddVoiceAsync">Add voice</MudButton>
+            </MudStack>
 
-                            <MudToggleGroup T="VoiceSource" Value="@v.Source" ValueChanged="@(s => SwitchVoiceSourceAsync(v, s))"
-                                           SelectionMode="SelectionMode.SingleSelection">
-                                <MudToggleItem Value="VoiceSource.Uploaded" Text="Reference Audio" />
-                                <MudToggleItem Value="VoiceSource.Generated" Text="Prompt" />
-                            </MudToggleGroup>
-
-                            @if (v.Source == VoiceSource.Uploaded)
-                            {
-                                @if (v.AudioFileName != null)
+            <MudExpansionPanels MultiExpansion="true">
+                @foreach (var voice in Presenter.Voices)
+                {
+                    var v = voice;
+                    <MudExpansionPanel @key="v.Id">
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                @if (v.IsDefault)
                                 {
-                                    <audio controls style="width:100%;">
-                                        <source src="@AudioUrl(v)" />
-                                        Audio not supported.
-                                    </audio>
+                                    <MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Small" Color="Color.Warning"
+                                             Title="Default voice" />
                                 }
                                 else
                                 {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">No audio uploaded yet.</MudText>
+                                    <MudTooltip Text="Set as default">
+                                        <MudIconButton Icon="@Icons.Material.Outlined.StarBorder" Size="Size.Small"
+                                                       OnClick="@(() => Presenter.SetVoiceDefaultAsync(v.Id))" />
+                                    </MudTooltip>
                                 }
+                                <MudText Typo="Typo.body1">@v.Name</MudText>
+                                <MudSpacer />
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(v.Source == VoiceSource.Uploaded ? Color.Info : Color.Secondary)"
+                                         Variant="Variant.Outlined">
+                                    @(v.Source == VoiceSource.Uploaded ? "Reference" : "Prompt")
+                                </MudChip>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => ConfirmDeleteVoiceAsync(v))" />
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudStack Spacing="3" Class="pt-2">
 
-                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                               StartIcon="@Icons.Material.Filled.UploadFile"
-                                               HtmlTag="label" for="@($"voice-upload-{v.Id}")"
-                                               Style="cursor:pointer">
-                                        @(v.AudioFileName != null ? "Replace audio" : "Upload audio")
-                                    </MudButton>
-                                    <InputFile id="@($"voice-upload-{v.Id}")"
-                                               OnChange="@(e => OnReplaceAudioAsync(e, v))"
-                                               accept=".wav,.aac" style="display:none" />
-                                </MudStack>
-                            }
-                            else
-                            {
-                                <MudTextField Value="@GetPromptDraft(v)"
-                                              ValueChanged="@((string s) => _draftPrompts[v.Id] = s)"
-                                              Label="Voice description prompt"
-                                              Variant="Variant.Outlined" Lines="4" Immediate="true" />
-                                <MudStack Row="true" Spacing="1">
-                                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                               StartIcon="@Icons.Material.Filled.Save"
-                                               Disabled="@(!HasPromptDraft(v))"
-                                               OnClick="@(() => SavePromptAsync(v))">
-                                        Save prompt
-                                    </MudButton>
-                                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                               StartIcon="@Icons.Material.Filled.AutoFixHigh"
-                                               Disabled="@(_regeneratingPrompt == v.Id)"
-                                               OnClick="@(() => RegeneratePromptAsync(v))">
-                                        @(_regeneratingPrompt == v.Id ? "Generating…" : "Regenerate with AI")
-                                    </MudButton>
+                                <MudToggleGroup T="VoiceSource" Value="@v.Source"
+                                                ValueChanged="@(s => SwitchVoiceSourceAsync(v, s))"
+                                                SelectionMode="SelectionMode.SingleSelection">
+                                    <MudToggleItem Value="VoiceSource.Uploaded" Text="Reference Audio" />
+                                    <MudToggleItem Value="VoiceSource.Generated" Text="Prompt" />
+                                </MudToggleGroup>
+
+                                @if (v.Source == VoiceSource.Uploaded)
+                                {
                                     @if (v.AudioFileName != null)
                                     {
-                                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                                   StartIcon="@Icons.Material.Filled.VolumeUp"
-                                                   Disabled="@(_generatingAudio == v.Id)"
-                                                   OnClick="@(() => GenerateAudioAsync(v))">
-                                            @(_generatingAudio == v.Id ? "Generating…" : "Regenerate audio")
-                                        </MudButton>
+                                        <audio controls style="width:100%;">
+                                            <source src="@AudioUrl(v)" />
+                                            Audio not supported.
+                                        </audio>
                                     }
                                     else
                                     {
-                                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                                   Color="Color.Primary"
-                                                   StartIcon="@Icons.Material.Filled.VolumeUp"
-                                                   Disabled="@(_generatingAudio == v.Id || string.IsNullOrWhiteSpace(v.DesignPrompt))"
-                                                   OnClick="@(() => GenerateAudioAsync(v))">
-                                            @(_generatingAudio == v.Id ? "Generating…" : "Generate audio")
-                                        </MudButton>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">No audio uploaded yet.</MudText>
                                     }
-                                </MudStack>
-                                @if (v.AudioFileName != null)
-                                {
-                                    <audio controls style="width:100%;">
-                                        <source src="@AudioUrl(v)" />
-                                        Audio not supported.
-                                    </audio>
-                                }
-                            }
 
-                            {{! Transcript — both modes }}
-                            <MudExpansionPanel Text="Transcript" Dense="true">
-                                <MudStack Spacing="2">
-                                    <MudTextField Value="@(GetTranscriptDraft(v))"
-                                                  ValueChanged="@((string s) => _draftTranscripts[v.Id] = s)"
-                                                  Label="Transcript" Variant="Variant.Outlined"
-                                                  Lines="3" Immediate="true" />
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.UploadFile" HtmlTag="label"
+                                                   for="@($"voice-upload-{v.Id}")" Style="cursor:pointer">
+                                            @(v.AudioFileName != null ? "Replace audio" : "Upload audio")
+                                        </MudButton>
+                                        <InputFile id="@($"voice-upload-{v.Id}")" OnChange="@(e => OnReplaceAudioAsync(e, v))"
+                                                   accept=".wav,.aac" style="display:none" />
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudTextField Value="@GetPromptDraft(v)" ValueChanged="@((string s) => _draftPrompts[v.Id] = s)"
+                                                  Label="Voice description prompt" Variant="Variant.Outlined" Lines="4" Immediate="true" />
                                     <MudStack Row="true" Spacing="1">
                                         <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                                   StartIcon="@Icons.Material.Filled.Save"
-                                                   Disabled="@(!HasTranscriptDraft(v))"
-                                                   OnClick="@(() => SaveTranscriptAsync(v))">
-                                            Save
+                                                   StartIcon="@Icons.Material.Filled.Save" Disabled="@(!HasPromptDraft(v))"
+                                                   OnClick="@(() => SavePromptAsync(v))">
+                                            Save prompt
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.AutoFixHigh" Disabled="@(_regeneratingPrompt == v.Id)"
+                                                   OnClick="@(() => RegeneratePromptAsync(v))">
+                                            @(_regeneratingPrompt == v.Id ? "Generating…" : "Regenerate with AI")
                                         </MudButton>
                                         @if (v.AudioFileName != null)
                                         {
                                             <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                                       StartIcon="@Icons.Material.Filled.RecordVoiceOver"
-                                                       Disabled="@(_transcribing == v.Id)"
-                                                       OnClick="@(() => TranscribeAsync(v))">
-                                                @(_transcribing == v.Id ? "Transcribing…" : "Send to AI")
+                                                       StartIcon="@Icons.Material.Filled.VolumeUp" Disabled="@(_generatingAudio == v.Id)"
+                                                       OnClick="@(() => GenerateAudioAsync(v))">
+                                                @(_generatingAudio == v.Id ? "Generating…" : "Regenerate audio")
+                                            </MudButton>
+                                        }
+                                        else
+                                        {
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                                       StartIcon="@Icons.Material.Filled.VolumeUp"
+                                                       Disabled="@(_generatingAudio == v.Id || string.IsNullOrWhiteSpace(v.DesignPrompt))"
+                                                       OnClick="@(() => GenerateAudioAsync(v))">
+                                                @(_generatingAudio == v.Id ? "Generating…" : "Generate audio")
                                             </MudButton>
                                         }
                                     </MudStack>
-                                </MudStack>
-                            </MudExpansionPanel>
+                                    @if (v.AudioFileName != null)
+                                    {
+                                        <audio controls style="width:100%;">
+                                            <source src="@AudioUrl(v)" />
+                                            Audio not supported.
+                                        </audio>
+                                    }
+                                }
 
-                        </MudStack>
-                    </ChildContent>
-                </MudExpansionPanel>
-            }
-        </MudExpansionPanels>
+                                <MudExpansionPanel Text="Transcript" Dense="true">
+                                    <MudStack Spacing="2">
+                                        <MudTextField Value="@(GetTranscriptDraft(v))"
+                                                      ValueChanged="@((string s) => _draftTranscripts[v.Id] = s)" Label="Transcript"
+                                                      Variant="Variant.Outlined" Lines="3" Immediate="true" />
+                                        <MudStack Row="true" Spacing="1">
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.Save" Disabled="@(!HasTranscriptDraft(v))"
+                                                       OnClick="@(() => SaveTranscriptAsync(v))">
+                                                Save
+                                            </MudButton>
+                                            @if (v.AudioFileName != null)
+                                            {
+                                                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.RecordVoiceOver"
+                                                           Disabled="@(_transcribing == v.Id)" OnClick="@(() => TranscribeAsync(v))">
+                                                    @(_transcribing == v.Id ? "Transcribing…" : "Send to AI")
+                                                </MudButton>
+                                            }
+                                        </MudStack>
+                                    </MudStack>
+                                </MudExpansionPanel>
+
+                            </MudStack>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        </MudStack>
+
+        @if (!Character.IsNarrator)
+        {
+            <MudDivider />
+            <MudText Typo="Typo.subtitle2">Lines (@Lines.Count)</MudText>
+            <CharacterLinesViewer Lines="Lines" />
+        }
     </MudStack>
-
-    @if (!Character.IsNarrator)
-    {
-        <MudDivider />
-        <MudText Typo="Typo.subtitle2">Lines (@Lines.Count)</MudText>
-        <CharacterLinesViewer Lines="Lines" />
-    }
-</MudStack>
 
 @code {
     [Parameter, EditorRequired] public Character Character { get; set; } = null!;
