@@ -18,6 +18,7 @@ namespace Read2Me.Services
         private readonly SemaphoreSlim _cacheLock = new(1, 1);
         private MudTheme? _cachedMudTheme;
         private AppTheme? _cachedAppTheme;
+        private bool _cachedFollowSystem;
 
         public event Action? OnThemeChanged;
 
@@ -27,7 +28,7 @@ namespace Read2Me.Services
             _logger = logger;
         }
 
-        public async Task<(MudTheme Theme, bool IsDark)> GetCurrentThemeAsync()
+        public async Task<(MudTheme Theme, bool IsDark, bool FollowSystem)> GetCurrentThemeAsync()
         {
             await _cacheLock.WaitAsync();
             try
@@ -35,7 +36,7 @@ namespace Read2Me.Services
                 if (_cachedMudTheme != null && _cachedAppTheme != null)
                 {
                     _logger.LogDebug("Returning cached theme '{Name}'", _cachedAppTheme.Name);
-                    return (_cachedMudTheme, _cachedAppTheme.IsDark);
+                    return (_cachedMudTheme, _cachedAppTheme.IsDark, _cachedFollowSystem);
                 }
 
                 await using var db = await _dbFactory.CreateDbContextAsync();
@@ -49,10 +50,11 @@ namespace Read2Me.Services
 
                 theme ??= await db.Themes.OrderBy(t => t.Id).FirstAsync();
 
-                _logger.LogDebug("Loaded theme '{Name}' (dark={IsDark})", theme.Name, theme.IsDark);
+                _logger.LogDebug("Loaded theme '{Name}' (dark={IsDark}, follow={Follow})", theme.Name, theme.IsDark, settings?.FollowSystemPreference ?? false);
                 _cachedAppTheme = theme;
                 _cachedMudTheme = BuildMudTheme(theme);
-                return (_cachedMudTheme, theme.IsDark);
+                _cachedFollowSystem = settings?.FollowSystemPreference ?? false;
+                return (_cachedMudTheme, theme.IsDark, _cachedFollowSystem);
             }
             finally
             {
@@ -156,6 +158,32 @@ namespace Read2Me.Services
             OnThemeChanged?.Invoke();
         }
 
+        public async Task SetFollowSystemPreferenceAsync(bool follow)
+        {
+            _logger.LogInformation("Setting follow system preference to {Follow}", follow);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var settings = await db.Settings.SingleOrDefaultAsync();
+            if (settings == null)
+            {
+                db.Settings.Add(new AppSettings { FollowSystemPreference = follow });
+            }
+            else
+            {
+                settings.FollowSystemPreference = follow;
+            }
+            await db.SaveChangesAsync();
+
+            InvalidateCache();
+            OnThemeChanged?.Invoke();
+        }
+
+        public async Task<bool> GetFollowSystemPreferenceAsync()
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var settings = await db.Settings.SingleOrDefaultAsync();
+            return settings?.FollowSystemPreference ?? false;
+        }
+
         private void InvalidateCache()
         {
             _cacheLock.Wait();
@@ -172,33 +200,72 @@ namespace Read2Me.Services
 
         private static async Task EnsureSeededAsync(Read2MeDbContext db)
         {
-            if (await db.Themes.AnyAsync()) return;
+            var builtInThemes = GetBuiltInThemes();
+            var existingBuiltInNames = await db.Themes
+                .Where(t => t.IsBuiltIn)
+                .Select(t => t.Name)
+                .ToListAsync();
 
-            db.Themes.AddRange(GetBuiltInThemes());
-            db.Settings.Add(new AppSettings());
-            await db.SaveChangesAsync();
+            var missingThemes = builtInThemes
+                .Where(t => !existingBuiltInNames.Contains(t.Name))
+                .ToList();
+
+            if (missingThemes.Any())
+            {
+                db.Themes.AddRange(missingThemes);
+            }
+
+            if (!await db.Settings.AnyAsync())
+            {
+                db.Settings.Add(new AppSettings());
+            }
+
+            if (missingThemes.Any() || !await db.Settings.AnyAsync())
+            {
+                await db.SaveChangesAsync();
+            }
         }
 
         private static List<AppTheme> GetBuiltInThemes() =>
         [
             new() { Name = "Light",  IsBuiltIn = true, IsDark = false, Primary = "#594AE2", Secondary = "#FF4081" },
-            new() { Name = "Dark",   IsBuiltIn = true, IsDark = true,  Primary = "#7C5CBF", Secondary = "#FF4081" },
-            new() { Name = "Ocean",  IsBuiltIn = true, IsDark = true,  Primary = "#006064", Secondary = "#00BCD4" },
+            new() { Name = "Dark",   IsBuiltIn = true, IsDark = true,  Primary = "#7C5CBF", Secondary = "#FF4081", Background = "#27272f", Surface = "#373740", AppbarBackground = "#27272f", DrawerBackground = "#27272f" },
+            new() { Name = "Ocean",  IsBuiltIn = true, IsDark = true,  Primary = "#006064", Secondary = "#00BCD4", Background = "#002f35", Surface = "#004d40", AppbarBackground = "#006064", DrawerBackground = "#002f35" },
             new() { Name = "Forest", IsBuiltIn = true, IsDark = false, Primary = "#2E7D32", Secondary = "#8BC34A" },
+            new() { Name = "Sunset", IsBuiltIn = true, IsDark = false, Primary = "#FF6F61", Secondary = "#FFB347", Background = "#FFF5F2", Surface = "#FFFFFF", AppbarBackground = "#FF6F61", TextPrimary = "#4A4A4A" },
+            new() { Name = "Midnight", IsBuiltIn = true, IsDark = true, Primary = "#BB86FC", Secondary = "#03DAC6", Background = "#121212", Surface = "#1E1E1E", AppbarBackground = "#1F1B24", DrawerBackground = "#121212" },
+            new() { Name = "Nord", IsBuiltIn = true, IsDark = true, Primary = "#88C0D0", Secondary = "#81A1C1", Background = "#2E3440", Surface = "#3B4252", AppbarBackground = "#2E3440", DrawerBackground = "#2E3440", TextPrimary = "#ECEFF4" },
+            new() { Name = "Coffee", IsBuiltIn = true, IsDark = false, Primary = "#6F4E37", Secondary = "#A67B5B", Background = "#F5F5DC", Surface = "#FFFFFF", AppbarBackground = "#6F4E37" },
+            new() { Name = "Cyberpunk", IsBuiltIn = true, IsDark = true, Primary = "#F0ED0D", Secondary = "#00F0FF", Background = "#010101", Surface = "#1A1A1A", AppbarBackground = "#010101", DrawerBackground = "#010101", TextPrimary = "#F0ED0D" },
         ];
 
-        private static MudTheme BuildMudTheme(AppTheme theme) => new()
+        private static MudTheme BuildMudTheme(AppTheme theme)
         {
-            PaletteLight = new PaletteLight
+            var mudTheme = new MudTheme();
+
+            if (theme.IsDark)
             {
-                Primary = theme.Primary,
-                Secondary = theme.Secondary,
-            },
-            PaletteDark = new PaletteDark
+                ApplyPalette(mudTheme.PaletteDark, theme);
+            }
+            else
             {
-                Primary = theme.Primary,
-                Secondary = theme.Secondary,
-            },
-        };
+                ApplyPalette(mudTheme.PaletteLight, theme);
+            }
+
+            return mudTheme;
+        }
+
+        private static void ApplyPalette(Palette palette, AppTheme theme)
+        {
+            palette.Primary = theme.Primary;
+            palette.Secondary = theme.Secondary;
+
+            if (!string.IsNullOrEmpty(theme.Background)) palette.Background = theme.Background;
+            if (!string.IsNullOrEmpty(theme.Surface)) palette.Surface = theme.Surface;
+            if (!string.IsNullOrEmpty(theme.AppbarBackground)) palette.AppbarBackground = theme.AppbarBackground;
+            if (!string.IsNullOrEmpty(theme.DrawerBackground)) palette.DrawerBackground = theme.DrawerBackground;
+            if (!string.IsNullOrEmpty(theme.TextPrimary)) palette.TextPrimary = theme.TextPrimary;
+            if (!string.IsNullOrEmpty(theme.TextSecondary)) palette.TextSecondary = theme.TextSecondary;
+        }
     }
 }

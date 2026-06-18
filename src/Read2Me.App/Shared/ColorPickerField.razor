@@ -1,0 +1,31 @@
+﻿<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+    <div style="position:relative; width:36px; height:36px; border-radius:6px; overflow:hidden; border:1px solid rgba(128,128,128,0.3); background:@(Value ?? "transparent");">
+        <input type="color" value="@(GetHexColor(Value))" @onchange="OnColorChanged"
+               style="position:absolute; top:-5px; left:-5px; width:50px; height:50px; border:none; cursor:pointer; opacity:@(string.IsNullOrEmpty(Value) ? "0.01" : "1")" />
+    </div>
+    <MudTextField T="string" Value="@Value" ValueChanged="OnValueChanged" Label="@Label"
+                  Placeholder="Auto" Clearable="true" Margin="Margin.Dense" />
+</MudStack>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "";
+
+    private string GetHexColor(string? val)
+    {
+        if (string.IsNullOrWhiteSpace(val)) return "#000000";
+        if (val.StartsWith("#") && (val.Length == 7 || val.Length == 4)) return val;
+        return "#000000";
+    }
+
+    private async Task OnColorChanged(ChangeEventArgs e)
+    {
+        await ValueChanged.InvokeAsync(e.Value?.ToString());
+    }
+
+    private async Task OnValueChanged(string? value)
+    {
+        await ValueChanged.InvokeAsync(value);
+    }
+}

@@ -30,17 +30,18 @@
 @code {
     MudTheme _theme = new();
     bool _isDark;
+    bool _followSystem;
     bool _drawerOpen = true;
 
     protected override async Task OnInitializedAsync()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
-        (_theme, _isDark) = await ThemeService.GetCurrentThemeAsync();
+        (_theme, _isDark, _followSystem) = await ThemeService.GetCurrentThemeAsync();
     }
 
     private async void HandleThemeChanged()
     {
-        (_theme, _isDark) = await ThemeService.GetCurrentThemeAsync();
+        (_theme, _isDark, _followSystem) = await ThemeService.GetCurrentThemeAsync();
         await InvokeAsync(StateHasChanged);
     }
 

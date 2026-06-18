@@ -22,6 +22,30 @@
         </MudStack>
 
         <MudSwitch @bind-Value="Theme.IsDark" Label="Dark Mode" Color="Color.Primary" />
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.h6" Class="mb-2">Advanced Colors (Optional)</MudText>
+
+        <MudGrid>
+            <MudItem xs="6">
+                <ColorPickerField Label="Background" @bind-Value="Theme.Background" />
+            </MudItem>
+            <MudItem xs="6">
+                <ColorPickerField Label="Surface" @bind-Value="Theme.Surface" />
+            </MudItem>
+            <MudItem xs="6">
+                <ColorPickerField Label="AppBar" @bind-Value="Theme.AppbarBackground" />
+            </MudItem>
+            <MudItem xs="6">
+                <ColorPickerField Label="Drawer" @bind-Value="Theme.DrawerBackground" />
+            </MudItem>
+            <MudItem xs="6">
+                <ColorPickerField Label="Text Primary" @bind-Value="Theme.TextPrimary" />
+            </MudItem>
+            <MudItem xs="6">
+                <ColorPickerField Label="Text Secondary" @bind-Value="Theme.TextSecondary" />
+            </MudItem>
+        </MudGrid>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>

@@ -4,7 +4,11 @@
 @inject ISnackbar Snackbar
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5">
-    <MudText Typo="Typo.h4">Themes</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+        <MudText Typo="Typo.h4">Themes</MudText>
+        <MudSwitch T="bool" Value="_followSystem" ValueChanged="OnFollowSystemChanged"
+                   Label="Follow System Preference" Color="Color.Primary" />
+    </MudStack>
     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                StartIcon="@Icons.Material.Filled.Add"
                OnClick="OpenAddDialog">
@@ -42,6 +46,18 @@ else
                             <MudTooltip Text="Secondary">
                                 <div style="width:20px;height:20px;border-radius:50%;background:@t.Secondary;border:1px solid rgba(128,128,128,0.3);"></div>
                             </MudTooltip>
+                            @if (!string.IsNullOrEmpty(t.Background))
+                            {
+                                <MudTooltip Text="Background">
+                                    <div style="width:20px;height:20px;border-radius:50%;background:@t.Background;border:1px solid rgba(128,128,128,0.3);"></div>
+                                </MudTooltip>
+                            }
+                            @if (!string.IsNullOrEmpty(t.AppbarBackground))
+                            {
+                                <MudTooltip Text="AppBar">
+                                    <div style="width:20px;height:20px;border-radius:50%;background:@t.AppbarBackground;border:1px solid rgba(128,128,128,0.3);"></div>
+                                </MudTooltip>
+                            }
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1">
                                 @(t.IsDark ? "Dark" : "Light")
                             </MudChip>
@@ -76,6 +92,7 @@ else
 @code {
     List<AppTheme>? _themes;
     int? _selectedThemeId;
+    bool _followSystem;
 
     protected override async Task OnInitializedAsync()
     {
@@ -86,6 +103,14 @@ else
     {
         _themes = await ThemeService.GetAllThemesAsync();
         _selectedThemeId = await ThemeService.GetSelectedThemeIdAsync();
+        _followSystem = await ThemeService.GetFollowSystemPreferenceAsync();
+    }
+
+    async Task OnFollowSystemChanged(bool follow)
+    {
+        await ThemeService.SetFollowSystemPreferenceAsync(follow);
+        _followSystem = follow;
+        Snackbar.Add(follow ? "Following system preference" : "Manual theme selection active", Severity.Info);
     }
 
     async Task SelectThemeAsync(int themeId)
@@ -118,6 +143,12 @@ else
             Name = theme.Name,
             Primary = theme.Primary,
             Secondary = theme.Secondary,
+            Background = theme.Background,
+            Surface = theme.Surface,
+            AppbarBackground = theme.AppbarBackground,
+            DrawerBackground = theme.DrawerBackground,
+            TextPrimary = theme.TextPrimary,
+            TextSecondary = theme.TextSecondary,
             IsDark = theme.IsDark,
             IsBuiltIn = theme.IsBuiltIn,
         };
