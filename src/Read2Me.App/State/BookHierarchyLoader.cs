@@ -20,20 +20,20 @@ namespace Read2Me.App.State
 
         public async Task LoadPartsAsync(ProjectFolderId folderId, Guid volumeId)
         {
-            var parts = await reader.GetPartsAsync(folderId, volumeId);
-            For(folderId).SetParts(volumeId, parts);
+            var children = await reader.GetChildrenAsync(folderId, BookNodeLevel.Volume, volumeId);
+            For(folderId).SetParts(volumeId, children.Parts!);
         }
 
         public async Task LoadChaptersAsync(ProjectFolderId folderId, Guid partId)
         {
-            var chapters = await reader.GetChaptersAsync(folderId, partId);
-            For(folderId).SetChapters(partId, chapters);
+            var children = await reader.GetChildrenAsync(folderId, BookNodeLevel.Part, partId);
+            For(folderId).SetChapters(partId, children.Chapters!);
         }
 
         public async Task LoadParagraphsAsync(ProjectFolderId folderId, Guid chapterId)
         {
-            var paragraphs = await reader.GetChapterParagraphsAsync(folderId, chapterId);
-            For(folderId).SetParagraphs(chapterId, paragraphs);
+            var children = await reader.GetChildrenAsync(folderId, BookNodeLevel.Chapter, chapterId);
+            For(folderId).SetParagraphs(chapterId, children.Paragraphs!);
         }
 
         public void Reset(ProjectFolderId folderId) => _caches.Remove(folderId);

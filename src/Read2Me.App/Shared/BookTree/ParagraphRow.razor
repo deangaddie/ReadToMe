@@ -208,29 +208,16 @@ else
     protected override void OnInitialized()
     {
         Queue.Changed += Refresh;
-        ApplyResolvedCharacter();
-    }
-
-    // Worker writes the resolved character to the DB on a background scope; this
-    // circuit's in-memory tree is untouched. Stamp the resolved character onto the
-    // loaded items so the chip updates without a reload. Idempotent.
-    void ApplyResolvedCharacter()
-    {
-        var resolved = Queue.ResolvedOf(FolderId, Para.Id);
-        if (resolved is null) return;
-
-        foreach (var it in Para.Items)
-        {
-            if (it.ItemType != ParagraphItemType.Character) continue;
-            if (it.CharacterId == resolved.CharacterId) continue;
-            it.CharacterId = resolved.CharacterId;
-            it.Character = new Character { Id = resolved.CharacterId, Name = resolved.Name };
-        }
     }
 
     void Refresh() => InvokeAsync(() =>
     {
-        ApplyResolvedCharacter();
+        var resolved = Queue.ResolvedOf(FolderId, Para.Id);
+        if (resolved is not null)
+            ParagraphCharacterStamp.Apply(
+                Para.Items,
+                resolved.CharacterId,
+                ParagraphCharacterStamp.PlaceholderFor(resolved.CharacterId, resolved.Name));
         StateHasChanged();
     });
 

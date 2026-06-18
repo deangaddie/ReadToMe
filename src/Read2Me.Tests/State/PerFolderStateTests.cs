@@ -198,7 +198,8 @@ namespace Read2Me.Tests.State
         {
             var (state, _, reader) = Create();
             var volId = Id();
-            reader.GetPartsAsync(Folder, volId).Returns(new List<Part>());
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Volume, volId)
+                .Returns(new HierarchyChildren(new List<Part>(), null, null));
 
             int fireCount = 0;
             state.Changed += () => fireCount++;
@@ -230,8 +231,8 @@ namespace Read2Me.Tests.State
             var (state, _, reader) = Create();
             var volId = Id();
 
-            var tcs = new TaskCompletionSource<List<Part>>();
-            reader.GetPartsAsync(Folder, volId).Returns(tcs.Task);
+            var tcs = new TaskCompletionSource<HierarchyChildren>();
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Volume, volId).Returns(tcs.Task);
 
             bool loadingDuringCallback = false;
             state.Changed += () => loadingDuringCallback = state.LoadingIds.Contains(volId);
@@ -242,7 +243,7 @@ namespace Read2Me.Tests.State
             // First notify (loading=true) happened synchronously before await
             Assert.True(loadingDuringCallback);
 
-            tcs.SetResult([]);
+            tcs.SetResult(new HierarchyChildren([], null, null));
             await loadTask;
 
             Assert.DoesNotContain(volId, state.LoadingIds);
@@ -260,8 +261,10 @@ namespace Read2Me.Tests.State
             var partId = Id();
 
             state.ExpandedVolumeIds.Add(volId);
-            reader.GetPartsAsync(Folder, volId).Returns(new List<Part> { new Part { Id = partId } });
-            reader.GetChaptersAsync(Folder, partId).Returns(new List<Chapter>());
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Volume, volId)
+                .Returns(new HierarchyChildren(new List<Part> { new Part { Id = partId } }, null, null));
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Part, partId)
+                .Returns(new HierarchyChildren(null, new List<Chapter>(), null));
 
             await state.RestoreExpandedAsync();
 
@@ -279,12 +282,12 @@ namespace Read2Me.Tests.State
 
             state.ExpandedVolumeIds.Add(volId);
             state.ExpandedPartIds.Add(part1Id);
-            reader.GetPartsAsync(Folder, volId).Returns(new List<Part>
-            {
-                new Part { Id = part1Id },
-                new Part { Id = part2Id },
-            });
-            reader.GetChaptersAsync(Folder, part1Id).Returns(new List<Chapter>());
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Volume, volId)
+                .Returns(new HierarchyChildren(
+                    new List<Part> { new Part { Id = part1Id }, new Part { Id = part2Id } },
+                    null, null));
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Part, part1Id)
+                .Returns(new HierarchyChildren(null, new List<Chapter>(), null));
 
             await state.RestoreExpandedAsync();
 

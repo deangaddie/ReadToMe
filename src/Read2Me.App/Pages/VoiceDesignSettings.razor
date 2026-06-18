@@ -3,6 +3,7 @@
 @using Read2Me.AppData.Entities
 @using Read2Me.Services.Audio.VoiceDesign
 @using Read2Me.Services.Audio.VoiceDesign.Settings
+@using Read2Me.Services.Llm
 @inject VoiceDesignSettingsService SettingsService
 @inject IVoiceDesignClientResolver ClientResolver
 @inject IDialogService DialogService
@@ -120,10 +121,7 @@ else
 }
 
 @code {
-    const string DefaultSampleText =
-        "The morning light filtered through tall oak trees as Sarah walked along the winding path. " +
-        "She had lived in this valley all her life, yet each season brought something new to discover. " +
-        "A soft breeze carried the scent of pine and rain, and somewhere in the distance a hawk cried out.";
+    const string DefaultSampleText = PromptTemplates.VoiceDesignSampleSentence;
 
     List<VoiceDesignServiceConfig>? _configs;
     int? _activeConfigId;

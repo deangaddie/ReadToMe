@@ -553,5 +553,80 @@ namespace Read2Me.Tests.Services
             Assert.Equal("existing voice", item.VoiceInstructions);
         }
 
+        [Fact]
+        public async Task SetParagraphCharacterCommand_WithId_SetsAllCharacterItemsLeavesNarrationUntouched()
+        {
+            await using var db = await SeedProjectAsync();
+            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
+            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
+            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
+            var ci1 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "A", Order = Key() };
+            var ci2 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "B", Order = Key(ci1.Order) };
+            var ni = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Narration, Text = "N", Order = Key(ci2.Order) };
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
+            db.ParagraphItems.AddRange(ci1, ci2, ni);
+            db.Characters.Add(character);
+            await db.SaveChangesAsync();
+            await db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para.Id, character.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(ci1.Id))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(ci2.Id))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(ni.Id))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_WithNullId_ClearsAllCharacterItems()
+        {
+            await using var db = await SeedProjectAsync();
+            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
+            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
+            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
+            var existingChar = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var ci1 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "A", Order = Key(), CharacterId = existingChar.Id };
+            var ci2 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "B", Order = Key(ci1.Order), CharacterId = existingChar.Id };
+            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
+            db.Characters.Add(existingChar);
+            db.ParagraphItems.AddRange(ci1, ci2);
+            await db.SaveChangesAsync();
+            await db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para.Id, null));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Null((await verify.ParagraphItems.FindAsync(ci1.Id))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(ci2.Id))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_DoesNotTouchOtherParagraphs()
+        {
+            await using var db = await SeedProjectAsync();
+            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
+            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
+            var para1 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
+            var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key(para1.Order) };
+            var target = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para1.Id, ItemType = ParagraphItemType.Character, Text = "T", Order = Key() };
+            var other = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para2.Id, ItemType = ParagraphItemType.Character, Text = "O", Order = Key() };
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.AddRange(para1, para2);
+            db.ParagraphItems.AddRange(target, other);
+            db.Characters.Add(character);
+            await db.SaveChangesAsync();
+            await db.DisposeAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para1.Id, character.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(target.Id))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(other.Id))!.CharacterId);
+        }
+
     }
 }

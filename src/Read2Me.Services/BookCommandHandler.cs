@@ -126,7 +126,7 @@ namespace Read2Me.Services
         }
 
         private async Task SetParagraphCharacterAsync(
-            ProjectFolderId folderId, Guid paragraphId, Guid characterId, string? voiceInstructions)
+            ProjectFolderId folderId, Guid paragraphId, Guid? characterId, string? voiceInstructions)
         {
             var db = await _session.OpenAsync(folderId);
             var items = await db.ParagraphItems
@@ -135,7 +135,7 @@ namespace Read2Me.Services
             foreach (var item in items)
             {
                 item.CharacterId = characterId;
-                if (voiceInstructions != null)
+                if (characterId.HasValue && voiceInstructions != null)
                     item.VoiceInstructions = voiceInstructions;
             }
             await db.SaveChangesAsync();

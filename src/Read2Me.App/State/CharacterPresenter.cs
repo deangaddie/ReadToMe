@@ -36,6 +36,19 @@ namespace Read2Me.App.State
 
         private ProjectFolderId? _folderId;
 
+        /// <summary>
+        /// Per-voice cache-buster token. Incremented whenever a voice's audio file is
+        /// (over)written so the UI can request a fresh URL. The audio file keeps the same
+        /// name across regenerations, so without this the browser and the static-file
+        /// middleware's ETag/Last-Modified revalidation serve the stale file until restart.
+        /// </summary>
+        private readonly Dictionary<Guid, int> _audioTokens = [];
+
+        public int AudioToken(Guid voiceId) => _audioTokens.GetValueOrDefault(voiceId);
+
+        private void BumpAudioToken(Guid voiceId) =>
+            _audioTokens[voiceId] = _audioTokens.GetValueOrDefault(voiceId) + 1;
+
         public event Action? StateChanged;
 
         public async Task LoadAsync(ProjectFolderId folderId)
@@ -192,6 +205,7 @@ namespace Read2Me.App.State
                 };
                 var fileName = await audioPipeline.StoreAsync(req, ct);
                 await commandHandler.ExecuteAsync(new SetVoiceAudioCommand(folder, voiceId, fileName), ct);
+                BumpAudioToken(voiceId);
             }
             catch (Exception ex)
             {
@@ -372,6 +386,7 @@ namespace Read2Me.App.State
                     v.Transcript = sampleText;
                     v.DesignPrompt = designPrompt;
                 });
+                BumpAudioToken(voiceId);
             }
             catch (Exception ex)
             {

@@ -142,26 +142,8 @@ namespace Read2Me.App.State
 
             var character = characterId.HasValue ? Characters.Find(c => c.Id == characterId.Value) : null;
 
-            var charItems = paragraph.Items
-                .Where(i => i.ItemType == Data.Enums.ParagraphItemType.Character)
-                .ToList();
-
-            if (characterId.HasValue)
-            {
-                await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId.Value));
-            }
-            else
-            {
-                foreach (var item in charItems)
-                    await commandHandler.ExecuteAsync(new SetItemCharacterCommand(folderId, item.Id, null));
-            }
-
-            foreach (var item in charItems)
-            {
-                item.CharacterId = characterId;
-                item.Character = character;
-            }
-
+            await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
+            ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character);
             NotifyStateChanged();
         }
 

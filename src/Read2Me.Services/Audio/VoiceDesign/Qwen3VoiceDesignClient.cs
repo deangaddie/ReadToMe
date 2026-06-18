@@ -1,8 +1,6 @@
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -33,22 +31,16 @@ namespace Read2Me.Services.Audio.VoiceDesign
                 http.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", settings.ApiKey);
 
-            var payload = new
+            var form = new MultipartFormDataContent
             {
-                voice_description = prompt,
-                text = sampleText,
-                model = string.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model,
+                { new StringContent(sampleText), "text" },
+                { new StringContent(prompt), "voice_description" },
             };
-            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
-            {
-                DefaultIgnoreCondition =
-                    System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-            });
 
             using var request = new HttpRequestMessage(
                 HttpMethod.Post, settings.BaseUrl.TrimEnd('/') + "/tts")
             {
-                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+                Content = form,
             };
 
             var response = await http.SendAsync(

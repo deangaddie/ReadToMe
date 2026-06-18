@@ -103,7 +103,7 @@
 
                                 @if (v.Source == VoiceSource.Uploaded)
                                 {
-                                    @if (v.AudioFileName != null)
+                                    @if (v.AudioFileName != null && !_reloadingAudio.Contains(v.Id))
                                     {
                                         <audio controls style="width:100%;">
                                             <source src="@AudioUrl(v)" />
@@ -127,7 +127,7 @@
                                 }
                                 else
                                 {
-                                    <MudTextField Value="@GetPromptDraft(v)" ValueChanged="@((string s) => _draftPrompts[v.Id] = s)"
+                                    <MudTextField Value="@GetPromptDraft(v)" ValueChanged="@((string s) => _drafts.Set(v.Id, VoiceDraftField.Prompt, s))"
                                                   Label="Voice description prompt" Variant="Variant.Outlined" Lines="4" Immediate="true" />
                                     <MudStack Row="true" Spacing="1">
                                         <MudButton Variant="Variant.Outlined" Size="Size.Small"
@@ -158,7 +158,7 @@
                                             </MudButton>
                                         }
                                     </MudStack>
-                                    @if (v.AudioFileName != null)
+                                    @if (v.AudioFileName != null && !_reloadingAudio.Contains(v.Id))
                                     {
                                         <audio controls style="width:100%;">
                                             <source src="@AudioUrl(v)" />
@@ -170,7 +170,7 @@
                                 <MudExpansionPanel Text="Advanced settings" Dense="true">
                                     <MudStack Spacing="2">
                                         <MudTextField Value="@GetOverrideDraft(v)"
-                                                      ValueChanged="@((string s) => _draftOverrides[v.Id] = s)"
+                                                      ValueChanged="@((string s) => _drafts.Set(v.Id, VoiceDraftField.Override, s))"
                                                       Label="Settings override (JSON)" Variant="Variant.Outlined"
                                                       Lines="3" Immediate="true"
                                                       HelperText="Only the keys you set override the active provider's defaults. Leave blank for none." />
@@ -183,7 +183,7 @@
                                 <MudExpansionPanel Text="Transcript" Dense="true">
                                     <MudStack Spacing="2">
                                         <MudTextField Value="@(GetTranscriptDraft(v))"
-                                                      ValueChanged="@((string s) => _draftTranscripts[v.Id] = s)" Label="Transcript"
+                                                      ValueChanged="@((string s) => _drafts.Set(v.Id, VoiceDraftField.Transcript, s))" Label="Transcript"
                                                       Variant="Variant.Outlined" Lines="3" Immediate="true" />
                                         <MudStack Row="true" Spacing="1">
                                             <MudButton Variant="Variant.Outlined" Size="Size.Small"
@@ -230,31 +230,31 @@
     Guid? _generatingAudio;
     Guid? _transcribing;
 
-    Dictionary<Guid, string> _draftPrompts = new();
-    Dictionary<Guid, string> _draftTranscripts = new();
-    Dictionary<Guid, string> _draftOverrides = new();
+    readonly VoiceDraftBuffer _drafts = new();
+    readonly HashSet<Guid> _reloadingAudio = new();
 
     string AudioUrl(Voice v) =>
-        $"/workspace/{FolderName}/{v.AudioFileName?.Replace('\\', '/')}";
+        $"/workspace/{FolderName}/{v.AudioFileName?.Replace('\\', '/')}?v={Presenter.AudioToken(v.Id)}";
 
-    bool HasPromptDraft(Voice v) =>
-        _draftPrompts.TryGetValue(v.Id, out var d) && d != (v.DesignPrompt ?? "");
+    async Task CycleAudioPlayerAsync(Guid voiceId)
+    {
+        _reloadingAudio.Add(voiceId);
+        StateHasChanged();
+        await Task.Yield();
+        _reloadingAudio.Remove(voiceId);
+        StateHasChanged();
+    }
 
-    bool HasTranscriptDraft(Voice v) =>
-        _draftTranscripts.TryGetValue(v.Id, out var d) && d != (v.Transcript ?? "");
+    bool HasPromptDraft(Voice v) => _drafts.IsDirty(v.Id, VoiceDraftField.Prompt, v.DesignPrompt);
+    bool HasTranscriptDraft(Voice v) => _drafts.IsDirty(v.Id, VoiceDraftField.Transcript, v.Transcript);
 
-    string GetPromptDraft(Voice v) =>
-        _draftPrompts.TryGetValue(v.Id, out var d) ? d : (v.DesignPrompt ?? "");
-
-    string GetTranscriptDraft(Voice v) =>
-        _draftTranscripts.TryGetValue(v.Id, out var d) ? d : (v.Transcript ?? "");
-
-    string GetOverrideDraft(Voice v) =>
-        _draftOverrides.TryGetValue(v.Id, out var d) ? d : (v.SettingsOverrideJson ?? "");
+    string GetPromptDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Prompt, v.DesignPrompt);
+    string GetTranscriptDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Transcript, v.Transcript);
+    string GetOverrideDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Override, v.SettingsOverrideJson);
 
     async Task SaveOverrideAsync(Voice v)
     {
-        var raw = _draftOverrides.TryGetValue(v.Id, out var d) ? d : (v.SettingsOverrideJson ?? "");
+        var raw = _drafts.Current(v.Id, VoiceDraftField.Override, v.SettingsOverrideJson);
         string? json = string.IsNullOrWhiteSpace(raw) ? null : raw;
         if (json is not null)
         {
@@ -262,7 +262,7 @@
             catch { Snackbar.Add("Override is not valid JSON.", Severity.Error); return; }
         }
         await Presenter.SetVoiceSettingsOverrideAsync(v.Id, json);
-        _draftOverrides.Remove(v.Id);
+        _drafts.Clear(v.Id, VoiceDraftField.Override);
         Snackbar.Add("Settings override saved.", Severity.Success);
     }
 
@@ -318,15 +318,17 @@
         if (ext is not (".wav" or ".aac")) return;
         await using var stream = e.File.OpenReadStream(maxAllowedSize: 200 * 1024 * 1024);
         await Presenter.ReplaceVoiceAudioAsync(Character.Id, voice.Id, voice.Name, stream, ext);
+        await CycleAudioPlayerAsync(voice.Id);
     }
 
     // ── Prompt editing ────────────────────────────────────────────────────────
 
     async Task SavePromptAsync(Voice voice)
     {
-        if (!_draftPrompts.TryGetValue(voice.Id, out var prompt)) return;
+        if (!HasPromptDraft(voice)) return;
+        var prompt = _drafts.Current(voice.Id, VoiceDraftField.Prompt, voice.DesignPrompt);
         await Presenter.SetVoiceDesignPromptDirectAsync(voice.Id, prompt);
-        _draftPrompts.Remove(voice.Id);
+        _drafts.Clear(voice.Id, VoiceDraftField.Prompt);
     }
 
     async Task RegeneratePromptAsync(Voice voice)
@@ -336,28 +338,30 @@
         var prompt = await Presenter.GenerateDesignPromptTextAsync(Character.Id);
         _regeneratingPrompt = null;
         if (prompt != null)
-            _draftPrompts[voice.Id] = prompt;
+            _drafts.Set(voice.Id, VoiceDraftField.Prompt, prompt);
         StateHasChanged();
     }
 
     async Task GenerateAudioAsync(Voice voice)
     {
-        var prompt = _draftPrompts.TryGetValue(voice.Id, out var d) ? d : voice.DesignPrompt;
+        var prompt = _drafts.Current(voice.Id, VoiceDraftField.Prompt, voice.DesignPrompt);
         if (string.IsNullOrWhiteSpace(prompt)) return;
         _generatingAudio = voice.Id;
         StateHasChanged();
         await Presenter.GenerateVoiceAudioAsync(Character.Id, voice.Id, voice.Name, prompt);
         _generatingAudio = null;
-        _draftPrompts.Remove(voice.Id);
+        _drafts.Clear(voice.Id, VoiceDraftField.Prompt);
+        await CycleAudioPlayerAsync(voice.Id);
     }
 
     // ── Transcript ────────────────────────────────────────────────────────────
 
     async Task SaveTranscriptAsync(Voice voice)
     {
-        if (!_draftTranscripts.TryGetValue(voice.Id, out var t)) return;
+        if (!HasTranscriptDraft(voice)) return;
+        var t = _drafts.Current(voice.Id, VoiceDraftField.Transcript, voice.Transcript);
         await Presenter.SetVoiceTranscriptDirectAsync(voice.Id, t);
-        _draftTranscripts.Remove(voice.Id);
+        _drafts.Clear(voice.Id, VoiceDraftField.Transcript);
     }
 
     async Task TranscribeAsync(Voice voice)
@@ -377,7 +381,7 @@
 
         await Presenter.TranscribeVoiceAsync(voice.Id, stream, fileName);
         _transcribing = null;
-        _draftTranscripts.Remove(voice.Id);
+        _drafts.Clear(voice.Id, VoiceDraftField.Transcript);
 
         if (Presenter.Error != null)
             Snackbar.Add(Presenter.Error, Severity.Error);

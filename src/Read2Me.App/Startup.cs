@@ -116,7 +116,16 @@ namespace Read2Me.App
             app.UseStaticFiles(new StaticFileOptions
             {
                 FileProvider = new PhysicalFileProvider(workspacePath),
-                RequestPath = "/workspace"
+                RequestPath = "/workspace",
+                // Voice/audio files are overwritten in place (same name across
+                // regenerations). Tell clients never to reuse a cached copy so a
+                // regenerated voice plays the new audio without a server restart.
+                OnPrepareResponse = ctx =>
+                {
+                    ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+                    ctx.Context.Response.Headers.Pragma = "no-cache";
+                    ctx.Context.Response.Headers.Expires = "0";
+                }
             });
 
             app.UseRouting();

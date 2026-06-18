@@ -64,7 +64,9 @@ namespace Read2Me.Services.Llm
         /// Stored as the voice transcript for generated voices.
         /// </summary>
         public const string VoiceDesignSampleSentence =
-            "The quick brown fox jumps over the lazy dog near the riverbank at dusk.";
+            "The morning light filtered through tall oak trees as Sarah walked along the winding path. " +
+            "She had lived in this valley all her life, yet each season brought something new to discover. " +
+            "A soft breeze carried the scent of pine and rain, and somewhere in the distance a hawk cried out.";
 
         private static readonly JsonSerializerOptions _jsonOptions = new()
         {

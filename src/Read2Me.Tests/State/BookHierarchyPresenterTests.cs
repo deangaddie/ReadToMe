@@ -90,7 +90,8 @@ namespace Read2Me.Tests.State
                 Filename: null, HasContent: true,
                 Volumes: new List<Volume> { vol }, Characters: [],
                 TotalParts: 1, TotalChapters: 1, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
-            ctx.Reader.GetPartsAsync(Folder, vol.Id).Returns(new List<Part>());
+            ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Volume, vol.Id)
+                .Returns(new HierarchyChildren(new List<Part>(), null, null));
 
             await ctx.Presenter.LoadAsync(Folder);
 
@@ -670,6 +671,33 @@ namespace Read2Me.Tests.State
             await presenter.SetItemCharacterAsync(Folder, item, null);
 
             Assert.Null(queue.OutcomeOf(Folder, paragraphId));
+        }
+
+        // ---------------------------------------------------------------
+        // SetParagraphCharacterAsync — single command regardless of null/non-null id
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task SetParagraphCharacterAsync_Clearing_SendsSingleSetParagraphCharacterCommandWithNullId()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var paragraph = new Paragraph
+            {
+                Id = Guid.NewGuid(),
+                Items =
+                [
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a", CharacterId = Guid.NewGuid() },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "b", CharacterId = Guid.NewGuid() },
+                ]
+            };
+
+            await ctx.Presenter.SetParagraphCharacterAsync(Folder, paragraph, null);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphCharacterCommand>(c => c.ParagraphId == paragraph.Id && c.CharacterId == null));
+            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetItemCharacterCommand>());
         }
     }
 }

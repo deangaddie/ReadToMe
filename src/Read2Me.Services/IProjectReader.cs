@@ -25,6 +25,16 @@ namespace Read2Me.Services
         IReadOnlyList<ContextParagraph> Preceding,
         IReadOnlyList<ContextParagraph> Following);
 
+    /// <summary>
+    /// Ordered children of a node at a given hierarchy level.
+    /// Exactly one list is populated; the others are null.
+    /// parentLevel=Volume → Parts; Part → Chapters; Chapter → Paragraphs (with Items included).
+    /// </summary>
+    public sealed record HierarchyChildren(
+        List<Part>? Parts,
+        List<Chapter>? Chapters,
+        List<Paragraph>? Paragraphs);
+
     public interface IProjectReader
     {
         Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId);
@@ -36,6 +46,13 @@ namespace Read2Me.Services
         Task<List<Part>> GetPartsAsync(ProjectFolderId folderId, Guid volumeId);
         Task<List<Chapter>> GetChaptersAsync(ProjectFolderId folderId, Guid partId);
         Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId folderId, Guid chapterId);
+
+        /// <summary>
+        /// Returns the ordered structural children of <paramref name="parentId"/> at <paramref name="parentLevel"/>.
+        /// Volume → Parts; Part → Chapters; Chapter → Paragraphs (Items included).
+        /// Returns an empty result if the parent is not found.
+        /// </summary>
+        Task<HierarchyChildren> GetChildrenAsync(ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId);
         Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId);
         Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId);
         Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId);

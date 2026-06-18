@@ -141,6 +141,30 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<HierarchyChildren> GetChildrenAsync(
+            ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return parentLevel switch
+            {
+                BookNodeLevel.Volume => new HierarchyChildren(
+                    await db.Parts.Where(p => p.VolumeId == parentId).OrderBy(p => p.Order).ToListAsync(),
+                    null, null),
+                BookNodeLevel.Part => new HierarchyChildren(
+                    null,
+                    await db.Chapters.Where(c => c.PartId == parentId).OrderBy(c => c.Order).ToListAsync(),
+                    null),
+                _ => new HierarchyChildren(
+                    null, null,
+                    await db.Paragraphs
+                        .Where(p => p.ChapterId == parentId)
+                        .OrderBy(p => p.Order)
+                        .Include(p => p.Items.OrderBy(i => i.Order))
+                            .ThenInclude(i => i.Character)
+                        .ToListAsync()),
+            };
+        }
+
         public async Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);

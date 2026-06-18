@@ -35,7 +35,7 @@ public record MergeParagraphItemCommand(ProjectFolderId FolderId, Guid ItemId, M
 // Character
 public record SetItemCharacterCommand(ProjectFolderId FolderId, Guid ItemId, Guid? CharacterId) : BookCommand(FolderId);
 public record CreateCharacterCommand(ProjectFolderId FolderId, string Name) : BookCommand(FolderId);
-public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid ParagraphId, Guid CharacterId, string? VoiceInstructions = null) : BookCommand(FolderId);
+public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid ParagraphId, Guid? CharacterId, string? VoiceInstructions = null) : BookCommand(FolderId);
 public record AddCharacterAliasCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
 public record RemoveCharacterAliasCommand(ProjectFolderId FolderId, Guid AliasId) : BookCommand(FolderId);
 public record MergeCharactersCommand(ProjectFolderId FolderId, Guid SurvivorId, Guid MergedId, bool AddNameAsAlias) : BookCommand(FolderId);
