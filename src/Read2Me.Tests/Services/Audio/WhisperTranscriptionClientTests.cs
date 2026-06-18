@@ -39,8 +39,8 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(HttpMethod.Post, _httpFactory.LastRequest.Method);
             Assert.Contains("/asr?task=transcribe&output=txt", _httpFactory.LastRequest.RequestUri?.ToString() ?? "");
             
-            var content = Assert.IsType<MultipartFormDataContent>(_httpFactory.LastRequest.Content);
-            var strContent = await content.ReadAsStringAsync();
+            Assert.IsType<MultipartFormDataContent>(_httpFactory.LastRequest.Content);
+            var strContent = _httpFactory.LastRequestContent ?? "";
             Assert.Contains("audio_file", strContent);
             Assert.Contains("test.wav", strContent);
         }
@@ -49,14 +49,19 @@ namespace Read2Me.Tests.Services.Audio
         {
             public HttpResponseMessage? Response { get; set; }
             public HttpRequestMessage? LastRequest { get; private set; }
+            public string? LastRequestContent { get; private set; }
             public HttpClient CreateClient(string name) => new HttpClient(new FakeHttpMessageHandler(this));
 
             private class FakeHttpMessageHandler(FakeHttpClientFactory factory) : HttpMessageHandler
             {
-                protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+                protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
                 {
                     factory.LastRequest = request;
-                    return Task.FromResult(factory.Response!);
+                    if (request.Content != null)
+                    {
+                        factory.LastRequestContent = await request.Content.ReadAsStringAsync(cancellationToken);
+                    }
+                    return factory.Response!;
                 }
             }
         }
