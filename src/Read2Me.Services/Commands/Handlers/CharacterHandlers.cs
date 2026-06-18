@@ -7,6 +7,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Services.Characters;
 
 namespace Read2Me.Services.Commands.Handlers;
 
@@ -31,7 +32,8 @@ internal sealed class CreateCharacterHandler(ProjectDbSession session) : IComman
     public async Task<Guid?> HandleAsync(CreateCharacterCommand c, CancellationToken ct)
     {
         var db = await session.OpenAsync(c.FolderId);
-        var existing = await db.Characters.FirstOrDefaultAsync(ch => ch.Name == c.Name);
+        var all = await db.Characters.Include(ch => ch.Aliases).ToListAsync(ct);
+        var existing = all.FirstOrDefault(ch => CharacterResolver.Matches(ch, c.Name));
         if (existing != null) return existing.Id;
         var character = new Character { Id = Guid.NewGuid(), Name = c.Name };
         db.Characters.Add(character);

@@ -46,6 +46,7 @@ namespace Read2Me.App
             services.AddScoped<LlmPromptService>();
             services.AddScoped<Read2Me.Services.Llm.ILlmClient, Read2Me.Services.Llm.OpenAiLlmClient>();
             services.AddScoped<Read2Me.Services.Characters.CharacterAttributionService>();
+            services.AddScoped<Read2Me.Services.Characters.CharacterResolver>();
             services.AddScoped<VoiceDesignSettingsService>();
             services.AddScoped<TranscriptionSettingsService>();
             services.AddScoped<Read2Me.Services.Audio.Transcription.ITranscriptionClientResolver, Read2Me.Services.Audio.Transcription.TranscriptionClientResolver>();

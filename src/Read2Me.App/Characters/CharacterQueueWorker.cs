@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -59,9 +58,9 @@ namespace Read2Me.App.Characters
                 switch (outcome.Status)
                 {
                     case AttributionStatus.Resolved:
-                        var reader = scope.ServiceProvider.GetRequiredService<IProjectReader>();
+                        var resolver = scope.ServiceProvider.GetRequiredService<CharacterResolver>();
                         var commands = scope.ServiceProvider.GetRequiredService<IBookCommandHandler>();
-                        var charId = await AssignCharacterAsync(reader, commands, item, outcome.Character!, outcome.VoiceInstructions, ct);
+                        var charId = await AssignCharacterAsync(resolver, commands, item, outcome.Character!, outcome.VoiceInstructions, ct);
                         queue.MarkComplete(item, sw.Elapsed.TotalSeconds,
                             new ResolvedCharacter(charId, outcome.Character!));
                         logger.LogInformation("Completed paragraph {ParagraphId} in {Elapsed:F1}s",
@@ -102,33 +101,16 @@ namespace Read2Me.App.Characters
         }
 
         private async Task<Guid> AssignCharacterAsync(
-            IProjectReader reader,
+            CharacterResolver resolver,
             IBookCommandHandler commands,
             QueuedParagraph item,
             string name,
             string? voiceInstructions,
             CancellationToken ct)
         {
-            var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
-            var existing = characters.FirstOrDefault(c =>
-                string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase) ||
-                c.Aliases.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)));
-
-            Guid charId;
-            if (existing != null)
-            {
-                charId = existing.Id;
-            }
-            else
-            {
-                var created = await commands.ExecuteAsync(new CreateCharacterCommand(item.Folder, name), ct);
-                charId = created ?? throw new InvalidOperationException(
-                    $"CreateCharacterCommand returned null for name '{name}'");
-            }
-
+            var charId = await resolver.ResolveOrCreateAsync(item.Folder, name, ct);
             await commands.ExecuteAsync(
                 new SetParagraphCharacterCommand(item.Folder, item.ParagraphId, charId, voiceInstructions), ct);
-
             return charId;
         }
     }
