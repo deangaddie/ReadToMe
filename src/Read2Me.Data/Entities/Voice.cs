@@ -13,6 +13,7 @@ namespace Read2Me.Data.Entities
         public string? DesignPrompt { get; set; }
         public string? Transcript { get; set; }
         public string? AudioFileName { get; set; }
+        public string? SettingsOverrideJson { get; set; }
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
         public Character Character { get; set; } = null!;

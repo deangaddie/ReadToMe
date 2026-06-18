@@ -1,0 +1,73 @@
+@using Read2Me.AppData.Entities
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_form.Name" Label="Name" Variant="Variant.Outlined"
+                          Required="true" Immediate="true" />
+
+            <MudSelect T="VoiceDesignServiceType" @bind-Value="_form.Type" Label="Type" Variant="Variant.Outlined">
+                @foreach (var type in Enum.GetValues<VoiceDesignServiceType>())
+                {
+                    <MudSelectItem Value="@type">@type</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
+                          Placeholder="@(_form.Type == VoiceDesignServiceType.VoxCpm2 ? "http://localhost:8003" : "http://localhost:8100")"
+                          Required="true" Immediate="true"
+                          UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
+
+            @if (_form.Type == VoiceDesignServiceType.VoxCpm2)
+            {
+                <MudNumericField @bind-Value="_form.MaxLen" Label="Max Len" Variant="Variant.Outlined"
+                                 Min="1" Max="8192" Immediate="true"
+                                 HelperText="Max output length in tokens (server caps at 8192)." />
+            }
+
+            @if (_form.Type == VoiceDesignServiceType.Qwen3)
+            {
+                <MudTextField @bind-Value="_form.ApiKey" Label="API Key (optional)" Variant="Variant.Outlined"
+                              Immediate="true" InputType="InputType.Password"
+                              UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
+                <MudTextField @bind-Value="_form.Model" Label="Model (optional)" Variant="Variant.Outlined"
+                              Immediate="true" Placeholder="Leave blank to use server default" />
+            }
+
+            @if (_error != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Existing config to edit; null for a new one.</summary>
+    [Parameter] public VoiceDesignServiceConfig? Config { get; set; }
+
+    VoiceDesignServiceConfigForm _form = new();
+    string? _error;
+
+    protected override void OnInitialized()
+    {
+        _form = Config != null
+            ? VoiceDesignServiceConfigForm.FromConfig(Config)
+            : new VoiceDesignServiceConfigForm();
+    }
+
+    void Submit()
+    {
+        _error = _form.Validate();
+        if (_error != null) return;
+        MudDialog.Close(DialogResult.Ok(_form.BuildConfig()));
+    }
+
+    void Cancel() => MudDialog.Cancel();
+}

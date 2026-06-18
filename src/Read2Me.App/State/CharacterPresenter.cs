@@ -8,8 +8,8 @@ using Read2Me.Core.Audio;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
-using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Llm;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
@@ -20,8 +20,8 @@ namespace Read2Me.App.State
         IBookCommandHandler commandHandler,
         IAudioPipeline audioPipeline,
         ITranscriptionClientResolver transcriptionResolver,
-        IVoiceDesignClient voiceDesignClient,
-        AudioSettingsService audioSettings,
+        IVoiceDesignClientResolver voiceDesignResolver,
+        VoiceDesignSettingsService voiceDesignSettings,
         TranscriptionSettingsService transcriptionSettings,
         Read2Me.Services.Voice.VoiceDesignPromptService voiceDesignPromptService,
         Read2Me.Core.IO.IFileSystem fileSystem)
@@ -139,6 +139,19 @@ namespace Read2Me.App.State
 
         public Task SetVoiceDesignPromptDirectAsync(Guid voiceId, string prompt) =>
             ExecuteAndReloadAsync(new SetVoiceDesignPromptCommand(_folderId!.Value, voiceId, prompt));
+
+        public async Task SetVoiceSettingsOverrideAsync(Guid voiceId, string? json)
+        {
+            if (_folderId is not { } folder) return;
+            IsBusy = true; Error = null; NotifyStateChanged();
+            try
+            {
+                await commandHandler.ExecuteAsync(new SetVoiceSettingsOverrideCommand(folder, voiceId, json));
+                UpdateVoiceInPlace(voiceId, v => v.SettingsOverrideJson = json);
+            }
+            catch (Exception ex) { Error = ex.Message; }
+            IsBusy = false; NotifyStateChanged();
+        }
 
         public Task SetVoiceDefaultAsync(Guid voiceId) =>
             ExecuteAndReloadAsync(new SetVoiceDefaultCommand(_folderId!.Value, voiceId));
@@ -311,7 +324,7 @@ namespace Read2Me.App.State
         {
             if (_folderId is not { } folder) return;
 
-            var config = await audioSettings.GetActiveVoiceDesignConfigAsync();
+            var config = await voiceDesignSettings.GetActiveConfigAsync();
             if (config == null)
             {
                 Error = "No active voice design server configured.";
@@ -326,8 +339,13 @@ namespace Read2Me.App.State
             NotifyStateChanged();
             try
             {
-                var sampleText = PromptTemplates.VoiceDesignSampleSentence;
-                await using var audioStream = await voiceDesignClient.DesignVoiceAsync(config, designPrompt, sampleText, ct);
+                var storedSampleText = await voiceDesignSettings.GetSampleTextAsync();
+                var sampleText = string.IsNullOrWhiteSpace(storedSampleText)
+                    ? PromptTemplates.VoiceDesignSampleSentence
+                    : storedSampleText;
+                var overrideJson = Voices.Find(v => v.Id == voiceId)?.SettingsOverrideJson;
+                var client = voiceDesignResolver.Resolve(config.Type);
+                await using var audioStream = await client.DesignVoiceAsync(config, designPrompt, sampleText, overrideJson, ct);
 
                 var req = new AudioStoreRequest
                 {
@@ -348,13 +366,19 @@ namespace Read2Me.App.State
                 await commandHandler.ExecuteAsync(new SetVoiceTranscriptCommand(folder, voiceId, sampleText), ct);
                 await commandHandler.ExecuteAsync(
                     new SetVoiceDesignPromptCommand(folder, voiceId, designPrompt), ct);
+                UpdateVoiceInPlace(voiceId, v =>
+                {
+                    v.AudioFileName = fileName;
+                    v.Transcript = sampleText;
+                    v.DesignPrompt = designPrompt;
+                });
             }
             catch (Exception ex)
             {
                 Error = ex.Message;
             }
             IsBusy = false;
-            await LoadAsync(folder);
+            NotifyStateChanged();
         }
 
         // ── Context helper ────────────────────────────────────────────────────

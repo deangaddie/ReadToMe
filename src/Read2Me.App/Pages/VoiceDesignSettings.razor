@@ -1,0 +1,273 @@
+@page "/voice-design-settings"
+@using System.Text.Json
+@using Read2Me.AppData.Entities
+@using Read2Me.Services.Audio.VoiceDesign
+@using Read2Me.Services.Audio.VoiceDesign.Settings
+@inject VoiceDesignSettingsService SettingsService
+@inject IVoiceDesignClientResolver ClientResolver
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IDisposable
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5">
+    <MudText Typo="Typo.h4">Voice Design Settings</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenAddDialog">
+        New Configuration
+    </MudButton>
+</MudStack>
+
+<MudCard Outlined="true" Class="mb-5">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Sample Text</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Text spoken by every generated voice. Used for both voice design previews and generating voice clips for characters.
+        </MudText>
+        <MudTextField @bind-Value="_sampleTextDraft"
+                      Label="Sample text" Variant="Variant.Outlined"
+                      Lines="3" Immediate="true"
+                      HelperText="@($"Default: \"{DefaultSampleText}\"")" />
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   Disabled="@(_sampleTextDraft == (_activeSampleText ?? DefaultSampleText))"
+                   OnClick="SaveSampleTextAsync">Save</MudButton>
+        <MudButton Variant="Variant.Outlined"
+                   Disabled="@(_sampleTextDraft == DefaultSampleText)"
+                   OnClick="ResetSampleText">Reset to default</MudButton>
+    </MudCardActions>
+</MudCard>
+
+@if (_configs == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_configs.Count == 0)
+{
+    <MudText Typo="Typo.body1" Color="Color.Secondary">
+        No voice design configurations yet. Create one to get started.
+    </MudText>
+}
+else
+{
+    <MudGrid>
+        @foreach (var config in _configs)
+        {
+            var c = config;
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Outlined="true">
+                    <MudCardContent Class="pb-0">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.h6">@c.Name</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@c.Type</MudChip>
+                        </MudStack>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@DescribeUrl(c)</MudText>
+
+                        <MudStack Spacing="2" Class="mt-3">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudTextField @bind-Value="_testPrompts[c.Id]" Label="Test prompt" Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" Lines="2" Placeholder="Describe the voice…" />
+                            </MudStack>
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.RecordVoiceOver"
+                                       Disabled="@(_testingConfigId == c.Id || string.IsNullOrWhiteSpace(GetTestPrompt(c.Id)))"
+                                       OnClick="@(() => TestDesignAsync(c))">
+                                @(_testingConfigId == c.Id ? "Testing…" : "Test design")
+                            </MudButton>
+                            @if (_testingConfigId == c.Id)
+                            {
+                                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                            }
+                        </MudStack>
+
+                        @if (_testResults.TryGetValue(c.Id, out var result))
+                        {
+                            <MudAlert Severity="@(result.Success ? Severity.Success : Severity.Error)"
+                                      Dense="true" Class="mt-2" ShowCloseIcon="true"
+                                      CloseIconClicked="() => _testResults.Remove(c.Id)">
+                                @result.Message
+                            </MudAlert>
+                            @if (result.AudioDataUri != null)
+                            {
+                                <audio controls src="@result.AudioDataUri" class="mt-2" style="width:100%" />
+                            }
+                        }
+                    </MudCardContent>
+                    <MudCardActions>
+                        @if (_activeConfigId == c.Id)
+                        {
+                            <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle"
+                                     Size="Size.Small" Variant="Variant.Filled">Active</MudChip>
+                        }
+                        else
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                       OnClick="() => SelectConfigAsync(c.Id)">Apply</MudButton>
+                        }
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="() => OpenEditDialog(c)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                       Color="Color.Error" OnClick="() => DeleteConfigAsync(c.Id)" />
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    const string DefaultSampleText =
+        "The morning light filtered through tall oak trees as Sarah walked along the winding path. " +
+        "She had lived in this valley all her life, yet each season brought something new to discover. " +
+        "A soft breeze carried the scent of pine and rain, and somewhere in the distance a hawk cried out.";
+
+    List<VoiceDesignServiceConfig>? _configs;
+    int? _activeConfigId;
+
+    string? _activeSampleText;
+    string _sampleTextDraft = "";
+
+    int? _testingConfigId;
+    readonly Dictionary<int, string> _testPrompts = new();
+    readonly Dictionary<int, TestResult> _testResults = new();
+
+    record TestResult(bool Success, string Message, string? AudioDataUri = null);
+
+    string GetTestPrompt(int configId) =>
+        _testPrompts.TryGetValue(configId, out var p) ? p : "";
+
+    async Task TestDesignAsync(VoiceDesignServiceConfig config)
+    {
+        var prompt = GetTestPrompt(config.Id);
+        if (string.IsNullOrWhiteSpace(prompt)) return;
+
+        _testResults.Remove(config.Id);
+        _testingConfigId = config.Id;
+        StateHasChanged();
+
+        try
+        {
+            var client = ClientResolver.Resolve(config.Type);
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var sampleText = string.IsNullOrWhiteSpace(_activeSampleText) ? DefaultSampleText : _activeSampleText;
+            await using var stream = await client.DesignVoiceAsync(
+                config, prompt, sampleText, null, cts.Token);
+            using var ms = new System.IO.MemoryStream();
+            await stream.CopyToAsync(ms, cts.Token);
+            var dataUri = $"data:audio/wav;base64,{Convert.ToBase64String(ms.ToArray())}";
+            _testResults[config.Id] = new TestResult(true, "Voice generated.", dataUri);
+        }
+        catch (Exception ex)
+        {
+            _testResults[config.Id] = new TestResult(false, $"Test failed: {ex.Message}");
+        }
+        finally
+        {
+            _testingConfigId = null;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        SettingsService.OnChanged += HandleChanged;
+        await LoadAsync();
+    }
+
+    void HandleChanged() => InvokeAsync(LoadAsync);
+
+    async Task LoadAsync()
+    {
+        _configs = await SettingsService.GetAllConfigsAsync();
+        _activeConfigId = await SettingsService.GetActiveConfigIdAsync();
+        _activeSampleText = await SettingsService.GetSampleTextAsync();
+        _sampleTextDraft = _activeSampleText ?? DefaultSampleText;
+        foreach (var c in _configs)
+            _testPrompts.TryAdd(c.Id, "");
+        StateHasChanged();
+    }
+
+    async Task SaveSampleTextAsync()
+    {
+        var toSave = _sampleTextDraft == DefaultSampleText ? null : _sampleTextDraft;
+        await SettingsService.SetSampleTextAsync(toSave);
+        _activeSampleText = toSave;
+        Snackbar.Add("Sample text saved.", Severity.Success);
+    }
+
+    void ResetSampleText()
+    {
+        _sampleTextDraft = DefaultSampleText;
+    }
+
+    static string DescribeUrl(VoiceDesignServiceConfig c)
+    {
+        try
+        {
+            return c.Type switch
+            {
+                VoiceDesignServiceType.VoxCpm2 =>
+                    JsonSerializer.Deserialize<VoxCpm2VoiceDesignSettings>(c.SettingsJson)?.BaseUrl ?? "",
+                VoiceDesignServiceType.Qwen3 =>
+                    JsonSerializer.Deserialize<Qwen3VoiceDesignSettings>(c.SettingsJson)?.BaseUrl ?? "",
+                _ => "",
+            };
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    async Task SelectConfigAsync(int configId)
+    {
+        await SettingsService.SetActiveConfigAsync(configId);
+        await LoadAsync();
+        Snackbar.Add("Configuration applied", Severity.Success);
+    }
+
+    static readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task OpenAddDialog()
+    {
+        var dialog = await DialogService.ShowAsync<VoiceDesignServiceConfigDialog>("New Configuration", _dialogOptions);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: VoiceDesignServiceConfig saved })
+        {
+            await SettingsService.CreateConfigAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Configuration created", Severity.Success);
+        }
+    }
+
+    async Task OpenEditDialog(VoiceDesignServiceConfig config)
+    {
+        var dialog = await DialogService.ShowAsync<VoiceDesignServiceConfigDialog>(
+            "Edit Configuration",
+            new DialogParameters<VoiceDesignServiceConfigDialog> { { x => x.Config, config } },
+            _dialogOptions);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: VoiceDesignServiceConfig saved })
+        {
+            await SettingsService.UpdateConfigAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Configuration updated", Severity.Success);
+        }
+    }
+
+    async Task DeleteConfigAsync(int configId)
+    {
+        await SettingsService.DeleteConfigAsync(configId);
+        await LoadAsync();
+        Snackbar.Add("Configuration deleted", Severity.Info);
+    }
+
+    public void Dispose()
+    {
+        SettingsService.OnChanged -= HandleChanged;
+    }
+}

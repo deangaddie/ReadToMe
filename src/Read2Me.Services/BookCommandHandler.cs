@@ -64,6 +64,7 @@ namespace Read2Me.Services
                 case SetVoiceDefaultCommand c: await SetVoiceDefaultAsync(c.FolderId, c.VoiceId); break;
                 case UpdateVoiceCommand c: await UpdateVoiceAsync(c.FolderId, c.VoiceId, c.Name, c.Description); break;
                 case SetVoiceDesignPromptCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.DesignPrompt = c.Prompt); break;
+                case SetVoiceSettingsOverrideCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.SettingsOverrideJson = c.Json); break;
                 case SetVoiceTranscriptCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.Transcript = c.Transcript); break;
                 case SetVoiceAudioCommand c: await UpdateVoiceFieldAsync(c.FolderId, c.VoiceId, v => v.AudioFileName = c.AudioFileName); break;
                 case SetVoiceSourceCommand c: await SetVoiceSourceAsync(c.FolderId, c.VoiceId, c.IsGenerated ? VoiceSource.Generated : VoiceSource.Uploaded); break;
