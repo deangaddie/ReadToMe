@@ -124,6 +124,23 @@ internal sealed class SetVoiceAudioHandler(ProjectDbSession session) : ICommandH
     }
 }
 
+internal sealed class SetVoiceGeneratedHandler(ProjectDbSession session) : ICommandHandler<SetVoiceGeneratedCommand>
+{
+    public async Task<Guid?> HandleAsync(SetVoiceGeneratedCommand c, CancellationToken ct)
+    {
+        var db = await session.OpenAsync(c.FolderId);
+        var voice = await db.Voices.FindAsync(c.VoiceId);
+        if (voice == null) return null;
+
+        voice.AudioFileName = c.AudioFileName;
+        voice.Transcript = c.Transcript;
+        voice.DesignPrompt = c.DesignPrompt;
+
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+}
+
 internal sealed class SetVoiceSourceHandler(ProjectDbSession session, IFileSystem fs) : ICommandHandler<SetVoiceSourceCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceSourceCommand c, CancellationToken ct)

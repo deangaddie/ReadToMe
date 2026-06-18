@@ -21,9 +21,9 @@ namespace Read2Me.Services.Audio
 
             var projectFolder = fs.GetProjectFolderPath(request.FolderId.Value);
             var charFolder = Path.Combine(projectFolder, "voices", request.CharacterId.ToString());
-            Directory.CreateDirectory(charFolder);
+            fs.EnsureDirectory(charFolder);
 
-            WriteHelperTextFileIfAbsent(charFolder, request);
+            await WriteHelperTextFileIfAbsentAsync(charFolder, request);
 
             var sanitizedVoiceName = NameSanitizer.Sanitize(request.VoiceName);
             if (string.IsNullOrEmpty(sanitizedVoiceName))
@@ -38,20 +38,20 @@ namespace Read2Me.Services.Audio
                        .Replace('\\', '/');
         }
 
-        private static void WriteHelperTextFileIfAbsent(string charFolder, AudioStoreRequest request)
+        private async Task WriteHelperTextFileIfAbsentAsync(string charFolder, AudioStoreRequest request)
         {
             var sanitizedCharName = NameSanitizer.Sanitize(request.CharacterName);
             if (string.IsNullOrEmpty(sanitizedCharName))
                 sanitizedCharName = request.CharacterId.ToString("N")[..8];
 
             var txtPath = Path.Combine(charFolder, sanitizedCharName + ".txt");
-            if (File.Exists(txtPath)) return;
+            if (fs.FileExists(txtPath)) return;
 
             var lines = new System.Collections.Generic.List<string> { request.CharacterName };
             foreach (var alias in request.CharacterAliases)
                 lines.Add(alias);
 
-            File.WriteAllLines(txtPath, lines);
+            await fs.WriteAllLinesAsync(txtPath, lines);
         }
     }
 }

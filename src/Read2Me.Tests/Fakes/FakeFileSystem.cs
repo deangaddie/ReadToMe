@@ -38,6 +38,8 @@ namespace Read2Me.Tests.Fakes
 
         public bool FileExists(string path) => _files.ContainsKey(path);
 
+        public void EnsureDirectory(string path) { }
+
         public void DeleteFile(string path) => _files.Remove(path);
 
         public async Task WriteFileAsync(string path, Stream source)
@@ -45,6 +47,12 @@ namespace Read2Me.Tests.Fakes
             using var ms = new MemoryStream();
             await source.CopyToAsync(ms);
             _files[path] = ms.ToArray();
+        }
+
+        public Task WriteAllLinesAsync(string path, IEnumerable<string> lines)
+        {
+            _files[path] = System.Text.Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, lines) + Environment.NewLine);
+            return Task.CompletedTask;
         }
 
         public byte[] GetFileContent(string path) => _files[path];

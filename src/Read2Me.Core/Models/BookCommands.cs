@@ -49,6 +49,7 @@ public record SetVoiceDesignPromptCommand(ProjectFolderId FolderId, Guid VoiceId
 public record SetVoiceSettingsOverrideCommand(ProjectFolderId FolderId, Guid VoiceId, string? Json) : BookCommand(FolderId);
 public record SetVoiceTranscriptCommand(ProjectFolderId FolderId, Guid VoiceId, string Transcript) : BookCommand(FolderId);
 public record SetVoiceAudioCommand(ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : BookCommand(FolderId);
+public record SetVoiceGeneratedCommand(ProjectFolderId FolderId, Guid VoiceId, string AudioFileName, string Transcript, string DesignPrompt) : BookCommand(FolderId);
 public record SetVoiceSourceCommand(ProjectFolderId FolderId, Guid VoiceId, bool IsGenerated) : BookCommand(FolderId);
 public record DeleteVoiceCommand(ProjectFolderId FolderId, Guid VoiceId) : BookCommand(FolderId);
 

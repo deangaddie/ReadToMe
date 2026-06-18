@@ -7,7 +7,7 @@ using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.Characters
 {
-    public sealed class CharacterResolver(IProjectReader reader, IBookCommandHandler commands)
+    public class CharacterResolver(IProjectReader reader, IBookCommandHandler commands)
     {
         public static bool Matches(Character c, string name) =>
             string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase) ||
@@ -17,7 +17,7 @@ namespace Read2Me.Services.Characters
         /// Returns the id of an existing Character matching <paramref name="name"/> by canonical name
         /// or alias (case-insensitive), creating a new Character if none matches.
         /// </summary>
-        public async Task<Guid> ResolveOrCreateAsync(ProjectFolderId folder, string name, CancellationToken ct)
+        public virtual async Task<Guid> ResolveOrCreateAsync(ProjectFolderId folder, string name, CancellationToken ct)
         {
             var characters = await reader.GetCharactersWithAliasesAsync(folder);
             var existing = characters.FirstOrDefault(c => Matches(c, name));

@@ -13,7 +13,9 @@ namespace Read2Me.Core.IO
         void DeleteProjectFolder(string name);
 
         bool FileExists(string path);
+        void EnsureDirectory(string path);
         void DeleteFile(string path);
         Task WriteFileAsync(string path, Stream source);
+        Task WriteAllLinesAsync(string path, IEnumerable<string> lines);
     }
 }

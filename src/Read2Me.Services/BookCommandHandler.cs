@@ -78,6 +78,7 @@ namespace Read2Me.Services
                 [typeof(SetVoiceSettingsOverrideCommand)] = Wrap(new SetVoiceSettingsOverrideHandler(session)),
                 [typeof(SetVoiceTranscriptCommand)]       = Wrap(new SetVoiceTranscriptHandler(session)),
                 [typeof(SetVoiceAudioCommand)]            = Wrap(new SetVoiceAudioHandler(session)),
+                [typeof(SetVoiceGeneratedCommand)]        = Wrap(new SetVoiceGeneratedHandler(session)),
                 [typeof(SetVoiceSourceCommand)]           = Wrap(new SetVoiceSourceHandler(session, fs)),
                 [typeof(DeleteVoiceCommand)]              = Wrap(new DeleteVoiceHandler(session, fs)),
 

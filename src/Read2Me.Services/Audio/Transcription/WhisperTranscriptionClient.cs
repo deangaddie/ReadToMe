@@ -40,7 +40,7 @@ namespace Read2Me.Services.Audio.Transcription
             content.Add(fileContent, "audio_file", fileName);
 
             var url = settings.BaseUrl.TrimEnd('/') + "/asr?task=transcribe&output=txt";
-            using var response = await http.PostAsync(url, content, ct);
+            var response = await http.PostAsync(url, content, ct);
             response.EnsureSuccessStatusCode();
 
             var text = await response.Content.ReadAsStringAsync(ct);

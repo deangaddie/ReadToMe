@@ -27,12 +27,15 @@ file sealed class FixedPathFileSystem(string fixedPath) : IFileSystem
     public void CreateProjectFolder(string name) { }
     public void DeleteProjectFolder(string name) { }
     public bool FileExists(string path) => File.Exists(path);
+    public void EnsureDirectory(string path) => Directory.CreateDirectory(path);
     public void DeleteFile(string path) => File.Delete(path);
     public async Task WriteFileAsync(string path, Stream source)
     {
         await using var f = File.Create(path);
         await source.CopyToAsync(f);
     }
+
+    public Task WriteAllLinesAsync(string path, System.Collections.Generic.IEnumerable<string> lines) => File.WriteAllLinesAsync(path, lines);
 }
 
 public class BookReadingServiceFlattenTests : IAsyncDisposable

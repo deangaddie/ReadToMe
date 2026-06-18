@@ -37,7 +37,7 @@ namespace Read2Me.Services.Audio.VoiceDesign
                 { new StringContent(prompt), "voice_description" },
             };
 
-            using var request = new HttpRequestMessage(
+            var request = new HttpRequestMessage(
                 HttpMethod.Post, settings.BaseUrl.TrimEnd('/') + "/tts")
             {
                 Content = form,

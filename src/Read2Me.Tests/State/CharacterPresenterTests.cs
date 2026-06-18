@@ -35,6 +35,7 @@ namespace Read2Me.Tests.State
                 transcriptionResolver: null!,
                 voiceDesignResolver: null!,
                 voiceDesignSettings: null!,
+                voiceAudioGenerator: null!,
                 transcriptionSettings: null!,
                 voiceDesignPromptService: null!,
                 fileSystem: null!);

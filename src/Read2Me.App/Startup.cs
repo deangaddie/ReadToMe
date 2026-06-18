@@ -39,6 +39,7 @@ namespace Read2Me.App
             services.AddSingleton<IFileSystem, FileSystemService>();
             services.AddSingleton<CharacterQueueService>();
             services.AddSingleton<Read2Me.Services.Llm.LlmStreamBroadcaster>();
+            services.AddScoped<ICharacterQueueProcessor, CharacterQueueProcessor>();
             services.AddHostedService<CharacterQueueWorker>();
 
             services.AddHttpClient();
@@ -53,6 +54,7 @@ namespace Read2Me.App
             services.AddKeyedScoped<Read2Me.Services.Audio.Transcription.ITranscriptionClient, Read2Me.Services.Audio.Transcription.WhisperTranscriptionClient>(Read2Me.AppData.Entities.TranscriptionServiceType.LocalWhisper);
             services.AddScoped<Read2Me.Services.Audio.VoiceDesign.IVoiceDesignClientResolver,
                                Read2Me.Services.Audio.VoiceDesign.VoiceDesignClientResolver>();
+            services.AddScoped<Read2Me.Services.Audio.VoiceDesign.VoiceAudioGenerator>();
             services.AddKeyedScoped<Read2Me.Services.Audio.VoiceDesign.IVoiceDesignClient,
                                     Read2Me.Services.Audio.VoiceDesign.VoxCpm2VoiceDesignClient>(
                                     Read2Me.AppData.Entities.VoiceDesignServiceType.VoxCpm2);

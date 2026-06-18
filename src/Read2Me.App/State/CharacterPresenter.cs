@@ -22,6 +22,7 @@ namespace Read2Me.App.State
         ITranscriptionClientResolver transcriptionResolver,
         IVoiceDesignClientResolver voiceDesignResolver,
         VoiceDesignSettingsService voiceDesignSettings,
+        VoiceAudioGenerator voiceAudioGenerator,
         TranscriptionSettingsService transcriptionSettings,
         Read2Me.Services.Voice.VoiceDesignPromptService voiceDesignPromptService,
         Read2Me.Core.IO.IFileSystem fileSystem)
@@ -338,14 +339,6 @@ namespace Read2Me.App.State
         {
             if (_folderId is not { } folder) return;
 
-            var config = await voiceDesignSettings.GetActiveConfigAsync();
-            if (config == null)
-            {
-                Error = "No active voice design server configured.";
-                NotifyStateChanged();
-                return;
-            }
-
             var character = Characters.Find(c => c.Id == characterId);
 
             IsBusy = true;
@@ -353,40 +346,34 @@ namespace Read2Me.App.State
             NotifyStateChanged();
             try
             {
-                var storedSampleText = await voiceDesignSettings.GetSampleTextAsync();
-                var sampleText = string.IsNullOrWhiteSpace(storedSampleText)
-                    ? PromptTemplates.VoiceDesignSampleSentence
-                    : storedSampleText;
-                var overrideJson = Voices.Find(v => v.Id == voiceId)?.SettingsOverrideJson;
-                var client = voiceDesignResolver.Resolve(config.Type);
-                await using var audioStream = await client.DesignVoiceAsync(config, designPrompt, sampleText, overrideJson, ct);
-
-                var req = new AudioStoreRequest
+                var request = new VoiceGenerationRequest
                 {
                     FolderId = folder,
                     CharacterId = characterId,
                     CharacterName = character?.Name ?? string.Empty,
-                    CharacterAliases = character?.Aliases is { } aliases
-                        ? aliases.Select(a => a.Name).ToList()
-                        : [],
+                    CharacterAliases = character?.Aliases?.Select(a => a.Name).ToList() ?? [],
                     VoiceId = voiceId,
                     VoiceName = voiceName,
-                    Source = audioStream,
-                    Extension = ".wav",
+                    DesignPrompt = designPrompt,
+                    SettingsOverrideJson = Voices.Find(v => v.Id == voiceId)?.SettingsOverrideJson
                 };
-                var fileName = await audioPipeline.StoreAsync(req, ct);
 
-                await commandHandler.ExecuteAsync(new SetVoiceAudioCommand(folder, voiceId, fileName), ct);
-                await commandHandler.ExecuteAsync(new SetVoiceTranscriptCommand(folder, voiceId, sampleText), ct);
-                await commandHandler.ExecuteAsync(
-                    new SetVoiceDesignPromptCommand(folder, voiceId, designPrompt), ct);
-                UpdateVoiceInPlace(voiceId, v =>
+                var result = await voiceAudioGenerator.GenerateAsync(request, ct);
+
+                if (result.IsSuccess)
                 {
-                    v.AudioFileName = fileName;
-                    v.Transcript = sampleText;
-                    v.DesignPrompt = designPrompt;
-                });
-                BumpAudioToken(voiceId);
+                    UpdateVoiceInPlace(voiceId, v =>
+                    {
+                        v.AudioFileName = result.AudioFileName;
+                        v.Transcript = result.Transcript;
+                        v.DesignPrompt = designPrompt;
+                    });
+                    BumpAudioToken(voiceId);
+                }
+                else
+                {
+                    Error = result.ErrorMessage;
+                }
             }
             catch (Exception ex)
             {

@@ -33,6 +33,8 @@ namespace Read2Me.Services.IO
 
         public bool FileExists(string path) => File.Exists(path);
 
+        public void EnsureDirectory(string path) => Directory.CreateDirectory(path);
+
         public void DeleteFile(string path) => File.Delete(path);
 
         public async Task WriteFileAsync(string path, Stream source)
@@ -40,5 +42,7 @@ namespace Read2Me.Services.IO
             using var dest = File.Create(path);
             await source.CopyToAsync(dest);
         }
+
+        public Task WriteAllLinesAsync(string path, IEnumerable<string> lines) => File.WriteAllLinesAsync(path, lines);
     }
 }

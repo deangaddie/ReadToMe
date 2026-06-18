@@ -19,7 +19,7 @@ namespace Read2Me.Services.Characters
         string? VoiceInstructions,
         string? FailureReason);
 
-    public sealed class CharacterAttributionService(
+    public class CharacterAttributionService(
         ILlmClient llm,
         LlmSettingsService settings,
         LlmPromptService prompts,
@@ -27,7 +27,7 @@ namespace Read2Me.Services.Characters
         ILogger<CharacterAttributionService> logger,
         LlmStreamBroadcaster broadcaster)
     {
-        public async Task<AttributionOutcome> AttributeAsync(QueuedParagraph item, CancellationToken ct)
+        public virtual async Task<AttributionOutcome> AttributeAsync(QueuedParagraph item, CancellationToken ct)
         {
             try
             {

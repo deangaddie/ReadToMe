@@ -1,27 +1,25 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using Read2Me.Core.Audio;
-using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
-using Read2Me.Services.IO;
-using Read2Me.Tests.Infrastructure;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
 {
-    public class FileAudioPipelineTests : ProjectDbTestBase
+    public class FileAudioPipelineTests
     {
         private readonly FileAudioPipeline _pipeline;
+        private readonly FakeFileSystem _fs;
         private readonly ProjectFolderId _folder;
 
         public FileAudioPipelineTests()
         {
-            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
-            _pipeline = new FileAudioPipeline(fs);
-            _folder = new ProjectFolderId(FolderName);
+            _fs = new FakeFileSystem();
+            _pipeline = new FileAudioPipeline(_fs);
+            _folder = new ProjectFolderId("TestProject");
         }
 
         private static Stream AudioStream() => new MemoryStream([0x52, 0x49, 0x46, 0x46]);
@@ -80,9 +78,9 @@ namespace Read2Me.Tests.Services.Audio
 
             await _pipeline.StoreAsync(req);
 
-            var expectedFile = Path.Combine(TempDir, FolderName, "voices", charId.ToString(),
+            var expectedFile = Path.Combine("C:\\fake-workspace", "TestProject", "voices", charId.ToString(),
                 $"{voiceId}-alice-bright.aac");
-            Assert.True(File.Exists(expectedFile));
+            Assert.True(_fs.FileExists(expectedFile));
         }
 
         [Fact]
@@ -101,12 +99,12 @@ namespace Read2Me.Tests.Services.Audio
 
             await _pipeline.StoreAsync(req);
 
-            var txtPath = Path.Combine(TempDir, FolderName, "voices", charId.ToString(), "alice.txt");
-            Assert.True(File.Exists(txtPath));
-            var lines = await File.ReadAllLinesAsync(txtPath);
-            Assert.Equal("Alice", lines[0]);
-            Assert.Contains("Al", lines);
-            Assert.Contains("Ally", lines);
+            var txtPath = Path.Combine("C:\\fake-workspace", "TestProject", "voices", charId.ToString(), "alice.txt");
+            Assert.True(_fs.FileExists(txtPath));
+            var content = System.Text.Encoding.UTF8.GetString(_fs.GetFileContent(txtPath));
+            Assert.Contains("Alice", content);
+            Assert.Contains("Al", content);
+            Assert.Contains("Ally", content);
         }
 
         [Fact]
@@ -119,10 +117,10 @@ namespace Read2Me.Tests.Services.Audio
             await _pipeline.StoreAsync(req1);
             await _pipeline.StoreAsync(req2);
 
-            var txtPath = Path.Combine(TempDir, FolderName, "voices", charId.ToString(), "alice.txt");
-            var lines = await File.ReadAllLinesAsync(txtPath);
-            Assert.Equal("Alice", lines[0]);
-            Assert.DoesNotContain("Alice CHANGED", lines);
+            var txtPath = Path.Combine("C:\\fake-workspace", "TestProject", "voices", charId.ToString(), "alice.txt");
+            var content = System.Text.Encoding.UTF8.GetString(_fs.GetFileContent(txtPath));
+            Assert.Contains("Alice", content);
+            Assert.DoesNotContain("Alice CHANGED", content);
         }
 
         [Fact]
@@ -145,9 +143,23 @@ namespace Read2Me.Tests.Services.Audio
 
             await _pipeline.StoreAsync(req);
 
-            var filePath = Path.Combine(TempDir, FolderName, "voices", charId.ToString(), $"{voiceId}-bob-voice.wav");
-            var written = await File.ReadAllBytesAsync(filePath);
+            var filePath = Path.Combine("C:\\fake-workspace", "TestProject", "voices", charId.ToString(), $"{voiceId}-bob-voice.wav");
+            var written = _fs.GetFileContent(filePath);
             Assert.Equal(data, written);
+        }
+
+        [Fact]
+        public async Task StoreAsync_FallsBackToVoiceIdPrefix_WhenSanitizedNameEmpty()
+        {
+            var charId = Guid.NewGuid();
+            var voiceId = Guid.NewGuid();
+            var req = MakeRequest(".wav", voiceName: "!!!", charId: charId, voiceId: voiceId);
+
+            var result = await _pipeline.StoreAsync(req);
+
+            var expectedPrefix = voiceId.ToString("N")[..8];
+            Assert.Contains(expectedPrefix, result);
+            Assert.EndsWith(".wav", result);
         }
     }
 }
