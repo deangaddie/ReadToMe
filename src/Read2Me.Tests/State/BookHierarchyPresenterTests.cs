@@ -21,7 +21,7 @@ namespace Read2Me.Tests.State
     {
         private Result _result = Result.Ok();
 
-        public FakeBookUseCases() : base(null!, null!, null!) { }
+        public FakeBookUseCases() : base(null!, null!, null!, null!) { }
 
         public void SetResult(Result r) => _result = r;
 

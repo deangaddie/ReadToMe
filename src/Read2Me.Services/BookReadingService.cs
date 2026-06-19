@@ -18,7 +18,7 @@ namespace Read2Me.Services
         IBookContentPersister persister,
         ILogger<BookReadingService> logger)
     {
-        public async Task ReadBookAsync(string folderName, CancellationToken cancellationToken = default)
+        public async Task<byte[]?> ReadBookAsync(string folderName, CancellationToken cancellationToken = default)
         {
             logger.LogInformation("Starting book read for project '{Folder}'", folderName);
 
@@ -32,15 +32,26 @@ namespace Read2Me.Services
             if (!session.FileSystem.FileExists(bookFilePath))
                 throw new FileNotFoundException($"Book file not found: {bookFilePath}");
 
-            var content = project.Type switch
+            byte[]? coverImage = null;
+            BookContent content;
+            if (project.Type == BookFileType.Epub)
             {
-                BookFileType.Epub => await epubReader.ReadAsync(bookFilePath, cancellationToken),
-                BookFileType.Text => await textReader.ReadAsync(bookFilePath, cancellationToken),
-                _ => throw new NotSupportedException($"Unsupported file type: {project.Type}")
-            };
+                var result = await epubReader.ReadAsync(bookFilePath, cancellationToken);
+                content = result.Content;
+                coverImage = result.CoverImage;
+            }
+            else
+            {
+                content = project.Type switch
+                {
+                    BookFileType.Text => await textReader.ReadAsync(bookFilePath, cancellationToken),
+                    _ => throw new NotSupportedException($"Unsupported file type: {project.Type}")
+                };
+            }
 
             await persister.PersistAsync(db, content, cancellationToken);
             logger.LogInformation("Book read complete for project '{Folder}'", folderName);
+            return coverImage;
         }
 
         public async Task<List<string>> FlattenFromFileAsync(string folderName, CancellationToken cancellationToken = default)

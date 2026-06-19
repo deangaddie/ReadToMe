@@ -5,9 +5,11 @@ using VersOne.Epub;
 
 namespace Read2Me.Services.Books
 {
+    public sealed record EpubReadResult(BookContent Content, byte[]? CoverImage);
+
     public partial class EpubFileReader(ILogger<EpubFileReader> logger)
     {
-        public async Task<BookContent> ReadAsync(string filePath, CancellationToken cancellationToken = default)
+        public async Task<EpubReadResult> ReadAsync(string filePath, CancellationToken cancellationToken = default)
         {
             logger.LogInformation("Reading EPUB: {Path}", filePath);
 
@@ -27,6 +29,7 @@ namespace Read2Me.Services.Books
                     });
 
             var navPoints = epub.Navigation;
+            BookContent content;
 
             if (navPoints is { Count: > 0 })
             {
@@ -35,7 +38,7 @@ namespace Read2Me.Services.Books
                 if (navContent is not null)
                 {
                     logger.LogInformation("EPUB parsed: {Volumes} volume(s)", navContent.Volumes.Count);
-                    return navContent;
+                    return new EpubReadResult(navContent, epub.CoverImage);
                 }
             }
 
@@ -46,8 +49,9 @@ namespace Read2Me.Services.Books
                 .Where(ch => ch.Paragraphs.Count > 0)
                 .ToList();
 
+            content = new BookContent([new VolumeContent("Volume 1", [new PartContent(null, chapters)])]);
             logger.LogInformation("EPUB parsed (flat): {Chapters} chapter(s)", chapters.Count);
-            return new BookContent([new VolumeContent("Volume 1", [new PartContent(null, chapters)])]);
+            return new EpubReadResult(content, epub.CoverImage);
         }
 
         // Builds a lookup keyed by "filePath#anchor" for TOC entries that share a file.
