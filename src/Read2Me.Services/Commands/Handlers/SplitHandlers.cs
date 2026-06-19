@@ -6,7 +6,7 @@ using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-internal sealed class SplitAtPartHandler(ProjectDbSession session) : ICommandHandler<SplitAtPartCommand>
+public sealed class SplitAtPartHandler(ProjectDbSession session) : ICommandHandler<SplitAtPartCommand>
 {
     public async Task<Guid?> HandleAsync(SplitAtPartCommand c, CancellationToken ct)
     {
@@ -16,7 +16,7 @@ internal sealed class SplitAtPartHandler(ProjectDbSession session) : ICommandHan
     }
 }
 
-internal sealed class SplitAtChapterHandler(ProjectDbSession session) : ICommandHandler<SplitAtChapterCommand>
+public sealed class SplitAtChapterHandler(ProjectDbSession session) : ICommandHandler<SplitAtChapterCommand>
 {
     public async Task<Guid?> HandleAsync(SplitAtChapterCommand c, CancellationToken ct)
     {
@@ -26,7 +26,7 @@ internal sealed class SplitAtChapterHandler(ProjectDbSession session) : ICommand
     }
 }
 
-internal sealed class SplitAtParagraphHandler(ProjectDbSession session) : ICommandHandler<SplitAtParagraphCommand>
+public sealed class SplitAtParagraphHandler(ProjectDbSession session) : ICommandHandler<SplitAtParagraphCommand>
 {
     public async Task<Guid?> HandleAsync(SplitAtParagraphCommand c, CancellationToken ct)
     {
@@ -36,7 +36,7 @@ internal sealed class SplitAtParagraphHandler(ProjectDbSession session) : IComma
     }
 }
 
-internal sealed class SplitAtItemHandler(ProjectDbSession session) : ICommandHandler<SplitAtItemCommand>
+public sealed class SplitAtItemHandler(ProjectDbSession session) : ICommandHandler<SplitAtItemCommand>
 {
     public async Task<Guid?> HandleAsync(SplitAtItemCommand c, CancellationToken ct)
     {

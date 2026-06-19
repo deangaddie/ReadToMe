@@ -11,7 +11,7 @@ using Read2Me.Services.Characters;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-internal sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommandHandler<SetItemCharacterCommand>
+public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommandHandler<SetItemCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(SetItemCharacterCommand c, CancellationToken ct)
     {
@@ -27,7 +27,7 @@ internal sealed class SetItemCharacterHandler(ProjectDbSession session) : IComma
     }
 }
 
-internal sealed class CreateCharacterHandler(ProjectDbSession session) : ICommandHandler<CreateCharacterCommand>
+public sealed class CreateCharacterHandler(ProjectDbSession session) : ICommandHandler<CreateCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(CreateCharacterCommand c, CancellationToken ct)
     {
@@ -42,7 +42,7 @@ internal sealed class CreateCharacterHandler(ProjectDbSession session) : IComman
     }
 }
 
-internal sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphCharacterCommand>
+public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(SetParagraphCharacterCommand c, CancellationToken ct)
     {
@@ -61,7 +61,7 @@ internal sealed class SetParagraphCharacterHandler(ProjectDbSession session) : I
     }
 }
 
-internal sealed class AddCharacterAliasHandler(ProjectDbSession session) : ICommandHandler<AddCharacterAliasCommand>
+public sealed class AddCharacterAliasHandler(ProjectDbSession session) : ICommandHandler<AddCharacterAliasCommand>
 {
     public async Task<Guid?> HandleAsync(AddCharacterAliasCommand c, CancellationToken ct)
     {
@@ -82,7 +82,7 @@ internal sealed class AddCharacterAliasHandler(ProjectDbSession session) : IComm
     }
 }
 
-internal sealed class RemoveCharacterAliasHandler(ProjectDbSession session) : ICommandHandler<RemoveCharacterAliasCommand>
+public sealed class RemoveCharacterAliasHandler(ProjectDbSession session) : ICommandHandler<RemoveCharacterAliasCommand>
 {
     public async Task<Guid?> HandleAsync(RemoveCharacterAliasCommand c, CancellationToken ct)
     {
@@ -95,7 +95,7 @@ internal sealed class RemoveCharacterAliasHandler(ProjectDbSession session) : IC
     }
 }
 
-internal sealed class MergeCharactersHandler(ProjectDbSession session) : ICommandHandler<MergeCharactersCommand>
+public sealed class MergeCharactersHandler(ProjectDbSession session) : ICommandHandler<MergeCharactersCommand>
 {
     public async Task<Guid?> HandleAsync(MergeCharactersCommand c, CancellationToken ct)
     {
@@ -153,7 +153,7 @@ internal sealed class MergeCharactersHandler(ProjectDbSession session) : IComman
     }
 }
 
-internal sealed class DeleteCharacterHandler(ProjectDbSession session) : ICommandHandler<DeleteCharacterCommand>
+public sealed class DeleteCharacterHandler(ProjectDbSession session) : ICommandHandler<DeleteCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteCharacterCommand c, CancellationToken ct)
     {

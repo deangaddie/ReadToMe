@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using FractionalIndexing;
 using Read2Me.Core.Models;
+using Read2Me.Core.Utils;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services.Books;
@@ -17,7 +17,7 @@ namespace Read2Me.Services
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
             string? prev = null;
-            string NextKey() => prev = OrderKeyGenerator.GenerateKeyBetween(prev, null);
+            string NextKey() => prev = OrderHelper.GetNextOrder(prev);
 
             foreach (var vol in content.Volumes)
             {

@@ -12,7 +12,7 @@ using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-internal sealed class CreateVoiceHandler(ProjectDbSession session) : ICommandHandler<CreateVoiceCommand>
+public sealed class CreateVoiceHandler(ProjectDbSession session) : ICommandHandler<CreateVoiceCommand>
 {
     public async Task<Guid?> HandleAsync(CreateVoiceCommand c, CancellationToken ct)
     {
@@ -39,7 +39,7 @@ internal sealed class CreateVoiceHandler(ProjectDbSession session) : ICommandHan
     }
 }
 
-internal sealed class SetVoiceDefaultHandler(ProjectDbSession session) : ICommandHandler<SetVoiceDefaultCommand>
+public sealed class SetVoiceDefaultHandler(ProjectDbSession session) : ICommandHandler<SetVoiceDefaultCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceDefaultCommand c, CancellationToken ct)
     {
@@ -58,7 +58,7 @@ internal sealed class SetVoiceDefaultHandler(ProjectDbSession session) : IComman
     }
 }
 
-internal sealed class UpdateVoiceHandler(ProjectDbSession session) : ICommandHandler<UpdateVoiceCommand>
+public sealed class UpdateVoiceHandler(ProjectDbSession session) : ICommandHandler<UpdateVoiceCommand>
 {
     public async Task<Guid?> HandleAsync(UpdateVoiceCommand c, CancellationToken ct)
     {
@@ -72,7 +72,7 @@ internal sealed class UpdateVoiceHandler(ProjectDbSession session) : ICommandHan
     }
 }
 
-internal sealed class SetVoiceDesignPromptHandler(ProjectDbSession session) : ICommandHandler<SetVoiceDesignPromptCommand>
+public sealed class SetVoiceDesignPromptHandler(ProjectDbSession session) : ICommandHandler<SetVoiceDesignPromptCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceDesignPromptCommand c, CancellationToken ct)
     {
@@ -85,7 +85,7 @@ internal sealed class SetVoiceDesignPromptHandler(ProjectDbSession session) : IC
     }
 }
 
-internal sealed class SetVoiceSettingsOverrideHandler(ProjectDbSession session) : ICommandHandler<SetVoiceSettingsOverrideCommand>
+public sealed class SetVoiceSettingsOverrideHandler(ProjectDbSession session) : ICommandHandler<SetVoiceSettingsOverrideCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceSettingsOverrideCommand c, CancellationToken ct)
     {
@@ -98,7 +98,7 @@ internal sealed class SetVoiceSettingsOverrideHandler(ProjectDbSession session) 
     }
 }
 
-internal sealed class SetVoiceTranscriptHandler(ProjectDbSession session) : ICommandHandler<SetVoiceTranscriptCommand>
+public sealed class SetVoiceTranscriptHandler(ProjectDbSession session) : ICommandHandler<SetVoiceTranscriptCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceTranscriptCommand c, CancellationToken ct)
     {
@@ -111,7 +111,7 @@ internal sealed class SetVoiceTranscriptHandler(ProjectDbSession session) : ICom
     }
 }
 
-internal sealed class SetVoiceAudioHandler(ProjectDbSession session) : ICommandHandler<SetVoiceAudioCommand>
+public sealed class SetVoiceAudioHandler(ProjectDbSession session) : ICommandHandler<SetVoiceAudioCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceAudioCommand c, CancellationToken ct)
     {
@@ -124,7 +124,7 @@ internal sealed class SetVoiceAudioHandler(ProjectDbSession session) : ICommandH
     }
 }
 
-internal sealed class SetVoiceGeneratedHandler(ProjectDbSession session) : ICommandHandler<SetVoiceGeneratedCommand>
+public sealed class SetVoiceGeneratedHandler(ProjectDbSession session) : ICommandHandler<SetVoiceGeneratedCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceGeneratedCommand c, CancellationToken ct)
     {
@@ -141,7 +141,7 @@ internal sealed class SetVoiceGeneratedHandler(ProjectDbSession session) : IComm
     }
 }
 
-internal sealed class SetVoiceSourceHandler(ProjectDbSession session, IFileSystem fs) : ICommandHandler<SetVoiceSourceCommand>
+public sealed class SetVoiceSourceHandler(ProjectDbSession session, IFileSystem fs) : ICommandHandler<SetVoiceSourceCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceSourceCommand c, CancellationToken ct)
     {
@@ -168,7 +168,7 @@ internal sealed class SetVoiceSourceHandler(ProjectDbSession session, IFileSyste
     }
 }
 
-internal sealed class DeleteVoiceHandler(ProjectDbSession session, IFileSystem fs) : ICommandHandler<DeleteVoiceCommand>
+public sealed class DeleteVoiceHandler(ProjectDbSession session, IFileSystem fs) : ICommandHandler<DeleteVoiceCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteVoiceCommand c, CancellationToken ct)
     {
@@ -190,6 +190,7 @@ internal sealed class DeleteVoiceHandler(ProjectDbSession session, IFileSystem f
         }
 
         db.Voices.Remove(voice);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.SaveChangesAsync(ct);
 
         if (wasDefault)
@@ -204,6 +205,7 @@ internal sealed class DeleteVoiceHandler(ProjectDbSession session, IFileSystem f
                 await db.SaveChangesAsync(ct);
             }
         }
+        await tx.CommitAsync(ct);
 
         return null;
     }

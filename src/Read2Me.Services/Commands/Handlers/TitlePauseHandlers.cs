@@ -9,7 +9,7 @@ using Read2Me.Services.Books;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-internal sealed class AddBookTitleHandler(ProjectDbSession session) : ICommandHandler<AddBookTitleCommand>
+public sealed class AddBookTitleHandler(ProjectDbSession session) : ICommandHandler<AddBookTitleCommand>
 {
     public async Task<Guid?> HandleAsync(AddBookTitleCommand c, CancellationToken ct)
     {
@@ -28,7 +28,7 @@ internal sealed class AddBookTitleHandler(ProjectDbSession session) : ICommandHa
     }
 }
 
-internal sealed class AddVolumeTitlesHandler(ProjectDbSession session) : ICommandHandler<AddVolumeTitlesCommand>
+public sealed class AddVolumeTitlesHandler(ProjectDbSession session) : ICommandHandler<AddVolumeTitlesCommand>
 {
     public async Task<Guid?> HandleAsync(AddVolumeTitlesCommand c, CancellationToken ct)
     {
@@ -44,7 +44,7 @@ internal sealed class AddVolumeTitlesHandler(ProjectDbSession session) : IComman
     }
 }
 
-internal sealed class AddPartTitlesHandler(ProjectDbSession session) : ICommandHandler<AddPartTitlesCommand>
+public sealed class AddPartTitlesHandler(ProjectDbSession session) : ICommandHandler<AddPartTitlesCommand>
 {
     public async Task<Guid?> HandleAsync(AddPartTitlesCommand c, CancellationToken ct)
     {
@@ -60,7 +60,7 @@ internal sealed class AddPartTitlesHandler(ProjectDbSession session) : ICommandH
     }
 }
 
-internal sealed class AddChapterTitlesHandler(ProjectDbSession session) : ICommandHandler<AddChapterTitlesCommand>
+public sealed class AddChapterTitlesHandler(ProjectDbSession session) : ICommandHandler<AddChapterTitlesCommand>
 {
     public async Task<Guid?> HandleAsync(AddChapterTitlesCommand c, CancellationToken ct)
     {
@@ -73,7 +73,7 @@ internal sealed class AddChapterTitlesHandler(ProjectDbSession session) : IComma
     }
 }
 
-internal sealed class AddPausesHandler(ProjectDbSession session) : ICommandHandler<AddPausesCommand>
+public sealed class AddPausesHandler(ProjectDbSession session) : ICommandHandler<AddPausesCommand>
 {
     public async Task<Guid?> HandleAsync(AddPausesCommand c, CancellationToken ct)
     {
@@ -86,7 +86,7 @@ internal sealed class AddPausesHandler(ProjectDbSession session) : ICommandHandl
     }
 }
 
-internal sealed class InsertPauseParagraphHandler(ProjectDbSession session) : ICommandHandler<InsertPauseParagraphCommand>
+public sealed class InsertPauseParagraphHandler(ProjectDbSession session) : ICommandHandler<InsertPauseParagraphCommand>
 {
     private static ParagraphItemType MapPauseKind(PauseKind kind) => kind switch
     {
@@ -134,7 +134,7 @@ internal sealed class InsertPauseParagraphHandler(ProjectDbSession session) : IC
     }
 }
 
-internal sealed class ClearBookContentHandler(ProjectDbSession session) : ICommandHandler<ClearBookContentCommand>
+public sealed class ClearBookContentHandler(ProjectDbSession session) : ICommandHandler<ClearBookContentCommand>
 {
     public async Task<Guid?> HandleAsync(ClearBookContentCommand c, CancellationToken ct)
     {

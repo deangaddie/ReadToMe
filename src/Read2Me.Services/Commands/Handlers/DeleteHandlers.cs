@@ -7,7 +7,7 @@ using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-internal sealed class DeleteVolumeHandler(ProjectDbSession session) : ICommandHandler<DeleteVolumeCommand>
+public sealed class DeleteVolumeHandler(ProjectDbSession session) : ICommandHandler<DeleteVolumeCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteVolumeCommand c, CancellationToken ct)
     {
@@ -20,7 +20,7 @@ internal sealed class DeleteVolumeHandler(ProjectDbSession session) : ICommandHa
     }
 }
 
-internal sealed class DeletePartHandler(ProjectDbSession session) : ICommandHandler<DeletePartCommand>
+public sealed class DeletePartHandler(ProjectDbSession session) : ICommandHandler<DeletePartCommand>
 {
     public async Task<Guid?> HandleAsync(DeletePartCommand c, CancellationToken ct)
     {
@@ -33,7 +33,7 @@ internal sealed class DeletePartHandler(ProjectDbSession session) : ICommandHand
     }
 }
 
-internal sealed class DeleteChapterHandler(ProjectDbSession session) : ICommandHandler<DeleteChapterCommand>
+public sealed class DeleteChapterHandler(ProjectDbSession session) : ICommandHandler<DeleteChapterCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteChapterCommand c, CancellationToken ct)
     {
@@ -46,7 +46,7 @@ internal sealed class DeleteChapterHandler(ProjectDbSession session) : ICommandH
     }
 }
 
-internal sealed class DeleteParagraphHandler(ProjectDbSession session) : ICommandHandler<DeleteParagraphCommand>
+public sealed class DeleteParagraphHandler(ProjectDbSession session) : ICommandHandler<DeleteParagraphCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteParagraphCommand c, CancellationToken ct)
     {
@@ -59,7 +59,7 @@ internal sealed class DeleteParagraphHandler(ProjectDbSession session) : IComman
     }
 }
 
-internal sealed class DeleteParagraphItemHandler(ProjectDbSession session) : ICommandHandler<DeleteParagraphItemCommand>
+public sealed class DeleteParagraphItemHandler(ProjectDbSession session) : ICommandHandler<DeleteParagraphItemCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteParagraphItemCommand c, CancellationToken ct)
     {

@@ -4,8 +4,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Read2Me.Core.IO;
 using Read2Me.Core.Configuration;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
@@ -27,10 +29,17 @@ namespace Read2Me.Tests.Services
         {
             _tempDir = Path.Combine(Path.GetTempPath(), "Read2MeMergeTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempDir);
-            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = _tempDir }));
-            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _writer = new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
-            _svc = new BookCommandHandler(session, fs);
+
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = _tempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            services.AddScoped<ProjectService>();
+            services.AddScoped(sp => NullLogger<ProjectService>.Instance);
+            var sp = services.BuildServiceProvider();
+
+            _writer = sp.GetRequiredService<ProjectService>();
+            _svc = sp.GetRequiredService<BookCommandHandler>();
         }
 
         public void Dispose()

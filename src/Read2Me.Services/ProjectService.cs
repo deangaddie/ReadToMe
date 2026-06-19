@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Read2Me.Core.Exceptions;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
@@ -59,30 +60,45 @@ namespace Read2Me.Services
                 throw new ArgumentException("Title produces an empty folder name.", nameof(title));
 
             if (_fs.ProjectFolderExists(folderId))
-                throw new InvalidOperationException($"A project named \"{folderId}\" already exists.");
+                throw new ProjectAlreadyExistsException(folderId);
 
             _logger.LogInformation("Creating project '{Title}' in folder '{Folder}'", title, folderId);
 
             _fs.CreateProjectFolder(folderId);
-
-            var destFile = Path.Combine(_fs.GetProjectFolderPath(folderId), originalFileName);
-            await _fs.WriteFileAsync(destFile, fileStream);
-            _logger.LogDebug("Saved book file: {File}", destFile);
-
-            var db = await _session.OpenAsync(folderId);
-
-            db.Projects.Add(new ProjectEntity
+            try
             {
-                Title = title,
-                BookTitle = bookTitle,
-                Author = author,
-                Filename = originalFileName,
-                Type = fileType,
-            });
-            await db.SaveChangesAsync();
+                var destFile = Path.Combine(_fs.GetProjectFolderPath(folderId), originalFileName);
+                await _fs.WriteFileAsync(destFile, fileStream);
+                _logger.LogDebug("Saved book file: {File}", destFile);
 
-            _logger.LogInformation("Project '{Title}' created successfully", title);
-            return folderId;
+                var db = await _session.OpenAsync(folderId);
+
+                db.Projects.Add(new ProjectEntity
+                {
+                    Title = title,
+                    BookTitle = bookTitle,
+                    Author = author,
+                    Filename = originalFileName,
+                    Type = fileType,
+                });
+                await db.SaveChangesAsync();
+
+                _logger.LogInformation("Project '{Title}' created successfully", title);
+                return folderId;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create project '{Title}'. Rolling back file system changes.", title);
+                try
+                {
+                    _fs.DeleteProjectFolder(folderId);
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(rollbackEx, "Failed to rollback project folder deletion for '{FolderId}'", folderId);
+                }
+                throw;
+            }
         }
 
         public async Task SaveCoverImageAsync(ProjectFolderId folderId, string filename, Stream stream)
@@ -91,10 +107,7 @@ namespace Read2Me.Services
             var db = await _session.OpenAsync(folderId);
             var entity = await db.Projects.SingleOrDefaultAsync();
             if (entity == null)
-            {
-                _logger.LogWarning("SaveCoverImageAsync: project record not found for '{Folder}'", folderId);
-                return;
-            }
+                throw new ProjectNotFoundException(folderId.Value);
 
             var folderPath = _fs.GetProjectFolderPath(folderId);
             if (entity.CoverImage != null)

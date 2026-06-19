@@ -1,4 +1,4 @@
-using FractionalIndexing;
+using Read2Me.Core.Utils;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
@@ -15,7 +15,7 @@ internal static class PauseInserter
         {
             Id = Guid.NewGuid(),
             ChapterId = chapterId,
-            Order = OrderKeyGenerator.GenerateKeyBetween(afterOrder, beforeOrder),
+            Order = OrderHelper.GetBetween(afterOrder, beforeOrder),
         };
         db.Paragraphs.Add(para);
         db.ParagraphItems.Add(new ParagraphItem
@@ -23,7 +23,7 @@ internal static class PauseInserter
             Id = Guid.NewGuid(),
             ParagraphId = para.Id,
             ItemType = pauseType,
-            Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+            Order = OrderHelper.GetBetween(null, null),
         });
         return para;
     }

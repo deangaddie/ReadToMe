@@ -2,8 +2,10 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Read2Me.Core.IO;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
@@ -26,11 +28,18 @@ namespace Read2Me.Tests.Services.Characters
 
         public CharacterResolverTests()
         {
-            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
-            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _handler = new BookCommandHandler(session, fs);
-            _reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
-            _resolver = new CharacterResolver(_reader, _handler);
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            services.AddScoped<ProjectReader>();
+            services.AddScoped(sp => NullLogger<ProjectReader>.Instance);
+            services.AddScoped<CharacterResolver>();
+            var sp = services.BuildServiceProvider();
+
+            _handler = sp.GetRequiredService<BookCommandHandler>();
+            _reader = sp.GetRequiredService<ProjectReader>();
+            _resolver = sp.GetRequiredService<CharacterResolver>();
             _folder = new ProjectFolderId(FolderName);
         }
 

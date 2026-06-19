@@ -5,7 +5,7 @@ using Read2Me.Core.Models;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-internal sealed class MergeVolumeHandler(ProjectDbSession session) : ICommandHandler<MergeVolumeCommand>
+public sealed class MergeVolumeHandler(ProjectDbSession session) : ICommandHandler<MergeVolumeCommand>
 {
     public async Task<Guid?> HandleAsync(MergeVolumeCommand c, CancellationToken ct)
     {
@@ -15,7 +15,7 @@ internal sealed class MergeVolumeHandler(ProjectDbSession session) : ICommandHan
     }
 }
 
-internal sealed class MergePartHandler(ProjectDbSession session) : ICommandHandler<MergePartCommand>
+public sealed class MergePartHandler(ProjectDbSession session) : ICommandHandler<MergePartCommand>
 {
     public async Task<Guid?> HandleAsync(MergePartCommand c, CancellationToken ct)
     {
@@ -25,7 +25,7 @@ internal sealed class MergePartHandler(ProjectDbSession session) : ICommandHandl
     }
 }
 
-internal sealed class MergeChapterHandler(ProjectDbSession session) : ICommandHandler<MergeChapterCommand>
+public sealed class MergeChapterHandler(ProjectDbSession session) : ICommandHandler<MergeChapterCommand>
 {
     public async Task<Guid?> HandleAsync(MergeChapterCommand c, CancellationToken ct)
     {
@@ -35,7 +35,7 @@ internal sealed class MergeChapterHandler(ProjectDbSession session) : ICommandHa
     }
 }
 
-internal sealed class MergeParagraphHandler(ProjectDbSession session) : ICommandHandler<MergeParagraphCommand>
+public sealed class MergeParagraphHandler(ProjectDbSession session) : ICommandHandler<MergeParagraphCommand>
 {
     public async Task<Guid?> HandleAsync(MergeParagraphCommand c, CancellationToken ct)
     {
@@ -45,7 +45,7 @@ internal sealed class MergeParagraphHandler(ProjectDbSession session) : ICommand
     }
 }
 
-internal sealed class MergeParagraphItemHandler(ProjectDbSession session) : ICommandHandler<MergeParagraphItemCommand>
+public sealed class MergeParagraphItemHandler(ProjectDbSession session) : ICommandHandler<MergeParagraphItemCommand>
 {
     public async Task<Guid?> HandleAsync(MergeParagraphItemCommand c, CancellationToken ct)
     {

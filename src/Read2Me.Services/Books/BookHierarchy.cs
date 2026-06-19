@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FractionalIndexing;
+using Read2Me.Core.Utils;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
@@ -46,7 +47,7 @@ namespace Read2Me.Services.Books
             {
                 Id = Guid.NewGuid(),
                 Title = newVolumeTitle ?? currentVol.Title,
-                Order = OrderKeyGenerator.GenerateKeyBetween(currentVol.Order, nextOrder),
+                Order = OrderHelper.GetBetween(currentVol.Order, nextOrder),
             };
 
             var movedParts = siblings.Skip(splitIdx).ToList();
@@ -81,7 +82,7 @@ namespace Read2Me.Services.Books
                 Id = Guid.NewGuid(),
                 VolumeId = currentPart.VolumeId,
                 Title = newPartTitle ?? currentPart.Title,
-                Order = OrderKeyGenerator.GenerateKeyBetween(currentPart.Order, nextOrder),
+                Order = OrderHelper.GetBetween(currentPart.Order, nextOrder),
             };
 
             var movedChapters = chapterSiblings.Skip(splitIdx).ToList();
@@ -116,7 +117,7 @@ namespace Read2Me.Services.Books
                 Id = Guid.NewGuid(),
                 PartId = currentChapter.PartId,
                 Title = newChapterTitle ?? currentChapter.Title,
-                Order = OrderKeyGenerator.GenerateKeyBetween(currentChapter.Order, nextOrder),
+                Order = OrderHelper.GetBetween(currentChapter.Order, nextOrder),
             };
 
             var movedParagraphs = paragraphSiblings.Skip(splitIdx).ToList();
@@ -150,7 +151,7 @@ namespace Read2Me.Services.Books
             {
                 Id = Guid.NewGuid(),
                 ChapterId = currentParagraph.ChapterId,
-                Order = OrderKeyGenerator.GenerateKeyBetween(currentParagraph.Order, nextOrder),
+                Order = OrderHelper.GetBetween(currentParagraph.Order, nextOrder),
             };
 
             var movedItems = itemSiblings.Skip(splitIdx).ToList();
@@ -290,19 +291,19 @@ namespace Read2Me.Services.Books
                 {
                     Id = Guid.NewGuid(),
                     Title = string.Empty,
-                    Order = OrderKeyGenerator.GenerateKeyBetween(null, firstVol.Order),
+                    Order = OrderHelper.GetBefore(firstVol.Order),
                 };
                 var newPart = new Part
                 {
                     Id = Guid.NewGuid(),
                     VolumeId = newVol.Id,
-                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                    Order = OrderHelper.GetBetween(null, null),
                 };
                 var newChapter = new Chapter
                 {
                     Id = Guid.NewGuid(),
                     PartId = newPart.Id,
-                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                    Order = OrderHelper.GetBetween(null, null),
                 };
                 toAdd.AddRange([newVol, newPart, newChapter]);
                 chapterId = newChapter.Id;
@@ -319,13 +320,13 @@ namespace Read2Me.Services.Books
                     {
                         Id = Guid.NewGuid(),
                         VolumeId = vol.Id,
-                        Order = OrderKeyGenerator.GenerateKeyBetween(null, firstPart.Order),
+                        Order = OrderHelper.GetBefore(firstPart.Order),
                     };
                     var newChapter = new Chapter
                     {
                         Id = Guid.NewGuid(),
                         PartId = newPart.Id,
-                        Order = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                        Order = OrderHelper.GetBetween(null, null),
                     };
                     toAdd.AddRange([newPart, newChapter]);
                     chapterId = newChapter.Id;
@@ -342,7 +343,7 @@ namespace Read2Me.Services.Books
                     {
                         Id = Guid.NewGuid(),
                         PartId = part.Id,
-                        Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                        Order = OrderHelper.GetBefore(firstChapter?.Order),
                     };
                     toAdd.Add(newChapter);
                     chapterId = newChapter.Id;
@@ -374,7 +375,7 @@ namespace Read2Me.Services.Books
                 {
                     Id = Guid.NewGuid(),
                     PartId = firstPart.Id,
-                    Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                    Order = OrderHelper.GetBefore(firstChapter?.Order),
                 };
                 results.Add((vol.Id, vol.Title, newChapter, firstChapter?.Order));
             }
@@ -395,7 +396,7 @@ namespace Read2Me.Services.Books
                     {
                         Id = Guid.NewGuid(),
                         PartId = part.Id,
-                        Order = OrderKeyGenerator.GenerateKeyBetween(null, firstChapter?.Order),
+                        Order = OrderHelper.GetBefore(firstChapter?.Order),
                     };
                     results.Add((part.Id, part.Title, newChapter, firstChapter?.Order));
                 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
@@ -9,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
+using Read2Me.Core.Exceptions;
 
 namespace Read2Me.Services.Llm
 {
@@ -41,9 +43,21 @@ namespace Read2Me.Services.Llm
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             };
 
-            using var response = await http.SendAsync(
-                request, HttpCompletionOption.ResponseHeadersRead, ct);
-            response.EnsureSuccessStatusCode();
+            HttpResponseMessage response;
+            try
+            {
+                response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            }
+            catch (Exception ex)
+            {
+                throw new LlmProviderException($"Failed to connect to LLM provider at {config.BaseUrl}", ex);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(ct);
+                throw new LlmProviderException($"LLM provider returned error ({response.StatusCode}): {error}", null!);
+            }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var reader = new StreamReader(stream);
@@ -80,8 +94,21 @@ namespace Read2Me.Services.Llm
         {
             var http = CreateClient(config);
 
-            using var response = await http.GetAsync(OpenAiStreamParser.Combine(config.BaseUrl, "v1/models"), ct);
-            response.EnsureSuccessStatusCode();
+            HttpResponseMessage response;
+            try
+            {
+                response = await http.GetAsync(OpenAiStreamParser.Combine(config.BaseUrl, "v1/models"), ct);
+            }
+            catch (Exception ex)
+            {
+                throw new LlmProviderException($"Failed to connect to LLM provider at {config.BaseUrl}", ex);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(ct);
+                throw new LlmProviderException($"LLM provider returned error ({response.StatusCode}): {error}", null!);
+            }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);

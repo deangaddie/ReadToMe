@@ -14,23 +14,53 @@ namespace Read2Me.App.State
         private readonly Dictionary<Guid, ParagraphSelection> _selected = new();
         private IReadOnlyDictionary<Guid, int> _counts = new Dictionary<Guid, int>();
 
-        public void SetCounts(IReadOnlyDictionary<Guid, int> counts) => _counts = counts;
+        public event Action? OnChanged;
+        private void NotifyChanged() => OnChanged?.Invoke();
 
-        public void AddParagraph(Guid id, ParagraphSelection ancestry) => _selected[id] = ancestry;
-        public void RemoveParagraph(Guid id) => _selected.Remove(id);
+        public void SetCounts(IReadOnlyDictionary<Guid, int> counts)
+        {
+            _counts = counts;
+            NotifyChanged();
+        }
+
+        public void AddParagraph(Guid id, ParagraphSelection ancestry)
+        {
+            _selected[id] = ancestry;
+            NotifyChanged();
+        }
+
+        public void RemoveParagraph(Guid id)
+        {
+            if (_selected.Remove(id))
+                NotifyChanged();
+        }
 
         public void AddParagraphs(IEnumerable<CharacterParagraphRef> refs)
         {
             foreach (var r in refs)
                 _selected[r.ParagraphId] = new ParagraphSelection(r.VolumeId, r.PartId, r.ChapterId);
+            NotifyChanged();
         }
 
         public void RemoveParagraphs(IEnumerable<Guid> ids)
         {
-            foreach (var id in ids) _selected.Remove(id);
+            var changed = false;
+            foreach (var id in ids)
+            {
+                if (_selected.Remove(id))
+                    changed = true;
+            }
+            if (changed) NotifyChanged();
         }
 
-        public void Clear() => _selected.Clear();
+        public void Clear()
+        {
+            if (_selected.Count > 0)
+            {
+                _selected.Clear();
+                NotifyChanged();
+            }
+        }
 
         public bool IsParagraphSelected(Guid paragraphId) => _selected.ContainsKey(paragraphId);
         public IEnumerable<Guid> SelectedParagraphIds() => _selected.Keys;

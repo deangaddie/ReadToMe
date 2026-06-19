@@ -2,8 +2,10 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Read2Me.Core.IO;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
@@ -24,9 +26,14 @@ namespace Read2Me.Tests.Services.Characters
 
         public VoiceCommandTests()
         {
-            _fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
-            var session = new ProjectDbSession(_fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _svc = new BookCommandHandler(session, _fs);
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            var sp = services.BuildServiceProvider();
+
+            _svc = sp.GetRequiredService<BookCommandHandler>();
+            _fs = (FileSystemService)sp.GetRequiredService<IFileSystem>();
             _folder = new ProjectFolderId(FolderName);
         }
 

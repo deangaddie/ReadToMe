@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,7 @@ namespace Read2Me.Services
         private readonly ILogger<LlmPromptService> _logger;
 
         public event Action? OnChanged;
+        private void NotifyChanged() => OnChanged?.Invoke();
 
         public LlmPromptService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<LlmPromptService> logger)
         {
@@ -45,7 +47,7 @@ namespace Read2Me.Services
             var row = await EnsureRowAsync(db);
             row.CharacterPrompt = template;
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         public async Task SetVoicePromptAsync(string template)
@@ -55,7 +57,7 @@ namespace Read2Me.Services
             var row = await EnsureRowAsync(db);
             row.VoicePrompt = template;
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         public async Task ResetCharacterPromptAsync()
@@ -65,7 +67,7 @@ namespace Read2Me.Services
             var row = await EnsureRowAsync(db);
             row.CharacterPrompt = null;
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         public async Task<(int Before, int After)> GetContextWindowAsync()
@@ -86,7 +88,7 @@ namespace Read2Me.Services
             row.ContextParagraphsBefore = before;
             row.ContextParagraphsAfter = after;
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         public async Task ResetVoicePromptAsync()
@@ -96,7 +98,7 @@ namespace Read2Me.Services
             var row = await EnsureRowAsync(db);
             row.VoicePrompt = null;
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         private static async Task<LlmPromptSettings> EnsureRowAsync(Read2MeDbContext db)

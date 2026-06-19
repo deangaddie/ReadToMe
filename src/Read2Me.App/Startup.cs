@@ -8,6 +8,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
+using Read2Me.App.Configuration;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
 using Read2Me.Services;
@@ -34,66 +35,14 @@ namespace Read2Me.App
 
         public void ConfigureServices(IServiceCollection services)
         {
-            services.Configure<WorkspaceOptions>(Configuration.GetSection(WorkspaceOptions.SectionName));
-            services.AddSingleton<ThemeService>();
-            services.AddSingleton<IFileSystem, FileSystemService>();
-            services.AddSingleton<CharacterQueueService>();
-            services.AddSingleton<Read2Me.Services.Llm.LlmStreamBroadcaster>();
-            services.AddScoped<ICharacterQueueProcessor, CharacterQueueProcessor>();
-            services.AddHostedService<CharacterQueueWorker>();
+            services.AddProjectServices(Configuration);
+            services.AddLlmServices();
+            services.AddAudioServices();
+            services.AddCharacterServices();
+            services.AddAppState();
+            services.AddAppDatabase();
 
             services.AddHttpClient();
-            services.AddScoped<LlmSettingsService>();
-            services.AddScoped<LlmPromptService>();
-            services.AddScoped<Read2Me.Services.Llm.ILlmClient, Read2Me.Services.Llm.OpenAiLlmClient>();
-            services.AddScoped<Read2Me.Services.Characters.CharacterAttributionService>();
-            services.AddScoped<Read2Me.Services.Characters.CharacterResolver>();
-            services.AddScoped<VoiceDesignSettingsService>();
-            services.AddScoped<TranscriptionSettingsService>();
-            services.AddScoped<Read2Me.Services.Audio.Transcription.ITranscriptionClientResolver, Read2Me.Services.Audio.Transcription.TranscriptionClientResolver>();
-            services.AddKeyedScoped<Read2Me.Services.Audio.Transcription.ITranscriptionClient, Read2Me.Services.Audio.Transcription.WhisperTranscriptionClient>(Read2Me.AppData.Entities.TranscriptionServiceType.LocalWhisper);
-            services.AddScoped<Read2Me.Services.Audio.VoiceDesign.IVoiceDesignClientResolver,
-                               Read2Me.Services.Audio.VoiceDesign.VoiceDesignClientResolver>();
-            services.AddScoped<Read2Me.Services.Audio.VoiceDesign.VoiceAudioGenerator>();
-            services.AddKeyedScoped<Read2Me.Services.Audio.VoiceDesign.IVoiceDesignClient,
-                                    Read2Me.Services.Audio.VoiceDesign.VoxCpm2VoiceDesignClient>(
-                                    Read2Me.AppData.Entities.VoiceDesignServiceType.VoxCpm2);
-            services.AddKeyedScoped<Read2Me.Services.Audio.VoiceDesign.IVoiceDesignClient,
-                                    Read2Me.Services.Audio.VoiceDesign.Qwen3VoiceDesignClient>(
-                                    Read2Me.AppData.Entities.VoiceDesignServiceType.Qwen3);
-            services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, Read2Me.Services.Audio.FileAudioPipeline>();
-            services.AddScoped<Read2Me.Services.Voice.VoiceDesignPromptService>();
-            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
-
-            services.AddScoped<ProjectDbSession>();
-            services.AddScoped<ProjectService>();
-            services.AddScoped<IProjectWriter>(sp => sp.GetRequiredService<ProjectService>());
-            services.AddScoped<ProjectReader>();
-            services.AddScoped<IProjectReader>(sp => sp.GetRequiredService<ProjectReader>());
-            services.AddScoped<Read2Me.Services.BookCommandHandler>();
-            services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<Read2Me.Services.BookCommandHandler>());
-
-            services.AddScoped<IBookContentPersister, BookContentPersister>();
-            services.AddScoped<BookReadingService>();
-            services.AddScoped<ProjectUseCases>();
-            services.AddScoped<BookUseCases>();
-            services.AddScoped<BookHierarchyLoader>();
-            services.AddScoped<BookTreeState>();
-            services.AddScoped<BookSelectionState>();
-            services.AddScoped<BookHierarchyPresenter>();
-            services.AddScoped<CharacterPresenter>();
-            services.AddScoped<MenuActions>();
-
-            services.AddSingleton<EpubFileReader>();
-            services.AddSingleton<TextFileReader>();
-
-            services.AddDbContextFactory<Read2MeDbContext>((sp, options) =>
-            {
-                var workspace = sp.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
-                var dbPath = Path.Combine(workspace.FolderPath, "app.db");
-                options.UseSqlite($"Data Source={dbPath}");
-            });
-
             services.AddRazorPages();
             services.AddServerSideBlazor();
             services.AddMudServices();

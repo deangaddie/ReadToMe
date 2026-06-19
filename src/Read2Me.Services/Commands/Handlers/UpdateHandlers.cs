@@ -7,7 +7,7 @@ using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-internal sealed class UpdateVolumeTitleHandler(ProjectDbSession session) : ICommandHandler<UpdateVolumeTitleCommand>
+public sealed class UpdateVolumeTitleHandler(ProjectDbSession session) : ICommandHandler<UpdateVolumeTitleCommand>
 {
     public async Task<Guid?> HandleAsync(UpdateVolumeTitleCommand c, CancellationToken ct)
     {
@@ -20,7 +20,7 @@ internal sealed class UpdateVolumeTitleHandler(ProjectDbSession session) : IComm
     }
 }
 
-internal sealed class UpdatePartTitleHandler(ProjectDbSession session) : ICommandHandler<UpdatePartTitleCommand>
+public sealed class UpdatePartTitleHandler(ProjectDbSession session) : ICommandHandler<UpdatePartTitleCommand>
 {
     public async Task<Guid?> HandleAsync(UpdatePartTitleCommand c, CancellationToken ct)
     {
@@ -33,7 +33,7 @@ internal sealed class UpdatePartTitleHandler(ProjectDbSession session) : IComman
     }
 }
 
-internal sealed class UpdateChapterTitleHandler(ProjectDbSession session) : ICommandHandler<UpdateChapterTitleCommand>
+public sealed class UpdateChapterTitleHandler(ProjectDbSession session) : ICommandHandler<UpdateChapterTitleCommand>
 {
     public async Task<Guid?> HandleAsync(UpdateChapterTitleCommand c, CancellationToken ct)
     {
@@ -46,7 +46,7 @@ internal sealed class UpdateChapterTitleHandler(ProjectDbSession session) : ICom
     }
 }
 
-internal sealed class UpdateParagraphItemTextHandler(ProjectDbSession session) : ICommandHandler<UpdateParagraphItemTextCommand>
+public sealed class UpdateParagraphItemTextHandler(ProjectDbSession session) : ICommandHandler<UpdateParagraphItemTextCommand>
 {
     public async Task<Guid?> HandleAsync(UpdateParagraphItemTextCommand c, CancellationToken ct)
     {

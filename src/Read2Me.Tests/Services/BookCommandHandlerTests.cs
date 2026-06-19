@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
@@ -24,9 +25,13 @@ namespace Read2Me.Tests.Services
 
         public BookCommandHandlerTests()
         {
-            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
-            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _svc = new BookCommandHandler(session, fs);
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            var sp = services.BuildServiceProvider();
+
+            _svc = sp.GetRequiredService<BookCommandHandler>();
             _folder = new ProjectFolderId(FolderName);
         }
 
