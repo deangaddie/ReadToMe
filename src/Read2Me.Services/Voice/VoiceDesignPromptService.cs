@@ -11,23 +11,40 @@ namespace Read2Me.Services.Voice
     /// Generates a voice-design text prompt by calling the LLM with the configured
     /// voice prompt template, substituting book/author/character details.
     /// </summary>
-    public sealed class VoiceDesignPromptService(
-        ILlmClient llm,
-        LlmSettingsService settings,
-        LlmPromptService prompts,
-        ILogger<VoiceDesignPromptService> logger)
+    public class VoiceDesignPromptService
     {
+        private readonly ILlmClient llm;
+        private readonly LlmSettingsService settings;
+        private readonly LlmPromptService prompts;
+        private readonly ILogger<VoiceDesignPromptService> logger;
+
+        public VoiceDesignPromptService(
+            ILlmClient llm,
+            LlmSettingsService settings,
+            LlmPromptService prompts,
+            ILogger<VoiceDesignPromptService> logger)
+        {
+            this.llm = llm;
+            this.settings = settings;
+            this.prompts = prompts;
+            this.logger = logger;
+            if (prompts != null)
+                prompts.OnChanged += () => _cachedVoicePromptTemplate = null;
+        }
+
         public enum GenerateStatus { Success, NoLlmConfigured, Failed }
 
         public sealed record GenerateResult(GenerateStatus Status, string? Prompt, string? FailureReason);
 
-        public async Task<string> BuildRenderedPromptAsync(
+        private string? _cachedVoicePromptTemplate;
+
+        public virtual async Task<string> BuildRenderedPromptAsync(
             string bookTitle,
             string author,
             string characterName)
         {
-            var template = await prompts.GetVoicePromptAsync();
-            return PromptTemplates.Render(template, new Dictionary<string, string>
+            _cachedVoicePromptTemplate ??= await prompts.GetVoicePromptAsync();
+            return PromptTemplates.Render(_cachedVoicePromptTemplate, new Dictionary<string, string>
             {
                 [PromptTemplates.BookTitle]     = bookTitle,
                 [PromptTemplates.BookAuthor]    = author,
@@ -44,7 +61,7 @@ namespace Read2Me.Services.Voice
                 await BuildRenderedPromptAsync(bookTitle, author, characterName),
                 ct);
 
-        public async Task<GenerateResult> GenerateWithPromptAsync(
+        public virtual async Task<GenerateResult> GenerateWithPromptAsync(
             string renderedPrompt,
             CancellationToken ct = default)
         {

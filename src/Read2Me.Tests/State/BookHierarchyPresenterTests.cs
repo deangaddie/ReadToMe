@@ -745,8 +745,9 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
-        public async Task OnQueueChanged_StampsResolvedCharacterOntoTreeParagraph()
+        public async Task OnQueueChanged_DoesNotMutateParagraphItems_WhenResolved()
         {
+            // Items stay unstamped; ParagraphRow reads Queue.ResolvedOf at render time instead.
             var (ctx, queue, para, queued) = await CreateWithLoadedParagraph();
 
             var charId = Guid.NewGuid();
@@ -757,8 +758,26 @@ namespace Read2Me.Tests.State
             queue.MarkComplete(queued, elapsedSeconds: 1.0, resolved);
 
             var item = para.Items.First();
-            Assert.Equal(charId, item.CharacterId);
-            Assert.Equal("Alice", item.Character?.Name);
+            Assert.Null(item.CharacterId);
+            Assert.Null(item.Character);
+        }
+
+        [Fact]
+        public async Task OnQueueChanged_ResolvedOf_ReturnsResolvedCharacter()
+        {
+            var (ctx, queue, para, queued) = await CreateWithLoadedParagraph();
+
+            var charId = Guid.NewGuid();
+            var resolved = new ResolvedCharacter(charId, "Alice");
+
+            queue.Enqueue([queued]);
+            queue.MarkProcessing(queued);
+            queue.MarkComplete(queued, elapsedSeconds: 1.0, resolved);
+
+            var result = queue.ResolvedOf(Folder, para.Id);
+            Assert.NotNull(result);
+            Assert.Equal(charId, result!.CharacterId);
+            Assert.Equal("Alice", result.Name);
         }
 
         [Fact]

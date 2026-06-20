@@ -272,16 +272,9 @@ namespace Read2Me.App.State
 
         private void OnQueueChanged()
         {
-            if (_lastFolder is not { } folder) return;
-            foreach (var para in Tree.AllParagraphs())
-            {
-                var resolved = characterQueue.ResolvedOf(folder, para.Id);
-                if (resolved is not null)
-                    ParagraphCharacterStamp.Apply(
-                        para.Items,
-                        resolved.CharacterId,
-                        ParagraphCharacterStamp.PlaceholderFor(resolved.CharacterId, resolved.Name));
-            }
+            // ParagraphRow components subscribe to CharacterQueueService.Changed directly
+            // and re-render per-paragraph using Queue.ResolvedOf as a display overlay.
+            // No tree-wide mutation needed here.
         }
 
         public void Dispose()

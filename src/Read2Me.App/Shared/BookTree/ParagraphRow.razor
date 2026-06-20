@@ -11,7 +11,8 @@
 @{
     var queueStatus = Queue.StatusOf(FolderId, Para.Id);
     var queueOutcome = queueStatus is null ? Queue.OutcomeOf(FolderId, Para.Id) : null;
-    var vm = ParagraphRowViewModel.For(Para, Presenter.SplitView, queueStatus, queueOutcome is not null);
+    var resolved = Queue.ResolvedOf(FolderId, Para.Id);
+    var vm = ParagraphRowViewModel.For(Para, Presenter.SplitView, queueStatus, queueOutcome is not null, resolved);
     var isBusy = vm.IsBusy;
     var isCharPara = vm.IsCharacterParagraph;
     var hasUnknown = vm.HasUnknownInSplit;
@@ -68,8 +69,9 @@
                 @if (it.ItemType == ParagraphItemType.Character || it.ItemType == ParagraphItemType.Narration)
                 {
                     var isCharItem = it.ItemType == ParagraphItemType.Character;
+                    var resolvedName = it.Character?.Name ?? vm.ResolvedOverlay?.Name;
                     var (chipIcon, chipColor, chipLabel) = isCharItem
-                        ? ("", it.Character == null ? Color.Warning : Color.Primary, it.Character?.Name ?? "Unknown")
+                        ? ("", resolvedName == null ? Color.Warning : Color.Primary, resolvedName ?? "Unknown")
                         : ParagraphItemDisplay.GetItemDisplay(it.ItemType) switch { var d => (d.icon, d.color, d.label) };
                     <div style="display:grid; grid-template-columns:120px 1fr auto; align-items:start; gap:8px;">
                         <CharacterChipMenu Label="@chipLabel"

@@ -12,7 +12,7 @@ namespace Read2Me.Services.Audio.VoiceDesign
         VoiceDesignSettingsService settings,
         IVoiceDesignClientResolver clientResolver,
         IAudioPipeline audioPipeline,
-        IBookCommandHandler commandHandler)
+        IBookCommandHandler commandHandler) : IVoiceAudioGenerator
     {
         public async Task<VoiceGenerationResult> GenerateAsync(VoiceGenerationRequest request, CancellationToken ct)
         {

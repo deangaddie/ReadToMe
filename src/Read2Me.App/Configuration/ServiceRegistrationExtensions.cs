@@ -71,6 +71,7 @@ public static class ServiceRegistrationExtensions
         services.AddKeyedScoped<ITranscriptionClient, WhisperTranscriptionClient>(Read2Me.AppData.Entities.TranscriptionServiceType.LocalWhisper);
         services.AddScoped<IVoiceDesignClientResolver, VoiceDesignClientResolver>();
         services.AddScoped<VoiceAudioGenerator>();
+        services.AddScoped<IVoiceAudioGenerator>(sp => sp.GetRequiredService<VoiceAudioGenerator>());
         services.AddKeyedScoped<IVoiceDesignClient, VoxCpm2VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.VoxCpm2);
         services.AddKeyedScoped<IVoiceDesignClient, Qwen3VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.Qwen3);
         services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, FileAudioPipeline>();
@@ -85,6 +86,7 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<CharacterQueueWorker>();
         services.AddScoped<CharacterAttributionService>();
         services.AddScoped<CharacterResolver>();
+        services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddScoped<CharacterPresenter>();
         return services;
     }

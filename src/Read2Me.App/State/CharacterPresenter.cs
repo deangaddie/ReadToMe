@@ -1,16 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Read2Me.Core.Audio;
+using Read2Me.App.Services;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
-using Read2Me.Services.Audio.Transcription;
-using Read2Me.Services.Audio.VoiceDesign;
-using Read2Me.Services.Llm;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.App.State
@@ -18,12 +14,7 @@ namespace Read2Me.App.State
     public class CharacterPresenter(
         IProjectReader reader,
         IBookCommandHandler commandHandler,
-        IAudioPipeline audioPipeline,
-        ITranscriptionClientResolver transcriptionResolver,
-        VoiceAudioGenerator voiceAudioGenerator,
-        TranscriptionSettingsService transcriptionSettings,
-        Read2Me.Services.Voice.VoiceDesignPromptService voiceDesignPromptService,
-        Read2Me.Core.IO.IFileSystem fileSystem)
+        VoiceOrchestrator voiceOrchestrator)
     {
         public bool IsLoading { get; private set; }
         public bool IsBusy { get; private set; }
@@ -178,7 +169,7 @@ namespace Read2Me.App.State
 
         public async Task UploadVoiceAudioAsync(
             Guid characterId, Guid voiceId, string voiceName,
-            Stream audioStream, string extension,
+            System.IO.Stream audioStream, string extension,
             CancellationToken ct = default)
         {
             if (_folderId is not { } folder) return;
@@ -189,7 +180,7 @@ namespace Read2Me.App.State
             NotifyStateChanged();
             try
             {
-                var req = new AudioStoreRequest
+                var req = new Read2Me.Core.Audio.AudioStoreRequest
                 {
                     FolderId = folder,
                     CharacterId = characterId,
@@ -202,7 +193,7 @@ namespace Read2Me.App.State
                     Source = audioStream,
                     Extension = extension,
                 };
-                var fileName = await audioPipeline.StoreAsync(req, ct);
+                var fileName = await voiceOrchestrator.StoreAudioAsync(req, ct);
                 await commandHandler.ExecuteAsync(new SetVoiceAudioCommand(folder, voiceId, fileName), ct);
                 BumpAudioToken(voiceId);
             }
@@ -216,40 +207,28 @@ namespace Read2Me.App.State
 
         public Task ReplaceVoiceAudioAsync(
             Guid characterId, Guid voiceId, string voiceName,
-            Stream audioStream, string extension,
+            System.IO.Stream audioStream, string extension,
             CancellationToken ct = default) =>
             UploadVoiceAudioAsync(characterId, voiceId, voiceName, audioStream, extension, ct);
 
-        public Stream? OpenVoiceAudioStream(VoiceEntity voice)
+        public System.IO.Stream? OpenVoiceAudioStream(VoiceEntity voice)
         {
-            if (_folderId is not { } folder || voice.AudioFileName == null) return null;
-            var projectFolder = fileSystem.GetProjectFolderPath(folder.Value);
-            var path = System.IO.Path.Combine(projectFolder, voice.AudioFileName.Replace('/', System.IO.Path.DirectorySeparatorChar));
-            if (!fileSystem.FileExists(path)) return null;
-            return File.OpenRead(path);
+            if (_folderId is not { } folder) return null;
+            return voiceOrchestrator.OpenAudioStream(folder, voice.AudioFileName);
         }
 
         public async Task TranscribeVoiceAsync(
-            Guid voiceId, Stream audioStream, string fileName,
+            Guid voiceId, System.IO.Stream audioStream, string fileName,
             CancellationToken ct = default)
         {
             if (_folderId is not { } folder) return;
-
-            var config = await transcriptionSettings.GetActiveConfigAsync();
-            if (config == null)
-            {
-                Error = "No active transcription server configured.";
-                NotifyStateChanged();
-                return;
-            }
 
             IsBusy = true;
             Error = null;
             NotifyStateChanged();
             try
             {
-                var transcriptionClient = transcriptionResolver.Resolve(config.Type);
-                var transcript = await transcriptionClient.TranscribeAsync(config, audioStream, fileName, ct);
+                var transcript = await voiceOrchestrator.TranscribeAsync(folder, voiceId, audioStream, fileName, ct);
                 await commandHandler.ExecuteAsync(new SetVoiceTranscriptCommand(folder, voiceId, transcript), ct);
                 UpdateVoiceInPlace(voiceId, v => v.Transcript = transcript);
             }
@@ -286,31 +265,10 @@ namespace Read2Me.App.State
             if (_folderId is not { } folder) return null;
             var character = Characters.Find(c => c.Id == characterId);
             var project = await reader.GetProjectAsync(folder);
-            return await voiceDesignPromptService.BuildRenderedPromptAsync(
+            return await voiceOrchestrator.BuildRenderedPromptAsync(
                 project?.BookTitle ?? string.Empty,
                 project?.Author ?? string.Empty,
                 character?.Name ?? string.Empty);
-        }
-
-        /// <summary>
-        /// Generates a voice-design prompt from the LLM for the given character and returns it.
-        /// Does not persist anything — caller decides what to do with the result.
-        /// </summary>
-        public async Task<string?> GenerateDesignPromptTextAsync(
-            Guid characterId,
-            CancellationToken ct = default)
-        {
-            if (_folderId is not { } folder) return null;
-            var character = Characters.Find(c => c.Id == characterId);
-            var project = await reader.GetProjectAsync(folder);
-            var result = await voiceDesignPromptService.GenerateAsync(
-                project?.BookTitle ?? string.Empty,
-                project?.Author ?? string.Empty,
-                character?.Name ?? string.Empty,
-                ct);
-            return result.Status == Services.Voice.VoiceDesignPromptService.GenerateStatus.Success
-                ? result.Prompt
-                : null;
         }
 
         /// <summary>
@@ -321,43 +279,16 @@ namespace Read2Me.App.State
             string renderedPrompt,
             CancellationToken ct = default)
         {
-            var result = await voiceDesignPromptService.GenerateWithPromptAsync(renderedPrompt, ct);
-            return result.Status == Services.Voice.VoiceDesignPromptService.GenerateStatus.Success
-                ? result.Prompt
-                : null;
-        }
-
-        public async Task GenerateDesignPromptAsync(
-            Guid characterId, Guid voiceId,
-            CancellationToken ct = default)
-        {
-            if (_folderId is not { } folder) return;
-
-            var character = Characters.Find(c => c.Id == characterId);
-            var project = await reader.GetProjectAsync(folder);
-
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
             try
             {
-                var result = await voiceDesignPromptService.GenerateAsync(
-                    project?.BookTitle ?? string.Empty,
-                    project?.Author ?? string.Empty,
-                    character?.Name ?? string.Empty,
-                    ct);
-
-                if (result.Status == Services.Voice.VoiceDesignPromptService.GenerateStatus.Success && result.Prompt is not null)
-                    await commandHandler.ExecuteAsync(new SetVoiceDesignPromptCommand(folder, voiceId, result.Prompt), ct);
-                else
-                    Error = result.FailureReason ?? "Failed to generate voice prompt.";
+                return await voiceOrchestrator.GenerateWithPromptAsync(renderedPrompt, ct);
             }
             catch (Exception ex)
             {
                 Error = ex.Message;
+                NotifyStateChanged();
+                return null;
             }
-            IsBusy = false;
-            await LoadAsync(folder);
         }
 
         public async Task GenerateVoiceAudioAsync(
@@ -373,7 +304,7 @@ namespace Read2Me.App.State
             NotifyStateChanged();
             try
             {
-                var request = new VoiceGenerationRequest
+                var request = new Read2Me.Services.Audio.VoiceDesign.VoiceGenerationRequest
                 {
                     FolderId = folder,
                     CharacterId = characterId,
@@ -385,7 +316,7 @@ namespace Read2Me.App.State
                     SettingsOverrideJson = Voices.Find(v => v.Id == voiceId)?.SettingsOverrideJson
                 };
 
-                var result = await voiceAudioGenerator.GenerateAsync(request, ct);
+                var result = await voiceOrchestrator.GenerateVoiceAudioAsync(request, ct);
 
                 if (result.IsSuccess)
                 {

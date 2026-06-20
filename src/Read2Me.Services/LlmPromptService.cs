@@ -14,7 +14,7 @@ namespace Read2Me.Services
         private readonly ILogger<LlmPromptService> _logger;
 
         public event Action? OnChanged;
-        private void NotifyChanged() => OnChanged?.Invoke();
+        protected virtual void NotifyChanged() => OnChanged?.Invoke();
 
         public LlmPromptService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<LlmPromptService> logger)
         {
@@ -31,7 +31,7 @@ namespace Read2Me.Services
                 : row.CharacterPrompt;
         }
 
-        public async Task<string> GetVoicePromptAsync()
+        public virtual async Task<string> GetVoicePromptAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var row = await db.PromptSettings.SingleOrDefaultAsync();

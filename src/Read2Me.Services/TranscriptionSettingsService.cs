@@ -32,7 +32,7 @@ namespace Read2Me.Services
 
         public Task<List<TranscriptionServiceConfig>> GetAllConfigsAsync() => _store.GetAllConfigsAsync();
         public Task<int?> GetActiveConfigIdAsync() => _store.GetActiveConfigIdAsync();
-        public Task<TranscriptionServiceConfig?> GetActiveConfigAsync() => _store.GetActiveConfigAsync();
+        public virtual Task<TranscriptionServiceConfig?> GetActiveConfigAsync() => _store.GetActiveConfigAsync();
         public Task SetActiveConfigAsync(int configId) => _store.SetActiveConfigAsync(configId);
         public Task<TranscriptionServiceConfig> CreateConfigAsync(TranscriptionServiceConfig config) => _store.CreateConfigAsync(config);
         public Task UpdateConfigAsync(TranscriptionServiceConfig config) => _store.UpdateConfigAsync(config);

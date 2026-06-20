@@ -84,5 +84,39 @@ namespace Read2Me.Tests.State
             var vm = ParagraphRowViewModel.For(Para(Char(null)), splitView: false, null, false);
             Assert.False(vm.HasUnknownInSplit);
         }
+
+        [Fact]
+        public void ResolvedOverlay_WhenAllItemsUnassigned_ChipSingleWithOverlayName()
+        {
+            var overlay = new ResolvedCharacter(Guid.NewGuid(), "Carol");
+            var vm = ParagraphRowViewModel.For(Para(Char(null)), false, null, false, overlay);
+            Assert.Equal(ParaCharacterChip.Single, vm.Chip);
+            Assert.Equal("Carol", vm.SingleCharacterName);
+        }
+
+        [Fact]
+        public void ResolvedOverlay_WhenAllItemsUnassigned_SplitView_HasUnknownFalse()
+        {
+            var overlay = new ResolvedCharacter(Guid.NewGuid(), "Carol");
+            var vm = ParagraphRowViewModel.For(Para(Char(null)), splitView: true, null, false, overlay);
+            Assert.False(vm.HasUnknownInSplit);
+        }
+
+        [Fact]
+        public void ResolvedOverlay_WhenItemHasRealCharacter_ChipUsesRealCharacter()
+        {
+            var overlay = new ResolvedCharacter(Guid.NewGuid(), "Carol");
+            var vm = ParagraphRowViewModel.For(Para(Char(Alice)), false, null, false, overlay);
+            Assert.Equal(ParaCharacterChip.Single, vm.Chip);
+            Assert.Equal("Alice", vm.SingleCharacterName);
+        }
+
+        [Fact]
+        public void ResolvedOverlay_ExposedOnViewModel()
+        {
+            var overlay = new ResolvedCharacter(Guid.NewGuid(), "Carol");
+            var vm = ParagraphRowViewModel.For(Para(Char(null)), false, null, false, overlay);
+            Assert.Equal(overlay, vm.ResolvedOverlay);
+        }
     }
 }
