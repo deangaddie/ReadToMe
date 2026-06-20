@@ -148,7 +148,10 @@
                     </div>
                     @if (isAudioMode && _playingItemId == it.Id && it.AudioFileName != null)
                     {
-                        <audio src="@($"/workspace/{FolderId.Value}/{it.AudioFileName.Replace('\\', '/')}")" controls autoplay style="width:100%; margin-top:4px;"></audio>
+                        var audioVersion = AudioQueue.AudioVersionOf(FolderId, it.Id);
+                        var audioSrc = $"/workspace/{FolderId.Value}/{it.AudioFileName.Replace('\\', '/')}";
+                        if (audioVersion.HasValue) audioSrc += $"?v={audioVersion.Value}";
+                        <audio src="@audioSrc" controls autoplay style="width:100%; margin-top:4px;"></audio>
                     }
                 }
                 else

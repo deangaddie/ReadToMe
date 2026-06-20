@@ -1,0 +1,87 @@
+@using Read2Me.Services.Audio
+@inject AudioQueueService Queue
+@implements IDisposable
+
+@{
+    var snap = Queue.Snapshot();
+    var isActive = snap.QueuedCount > 0 || snap.ProcessingCount > 0;
+}
+
+@if (isActive)
+{
+    <div style="position:fixed; bottom:0; left:0; right:0; z-index:1290;
+                background:var(--mud-palette-dark);
+                color:var(--mud-palette-dark-text);
+                border-top:1px solid var(--mud-palette-divider);
+                padding:6px 16px;
+                display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:0.8rem;">
+
+        <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Size="Size.Small" Style="opacity:0.7;" />
+
+        @if (snap.ProcessingCount > 0)
+        {
+            <span>
+                <strong>Generating audio</strong>
+                <span style="opacity:0.6;"> @snap.CurrentItemElapsedSeconds.ToString("F0")s</span>
+            </span>
+        }
+        else
+        {
+            <span style="opacity:0.6;">Idle</span>
+        }
+
+        @if (snap.QueuedCount > 0)
+        {
+            <span style="opacity:0.7;">@snap.QueuedCount queued</span>
+        }
+
+        @if (snap.AverageSecondsPerItem > 0)
+        {
+            <span style="opacity:0.7;">avg @snap.AverageSecondsPerItem.ToString("F1")s/item</span>
+        }
+
+        @if (snap.EstimatedSecondsRemaining > 0)
+        {
+            var eta = TimeSpan.FromSeconds(snap.EstimatedSecondsRemaining);
+            var etaStr = eta.TotalHours >= 1
+                ? $"{(int)eta.TotalHours}h {eta.Minutes:D2}m"
+                : $"{eta.Minutes}m {eta.Seconds:D2}s";
+            <span style="opacity:0.7;">ETA @etaStr</span>
+        }
+
+        @if (snap.CompletedCount > 0)
+        {
+            <span style="opacity:0.5;">@snap.CompletedCount done</span>
+        }
+
+        <MudSpacer />
+
+        <MudTooltip Text="Cancel all">
+            <MudIconButton Icon="@Icons.Material.Filled.Cancel"
+                           Size="Size.Small"
+                           Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                           OnClick="CancelAll" />
+        </MudTooltip>
+    </div>
+}
+
+@code {
+    private System.Threading.Timer? _ticker;
+
+    protected override void OnInitialized()
+    {
+        Queue.Changed += Refresh;
+        _ticker = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null,
+            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    void Refresh() => InvokeAsync(StateHasChanged);
+
+    void CancelAll() => Queue.CancelAll();
+
+    public void Dispose()
+    {
+        Queue.Changed -= Refresh;
+        _ticker?.Dispose();
+    }
+}

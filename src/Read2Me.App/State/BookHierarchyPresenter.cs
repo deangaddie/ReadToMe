@@ -294,8 +294,8 @@ namespace Read2Me.App.State
         {
             if (_lastFolder is not { } folder || AudioSelection is null) return;
 
-            var items = AudioSelection.SelectedItems().ToList();
-            if (items.Count == 0) return;
+            var selectedIds = AudioSelection.SelectedItems().Select(r => r.ParagraphItemId).ToList();
+            if (selectedIds.Count == 0) return;
 
             var activeConfig = await paragraphTtsSettings.GetActiveConfigAsync();
             if (activeConfig is null)
@@ -306,6 +306,7 @@ namespace Read2Me.App.State
                 return;
             }
 
+            var items = await reader.GetOrderedAudioItemRefsAsync(folder, selectedIds);
             audioQueue.Enqueue(folder, items);
             AudioSelection.Clear();
             NotifyStateChanged();

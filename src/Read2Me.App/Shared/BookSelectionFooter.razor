@@ -10,9 +10,10 @@
 @{
     var snap = Queue.Snapshot();
     var audioSnap = AudioQueue.Snapshot();
-    var queueBarActive = snap.QueuedCount > 0 || snap.ProcessingCount > 0
-                      || audioSnap.QueuedCount > 0 || audioSnap.ProcessingCount > 0;
-    var bottomOffset = queueBarActive ? "38px" : "0";
+    var charBarActive = snap.QueuedCount > 0 || snap.ProcessingCount > 0;
+    var audioBarActive = audioSnap.QueuedCount > 0 || audioSnap.ProcessingCount > 0;
+    var activeBars = (charBarActive ? 1 : 0) + (audioBarActive ? 1 : 0);
+    var bottomOffset = activeBars switch { 2 => "76px", 1 => "38px", _ => "0" };
     var isAudioMode = Presenter.ViewMode == BookViewMode.SplitAudio;
     var audioCount = Presenter.SelectedAudioItemCount;
     var attrCount = Presenter.SelectedParagraphCount;

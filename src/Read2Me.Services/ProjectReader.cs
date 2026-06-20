@@ -373,6 +373,28 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<List<AudioItemRef>> GetOrderedAudioItemRefsAsync(
+            ProjectFolderId folderId, IEnumerable<Guid> paragraphItemIds)
+        {
+            var ids = paragraphItemIds.ToHashSet();
+            var db = await _session.OpenAsync(folderId);
+
+            return await db.ParagraphItems
+                .Where(i => ids.Contains(i.Id))
+                .OrderBy(i => i.Paragraph.Chapter.Part.Volume.Order)
+                .ThenBy(i => i.Paragraph.Chapter.Part.Order)
+                .ThenBy(i => i.Paragraph.Chapter.Order)
+                .ThenBy(i => i.Paragraph.Order)
+                .ThenBy(i => i.Order)
+                .Select(i => new AudioItemRef(
+                    i.Id,
+                    i.ParagraphId,
+                    i.Paragraph.ChapterId,
+                    i.Paragraph.Chapter.PartId,
+                    i.Paragraph.Chapter.Part.VolumeId))
+                .ToListAsync();
+        }
+
         public async Task<IReadOnlyDictionary<Guid, int>> GetNodeAudioItemCountsAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);

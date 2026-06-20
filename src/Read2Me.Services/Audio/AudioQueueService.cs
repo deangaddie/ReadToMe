@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Channels;
 using Read2Me.Core.Models;
+using Read2Me.Services.Characters;
 
 namespace Read2Me.Services.Audio
 {
@@ -15,7 +16,14 @@ namespace Read2Me.Services.Audio
 
     public sealed record AudioItemOutcome(AudioItemOutcomeKind Kind, string? Reason);
 
-    public sealed record AudioQueueSnapshot(int QueuedCount, int ProcessingCount);
+    public sealed record AudioQueueSnapshot(
+        int QueuedCount,
+        int ProcessingCount,
+        double AverageSecondsPerItem,
+        double EstimatedSecondsRemaining,
+        int CompletedCount,
+        double CurrentItemElapsedSeconds
+    );
 
     internal readonly record struct AudioItemKey(ProjectFolderId Folder, Guid ParagraphItemId);
 
@@ -27,6 +35,9 @@ namespace Read2Me.Services.Audio
         private readonly ConcurrentDictionary<AudioItemKey, AudioItemQueueStatus> _status = new();
         private readonly ConcurrentDictionary<AudioItemKey, AudioItemOutcome> _outcomes = new();
         private readonly ConcurrentHashSet _complete = new();
+        private readonly ConcurrentDictionary<AudioItemKey, long> _versions = new();
+        private readonly QueueMetrics _metrics = new();
+        private DateTimeOffset? _processingStartedAt;
 
         public event Action? Changed;
         public event Action<ProjectFolderId, Guid, string>? AudioFileAssigned;
@@ -38,7 +49,8 @@ namespace Read2Me.Services.Audio
             foreach (var item in items)
             {
                 var key = new AudioItemKey(folder, item.ParagraphItemId);
-                if (_complete.Contains(key)) continue;
+                _complete.Remove(key);
+                _outcomes.TryRemove(key, out _);
                 if (_status.TryAdd(key, AudioItemQueueStatus.Queued))
                     _channel.Writer.TryWrite(new QueuedAudioItem(folder, item));
             }
@@ -49,6 +61,7 @@ namespace Read2Me.Services.Audio
         {
             var key = new AudioItemKey(folder, item.ParagraphItemId);
             _status[key] = AudioItemQueueStatus.Processing;
+            _processingStartedAt = DateTimeOffset.UtcNow;
             Changed?.Invoke();
         }
 
@@ -58,6 +71,10 @@ namespace Read2Me.Services.Audio
             _status.TryRemove(key, out _);
             _outcomes.TryRemove(key, out _);
             _complete.Add(key);
+            _versions[key] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            if (_processingStartedAt.HasValue)
+                _metrics.RecordCompletion((DateTimeOffset.UtcNow - _processingStartedAt.Value).TotalSeconds);
+            _processingStartedAt = null;
             AudioFileAssigned?.Invoke(folder, item.ParagraphItemId, relativePath);
             Changed?.Invoke();
         }
@@ -67,6 +84,7 @@ namespace Read2Me.Services.Audio
             var key = new AudioItemKey(folder, item.ParagraphItemId);
             _outcomes[key] = new AudioItemOutcome(AudioItemOutcomeKind.Failed, reason);
             _status.TryRemove(key, out _);
+            _processingStartedAt = null;
             Changed?.Invoke();
         }
 
@@ -79,6 +97,8 @@ namespace Read2Me.Services.Audio
             _status.Clear();
             _outcomes.Clear();
             _complete.Clear();
+            _versions.Clear();
+            _processingStartedAt = null;
 
             Changed?.Invoke();
         }
@@ -91,7 +111,12 @@ namespace Read2Me.Services.Audio
                 if (s == AudioItemQueueStatus.Queued) queued++;
                 else processing++;
             }
-            return new AudioQueueSnapshot(queued, processing);
+            var (completed, avg) = _metrics.Read();
+            double eta = avg > 0 ? queued * avg : 0;
+            double elapsed = _processingStartedAt.HasValue
+                ? (DateTimeOffset.UtcNow - _processingStartedAt.Value).TotalSeconds
+                : 0;
+            return new AudioQueueSnapshot(queued, processing, avg, eta, completed, elapsed);
         }
 
         public AudioItemQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphItemId)
@@ -105,6 +130,12 @@ namespace Read2Me.Services.Audio
             var key = new AudioItemKey(folder, paragraphItemId);
             return _outcomes.TryGetValue(key, out var o) ? o : null;
         }
+
+        public long? AudioVersionOf(ProjectFolderId folder, Guid paragraphItemId)
+        {
+            var key = new AudioItemKey(folder, paragraphItemId);
+            return _versions.TryGetValue(key, out var v) ? v : null;
+        }
     }
 
     internal sealed class ConcurrentHashSet
@@ -113,6 +144,7 @@ namespace Read2Me.Services.Audio
 
         public bool Contains(AudioItemKey key) => _inner.ContainsKey(key);
         public void Add(AudioItemKey key) => _inner.TryAdd(key, 0);
+        public void Remove(AudioItemKey key) => _inner.TryRemove(key, out _);
         public void Clear() => _inner.Clear();
     }
 }

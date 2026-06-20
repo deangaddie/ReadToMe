@@ -1,10 +1,15 @@
+@using Read2Me.Services.Audio
 @using Read2Me.Services.Characters
 @inject CharacterQueueService Queue
+@inject AudioQueueService AudioQueue
 @implements IDisposable
 
 @{
     var snap = Queue.Snapshot();
     var isActive = snap.QueuedCount > 0 || snap.ProcessingCount > 0;
+    var audioSnap = AudioQueue.Snapshot();
+    var audioBarActive = audioSnap.QueuedCount > 0 || audioSnap.ProcessingCount > 0;
+    var bottomPx = audioBarActive ? "38px" : "0";
 }
 
 @if (isActive || _expanded)
@@ -15,7 +20,7 @@
              @onclick="ToggleExpanded"></div>
     }
 
-    <div style="position:fixed; bottom:0; left:0; right:0; z-index:1290;
+    <div style="position:fixed; bottom:@bottomPx; left:0; right:0; z-index:1290;
                 display:flex; flex-direction:column;
                 @(_expanded ? "height:50vh;" : "")">
 
@@ -102,6 +107,7 @@
     protected override void OnInitialized()
     {
         Queue.Changed += Refresh;
+        AudioQueue.Changed += Refresh;
         _ticker = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -119,6 +125,7 @@
     public void Dispose()
     {
         Queue.Changed -= Refresh;
+        AudioQueue.Changed -= Refresh;
         _ticker?.Dispose();
     }
 }
