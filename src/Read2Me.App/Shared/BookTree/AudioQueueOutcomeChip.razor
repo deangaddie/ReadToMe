@@ -1,0 +1,17 @@
+@using MudBlazor
+@using Read2Me.Services.Audio
+
+@if (Outcome.Kind == AudioItemOutcomeKind.Failed)
+{
+    <MudTooltip Text="@(Outcome.Reason ?? "Failed")" Placement="Placement.Top">
+        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text"
+                 Icon="@Icons.Material.Outlined.ErrorOutline" Class="mt-0"
+                 Style="pointer-events:none; opacity:0.75;">
+            Failed
+        </MudChip>
+    </MudTooltip>
+}
+
+@code {
+    [Parameter, EditorRequired] public AudioItemOutcome Outcome { get; set; } = null!;
+}

@@ -3,22 +3,26 @@
 @using Read2Me.Core.Models
 @using Read2Me.Data.Entities
 @using Read2Me.Data.Enums
+@using Read2Me.Services.Audio
 @using Read2Me.Services.Characters
 @inject BookHierarchyPresenter Presenter
 @inject CharacterQueueService Queue
+@inject AudioQueueService AudioQueue
 @implements IDisposable
 
 @{
+    var viewMode = Presenter.ViewMode;
+    var isSplit = viewMode != BookViewMode.Combined;
     var queueStatus = Queue.StatusOf(FolderId, Para.Id);
     var queueOutcome = queueStatus is null ? Queue.OutcomeOf(FolderId, Para.Id) : null;
     var resolved = Queue.ResolvedOf(FolderId, Para.Id);
-    var vm = ParagraphRowViewModel.For(Para, Presenter.SplitView, queueStatus, queueOutcome is not null, resolved);
+    var vm = ParagraphRowViewModel.For(Para, isSplit, queueStatus, queueOutcome is not null, resolved);
     var isBusy = vm.IsBusy;
     var isCharPara = vm.IsCharacterParagraph;
     var hasUnknown = vm.HasUnknownInSplit;
 }
 
-@if (Presenter.SplitView)
+@if (isSplit)
 {
     var firstItem = Para.Items.FirstOrDefault();
     var isPauseParagraph = ParagraphItemDisplay.IsPauseParagraph(Para);
@@ -40,11 +44,13 @@
     else
     {
         var items = Para.Items.ToList();
-        var isSplitSelected = isCharPara && Presenter.Selection.IsParagraphSelected(Para.Id);
+        var isAttribution = viewMode == BookViewMode.SplitAttribution;
+        var isAudioMode = viewMode == BookViewMode.SplitAudio;
+        var isSplitSelected = isAttribution && isCharPara && Presenter.Selection.IsParagraphSelected(Para.Id);
         var splitBg = hasUnknown ? "rgba(var(--mud-palette-warning-rgb), 0.06)" : isSplitSelected ? "rgba(var(--mud-palette-primary-rgb), 0.10)" : "";
         <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
                   Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : isSplitSelected ? "var(--mud-palette-primary)" : "var(--mud-palette-divider)") };{(splitBg != "" ? $" background: {splitBg};" : "")}")">
-            @if (isCharPara)
+            @if (isAttribution && isCharPara)
             {
                 @if (isBusy)
                 {
@@ -73,7 +79,25 @@
                     var (chipIcon, chipColor, chipLabel) = isCharItem
                         ? ("", resolvedName == null ? Color.Warning : Color.Primary, resolvedName ?? "Unknown")
                         : ParagraphItemDisplay.GetItemDisplay(it.ItemType) switch { var d => (d.icon, d.color, d.label) };
-                    <div style="display:grid; grid-template-columns:120px 1fr auto; align-items:start; gap:8px;">
+                    var audioRef = new AudioItemRef(it.Id, Para.Id, ChapterId, PartId, VolumeId);
+                    var audioStatus = isAudioMode ? AudioQueue.StatusOf(FolderId, it.Id) : null;
+                    var audioOutcome = isAudioMode && audioStatus is null ? AudioQueue.OutcomeOf(FolderId, it.Id) : null;
+                    var isAudioBusy = audioStatus is not null;
+                    var isAudioSelected = isAudioMode && !isAudioBusy && Presenter.AudioSelection.IsItemSelected(it.Id);
+                    <div style="display:grid; grid-template-columns:@(isAudioMode ? "32px " : "")120px 1fr auto; align-items:start; gap:8px;">
+                        @if (isAudioMode)
+                        {
+                            @if (isAudioBusy)
+                            {
+                                <span></span>
+                            }
+                            else
+                            {
+                                <MudCheckBox T="bool" Value="@isAudioSelected"
+                                             ValueChanged="@((bool v) => Presenter.ToggleAudioItemAsync(audioRef, v))"
+                                             Size="Size.Small" Class="pa-0 ma-0" />
+                            }
+                        }
                         <CharacterChipMenu Label="@chipLabel"
                                            FolderId="@FolderId"
                                            Color="@chipColor"
@@ -91,22 +115,50 @@
                         }
                         @if (!isBusy)
                         {
-                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it)"
-                                               IsFirst="@(items[0].Id == it.Id)"
-                                               IsLast="@(items[^1].Id == it.Id)"
-                                               OnChanged="OnChanged"
-                                               OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                                @if (isAudioMode && isAudioBusy)
+                                {
+                                    <AudioQueueStatusChip Status="audioStatus!.Value" />
+                                }
+                                else if (isAudioMode && audioOutcome is not null)
+                                {
+                                    <AudioQueueOutcomeChip Outcome="audioOutcome" />
+                                }
+                                else if (isAudioMode && it.AudioFileName != null)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.PlayCircleOutline"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => _playingItemId = _playingItemId == it.Id ? null : it.Id)"
+                                                   Color="@(_playingItemId == it.Id ? Color.Primary : Color.Default)" />
+                                }
+                                @if (!isAudioBusy)
+                                {
+                                    <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it)"
+                                                 IsFirst="@(items[0].Id == it.Id)"
+                                                 IsLast="@(items[^1].Id == it.Id)"
+                                                 OnChanged="OnChanged"
+                                                 OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                                }
+                            </MudStack>
                         }
                         else
                         {
                             <span></span>
                         }
                     </div>
+                    @if (isAudioMode && _playingItemId == it.Id && it.AudioFileName != null)
+                    {
+                        <audio src="@($"/workspace/{FolderId.Value}/{it.AudioFileName.Replace('\\', '/')}")" controls autoplay style="width:100%; margin-top:4px;"></audio>
+                    }
                 }
                 else
                 {
                     var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetItemDisplay(it.ItemType);
-                    <div style="@($"display:grid; grid-template-columns:120px 1fr auto; align-items:center; gap:8px; opacity:0.6; font-style:italic;")">
+                    <div style="@($"display:grid; grid-template-columns:{(isAudioMode ? "32px " : "")}120px 1fr auto; align-items:center; gap:8px; opacity:0.6; font-style:italic;")">
+                        @if (isAudioMode)
+                        {
+                            <span></span>
+                        }
                         <MudChip T="string" Size="Size.Small" Color="@pauseColor" Variant="Variant.Outlined"
                                  Icon="@pauseIcon" Class="mt-0"
                                  Style="width:100%; justify-content:center;">
@@ -207,9 +259,12 @@ else
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
+    Guid? _playingItemId;
+
     protected override void OnInitialized()
     {
         Queue.Changed += Refresh;
+        AudioQueue.Changed += Refresh;
     }
 
     void Refresh() => InvokeAsync(StateHasChanged);
@@ -217,5 +272,6 @@ else
     public void Dispose()
     {
         Queue.Changed -= Refresh;
+        AudioQueue.Changed -= Refresh;
     }
 }

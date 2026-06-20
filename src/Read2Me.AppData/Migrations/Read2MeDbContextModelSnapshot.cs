@@ -25,6 +25,9 @@ namespace Read2Me.AppData.Migrations
                     b.Property<int?>("ActiveLlmConfigId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("ActiveParagraphTtsConfigId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("ActiveTranscriptionConfigId")
                         .HasColumnType("INTEGER");
 
@@ -157,6 +160,30 @@ namespace Read2Me.AppData.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("LlmServerConfigs");
+                });
+
+            modelBuilder.Entity("Read2Me.AppData.Entities.ParagraphTtsServiceConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SettingsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ParagraphTtsServiceConfigs");
                 });
 
             modelBuilder.Entity("Read2Me.AppData.Entities.TranscriptionServiceConfig", b =>

@@ -38,6 +38,18 @@ namespace Read2Me.Services.Audio
                        .Replace('\\', '/');
         }
 
+        public async Task<string> StoreParagraphAudioAsync(ProjectFolderId folderId, Guid paragraphItemId, Stream source, CancellationToken ct = default)
+        {
+            var projectFolder = fs.GetProjectFolderPath(folderId.Value);
+            var audioFolder = Path.Combine(projectFolder, "audio");
+            fs.EnsureDirectory(audioFolder);
+
+            var fileName = $"{paragraphItemId}.wav";
+            await fs.WriteFileAsync(Path.Combine(audioFolder, fileName), source);
+
+            return $"audio/{fileName}";
+        }
+
         private async Task WriteHelperTextFileIfAbsentAsync(string charFolder, AudioStoreRequest request)
         {
             var sanitizedCharName = NameSanitizer.Sanitize(request.CharacterName);

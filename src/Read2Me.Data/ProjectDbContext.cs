@@ -75,6 +75,7 @@ namespace Read2Me.Data
                 e.Property(pi => pi.Order).HasMaxLength(250).IsRequired().UseCollation("BINARY");
                 e.Property(pi => pi.ItemType).HasConversion<string>().IsRequired();
                 e.Property(pi => pi.VoiceInstructions).HasMaxLength(3000);
+                e.Property(pi => pi.AudioFileName).HasMaxLength(512);
                 e.HasOne(pi => pi.Paragraph).WithMany(p => p.Items).HasForeignKey(pi => pi.ParagraphId);
                 e.HasOne(pi => pi.Character).WithMany().HasForeignKey(pi => pi.CharacterId);
             });

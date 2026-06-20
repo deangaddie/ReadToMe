@@ -39,18 +39,31 @@ else if (!Presenter.HasContent)
 else
 {
     @* Bottom padding reserves space so the fixed selection footer never hides content. *@
-    <MudStack Spacing="3" Class="pa-3" Style="@($"padding-bottom:{(Presenter.SelectedParagraphCount > 0 ? "72px" : "0")};")">
+    <MudStack Spacing="3" Class="pa-3" Style="@($"padding-bottom:{(Presenter.SelectedParagraphCount > 0 || Presenter.SelectedAudioItemCount > 0 ? "72px" : "0")};")">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="1">
             @if (Presenter.Error != null)
             {
                 <MudText Color="Color.Error" Typo="Typo.caption">@Presenter.Error</MudText>
             }
-            <MudToggleIconButton Toggled="Presenter.SplitView" ToggledChanged="@((v) => { Presenter.SplitView = v; StateHasChanged(); })"
-                                 Icon="@Icons.Material.Filled.ViewStream"
-                                 ToggledIcon="@Icons.Material.Filled.Subject"
-                                 title="Show split items"
-                                 toggledTitle="Show original paragraphs"
-                                 Size="Size.Small" />
+            <MudMenu Icon="@(Presenter.ViewMode == BookViewMode.Combined ? Icons.Material.Filled.ViewStream : Icons.Material.Filled.Subject)"
+                     Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                     title="@(Presenter.ViewMode switch { BookViewMode.SplitAttribution => "Split: Attribution", BookViewMode.SplitAudio => "Split: Audio", _ => "Combined" })">
+                <MudMenuItem Icon="@Icons.Material.Filled.ViewStream"
+                             IconColor="@(Presenter.ViewMode == BookViewMode.Combined ? Color.Primary : Color.Default)"
+                             OnClick="@(() => Presenter.ViewMode = BookViewMode.Combined)">
+                    Combined
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Subject"
+                             IconColor="@(Presenter.ViewMode == BookViewMode.SplitAttribution ? Color.Primary : Color.Default)"
+                             OnClick="@(() => Presenter.ViewMode = BookViewMode.SplitAttribution)">
+                    Split: Attribution
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.GraphicEq"
+                             IconColor="@(Presenter.ViewMode == BookViewMode.SplitAudio ? Color.Primary : Color.Default)"
+                             OnClick="@(() => Presenter.ViewMode = BookViewMode.SplitAudio)">
+                    Split: Audio
+                </MudMenuItem>
+            </MudMenu>
             @if (Presenter.ConfirmReread)
             {
                 <MudText Typo="Typo.caption" Color="Color.Warning">Delete all book data and reprocess?</MudText>

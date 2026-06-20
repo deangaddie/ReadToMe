@@ -58,3 +58,16 @@ public sealed class UpdateParagraphItemTextHandler(ProjectDbSession session) : I
         return null;
     }
 }
+
+public sealed class SetParagraphItemAudioHandler(ProjectDbSession session) : ICommandHandler<SetParagraphItemAudioCommand>
+{
+    public async Task<Guid?> HandleAsync(SetParagraphItemAudioCommand c, CancellationToken ct)
+    {
+        var db = await session.OpenAsync(c.FolderId);
+        var e = await db.ParagraphItems.FindAsync(c.ItemId);
+        if (e == null) return null;
+        e.AudioFileName = c.AudioFileName;
+        await db.SaveChangesAsync();
+        return null;
+    }
+}

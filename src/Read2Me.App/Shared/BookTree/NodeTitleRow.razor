@@ -7,21 +7,36 @@
 @implements IDisposable
 
 @{
-    var row = NodeRowViewModel.For(
-        Presenter.IsNodeSelectable(NodeId),
-        Presenter.Selection.NodeState(Level, NodeId),
-        Queue.SummaryForNode(FolderId, NodeId));
+    var isAudioMode = Presenter.ViewMode == BookViewMode.SplitAudio;
+    var row = isAudioMode
+        ? NodeRowViewModel.For(
+            Presenter.IsNodeAudioSelectable(NodeId),
+            Presenter.AudioSelection.NodeState(Level, NodeId),
+            Queue.SummaryForNode(FolderId, NodeId))
+        : NodeRowViewModel.For(
+            Presenter.IsNodeSelectable(NodeId),
+            Presenter.Selection.NodeState(Level, NodeId),
+            Queue.SummaryForNode(FolderId, NodeId));
 }
 <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
     @if (row.ShowSelectionControls)
     {
         <span @onclick:stopPropagation="true" style="display:inline-flex;align-items:center;">
-            <MudCheckBox T="bool?" Value="@row.CheckboxValue"
-                         ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, Level, NodeId, v == true))"
-                         Size="Size.Small" />
-            <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
-                           Size="Size.Small" title="Select unprocessed"
-                           OnClick="@(() => Presenter.SetNodeAsync(FolderId, Level, NodeId, true, unprocessedOnly: true))" />
+            @if (isAudioMode)
+            {
+                <MudCheckBox T="bool?" Value="@row.CheckboxValue"
+                             ValueChanged="@((bool? v) => Presenter.SetAudioNodeAsync(FolderId, Level, NodeId, v == true))"
+                             Size="Size.Small" />
+            }
+            else
+            {
+                <MudCheckBox T="bool?" Value="@row.CheckboxValue"
+                             ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, Level, NodeId, v == true))"
+                             Size="Size.Small" />
+                <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                               Size="Size.Small" title="Select unprocessed"
+                               OnClick="@(() => Presenter.SetNodeAsync(FolderId, Level, NodeId, true, unprocessedOnly: true))" />
+            }
         </span>
     }
     <MudText Style="flex:1">@Title</MudText>

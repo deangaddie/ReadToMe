@@ -161,5 +161,51 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Contains(expectedPrefix, result);
             Assert.EndsWith(".wav", result);
         }
+
+        // --- StoreParagraphAudioAsync ---
+
+        [Fact]
+        public async Task StoreParagraphAudioAsync_ReturnsCorrectRelativePath()
+        {
+            var itemId = Guid.NewGuid();
+            var result = await _pipeline.StoreParagraphAudioAsync(_folder, itemId, AudioStream());
+            Assert.Equal($"audio/{itemId}.wav", result);
+        }
+
+        [Fact]
+        public async Task StoreParagraphAudioAsync_UsesForwardSlashes()
+        {
+            var result = await _pipeline.StoreParagraphAudioAsync(_folder, Guid.NewGuid(), AudioStream());
+            Assert.DoesNotContain('\\', result);
+        }
+
+        [Fact]
+        public async Task StoreParagraphAudioAsync_WritesFileToAudioSubfolder()
+        {
+            var itemId = Guid.NewGuid();
+            await _pipeline.StoreParagraphAudioAsync(_folder, itemId, AudioStream());
+            var expected = Path.Combine("C:\\fake-workspace", "TestProject", "audio", $"{itemId}.wav");
+            Assert.True(_fs.FileExists(expected));
+        }
+
+        [Fact]
+        public async Task StoreParagraphAudioAsync_WritesCorrectContent()
+        {
+            var itemId = Guid.NewGuid();
+            var data = new byte[] { 0xAA, 0xBB, 0xCC };
+            await _pipeline.StoreParagraphAudioAsync(_folder, itemId, new MemoryStream(data));
+            var expected = Path.Combine("C:\\fake-workspace", "TestProject", "audio", $"{itemId}.wav");
+            Assert.Equal(data, _fs.GetFileContent(expected));
+        }
+
+        [Fact]
+        public async Task StoreParagraphAudioAsync_NoCharacterSubfolderOrHelperFile()
+        {
+            var itemId = Guid.NewGuid();
+            await _pipeline.StoreParagraphAudioAsync(_folder, itemId, AudioStream());
+            var files = _fs.GetAllPaths();
+            Assert.DoesNotContain(files, p => p.EndsWith(".txt"));
+            Assert.DoesNotContain(files, p => p.Contains("voices"));
+        }
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Read2Me.App.Audio;
 using Read2Me.App.Characters;
 using Read2Me.App.State;
 using Read2Me.Core.Configuration;
@@ -12,6 +13,7 @@ using Read2Me.AppData;
 using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Books;
@@ -63,10 +65,19 @@ public static class ServiceRegistrationExtensions
         return services;
     }
 
+    public static IServiceCollection AddAudioQueueServices(this IServiceCollection services)
+    {
+        services.AddSingleton<Read2Me.Services.Audio.AudioQueueService>();
+        services.AddScoped<IAudioQueueProcessor, AudioQueueProcessor>();
+        services.AddHostedService<AudioQueueWorker>();
+        return services;
+    }
+
     public static IServiceCollection AddAudioServices(this IServiceCollection services)
     {
         services.AddScoped<VoiceDesignSettingsService>();
         services.AddScoped<TranscriptionSettingsService>();
+        services.AddScoped<ParagraphTtsSettingsService>();
         services.AddScoped<ITranscriptionClientResolver, TranscriptionClientResolver>();
         services.AddKeyedScoped<ITranscriptionClient, WhisperTranscriptionClient>(Read2Me.AppData.Entities.TranscriptionServiceType.LocalWhisper);
         services.AddScoped<IVoiceDesignClientResolver, VoiceDesignClientResolver>();
@@ -76,6 +87,8 @@ public static class ServiceRegistrationExtensions
         services.AddKeyedScoped<IVoiceDesignClient, Qwen3VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.Qwen3);
         services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, FileAudioPipeline>();
         services.AddScoped<VoiceDesignPromptService>();
+        services.AddScoped<IParagraphTtsClientResolver, ParagraphTtsClientResolver>();
+        services.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.VoxCpm2);
         return services;
     }
 
@@ -96,6 +109,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<ThemeService>();
         services.AddScoped<BookTreeState>();
         services.AddScoped<BookSelectionState>();
+        services.AddScoped<AudioItemSelectionState>();
         services.AddScoped<MenuActions>();
         return services;
     }

@@ -77,6 +77,9 @@ public static class ServiceCollectionExtensions
         // Clear
         services.AddScoped<ICommandHandler<ClearBookContentCommand>, ClearBookContentHandler>();
 
+        // Audio
+        services.AddScoped<ICommandHandler<SetParagraphItemAudioCommand>, SetParagraphItemAudioHandler>();
+
         services.AddScoped<ProjectReader>();
         services.AddScoped<IProjectReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<BookCommandHandler>();

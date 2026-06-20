@@ -1,0 +1,150 @@
+@page "/paragraph-tts-settings"
+@using System.Text.Json
+@using Read2Me.AppData.Entities
+@using Read2Me.Services.Audio.ParagraphTts.Settings
+@inject ParagraphTtsSettingsService SettingsService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5">
+    <MudText Typo="Typo.h4">Paragraph TTS Settings</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenAddDialog">
+        New Configuration
+    </MudButton>
+</MudStack>
+
+@if (_configs == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_configs.Count == 0)
+{
+    <MudText Typo="Typo.body1" Color="Color.Secondary">
+        No paragraph TTS configurations yet. Create one to get started.
+    </MudText>
+}
+else
+{
+    <MudGrid>
+        @foreach (var config in _configs)
+        {
+            var c = config;
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Outlined="true">
+                    <MudCardContent Class="pb-0">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.h6">@c.Name</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@c.Type</MudChip>
+                        </MudStack>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@DescribeUrl(c)</MudText>
+                    </MudCardContent>
+                    <MudCardActions>
+                        @if (_activeConfigId == c.Id)
+                        {
+                            <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle"
+                                     Size="Size.Small" Variant="Variant.Filled">Active</MudChip>
+                        }
+                        else
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                       OnClick="() => SelectConfigAsync(c.Id)">Apply</MudButton>
+                        }
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="() => OpenEditDialog(c)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                       Color="Color.Error" OnClick="() => DeleteConfigAsync(c.Id)" />
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    List<ParagraphTtsServiceConfig>? _configs;
+    int? _activeConfigId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SettingsService.OnChanged += HandleChanged;
+        await LoadAsync();
+    }
+
+    void HandleChanged() => InvokeAsync(LoadAsync);
+
+    async Task LoadAsync()
+    {
+        _configs = await SettingsService.GetAllConfigsAsync();
+        _activeConfigId = await SettingsService.GetActiveConfigIdAsync();
+        StateHasChanged();
+    }
+
+    static string DescribeUrl(ParagraphTtsServiceConfig c)
+    {
+        try
+        {
+            return c.Type switch
+            {
+                ParagraphTtsServiceType.VoxCpm2 =>
+                    JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(c.SettingsJson)?.BaseUrl ?? "",
+                _ => "",
+            };
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    async Task SelectConfigAsync(int configId)
+    {
+        await SettingsService.SetActiveConfigAsync(configId);
+        await LoadAsync();
+        Snackbar.Add("Configuration applied", Severity.Success);
+    }
+
+    static readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task OpenAddDialog()
+    {
+        var dialog = await DialogService.ShowAsync<ParagraphTtsServiceConfigDialog>("New Configuration", _dialogOptions);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: ParagraphTtsServiceConfig saved })
+        {
+            await SettingsService.CreateConfigAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Configuration created", Severity.Success);
+        }
+    }
+
+    async Task OpenEditDialog(ParagraphTtsServiceConfig config)
+    {
+        var dialog = await DialogService.ShowAsync<ParagraphTtsServiceConfigDialog>(
+            "Edit Configuration",
+            new DialogParameters<ParagraphTtsServiceConfigDialog> { { x => x.Config, config } },
+            _dialogOptions);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: ParagraphTtsServiceConfig saved })
+        {
+            await SettingsService.UpdateConfigAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Configuration updated", Severity.Success);
+        }
+    }
+
+    async Task DeleteConfigAsync(int configId)
+    {
+        await SettingsService.DeleteConfigAsync(configId);
+        await LoadAsync();
+        Snackbar.Add("Configuration deleted", Severity.Info);
+    }
+
+    public void Dispose()
+    {
+        SettingsService.OnChanged -= HandleChanged;
+    }
+}

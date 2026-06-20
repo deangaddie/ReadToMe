@@ -11,6 +11,7 @@ namespace Read2Me.Data.Entities
         public string? Text { get; set; }
         public Guid? CharacterId { get; set; }
         public string? VoiceInstructions { get; set; }
+        public string? AudioFileName { get; set; }
 
         public Paragraph Paragraph { get; set; } = null!;
         public Character? Character { get; set; }

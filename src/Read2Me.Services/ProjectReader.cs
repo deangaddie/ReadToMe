@@ -347,5 +347,55 @@ namespace Read2Me.Services
             }
             return nodes;
         }
+
+        public async Task<List<AudioItemRef>> GetAudioItemRefsAsync(
+            ProjectFolderId folderId, BookNodeLevel level, Guid nodeId)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            IQueryable<Data.Entities.ParagraphItem> q = db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration);
+
+            q = level switch
+            {
+                BookNodeLevel.Volume  => q.Where(i => i.Paragraph.Chapter.Part.VolumeId == nodeId),
+                BookNodeLevel.Part    => q.Where(i => i.Paragraph.Chapter.PartId == nodeId),
+                _                     => q.Where(i => i.Paragraph.ChapterId == nodeId),
+            };
+
+            return await q
+                .Select(i => new AudioItemRef(
+                    i.Id,
+                    i.ParagraphId,
+                    i.Paragraph.ChapterId,
+                    i.Paragraph.Chapter.PartId,
+                    i.Paragraph.Chapter.Part.VolumeId))
+                .ToListAsync();
+        }
+
+        public async Task<IReadOnlyDictionary<Guid, int>> GetNodeAudioItemCountsAsync(ProjectFolderId folderId)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            var rows = await db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                .Select(i => new
+                {
+                    ItemId = i.Id,
+                    ChapterId = i.Paragraph.ChapterId,
+                    PartId = i.Paragraph.Chapter.PartId,
+                    VolumeId = i.Paragraph.Chapter.Part.VolumeId,
+                })
+                .ToListAsync();
+
+            var counts = new Dictionary<Guid, int>();
+            foreach (var r in rows)
+            {
+                counts.TryGetValue(r.ChapterId, out var c); counts[r.ChapterId] = c + 1;
+                counts.TryGetValue(r.PartId,    out var p); counts[r.PartId]    = p + 1;
+                counts.TryGetValue(r.VolumeId,  out var v); counts[r.VolumeId]  = v + 1;
+            }
+            return counts;
+        }
     }
 }

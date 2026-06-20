@@ -68,3 +68,6 @@ public enum PauseKind { Pause, ParagraphPause, ChapterPause, PartPause, VolumePa
 
 // Clear
 public record ClearBookContentCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
+
+// Audio
+public record SetParagraphItemAudioCommand(ProjectFolderId FolderId, Guid ItemId, string AudioFileName) : BookCommand(FolderId);

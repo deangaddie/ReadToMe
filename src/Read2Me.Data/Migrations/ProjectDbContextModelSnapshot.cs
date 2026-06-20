@@ -125,6 +125,10 @@ namespace Read2Me.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AudioFileName")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("CharacterId")
                         .HasColumnType("TEXT");
 

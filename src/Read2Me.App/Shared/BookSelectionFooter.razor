@@ -1,17 +1,25 @@
 @using Read2Me.App.State
 @using Read2Me.Data.Entities
+@using Read2Me.Services.Audio
 @using Read2Me.Services.Characters
 @inject BookHierarchyPresenter Presenter
 @inject CharacterQueueService Queue
+@inject AudioQueueService AudioQueue
 @implements IDisposable
 
 @{
     var snap = Queue.Snapshot();
-    var queueBarActive = snap.QueuedCount > 0 || snap.ProcessingCount > 0;
+    var audioSnap = AudioQueue.Snapshot();
+    var queueBarActive = snap.QueuedCount > 0 || snap.ProcessingCount > 0
+                      || audioSnap.QueuedCount > 0 || audioSnap.ProcessingCount > 0;
     var bottomOffset = queueBarActive ? "38px" : "0";
+    var isAudioMode = Presenter.ViewMode == BookViewMode.SplitAudio;
+    var audioCount = Presenter.SelectedAudioItemCount;
+    var attrCount = Presenter.SelectedParagraphCount;
+    var showFooter = isAudioMode ? audioCount > 0 : attrCount > 0;
 }
 
-@if (Presenter.SelectedParagraphCount > 0)
+@if (showFooter)
 {
     <div style="position:fixed; bottom:@bottomOffset; left:0; right:0; z-index:1300;
                 background:var(--mud-palette-surface);
@@ -20,18 +28,34 @@
                 padding:8px 16px;
                 display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
 
-        <MudText Typo="Typo.body2">
-            <b>@Presenter.SelectedParagraphCount</b> paragraph@(Presenter.SelectedParagraphCount == 1 ? "" : "s") selected
-        </MudText>
-
-        <MudSpacer />
-        <MudButton StartIcon="@Icons.Material.Filled.Add"
-                   Color="Color.Primary"
-                   Variant="Variant.Filled"
-                   Size="Size.Small"
-                   OnClick="AddToQueue">
-            Add to Character queue
-        </MudButton>
+        @if (isAudioMode)
+        {
+            <MudText Typo="Typo.body2">
+                <b>@audioCount</b> item@(audioCount == 1 ? "" : "s") selected
+            </MudText>
+            <MudSpacer />
+            <MudButton StartIcon="@Icons.Material.Filled.GraphicEq"
+                       Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       Size="Size.Small"
+                       OnClick="AddToAudioQueue">
+                Add to Audio queue
+            </MudButton>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2">
+                <b>@attrCount</b> paragraph@(attrCount == 1 ? "" : "s") selected
+            </MudText>
+            <MudSpacer />
+            <MudButton StartIcon="@Icons.Material.Filled.Add"
+                       Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       Size="Size.Small"
+                       OnClick="AddToCharacterQueue">
+                Add to Character queue
+            </MudButton>
+        }
     </div>
 }
 
@@ -39,14 +63,17 @@
     protected override void OnInitialized()
     {
         Presenter.StateChanged += Refresh;
+        AudioQueue.Changed += Refresh;
     }
 
-    Task AddToQueue() => Presenter.AddSelectionToCharacterQueue();
+    Task AddToCharacterQueue() => Presenter.AddSelectionToCharacterQueue();
+    Task AddToAudioQueue() => Presenter.AddSelectionToAudioQueue();
 
     void Refresh() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
         Presenter.StateChanged -= Refresh;
+        AudioQueue.Changed -= Refresh;
     }
 }

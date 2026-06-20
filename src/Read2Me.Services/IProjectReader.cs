@@ -70,6 +70,12 @@ namespace Read2Me.Services
         // Preview is the first character item's text, truncated.
         Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds);
 
+        // Returns non-Pause ParagraphItems (Character + Narration) scoped to the given node, for audio selection.
+        Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId);
+
+        // Returns per-node (Chapter/Part/Volume) counts of non-Pause ParagraphItems for audio selection roll-up.
+        Task<IReadOnlyDictionary<Guid, int>> GetNodeAudioItemCountsAsync(ProjectFolderId folderId);
+
         /// <summary>
         /// Returns the text of <paramref name="paragraphId"/> plus up to <paramref name="before"/> preceding
         /// and <paramref name="after"/> following paragraphs within the same chapter.

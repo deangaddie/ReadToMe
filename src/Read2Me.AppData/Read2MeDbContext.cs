@@ -15,6 +15,7 @@ namespace Read2Me.AppData
         public DbSet<LlmPromptSettings> PromptSettings => Set<LlmPromptSettings>();
         public DbSet<VoiceDesignServiceConfig> VoiceDesignServiceConfigs => Set<VoiceDesignServiceConfig>();
         public DbSet<TranscriptionServiceConfig> TranscriptionServiceConfigs => Set<TranscriptionServiceConfig>();
+        public DbSet<ParagraphTtsServiceConfig> ParagraphTtsServiceConfigs => Set<ParagraphTtsServiceConfig>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -32,6 +33,14 @@ namespace Read2Me.AppData
             });
 
             modelBuilder.Entity<TranscriptionServiceConfig>(e =>
+            {
+                e.HasKey(a => a.Id);
+                e.Property(a => a.Name).HasMaxLength(250).IsRequired();
+                e.Property(a => a.Type).HasConversion<string>().IsRequired();
+                e.Property(a => a.SettingsJson).IsRequired();
+            });
+
+            modelBuilder.Entity<ParagraphTtsServiceConfig>(e =>
             {
                 e.HasKey(a => a.Id);
                 e.Property(a => a.Name).HasMaxLength(250).IsRequired();

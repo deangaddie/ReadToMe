@@ -1,5 +1,8 @@
+using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Read2Me.Core.Models;
 
 namespace Read2Me.Core.Audio
 {
@@ -11,5 +14,10 @@ namespace Read2Me.Core.Audio
     public interface IAudioPipeline
     {
         Task<string> StoreAsync(AudioStoreRequest request, CancellationToken ct = default);
+
+        /// <summary>
+        /// Stores generated paragraph audio. Returns relative path e.g. "audio/{paragraphItemId}.wav".
+        /// </summary>
+        Task<string> StoreParagraphAudioAsync(ProjectFolderId folderId, Guid paragraphItemId, Stream source, CancellationToken ct = default);
     }
 }

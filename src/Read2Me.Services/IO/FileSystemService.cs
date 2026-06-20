@@ -33,6 +33,8 @@ namespace Read2Me.Services.IO
 
         public bool FileExists(string path) => File.Exists(path);
 
+        public Stream OpenRead(string path) => File.OpenRead(path);
+
         public void EnsureDirectory(string path) => Directory.CreateDirectory(path);
 
         public void DeleteFile(string path) => File.Delete(path);

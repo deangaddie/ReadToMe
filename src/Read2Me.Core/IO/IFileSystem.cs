@@ -13,6 +13,7 @@ namespace Read2Me.Core.IO
         void DeleteProjectFolder(string name);
 
         bool FileExists(string path);
+        Stream OpenRead(string path);
         void EnsureDirectory(string path);
         void DeleteFile(string path);
         Task WriteFileAsync(string path, Stream source);

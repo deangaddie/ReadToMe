@@ -36,6 +36,9 @@ namespace Read2Me.Tests.Services.Audio
             {
                 return Task.FromResult($"voices/{request.CharacterId}/{request.VoiceId}-voice.wav");
             }
+
+            public Task<string> StoreParagraphAudioAsync(ProjectFolderId folderId, Guid paragraphItemId, Stream source, CancellationToken ct = default)
+                => Task.FromResult($"audio/{paragraphItemId}.wav");
         }
 
         [Fact]

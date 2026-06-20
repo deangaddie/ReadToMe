@@ -27,6 +27,7 @@ file sealed class FixedPathFileSystem(string fixedPath) : IFileSystem
     public void CreateProjectFolder(string name) { }
     public void DeleteProjectFolder(string name) { }
     public bool FileExists(string path) => File.Exists(path);
+    public Stream OpenRead(string path) => File.OpenRead(path);
     public void EnsureDirectory(string path) => Directory.CreateDirectory(path);
     public void DeleteFile(string path) => File.Delete(path);
     public async Task WriteFileAsync(string path, Stream source)

@@ -8,10 +8,14 @@ namespace Read2Me.Tests.Fakes
 {
     public class FakeFileSystem : IFileSystem
     {
-        private const string FakeRoot = "C:\\fake-workspace";
-
+        private readonly string _root;
         private readonly HashSet<string> _folders = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, byte[]> _files = new(StringComparer.OrdinalIgnoreCase);
+
+        public FakeFileSystem(string root = "C:\\fake-workspace")
+        {
+            _root = root;
+        }
 
         public void SeedFolder(params string[] names)
         {
@@ -19,12 +23,14 @@ namespace Read2Me.Tests.Fakes
                 _folders.Add(n);
         }
 
+        public void SeedFile(string path, byte[] content) => _files[path] = content;
+
         public IReadOnlyList<string> ListProjectFolders() =>
             _folders.OrderBy(n => n).ToList();
 
         public bool ProjectFolderExists(string name) => _folders.Contains(name);
 
-        public string GetProjectFolderPath(string name) => Path.Combine(FakeRoot, name);
+        public string GetProjectFolderPath(string name) => Path.Combine(_root, name);
 
         public void CreateProjectFolder(string name) => _folders.Add(name);
 
@@ -37,6 +43,12 @@ namespace Read2Me.Tests.Fakes
         }
 
         public bool FileExists(string path) => _files.ContainsKey(path);
+
+        public Stream OpenRead(string path)
+        {
+            if (_files.TryGetValue(path, out var data)) return new MemoryStream(data);
+            throw new FileNotFoundException($"File not found in FakeFileSystem: {path}");
+        }
 
         public void EnsureDirectory(string path) { }
 
@@ -56,5 +68,7 @@ namespace Read2Me.Tests.Fakes
         }
 
         public byte[] GetFileContent(string path) => _files[path];
+
+        public IReadOnlyList<string> GetAllPaths() => _files.Keys.ToList();
     }
 }

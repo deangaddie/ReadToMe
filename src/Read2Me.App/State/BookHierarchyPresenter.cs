@@ -6,6 +6,7 @@ using MudBlazor;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.UseCases;
 
@@ -17,13 +18,33 @@ namespace Read2Me.App.State
         BookUseCases bookUseCases,
         BookTreeState treeState,
         BookSelectionState selectionState,
+        AudioItemSelectionState audioSelectionState,
         IDialogService dialogService,
-        CharacterQueueService characterQueue) : IDisposable
+        ISnackbar snackbar,
+        ParagraphTtsSettingsService paragraphTtsSettings,
+        CharacterQueueService characterQueue,
+        AudioQueueService audioQueue) : IDisposable
     {
         public bool IsLoading { get; private set; }
         public bool HasContent { get; private set; }
         public bool IsBusy { get; private set; }
-        public bool SplitView { get; set; }
+
+        private BookViewMode _viewMode = BookViewMode.Combined;
+        public BookViewMode ViewMode
+        {
+            get => _viewMode;
+            set
+            {
+                if (_viewMode == value) return;
+                _viewMode = value;
+                Selection?.Clear();
+                AudioSelection?.Clear();
+                NotifyStateChanged();
+            }
+        }
+
+        public bool SplitView => _viewMode != BookViewMode.Combined;
+
         public bool ConfirmReread { get; private set; }
         public string? Filename { get; private set; }
         public string? Error { get; private set; }
@@ -33,14 +54,18 @@ namespace Read2Me.App.State
         public int TotalChapters { get; private set; }
         public PerFolderState Tree { get; private set; } = null!;
         public FolderSelection Selection { get; private set; } = null!;
+        public AudioItemSelection AudioSelection { get; private set; } = null!;
 
         private HashSet<Guid> _selectableNodes = [];
         private IReadOnlyDictionary<Guid, int> _nodeCounts = new Dictionary<Guid, int>();
+        private IReadOnlyDictionary<Guid, int> _audioNodeCounts = new Dictionary<Guid, int>();
 
         public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
+        public bool IsNodeAudioSelectable(Guid nodeId) => _audioNodeCounts.ContainsKey(nodeId) && _audioNodeCounts[nodeId] > 0;
 
         private ProjectFolderId? _lastFolder;
         private bool _queueSubscribed;
+        private bool _audioQueueSubscribed;
 
         public event Action? StateChanged;
 
@@ -54,14 +79,24 @@ namespace Read2Me.App.State
                 _queueSubscribed = true;
             }
 
+            if (!_audioQueueSubscribed)
+            {
+                audioQueue.AudioFileAssigned += OnAudioFileAssigned;
+                _audioQueueSubscribed = true;
+            }
+
             if (_lastFolder.HasValue && _lastFolder.Value.Value != folderId.Value)
+            {
                 selectionState.Reset(_lastFolder.Value);
+                audioSelectionState.Reset(_lastFolder.Value);
+            }
 
             _lastFolder = folderId;
             Tree = treeState.For(folderId);
             Tree.Changed -= NotifyStateChanged;
             Tree.Changed += NotifyStateChanged;
             Selection = selectionState.For(folderId);
+            AudioSelection = audioSelectionState.For(folderId);
             ConfirmReread = false;
 
             var overview = await reader.GetBookOverviewAsync(folderId);
@@ -75,6 +110,11 @@ namespace Read2Me.App.State
             _nodeCounts = overview.NodeCharacterParagraphCounts;
             Selection.SetCounts(_nodeCounts);
 
+            _audioNodeCounts = overview.HasContent
+                ? await reader.GetNodeAudioItemCountsAsync(folderId)
+                : new Dictionary<Guid, int>();
+            AudioSelection.SetCounts(_audioNodeCounts);
+
             if (Volumes.Count == 1)
                 Tree.ExpandedVolumeIds.Add(Volumes[0].Id);
 
@@ -87,6 +127,7 @@ namespace Read2Me.App.State
         public async Task ResetAndLoadAsync(ProjectFolderId folderId)
         {
             selectionState.Reset(folderId);
+            audioSelectionState.Reset(folderId);
             Tree?.Reset();
             await LoadAsync(folderId);
         }
@@ -223,6 +264,53 @@ namespace Read2Me.App.State
 
         public int SelectedParagraphCount => Selection?.SelectedParagraphCount ?? 0;
 
+        // ---------------------------------------------------------------
+        // Audio item selection mutators
+        // ---------------------------------------------------------------
+
+        public Task ToggleAudioItemAsync(AudioItemRef item, bool on)
+        {
+            if (on)
+                AudioSelection.AddItem(item);
+            else
+                AudioSelection.RemoveItem(item.ParagraphItemId);
+            NotifyStateChanged();
+            return Task.CompletedTask;
+        }
+
+        public async Task SetAudioNodeAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool on)
+        {
+            var refs = await reader.GetAudioItemRefsAsync(folderId, level, nodeId);
+            if (on)
+                AudioSelection.AddItems(refs);
+            else
+                AudioSelection.RemoveItems(refs.Select(r => r.ParagraphItemId));
+            NotifyStateChanged();
+        }
+
+        public int SelectedAudioItemCount => AudioSelection?.SelectedItemCount ?? 0;
+
+        public async Task AddSelectionToAudioQueue()
+        {
+            if (_lastFolder is not { } folder || AudioSelection is null) return;
+
+            var items = AudioSelection.SelectedItems().ToList();
+            if (items.Count == 0) return;
+
+            var activeConfig = await paragraphTtsSettings.GetActiveConfigAsync();
+            if (activeConfig is null)
+            {
+                snackbar.Add(
+                    "No paragraph TTS service configured. Go to Paragraph TTS Settings to add one.",
+                    Severity.Warning);
+                return;
+            }
+
+            audioQueue.Enqueue(folder, items);
+            AudioSelection.Clear();
+            NotifyStateChanged();
+        }
+
         public ProjectFolderId? CurrentFolder => _lastFolder;
 
         public async Task AddSelectionToCharacterQueue()
@@ -277,12 +365,33 @@ namespace Read2Me.App.State
             // No tree-wide mutation needed here.
         }
 
+        private void OnAudioFileAssigned(ProjectFolderId folder, Guid paragraphItemId, string relativePath)
+        {
+            if (_lastFolder is not { } current || current.Value != folder.Value) return;
+
+            foreach (var para in Tree.AllParagraphs())
+            {
+                var item = para.Items.FirstOrDefault(i => i.Id == paragraphItemId);
+                if (item is not null)
+                {
+                    item.AudioFileName = relativePath;
+                    break;
+                }
+            }
+        }
+
         public void Dispose()
         {
             if (_queueSubscribed)
             {
                 characterQueue.Changed -= OnQueueChanged;
                 _queueSubscribed = false;
+            }
+
+            if (_audioQueueSubscribed)
+            {
+                audioQueue.AudioFileAssigned -= OnAudioFileAssigned;
+                _audioQueueSubscribed = false;
             }
         }
     }

@@ -10,9 +10,11 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.UseCases;
 using Xunit;
+using Read2Me.AppData.Entities;
 
 namespace Read2Me.Tests.State
 {
@@ -63,8 +65,12 @@ namespace Read2Me.Tests.State
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
+            var audioSelectionState = new AudioItemSelectionState();
             var characterQueue = new CharacterQueueService();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, dialogService, characterQueue);
+            var snackbar = Substitute.For<ISnackbar>();
+            var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
+            paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, new AudioQueueService());
             return new Context(presenter, reader, commandHandler, bookUseCases, treeState);
         }
 
@@ -657,8 +663,9 @@ namespace Read2Me.Tests.State
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
+            var audioSelectionState = new AudioItemSelectionState();
             var presenter = new BookHierarchyPresenter(reader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, dialogService, queue);
+                treeState, selectionState, audioSelectionState, dialogService, queue, new AudioQueueService());
             await presenter.LoadAsync(Folder);
 
             var paragraphId = Guid.NewGuid();
@@ -732,8 +739,9 @@ namespace Read2Me.Tests.State
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
+            var audioSelectionState = new AudioItemSelectionState();
             var queue = new CharacterQueueService();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, dialogService, queue);
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, queue, new AudioQueueService());
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraphs are loaded into the cache.
