@@ -80,15 +80,38 @@
                                                        OnClick="@(() => Presenter.SetVoiceDefaultAsync(v.Id))" />
                                     </MudTooltip>
                                 }
-                                <MudText Typo="Typo.body1">@v.Name</MudText>
+                                @if (_renamingVoice == v.Id)
+                                {
+                                    <span @onclick:stopPropagation="true" style="display:contents">
+                                        <MudTextField @bind-Value="_renameValue" Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense" Style="width:180px;" Immediate="true"
+                                                      OnKeyDown="@(e => OnRenameKeyDownAsync(e, v))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary"
+                                                       OnClick="@(() => CommitRenameAsync(v))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                       OnClick="@CancelRename" />
+                                    </span>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body1">@v.Name</MudText>
+                                    <span @onclick:stopPropagation="true">
+                                        <MudTooltip Text="Rename">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                           OnClick="@(() => BeginRename(v))" />
+                                        </MudTooltip>
+                                    </span>
+                                }
                                 <MudSpacer />
                                 <MudChip T="string" Size="Size.Small"
                                          Color="@(v.Source == VoiceSource.Uploaded ? Color.Info : Color.Secondary)"
                                          Variant="Variant.Outlined">
                                     @(v.Source == VoiceSource.Uploaded ? "Reference" : "Prompt")
                                 </MudChip>
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                               OnClick="@(() => ConfirmDeleteVoiceAsync(v))" />
+                                <span @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => ConfirmDeleteVoiceAsync(v))" />
+                                </span>
                             </MudStack>
                         </TitleContent>
                         <ChildContent>
@@ -229,6 +252,8 @@
     Guid? _regeneratingPrompt;
     Guid? _generatingAudio;
     Guid? _transcribing;
+    Guid? _renamingVoice;
+    string _renameValue = "";
 
     readonly VoiceDraftBuffer _drafts = new();
     readonly HashSet<Guid> _reloadingAudio = new();
@@ -302,6 +327,25 @@
         await Presenter.AddVoiceAndGetIdAsync(Character.Id, r.Name, r.IsGenerated);
     }
 
+    // ── Voice rename ──────────────────────────────────────────────────────────
+
+    void BeginRename(Voice v) { _renamingVoice = v.Id; _renameValue = v.Name; }
+    void CancelRename() { _renamingVoice = null; _renameValue = ""; }
+
+    async Task CommitRenameAsync(Voice v)
+    {
+        var name = _renameValue.Trim();
+        if (!string.IsNullOrEmpty(name) && name != v.Name)
+            await Presenter.UpdateVoiceAsync(v.Id, name, v.Description);
+        CancelRename();
+    }
+
+    async Task OnRenameKeyDownAsync(KeyboardEventArgs e, Voice v)
+    {
+        if (e.Key == "Enter") await CommitRenameAsync(v);
+        else if (e.Key == "Escape") CancelRename();
+    }
+
     // ── Voice source switch ───────────────────────────────────────────────────
 
     async Task SwitchVoiceSourceAsync(Voice voice, VoiceSource newSource)
@@ -333,12 +377,23 @@
 
     async Task RegeneratePromptAsync(Voice voice)
     {
+        var builtPrompt = await Presenter.BuildDesignPromptAsync(Character.Id);
+        if (builtPrompt == null) return;
+
+        var parameters = new DialogParameters<GenerateWithAiDialog>
+        {
+            { d => d.Prompt, builtPrompt },
+        };
+        var dialog = await DialogService.ShowAsync<GenerateWithAiDialog>("Generate with AI", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false || result.Data is not string userPrompt) return;
+
         _regeneratingPrompt = voice.Id;
         StateHasChanged();
-        var prompt = await Presenter.GenerateDesignPromptTextAsync(Character.Id);
+        var designPrompt = await Presenter.GenerateDesignPromptWithTextAsync(userPrompt);
         _regeneratingPrompt = null;
-        if (prompt != null)
-            _drafts.Set(voice.Id, VoiceDraftField.Prompt, prompt);
+        if (designPrompt != null)
+            _drafts.Set(voice.Id, VoiceDraftField.Prompt, designPrompt);
         StateHasChanged();
     }
 

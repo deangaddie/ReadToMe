@@ -278,6 +278,21 @@ namespace Read2Me.App.State
         }
 
         /// <summary>
+        /// Builds the rendered LLM prompt for voice design without calling the LLM.
+        /// Returns null if no folder is active.
+        /// </summary>
+        public async Task<string?> BuildDesignPromptAsync(Guid characterId)
+        {
+            if (_folderId is not { } folder) return null;
+            var character = Characters.Find(c => c.Id == characterId);
+            var project = await reader.GetProjectAsync(folder);
+            return await voiceDesignPromptService.BuildRenderedPromptAsync(
+                project?.BookTitle ?? string.Empty,
+                project?.Author ?? string.Empty,
+                character?.Name ?? string.Empty);
+        }
+
+        /// <summary>
         /// Generates a voice-design prompt from the LLM for the given character and returns it.
         /// Does not persist anything — caller decides what to do with the result.
         /// </summary>
@@ -293,6 +308,20 @@ namespace Read2Me.App.State
                 project?.Author ?? string.Empty,
                 character?.Name ?? string.Empty,
                 ct);
+            return result.Status == Services.Voice.VoiceDesignPromptService.GenerateStatus.Success
+                ? result.Prompt
+                : null;
+        }
+
+        /// <summary>
+        /// Sends a pre-built (possibly user-edited) prompt to the LLM for voice design.
+        /// Does not persist anything — caller decides what to do with the result.
+        /// </summary>
+        public async Task<string?> GenerateDesignPromptWithTextAsync(
+            string renderedPrompt,
+            CancellationToken ct = default)
+        {
+            var result = await voiceDesignPromptService.GenerateWithPromptAsync(renderedPrompt, ct);
             return result.Status == Services.Voice.VoiceDesignPromptService.GenerateStatus.Success
                 ? result.Prompt
                 : null;

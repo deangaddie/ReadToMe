@@ -21,10 +21,31 @@ namespace Read2Me.Services.Voice
 
         public sealed record GenerateResult(GenerateStatus Status, string? Prompt, string? FailureReason);
 
+        public async Task<string> BuildRenderedPromptAsync(
+            string bookTitle,
+            string author,
+            string characterName)
+        {
+            var template = await prompts.GetVoicePromptAsync();
+            return PromptTemplates.Render(template, new Dictionary<string, string>
+            {
+                [PromptTemplates.BookTitle]     = bookTitle,
+                [PromptTemplates.BookAuthor]    = author,
+                [PromptTemplates.CharacterName] = characterName,
+            });
+        }
+
         public async Task<GenerateResult> GenerateAsync(
             string bookTitle,
             string author,
             string characterName,
+            CancellationToken ct = default) =>
+            await GenerateWithPromptAsync(
+                await BuildRenderedPromptAsync(bookTitle, author, characterName),
+                ct);
+
+        public async Task<GenerateResult> GenerateWithPromptAsync(
+            string renderedPrompt,
             CancellationToken ct = default)
         {
             var config = await settings.GetActiveConfigAsync();
@@ -36,13 +57,7 @@ namespace Read2Me.Services.Voice
 
             try
             {
-                var template = await prompts.GetVoicePromptAsync();
-                var rendered = PromptTemplates.Render(template, new Dictionary<string, string>
-                {
-                    [PromptTemplates.BookTitle]     = bookTitle,
-                    [PromptTemplates.BookAuthor]    = author,
-                    [PromptTemplates.CharacterName] = characterName,
-                });
+                var rendered = renderedPrompt;
 
                 var sb = new StringBuilder();
                 await foreach (var chunk in llm.StreamChatAsync(config, rendered, ct))
@@ -55,7 +70,7 @@ namespace Read2Me.Services.Voice
             }
             catch (System.Exception ex)
             {
-                logger.LogError(ex, "Failed to generate voice design prompt for '{CharacterName}'", characterName);
+                logger.LogError(ex, "Failed to generate voice design prompt");
                 return new GenerateResult(GenerateStatus.Failed, null, ex.Message);
             }
         }
