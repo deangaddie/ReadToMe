@@ -5,7 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Read2Me.App.Audio;
 using Read2Me.App.Characters;
+using Read2Me.App.Queueing;
 using Read2Me.App.State;
+using Read2Me.Services.Queueing;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
 using Read2Me.App.Shared.BookMenus;
@@ -68,8 +70,12 @@ public static class ServiceRegistrationExtensions
     public static IServiceCollection AddAudioQueueServices(this IServiceCollection services)
     {
         services.AddSingleton<Read2Me.Services.Audio.AudioQueueService>();
+        services.AddSingleton<IQueueSource<Read2Me.Services.Audio.QueuedAudioItem>>(
+            sp => sp.GetRequiredService<Read2Me.Services.Audio.AudioQueueService>());
         services.AddScoped<IAudioQueueProcessor, AudioQueueProcessor>();
-        services.AddHostedService<AudioQueueWorker>();
+        services.AddScoped<IQueueProcessor<Read2Me.Services.Audio.QueuedAudioItem>>(
+            sp => sp.GetRequiredService<IAudioQueueProcessor>());
+        services.AddHostedService<QueueWorker<Read2Me.Services.Audio.QueuedAudioItem>>();
         return services;
     }
 
@@ -95,8 +101,12 @@ public static class ServiceRegistrationExtensions
     public static IServiceCollection AddCharacterServices(this IServiceCollection services)
     {
         services.AddSingleton<CharacterQueueService>();
+        services.AddSingleton<IQueueSource<QueuedParagraph>>(
+            sp => sp.GetRequiredService<CharacterQueueService>());
         services.AddScoped<ICharacterQueueProcessor, CharacterQueueProcessor>();
-        services.AddHostedService<CharacterQueueWorker>();
+        services.AddScoped<IQueueProcessor<QueuedParagraph>>(
+            sp => sp.GetRequiredService<ICharacterQueueProcessor>());
+        services.AddHostedService<QueueWorker<QueuedParagraph>>();
         services.AddScoped<CharacterAttributionService>();
         services.AddScoped<CharacterResolver>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();

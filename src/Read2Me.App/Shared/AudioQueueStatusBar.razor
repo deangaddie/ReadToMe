@@ -1,13 +1,17 @@
 @using Read2Me.Services.Audio
+@using Read2Me.App.State
 @inject AudioQueueService Queue
 @implements IDisposable
 
 @{
     var snap = Queue.Snapshot();
-    var isActive = snap.QueuedCount > 0 || snap.ProcessingCount > 0;
+    var vm = QueueStatusViewModel.For(
+        snap.QueuedCount, snap.ProcessingCount, snap.AverageSecondsPerItem,
+        snap.EstimatedSecondsRemaining, snap.CompletedCount, snap.CurrentItemElapsedSeconds,
+        averageUnit: "item");
 }
 
-@if (isActive)
+@if (vm.IsActive)
 {
     <div style="position:fixed; bottom:0; left:0; right:0; z-index:1290;
                 background:var(--mud-palette-dark);
@@ -18,11 +22,11 @@
 
         <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Size="Size.Small" Style="opacity:0.7;" />
 
-        @if (snap.ProcessingCount > 0)
+        @if (vm.ShowProcessing)
         {
             <span>
                 <strong>Generating audio</strong>
-                <span style="opacity:0.6;"> @snap.CurrentItemElapsedSeconds.ToString("F0")s</span>
+                <span style="opacity:0.6;"> @vm.ElapsedText</span>
             </span>
         }
         else
@@ -30,28 +34,24 @@
             <span style="opacity:0.6;">Idle</span>
         }
 
-        @if (snap.QueuedCount > 0)
+        @if (vm.ShowQueued)
         {
-            <span style="opacity:0.7;">@snap.QueuedCount queued</span>
+            <span style="opacity:0.7;">@vm.QueuedText</span>
         }
 
-        @if (snap.AverageSecondsPerItem > 0)
+        @if (vm.ShowAverage)
         {
-            <span style="opacity:0.7;">avg @snap.AverageSecondsPerItem.ToString("F1")s/item</span>
+            <span style="opacity:0.7;">@vm.AverageText</span>
         }
 
-        @if (snap.EstimatedSecondsRemaining > 0)
+        @if (vm.ShowEta)
         {
-            var eta = TimeSpan.FromSeconds(snap.EstimatedSecondsRemaining);
-            var etaStr = eta.TotalHours >= 1
-                ? $"{(int)eta.TotalHours}h {eta.Minutes:D2}m"
-                : $"{eta.Minutes}m {eta.Seconds:D2}s";
-            <span style="opacity:0.7;">ETA @etaStr</span>
+            <span style="opacity:0.7;">@vm.EtaText</span>
         }
 
-        @if (snap.CompletedCount > 0)
+        @if (vm.ShowCompleted)
         {
-            <span style="opacity:0.5;">@snap.CompletedCount done</span>
+            <span style="opacity:0.5;">@vm.CompletedText</span>
         }
 
         <MudSpacer />

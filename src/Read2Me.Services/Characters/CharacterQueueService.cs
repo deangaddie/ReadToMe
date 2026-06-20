@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Channels;
 using Read2Me.Core.Models;
+using Read2Me.Services.Queueing;
+
 
 namespace Read2Me.Services.Characters
 {
@@ -39,17 +41,14 @@ namespace Read2Me.Services.Characters
         public bool IsEmpty => !HasProcessing && QueuedCount == 0;
     }
 
-    public sealed class CharacterQueueService
+    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>
     {
         private Channel<QueuedParagraph> _channel =
             Channel.CreateUnbounded<QueuedParagraph>(new UnboundedChannelOptions { SingleReader = true });
 
         private readonly ParagraphStatusMap _map = new();
-        private readonly QueueMetrics _metrics = new();
 
-        private ParagraphKey? _processingKey;
         private string? _processingPreview;
-        private DateTimeOffset? _processingStartedAt;
 
         private CancellationTokenSource _itemCts = new();
 
@@ -75,9 +74,7 @@ namespace Read2Me.Services.Characters
             oldChannel.Writer.TryComplete();
 
             _map.ClearAll();
-            _processingKey = null;
             _processingPreview = null;
-            _processingStartedAt = null;
 
             Changed?.Invoke();
         }
@@ -97,9 +94,7 @@ namespace Read2Me.Services.Characters
         {
             var key = Key(item);
             _map.MarkProcessing(key);
-            _processingKey = key;
             _processingPreview = item.Preview;
-            _processingStartedAt = DateTimeOffset.UtcNow;
             Changed?.Invoke();
         }
 
@@ -109,21 +104,27 @@ namespace Read2Me.Services.Characters
             _map.RemoveOutcome(key);
             if (resolved is not null)
                 _map.SetResolved(key, resolved);
-            Finish(key, elapsedSeconds);
+            _map.Finish(key, elapsedSeconds);
+            _processingPreview = null;
+            Changed?.Invoke();
         }
 
         public void MarkUnknown(QueuedParagraph item, double elapsedSeconds)
         {
             var key = Key(item);
             _map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, null));
-            Finish(key, elapsedSeconds);
+            _map.Finish(key, elapsedSeconds);
+            _processingPreview = null;
+            Changed?.Invoke();
         }
 
         public void MarkFailed(QueuedParagraph item, string? reason)
         {
             var key = Key(item);
             _map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Failed, reason));
-            Finish(key, null);
+            _map.DropAncestry(key);
+            _processingPreview = null;
+            Changed?.Invoke();
         }
 
         public ParagraphQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphId)
@@ -147,11 +148,9 @@ namespace Read2Me.Services.Characters
         public QueueSnapshot Snapshot()
         {
             var (queuedCount, processingCount) = _map.CountStatuses();
-            var (completed, avg) = _metrics.Read();
+            var (completed, avg) = _map.Metrics();
             double eta = avg > 0 ? queuedCount * avg : 0;
-            var elapsed = _processingStartedAt.HasValue
-                ? (DateTimeOffset.UtcNow - _processingStartedAt.Value).TotalSeconds
-                : 0;
+            var elapsed = _map.CurrentElapsedSeconds();
 
             return new QueueSnapshot(
                 QueuedCount: queuedCount,
@@ -165,18 +164,5 @@ namespace Read2Me.Services.Characters
         }
 
         private static ParagraphKey Key(QueuedParagraph i) => new(i.Folder, i.ParagraphId);
-
-        private void Finish(ParagraphKey key, double? elapsedSeconds)
-        {
-            _map.RemoveEntry(key);
-            _processingKey = null;
-            _processingPreview = null;
-            _processingStartedAt = null;
-
-            if (elapsedSeconds is double elapsed)
-                _metrics.RecordCompletion(elapsed);
-
-            Changed?.Invoke();
-        }
     }
 }

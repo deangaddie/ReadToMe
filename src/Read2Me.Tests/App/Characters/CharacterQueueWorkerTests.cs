@@ -4,29 +4,29 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Read2Me.App.Audio;
+using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
-using Read2Me.Services.Audio;
+using Read2Me.Services.Characters;
 using Read2Me.Services.Queueing;
 using Xunit;
 
-namespace Read2Me.Tests.App.Audio
+namespace Read2Me.Tests.App.Characters
 {
-    public class AudioQueueWorkerTests
+    public class CharacterQueueWorkerTests
     {
         private static readonly ProjectFolderId Folder = new("test-book");
 
         [Fact]
         public async Task Worker_ContinuesAfterPerItemFailure()
         {
-            var queue = new AudioQueueService();
+            var queue = new CharacterQueueService();
             var processed = new List<Guid>();
             var tcs = new TaskCompletionSource();
 
             var processor = new FakeProcessor(item =>
             {
-                processed.Add(item.Item.ParagraphItemId);
+                processed.Add(item.ParagraphId);
                 if (processed.Count == 1)
                     throw new InvalidOperationException("first item fails");
                 if (processed.Count == 2)
@@ -34,19 +34,19 @@ namespace Read2Me.Tests.App.Audio
             });
 
             var services = new ServiceCollection();
-            services.AddSingleton<IAudioQueueProcessor>(processor);
-            services.AddScoped<IQueueProcessor<QueuedAudioItem>>(
-                sp => sp.GetRequiredService<IAudioQueueProcessor>());
+            services.AddSingleton<ICharacterQueueProcessor>(processor);
+            services.AddScoped<IQueueProcessor<QueuedParagraph>>(
+                sp => sp.GetRequiredService<ICharacterQueueProcessor>());
             var provider = services.BuildServiceProvider();
             var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
-            var worker = new QueueWorker<QueuedAudioItem>(
-                queue, scopeFactory, NullLogger<QueueWorker<QueuedAudioItem>>.Instance);
+            var worker = new QueueWorker<QueuedParagraph>(
+                queue, scopeFactory, NullLogger<QueueWorker<QueuedParagraph>>.Instance);
             using var cts = new CancellationTokenSource();
 
-            var item1 = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-            var item2 = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-            queue.Enqueue(Folder, [item1, item2]);
+            var p1 = new QueuedParagraph(Folder, Guid.NewGuid(), "a", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            var p2 = new QueuedParagraph(Folder, Guid.NewGuid(), "b", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            queue.Enqueue([p1, p2]);
 
             var workerTask = worker.StartAsync(cts.Token);
 
@@ -54,13 +54,13 @@ namespace Read2Me.Tests.App.Audio
             cts.Cancel();
             await worker.StopAsync(CancellationToken.None);
 
-            Assert.Equal(tcs.Task, completed);
+            Assert.Equal(tcs.Task, completed);   // 2nd item processed => worker survived the throw
             Assert.Equal(2, processed.Count);
         }
 
-        private sealed class FakeProcessor(Action<QueuedAudioItem> handle) : IAudioQueueProcessor
+        private sealed class FakeProcessor(Action<QueuedParagraph> handle) : ICharacterQueueProcessor
         {
-            public Task ProcessItemAsync(QueuedAudioItem item, CancellationToken ct)
+            public Task ProcessItemAsync(QueuedParagraph item, CancellationToken ct)
             {
                 handle(item);
                 return Task.CompletedTask;

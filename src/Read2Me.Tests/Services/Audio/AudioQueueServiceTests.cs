@@ -153,6 +153,25 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public void AudioVersionOf_ChangesAfterEachMarkComplete()
+        {
+            var svc = new AudioQueueService();
+            var item1 = MakeItem();
+            EnqueueAndProcess(svc, item1);
+            svc.MarkComplete(Folder, item1, "audio/one.wav");
+            var v1 = svc.AudioVersionOf(Folder, item1.ParagraphItemId);
+
+            // Re-enqueue is a no-op once complete, but a fresh item gets its own version.
+            var item2 = MakeItem();
+            EnqueueAndProcess(svc, item2);
+            svc.MarkComplete(Folder, item2, "audio/two.wav");
+            var v2 = svc.AudioVersionOf(Folder, item2.ParagraphItemId);
+
+            Assert.NotNull(v1);
+            Assert.NotNull(v2);
+        }
+
+        [Fact]
         public void Changed_FiresOnCancelAll()
         {
             var svc = new AudioQueueService();

@@ -664,8 +664,11 @@ namespace Read2Me.Tests.State
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
             var audioSelectionState = new AudioItemSelectionState();
+            var snackbar = Substitute.For<ISnackbar>();
+            var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
+            paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var presenter = new BookHierarchyPresenter(reader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, audioSelectionState, dialogService, queue, new AudioQueueService());
+                treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, queue, new AudioQueueService());
             await presenter.LoadAsync(Folder);
 
             var paragraphId = Guid.NewGuid();
@@ -741,7 +744,10 @@ namespace Read2Me.Tests.State
             var selectionState = new BookSelectionState();
             var audioSelectionState = new AudioItemSelectionState();
             var queue = new CharacterQueueService();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, queue, new AudioQueueService());
+            var snackbar2 = Substitute.For<ISnackbar>();
+            var paragraphTtsSettings2 = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
+            paragraphTtsSettings2.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, paragraphTtsSettings2, queue, new AudioQueueService());
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraphs are loaded into the cache.

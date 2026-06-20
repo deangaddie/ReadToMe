@@ -7,41 +7,89 @@ namespace Read2Me.App.State
 {
     public enum TriState { Unchecked, Indeterminate, Checked }
 
-    public sealed class AudioItemSelection
+    /// <summary>
+    /// An item that can be rolled up under the Volume → Part → Chapter hierarchy.
+    /// <see cref="SelectionKey"/> uniquely identifies the item within a folder selection.
+    /// </summary>
+    public interface IHasNodeAncestry
     {
-        private readonly Dictionary<Guid, AudioItemRef> _selected = new();
+        Guid VolumeId { get; }
+        Guid PartId { get; }
+        Guid ChapterId { get; }
+        Guid SelectionKey { get; }
+    }
+
+    /// <summary>
+    /// Shared roll-up selection engine. Holds selected items keyed by <see cref="IHasNodeAncestry.SelectionKey"/>
+    /// and derives a node's tri-state on read from the selected count vs. the seeded total
+    /// (CONTEXT.md: "Roll-up — a node's tri-state is derived … computed on read").
+    /// Always raises <see cref="OnChanged"/> on mutation.
+    /// </summary>
+    public sealed class RollupSelection<TItem> where TItem : IHasNodeAncestry
+    {
+        private readonly Dictionary<Guid, TItem> _selected = new();
         private IReadOnlyDictionary<Guid, int> _counts = new Dictionary<Guid, int>();
 
-        public void SetCounts(IReadOnlyDictionary<Guid, int> counts) => _counts = counts;
+        public event Action? OnChanged;
+        private void NotifyChanged() => OnChanged?.Invoke();
 
-        public void AddItem(AudioItemRef r) => _selected[r.ParagraphItemId] = r;
-
-        public void RemoveItem(Guid paragraphItemId) => _selected.Remove(paragraphItemId);
-
-        public void AddItems(IEnumerable<AudioItemRef> refs)
+        public void SetCounts(IReadOnlyDictionary<Guid, int> counts)
         {
-            foreach (var r in refs)
-                _selected[r.ParagraphItemId] = r;
+            _counts = counts;
+            NotifyChanged();
         }
 
-        public void RemoveItems(IEnumerable<Guid> ids)
+        public void Add(TItem item)
         {
-            foreach (var id in ids)
-                _selected.Remove(id);
+            _selected[item.SelectionKey] = item;
+            NotifyChanged();
         }
 
-        public void Clear() => _selected.Clear();
+        public void AddRange(IEnumerable<TItem> items)
+        {
+            foreach (var item in items)
+                _selected[item.SelectionKey] = item;
+            NotifyChanged();
+        }
 
-        public bool IsItemSelected(Guid paragraphItemId) => _selected.ContainsKey(paragraphItemId);
-        public IEnumerable<AudioItemRef> SelectedItems() => _selected.Values;
-        public int SelectedItemCount => _selected.Count;
+        public void Remove(Guid key)
+        {
+            if (_selected.Remove(key))
+                NotifyChanged();
+        }
+
+        public void RemoveRange(IEnumerable<Guid> keys)
+        {
+            var changed = false;
+            foreach (var key in keys)
+            {
+                if (_selected.Remove(key))
+                    changed = true;
+            }
+            if (changed) NotifyChanged();
+        }
+
+        public void Clear()
+        {
+            if (_selected.Count > 0)
+            {
+                _selected.Clear();
+                NotifyChanged();
+            }
+        }
+
+        public bool IsSelected(Guid key) => _selected.ContainsKey(key);
+        public IEnumerable<TItem> Selected() => _selected.Values;
+        public IEnumerable<Guid> SelectedKeys() => _selected.Keys;
+        public bool TryGet(Guid key, out TItem item) => _selected.TryGetValue(key, out item!);
+        public int SelectedCount => _selected.Count;
 
         public int SelectedCountUnder(BookNodeLevel level, Guid nodeId) =>
-            _selected.Values.Count(r => level switch
+            _selected.Values.Count(s => level switch
             {
-                BookNodeLevel.Volume  => r.VolumeId == nodeId,
-                BookNodeLevel.Part    => r.PartId == nodeId,
-                _                     => r.ChapterId == nodeId,
+                BookNodeLevel.Volume  => s.VolumeId == nodeId,
+                BookNodeLevel.Part    => s.PartId == nodeId,
+                _                     => s.ChapterId == nodeId,
             });
 
         public TriState NodeState(BookNodeLevel level, Guid nodeId)
@@ -50,6 +98,48 @@ namespace Read2Me.App.State
             if (selected == 0) return TriState.Unchecked;
             var total = _counts.TryGetValue(nodeId, out var t) ? t : 0;
             return total > 0 && selected >= total ? TriState.Checked : TriState.Indeterminate;
+        }
+    }
+
+    public sealed class AudioItemSelection
+    {
+        private readonly RollupSelection<AudioItemEntry> _inner = new();
+
+        public event Action? OnChanged
+        {
+            add => _inner.OnChanged += value;
+            remove => _inner.OnChanged -= value;
+        }
+
+        public void SetCounts(IReadOnlyDictionary<Guid, int> counts) => _inner.SetCounts(counts);
+
+        public void AddItem(AudioItemRef r) => _inner.Add(new AudioItemEntry(r));
+
+        public void RemoveItem(Guid paragraphItemId) => _inner.Remove(paragraphItemId);
+
+        public void AddItems(IEnumerable<AudioItemRef> refs) =>
+            _inner.AddRange(refs.Select(r => new AudioItemEntry(r)));
+
+        public void RemoveItems(IEnumerable<Guid> ids) => _inner.RemoveRange(ids);
+
+        public void Clear() => _inner.Clear();
+
+        public bool IsItemSelected(Guid paragraphItemId) => _inner.IsSelected(paragraphItemId);
+        public IEnumerable<AudioItemRef> SelectedItems() => _inner.Selected().Select(e => e.Ref);
+        public int SelectedItemCount => _inner.SelectedCount;
+
+        public int SelectedCountUnder(BookNodeLevel level, Guid nodeId) =>
+            _inner.SelectedCountUnder(level, nodeId);
+
+        public TriState NodeState(BookNodeLevel level, Guid nodeId) =>
+            _inner.NodeState(level, nodeId);
+
+        private readonly record struct AudioItemEntry(AudioItemRef Ref) : IHasNodeAncestry
+        {
+            public Guid VolumeId => Ref.VolumeId;
+            public Guid PartId => Ref.PartId;
+            public Guid ChapterId => Ref.ChapterId;
+            public Guid SelectionKey => Ref.ParagraphItemId;
         }
     }
 
@@ -78,81 +168,51 @@ namespace Read2Me.App.State
 
     public sealed class FolderSelection
     {
-        private readonly Dictionary<Guid, ParagraphSelection> _selected = new();
-        private IReadOnlyDictionary<Guid, int> _counts = new Dictionary<Guid, int>();
+        private readonly RollupSelection<ParagraphEntry> _inner = new();
 
-        public event Action? OnChanged;
-        private void NotifyChanged() => OnChanged?.Invoke();
-
-        public void SetCounts(IReadOnlyDictionary<Guid, int> counts)
+        public event Action? OnChanged
         {
-            _counts = counts;
-            NotifyChanged();
+            add => _inner.OnChanged += value;
+            remove => _inner.OnChanged -= value;
         }
 
-        public void AddParagraph(Guid id, ParagraphSelection ancestry)
-        {
-            _selected[id] = ancestry;
-            NotifyChanged();
-        }
+        public void SetCounts(IReadOnlyDictionary<Guid, int> counts) => _inner.SetCounts(counts);
 
-        public void RemoveParagraph(Guid id)
-        {
-            if (_selected.Remove(id))
-                NotifyChanged();
-        }
+        public void AddParagraph(Guid id, ParagraphSelection ancestry) =>
+            _inner.Add(new ParagraphEntry(id, ancestry));
 
-        public void AddParagraphs(IEnumerable<CharacterParagraphRef> refs)
-        {
-            foreach (var r in refs)
-                _selected[r.ParagraphId] = new ParagraphSelection(r.VolumeId, r.PartId, r.ChapterId);
-            NotifyChanged();
-        }
+        public void RemoveParagraph(Guid id) => _inner.Remove(id);
 
-        public void RemoveParagraphs(IEnumerable<Guid> ids)
-        {
-            var changed = false;
-            foreach (var id in ids)
-            {
-                if (_selected.Remove(id))
-                    changed = true;
-            }
-            if (changed) NotifyChanged();
-        }
+        public void AddParagraphs(IEnumerable<CharacterParagraphRef> refs) =>
+            _inner.AddRange(refs.Select(r =>
+                new ParagraphEntry(r.ParagraphId, new ParagraphSelection(r.VolumeId, r.PartId, r.ChapterId))));
 
-        public void Clear()
-        {
-            if (_selected.Count > 0)
-            {
-                _selected.Clear();
-                NotifyChanged();
-            }
-        }
+        public void RemoveParagraphs(IEnumerable<Guid> ids) => _inner.RemoveRange(ids);
 
-        public bool IsParagraphSelected(Guid paragraphId) => _selected.ContainsKey(paragraphId);
-        public IEnumerable<Guid> SelectedParagraphIds() => _selected.Keys;
+        public void Clear() => _inner.Clear();
+
+        public bool IsParagraphSelected(Guid paragraphId) => _inner.IsSelected(paragraphId);
+        public IEnumerable<Guid> SelectedParagraphIds() => _inner.SelectedKeys();
         public ParagraphSelection? GetAncestry(Guid paragraphId) =>
-            _selected.TryGetValue(paragraphId, out var v) ? v : null;
-        public int SelectedParagraphCount => _selected.Count;
+            _inner.TryGet(paragraphId, out var e) ? e.Ancestry : null;
+        public int SelectedParagraphCount => _inner.SelectedCount;
 
         public int SelectedCountUnder(BookNodeLevel level, Guid nodeId) =>
-            _selected.Values.Count(s => level switch
-            {
-                BookNodeLevel.Volume  => s.VolumeId == nodeId,
-                BookNodeLevel.Part    => s.PartId == nodeId,
-                _                     => s.ChapterId == nodeId,
-            });
+            _inner.SelectedCountUnder(level, nodeId);
 
-        public TriState NodeState(BookNodeLevel level, Guid nodeId)
-        {
-            var selected = SelectedCountUnder(level, nodeId);
-            if (selected == 0) return TriState.Unchecked;
-            var total = _counts.TryGetValue(nodeId, out var t) ? t : 0;
-            return total > 0 && selected >= total ? TriState.Checked : TriState.Indeterminate;
-        }
+        public TriState NodeState(BookNodeLevel level, Guid nodeId) =>
+            _inner.NodeState(level, nodeId);
 
         public bool IsNodeFullySelected(BookNodeLevel level, Guid nodeId) =>
             NodeState(level, nodeId) == TriState.Checked;
+
+        private readonly record struct ParagraphEntry(Guid Id, ParagraphSelection Ancestry) : IHasNodeAncestry
+        {
+            public Guid VolumeId => Ancestry.VolumeId;
+            public Guid PartId => Ancestry.PartId;
+            public Guid ChapterId => Ancestry.ChapterId;
+            public Guid SelectionKey => Id;
+        }
     }
 
     public sealed class BookSelectionState

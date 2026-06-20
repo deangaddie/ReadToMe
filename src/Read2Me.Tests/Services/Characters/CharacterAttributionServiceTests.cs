@@ -141,6 +141,8 @@ namespace Read2Me.Tests.Services.Characters
                 => Task.FromResult(new List<Read2Me.Core.Models.AudioItemRef>());
             public Task<IReadOnlyDictionary<Guid, int>> GetNodeAudioItemCountsAsync(ProjectFolderId folderId)
                 => Task.FromResult<IReadOnlyDictionary<Guid, int>>(new System.Collections.Generic.Dictionary<Guid, int>());
+            public Task<List<Read2Me.Core.Models.AudioItemRef>> GetOrderedAudioItemRefsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphItemIds)
+                => Task.FromResult(new List<Read2Me.Core.Models.AudioItemRef>());
         }
 
         private static ParagraphContext DefaultContext() =>

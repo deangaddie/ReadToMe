@@ -1,7 +1,7 @@
-using Read2Me.Services.Characters;
+using Read2Me.Services.Queueing;
 using Xunit;
 
-namespace Read2Me.Tests.Services.Characters
+namespace Read2Me.Tests.Services.Queueing
 {
     public class QueueMetricsTests
     {
@@ -9,7 +9,7 @@ namespace Read2Me.Tests.Services.Characters
         public void NoCompletions_AverageIsZero()
         {
             var m = new QueueMetrics();
-            Assert.Equal(0.0, m.AverageSecondsPerParagraph);
+            Assert.Equal(0.0, m.AverageSecondsPerCompletion);
             Assert.Equal(0, m.CompletedCount);
         }
 
@@ -18,7 +18,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var m = new QueueMetrics();
             m.RecordCompletion(5.0);
-            Assert.Equal(5.0, m.AverageSecondsPerParagraph);
+            Assert.Equal(5.0, m.AverageSecondsPerCompletion);
             Assert.Equal(1, m.CompletedCount);
         }
 
@@ -29,7 +29,7 @@ namespace Read2Me.Tests.Services.Characters
             m.RecordCompletion(2);
             m.RecordCompletion(4);
             m.RecordCompletion(6);
-            Assert.Equal(4.0, m.AverageSecondsPerParagraph, precision: 6);
+            Assert.Equal(4.0, m.AverageSecondsPerCompletion, precision: 6);
             Assert.Equal(3, m.CompletedCount);
         }
     }
