@@ -100,10 +100,15 @@ namespace Read2Me.App.Audio
                 var refAudioPath = Path.Combine(folderPath, voice.AudioFileName!.Replace('/', Path.DirectorySeparatorChar));
                 using var refAudio = fs.OpenRead(refAudioPath);
 
-                var wavStream = await client.GenerateAsync(row.Text ?? string.Empty, row.VoiceInstructions, refAudio, config, ct);
-                broadcaster.Publish(new AudioGenerated(itemRef.ParagraphItemId));
-
                 var sourceText = row.Text ?? string.Empty;
+
+                // A trailing comma marks a sentence that continues in the next item. Some TTS
+                // services treat the dangling comma as a cue to invent an ending (e.g. turning
+                // it into a greeting). Swap it for a semicolon, which reads as a neutral pause.
+                var ttsText = ReplaceTrailingComma(sourceText);
+
+                var wavStream = await client.GenerateAsync(ttsText, row.VoiceInstructions, refAudio, config, ct);
+                broadcaster.Publish(new AudioGenerated(itemRef.ParagraphItemId));
 
                 // --- Post-processing pipeline (inline, blocking). Two independent stages:
                 //     normalize and verify. Audio is always stored; no stage failure routes to MarkFailed.
@@ -211,6 +216,20 @@ namespace Read2Me.App.Audio
             }
 
             return (true, wer, null, transcript);
+        }
+
+        /// <summary>
+        /// If the text ends in a comma (after trailing whitespace), replaces it with a semicolon.
+        /// A trailing comma signals a sentence split across items; the semicolon keeps the neutral
+        /// pause without prompting the TTS service to fabricate a sentence ending.
+        /// </summary>
+        internal static string ReplaceTrailingComma(string text)
+        {
+            var trimmed = text.TrimEnd();
+            if (trimmed.Length == 0 || trimmed[^1] != ',')
+                return text;
+
+            return string.Concat(trimmed.AsSpan(0, trimmed.Length - 1), ";");
         }
     }
 }

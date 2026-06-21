@@ -117,7 +117,8 @@ namespace Read2Me.Tests.App.Audio
 
         private async Task<(QueuedAudioItem item, Guid itemId)> SeedCharacterItemAsync(
             bool hasDefaultVoice = true,
-            string voiceAudioFile = "voices/char1/voice.wav")
+            string voiceAudioFile = "voices/char1/voice.wav",
+            string text = "In a hole in the ground")
         {
             await using var db = await OpenDbAsync();
 
@@ -152,7 +153,7 @@ namespace Read2Me.Tests.App.Audio
                 ParagraphId = para.Id,
                 ItemType = ParagraphItemType.Character,
                 CharacterId = charId,
-                Text = "In a hole in the ground",
+                Text = text,
                 VoiceInstructions = "whispered",
                 Order = Key()
             };
@@ -232,6 +233,28 @@ namespace Read2Me.Tests.App.Audio
             Assert.True(_fs.FileExists(expectedPath));
 
             Assert.Null(_queue.OutcomeOf(_folder, itemId));
+        }
+
+        [Fact]
+        public async Task TrailingComma_IsReplacedWithSemicolon_BeforeTts()
+        {
+            var (queuedItem, _) = await SeedCharacterItemAsync(text: "Turning it into a greeting,");
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Equal("Turning it into a greeting;", _ttsClient.LastText);
+        }
+
+        [Theory]
+        [InlineData("Hello there,", "Hello there;")]
+        [InlineData("Hello there,   ", "Hello there;")]
+        [InlineData("Hello there.", "Hello there.")]
+        [InlineData("Hello, there", "Hello, there")]
+        [InlineData("", "")]
+        [InlineData(",", ";")]
+        public void ReplaceTrailingComma_HandlesCases(string input, string expected)
+        {
+            Assert.Equal(expected, AudioQueueProcessor.ReplaceTrailingComma(input));
         }
 
         [Fact]
@@ -535,12 +558,14 @@ namespace Read2Me.Tests.App.Audio
         {
             public bool WasCalled { get; private set; }
             public string? LastVoiceInstructions { get; private set; }
+            public string? LastText { get; private set; }
 
             public Task<Stream> GenerateAsync(string text, string? voiceInstructions, Stream referenceAudioStream,
                 ParagraphTtsServiceConfig settings, CancellationToken ct = default)
             {
                 WasCalled = true;
                 LastVoiceInstructions = voiceInstructions;
+                LastText = text;
                 Stream result = new MemoryStream([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00]);
                 return Task.FromResult(result);
             }
