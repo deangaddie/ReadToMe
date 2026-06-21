@@ -8,6 +8,7 @@ using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
+using Read2Me.Services.NodeStatus;
 using Read2Me.Services.UseCases;
 
 namespace Read2Me.App.State
@@ -24,7 +25,8 @@ namespace Read2Me.App.State
         ParagraphTtsSettingsService paragraphTtsSettings,
         CharacterQueueService characterQueue,
         AudioQueueService audioQueue,
-        AudioReviewService audioReviews) : IDisposable
+        AudioReviewService audioReviews,
+        NodeStatusService nodeStatus) : IDisposable
     {
         public bool IsLoading { get; private set; }
         public bool HasContent { get; private set; }
@@ -120,6 +122,8 @@ namespace Read2Me.App.State
             if (overview.HasContent)
                 audioReviews.Hydrate(folderId, await reader.GetAudioReviewsAsync(folderId));
 
+            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
+
             if (Volumes.Count == 1)
                 Tree.ExpandedVolumeIds.Add(Volumes[0].Id);
 
@@ -133,6 +137,7 @@ namespace Read2Me.App.State
         {
             selectionState.Reset(folderId);
             audioSelectionState.Reset(folderId);
+            nodeStatus.Clear(folderId);
             Tree?.Reset();
             await LoadAsync(folderId);
         }
@@ -186,6 +191,15 @@ namespace Read2Me.App.State
 
             item.CharacterId = characterId;
             item.Character = character;
+
+            // Recompute remaining unattributed Character items now that the item is stamped.
+            var remainingUnattributed = item.Paragraph?.Items
+                .Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null) ?? 0;
+            if (remainingUnattributed == 0)
+                nodeStatus.ZeroParagraphAttribution(folderId, item.ParagraphId);
+            else
+                nodeStatus.DecrementUnattributed(folderId, item.ParagraphId);
+
             NotifyStateChanged();
         }
 
@@ -197,6 +211,9 @@ namespace Read2Me.App.State
 
             await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
             ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character);
+
+            nodeStatus.ZeroParagraphAttribution(folderId, paragraph.Id);
+
             NotifyStateChanged();
         }
 
@@ -303,7 +320,22 @@ namespace Read2Me.App.State
             if (current is not null)
                 audioReviews.Set(folderId, paragraphItemId,
                     current with { State = AudioReviewState.Dismissed });
+
+            RecomputeParagraphReview(folderId, paragraphItemId);
             NotifyStateChanged();
+        }
+
+        private void RecomputeParagraphReview(ProjectFolderId folderId, Guid paragraphItemId)
+        {
+            foreach (var para in Tree.AllParagraphs())
+            {
+                if (!para.Items.Any(i => i.Id == paragraphItemId)) continue;
+
+                var hasAnyNeedsReview = para.Items.Any(i =>
+                    audioReviews.ReviewOf(folderId, i.Id)?.State == AudioReviewState.NeedsReview);
+                nodeStatus.SetParagraphReview(folderId, para.Id, hasAnyNeedsReview);
+                break;
+            }
         }
 
         public async Task AddSelectionToAudioQueue()
@@ -392,6 +424,7 @@ namespace Read2Me.App.State
                 if (item is not null)
                 {
                     item.AudioFileName = relativePath;
+                    nodeStatus.DecrementMissingAudio(folder, item.ParagraphId);
                     break;
                 }
             }

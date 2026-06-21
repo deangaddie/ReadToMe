@@ -145,6 +145,8 @@ namespace Read2Me.Tests.Services.Characters
                 => Task.FromResult(new List<Read2Me.Core.Models.AudioItemRef>());
             public Task<List<(Guid ParagraphItemId, Read2Me.Services.Audio.AudioReviewInfo Info)>> GetAudioReviewsAsync(ProjectFolderId folderId)
                 => Task.FromResult(new List<(Guid, Read2Me.Services.Audio.AudioReviewInfo)>());
+            public Task<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>> GetNodeStatusSeedAsync(ProjectFolderId folderId)
+                => Task.FromResult<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>>([]);
         }
 
         private static ParagraphContext DefaultContext() =>

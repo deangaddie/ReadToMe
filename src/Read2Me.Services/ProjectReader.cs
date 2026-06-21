@@ -9,6 +9,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
+using Read2Me.Services.NodeStatus;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 using ProjectEntity = Read2Me.Data.Entities.Project;
 
@@ -428,6 +429,49 @@ namespace Read2Me.Services
                     r.VerifyReason,
                     r.Transcript,
                     r.OriginalTextSnapshot)))
+                .ToList();
+        }
+
+        public async Task<IReadOnlyList<ParagraphStatusSeedRow>> GetNodeStatusSeedAsync(ProjectFolderId folderId)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            // One row per paragraph that has at least one non-Pause item.
+            var rows = await db.ParagraphItems
+                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                .GroupBy(i => new
+                {
+                    ParagraphId = i.ParagraphId,
+                    ChapterId = i.Paragraph.ChapterId,
+                    PartId = i.Paragraph.Chapter.PartId,
+                    VolumeId = i.Paragraph.Chapter.Part.VolumeId,
+                })
+                .Select(g => new
+                {
+                    g.Key.ParagraphId,
+                    g.Key.ChapterId,
+                    g.Key.PartId,
+                    g.Key.VolumeId,
+                    Unattributed = g.Count(i => i.ItemType == ParagraphItemType.Character && i.CharacterId == null),
+                    MissingAudio = g.Count(i => i.AudioFileName == null),
+                })
+                .ToListAsync();
+
+            // Paragraph qualifies for Review=1 if any of its items has a NeedsReview AudioReview row.
+            var needsReviewParagraphIds = await db.AudioReviews
+                .Where(r => r.State == Data.Enums.AudioReviewState.NeedsReview)
+                .Join(db.ParagraphItems,
+                    r => r.ParagraphItemId,
+                    i => i.Id,
+                    (r, i) => i.ParagraphId)
+                .Distinct()
+                .ToHashSetAsync();
+
+            return rows
+                .Select(r => new ParagraphStatusSeedRow(
+                    r.ParagraphId, r.ChapterId, r.PartId, r.VolumeId,
+                    r.Unattributed, r.MissingAudio,
+                    Review: needsReviewParagraphIds.Contains(r.ParagraphId) ? 1 : 0))
                 .ToList();
         }
 

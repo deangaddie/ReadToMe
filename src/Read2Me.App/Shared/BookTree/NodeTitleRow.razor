@@ -2,21 +2,26 @@
 @using Read2Me.App.Shared.BookMenus
 @using Read2Me.Core.Models
 @using Read2Me.Services.Characters
+@using Read2Me.Services.NodeStatus
 @inject BookHierarchyPresenter Presenter
 @inject CharacterQueueService Queue
+@inject NodeStatusService NodeStatus
 @implements IDisposable
 
 @{
     var isAudioMode = Presenter.ViewMode == BookViewMode.SplitAudio;
+    var nodeStatus = NodeStatus.StatusForNode(FolderId, NodeId);
     var row = isAudioMode
         ? NodeRowViewModel.For(
             Presenter.IsNodeAudioSelectable(NodeId),
             Presenter.AudioSelection.NodeState(Level, NodeId),
-            Queue.SummaryForNode(FolderId, NodeId))
+            Queue.SummaryForNode(FolderId, NodeId),
+            nodeStatus)
         : NodeRowViewModel.For(
             Presenter.IsNodeSelectable(NodeId),
             Presenter.Selection.NodeState(Level, NodeId),
-            Queue.SummaryForNode(FolderId, NodeId));
+            Queue.SummaryForNode(FolderId, NodeId),
+            nodeStatus);
 }
 <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
     @if (row.ShowSelectionControls)
@@ -40,6 +45,29 @@
         </span>
     }
     <MudText Style="flex:1">@Title</MudText>
+    @if (row.ShowAttributionBadge)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
+                 Icon="@Icons.Material.Filled.PersonOff" Class="mt-0"
+                 Style="pointer-events:none;">@row.AttributionRemaining</MudChip>
+    }
+    @if (row.ShowAudioBadge)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled"
+                 Icon="@Icons.Material.Filled.GraphicEq" Class="mt-0"
+                 Style="pointer-events:none;">@row.AudioRemaining</MudChip>
+    }
+    @if (row.ShowReviewBadge)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                 Icon="@Icons.Material.Filled.RateReview" Class="mt-0"
+                 Style="pointer-events:none;">@row.Review</MudChip>
+    }
+    @if (row.ShowDoneIndicator)
+    {
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small"
+                 Color="Color.Success" Style="opacity:0.5;pointer-events:none;" />
+    }
     @if (row.ShowProcessingChip)
     {
         <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
@@ -77,9 +105,17 @@
     [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
 
-    protected override void OnInitialized() => Queue.Changed += Refresh;
+    protected override void OnInitialized()
+    {
+        Queue.Changed += Refresh;
+        NodeStatus.Changed += Refresh;
+    }
 
     void Refresh() => InvokeAsync(StateHasChanged);
 
-    public void Dispose() => Queue.Changed -= Refresh;
+    public void Dispose()
+    {
+        Queue.Changed -= Refresh;
+        NodeStatus.Changed -= Refresh;
+    }
 }

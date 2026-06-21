@@ -44,7 +44,8 @@ namespace Read2Me.Tests.State
             IBookCommandHandler CommandHandler,
             FakeBookUseCases BookUseCases,
             BookTreeState TreeState,
-            AudioReviewService AudioReviews);
+            AudioReviewService AudioReviews,
+            Read2Me.Services.NodeStatus.NodeStatusService NodeStatus);
 
         private static Context Create(IReadOnlyDictionary<Guid, int>? nodeCounts = null)
         {
@@ -66,6 +67,12 @@ namespace Read2Me.Tests.State
             reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
                 .Returns(new List<(Guid, AudioReviewInfo)>());
 
+            reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>());
+
+            reader.GetCharactersAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Character>());
+
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
@@ -75,8 +82,9 @@ namespace Read2Me.Tests.State
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioReviews = new AudioReviewService();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, new AudioQueueService(), audioReviews);
-            return new Context(presenter, reader, commandHandler, bookUseCases, treeState, audioReviews);
+            var nodeStatus = new Read2Me.Services.NodeStatus.NodeStatusService();
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, new AudioQueueService(), audioReviews, nodeStatus);
+            return new Context(presenter, reader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
         }
 
         // ---------------------------------------------------------------
@@ -673,7 +681,7 @@ namespace Read2Me.Tests.State
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var presenter = new BookHierarchyPresenter(reader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, queue, new AudioQueueService(), new AudioReviewService());
+                treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, queue, new AudioQueueService(), new AudioReviewService(), new Read2Me.Services.NodeStatus.NodeStatusService());
             await presenter.LoadAsync(Folder);
 
             var paragraphId = Guid.NewGuid();
@@ -710,6 +718,89 @@ namespace Read2Me.Tests.State
             await ctx.CommandHandler.Received(1).ExecuteAsync(
                 Arg.Is<DismissAudioReviewCommand>(c => c.ParagraphItemId == itemId && c.FolderId.Value == Folder.Value));
             Assert.Equal(Read2Me.Core.Models.AudioReviewState.Dismissed, ctx.AudioReviews.ReviewOf(Folder, itemId)!.State);
+        }
+
+        // ---------------------------------------------------------------
+        // DismissAudioReviewAsync — decrements review badge live (issue 0004)
+        // ---------------------------------------------------------------
+
+        private static Read2Me.Services.NodeStatus.ParagraphStatusSeedRow MakeReviewSeedRow(
+            Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int review) =>
+            new(paragraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 0, Review: review);
+
+        private static async Task<(Context ctx, Guid itemId, Guid chapterId, Guid partId, Guid volumeId)>
+            CreateWithReviewSeedRow()
+        {
+            var volumeId = Guid.NewGuid(); var partId = Guid.NewGuid(); var chapterId = Guid.NewGuid();
+            var paraId = Guid.NewGuid();
+            var itemId = Guid.NewGuid();
+
+            var para = new Paragraph
+            {
+                Id = paraId,
+                Items =
+                [
+                    new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Character, Order = "a" },
+                ]
+            };
+
+            var reader = Substitute.For<IProjectReader>();
+            var commandHandler = Substitute.For<IBookCommandHandler>();
+            var bookUseCases = new FakeBookUseCases();
+            var dialogService = Substitute.For<IDialogService>();
+
+            reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: true, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
+                .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
+            reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<(Guid, AudioReviewInfo)>());
+            reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
+                {
+                    new(paraId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 0, Review: 1),
+                });
+
+            var hierarchyLoader = new BookHierarchyLoader(reader);
+            var treeState = new BookTreeState(hierarchyLoader);
+            var selectionState = new BookSelectionState();
+            var audioSelectionState = new AudioItemSelectionState();
+            var characterQueue = new CharacterQueueService();
+            var audioQueue = new AudioQueueService();
+            var snackbar = Substitute.For<ISnackbar>();
+            var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
+            paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
+            var audioReviews = new AudioReviewService();
+            var nodeStatus = new Read2Me.Services.NodeStatus.NodeStatusService();
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, audioQueue, audioReviews, nodeStatus);
+
+            await presenter.LoadAsync(Folder);
+            // Expand chapter so paragraph is loaded into cache (item→paragraph mapping).
+            await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
+
+            // Seed an in-memory NeedsReview for the item.
+            audioReviews.Set(Folder, itemId, new AudioReviewInfo(
+                Read2Me.Core.Models.AudioReviewState.NeedsReview,
+                NormalizeOk: true, NormalizeReason: null,
+                VerifyOk: false, Wer: 0.3, VerifyReason: "WER too high",
+                Transcript: "t", OriginalTextSnapshot: "o"));
+
+            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
+            return (ctx, itemId, chapterId, partId, volumeId);
+        }
+
+        [Fact]
+        public async Task DismissAudioReviewAsync_DecrementsReviewBadge()
+        {
+            var (ctx, itemId, chapterId, partId, volumeId) = await CreateWithReviewSeedRow();
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).Review);
+
+            await ctx.Presenter.DismissAudioReviewAsync(Folder, itemId);
+
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).Review);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, partId).Review);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, volumeId).Review);
         }
 
         // ---------------------------------------------------------------
@@ -769,6 +860,9 @@ namespace Read2Me.Tests.State
             reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
                 .Returns(new List<(Guid, AudioReviewInfo)>());
 
+            reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>());
+
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
@@ -777,13 +871,13 @@ namespace Read2Me.Tests.State
             var snackbar2 = Substitute.For<ISnackbar>();
             var paragraphTtsSettings2 = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings2.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, paragraphTtsSettings2, queue, new AudioQueueService(), new AudioReviewService());
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, paragraphTtsSettings2, queue, new AudioQueueService(), new AudioReviewService(), new Read2Me.Services.NodeStatus.NodeStatusService());
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraphs are loaded into the cache.
             await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
 
-            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState, new AudioReviewService());
+            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState, new AudioReviewService(), new Read2Me.Services.NodeStatus.NodeStatusService());
             var queuedPara = new QueuedParagraph(Folder, para.Id, "preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
             return (ctx, queue, para, queuedPara);
         }
@@ -836,6 +930,238 @@ namespace Read2Me.Tests.State
             var ex = Record.Exception(() => queue.MarkComplete(foreignPara, 1.0, new ResolvedCharacter(Guid.NewGuid(), "Bob")));
 
             Assert.Null(ex);
+        }
+
+        // ---------------------------------------------------------------
+        // Live attribution badge updates (issue 0002)
+        // ---------------------------------------------------------------
+
+        private static Read2Me.Services.NodeStatus.ParagraphStatusSeedRow MakeSeedRow(
+            Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int unattributed) =>
+            new(paragraphId, chapterId, partId, volumeId, unattributed, MissingAudio: 0, Review: 0);
+
+        [Fact]
+        public async Task SetItemCharacterAsync_LastUnattributedItem_DecrementsChapterBadge()
+        {
+            var ctx = Create();
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+
+            // Seed: paragraph has 1 unattributed item
+            ctx.Reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
+                {
+                    MakeSeedRow(paraId, ch, part, vol, unattributed: 1),
+                });
+
+            await ctx.Presenter.LoadAsync(Folder);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+
+            // One Character item in the paragraph — assigning it = last unattributed
+            var para = new Paragraph { Id = paraId };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
+                ItemType = ParagraphItemType.Character,
+                Paragraph = para,
+            };
+            para.Items.Add(item);
+
+            await ctx.Presenter.SetItemCharacterAsync(Folder, item, Guid.NewGuid());
+
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, part).AttributionRemaining);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, vol).AttributionRemaining);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterAsync_NonLastUnattributedItem_DoesNotDecrementBadge()
+        {
+            var ctx = Create();
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+
+            ctx.Reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
+                {
+                    MakeSeedRow(paraId, ch, part, vol, unattributed: 2),
+                });
+
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var para = new Paragraph { Id = paraId };
+            var item1 = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
+                ItemType = ParagraphItemType.Character,
+                Paragraph = para,
+            };
+            var item2 = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "b",
+                ItemType = ParagraphItemType.Character,
+                Paragraph = para,
+            };
+            para.Items.Add(item1);
+            para.Items.Add(item2);
+
+            // Assign only item1; item2 remains unattributed
+            await ctx.Presenter.SetItemCharacterAsync(Folder, item1, Guid.NewGuid());
+
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterAsync_ZeroesEntireParagraphAttribution()
+        {
+            var ctx = Create();
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+
+            ctx.Reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
+                {
+                    MakeSeedRow(paraId, ch, part, vol, unattributed: 3),
+                });
+
+            await ctx.Presenter.LoadAsync(Folder);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+
+            var para = new Paragraph
+            {
+                Id = paraId,
+                Items =
+                [
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "b" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "c" },
+                ]
+            };
+
+            await ctx.Presenter.SetParagraphCharacterAsync(Folder, para, Guid.NewGuid());
+
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, part).AttributionRemaining);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, vol).AttributionRemaining);
+        }
+
+        // ---------------------------------------------------------------
+        // Live audio badge updates (issue 0003)
+        // ---------------------------------------------------------------
+
+        private static Read2Me.Services.NodeStatus.ParagraphStatusSeedRow MakeAudioSeedRow(
+            Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int missingAudio) =>
+            new(paragraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: missingAudio, Review: 0);
+
+        private static async Task<(Context ctx, AudioQueueService audioQueue, Paragraph para, Guid chapterId, Guid partId, Guid volumeId)>
+            CreateWithAudioSeedRow(int missingAudio)
+        {
+            var volumeId = Guid.NewGuid(); var partId = Guid.NewGuid(); var chapterId = Guid.NewGuid();
+            var paraId = Guid.NewGuid();
+            var itemId = Guid.NewGuid();
+
+            var para = new Paragraph
+            {
+                Id = paraId,
+                Items =
+                [
+                    new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Character, Order = "a" },
+                ]
+            };
+
+            var reader = Substitute.For<IProjectReader>();
+            var commandHandler = Substitute.For<IBookCommandHandler>();
+            var bookUseCases = new FakeBookUseCases();
+            var dialogService = Substitute.For<IDialogService>();
+
+            reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
+                Filename: null, HasContent: true, Volumes: [], Characters: [],
+                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
+                .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
+            reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<(Guid, AudioReviewInfo)>());
+            reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
+                {
+                    new(paraId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: missingAudio, Review: 0),
+                });
+
+            var hierarchyLoader = new BookHierarchyLoader(reader);
+            var treeState = new BookTreeState(hierarchyLoader);
+            var selectionState = new BookSelectionState();
+            var audioSelectionState = new AudioItemSelectionState();
+            var characterQueue = new CharacterQueueService();
+            var audioQueue = new AudioQueueService();
+            var snackbar = Substitute.For<ISnackbar>();
+            var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
+            paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
+            var audioReviews = new AudioReviewService();
+            var nodeStatus = new Read2Me.Services.NodeStatus.NodeStatusService();
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, audioQueue, audioReviews, nodeStatus);
+
+            await presenter.LoadAsync(Folder);
+            await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
+
+            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
+            return (ctx, audioQueue, para, chapterId, partId, volumeId);
+        }
+
+        [Fact]
+        public async Task OnAudioFileAssigned_LastMissingItem_DecrementsAudioBadge()
+        {
+            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+
+            var item = para.Items.First();
+            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
+            audioQueue.MarkComplete(Folder, itemRef, "audio/item.wav");
+
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, partId).AudioRemaining);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, volumeId).AudioRemaining);
+        }
+
+        [Fact]
+        public async Task OnAudioFileAssigned_NonLastMissingItem_DoesNotDecrementToZero()
+        {
+            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 2);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+
+            var item = para.Items.First();
+            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
+            audioQueue.MarkComplete(Folder, itemRef, "audio/item.wav");
+
+            // Still 1 missing audio item in paragraph → still contributes 1 to node count
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterAsync_ClearCharacter_DoesNotGoNegative()
+        {
+            var ctx = Create();
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+
+            // Paragraph already fully attributed (Unattributed=0)
+            ctx.Reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
+                {
+                    MakeSeedRow(paraId, ch, part, vol, unattributed: 0),
+                });
+
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var para = new Paragraph { Id = paraId };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
+                ItemType = ParagraphItemType.Character,
+                CharacterId = Guid.NewGuid(),
+                Paragraph = para,
+            };
+            para.Items.Add(item);
+
+            // Clear the character (set to null) — should not go negative
+            await ctx.Presenter.SetItemCharacterAsync(Folder, item, null);
+
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
         }
     }
 }

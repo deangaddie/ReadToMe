@@ -21,6 +21,7 @@ using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Books;
 using Read2Me.Services.Characters;
 using Read2Me.Services.IO;
+using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Llm;
 using Read2Me.Services.UseCases;
 using Read2Me.Services.Voice;
@@ -106,6 +107,7 @@ public static class ServiceRegistrationExtensions
 
     public static IServiceCollection AddCharacterServices(this IServiceCollection services)
     {
+        services.AddSingleton<NodeStatusService>();
         services.AddSingleton<CharacterQueueService>();
         services.AddSingleton<IQueueSource<QueuedParagraph>>(
             sp => sp.GetRequiredService<CharacterQueueService>());

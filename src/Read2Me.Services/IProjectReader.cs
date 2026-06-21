@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services.Audio;
+using Read2Me.Services.NodeStatus;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Services
@@ -82,6 +83,9 @@ namespace Read2Me.Services
 
         // Returns all AudioReview rows for the folder in one query (rows are sparse). For service hydration.
         Task<List<(Guid ParagraphItemId, AudioReviewInfo Info)>> GetAudioReviewsAsync(ProjectFolderId folderId);
+
+        // Returns one row per paragraph that has at least one non-Pause item, with per-paragraph stage counters and ancestry.
+        Task<IReadOnlyList<ParagraphStatusSeedRow>> GetNodeStatusSeedAsync(ProjectFolderId folderId);
 
         /// <summary>
         /// Returns the text of <paramref name="paragraphId"/> plus up to <paramref name="before"/> preceding
