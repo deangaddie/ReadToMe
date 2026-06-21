@@ -64,6 +64,10 @@ namespace Read2Me.Tests.State
                 Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>());
 
+            reader.GetAudioItemRefsAsync(
+                Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>())
+                .Returns(new List<AudioItemRef>());
+
             reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
                 .Returns(new List<(Guid, AudioReviewInfo)>());
 
@@ -1040,6 +1044,72 @@ namespace Read2Me.Tests.State
             Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
             Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, part).AttributionRemaining);
             Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, vol).AttributionRemaining);
+        }
+
+        // ---------------------------------------------------------------
+        // SetAudioNodeAsync needsAudioOnly (issue 0001)
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task SetAudioNodeAsync_NeedsAudioOnly_ForwardsFlagAndSelectsReturnedItems()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
+            var itemId1 = Guid.NewGuid(); var paraId1 = Guid.NewGuid();
+            var itemId2 = Guid.NewGuid(); var paraId2 = Guid.NewGuid();
+
+            ctx.Reader.GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, true)
+                .Returns(new List<AudioItemRef>
+                {
+                    new AudioItemRef(itemId1, paraId1, chId, ptId, volId),
+                    new AudioItemRef(itemId2, paraId2, chId, ptId, volId),
+                });
+
+            await ctx.Presenter.SetAudioNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true, needsAudioOnly: true);
+
+            Assert.True(ctx.Presenter.AudioSelection.IsItemSelected(itemId1));
+            Assert.True(ctx.Presenter.AudioSelection.IsItemSelected(itemId2));
+            await ctx.Reader.Received(1).GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, true);
+        }
+
+        [Fact]
+        public async Task SetAudioNodeAsync_Default_PassesFalseToReader()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var chId = Guid.NewGuid();
+            ctx.Reader.GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, false)
+                .Returns(new List<AudioItemRef>());
+
+            await ctx.Presenter.SetAudioNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true);
+
+            await ctx.Reader.Received(1).GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, false);
+        }
+
+        [Fact]
+        public async Task SetAudioNodeAsync_NeedsAudioOnly_NodeStateIsIndeterminate_WhenSubsetSelected()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
+            var itemId1 = Guid.NewGuid(); var paraId1 = Guid.NewGuid();
+
+            // Denominator = 3 items total under the chapter; needsAudioOnly returns only 1
+            ctx.Presenter.AudioSelection.SetCounts(new Dictionary<Guid, int> { [chId] = 3 });
+
+            ctx.Reader.GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, true)
+                .Returns(new List<AudioItemRef>
+                {
+                    new AudioItemRef(itemId1, paraId1, chId, ptId, volId),
+                });
+
+            await ctx.Presenter.SetAudioNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true, needsAudioOnly: true);
+
+            Assert.Equal(TriState.Indeterminate, ctx.Presenter.AudioSelection.NodeState(BookNodeLevel.Chapter, chId));
         }
 
         // ---------------------------------------------------------------

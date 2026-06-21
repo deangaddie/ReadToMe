@@ -300,9 +300,9 @@ namespace Read2Me.App.State
             return Task.CompletedTask;
         }
 
-        public async Task SetAudioNodeAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool on)
+        public async Task SetAudioNodeAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool on, bool needsAudioOnly = false)
         {
-            var refs = await reader.GetAudioItemRefsAsync(folderId, level, nodeId);
+            var refs = await reader.GetAudioItemRefsAsync(folderId, level, nodeId, needsAudioOnly);
             if (on)
                 AudioSelection.AddItems(refs);
             else

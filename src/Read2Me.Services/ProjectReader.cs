@@ -351,7 +351,7 @@ namespace Read2Me.Services
         }
 
         public async Task<List<AudioItemRef>> GetAudioItemRefsAsync(
-            ProjectFolderId folderId, BookNodeLevel level, Guid nodeId)
+            ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false)
         {
             var db = await _session.OpenAsync(folderId);
 
@@ -364,6 +364,10 @@ namespace Read2Me.Services
                 BookNodeLevel.Part    => q.Where(i => i.Paragraph.Chapter.PartId == nodeId),
                 _                     => q.Where(i => i.Paragraph.ChapterId == nodeId),
             };
+
+            if (needsAudioOnly)
+                q = q.Where(i => i.AudioFileName == null
+                                 && (i.ItemType == ParagraphItemType.Narration || i.CharacterId != null));
 
             return await q
                 .Select(i => new AudioItemRef(

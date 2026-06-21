@@ -73,7 +73,8 @@ namespace Read2Me.Services
         Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds);
 
         // Returns non-Pause ParagraphItems (Character + Narration) scoped to the given node, for audio selection.
-        Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId);
+        // When needsAudioOnly is true, filters to items missing a WAV and attribution-ready (Narration always; Character only when CharacterId != null).
+        Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false);
 
         // Returns the given ParagraphItem IDs ordered by book position (Volume→Part→Chapter→Paragraph→Item order).
         Task<List<AudioItemRef>> GetOrderedAudioItemRefsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphItemIds);

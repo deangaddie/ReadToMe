@@ -166,6 +166,126 @@ namespace Read2Me.Tests.Services
             Assert.Equal(["P3"], ctx.Following.Select(p => p.Text).ToArray());
         }
 
+        // Seeds a chapter with explicit ParagraphItem configurations for audio-selection tests.
+        private async Task<(Guid ChapterId, Guid NarrationNoWavId, Guid CharAttributedNoWavId, Guid CharUnattributedId, Guid CharWithWavId, Guid NarrationWithWavId, Guid PauseId)>
+            SeedAudioItemsAsync()
+        {
+            await using var db = await OpenDbAsync();
+            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
+            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
+            db.Volumes.Add(vol);
+            db.Parts.Add(part);
+            db.Chapters.Add(ch);
+
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            db.Characters.Add(character);
+
+            var paraOrder = Key();
+            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = paraOrder };
+            db.Paragraphs.Add(para);
+
+            // Narration, no WAV — should be included when needsAudioOnly
+            var narrationNoWav = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = para.Id,
+                ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = null,
+            };
+            // Character with CharacterId, no WAV — should be included when needsAudioOnly
+            var charAttributedNoWav = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = para.Id,
+                ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = null,
+            };
+            // Character without CharacterId (unattributed) — excluded when needsAudioOnly
+            var charUnattributed = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = para.Id,
+                ItemType = ParagraphItemType.Character, CharacterId = null, Order = Key(), AudioFileName = null,
+            };
+            // Character with CharacterId AND WAV — excluded when needsAudioOnly (already has audio)
+            var charWithWav = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = para.Id,
+                ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = "audio/item.wav",
+            };
+            // Narration with WAV — excluded when needsAudioOnly
+            var narrationWithWav = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = para.Id,
+                ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = "audio/narr.wav",
+            };
+            // Pause — always excluded regardless of needsAudioOnly
+            var pause = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = para.Id,
+                ItemType = ParagraphItemType.ParagraphPause, Order = Key(),
+            };
+
+            db.ParagraphItems.AddRange(narrationNoWav, charAttributedNoWav, charUnattributed, charWithWav, narrationWithWav, pause);
+            await db.SaveChangesAsync();
+
+            return (ch.Id, narrationNoWav.Id, charAttributedNoWav.Id, charUnattributed.Id, charWithWav.Id, narrationWithWav.Id, pause.Id);
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_NeedsAudioOnly_IncludesNarrationWithNoWav()
+        {
+            var (chId, narrationNoWavId, _, _, _, _, _) = await SeedAudioItemsAsync();
+            var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, needsAudioOnly: true);
+            Assert.Contains(refs, r => r.ParagraphItemId == narrationNoWavId);
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_NeedsAudioOnly_IncludesAttributedCharacterWithNoWav()
+        {
+            var (chId, _, charAttributedNoWavId, _, _, _, _) = await SeedAudioItemsAsync();
+            var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, needsAudioOnly: true);
+            Assert.Contains(refs, r => r.ParagraphItemId == charAttributedNoWavId);
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_NeedsAudioOnly_ExcludesUnattributedCharacter()
+        {
+            var (chId, _, _, charUnattributedId, _, _, _) = await SeedAudioItemsAsync();
+            var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, needsAudioOnly: true);
+            Assert.DoesNotContain(refs, r => r.ParagraphItemId == charUnattributedId);
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_NeedsAudioOnly_ExcludesItemsWithWav()
+        {
+            var (chId, _, _, _, charWithWavId, narrationWithWavId, _) = await SeedAudioItemsAsync();
+            var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, needsAudioOnly: true);
+            Assert.DoesNotContain(refs, r => r.ParagraphItemId == charWithWavId);
+            Assert.DoesNotContain(refs, r => r.ParagraphItemId == narrationWithWavId);
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_NeedsAudioOnly_ExcludesPauseItems()
+        {
+            var (chId, _, _, _, _, _, pauseId) = await SeedAudioItemsAsync();
+            var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, needsAudioOnly: true);
+            Assert.DoesNotContain(refs, r => r.ParagraphItemId == pauseId);
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_DefaultFlag_ReturnsFull_NonPauseSet()
+        {
+            var (chId, narrationNoWavId, charAttributedNoWavId, charUnattributedId, charWithWavId, narrationWithWavId, pauseId) = await SeedAudioItemsAsync();
+            var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, needsAudioOnly: false);
+            var ids = refs.Select(r => r.ParagraphItemId).ToHashSet();
+
+            // All non-Pause items included
+            Assert.Contains(narrationNoWavId, ids);
+            Assert.Contains(charAttributedNoWavId, ids);
+            Assert.Contains(charUnattributedId, ids);
+            Assert.Contains(charWithWavId, ids);
+            Assert.Contains(narrationWithWavId, ids);
+            // Pause excluded
+            Assert.DoesNotContain(pauseId, ids);
+        }
+
         [Fact]
         public async Task GetAudioReviews_ReturnsAllRowsForFolder()
         {

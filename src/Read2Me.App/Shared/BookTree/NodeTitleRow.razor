@@ -32,6 +32,9 @@
                 <MudCheckBox T="bool?" Value="@row.CheckboxValue"
                              ValueChanged="@((bool? v) => Presenter.SetAudioNodeAsync(FolderId, Level, NodeId, v == true))"
                              Size="Size.Small" />
+                <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                               Size="Size.Small" title="Select needs audio"
+                               OnClick="@(() => Presenter.SetAudioNodeAsync(FolderId, Level, NodeId, true, needsAudioOnly: true))" />
             }
             else
             {
