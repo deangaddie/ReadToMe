@@ -39,6 +39,26 @@
 
 <MudCard Outlined="true" Class="mb-5">
     <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Sentence chunking</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Split each item into sentences and synthesise them separately, stitching the
+            result with a short pause between sentences. Reduces peaking on long text.
+        </MudText>
+        <MudSwitch @bind-Value="_sentenceSplitEnabledDraft"
+                   Label="Enable sentence chunking" Color="Color.Primary" Class="mb-3" />
+        <MudNumericField @bind-Value="_sentencePauseMsDraft"
+                         Label="Pause between sentences (ms)" Variant="Variant.Outlined"
+                         Min="0" Step="50" />
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveSentenceChunkingAsync">Save</MudButton>
+    </MudCardActions>
+</MudCard>
+
+<MudCard Outlined="true" Class="mb-5">
+    <MudCardContent>
         <MudText Typo="Typo.h6" Class="mb-3">Transcript verification</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
             Word-error-rate threshold below which a generated clip passes verification.
@@ -57,6 +77,9 @@
 @code {
     string _ffmpegPathDraft = "";
     double _werThresholdDraft = AudioProcessingSettingsService.DefaultWerThreshold;
+    bool _sentenceSplitEnabledDraft = AudioProcessingSettingsService.DefaultSentenceSplitEnabled;
+    int _sentencePauseMsDraft = AudioProcessingSettingsService.DefaultSentencePauseMs;
+    int _sentenceMinChunkCharsDraft = AudioProcessingSettingsService.DefaultSentenceMinChunkChars;
     bool _testing;
 
     protected override async Task OnInitializedAsync()
@@ -69,9 +92,12 @@
 
     async Task LoadAsync()
     {
-        var (ffmpegPath, werThreshold) = await SettingsService.GetAsync();
-        _ffmpegPathDraft = ffmpegPath ?? "";
-        _werThresholdDraft = werThreshold;
+        var settings = await SettingsService.GetAsync();
+        _ffmpegPathDraft = settings.FfmpegPath ?? "";
+        _werThresholdDraft = settings.WerThreshold;
+        _sentenceSplitEnabledDraft = settings.SentenceSplitEnabled;
+        _sentencePauseMsDraft = settings.SentencePauseMs;
+        _sentenceMinChunkCharsDraft = settings.SentenceMinChunkChars;
         StateHasChanged();
     }
 
@@ -90,6 +116,18 @@
         }
         await SettingsService.SetWerThresholdAsync(_werThresholdDraft);
         Snackbar.Add("WER threshold saved.", Severity.Success);
+    }
+
+    async Task SaveSentenceChunkingAsync()
+    {
+        if (_sentencePauseMsDraft < 0)
+        {
+            Snackbar.Add("Pause must be zero or greater.", Severity.Error);
+            return;
+        }
+        await SettingsService.SetSentenceChunkingAsync(
+            _sentenceSplitEnabledDraft, _sentencePauseMsDraft, _sentenceMinChunkCharsDraft);
+        Snackbar.Add("Sentence chunking saved.", Severity.Success);
     }
 
     async Task TestFfmpegAsync()

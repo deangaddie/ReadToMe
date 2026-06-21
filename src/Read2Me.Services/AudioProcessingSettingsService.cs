@@ -14,9 +14,23 @@ namespace Read2Me.Services
     /// path and the WER pass threshold. Mirrors the single-row upsert pattern used by
     /// <see cref="ThemeService"/> / <see cref="VoiceDesignSettingsService"/>.
     /// </summary>
+    /// <summary>
+    /// Snapshot of the audio post-processing settings row, with defaults already applied for
+    /// a missing row.
+    /// </summary>
+    public readonly record struct AudioProcessingSettings(
+        string? FfmpegPath,
+        double WerThreshold,
+        bool SentenceSplitEnabled,
+        int SentencePauseMs,
+        int SentenceMinChunkChars);
+
     public class AudioProcessingSettingsService
     {
         public const double DefaultWerThreshold = 0.15;
+        public const bool DefaultSentenceSplitEnabled = true;
+        public const int DefaultSentencePauseMs = 300;
+        public const int DefaultSentenceMinChunkChars = 15;
 
         private readonly IDbContextFactory<Read2MeDbContext> _dbFactory;
         private readonly IFfmpegProber _prober;
@@ -34,11 +48,16 @@ namespace Read2Me.Services
             _logger = logger;
         }
 
-        public virtual async Task<(string? FfmpegPath, double WerThreshold)> GetAsync()
+        public virtual async Task<AudioProcessingSettings> GetAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var settings = await db.Settings.SingleOrDefaultAsync();
-            return (settings?.FfmpegPath, settings?.WerThreshold ?? DefaultWerThreshold);
+            return new AudioProcessingSettings(
+                settings?.FfmpegPath,
+                settings?.WerThreshold ?? DefaultWerThreshold,
+                settings?.SentenceSplitEnabled ?? DefaultSentenceSplitEnabled,
+                settings?.SentencePauseMs ?? DefaultSentencePauseMs,
+                settings?.SentenceMinChunkChars ?? DefaultSentenceMinChunkChars);
         }
 
         /// <summary>Saves the ffmpeg path. Blank/whitespace is stored as null (rely on PATH).</summary>
@@ -60,11 +79,25 @@ namespace Read2Me.Services
             OnChanged?.Invoke();
         }
 
+        /// <summary>Saves the sentence-chunking settings (toggle, pause, min-merge length).</summary>
+        public async Task SetSentenceChunkingAsync(bool enabled, int pauseMs, int minChunkChars)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            await MutateSettingsAsync(db, s =>
+            {
+                s.SentenceSplitEnabled = enabled;
+                s.SentencePauseMs = pauseMs;
+                s.SentenceMinChunkChars = minChunkChars;
+            });
+            await db.SaveChangesAsync();
+            OnChanged?.Invoke();
+        }
+
         /// <summary>Probes ffmpeg using the currently saved path.</summary>
         public async Task<FfmpegProbeResult> TestFfmpegAsync(CancellationToken ct = default)
         {
-            var (ffmpegPath, _) = await GetAsync();
-            return await _prober.ProbeAsync(ffmpegPath, ct);
+            var settings = await GetAsync();
+            return await _prober.ProbeAsync(settings.FfmpegPath, ct);
         }
 
         private static async Task MutateSettingsAsync(Read2MeDbContext db, Action<AppSettings> mutate)

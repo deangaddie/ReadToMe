@@ -112,7 +112,9 @@ namespace Read2Me.App.Audio
 
                 // --- Post-processing pipeline (inline, blocking). Two independent stages:
                 //     normalize and verify. Audio is always stored; no stage failure routes to MarkFailed.
-                var (ffmpegPath, werThreshold) = await audioProcessingSettings.GetAsync();
+                var processingSettings = await audioProcessingSettings.GetAsync();
+                var ffmpegPath = processingSettings.FfmpegPath;
+                var werThreshold = processingSettings.WerThreshold;
 
                 // Stage 1: normalize loudness. On skip the original audio is returned intact.
                 var normalizeResult = await normalizer.NormalizeAsync(wavStream, ffmpegPath, ct);

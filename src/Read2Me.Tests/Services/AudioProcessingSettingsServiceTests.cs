@@ -30,10 +30,35 @@ namespace Read2Me.Tests.Services
         {
             var svc = NewService();
 
-            var (ffmpegPath, werThreshold) = await svc.GetAsync();
+            var settings = await svc.GetAsync();
 
-            Assert.Null(ffmpegPath);
-            Assert.Equal(0.15, werThreshold);
+            Assert.Null(settings.FfmpegPath);
+            Assert.Equal(0.15, settings.WerThreshold);
+        }
+
+        [Fact]
+        public async Task Get_MissingRow_ReturnsSentenceChunkingDefaults()
+        {
+            var svc = NewService();
+
+            var settings = await svc.GetAsync();
+
+            Assert.True(settings.SentenceSplitEnabled);
+            Assert.Equal(300, settings.SentencePauseMs);
+            Assert.Equal(15, settings.SentenceMinChunkChars);
+        }
+
+        [Fact]
+        public async Task SetSentenceChunking_RoundTrips()
+        {
+            var svc = NewService();
+
+            await svc.SetSentenceChunkingAsync(enabled: false, pauseMs: 750, minChunkChars: 40);
+
+            var settings = await NewService().GetAsync();
+            Assert.False(settings.SentenceSplitEnabled);
+            Assert.Equal(750, settings.SentencePauseMs);
+            Assert.Equal(40, settings.SentenceMinChunkChars);
         }
 
         [Fact]
@@ -43,8 +68,8 @@ namespace Read2Me.Tests.Services
 
             await svc.SetFfmpegPathAsync(@"C:\tools\ffmpeg.exe");
 
-            var (ffmpegPath, _) = await NewService().GetAsync();
-            Assert.Equal(@"C:\tools\ffmpeg.exe", ffmpegPath);
+            var settings = await NewService().GetAsync();
+            Assert.Equal(@"C:\tools\ffmpeg.exe", settings.FfmpegPath);
         }
 
         [Theory]
@@ -58,8 +83,8 @@ namespace Read2Me.Tests.Services
 
             await svc.SetFfmpegPathAsync(blank);
 
-            var (ffmpegPath, _) = await NewService().GetAsync();
-            Assert.Null(ffmpegPath);
+            var settings = await NewService().GetAsync();
+            Assert.Null(settings.FfmpegPath);
         }
 
         [Fact]
@@ -69,8 +94,8 @@ namespace Read2Me.Tests.Services
 
             await svc.SetWerThresholdAsync(0.42);
 
-            var (_, werThreshold) = await NewService().GetAsync();
-            Assert.Equal(0.42, werThreshold);
+            var settings = await NewService().GetAsync();
+            Assert.Equal(0.42, settings.WerThreshold);
         }
 
         [Fact]

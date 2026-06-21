@@ -26,5 +26,22 @@ namespace Read2Me.AppData.Entities
         /// Word-error-rate pass threshold for transcript verification. Defaults to 0.15.
         /// </summary>
         public double WerThreshold { get; set; } = 0.15;
+
+        /// <summary>
+        /// Whether sentence chunking is applied before TTS synthesis. Defaults to true.
+        /// </summary>
+        public bool SentenceSplitEnabled { get; set; } = true;
+
+        /// <summary>
+        /// Silence inserted between adjacent sentences when stitching chunked audio, in
+        /// milliseconds. Defaults to 300.
+        /// </summary>
+        public int SentencePauseMs { get; set; } = 300;
+
+        /// <summary>
+        /// Sentence fragments shorter than this are merged into a neighbour rather than
+        /// emitted as their own chunk. Defaults to 15. Not surfaced in the UI.
+        /// </summary>
+        public int SentenceMinChunkChars { get; set; } = 15;
     }
 }

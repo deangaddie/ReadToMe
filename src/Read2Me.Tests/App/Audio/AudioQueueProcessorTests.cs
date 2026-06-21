@@ -646,8 +646,10 @@ namespace Read2Me.Tests.App.Audio
                 _werThreshold = werThreshold;
             }
 
-            public override Task<(string? FfmpegPath, double WerThreshold)> GetAsync() =>
-                Task.FromResult((_ffmpegPath, _werThreshold));
+            public override Task<AudioProcessingSettings> GetAsync() =>
+                Task.FromResult(new AudioProcessingSettings(
+                    _ffmpegPath, _werThreshold,
+                    SentenceSplitEnabled: false, SentencePauseMs: 300, SentenceMinChunkChars: 15));
         }
     }
 }
