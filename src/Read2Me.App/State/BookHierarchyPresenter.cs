@@ -23,7 +23,8 @@ namespace Read2Me.App.State
         ISnackbar snackbar,
         ParagraphTtsSettingsService paragraphTtsSettings,
         CharacterQueueService characterQueue,
-        AudioQueueService audioQueue) : IDisposable
+        AudioQueueService audioQueue,
+        AudioReviewService audioReviews) : IDisposable
     {
         public bool IsLoading { get; private set; }
         public bool HasContent { get; private set; }
@@ -114,6 +115,10 @@ namespace Read2Me.App.State
                 ? await reader.GetNodeAudioItemCountsAsync(folderId)
                 : new Dictionary<Guid, int>();
             AudioSelection.SetCounts(_audioNodeCounts);
+
+            // Load audio-review flags from prior sessions so they surface on project open.
+            if (overview.HasContent)
+                audioReviews.Hydrate(folderId, await reader.GetAudioReviewsAsync(folderId));
 
             if (Volumes.Count == 1)
                 Tree.ExpandedVolumeIds.Add(Volumes[0].Id);
@@ -289,6 +294,17 @@ namespace Read2Me.App.State
         }
 
         public int SelectedAudioItemCount => AudioSelection?.SelectedItemCount ?? 0;
+
+        public async Task DismissAudioReviewAsync(ProjectFolderId folderId, Guid paragraphItemId)
+        {
+            await commandHandler.ExecuteAsync(new DismissAudioReviewCommand(folderId, paragraphItemId));
+
+            var current = audioReviews.ReviewOf(folderId, paragraphItemId);
+            if (current is not null)
+                audioReviews.Set(folderId, paragraphItemId,
+                    current with { State = AudioReviewState.Dismissed });
+            NotifyStateChanged();
+        }
 
         public async Task AddSelectionToAudioQueue()
         {

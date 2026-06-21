@@ -71,3 +71,18 @@ public record ClearBookContentCommand(ProjectFolderId FolderId) : BookCommand(Fo
 
 // Audio
 public record SetParagraphItemAudioCommand(ProjectFolderId FolderId, Guid ItemId, string AudioFileName) : BookCommand(FolderId);
+
+public enum AudioReviewState { NeedsReview, Dismissed }
+
+public record SetAudioReviewCommand(
+    ProjectFolderId FolderId,
+    Guid ParagraphItemId,
+    bool NormalizeOk,
+    string? NormalizeReason,
+    bool VerifyOk,
+    double? Wer,
+    string? VerifyReason,
+    string? Transcript,
+    string? OriginalTextSnapshot) : BookCommand(FolderId);
+
+public record DismissAudioReviewCommand(ProjectFolderId FolderId, Guid ParagraphItemId) : BookCommand(FolderId);

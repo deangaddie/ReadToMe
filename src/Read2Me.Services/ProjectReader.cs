@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Services.Audio;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 using ProjectEntity = Read2Me.Data.Entities.Project;
 
@@ -393,6 +394,41 @@ namespace Read2Me.Services
                     i.Paragraph.Chapter.PartId,
                     i.Paragraph.Chapter.Part.VolumeId))
                 .ToListAsync();
+        }
+
+        public async Task<List<(Guid ParagraphItemId, AudioReviewInfo Info)>> GetAudioReviewsAsync(ProjectFolderId folderId)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            // Rows are sparse (present iff an item needs review), so a single unscoped query is cheap.
+            var rows = await db.AudioReviews
+                .Select(r => new
+                {
+                    r.ParagraphItemId,
+                    r.State,
+                    r.NormalizeOk,
+                    r.NormalizeReason,
+                    r.VerifyOk,
+                    r.Wer,
+                    r.VerifyReason,
+                    r.Transcript,
+                    r.OriginalTextSnapshot,
+                })
+                .ToListAsync();
+
+            return rows
+                .Select(r => (r.ParagraphItemId, new AudioReviewInfo(
+                    r.State == Data.Enums.AudioReviewState.Dismissed
+                        ? Core.Models.AudioReviewState.Dismissed
+                        : Core.Models.AudioReviewState.NeedsReview,
+                    r.NormalizeOk,
+                    r.NormalizeReason,
+                    r.VerifyOk,
+                    r.Wer,
+                    r.VerifyReason,
+                    r.Transcript,
+                    r.OriginalTextSnapshot)))
+                .ToList();
         }
 
         public async Task<IReadOnlyDictionary<Guid, int>> GetNodeAudioItemCountsAsync(ProjectFolderId folderId)

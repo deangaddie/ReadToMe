@@ -143,6 +143,8 @@ namespace Read2Me.Tests.Services.Characters
                 => Task.FromResult<IReadOnlyDictionary<Guid, int>>(new System.Collections.Generic.Dictionary<Guid, int>());
             public Task<List<Read2Me.Core.Models.AudioItemRef>> GetOrderedAudioItemRefsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphItemIds)
                 => Task.FromResult(new List<Read2Me.Core.Models.AudioItemRef>());
+            public Task<List<(Guid ParagraphItemId, Read2Me.Services.Audio.AudioReviewInfo Info)>> GetAudioReviewsAsync(ProjectFolderId folderId)
+                => Task.FromResult(new List<(Guid, Read2Me.Services.Audio.AudioReviewInfo)>());
         }
 
         private static ParagraphContext DefaultContext() =>

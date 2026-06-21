@@ -8,6 +8,7 @@
 @inject BookHierarchyPresenter Presenter
 @inject CharacterQueueService Queue
 @inject AudioQueueService AudioQueue
+@inject AudioReviewService AudioReviews
 @implements IDisposable
 
 @{
@@ -116,6 +117,15 @@
                         @if (!isBusy)
                         {
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                                @if (isAudioMode)
+                                {
+                                    var review = AudioReviews.ReviewOf(FolderId, it.Id);
+                                    @if (review is not null)
+                                    {
+                                        <AudioReviewChip Review="review"
+                                                         OnDismiss="@(() => Presenter.DismissAudioReviewAsync(FolderId, it.Id))" />
+                                    }
+                                }
                                 @if (isAudioMode && isAudioBusy)
                                 {
                                     <AudioQueueStatusChip Status="audioStatus!.Value" />
@@ -268,6 +278,7 @@ else
     {
         Queue.Changed += Refresh;
         AudioQueue.Changed += Refresh;
+        AudioReviews.Changed += Refresh;
     }
 
     void Refresh() => InvokeAsync(StateHasChanged);
@@ -276,5 +287,6 @@ else
     {
         Queue.Changed -= Refresh;
         AudioQueue.Changed -= Refresh;
+        AudioReviews.Changed -= Refresh;
     }
 }

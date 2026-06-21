@@ -1,0 +1,37 @@
+@using MudBlazor
+@using Read2Me.Core.Models
+@using Read2Me.Services.Audio
+
+@{
+    var hasProblem = !Review.NormalizeOk || !Review.VerifyOk;
+}
+
+@if (hasProblem)
+{
+    var reasons = new[] { Review.NormalizeReason, Review.VerifyReason }
+        .Where(r => !string.IsNullOrWhiteSpace(r));
+    var tooltip = string.Join(" · ", reasons);
+
+    @if (Review.State == Read2Me.Core.Models.AudioReviewState.Dismissed)
+    {
+        <MudTooltip Text="@tooltip" Placement="Placement.Top">
+            <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Size="Size.Small"
+                     Style="opacity:0.35; pointer-events:none;" />
+        </MudTooltip>
+    }
+    else
+    {
+        <MudTooltip Text="@tooltip" Placement="Placement.Top">
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+                     Icon="@Icons.Material.Outlined.WarningAmber" Class="mt-0"
+                     OnClose="@(() => OnDismiss.InvokeAsync())">
+                Review
+            </MudChip>
+        </MudTooltip>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public AudioReviewInfo Review { get; set; } = null!;
+    [Parameter] public EventCallback OnDismiss { get; set; }
+}

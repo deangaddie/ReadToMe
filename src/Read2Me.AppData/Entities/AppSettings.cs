@@ -15,5 +15,16 @@ namespace Read2Me.AppData.Entities
         /// Null means the built-in default is used.
         /// </summary>
         public string? VoiceDesignSampleText { get; set; }
+
+        /// <summary>
+        /// Path to the ffmpeg executable used by the audio post-processing pipeline.
+        /// Null/blank means rely on PATH.
+        /// </summary>
+        public string? FfmpegPath { get; set; }
+
+        /// <summary>
+        /// Word-error-rate pass threshold for transcript verification. Defaults to 0.15.
+        /// </summary>
+        public double WerThreshold { get; set; } = 0.15;
     }
 }

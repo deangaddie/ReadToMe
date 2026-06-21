@@ -43,7 +43,8 @@ namespace Read2Me.Tests.State
             IProjectReader Reader,
             IBookCommandHandler CommandHandler,
             FakeBookUseCases BookUseCases,
-            BookTreeState TreeState);
+            BookTreeState TreeState,
+            AudioReviewService AudioReviews);
 
         private static Context Create(IReadOnlyDictionary<Guid, int>? nodeCounts = null)
         {
@@ -62,6 +63,9 @@ namespace Read2Me.Tests.State
                 Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>());
 
+            reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<(Guid, AudioReviewInfo)>());
+
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
@@ -70,8 +74,9 @@ namespace Read2Me.Tests.State
             var snackbar = Substitute.For<ISnackbar>();
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, new AudioQueueService());
-            return new Context(presenter, reader, commandHandler, bookUseCases, treeState);
+            var audioReviews = new AudioReviewService();
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, new AudioQueueService(), audioReviews);
+            return new Context(presenter, reader, commandHandler, bookUseCases, treeState, audioReviews);
         }
 
         // ---------------------------------------------------------------
@@ -668,7 +673,7 @@ namespace Read2Me.Tests.State
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var presenter = new BookHierarchyPresenter(reader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, queue, new AudioQueueService());
+                treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, queue, new AudioQueueService(), new AudioReviewService());
             await presenter.LoadAsync(Folder);
 
             var paragraphId = Guid.NewGuid();
@@ -682,6 +687,29 @@ namespace Read2Me.Tests.State
             await presenter.SetItemCharacterAsync(Folder, item, null);
 
             Assert.Null(queue.OutcomeOf(Folder, paragraphId));
+        }
+
+        // ---------------------------------------------------------------
+        // DismissAudioReviewAsync — issues command + faints in-memory review
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task DismissAudioReviewAsync_IssuesCommand_AndSetsInMemoryDismissed()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var itemId = Guid.NewGuid();
+            ctx.AudioReviews.Set(Folder, itemId, new AudioReviewInfo(
+                Read2Me.Core.Models.AudioReviewState.NeedsReview, NormalizeOk: true, NormalizeReason: null,
+                VerifyOk: false, Wer: 0.3, VerifyReason: "WER 0.3 > 0.15",
+                Transcript: "t", OriginalTextSnapshot: "o"));
+
+            await ctx.Presenter.DismissAudioReviewAsync(Folder, itemId);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<DismissAudioReviewCommand>(c => c.ParagraphItemId == itemId && c.FolderId.Value == Folder.Value));
+            Assert.Equal(Read2Me.Core.Models.AudioReviewState.Dismissed, ctx.AudioReviews.ReviewOf(Folder, itemId)!.State);
         }
 
         // ---------------------------------------------------------------
@@ -738,6 +766,8 @@ namespace Read2Me.Tests.State
                 TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
             reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
                 .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
+            reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
+                .Returns(new List<(Guid, AudioReviewInfo)>());
 
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
@@ -747,13 +777,13 @@ namespace Read2Me.Tests.State
             var snackbar2 = Substitute.For<ISnackbar>();
             var paragraphTtsSettings2 = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings2.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, paragraphTtsSettings2, queue, new AudioQueueService());
+            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, paragraphTtsSettings2, queue, new AudioQueueService(), new AudioReviewService());
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraphs are loaded into the cache.
             await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
 
-            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState);
+            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState, new AudioReviewService());
             var queuedPara = new QueuedParagraph(Folder, para.Id, "preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
             return (ctx, queue, para, queuedPara);
         }

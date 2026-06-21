@@ -143,9 +143,24 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
+  whisper-cpu:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: read2me-whisper-cpu
+    ports:
+      - "9001:9000"
+    environment:
+      - ASR_ENGINE=openai_whisper
+      - ASR_MODEL=base.en
+      - ASR_MODEL_PATH=/root/.cache/whisper
+      - ASR_DEVICE=cpu
+    volumes:
+      - whisper_cpu_cache:/root/.cache/whisper
+    restart: unless-stopped
+
 volumes:
   chatterbox_cache:
   chatterbox_turbo_cache:
   qwen3_cache:
   qwen3_base_cache:
   whisper_cache:
+  whisper_cpu_cache:

@@ -165,5 +165,39 @@ namespace Read2Me.Tests.Services
             Assert.Equal(["P1"], ctx.Preceding.Select(p => p.Text).ToArray());
             Assert.Equal(["P3"], ctx.Following.Select(p => p.Text).ToArray());
         }
+
+        [Fact]
+        public async Task GetAudioReviews_ReturnsAllRowsForFolder()
+        {
+            var (_, ids) = await SeedChapterAsync("A", "B", "C");
+
+            await using (var db = await OpenDbAsync())
+            {
+                // One review row per the first two character paragraphs' items.
+                var items = db.ParagraphItems
+                    .Where(i => i.ParagraphId == ids[0] || i.ParagraphId == ids[1])
+                    .Select(i => i.Id)
+                    .ToList();
+                db.AudioReviews.Add(new AudioReview
+                {
+                    Id = Guid.NewGuid(), ParagraphItemId = items[0],
+                    State = Read2Me.Data.Enums.AudioReviewState.NeedsReview,
+                    NormalizeOk = true, VerifyOk = false, Wer = 0.3, VerifyReason = "over",
+                });
+                db.AudioReviews.Add(new AudioReview
+                {
+                    Id = Guid.NewGuid(), ParagraphItemId = items[1],
+                    State = Read2Me.Data.Enums.AudioReviewState.Dismissed,
+                    NormalizeOk = false, NormalizeReason = "clip", VerifyOk = true,
+                });
+                await db.SaveChangesAsync();
+            }
+
+            var rows = await _reader.GetAudioReviewsAsync(_folder);
+
+            Assert.Equal(2, rows.Count);
+            Assert.Contains(rows, r => r.Info.State == Read2Me.Core.Models.AudioReviewState.NeedsReview && r.Info.Wer == 0.3);
+            Assert.Contains(rows, r => r.Info.State == Read2Me.Core.Models.AudioReviewState.Dismissed && r.Info.NormalizeReason == "clip");
+        }
     }
 }

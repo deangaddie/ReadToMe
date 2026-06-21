@@ -79,6 +79,8 @@ public static class ServiceCollectionExtensions
 
         // Audio
         services.AddScoped<ICommandHandler<SetParagraphItemAudioCommand>, SetParagraphItemAudioHandler>();
+        services.AddScoped<ICommandHandler<SetAudioReviewCommand>, SetAudioReviewHandler>();
+        services.AddScoped<ICommandHandler<DismissAudioReviewCommand>, DismissAudioReviewHandler>();
 
         services.AddScoped<ProjectReader>();
         services.AddScoped<IProjectReader>(sp => sp.GetRequiredService<ProjectReader>());

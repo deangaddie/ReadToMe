@@ -22,6 +22,8 @@ namespace Read2Me.AppData
             modelBuilder.Entity<AppSettings>(e =>
             {
                 e.Property(a => a.VoiceDesignSampleText).HasMaxLength(2000);
+                e.Property(a => a.FfmpegPath).HasMaxLength(1024);
+                e.Property(a => a.WerThreshold).HasDefaultValue(0.15);
             });
 
             modelBuilder.Entity<VoiceDesignServiceConfig>(e =>

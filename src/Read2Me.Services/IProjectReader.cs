@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
+using Read2Me.Services.Audio;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Services
@@ -78,6 +79,9 @@ namespace Read2Me.Services
 
         // Returns per-node (Chapter/Part/Volume) counts of non-Pause ParagraphItems for audio selection roll-up.
         Task<IReadOnlyDictionary<Guid, int>> GetNodeAudioItemCountsAsync(ProjectFolderId folderId);
+
+        // Returns all AudioReview rows for the folder in one query (rows are sparse). For service hydration.
+        Task<List<(Guid ParagraphItemId, AudioReviewInfo Info)>> GetAudioReviewsAsync(ProjectFolderId folderId);
 
         /// <summary>
         /// Returns the text of <paramref name="paragraphId"/> plus up to <paramref name="before"/> preceding

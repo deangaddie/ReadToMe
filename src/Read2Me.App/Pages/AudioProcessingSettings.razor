@@ -1,0 +1,117 @@
+@page "/audio-processing-settings"
+@using Read2Me.Services
+@using Read2Me.Services.Audio
+@inject AudioProcessingSettingsService SettingsService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5">
+    <MudText Typo="Typo.h4">Audio Processing</MudText>
+</MudStack>
+
+<MudCard Outlined="true" Class="mb-5">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">ffmpeg</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Path to the ffmpeg executable used by the audio post-processing pipeline.
+            Leave blank to rely on the system PATH.
+        </MudText>
+        <MudTextField @bind-Value="_ffmpegPathDraft"
+                      Label="ffmpeg path" Variant="Variant.Outlined"
+                      Immediate="true" Placeholder="(blank = rely on PATH)" />
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveFfmpegPathAsync">Save</MudButton>
+        <MudButton Variant="Variant.Outlined"
+                   StartIcon="@Icons.Material.Filled.Check"
+                   Disabled="@_testing"
+                   OnClick="TestFfmpegAsync">
+            @(_testing ? "Testing…" : "Test ffmpeg")
+        </MudButton>
+        @if (_testing)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
+        }
+    </MudCardActions>
+</MudCard>
+
+<MudCard Outlined="true" Class="mb-5">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Transcript verification</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Word-error-rate threshold below which a generated clip passes verification.
+        </MudText>
+        <MudNumericField @bind-Value="_werThresholdDraft"
+                         Label="WER threshold" Variant="Variant.Outlined"
+                         Min="0" Max="1" Step="0.01" />
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveWerThresholdAsync">Save</MudButton>
+    </MudCardActions>
+</MudCard>
+
+@code {
+    string _ffmpegPathDraft = "";
+    double _werThresholdDraft = AudioProcessingSettingsService.DefaultWerThreshold;
+    bool _testing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SettingsService.OnChanged += HandleChanged;
+        await LoadAsync();
+    }
+
+    void HandleChanged() => InvokeAsync(LoadAsync);
+
+    async Task LoadAsync()
+    {
+        var (ffmpegPath, werThreshold) = await SettingsService.GetAsync();
+        _ffmpegPathDraft = ffmpegPath ?? "";
+        _werThresholdDraft = werThreshold;
+        StateHasChanged();
+    }
+
+    async Task SaveFfmpegPathAsync()
+    {
+        await SettingsService.SetFfmpegPathAsync(_ffmpegPathDraft);
+        Snackbar.Add("ffmpeg path saved.", Severity.Success);
+    }
+
+    async Task SaveWerThresholdAsync()
+    {
+        if (_werThresholdDraft < 0 || _werThresholdDraft > 1)
+        {
+            Snackbar.Add("WER threshold must be between 0 and 1.", Severity.Error);
+            return;
+        }
+        await SettingsService.SetWerThresholdAsync(_werThresholdDraft);
+        Snackbar.Add("WER threshold saved.", Severity.Success);
+    }
+
+    async Task TestFfmpegAsync()
+    {
+        _testing = true;
+        StateHasChanged();
+        try
+        {
+            // Probe the path currently in the field, persisting it first so the probe matches the UI.
+            await SettingsService.SetFfmpegPathAsync(_ffmpegPathDraft);
+            var result = await SettingsService.TestFfmpegAsync();
+            Snackbar.Add(result.Message, result.Success ? Severity.Success : Severity.Error);
+        }
+        finally
+        {
+            _testing = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        SettingsService.OnChanged -= HandleChanged;
+    }
+}
