@@ -47,6 +47,13 @@
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Type</MudText>
                         <MudText Typo="Typo.body1">@Project?.Type</MudText>
                     </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSwitch T="bool"
+                                   Label="Narrator-Only Mode"
+                                   Value="@(Project?.NarratorOnlyMode ?? false)"
+                                   ValueChanged="@OnNarratorOnlyModeChangedAsync"
+                                   Color="Color.Primary" />
+                    </MudItem>
                 </MudGrid>
             </MudItem>
             <MudItem xs="12" sm="3" Style="display:flex; flex-direction:column; align-items:flex-end">
@@ -115,6 +122,13 @@
         if (!result.IsSuccess)
             _coverError = result.Error;
         else
+            await OnProjectChanged.InvokeAsync();
+    }
+
+    async Task OnNarratorOnlyModeChangedAsync(bool value)
+    {
+        var result = await ProjectUseCases.SetNarratorOnlyModeAsync(FolderName, value);
+        if (result.IsSuccess)
             await OnProjectChanged.InvokeAsync();
     }
 }

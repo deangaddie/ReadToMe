@@ -65,7 +65,7 @@ namespace Read2Me.Tests.State
                 .Returns(new List<CharacterParagraphRef>());
 
             reader.GetAudioItemRefsAsync(
-                Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>())
+                Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<bool>())
                 .Returns(new List<AudioItemRef>());
 
             reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())

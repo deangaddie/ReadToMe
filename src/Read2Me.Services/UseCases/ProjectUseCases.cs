@@ -63,5 +63,15 @@ namespace Read2Me.Services.UseCases
             }
             catch (Exception) { return Result.Fail("Failed to delete cover image."); }
         }
+
+        public async Task<Result> SetNarratorOnlyModeAsync(string folderName, bool value)
+        {
+            try
+            {
+                await writer.SetNarratorOnlyModeAsync(new ProjectFolderId(folderName), value);
+                return Result.Ok();
+            }
+            catch (Exception) { return Result.Fail("Failed to save narrator-only setting."); }
+        }
     }
 }

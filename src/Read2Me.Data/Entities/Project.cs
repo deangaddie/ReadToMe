@@ -11,5 +11,6 @@ namespace Read2Me.Data.Entities
         public string Filename { get; set; } = string.Empty;
         public BookFileType Type { get; set; }
         public string? CoverImage { get; set; }
+        public bool NarratorOnlyMode { get; set; }
     }
 }

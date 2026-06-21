@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -61,7 +62,12 @@ namespace Read2Me.App.Audio
                     : row.Character?.Name;
                 broadcaster.Publish(new ItemStarted(itemRef.ParagraphItemId, speaker, row.Text));
 
-                var characterId = row.ItemType == ParagraphItemType.Narration
+                var narratorOnly = await db.Projects
+                    .AsNoTracking()
+                    .Select(p => p.NarratorOnlyMode)
+                    .FirstOrDefaultAsync(ct);
+
+                var characterId = narratorOnly || row.ItemType == ParagraphItemType.Narration
                     ? ProjectDbContext.NarratorId
                     : row.CharacterId;
 

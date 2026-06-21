@@ -95,7 +95,7 @@
                             else
                             {
                                 <MudCheckBox T="bool" Value="@isAudioSelected"
-                                             Disabled="@(isCharItem && it.Character == null)"
+                                             Disabled="@(isCharItem && it.Character == null && !Presenter.NarratorOnlyMode)"
                                              ValueChanged="@((bool v) => Presenter.ToggleAudioItemAsync(audioRef, v))"
                                              Size="Size.Small" Class="pa-0 ma-0" />
                             }

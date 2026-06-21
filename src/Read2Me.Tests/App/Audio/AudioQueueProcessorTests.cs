@@ -552,6 +552,95 @@ namespace Read2Me.Tests.App.Audio
             Assert.Equal("Narrator", started.Character);
         }
 
+        // --- NarratorOnlyMode --------------------------------------------------------
+
+        private async Task<(QueuedAudioItem item, Guid itemId)> SeedUnattributedCharacterItemAsync(
+            bool narratorOnlyMode,
+            string voiceAudioFile = "voices/narrator/voice.wav")
+        {
+            await using var db = await OpenDbAsync();
+
+            // Seed Project row with NarratorOnlyMode setting
+            var project = new Project
+            {
+                Id = Guid.NewGuid(),
+                Title = "Test Project",
+                BookTitle = "Test Book",
+                Author = "Author",
+                Filename = "test.txt",
+                Type = Read2Me.Data.Enums.BookFileType.Text,
+                NarratorOnlyMode = narratorOnlyMode
+            };
+            db.Projects.Add(project);
+
+            // Seed narrator voice
+            var voice = new Voice
+            {
+                Id = Guid.NewGuid(),
+                CharacterId = ProjectDbContext.NarratorId,
+                Name = "Narrator Voice",
+                IsDefault = true,
+                Source = VoiceSource.Uploaded,
+                AudioFileName = voiceAudioFile
+            };
+            db.Voices.Add(voice);
+            var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceAudioFile.Replace('/', Path.DirectorySeparatorChar));
+            _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
+
+            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
+            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
+            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(),
+                ParagraphId = para.Id,
+                ItemType = ParagraphItemType.Character,
+                CharacterId = null,  // unattributed
+                Text = "He said something",
+                Order = Key()
+            };
+
+            db.Volumes.Add(vol);
+            db.Parts.Add(part);
+            db.Chapters.Add(ch);
+            db.Paragraphs.Add(para);
+            db.ParagraphItems.Add(item);
+            await db.SaveChangesAsync();
+
+            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
+            return (new QueuedAudioItem(_folder, itemRef), item.Id);
+        }
+
+        [Fact]
+        public async Task ProcessItemAsync_NarratorOnlyMode_UnattributedCharacterItem_UsesNarratorVoice()
+        {
+            var (queuedItem, itemId) = await SeedUnattributedCharacterItemAsync(narratorOnlyMode: true);
+            _transcriber.Transcript = "He said something";
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            // TTS was called — item was not failed
+            Assert.True(_ttsClient.WasCalled);
+            // No Failed event published
+            Assert.DoesNotContain(_events, e => e is Failed);
+            // WAV stored
+            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
+            Assert.True(_fs.FileExists(expectedPath));
+        }
+
+        [Fact]
+        public async Task ProcessItemAsync_NarratorOnlyMode_False_UnattributedCharacterItem_Fails()
+        {
+            var (queuedItem, itemId) = await SeedUnattributedCharacterItemAsync(narratorOnlyMode: false);
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.False(_ttsClient.WasCalled);
+            var failed = Assert.Single(_events.OfType<Failed>());
+            Assert.Contains("No character assigned", failed.Reason);
+        }
+
         // --- Fakes --------------------------------------------------------------------
 
         private sealed class FakeTtsClient : IParagraphTtsClient

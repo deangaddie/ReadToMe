@@ -270,6 +270,51 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task GetAudioItemRefsAsync_NeedsAudioOnly_NarratorOnlyMode_IncludesUnattributedCharacter()
+        {
+            var (chId, _, _, charUnattributedId, _, _, _) = await SeedAudioItemsAsync();
+            var refs = await _reader.GetAudioItemRefsAsync(
+                _folder, BookNodeLevel.Chapter, chId,
+                needsAudioOnly: true, narratorOnlyMode: true);
+            Assert.Contains(refs, r => r.ParagraphItemId == charUnattributedId);
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_NeedsAudioOnly_NarratorOnlyMode_ExcludesUnattributedCharacterWithExistingWav()
+        {
+            await using var db = await OpenDbAsync();
+            var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
+            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
+            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
+            var itemId = Guid.NewGuid();
+            var item = new ParagraphItem
+            {
+                Id = itemId, ParagraphId = para.Id,
+                ItemType = ParagraphItemType.Character, CharacterId = null,
+                Order = Key(), AudioFileName = "audio/existing.wav"
+            };
+            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch);
+            db.Paragraphs.Add(para); db.ParagraphItems.Add(item);
+            await db.SaveChangesAsync();
+
+            var refs = await _reader.GetAudioItemRefsAsync(
+                _folder, BookNodeLevel.Chapter, ch.Id,
+                needsAudioOnly: true, narratorOnlyMode: true);
+            Assert.DoesNotContain(refs, r => r.ParagraphItemId == itemId);
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_NeedsAudioOnly_NarratorOnlyMode_False_ExcludesUnattributedCharacter()
+        {
+            var (chId, _, _, charUnattributedId, _, _, _) = await SeedAudioItemsAsync();
+            var refs = await _reader.GetAudioItemRefsAsync(
+                _folder, BookNodeLevel.Chapter, chId,
+                needsAudioOnly: true, narratorOnlyMode: false);
+            Assert.DoesNotContain(refs, r => r.ParagraphItemId == charUnattributedId);
+        }
+
+        [Fact]
         public async Task GetAudioItemRefsAsync_DefaultFlag_ReturnsFull_NonPauseSet()
         {
             var (chId, narrationNoWavId, charAttributedNoWavId, charUnattributedId, charWithWavId, narrationWithWavId, pauseId) = await SeedAudioItemsAsync();

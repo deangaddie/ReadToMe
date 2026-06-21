@@ -63,6 +63,8 @@ namespace Read2Me.App.State
         private IReadOnlyDictionary<Guid, int> _nodeCounts = new Dictionary<Guid, int>();
         private IReadOnlyDictionary<Guid, int> _audioNodeCounts = new Dictionary<Guid, int>();
 
+        public bool NarratorOnlyMode { get; private set; }
+
         public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
         public bool IsNodeAudioSelectable(Guid nodeId) => _audioNodeCounts.ContainsKey(nodeId) && _audioNodeCounts[nodeId] > 0;
 
@@ -103,6 +105,8 @@ namespace Read2Me.App.State
             ConfirmReread = false;
 
             var overview = await reader.GetBookOverviewAsync(folderId);
+            var project = await reader.GetProjectAsync(folderId);
+            NarratorOnlyMode = project?.NarratorOnlyMode ?? false;
             Filename = overview.Filename;
             HasContent = overview.HasContent;
             Volumes = overview.Volumes;
@@ -302,7 +306,7 @@ namespace Read2Me.App.State
 
         public async Task SetAudioNodeAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool on, bool needsAudioOnly = false)
         {
-            var refs = await reader.GetAudioItemRefsAsync(folderId, level, nodeId, needsAudioOnly);
+            var refs = await reader.GetAudioItemRefsAsync(folderId, level, nodeId, needsAudioOnly, narratorOnlyMode: NarratorOnlyMode);
             if (on)
                 AudioSelection.AddItems(refs);
             else
