@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -39,6 +40,8 @@ namespace Read2Me.Tests.App.Audio
         private readonly FakeTranscriptionSettings _transcriptionSettings;
         private readonly FakeAudioProcessingSettings _audioProcessingSettings;
         private readonly AudioReviewService _reviews;
+        private readonly AudioGenBroadcaster _broadcaster;
+        private readonly List<AudioGenEvent> _events = new();
         private readonly AudioQueueProcessor _sut;
         private readonly ProjectFolderId _folder;
 
@@ -76,6 +79,8 @@ namespace Read2Me.Tests.App.Audio
             _transcriptionSettings = new FakeTranscriptionSettings(TranscriptionConfig);
             _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15);
             _reviews = new AudioReviewService();
+            _broadcaster = new AudioGenBroadcaster();
+            _broadcaster.Event += e => _events.Add(e);
 
             var services = new ServiceCollection();
             services.AddBookCommandHandlers();
@@ -97,6 +102,7 @@ namespace Read2Me.Tests.App.Audio
                 _transcriptionSettings,
                 _audioProcessingSettings,
                 _reviews,
+                _broadcaster,
                 NullLogger<AudioQueueProcessor>.Instance);
         }
 
@@ -424,6 +430,103 @@ namespace Read2Me.Tests.App.Audio
             Assert.Null(_queue.OutcomeOf(_folder, itemId));
             // MarkComplete ran (audio version recorded).
             Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
+        }
+
+        // --- Audio Gen Stream events --------------------------------------------------
+
+        [Fact]
+        public async Task HappyPath_PublishesItemStartedAudioGeneratedNormalizedTranscribedVerified_InOrder()
+        {
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            var started = Assert.IsType<ItemStarted>(_events[0]);
+            Assert.Equal(itemId, started.Id);
+            Assert.Equal("Bilbo", started.Character);
+            Assert.Equal("In a hole in the ground", started.Text);
+
+            Assert.Equal(itemId, Assert.IsType<AudioGenerated>(_events[1]).Id);
+
+            var normalized = Assert.IsType<Normalized>(_events[2]);
+            Assert.True(normalized.Ok);
+
+            Assert.Equal(itemId, Assert.IsType<Transcribed>(_events[3]).Id);
+
+            var verified = Assert.IsType<Verified>(_events[4]);
+            Assert.True(verified.Ok);
+
+            Assert.DoesNotContain(_events, e => e is Failed);
+        }
+
+        [Fact]
+        public async Task WerOverThreshold_PublishesVerifiedFalseWithWer_NoFailed()
+        {
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _wer.Result = 0.42;
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            var verified = _events.OfType<Verified>().Single();
+            Assert.False(verified.Ok);
+            Assert.Equal(0.42, verified.Wer);
+            Assert.DoesNotContain(_events, e => e is Failed);
+        }
+
+        [Fact]
+        public async Task NormalizeSkipped_PublishesNormalizedFalseWithReason_NoFailed()
+        {
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _normalizer.Result = (NormalizeStatus.Skipped, "ffmpeg failed: boom");
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            var normalized = _events.OfType<Normalized>().Single();
+            Assert.False(normalized.Ok);
+            Assert.Equal("ffmpeg failed: boom", normalized.Reason);
+            Assert.DoesNotContain(_events, e => e is Failed);
+        }
+
+        [Fact]
+        public async Task HardFail_CharacterKnown_NoDefaultVoice_PublishesItemStartedThenFailed_NoPhaseEvents()
+        {
+            var (queuedItem, itemId) = await SeedCharacterItemAsync(hasDefaultVoice: false);
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            var started = Assert.IsType<ItemStarted>(_events[0]);
+            Assert.Equal("Bilbo", started.Character);
+            Assert.IsType<Failed>(_events[1]);
+            Assert.Equal(2, _events.Count);
+            Assert.DoesNotContain(_events, e => e is AudioGenerated or Normalized or Transcribed or Verified);
+        }
+
+        [Fact]
+        public async Task HardFail_RowNotFound_PublishesItemStartedNullThenFailed()
+        {
+            var missing = Guid.NewGuid();
+            var itemRef = new AudioItemRef(missing, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            var queuedItem = new QueuedAudioItem(_folder, itemRef);
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            var started = Assert.IsType<ItemStarted>(_events[0]);
+            Assert.Equal(missing, started.Id);
+            Assert.Null(started.Character);
+            Assert.Null(started.Text);
+            Assert.IsType<Failed>(_events[1]);
+        }
+
+        [Fact]
+        public async Task NarrationItem_ItemStartedReportsNarratorAsSpeaker()
+        {
+            var (queuedItem, itemId) = await SeedNarrationItemAsync();
+            _transcriber.Transcript = "The narrator spoke";
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            var started = Assert.IsType<ItemStarted>(_events[0]);
+            Assert.Equal("Narrator", started.Character);
         }
 
         // --- Fakes --------------------------------------------------------------------

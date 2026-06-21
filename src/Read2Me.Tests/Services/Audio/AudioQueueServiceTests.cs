@@ -45,7 +45,7 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
-        public void Enqueue_AlreadyComplete_IsNoOp()
+        public void Enqueue_AlreadyComplete_RequeuesForRegeneration()
         {
             var svc = new AudioQueueService();
             var item = MakeItem();
@@ -54,7 +54,7 @@ namespace Read2Me.Tests.Services.Audio
 
             svc.Enqueue(Folder, [item]);
 
-            Assert.Null(svc.StatusOf(Folder, item.ParagraphItemId));
+            Assert.Equal(AudioItemQueueStatus.Queued, svc.StatusOf(Folder, item.ParagraphItemId));
         }
 
         [Fact]

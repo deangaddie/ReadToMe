@@ -33,7 +33,6 @@ namespace Read2Me.Services.Audio
             Channel.CreateUnbounded<QueuedAudioItem>(new UnboundedChannelOptions { SingleReader = true });
 
         private readonly QueueStateStore<AudioItemKey, AudioItemOutcome> _store = new();
-        private readonly ConcurrentDictionary<AudioItemKey, byte> _complete = new();
         private readonly ConcurrentDictionary<AudioItemKey, long> _versions = new();
 
         public event Action? Changed;
@@ -46,7 +45,6 @@ namespace Read2Me.Services.Audio
             foreach (var item in items)
             {
                 var key = new AudioItemKey(folder, item.ParagraphItemId);
-                if (_complete.ContainsKey(key)) continue;
                 if (_store.TryMarkQueued(key))
                     _channel.Writer.TryWrite(new QueuedAudioItem(folder, item));
             }
@@ -63,7 +61,6 @@ namespace Read2Me.Services.Audio
         {
             var key = new AudioItemKey(folder, item.ParagraphItemId);
             _store.Finish(key);
-            _complete.TryAdd(key, 0);
             _versions[key] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             AudioFileAssigned?.Invoke(folder, item.ParagraphItemId, relativePath);
             Changed?.Invoke();
@@ -83,7 +80,6 @@ namespace Read2Me.Services.Audio
             oldChannel.Writer.TryComplete();
 
             _store.ClearAll();
-            _complete.Clear();
             _versions.Clear();
 
             Changed?.Invoke();

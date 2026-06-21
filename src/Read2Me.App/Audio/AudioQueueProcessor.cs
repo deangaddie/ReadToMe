@@ -29,6 +29,7 @@ namespace Read2Me.App.Audio
         TranscriptionSettingsService transcriptionSettings,
         AudioProcessingSettingsService audioProcessingSettings,
         AudioReviewService reviews,
+        AudioGenBroadcaster broadcaster,
         ILogger<AudioQueueProcessor> logger) : IAudioQueueProcessor
     {
         public async Task ProcessItemAsync(QueuedAudioItem queued, CancellationToken ct)
@@ -48,9 +49,17 @@ namespace Read2Me.App.Audio
 
                 if (row is null)
                 {
+                    broadcaster.Publish(new ItemStarted(itemRef.ParagraphItemId, null, null));
+                    broadcaster.Publish(new Failed(itemRef.ParagraphItemId,
+                        $"ParagraphItem {itemRef.ParagraphItemId} not found"));
                     queue.MarkFailed(folder, itemRef, $"ParagraphItem {itemRef.ParagraphItemId} not found");
                     return;
                 }
+
+                var speaker = row.ItemType == ParagraphItemType.Narration
+                    ? "Narrator"
+                    : row.Character?.Name;
+                broadcaster.Publish(new ItemStarted(itemRef.ParagraphItemId, speaker, row.Text));
 
                 var characterId = row.ItemType == ParagraphItemType.Narration
                     ? ProjectDbContext.NarratorId
@@ -58,6 +67,7 @@ namespace Read2Me.App.Audio
 
                 if (characterId is null)
                 {
+                    broadcaster.Publish(new Failed(itemRef.ParagraphItemId, "No character assigned to item"));
                     queue.MarkFailed(folder, itemRef, "No character assigned to item");
                     return;
                 }
@@ -72,6 +82,7 @@ namespace Read2Me.App.Audio
                     var charName = row.ItemType == ParagraphItemType.Narration
                         ? "Narrator"
                         : (row.Character?.Name ?? characterId.ToString());
+                    broadcaster.Publish(new Failed(itemRef.ParagraphItemId, $"No default voice for {charName}"));
                     queue.MarkFailed(folder, itemRef, $"No default voice for {charName}");
                     return;
                 }
@@ -79,6 +90,7 @@ namespace Read2Me.App.Audio
                 var config = await ttsSettings.GetActiveConfigAsync();
                 if (config is null)
                 {
+                    broadcaster.Publish(new Failed(itemRef.ParagraphItemId, "No active TTS configuration"));
                     queue.MarkFailed(folder, itemRef, "No active TTS configuration");
                     return;
                 }
@@ -89,6 +101,7 @@ namespace Read2Me.App.Audio
                 using var refAudio = fs.OpenRead(refAudioPath);
 
                 var wavStream = await client.GenerateAsync(row.Text ?? string.Empty, row.VoiceInstructions, refAudio, config, ct);
+                broadcaster.Publish(new AudioGenerated(itemRef.ParagraphItemId));
 
                 var sourceText = row.Text ?? string.Empty;
 
@@ -99,6 +112,7 @@ namespace Read2Me.App.Audio
                 // Stage 1: normalize loudness. On skip the original audio is returned intact.
                 var normalizeResult = await normalizer.NormalizeAsync(wavStream, ffmpegPath, ct);
                 var normalizeOk = normalizeResult.Status == NormalizeStatus.Normalized;
+                broadcaster.Publish(new Normalized(itemRef.ParagraphItemId, normalizeOk, normalizeResult.Reason));
 
                 // Always store the single {id}.wav (normalized when ffmpeg worked, else original).
                 var relativePath = $"audio/{itemRef.ParagraphItemId}.wav";
@@ -113,6 +127,10 @@ namespace Read2Me.App.Audio
                 // Stage 2: verify the stored audio against the source text (runs regardless of normalize outcome).
                 var (verifyOk, wer, verifyReason, transcript) =
                     await VerifyAsync(folderPath, relativePath, sourceText, werThreshold, ct);
+
+                if (transcript is not null)
+                    broadcaster.Publish(new Transcribed(itemRef.ParagraphItemId, transcript));
+                broadcaster.Publish(new Verified(itemRef.ParagraphItemId, verifyOk, wer, verifyReason));
 
                 // Single review signal: both ok ⇒ row deleted, else upsert. Mirror in-memory for live UI.
                 await commands.ExecuteAsync(
@@ -150,6 +168,7 @@ namespace Read2Me.App.Audio
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed processing audio item {ItemId}", itemRef.ParagraphItemId);
+                broadcaster.Publish(new Failed(itemRef.ParagraphItemId, ex.Message));
                 queue.MarkFailed(folder, itemRef, ex.Message);
             }
         }

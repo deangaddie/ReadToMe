@@ -1,0 +1,118 @@
+@using Read2Me.Services.Audio
+@using Read2Me.App.Audio
+@inject AudioGenBroadcaster Broadcaster
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div @ref="_scrollContainer"
+     style="height:100%; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:4px;">
+    @if (_model.Cards.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="padding:16px; text-align:center;">
+            Waiting for audio generation...
+        </MudText>
+    }
+    @foreach (var card in _model.Cards)
+    {
+        <MudCard Outlined="true">
+            <MudCardHeader Style="padding:8px 16px; background:var(--mud-palette-background-grey);">
+                <CardHeaderContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small" Style="opacity:0.6;" />
+                        <MudText Typo="Typo.caption" Style="opacity:0.8; font-weight:600;">
+                            @(string.IsNullOrEmpty(card.Character) ? "—" : card.Character)
+                        </MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap; margin-top:4px;">@card.Text</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+
+            @if (card.HasFailed)
+            {
+                <div style="padding:8px 16px;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                        <MudText Typo="Typo.body2" Color="Color.Error">@card.FailureReason</MudText>
+                    </MudStack>
+                </div>
+            }
+            else
+            {
+                <div style="padding:8px 16px; display:flex; flex-direction:column; gap:6px;">
+                    @PhaseRow("Generate audio", card.AudioGen, null)
+                    @PhaseRow("Normalize", card.Normalize, card.NormalizeReason)
+                    @PhaseRow("Transcribe", card.Transcribe, null)
+                    @PhaseRow("Verify", card.Verify, VerifyDetail(card))
+
+                    @if (!string.IsNullOrEmpty(card.Transcript))
+                    {
+                        <div style="margin-top:4px; padding-top:6px; border-top:1px solid var(--mud-palette-divider);">
+                            <MudText Typo="Typo.caption" Style="opacity:0.6;">Transcript</MudText>
+                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap; font-family:monospace; font-size:0.78rem;">@card.Transcript</MudText>
+                        </div>
+                    }
+                </div>
+            }
+        </MudCard>
+    }
+</div>
+
+@code {
+    private readonly AudioGenStreamModel _model = new();
+    private ElementReference _scrollContainer;
+    private bool _needsScroll;
+
+    protected override void OnInitialized() => Broadcaster.Event += OnEvent;
+
+    private void OnEvent(AudioGenEvent e)
+    {
+        InvokeAsync(() =>
+        {
+            _model.Apply(e);
+            _needsScroll = true;
+            StateHasChanged();
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_needsScroll)
+        {
+            _needsScroll = false;
+            await JS.InvokeVoidAsync("read2meScrollToBottom", _scrollContainer);
+        }
+    }
+
+    private static string? VerifyDetail(AudioGenCard card)
+    {
+        if (card.Wer is { } wer)
+            return $"WER {wer.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}";
+        return card.VerifyReason;
+    }
+
+    private RenderFragment PhaseRow(string label, PhaseState state, string? detail) => __builder =>
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            @switch (state)
+            {
+                case PhaseState.Pending:
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                                         Style="width:14px;height:14px;opacity:0.6;" />
+                    break;
+                case PhaseState.Ok:
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                    break;
+                case PhaseState.Fail:
+                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
+                    break;
+            }
+            <MudText Typo="Typo.body2">@label</MudText>
+            @if (!string.IsNullOrEmpty(detail))
+            {
+                <MudText Typo="Typo.caption" Style="opacity:0.6;">— @detail</MudText>
+            }
+        </MudStack>
+    };
+
+    public void Dispose() => Broadcaster.Event -= OnEvent;
+}

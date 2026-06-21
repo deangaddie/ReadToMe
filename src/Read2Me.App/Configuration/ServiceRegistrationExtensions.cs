@@ -88,6 +88,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<AudioProcessingSettingsService>();
         services.AddSingleton<IWerComparer, WerComparer>();
         services.AddSingleton<Read2Me.Services.Audio.AudioReviewService>();
+        services.AddSingleton<Read2Me.Services.Audio.AudioGenBroadcaster>();
         services.AddScoped<IAudioNormalizer, FfmpegAudioNormalizer>();
         services.AddScoped<ITranscriptionClientResolver, TranscriptionClientResolver>();
         services.AddKeyedScoped<ITranscriptionClient, WhisperTranscriptionClient>(Read2Me.AppData.Entities.TranscriptionServiceType.LocalWhisper);
