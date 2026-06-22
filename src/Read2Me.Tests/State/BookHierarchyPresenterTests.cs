@@ -1204,7 +1204,7 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
-        public async Task SetItemCharacterAsync_ClearCharacter_DoesNotGoNegative()
+        public async Task SetItemCharacterAsync_ClearCharacter_RaisesBadge()
         {
             var ctx = Create();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
@@ -1228,10 +1228,10 @@ namespace Read2Me.Tests.State
             };
             para.Items.Add(item);
 
-            // Clear the character (set to null) — should not go negative
+            // Clear the character — item becomes unattributed, badge rises to 1
             await ctx.Presenter.SetItemCharacterAsync(Folder, item, null);
 
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
         }
     }
 }

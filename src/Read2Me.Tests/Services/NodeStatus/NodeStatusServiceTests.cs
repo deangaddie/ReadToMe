@@ -121,17 +121,18 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         // ---------------------------------------------------------------
-        // DecrementUnattributed
+        // OnCharacterAttributed
         // ---------------------------------------------------------------
 
         [Fact]
-        public void DecrementUnattributed_NonLastItem_NodeCountStillOne()
+        public void OnCharacterAttributed_NonLastItem_NodeCountStillOne()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
             svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 2)]);
 
-            svc.DecrementUnattributed(Folder, para);
+            // Assign one of two items: 1 remaining
+            svc.OnCharacterAttributed(Folder, para, remainingUnattributed: 1);
 
             Assert.Equal(1, svc.StatusForNode(Folder, ch).AttributionRemaining);
             Assert.Equal(1, svc.StatusForNode(Folder, part).AttributionRemaining);
@@ -139,14 +140,14 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         [Fact]
-        public void DecrementUnattributed_LastItem_NodeCountDropsToZero()
+        public void OnCharacterAttributed_LastItem_NodeCountDropsToZero()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
             svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 2)]);
 
-            svc.DecrementUnattributed(Folder, para);
-            svc.DecrementUnattributed(Folder, para);
+            // Assign all items: 0 remaining
+            svc.OnCharacterAttributed(Folder, para, remainingUnattributed: 0);
 
             Assert.Equal(0, svc.StatusForNode(Folder, ch).AttributionRemaining);
             Assert.Equal(0, svc.StatusForNode(Folder, part).AttributionRemaining);
@@ -154,20 +155,20 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         [Fact]
-        public void DecrementUnattributed_ClampsAtZero_NeverNegative()
+        public void OnCharacterAttributed_RemainingIncreases_RaisesBadge()
         {
+            // Option X: assignment semantics allow the badge to rise (e.g. un-assigning a character)
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 1)]);
+            svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 0)]);
 
-            svc.DecrementUnattributed(Folder, para);
-            svc.DecrementUnattributed(Folder, para); // extra decrement — must not go negative
+            svc.OnCharacterAttributed(Folder, para, remainingUnattributed: 1);
 
-            Assert.Equal(0, svc.StatusForNode(Folder, ch).AttributionRemaining);
+            Assert.Equal(1, svc.StatusForNode(Folder, ch).AttributionRemaining);
         }
 
         [Fact]
-        public void DecrementUnattributed_FiresChanged()
+        public void OnCharacterAttributed_FiresChanged()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
@@ -176,60 +177,13 @@ namespace Read2Me.Tests.Services.NodeStatus
             int fired = 0;
             svc.Changed += () => fired++;
 
-            svc.DecrementUnattributed(Folder, para);
+            svc.OnCharacterAttributed(Folder, para, remainingUnattributed: 1);
 
             Assert.Equal(1, fired);
         }
 
         // ---------------------------------------------------------------
-        // ZeroParagraphAttribution
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public void ZeroParagraphAttribution_DropsParagraphFromCount()
-        {
-            var svc = new NodeStatusService();
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 3)]);
-
-            svc.ZeroParagraphAttribution(Folder, para);
-
-            Assert.Equal(0, svc.StatusForNode(Folder, ch).AttributionRemaining);
-        }
-
-        [Fact]
-        public void ZeroParagraphAttribution_TwoParagraphs_OnlyTargetDrops()
-        {
-            var svc = new NodeStatusService();
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid();
-            var para1 = Guid.NewGuid(); var para2 = Guid.NewGuid();
-            svc.Seed(Folder, [
-                MakeRow(para1, ch, part, vol, unattributed: 2),
-                MakeRow(para2, ch, part, vol, unattributed: 1),
-            ]);
-
-            svc.ZeroParagraphAttribution(Folder, para1);
-
-            Assert.Equal(1, svc.StatusForNode(Folder, ch).AttributionRemaining);
-        }
-
-        [Fact]
-        public void ZeroParagraphAttribution_FiresChanged()
-        {
-            var svc = new NodeStatusService();
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 1)]);
-
-            int fired = 0;
-            svc.Changed += () => fired++;
-
-            svc.ZeroParagraphAttribution(Folder, para);
-
-            Assert.Equal(1, fired);
-        }
-
-        // ---------------------------------------------------------------
-        // DecrementMissingAudio
+        // OnAudioAssigned
         // ---------------------------------------------------------------
 
         private static ParagraphStatusSeedRow MakeAudioRow(
@@ -238,13 +192,13 @@ namespace Read2Me.Tests.Services.NodeStatus
             new(paragraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: missingAudio, Review: 0);
 
         [Fact]
-        public void DecrementMissingAudio_NonLastItem_NodeAudioCountStillOne()
+        public void OnAudioAssigned_NonLastItem_NodeAudioCountStillOne()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
             svc.Seed(Folder, [MakeAudioRow(para, ch, part, vol, missingAudio: 2)]);
 
-            svc.DecrementMissingAudio(Folder, para);
+            svc.OnAudioAssigned(Folder, para);
 
             Assert.Equal(1, svc.StatusForNode(Folder, ch).AudioRemaining);
             Assert.Equal(1, svc.StatusForNode(Folder, part).AudioRemaining);
@@ -252,14 +206,14 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         [Fact]
-        public void DecrementMissingAudio_LastItem_NodeAudioCountDropsToZero()
+        public void OnAudioAssigned_LastItem_NodeAudioCountDropsToZero()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
             svc.Seed(Folder, [MakeAudioRow(para, ch, part, vol, missingAudio: 2)]);
 
-            svc.DecrementMissingAudio(Folder, para);
-            svc.DecrementMissingAudio(Folder, para);
+            svc.OnAudioAssigned(Folder, para);
+            svc.OnAudioAssigned(Folder, para);
 
             Assert.Equal(0, svc.StatusForNode(Folder, ch).AudioRemaining);
             Assert.Equal(0, svc.StatusForNode(Folder, part).AudioRemaining);
@@ -267,20 +221,20 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         [Fact]
-        public void DecrementMissingAudio_ClampsAtZero_NeverNegative()
+        public void OnAudioAssigned_ClampsAtZero_NeverNegative()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
             svc.Seed(Folder, [MakeAudioRow(para, ch, part, vol, missingAudio: 1)]);
 
-            svc.DecrementMissingAudio(Folder, para);
-            svc.DecrementMissingAudio(Folder, para);
+            svc.OnAudioAssigned(Folder, para);
+            svc.OnAudioAssigned(Folder, para); // extra — must not go negative
 
             Assert.Equal(0, svc.StatusForNode(Folder, ch).AudioRemaining);
         }
 
         [Fact]
-        public void DecrementMissingAudio_FiresChanged()
+        public void OnAudioAssigned_FiresChanged()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
@@ -289,7 +243,7 @@ namespace Read2Me.Tests.Services.NodeStatus
             int fired = 0;
             svc.Changed += () => fired++;
 
-            svc.DecrementMissingAudio(Folder, para);
+            svc.OnAudioAssigned(Folder, para);
 
             Assert.Equal(1, fired);
         }
@@ -306,11 +260,11 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         // ---------------------------------------------------------------
-        // SetParagraphReview
+        // OnReviewChanged
         // ---------------------------------------------------------------
 
         [Fact]
-        public void SetParagraphReview_True_NodeReviewCountIsOne()
+        public void OnReviewChanged_True_NodeReviewCountIsOne()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
@@ -322,13 +276,13 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         [Fact]
-        public void SetParagraphReview_False_NodeReviewDropsToZero()
+        public void OnReviewChanged_False_NodeReviewDropsToZero()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
             svc.Seed(Folder, [new ParagraphStatusSeedRow(para, ch, part, vol, Unattributed: 0, MissingAudio: 0, Review: 1)]);
 
-            svc.SetParagraphReview(Folder, para, needsReview: false);
+            svc.OnReviewChanged(Folder, para, needsReview: false);
 
             Assert.Equal(0, svc.StatusForNode(Folder, ch).Review);
             Assert.Equal(0, svc.StatusForNode(Folder, part).Review);
@@ -336,19 +290,19 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         [Fact]
-        public void SetParagraphReview_True_NodeReviewIncrementsFromZero()
+        public void OnReviewChanged_True_NodeReviewIncrementsFromZero()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
             svc.Seed(Folder, [new ParagraphStatusSeedRow(para, ch, part, vol, Unattributed: 0, MissingAudio: 0, Review: 0)]);
 
-            svc.SetParagraphReview(Folder, para, needsReview: true);
+            svc.OnReviewChanged(Folder, para, needsReview: true);
 
             Assert.Equal(1, svc.StatusForNode(Folder, ch).Review);
         }
 
         [Fact]
-        public void SetParagraphReview_FiresChanged()
+        public void OnReviewChanged_FiresChanged()
         {
             var svc = new NodeStatusService();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
@@ -357,7 +311,7 @@ namespace Read2Me.Tests.Services.NodeStatus
             int fired = 0;
             svc.Changed += () => fired++;
 
-            svc.SetParagraphReview(Folder, para, needsReview: false);
+            svc.OnReviewChanged(Folder, para, needsReview: false);
 
             Assert.Equal(1, fired);
         }

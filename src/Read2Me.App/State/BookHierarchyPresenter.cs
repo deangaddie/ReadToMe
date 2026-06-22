@@ -199,10 +199,7 @@ namespace Read2Me.App.State
             // Recompute remaining unattributed Character items now that the item is stamped.
             var remainingUnattributed = item.Paragraph?.Items
                 .Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null) ?? 0;
-            if (remainingUnattributed == 0)
-                nodeStatus.ZeroParagraphAttribution(folderId, item.ParagraphId);
-            else
-                nodeStatus.DecrementUnattributed(folderId, item.ParagraphId);
+            nodeStatus.OnCharacterAttributed(folderId, item.ParagraphId, remainingUnattributed);
 
             NotifyStateChanged();
         }
@@ -216,7 +213,7 @@ namespace Read2Me.App.State
             await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
             ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character);
 
-            nodeStatus.ZeroParagraphAttribution(folderId, paragraph.Id);
+            nodeStatus.OnCharacterAttributed(folderId, paragraph.Id, remainingUnattributed: 0);
 
             NotifyStateChanged();
         }
@@ -337,7 +334,7 @@ namespace Read2Me.App.State
 
                 var hasAnyNeedsReview = para.Items.Any(i =>
                     audioReviews.ReviewOf(folderId, i.Id)?.State == AudioReviewState.NeedsReview);
-                nodeStatus.SetParagraphReview(folderId, para.Id, hasAnyNeedsReview);
+                nodeStatus.OnReviewChanged(folderId, para.Id, hasAnyNeedsReview);
                 break;
             }
         }
@@ -428,7 +425,7 @@ namespace Read2Me.App.State
                 if (item is not null)
                 {
                     item.AudioFileName = relativePath;
-                    nodeStatus.DecrementMissingAudio(folder, item.ParagraphId);
+                    nodeStatus.OnAudioAssigned(folder, item.ParagraphId);
                     break;
                 }
             }

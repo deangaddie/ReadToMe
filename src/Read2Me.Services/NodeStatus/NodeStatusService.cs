@@ -68,18 +68,18 @@ namespace Read2Me.Services.NodeStatus
             Changed?.Invoke();
         }
 
-        public void DecrementUnattributed(ProjectFolderId folder, Guid paragraphId)
+        public void OnCharacterAttributed(ProjectFolderId folder, Guid paragraphId, int remainingUnattributed)
         {
             var key = new ParagraphKey(folder, paragraphId);
             if (_entries.TryGetValue(key, out var status))
             {
                 lock (status)
-                    status.Unattributed = Math.Max(0, status.Unattributed - 1);
+                    status.Unattributed = remainingUnattributed;
             }
             Changed?.Invoke();
         }
 
-        public void DecrementMissingAudio(ProjectFolderId folder, Guid paragraphId)
+        public void OnAudioAssigned(ProjectFolderId folder, Guid paragraphId)
         {
             var key = new ParagraphKey(folder, paragraphId);
             if (_entries.TryGetValue(key, out var status))
@@ -90,18 +90,7 @@ namespace Read2Me.Services.NodeStatus
             Changed?.Invoke();
         }
 
-        public void ZeroParagraphAttribution(ProjectFolderId folder, Guid paragraphId)
-        {
-            var key = new ParagraphKey(folder, paragraphId);
-            if (_entries.TryGetValue(key, out var status))
-            {
-                lock (status)
-                    status.Unattributed = 0;
-            }
-            Changed?.Invoke();
-        }
-
-        public void SetParagraphReview(ProjectFolderId folder, Guid paragraphId, bool needsReview)
+        public void OnReviewChanged(ProjectFolderId folder, Guid paragraphId, bool needsReview)
         {
             var key = new ParagraphKey(folder, paragraphId);
             if (_entries.TryGetValue(key, out var status))
