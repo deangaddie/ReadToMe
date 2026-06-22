@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Read2Me.Core.Audio;
@@ -9,15 +8,12 @@ using Read2Me.Core.Models;
 
 namespace Read2Me.Services.Audio
 {
-    public class FileAudioPipeline(IFileSystem fs) : IAudioPipeline
+    public class FileAudioPipeline(IFileSystem fs, IAudioNormalizer normalizer, AudioProcessingSettingsService settingsService) : IAudioPipeline
     {
-        private static readonly string[] AllowedExtensions = [".wav", ".aac"];
-
         public async Task<string> StoreAsync(AudioStoreRequest request, CancellationToken ct = default)
         {
-            var ext = request.Extension.ToLowerInvariant();
-            if (!AllowedExtensions.Contains(ext))
-                throw new InvalidOperationException($"Unsupported audio format '{ext}'. Accepted: .wav, .aac");
+            var settings = await settingsService.GetAsync();
+            var normalizedAudio = await normalizer.NormalizeToWavAsync(request.Source, settings.FfmpegPath, ct);
 
             var projectFolder = fs.GetProjectFolderPath(request.FolderId.Value);
             var charFolder = Path.Combine(projectFolder, "voices", request.CharacterId.ToString());
@@ -29,10 +25,10 @@ namespace Read2Me.Services.Audio
             if (string.IsNullOrEmpty(sanitizedVoiceName))
                 sanitizedVoiceName = request.VoiceId.ToString("N")[..8];
 
-            var fileName = $"{request.VoiceId}-{sanitizedVoiceName}{ext}";
+            var fileName = $"{request.VoiceId}-{sanitizedVoiceName}.wav";
             var fullPath = Path.Combine(charFolder, fileName);
 
-            await fs.WriteFileAsync(fullPath, request.Source);
+            await fs.WriteFileAsync(fullPath, normalizedAudio);
 
             return Path.Combine("voices", request.CharacterId.ToString(), fileName)
                        .Replace('\\', '/');

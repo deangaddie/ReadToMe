@@ -779,6 +779,9 @@ namespace Read2Me.Tests.App.Audio
                 ms.Position = 0;
                 return new NormalizeResult(Result.Status, ms, Result.Reason);
             }
+
+            public Task<Stream> NormalizeToWavAsync(Stream input, string? ffmpegPath, CancellationToken ct = default) =>
+                throw new NotSupportedException("Not used in audio queue processor tests.");
         }
 
         private sealed class FakeWerComparer : IWerComparer

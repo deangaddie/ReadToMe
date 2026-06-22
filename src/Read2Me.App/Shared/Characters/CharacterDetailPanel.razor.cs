@@ -135,10 +135,15 @@ namespace Read2Me.App.Shared.Characters
         async Task OnReplaceAudioAsync(InputFileChangeEventArgs e, Voice voice)
         {
             var ext = Path.GetExtension(e.File.Name).ToLowerInvariant();
-            if (ext is not (".wav" or ".aac")) return;
             await using var stream = e.File.OpenReadStream(maxAllowedSize: 200 * 1024 * 1024);
             await Presenter.ReplaceVoiceAudioAsync(Character.Id, voice.Id, voice.Name, stream, ext);
-            await CycleAudioPlayerAsync(voice.Id);
+            if (Presenter.Error != null)
+                Snackbar.Add(Presenter.Error, Severity.Error);
+            else
+            {
+                await CycleAudioPlayerAsync(voice.Id);
+                Snackbar.Add("Voice audio normalised.", Severity.Success);
+            }
         }
 
         // ── Prompt editing ────────────────────────────────────────────────────────
@@ -198,8 +203,13 @@ namespace Read2Me.App.Shared.Characters
             StateHasChanged();
             await Presenter.GenerateVoiceAudioAsync(Character.Id, voice.Id, voice.Name, prompt);
             _generatingAudio = null;
-            _drafts.Clear(voice.Id, VoiceDraftField.Prompt);
-            await CycleAudioPlayerAsync(voice.Id);
+            if (Presenter.Error != null)
+                Snackbar.Add(Presenter.Error, Severity.Error);
+            else
+            {
+                _drafts.Clear(voice.Id, VoiceDraftField.Prompt);
+                await CycleAudioPlayerAsync(voice.Id);
+            }
         }
 
         // ── Transcript ────────────────────────────────────────────────────────────

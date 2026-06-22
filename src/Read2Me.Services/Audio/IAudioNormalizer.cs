@@ -30,5 +30,13 @@ namespace Read2Me.Services.Audio
         /// executable path, or null/blank to rely on PATH.
         /// </summary>
         Task<NormalizeResult> NormalizeAsync(Stream wav, string? ffmpegPath, CancellationToken ct = default);
+
+        /// <summary>
+        /// Converts <paramref name="input"/> (any ffmpeg-decodable format) to a canonical reference WAV
+        /// (24 kHz, mono, 16-bit PCM) with EBU R128 loudness normalisation. The returned stream is
+        /// seekable and rewound. On loudnorm failure falls back to bare transcode. Throws on absent
+        /// ffmpeg or undecodable input; never returns the original bytes unchanged.
+        /// </summary>
+        Task<Stream> NormalizeToWavAsync(Stream input, string? ffmpegPath, CancellationToken ct = default);
     }
 }

@@ -144,7 +144,7 @@
                                             @(v.AudioFileName != null ? "Replace audio" : "Upload audio")
                                         </MudButton>
                                         <InputFile id="@($"voice-upload-{v.Id}")" OnChange="@(e => OnReplaceAudioAsync(e, v))"
-                                                   accept=".wav,.aac" style="display:none" />
+                                                   style="display:none" />
                                     </MudStack>
                                 }
                                 else
