@@ -1,7 +1,9 @@
 @using System.IO
 @using Read2Me.App.State
+@using Read2Me.Core.Models
 @using Read2Me.Data.Entities
 @using Read2Me.Data.Enums
+@using Read2Me.Services
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween">
@@ -65,7 +67,7 @@
                     <MudExpansionPanel @key="v.Id">
                         <TitleContent>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                @if (v.IsDefault)
+                                @if (Presenter.DefaultVoiceId == v.Id)
                                 {
                                     <MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Small" Color="Color.Warning"
                                              Title="Default voice" />
@@ -229,6 +231,68 @@
                 }
             </MudExpansionPanels>
         </MudStack>
+
+        @if (Presenter.VoiceRules.Count > 0)
+        {
+            <MudDivider />
+            <MudStack Spacing="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.subtitle2">Voice Rules</MudText>
+                    @if (!Character.IsNarrator)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
+                                   OnClick="OpenAddRuleDialogAsync">Add rule</MudButton>
+                    }
+                </MudStack>
+
+                @{ var nonDefaultRules = Presenter.VoiceRules.Where(r => !r.IsDefault).ToList(); }
+
+                @foreach (var rule in Presenter.VoiceRules)
+                {
+                    var r = rule;
+                    var nonDefaultIdx = nonDefaultRules.IndexOf(r);
+                    var isFirst = nonDefaultIdx == 0;
+                    var isLast  = nonDefaultIdx == nonDefaultRules.Count - 1;
+                    var isDangling = r.FromDangling || r.ToDangling;
+
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
+                              data-testid="voice-rule-row" data-rule-id="@r.Id">
+                        @if (isDangling)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small"
+                                     Title="One or more anchor nodes no longer exist" />
+                        }
+                        <MudText Typo="Typo.body2" Style="flex:1">@RuleDescription(r)</MudText>
+                        @if (!r.IsDefault)
+                        {
+                            <MudTooltip Text="Move up">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small"
+                                               Disabled="@isFirst"
+                                               OnClick="@(() => Presenter.MoveVoiceRuleUpAsync(r.Id))"
+                                               data-testid="rule-move-up" />
+                            </MudTooltip>
+                            <MudTooltip Text="Move down">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small"
+                                               Disabled="@isLast"
+                                               OnClick="@(() => Presenter.MoveVoiceRuleDownAsync(r.Id))"
+                                               data-testid="rule-move-down" />
+                            </MudTooltip>
+                            @if (isDangling)
+                            {
+                                <MudTooltip Text="Re-anchor (delete and recreate via book selection)">
+                                    <MudIconButton Icon="@Icons.Material.Filled.EditLocation" Size="Size.Small"
+                                                   Color="Color.Warning"
+                                                   data-testid="rule-reanchor" />
+                                </MudTooltip>
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => Presenter.DeleteVoiceRuleAsync(r.Id))"
+                                           data-testid="rule-delete" />
+                        }
+                    </MudStack>
+                }
+            </MudStack>
+        }
 
         @if (!Character.IsNarrator)
         {

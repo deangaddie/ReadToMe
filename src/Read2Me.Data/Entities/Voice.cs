@@ -8,7 +8,6 @@ namespace Read2Me.Data.Entities
         public Guid CharacterId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
-        public bool IsDefault { get; set; }
         public VoiceSource Source { get; set; }
         public string? DesignPrompt { get; set; }
         public string? Transcript { get; set; }

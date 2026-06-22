@@ -1,0 +1,220 @@
+@using Read2Me.App.State
+@using Read2Me.Core.Models
+@using Read2Me.Data.Entities
+@* @using Read2Me.Data.Enums *@
+@using Read2Me.Services
+@inject IProjectReader Reader
+@inject CharacterPresenter Presenter
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add Voice Rule</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+
+            <MudSelect T="Guid" Label="Voice" @bind-Value="_voiceId" Variant="Variant.Outlined">
+                @foreach (var v in Voices)
+                {
+                    <MudSelectItem Value="@v.Id">@v.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudText Typo="Typo.subtitle2">Mode</MudText>
+            <MudRadioGroup T="RuleMode" @bind-Value="_mode">
+                <MudRadio Value="RuleMode.FromHereOn">From here on</MudRadio>
+                <MudRadio Value="RuleMode.JustThisNode">Just this node</MudRadio>
+            </MudRadioGroup>
+
+            <MudText Typo="Typo.subtitle2">Anchor</MudText>
+
+            @* Volume *@
+            <MudSelect T="Guid?" Label="Volume" Value="_selectedVolumeId"
+                       ValueChanged="OnVolumeChangedAsync" Variant="Variant.Outlined"
+                       Clearable="true" data-testid="anchor-volume">
+                @foreach (var v in _volumes)
+                {
+                    <MudSelectItem Value="@((Guid?)v.Id)">@(v.Title ?? "Untitled")</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_selectedVolumeId.HasValue)
+            {
+                @* Part *@
+                <MudSelect T="Guid?" Label="Part" Value="_selectedPartId"
+                           ValueChanged="OnPartChangedAsync" Variant="Variant.Outlined"
+                           Clearable="true" data-testid="anchor-part">
+                    @foreach (var p in _parts)
+                    {
+                        <MudSelectItem Value="@((Guid?)p.Id)">@(p.Title ?? "Untitled")</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_selectedPartId.HasValue)
+                {
+                    @* Chapter *@
+                    <MudSelect T="Guid?" Label="Chapter" Value="_selectedChapterId"
+                               ValueChanged="OnChapterChangedAsync" Variant="Variant.Outlined"
+                               Clearable="true" data-testid="anchor-chapter">
+                        @foreach (var c in _chapters)
+                        {
+                            <MudSelectItem Value="@((Guid?)c.Id)">@(c.Title ?? "Untitled")</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    @if (_selectedChapterId.HasValue)
+                    {
+                        @* Paragraph *@
+                        <MudSelect T="Guid?" Label="Paragraph" Value="_selectedParagraphId"
+                                   ValueChanged="OnParagraphChangedAsync" Variant="Variant.Outlined"
+                                   Clearable="true" data-testid="anchor-paragraph">
+                            @foreach (var p in _paragraphs)
+                            {
+                                var preview = p.Items?.FirstOrDefault()?.Text ?? "";
+                                <MudSelectItem Value="@((Guid?)p.Id)">@(preview.Length > 40 ? preview[..40] + "…" : preview)</MudSelectItem>
+                            }
+                        </MudSelect>
+
+                        @if (_selectedParagraphId.HasValue)
+                        {
+                            @* ParagraphItem *@
+                            <MudSelect T="Guid?" Label="Line" Value="_selectedItemId"
+                                       ValueChanged="OnItemChangedAsync" Variant="Variant.Outlined"
+                                       Clearable="true" data-testid="anchor-item">
+                                @foreach (var pi in _items)
+                                {
+                                    var text = pi.Text ?? "";
+                                    <MudSelectItem Value="@((Guid?)pi.Id)">@(text.Length > 40 ? text[..40] + "…" : text)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                    }
+                }
+            }
+
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
+                   Disabled="@(!CanSubmit)">Add Rule</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    public enum RuleMode { FromHereOn, JustThisNode }
+
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter, EditorRequired] public Character Character { get; set; } = null!;
+    [Parameter, EditorRequired] public List<Voice> Voices { get; set; } = [];
+
+    Guid _voiceId;
+    RuleMode _mode = RuleMode.FromHereOn;
+
+    List<Volume>      _volumes    = [];
+    List<Part>        _parts      = [];
+    List<Chapter>     _chapters   = [];
+    List<Paragraph>   _paragraphs = [];
+    List<ParagraphItem> _items    = [];
+
+    Guid? _selectedVolumeId;
+    Guid? _selectedPartId;
+    Guid? _selectedChapterId;
+    Guid? _selectedParagraphId;
+    Guid? _selectedItemId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Voices.Count > 0) _voiceId = Voices[0].Id;
+        var folder = new ProjectFolderId(Presenter._folderId?.Value ?? "");
+        _volumes = await Reader.GetVolumesAsync(folder);
+    }
+
+    async Task OnVolumeChangedAsync(Guid? id)
+    {
+        _selectedVolumeId = id;
+        _selectedPartId = _selectedChapterId = _selectedParagraphId = _selectedItemId = null;
+        _parts = []; _chapters = []; _paragraphs = []; _items = [];
+        if (id.HasValue)
+        {
+            var folder = new ProjectFolderId(Presenter._folderId?.Value ?? "");
+            _parts = await Reader.GetPartsAsync(folder, id.Value);
+        }
+    }
+
+    async Task OnPartChangedAsync(Guid? id)
+    {
+        _selectedPartId = id;
+        _selectedChapterId = _selectedParagraphId = _selectedItemId = null;
+        _chapters = []; _paragraphs = []; _items = [];
+        if (id.HasValue)
+        {
+            var folder = new ProjectFolderId(Presenter._folderId?.Value ?? "");
+            _chapters = await Reader.GetChaptersAsync(folder, id.Value);
+        }
+    }
+
+    async Task OnChapterChangedAsync(Guid? id)
+    {
+        _selectedChapterId = id;
+        _selectedParagraphId = _selectedItemId = null;
+        _paragraphs = []; _items = [];
+        if (id.HasValue)
+        {
+            var folder = new ProjectFolderId(Presenter._folderId?.Value ?? "");
+            _paragraphs = await Reader.GetChapterParagraphsAsync(folder, id.Value);
+        }
+    }
+
+    async Task OnParagraphChangedAsync(Guid? id)
+    {
+        _selectedParagraphId = id;
+        _selectedItemId = null;
+        _items = [];
+        if (id.HasValue)
+        {
+            var para = _paragraphs.Find(p => p.Id == id.Value);
+            _items = para?.Items?.ToList() ?? [];
+        }
+        await Task.CompletedTask;
+    }
+
+    Task OnItemChangedAsync(Guid? id)
+    {
+        _selectedItemId = id;
+        return Task.CompletedTask;
+    }
+
+    (Read2Me.Core.Models.VoiceAnchorLevel? Level, Guid? NodeId) DeepestAnchor()
+    {
+        if (_selectedItemId.HasValue)    return (Read2Me.Core.Models.VoiceAnchorLevel.ParagraphItem, _selectedItemId);
+        if (_selectedParagraphId.HasValue) return (Read2Me.Core.Models.VoiceAnchorLevel.Paragraph, _selectedParagraphId);
+        if (_selectedChapterId.HasValue)   return (Read2Me.Core.Models.VoiceAnchorLevel.Chapter, _selectedChapterId);
+        if (_selectedPartId.HasValue)      return (Read2Me.Core.Models.VoiceAnchorLevel.Part, _selectedPartId);
+        if (_selectedVolumeId.HasValue)    return (Read2Me.Core.Models.VoiceAnchorLevel.Volume, _selectedVolumeId);
+        return (null, null);
+    }
+
+    bool CanSubmit => _voiceId != Guid.Empty && DeepestAnchor().NodeId.HasValue;
+
+    void Cancel() => MudDialog.Cancel();
+
+    void Submit()
+    {
+        var (level, nodeId) = DeepestAnchor();
+        if (!nodeId.HasValue) return;
+
+        var (toLevel, toNodeId) = _mode == RuleMode.JustThisNode
+            ? (level, nodeId)
+            : ((Read2Me.Core.Models.VoiceAnchorLevel?)null, (Guid?)null);
+
+        MudDialog.Close(DialogResult.Ok(new RuleDialogResult(_voiceId, level, nodeId, toLevel, toNodeId)));
+    }
+
+    public sealed record RuleDialogResult(
+        Guid VoiceId,
+        Read2Me.Core.Models.VoiceAnchorLevel? FromLevel,
+        Guid? FromNodeId,
+        Read2Me.Core.Models.VoiceAnchorLevel? ToLevel,
+        Guid? ToNodeId);
+}

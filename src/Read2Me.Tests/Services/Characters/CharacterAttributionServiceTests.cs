@@ -135,6 +135,9 @@ namespace Read2Me.Tests.Services.Characters
             public Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
             public Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) => Task.FromResult(new List<(Guid, string)>());
             public Task<List<Read2Me.Data.Entities.Voice>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<Read2Me.Data.Entities.Voice>());
+            public Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult<Guid?>(null);
+            public Task<(Read2Me.Services.Voice.StoryPosition ItemPosition, IReadOnlyList<Read2Me.Services.Voice.RuleInput> Rules)> GetVoiceRuleInputsAsync(ProjectFolderId folderId, Guid itemId, Guid characterId)
+                => Task.FromResult<(Read2Me.Services.Voice.StoryPosition, IReadOnlyList<Read2Me.Services.Voice.RuleInput>)>((default, Array.Empty<Read2Me.Services.Voice.RuleInput>()));
             public Task<HierarchyChildren> GetChildrenAsync(ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId)
                 => Task.FromResult(new HierarchyChildren(null, null, null));
             public Task<List<Read2Me.Core.Models.AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false)
@@ -147,6 +150,10 @@ namespace Read2Me.Tests.Services.Characters
                 => Task.FromResult(new List<(Guid, Read2Me.Services.Audio.AudioReviewInfo)>());
             public Task<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>> GetNodeStatusSeedAsync(ProjectFolderId folderId)
                 => Task.FromResult<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>>([]);
+            public Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId)
+                => Task.FromResult(new List<VoiceRuleRow>());
+            public Task<IReadOnlyDictionary<Guid, string?>> GetResolvedVoiceNamesAsync(ProjectFolderId folderId, IEnumerable<Guid> itemIds, bool narratorOnlyMode)
+                => Task.FromResult<IReadOnlyDictionary<Guid, string?>>(new Dictionary<Guid, string?>());
         }
 
         private static ParagraphContext DefaultContext() =>

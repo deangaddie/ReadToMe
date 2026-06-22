@@ -65,6 +65,23 @@ namespace Read2Me.App.State
 
         public bool NarratorOnlyMode { get; private set; }
 
+        // Voice preview cache for SplitAudio view: itemId → resolved voice name (null = no voice)
+        private readonly Dictionary<Guid, string?> _voicePreviewCache = new();
+        private readonly HashSet<Guid> _voicePreviewLoaded = new(); // item ids already fetched
+
+        public string? ResolvedVoiceName(Guid itemId) =>
+            _voicePreviewCache.TryGetValue(itemId, out var name) ? name : null;
+
+        public async Task EnsureVoicePreviewAsync(ProjectFolderId folderId, IEnumerable<Guid> itemIds)
+        {
+            var missing = itemIds.Where(id => !_voicePreviewLoaded.Contains(id)).ToList();
+            if (missing.Count == 0) return;
+            foreach (var id in missing) _voicePreviewLoaded.Add(id);
+            var resolved = await reader.GetResolvedVoiceNamesAsync(folderId, missing, NarratorOnlyMode);
+            foreach (var (id, name) in resolved)
+                _voicePreviewCache[id] = name;
+        }
+
         public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
         public bool IsNodeAudioSelectable(Guid nodeId) => _audioNodeCounts.ContainsKey(nodeId) && _audioNodeCounts[nodeId] > 0;
 
@@ -142,6 +159,8 @@ namespace Read2Me.App.State
             selectionState.Reset(folderId);
             audioSelectionState.Reset(folderId);
             nodeStatus.Clear(folderId);
+            _voicePreviewCache.Clear();
+            _voicePreviewLoaded.Clear();
             Tree?.Reset();
             await LoadAsync(folderId);
         }

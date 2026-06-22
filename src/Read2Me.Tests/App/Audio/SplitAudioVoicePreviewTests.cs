@@ -1,0 +1,242 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using FractionalIndexing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Read2Me.Core.Configuration;
+using Read2Me.Core.Models;
+using Read2Me.Data;
+using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
+using Read2Me.Services;
+using Read2Me.Services.IO;
+using Read2Me.Tests.Infrastructure;
+using VoiceEntity = Read2Me.Data.Entities.Voice;
+using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
+using Xunit;
+
+namespace Read2Me.Tests.App.Audio
+{
+    /// <summary>
+    /// Acceptance tests for Issue 006: SplitAudio resolved-voice preview.
+    /// Tests the reader method that backs the voice label; the presenter
+    /// just delegates to it, so the reader tests are the authoritative proof.
+    /// </summary>
+    public class SplitAudioVoicePreviewTests : ProjectDbTestBase
+    {
+        private readonly ProjectReader _reader;
+        private readonly ProjectFolderId _folder;
+
+        public SplitAudioVoicePreviewTests()
+        {
+            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
+            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            _reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
+            _folder = new ProjectFolderId(FolderName);
+        }
+
+        private static string Key(string? prev = null, string? next = null) =>
+            OrderKeyGenerator.GenerateKeyBetween(prev, next);
+
+        private static string FloorRank => OrderKeyGenerator.GenerateKeyBetween(null, null);
+
+        // ── seed helpers ──────────────────────────────────────────────────────
+
+        private async Task<(
+            Guid VolId, Guid PartId, Guid ChId, Guid ParaId,
+            Guid CharId, Guid DefaultVoiceId)> SeedMinimalAsync()
+        {
+            await using var db = await OpenDbAsync();
+            db.Projects.Add(new Project { Title = "T", BookTitle = "B", Author = "A", Filename = "f.txt", Type = BookFileType.Text });
+
+            var charId = Guid.NewGuid();
+            var voiceId = Guid.NewGuid();
+            db.Characters.Add(new Character { Id = charId, Name = "Alice" });
+            db.Voices.Add(new VoiceEntity { Id = voiceId, CharacterId = charId, Name = "Default Voice", Source = VoiceSource.Uploaded, AudioFileName = "d.wav" });
+
+            var vol  = new Volume    { Id = Guid.NewGuid(), Title = "V",  Order = Key() };
+            var part = new Part      { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
+            var ch   = new Chapter   { Id = Guid.NewGuid(), PartId   = part.Id, Order = Key() };
+            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id,  Order = Key() };
+
+            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
+            await db.SaveChangesAsync();
+            return (vol.Id, part.Id, ch.Id, para.Id, charId, voiceId);
+        }
+
+        private async Task<Guid> AddCharItemAsync(Guid paraId, Guid? charId, string text = "Hello")
+        {
+            await using var db = await OpenDbAsync();
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(),
+                ParagraphId = paraId,
+                Order = Key(),
+                ItemType = ParagraphItemType.Character,
+                Text = text,
+                CharacterId = charId
+            };
+            db.ParagraphItems.Add(item);
+            await db.SaveChangesAsync();
+            return item.Id;
+        }
+
+        private async Task<Guid> AddNarratorItemAsync(Guid paraId, string text = "Narration")
+        {
+            await using var db = await OpenDbAsync();
+            var narratorId = ProjectDbContext.NarratorId;
+            // Narrator char is seeded by migration; but voice+rule are not.
+            if (!await db.VoiceRules.AnyAsync(r => r.CharacterId == narratorId))
+            {
+                var nVoiceId = Guid.NewGuid();
+                db.Voices.Add(new VoiceEntity { Id = nVoiceId, CharacterId = narratorId, Name = "Narrator Voice", Source = VoiceSource.Uploaded, AudioFileName = "n.wav" });
+                db.VoiceRules.Add(new VoiceRule { Id = Guid.NewGuid(), CharacterId = narratorId, VoiceId = nVoiceId, IsDefault = true, Rank = FloorRank });
+                await db.SaveChangesAsync();
+            }
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(),
+                ParagraphId = paraId,
+                Order = Key(),
+                ItemType = ParagraphItemType.Narration,
+                Text = text,
+                CharacterId = null
+            };
+            db.ParagraphItems.Add(item);
+            await db.SaveChangesAsync();
+            return item.Id;
+        }
+
+        private async Task AddDefaultRuleAsync(Guid charId, Guid voiceId)
+        {
+            await using var db = await OpenDbAsync();
+            db.VoiceRules.Add(new VoiceRule { Id = Guid.NewGuid(), CharacterId = charId, VoiceId = voiceId, IsDefault = true, Rank = FloorRank });
+            await db.SaveChangesAsync();
+        }
+
+        private async Task<Guid> AddPositionalRuleAsync(Guid charId, Guid voiceId,
+            DataAnchorLevel fromLevel, Guid fromNodeId,
+            DataAnchorLevel? toLevel = null, Guid? toNodeId = null, string? rank = null)
+        {
+            await using var db = await OpenDbAsync();
+            var ruleId = Guid.NewGuid();
+            rank ??= Key(FloorRank);
+            db.VoiceRules.Add(new VoiceRule
+            {
+                Id = ruleId,
+                CharacterId = charId,
+                VoiceId = voiceId,
+                IsDefault = false,
+                Rank = rank,
+                FromLevel = fromLevel,
+                FromNodeId = fromNodeId,
+                ToLevel = toLevel,
+                ToNodeId = toNodeId
+            });
+            await db.SaveChangesAsync();
+            return ruleId;
+        }
+
+        // ── AC1+AC2: attributed character + narration items show resolved voice ──
+
+        [Fact]
+        public async Task ResolvedVoiceNames_DefaultRule_ReturnsDefaultVoiceForCharacterItem()
+        {
+            var (_, _, _, paraId, charId, voiceId) = await SeedMinimalAsync();
+            await AddDefaultRuleAsync(charId, voiceId);
+            var itemId = await AddCharItemAsync(paraId, charId);
+
+            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+
+            Assert.True(result.ContainsKey(itemId));
+            Assert.Equal("Default Voice", result[itemId]);
+        }
+
+        [Fact]
+        public async Task ResolvedVoiceNames_NarrationItem_ReturnsNarratorVoice()
+        {
+            var (_, _, _, paraId, _, _) = await SeedMinimalAsync();
+            var itemId = await AddNarratorItemAsync(paraId);
+
+            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+
+            Assert.True(result.ContainsKey(itemId));
+            Assert.Equal("Narrator Voice", result[itemId]);
+        }
+
+        // ── AC3: positional rule wins over default for covered item ──────────
+
+        [Fact]
+        public async Task ResolvedVoiceNames_PositionalRule_WinsOverDefault()
+        {
+            var (volId, partId, chId, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
+            await AddDefaultRuleAsync(charId, defaultVoiceId);
+
+            // Add second voice with a chapter-level positional rule.
+            Guid posVoiceId;
+            await using (var db = await OpenDbAsync())
+            {
+                posVoiceId = Guid.NewGuid();
+                db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "p.wav" });
+                await db.SaveChangesAsync();
+            }
+            // Rule: from ch onward.
+            await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, chId);
+
+            var itemId = await AddCharItemAsync(paraId, charId);
+
+            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+
+            Assert.Equal("Positional Voice", result[itemId]);
+        }
+
+        // ── AC4: unattributed character item → null (no voice, no error) ─────
+
+        [Fact]
+        public async Task ResolvedVoiceNames_UnattributedItem_ReturnsNull()
+        {
+            var (_, _, _, paraId, charId, voiceId) = await SeedMinimalAsync();
+            await AddDefaultRuleAsync(charId, voiceId);
+            // Item has no CharacterId assigned.
+            var itemId = await AddCharItemAsync(paraId, charId: null);
+
+            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+
+            // Not in result OR mapped to null — both are acceptable.
+            var hasKey = result.TryGetValue(itemId, out var name);
+            Assert.True(!hasKey || name == null);
+        }
+
+        // ── AC5: dangling rule doesn't surface as error; fallback voice shown ──
+
+        [Fact]
+        public async Task ResolvedVoiceNames_DanglingRule_FallsBackToDefault()
+        {
+            var (volId, partId, chId, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
+            await AddDefaultRuleAsync(charId, defaultVoiceId);
+
+            Guid posVoiceId;
+            await using (var db = await OpenDbAsync())
+            {
+                posVoiceId = Guid.NewGuid();
+                db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "p.wav" });
+                await db.SaveChangesAsync();
+            }
+            // Dangling rule: fromNodeId doesn't exist.
+            await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, Guid.NewGuid());
+
+            var itemId = await AddCharItemAsync(paraId, charId);
+
+            // Should NOT throw; should return the default voice (dangling rule doesn't match).
+            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+
+            Assert.Equal("Default Voice", result[itemId]);
+        }
+
+        // ── AC6: dotnet test green ────────────────────────────────────────────
+        // (covered by running the suite — no additional test needed)
+    }
+}

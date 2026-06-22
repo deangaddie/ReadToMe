@@ -14,6 +14,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Services.Voice;
 
 namespace Read2Me.App.Audio
 {
@@ -24,6 +25,7 @@ namespace Read2Me.App.Audio
         IBookCommandHandler commands,
         IFileSystem fs,
         IProjectDbContextFactory dbFactory,
+        IProjectReader reader,
         IAudioNormalizer normalizer,
         IWerComparer werComparer,
         ITranscriptionClientResolver transcriptionResolver,
@@ -78,10 +80,15 @@ namespace Read2Me.App.Audio
                     return;
                 }
 
-                var voice = await db.Voices
-                    .AsNoTracking()
-                    .Include(v => v.Character)
-                    .FirstOrDefaultAsync(v => v.CharacterId == characterId && v.IsDefault, ct);
+                var (itemPos, ruleInputs) = await reader.GetVoiceRuleInputsAsync(folder, itemRef.ParagraphItemId, characterId.Value);
+                var selectedVoiceId = VoiceRuleEvaluator.Evaluate(ruleInputs, itemPos);
+
+                var voice = selectedVoiceId.HasValue
+                    ? await db.Voices
+                        .AsNoTracking()
+                        .Include(v => v.Character)
+                        .FirstOrDefaultAsync(v => v.Id == selectedVoiceId.Value, ct)
+                    : null;
 
                 if (voice is null)
                 {

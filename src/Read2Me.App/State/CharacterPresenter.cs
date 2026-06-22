@@ -23,8 +23,10 @@ namespace Read2Me.App.State
         public Character? SelectedCharacter { get; private set; }
         public List<CharacterLine> Lines { get; private set; } = [];
         public List<VoiceEntity> Voices { get; private set; } = [];
+        public Guid? DefaultVoiceId { get; private set; }
+        public List<VoiceRuleRow> VoiceRules { get; private set; } = [];
 
-        private ProjectFolderId? _folderId;
+        internal ProjectFolderId? _folderId;
 
         /// <summary>
         /// Per-voice cache-buster token. Incremented whenever a voice's audio file is
@@ -55,11 +57,15 @@ namespace Read2Me.App.State
                 {
                     Lines = await reader.GetCharacterLinesAsync(folderId, reselected.Id);
                     Voices = await reader.GetCharacterVoicesAsync(folderId, reselected.Id);
+                    DefaultVoiceId = await reader.GetDefaultVoiceIdAsync(folderId, reselected.Id);
+                    VoiceRules = await reader.GetCharacterVoiceRulesAsync(folderId, reselected.Id);
                 }
                 else
                 {
                     Lines = [];
                     Voices = [];
+                    DefaultVoiceId = null;
+                    VoiceRules = [];
                 }
             }
             IsLoading = false;
@@ -72,6 +78,8 @@ namespace Read2Me.App.State
             SelectedCharacter = character;
             Lines = await reader.GetCharacterLinesAsync(folder, character.Id);
             Voices = await reader.GetCharacterVoicesAsync(folder, character.Id);
+            DefaultVoiceId = await reader.GetDefaultVoiceIdAsync(folder, character.Id);
+            VoiceRules = await reader.GetCharacterVoiceRulesAsync(folder, character.Id);
             NotifyStateChanged();
         }
 
@@ -164,6 +172,25 @@ namespace Read2Me.App.State
 
         public Task DeleteVoiceAsync(Guid voiceId) =>
             ExecuteAndReloadAsync(new DeleteVoiceCommand(_folderId!.Value, voiceId));
+
+        // ── Voice Rule commands ───────────────────────────────────────────────
+
+        public Task CreateVoiceRuleAsync(
+            Guid characterId, Guid voiceId,
+            VoiceAnchorLevel? fromLevel, Guid? fromNodeId,
+            VoiceAnchorLevel? toLevel, Guid? toNodeId) =>
+            ExecuteAndReloadAsync(new CreateVoiceRuleCommand(
+                _folderId!.Value, characterId, voiceId,
+                fromLevel, fromNodeId, toLevel, toNodeId));
+
+        public Task DeleteVoiceRuleAsync(Guid ruleId) =>
+            ExecuteAndReloadAsync(new DeleteVoiceRuleCommand(_folderId!.Value, ruleId));
+
+        public Task MoveVoiceRuleUpAsync(Guid ruleId) =>
+            ExecuteAndReloadAsync(new MoveVoiceRuleCommand(_folderId!.Value, ruleId, RuleMoveDirection.Up));
+
+        public Task MoveVoiceRuleDownAsync(Guid ruleId) =>
+            ExecuteAndReloadAsync(new MoveVoiceRuleCommand(_folderId!.Value, ruleId, RuleMoveDirection.Down));
 
         // ── Voice orchestration (AI + file I/O + DB) ─────────────────────────
 

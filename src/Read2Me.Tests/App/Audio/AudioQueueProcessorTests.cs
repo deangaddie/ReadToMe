@@ -89,13 +89,20 @@ namespace Read2Me.Tests.App.Audio
             var sp = services.BuildServiceProvider();
             _commands = sp.GetRequiredService<BookCommandHandler>();
 
+            var dbProvider = new ProjectDbContextProvider();
+            var fileSystem = new Read2Me.Services.IO.FileSystemService(
+                Microsoft.Extensions.Options.Options.Create(new Read2Me.Core.Configuration.WorkspaceOptions { FolderPath = TempDir }));
+            var dbSession = new ProjectDbSession(fileSystem, dbProvider, NullLogger<ProjectDbSession>.Instance);
+            var projectReader = new ProjectReader(dbSession, NullLogger<ProjectReader>.Instance);
+
             _sut = new AudioQueueProcessor(
                 _queue,
                 _settings,
                 _resolver,
                 _commands,
                 _fs,
-                new ProjectDbContextProvider(),
+                dbProvider,
+                projectReader,
                 _normalizer,
                 _wer,
                 _transcriptionResolver,
@@ -133,11 +140,18 @@ namespace Read2Me.Tests.App.Audio
                     Id = Guid.NewGuid(),
                     CharacterId = charId,
                     Name = "Bilbo Voice",
-                    IsDefault = true,
                     Source = VoiceSource.Uploaded,
                     AudioFileName = voiceAudioFile
                 };
                 db.Voices.Add(voice);
+                db.VoiceRules.Add(new VoiceRule
+                {
+                    Id = Guid.NewGuid(),
+                    CharacterId = charId,
+                    VoiceId = voice.Id,
+                    IsDefault = true,
+                    Rank = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                });
                 // Seed the reference audio file so it can be opened
                 var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceAudioFile.Replace('/', Path.DirectorySeparatorChar));
                 _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
@@ -182,11 +196,18 @@ namespace Read2Me.Tests.App.Audio
                     Id = Guid.NewGuid(),
                     CharacterId = ProjectDbContext.NarratorId,
                     Name = "Narrator Voice",
-                    IsDefault = true,
                     Source = VoiceSource.Uploaded,
                     AudioFileName = voiceAudioFile
                 };
                 db.Voices.Add(voice);
+                db.VoiceRules.Add(new VoiceRule
+                {
+                    Id = Guid.NewGuid(),
+                    CharacterId = ProjectDbContext.NarratorId,
+                    VoiceId = voice.Id,
+                    IsDefault = true,
+                    Rank = OrderKeyGenerator.GenerateKeyBetween(null, null),
+                });
                 var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceAudioFile.Replace('/', Path.DirectorySeparatorChar));
                 _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
             }
@@ -579,11 +600,18 @@ namespace Read2Me.Tests.App.Audio
                 Id = Guid.NewGuid(),
                 CharacterId = ProjectDbContext.NarratorId,
                 Name = "Narrator Voice",
-                IsDefault = true,
                 Source = VoiceSource.Uploaded,
                 AudioFileName = voiceAudioFile
             };
             db.Voices.Add(voice);
+            db.VoiceRules.Add(new VoiceRule
+            {
+                Id = Guid.NewGuid(),
+                CharacterId = ProjectDbContext.NarratorId,
+                VoiceId = voice.Id,
+                IsDefault = true,
+                Rank = OrderKeyGenerator.GenerateKeyBetween(null, null),
+            });
             var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceAudioFile.Replace('/', Path.DirectorySeparatorChar));
             _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
 
@@ -641,6 +669,69 @@ namespace Read2Me.Tests.App.Audio
             Assert.Contains("No character assigned", failed.Reason);
         }
 
+        [Fact]
+        public async Task PositionalRule_CoveringItem_UsesRuleVoice_NotDefault()
+        {
+            // Seed: character with default voice A + chapter-scoped rule for voice B.
+            // Item is in the chapter covered by the rule → processor must pick voice B.
+            await using var db = await OpenDbAsync();
+
+            var charId = Guid.NewGuid();
+            db.Characters.Add(new Character { Id = charId, Name = "Alice" });
+
+            const string voiceAAudio = "voices/alice/voice_a.wav";
+            const string voiceBAudio = "voices/alice/voice_b.wav";
+            const byte voiceAByte = 0xAA;
+            const byte voiceBByte = 0xBB;
+
+            var voiceA = new Voice { Id = Guid.NewGuid(), CharacterId = charId, Name = "Voice A", Source = VoiceSource.Uploaded, AudioFileName = voiceAAudio };
+            var voiceB = new Voice { Id = Guid.NewGuid(), CharacterId = charId, Name = "Voice B", Source = VoiceSource.Uploaded, AudioFileName = voiceBAudio };
+            db.Voices.Add(voiceA);
+            db.Voices.Add(voiceB);
+
+            // Default rule (rank floor) → voice A
+            var defaultRank = OrderKeyGenerator.GenerateKeyBetween(null, null);
+            db.VoiceRules.Add(new VoiceRule { Id = Guid.NewGuid(), CharacterId = charId, VoiceId = voiceA.Id, IsDefault = true, Rank = defaultRank });
+
+            var vol  = new Volume    { Id = Guid.NewGuid(), Title = "V",  Order = Key() };
+            var part = new Part      { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
+            var ch   = new Chapter   { Id = Guid.NewGuid(), PartId   = part.Id, Order = Key() };
+            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id,  Order = Key(), CharacterId = charId };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = para.Id,
+                ItemType = ParagraphItemType.Character, CharacterId = charId,
+                Text = "Alice speaks", Order = Key()
+            };
+
+            // Positional rule (higher rank) → voice B, just this chapter
+            var posRank = OrderKeyGenerator.GenerateKeyBetween(defaultRank, null);
+            db.VoiceRules.Add(new VoiceRule
+            {
+                Id = Guid.NewGuid(), CharacterId = charId, VoiceId = voiceB.Id,
+                IsDefault = false, Rank = posRank,
+                FromLevel = Data.Enums.VoiceAnchorLevel.Chapter, FromNodeId = ch.Id,
+                ToLevel   = Data.Enums.VoiceAnchorLevel.Chapter, ToNodeId   = ch.Id,
+            });
+
+            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch);
+            db.Paragraphs.Add(para); db.ParagraphItems.Add(item);
+            await db.SaveChangesAsync();
+
+            // Seed reference audio files with distinct first bytes
+            var folderPath = _fs.GetProjectFolderPath(FolderName);
+            _fs.SeedFile(Path.Combine(folderPath, voiceAAudio.Replace('/', Path.DirectorySeparatorChar)), [voiceAByte]);
+            _fs.SeedFile(Path.Combine(folderPath, voiceBAudio.Replace('/', Path.DirectorySeparatorChar)), [voiceBByte]);
+
+            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
+            var queuedItem = new QueuedAudioItem(_folder, itemRef);
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.True(_ttsClient.WasCalled);
+            Assert.Equal(voiceBByte, _ttsClient.LastReferenceAudioFirstByte);
+        }
+
         // --- Fakes --------------------------------------------------------------------
 
         private sealed class FakeTtsClient : IParagraphTtsClient
@@ -648,6 +739,7 @@ namespace Read2Me.Tests.App.Audio
             public bool WasCalled { get; private set; }
             public string? LastVoiceInstructions { get; private set; }
             public string? LastText { get; private set; }
+            public byte LastReferenceAudioFirstByte { get; private set; }
 
             public Task<Stream> GenerateAsync(string text, string? voiceInstructions, Stream referenceAudioStream,
                 ParagraphTtsServiceConfig settings, CancellationToken ct = default)
@@ -655,6 +747,9 @@ namespace Read2Me.Tests.App.Audio
                 WasCalled = true;
                 LastVoiceInstructions = voiceInstructions;
                 LastText = text;
+                var buf = new byte[1];
+                _ = referenceAudioStream.Read(buf, 0, 1);
+                LastReferenceAudioFirstByte = buf[0];
                 Stream result = new MemoryStream([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00]);
                 return Task.FromResult(result);
             }

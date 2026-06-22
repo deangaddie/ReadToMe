@@ -53,6 +53,19 @@ public record SetVoiceGeneratedCommand(ProjectFolderId FolderId, Guid VoiceId, s
 public record SetVoiceSourceCommand(ProjectFolderId FolderId, Guid VoiceId, bool IsGenerated) : BookCommand(FolderId);
 public record DeleteVoiceCommand(ProjectFolderId FolderId, Guid VoiceId) : BookCommand(FolderId);
 
+// Voice Rules
+public enum RuleMoveDirection { Up, Down }
+public record CreateVoiceRuleCommand(
+    ProjectFolderId FolderId,
+    Guid CharacterId,
+    Guid VoiceId,
+    VoiceAnchorLevel? FromLevel,
+    Guid? FromNodeId,
+    VoiceAnchorLevel? ToLevel,
+    Guid? ToNodeId) : BookCommand(FolderId);
+public record DeleteVoiceRuleCommand(ProjectFolderId FolderId, Guid RuleId) : BookCommand(FolderId);
+public record MoveVoiceRuleCommand(ProjectFolderId FolderId, Guid RuleId, RuleMoveDirection Direction) : BookCommand(FolderId);
+
 // Title insertion
 public record AddBookTitleCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 public record AddVolumeTitlesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);

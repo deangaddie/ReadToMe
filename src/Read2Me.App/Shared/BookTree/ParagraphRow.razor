@@ -109,7 +109,17 @@
                                            OnSelected="@(id => Presenter.SetItemCharacterAsync(FolderId, it, id))" />
                         @if (!string.IsNullOrWhiteSpace(it.Text))
                         {
-                            <MudText Typo="Typo.body2" Style="@(isCharItem ? "" : "font-style:italic;")">@it.Text</MudText>
+                            <div>
+                                <MudText Typo="Typo.body2" Style="@(isCharItem ? "" : "font-style:italic;")">@it.Text</MudText>
+                                @if (isAudioMode)
+                                {
+                                    var voiceName = Presenter.ResolvedVoiceName(it.Id);
+                                    <MudText Typo="Typo.caption" Style="opacity:0.65;"
+                                             data-testid="@($"voice-preview-{it.Id}")">
+                                        @(voiceName != null ? $"Voice: {voiceName}" : "—")
+                                    </MudText>
+                                }
+                            </div>
                         }
                         else
                         {
@@ -280,6 +290,17 @@ else
         Queue.Changed += Refresh;
         AudioQueue.Changed += Refresh;
         AudioReviews.Changed += Refresh;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Presenter.ViewMode == BookViewMode.SplitAudio)
+        {
+            var itemIds = Para.Items
+                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                .Select(i => i.Id);
+            await Presenter.EnsureVoicePreviewAsync(FolderId, itemIds);
+        }
     }
 
     void Refresh() => InvokeAsync(StateHasChanged);

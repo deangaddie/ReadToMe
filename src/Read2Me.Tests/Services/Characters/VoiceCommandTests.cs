@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.IO;
 using Read2Me.Core.Configuration;
@@ -22,7 +21,6 @@ namespace Read2Me.Tests.Services.Characters
     {
         private readonly BookCommandHandler _svc;
         private readonly ProjectFolderId _folder;
-        private readonly FileSystemService _fs;
 
         public VoiceCommandTests()
         {
@@ -33,7 +31,6 @@ namespace Read2Me.Tests.Services.Characters
             var sp = services.BuildServiceProvider();
 
             _svc = sp.GetRequiredService<BookCommandHandler>();
-            _fs = (FileSystemService)sp.GetRequiredService<IFileSystem>();
             _folder = new ProjectFolderId(FolderName);
         }
 
@@ -46,22 +43,40 @@ namespace Read2Me.Tests.Services.Characters
             return c.Id;
         }
 
+        // ── CreateVoice ───────────────────────────────────────────────────────
+
         [Fact]
-        public async Task CreateVoice_FirstVoice_IsDefault()
+        public async Task CreateVoice_FirstVoice_CreatesDefaultRule()
         {
             await using var db = await OpenDbAsync();
             var charId = await SeedCharacterAsync(db);
 
             var voiceId = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "Alice Voice"));
 
-            var voice = await db.Voices.FirstAsync();
-            Assert.True(voice.IsDefault);
-            Assert.Equal("Alice Voice", voice.Name);
-            Assert.Equal(charId, voice.CharacterId);
+            var rule = await db.VoiceRules.FirstOrDefaultAsync(r => r.CharacterId == charId);
+            Assert.NotNull(rule);
+            Assert.True(rule.IsDefault);
+            Assert.Equal(voiceId, rule.VoiceId);
+            Assert.Null(rule.FromLevel);
+            Assert.Null(rule.FromNodeId);
+            Assert.Null(rule.ToLevel);
+            Assert.Null(rule.ToNodeId);
         }
 
         [Fact]
-        public async Task CreateVoice_SecondVoice_IsNotDefault()
+        public async Task CreateVoice_FirstVoice_DefaultRuleHasFloorRank()
+        {
+            await using var db = await OpenDbAsync();
+            var charId = await SeedCharacterAsync(db);
+
+            await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V1"));
+
+            var rule = await db.VoiceRules.FirstAsync(r => r.CharacterId == charId && r.IsDefault);
+            Assert.Equal("a0", rule.Rank);
+        }
+
+        [Fact]
+        public async Task CreateVoice_SecondVoice_DoesNotCreateAnotherDefaultRule()
         {
             await using var db = await OpenDbAsync();
             var charId = await SeedCharacterAsync(db);
@@ -69,9 +84,8 @@ namespace Read2Me.Tests.Services.Characters
             await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "Voice 1"));
             await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "Voice 2"));
 
-            var voices = await db.Voices.OrderBy(v => v.CreatedUtc).ToListAsync();
-            Assert.True(voices[0].IsDefault);
-            Assert.False(voices[1].IsDefault);
+            var defaultRuleCount = await db.VoiceRules.CountAsync(r => r.CharacterId == charId && r.IsDefault);
+            Assert.Equal(1, defaultRuleCount);
         }
 
         [Fact]
@@ -86,8 +100,10 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("Bob", voice.Name);
         }
 
+        // ── SetVoiceDefault ───────────────────────────────────────────────────
+
         [Fact]
-        public async Task SetVoiceDefault_SwitchesDefault_OtherBecomesNonDefault()
+        public async Task SetVoiceDefault_RepontsDefaultRuleVoiceId()
         {
             await using var db = await OpenDbAsync();
             var charId = await SeedCharacterAsync(db);
@@ -97,14 +113,29 @@ namespace Read2Me.Tests.Services.Characters
 
             await _svc.ExecuteAsync(new SetVoiceDefaultCommand(_folder, id2!.Value));
 
-            var v1 = await db.Voices.FindAsync(id1!.Value);
-            var v2 = await db.Voices.FindAsync(id2!.Value);
-            Assert.False(v1!.IsDefault);
-            Assert.True(v2!.IsDefault);
+            var rule = await db.VoiceRules.FirstAsync(r => r.CharacterId == charId && r.IsDefault);
+            Assert.Equal(id2.Value, rule.VoiceId);
         }
 
         [Fact]
-        public async Task DeleteVoice_NonDefault_LeavesDefaultIntact()
+        public async Task SetVoiceDefault_DoesNotCreateNewRule()
+        {
+            await using var db = await OpenDbAsync();
+            var charId = await SeedCharacterAsync(db);
+
+            var id1 = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V1"));
+            var id2 = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V2"));
+
+            await _svc.ExecuteAsync(new SetVoiceDefaultCommand(_folder, id2!.Value));
+
+            var ruleCount = await db.VoiceRules.CountAsync(r => r.CharacterId == charId);
+            Assert.Equal(1, ruleCount); // still exactly one default rule
+        }
+
+        // ── DeleteVoice ───────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task DeleteVoice_NonDefault_DefaultRuleStillPointsToOriginalVoice()
         {
             await using var db = await OpenDbAsync();
             var charId = await SeedCharacterAsync(db);
@@ -114,14 +145,12 @@ namespace Read2Me.Tests.Services.Characters
 
             await _svc.ExecuteAsync(new DeleteVoiceCommand(_folder, id2!.Value));
 
-            var voices = await db.Voices.ToListAsync();
-            Assert.Single(voices);
-            Assert.True(voices[0].IsDefault);
-            Assert.Equal(id1!.Value, voices[0].Id);
+            var rule = await db.VoiceRules.FirstAsync(r => r.CharacterId == charId && r.IsDefault);
+            Assert.Equal(id1!.Value, rule.VoiceId);
         }
 
         [Fact]
-        public async Task DeleteVoice_Default_ReElectsFirstRemaining()
+        public async Task DeleteVoice_DefaultRuleTarget_RepontsToOldestRemaining()
         {
             await using var db = await OpenDbAsync();
             var charId = await SeedCharacterAsync(db);
@@ -129,14 +158,27 @@ namespace Read2Me.Tests.Services.Characters
             var id1 = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V1"));
             var id2 = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V2"));
 
-            // Delete the default (V1)
+            // id1 is the default rule target; delete it
             await _svc.ExecuteAsync(new DeleteVoiceCommand(_folder, id1!.Value));
 
-            var voices = await db.Voices.ToListAsync();
-            Assert.Single(voices);
-            Assert.True(voices[0].IsDefault);
-            Assert.Equal(id2!.Value, voices[0].Id);
+            var rule = await db.VoiceRules.FirstAsync(r => r.CharacterId == charId && r.IsDefault);
+            Assert.Equal(id2!.Value, rule.VoiceId);
         }
+
+        [Fact]
+        public async Task DeleteVoice_LastVoice_RemovesDefaultRule()
+        {
+            await using var db = await OpenDbAsync();
+            var charId = await SeedCharacterAsync(db);
+
+            var id = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V"));
+            await _svc.ExecuteAsync(new DeleteVoiceCommand(_folder, id!.Value));
+
+            var ruleCount = await db.VoiceRules.CountAsync(r => r.CharacterId == charId);
+            Assert.Equal(0, ruleCount);
+        }
+
+        // ── Other voice commands ──────────────────────────────────────────────
 
         [Fact]
         public async Task SetVoiceAudio_StoresFileName()
@@ -171,7 +213,6 @@ namespace Read2Me.Tests.Services.Characters
             var charId = await SeedCharacterAsync(db);
             var id = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V"));
 
-            // Create a real audio file on disk
             var charFolder = System.IO.Path.Combine(FolderPath, "voices", charId.ToString());
             System.IO.Directory.CreateDirectory(charFolder);
             var audioPath = System.IO.Path.Combine(charFolder, $"{id}-v.wav");

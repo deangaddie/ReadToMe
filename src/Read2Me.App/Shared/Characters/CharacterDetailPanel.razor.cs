@@ -285,5 +285,59 @@ namespace Read2Me.App.Shared.Characters
 
             await Presenter.DeleteCharacterAsync(Character.Id);
         }
+
+        // ── Voice Rules ───────────────────────────────────────────────────────────
+
+        internal static string RuleDescription(Read2Me.Services.VoiceRuleRow r)
+        {
+            if (r.IsDefault)
+                return $"Default → {r.VoiceName}";
+
+            string NodeLabel(Read2Me.Data.Enums.VoiceAnchorLevel? level, string? display, bool dangling)
+            {
+                if (dangling || display is null) return "(missing node)";
+                var prefix = level switch
+                {
+                    Read2Me.Data.Enums.VoiceAnchorLevel.Volume       => "Volume ",
+                    Read2Me.Data.Enums.VoiceAnchorLevel.Part         => "Part ",
+                    Read2Me.Data.Enums.VoiceAnchorLevel.Chapter      => "Chapter ",
+                    Read2Me.Data.Enums.VoiceAnchorLevel.Paragraph    => "Paragraph ",
+                    Read2Me.Data.Enums.VoiceAnchorLevel.ParagraphItem => "",
+                    _ => ""
+                };
+                return prefix + display;
+            }
+
+            var fromLabel = NodeLabel(r.FromLevel, r.FromDisplayName, r.FromDangling);
+            var toLabel   = NodeLabel(r.ToLevel,   r.ToDisplayName,   r.ToDangling);
+
+            bool fromHereOn = r.ToLevel is null && !r.ToDangling;
+            bool singleNode = r.FromLevel == r.ToLevel && r.FromNodeId == r.ToNodeId;
+
+            if (fromHereOn)
+                return $"From {fromLabel} onward → {r.VoiceName}";
+            if (singleNode)
+                return $"{fromLabel} → {r.VoiceName}";
+
+            return $"{fromLabel} to {toLabel} → {r.VoiceName}";
+        }
+
+        async Task OpenAddRuleDialogAsync()
+        {
+            var parameters = new DialogParameters<AddVoiceRuleDialog>
+            {
+                { d => d.Character, Character },
+                { d => d.Voices, Presenter.Voices },
+            };
+            var dialog = await DialogService.ShowAsync<AddVoiceRuleDialog>("Add Voice Rule", parameters);
+            var result = await dialog.Result;
+            if (result?.Canceled != false) return;
+            if (result.Data is not AddVoiceRuleDialog.RuleDialogResult r) return;
+
+            await Presenter.CreateVoiceRuleAsync(
+                Character.Id, r.VoiceId,
+                r.FromLevel, r.FromNodeId,
+                r.ToLevel, r.ToNodeId);
+        }
     }
 }

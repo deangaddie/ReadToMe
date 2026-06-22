@@ -63,6 +63,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<SetVoiceGeneratedCommand>, SetVoiceGeneratedHandler>();
         services.AddScoped<ICommandHandler<SetVoiceSourceCommand>, SetVoiceSourceHandler>();
         services.AddScoped<ICommandHandler<DeleteVoiceCommand>, DeleteVoiceHandler>();
+        services.AddScoped<ICommandHandler<CreateVoiceRuleCommand>, CreateVoiceRuleHandler>();
+        services.AddScoped<ICommandHandler<DeleteVoiceRuleCommand>, DeleteVoiceRuleHandler>();
+        services.AddScoped<ICommandHandler<MoveVoiceRuleCommand>, MoveVoiceRuleHandler>();
 
         // Title
         services.AddScoped<ICommandHandler<AddBookTitleCommand>, AddBookTitleHandler>();

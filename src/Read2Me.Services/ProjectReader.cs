@@ -10,8 +10,10 @@ using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
 using Read2Me.Services.NodeStatus;
+using Read2Me.Services.Voice;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 using ProjectEntity = Read2Me.Data.Entities.Project;
+using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 
 namespace Read2Me.Services
 {
@@ -189,9 +191,448 @@ namespace Read2Me.Services
             var db = await _session.OpenAsync(folderId);
             return await db.Voices
                 .Where(v => v.CharacterId == characterId)
-                .OrderByDescending(v => v.IsDefault)
-                .ThenBy(v => v.CreatedUtc)
+                .OrderBy(v => v.CreatedUtc)
                 .ToListAsync();
+        }
+
+        public async Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.VoiceRules
+                .Where(r => r.CharacterId == characterId && r.IsDefault)
+                .Select(r => (Guid?)r.VoiceId)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<(StoryPosition ItemPosition, IReadOnlyList<RuleInput> Rules)> GetVoiceRuleInputsAsync(
+            ProjectFolderId folderId, Guid itemId, Guid characterId)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            // Load item ancestry to build StoryPosition.
+            var ancestry = await db.ParagraphItems
+                .AsNoTracking()
+                .Where(pi => pi.Id == itemId)
+                .Select(pi => new
+                {
+                    ItemOrder    = pi.Order,
+                    ParaOrder    = pi.Paragraph.Order,
+                    ChapterOrder = pi.Paragraph.Chapter.Order,
+                    PartOrder    = pi.Paragraph.Chapter.Part.Order,
+                    VolumeOrder  = pi.Paragraph.Chapter.Part.Volume.Order,
+                })
+                .FirstOrDefaultAsync();
+
+            if (ancestry is null)
+                return (default, Array.Empty<RuleInput>());
+
+            var itemPos = new StoryPosition(
+                ancestry.VolumeOrder,
+                ancestry.PartOrder,
+                ancestry.ChapterOrder,
+                ancestry.ParaOrder,
+                ancestry.ItemOrder);
+
+            // Load the character's rules ordered by Rank.
+            var ruleRows = await db.VoiceRules
+                .AsNoTracking()
+                .Where(r => r.CharacterId == characterId)
+                .OrderBy(r => r.Rank)
+                .ToListAsync();
+
+            if (ruleRows.Count == 0)
+                return (itemPos, Array.Empty<RuleInput>());
+
+            // Collect distinct anchor node ids to resolve in batch (avoid N+1).
+            // We need to know, per (Level, NodeId), the Order tuple down to that level.
+            var volumeIds    = new HashSet<Guid>();
+            var partIds      = new HashSet<Guid>();
+            var chapterIds   = new HashSet<Guid>();
+            var paragraphIds = new HashSet<Guid>();
+            var itemIds      = new HashSet<Guid>();
+
+            foreach (var r in ruleRows)
+            {
+                CollectId(r.FromLevel, r.FromNodeId, volumeIds, partIds, chapterIds, paragraphIds, itemIds);
+                CollectId(r.ToLevel, r.ToNodeId, volumeIds, partIds, chapterIds, paragraphIds, itemIds);
+            }
+
+            // Resolve each level's nodes to (Volume.Order, Part.Order, Chapter.Order, Para.Order, Item.Order) tuples.
+            // Deeper levels carry their own Order; shallower levels leave deeper fields as sentinel.
+            const string MaxSentinel = "￿￿";  // sorts after all real Order keys (ASCII-range)
+            const string MinSentinel = "";              // empty string sorts before all real Order keys
+
+            // Volume nodes
+            var volOrders = volumeIds.Count > 0
+                ? await db.Volumes.AsNoTracking()
+                    .Where(v => volumeIds.Contains(v.Id))
+                    .Select(v => new { v.Id, v.Order })
+                    .ToDictionaryAsync(v => v.Id, v => v.Order)
+                : new Dictionary<Guid, string>();
+
+            // Part nodes — need Volume.Order
+            Dictionary<Guid, (string VolOrder, string PartOrder)> partOrders = new();
+            if (partIds.Count > 0)
+            {
+                var rows = await db.Parts.AsNoTracking()
+                    .Where(p => partIds.Contains(p.Id))
+                    .Select(p => new { p.Id, PartOrder = p.Order, VolumeOrder = p.Volume.Order })
+                    .ToListAsync();
+                foreach (var r in rows) partOrders[r.Id] = (r.VolumeOrder, r.PartOrder);
+            }
+
+            // Chapter nodes — need Volume, Part.Order
+            Dictionary<Guid, (string VolOrder, string PartOrder, string ChOrder)> chapterOrders = new();
+            if (chapterIds.Count > 0)
+            {
+                var rows = await db.Chapters.AsNoTracking()
+                    .Where(c => chapterIds.Contains(c.Id))
+                    .Select(c => new
+                    {
+                        c.Id,
+                        ChOrder = c.Order,
+                        PartOrder = c.Part.Order,
+                        VolumeOrder = c.Part.Volume.Order
+                    })
+                    .ToListAsync();
+                foreach (var r in rows) chapterOrders[r.Id] = (r.VolumeOrder, r.PartOrder, r.ChOrder);
+            }
+
+            // Paragraph nodes — need Volume, Part, Chapter.Order
+            Dictionary<Guid, (string VolOrder, string PartOrder, string ChOrder, string ParaOrder)> paraOrders = new();
+            if (paragraphIds.Count > 0)
+            {
+                var rows = await db.Paragraphs.AsNoTracking()
+                    .Where(p => paragraphIds.Contains(p.Id))
+                    .Select(p => new
+                    {
+                        p.Id,
+                        ParaOrder = p.Order,
+                        ChOrder = p.Chapter.Order,
+                        PartOrder = p.Chapter.Part.Order,
+                        VolumeOrder = p.Chapter.Part.Volume.Order
+                    })
+                    .ToListAsync();
+                foreach (var r in rows) paraOrders[r.Id] = (r.VolumeOrder, r.PartOrder, r.ChOrder, r.ParaOrder);
+            }
+
+            // ParagraphItem nodes — full 5-tuple
+            Dictionary<Guid, StoryPosition> itemPositions = new();
+            if (itemIds.Count > 0)
+            {
+                var rows = await db.ParagraphItems.AsNoTracking()
+                    .Where(pi => itemIds.Contains(pi.Id))
+                    .Select(pi => new
+                    {
+                        pi.Id,
+                        ItemOrder = pi.Order,
+                        ParaOrder = pi.Paragraph.Order,
+                        ChOrder = pi.Paragraph.Chapter.Order,
+                        PartOrder = pi.Paragraph.Chapter.Part.Order,
+                        VolumeOrder = pi.Paragraph.Chapter.Part.Volume.Order
+                    })
+                    .ToListAsync();
+                foreach (var r in rows)
+                    itemPositions[r.Id] = new StoryPosition(r.VolumeOrder, r.PartOrder, r.ChOrder, r.ParaOrder, r.ItemOrder);
+            }
+
+            // Build RuleInput list.
+            var inputs = new List<RuleInput>(ruleRows.Count);
+            foreach (var r in ruleRows)
+            {
+                var fromPos = ResolveSpanBound(r.FromLevel, r.FromNodeId, isMin: true,
+                    volOrders, partOrders, chapterOrders, paraOrders, itemPositions,
+                    MinSentinel, MaxSentinel, out var fromDangling);
+                var toPos = ResolveSpanBound(r.ToLevel, r.ToNodeId, isMin: false,
+                    volOrders, partOrders, chapterOrders, paraOrders, itemPositions,
+                    MinSentinel, MaxSentinel, out var toDangling);
+
+                var isDangling = (r.FromNodeId.HasValue && fromDangling) ||
+                                 (r.ToNodeId.HasValue && toDangling);
+
+                inputs.Add(new RuleInput(
+                    r.VoiceId,
+                    r.Rank,
+                    r.IsDefault,
+                    IsDangling: isDangling,
+                    From: (r.FromLevel.HasValue && !fromDangling) ? fromPos : null,
+                    To:   (r.ToLevel.HasValue   && !toDangling)  ? toPos   : null));
+            }
+
+            return (itemPos, inputs);
+        }
+
+        public async Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            var rules = await db.VoiceRules
+                .AsNoTracking()
+                .Where(r => r.CharacterId == characterId)
+                .OrderBy(r => r.Rank)
+                .ToListAsync();
+
+            if (rules.Count == 0) return [];
+
+            // Collect anchor node ids for batch lookup.
+            var volumeIds    = new HashSet<Guid>();
+            var partIds      = new HashSet<Guid>();
+            var chapterIds   = new HashSet<Guid>();
+            var paragraphIds = new HashSet<Guid>();
+            var itemIds      = new HashSet<Guid>();
+            var voiceIds     = new HashSet<Guid>();
+
+            foreach (var r in rules)
+            {
+                voiceIds.Add(r.VoiceId);
+                CollectId(r.FromLevel, r.FromNodeId, volumeIds, partIds, chapterIds, paragraphIds, itemIds);
+                CollectId(r.ToLevel,   r.ToNodeId,   volumeIds, partIds, chapterIds, paragraphIds, itemIds);
+            }
+
+            // Load voice names.
+            var voiceNames = await db.Voices
+                .AsNoTracking()
+                .Where(v => voiceIds.Contains(v.Id))
+                .Select(v => new { v.Id, v.Name })
+                .ToDictionaryAsync(v => v.Id, v => v.Name ?? "");
+
+            // Load node display names by level.
+            Dictionary<Guid, string> volumeNames    = new();
+            Dictionary<Guid, string> partNames      = new();
+            Dictionary<Guid, string> chapterNames   = new();
+            Dictionary<Guid, string> paragraphNames = new();
+            Dictionary<Guid, string> itemNames      = new();
+
+            if (volumeIds.Count > 0)
+            {
+                var rows = await db.Volumes.AsNoTracking()
+                    .Where(v => volumeIds.Contains(v.Id))
+                    .Select(v => new { v.Id, Name = v.Title ?? "Untitled" })
+                    .ToListAsync();
+                foreach (var r in rows) volumeNames[r.Id] = r.Name;
+            }
+            if (partIds.Count > 0)
+            {
+                var rows = await db.Parts.AsNoTracking()
+                    .Where(p => partIds.Contains(p.Id))
+                    .Select(p => new { p.Id, Name = p.Title ?? "Untitled" })
+                    .ToListAsync();
+                foreach (var r in rows) partNames[r.Id] = r.Name;
+            }
+            if (chapterIds.Count > 0)
+            {
+                var rows = await db.Chapters.AsNoTracking()
+                    .Where(c => chapterIds.Contains(c.Id))
+                    .Select(c => new { c.Id, Name = c.Title ?? "Untitled" })
+                    .ToListAsync();
+                foreach (var r in rows) chapterNames[r.Id] = r.Name;
+            }
+            if (paragraphIds.Count > 0)
+            {
+                var rows = await db.Paragraphs.AsNoTracking()
+                    .Where(p => paragraphIds.Contains(p.Id))
+                    .Select(p => new { p.Id, Name = "#" + (p.Order ?? "") })
+                    .ToListAsync();
+                foreach (var r in rows) paragraphNames[r.Id] = r.Name;
+            }
+            if (itemIds.Count > 0)
+            {
+                var rows = await db.ParagraphItems.AsNoTracking()
+                    .Where(pi => itemIds.Contains(pi.Id))
+                    .Select(pi => new { pi.Id, Name = pi.Text != null ? pi.Text.Substring(0, Math.Min(pi.Text.Length, 30)) : "" })
+                    .ToListAsync();
+                foreach (var r in rows) itemNames[r.Id] = "\"" + r.Name + (r.Name.Length == 30 ? "…" : "") + "\"";
+            }
+
+            string? ResolveDisplayName(DataAnchorLevel? level, Guid? nodeId, out bool dangling)
+            {
+                dangling = false;
+                if (level is null || nodeId is null) return null;
+                var id = nodeId.Value;
+                bool found;
+                string? name;
+                switch (level.Value)
+                {
+                    case DataAnchorLevel.Volume:
+                        found = volumeNames.TryGetValue(id, out name);
+                        break;
+                    case DataAnchorLevel.Part:
+                        found = partNames.TryGetValue(id, out name);
+                        break;
+                    case DataAnchorLevel.Chapter:
+                        found = chapterNames.TryGetValue(id, out name);
+                        break;
+                    case DataAnchorLevel.Paragraph:
+                        found = paragraphNames.TryGetValue(id, out name);
+                        break;
+                    case DataAnchorLevel.ParagraphItem:
+                        found = itemNames.TryGetValue(id, out name);
+                        break;
+                    default:
+                        found = false; name = null;
+                        break;
+                }
+                if (!found) { dangling = true; return null; }
+                return name;
+            }
+
+            var result = new List<VoiceRuleRow>(rules.Count);
+            foreach (var r in rules)
+            {
+                voiceNames.TryGetValue(r.VoiceId, out var voiceName);
+                var fromDisplay = ResolveDisplayName(r.FromLevel, r.FromNodeId, out var fromDangling);
+                var toDisplay   = ResolveDisplayName(r.ToLevel,   r.ToNodeId,   out var toDangling);
+                result.Add(new VoiceRuleRow(
+                    r.Id, r.IsDefault, r.Rank,
+                    r.VoiceId, voiceName ?? "",
+                    r.FromLevel, r.FromNodeId, fromDisplay, fromDangling,
+                    r.ToLevel, r.ToNodeId, toDisplay, toDangling));
+            }
+            return result;
+        }
+
+        public async Task<IReadOnlyDictionary<Guid, string?>> GetResolvedVoiceNamesAsync(
+            ProjectFolderId folderId, IEnumerable<Guid> itemIds, bool narratorOnlyMode)
+        {
+            var ids = itemIds.ToHashSet();
+            if (ids.Count == 0) return new Dictionary<Guid, string?>();
+
+            var db = await _session.OpenAsync(folderId);
+
+            // Load items with character info.
+            var items = await db.ParagraphItems
+                .AsNoTracking()
+                .Where(pi => ids.Contains(pi.Id))
+                .Select(pi => new
+                {
+                    pi.Id,
+                    pi.ItemType,
+                    pi.CharacterId,
+                })
+                .ToListAsync();
+
+            // Group by effective character id (narrator substitution honors NarratorOnlyMode).
+            var narratorId = Data.ProjectDbContext.NarratorId;
+            var charToItems = new Dictionary<Guid, List<Guid>>(); // characterId → list of itemIds
+
+            foreach (var it in items)
+            {
+                Guid? charId;
+                if (narratorOnlyMode || it.ItemType == ParagraphItemType.Narration)
+                    charId = narratorId;
+                else if (it.ItemType == ParagraphItemType.Character)
+                    charId = it.CharacterId;
+                else
+                    charId = null;
+
+                if (charId is null) continue;
+                if (!charToItems.TryGetValue(charId.Value, out var list))
+                    charToItems[charId.Value] = list = new List<Guid>();
+                list.Add(it.Id);
+            }
+
+            // Per character: resolve rules + positions, run evaluator.
+            var result = new Dictionary<Guid, string?>();
+
+            // Cache voice names.
+            var voiceNameCache = new Dictionary<Guid, string?>();
+            async Task<string?> GetVoiceName(Guid? voiceId)
+            {
+                if (voiceId is null) return null;
+                if (voiceNameCache.TryGetValue(voiceId.Value, out var cached)) return cached;
+                var name = await db.Voices.AsNoTracking()
+                    .Where(v => v.Id == voiceId.Value)
+                    .Select(v => (string?)v.Name)
+                    .FirstOrDefaultAsync();
+                voiceNameCache[voiceId.Value] = name;
+                return name;
+            }
+
+            foreach (var (charId, charItemIds) in charToItems)
+            {
+                foreach (var itemId in charItemIds)
+                {
+                    var (pos, inputs) = await GetVoiceRuleInputsAsync(folderId, itemId, charId);
+                    var resolvedVoiceId = VoiceRuleEvaluator.Evaluate(inputs, pos);
+                    result[itemId] = await GetVoiceName(resolvedVoiceId);
+                }
+            }
+
+            return result;
+        }
+
+        private static void CollectId(
+            DataAnchorLevel? level, Guid? nodeId,
+            HashSet<Guid> volumeIds, HashSet<Guid> partIds, HashSet<Guid> chapterIds,
+            HashSet<Guid> paragraphIds, HashSet<Guid> itemIds)
+        {
+            if (level is null || nodeId is null) return;
+            switch (level.Value)
+            {
+                case DataAnchorLevel.Volume:       volumeIds.Add(nodeId.Value);    break;
+                case DataAnchorLevel.Part:         partIds.Add(nodeId.Value);      break;
+                case DataAnchorLevel.Chapter:      chapterIds.Add(nodeId.Value);   break;
+                case DataAnchorLevel.Paragraph:    paragraphIds.Add(nodeId.Value); break;
+                case DataAnchorLevel.ParagraphItem: itemIds.Add(nodeId.Value);     break;
+            }
+        }
+
+        private static StoryPosition ResolveSpanBound(
+            DataAnchorLevel? level, Guid? nodeId, bool isMin,
+            Dictionary<Guid, string> volOrders,
+            Dictionary<Guid, (string VolOrder, string PartOrder)> partOrders,
+            Dictionary<Guid, (string VolOrder, string PartOrder, string ChOrder)> chapterOrders,
+            Dictionary<Guid, (string VolOrder, string PartOrder, string ChOrder, string ParaOrder)> paraOrders,
+            Dictionary<Guid, StoryPosition> itemPositions,
+            string minSentinel, string maxSentinel,
+            out bool isDangling)
+        {
+            isDangling = false;
+
+            if (level is null || nodeId is null)
+                return default; // null From/To → open bound; caller checks level for null
+
+            var tail = isMin ? minSentinel : maxSentinel;
+
+            switch (level.Value)
+            {
+                case DataAnchorLevel.Volume:
+                    if (!volOrders.TryGetValue(nodeId.Value, out var volOrder))
+                    { isDangling = true; return default; }
+                    return isMin
+                        ? new StoryPosition(volOrder, minSentinel, minSentinel, minSentinel, minSentinel)
+                        : new StoryPosition(volOrder, maxSentinel, maxSentinel, maxSentinel, maxSentinel);
+
+                case DataAnchorLevel.Part:
+                    if (!partOrders.TryGetValue(nodeId.Value, out var partRow))
+                    { isDangling = true; return default; }
+                    return isMin
+                        ? new StoryPosition(partRow.VolOrder, partRow.PartOrder, minSentinel, minSentinel, minSentinel)
+                        : new StoryPosition(partRow.VolOrder, partRow.PartOrder, maxSentinel, maxSentinel, maxSentinel);
+
+                case DataAnchorLevel.Chapter:
+                    if (!chapterOrders.TryGetValue(nodeId.Value, out var chRow))
+                    { isDangling = true; return default; }
+                    return isMin
+                        ? new StoryPosition(chRow.VolOrder, chRow.PartOrder, chRow.ChOrder, minSentinel, minSentinel)
+                        : new StoryPosition(chRow.VolOrder, chRow.PartOrder, chRow.ChOrder, maxSentinel, maxSentinel);
+
+                case DataAnchorLevel.Paragraph:
+                    if (!paraOrders.TryGetValue(nodeId.Value, out var paraRow))
+                    { isDangling = true; return default; }
+                    return isMin
+                        ? new StoryPosition(paraRow.VolOrder, paraRow.PartOrder, paraRow.ChOrder, paraRow.ParaOrder, minSentinel)
+                        : new StoryPosition(paraRow.VolOrder, paraRow.PartOrder, paraRow.ChOrder, paraRow.ParaOrder, maxSentinel);
+
+                case DataAnchorLevel.ParagraphItem:
+                    if (!itemPositions.TryGetValue(nodeId.Value, out var itemPos))
+                    { isDangling = true; return default; }
+                    return itemPos; // single-item anchor: min == max == exact position
+
+                default:
+                    isDangling = true;
+                    return default;
+            }
         }
 
         public async Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId)

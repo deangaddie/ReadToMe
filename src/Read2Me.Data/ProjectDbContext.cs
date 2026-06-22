@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 
 namespace Read2Me.Data
 {
@@ -17,6 +18,7 @@ namespace Read2Me.Data
         public DbSet<Paragraph> Paragraphs => Set<Paragraph>();
         public DbSet<ParagraphItem> ParagraphItems => Set<ParagraphItem>();
         public DbSet<Voice> Voices => Set<Voice>();
+        public DbSet<VoiceRule> VoiceRules => Set<VoiceRule>();
         public DbSet<CharacterAlias> CharacterAliases => Set<CharacterAlias>();
         public DbSet<AudioReview> AudioReviews => Set<AudioReview>();
 
@@ -92,6 +94,25 @@ namespace Read2Me.Data
                 e.Property(v => v.AudioFileName).HasMaxLength(512);
                 e.Property(v => v.SettingsOverrideJson).HasMaxLength(4000);
                 e.HasOne(v => v.Character).WithMany(c => c.Voices).HasForeignKey(v => v.CharacterId);
+            });
+
+            modelBuilder.Entity<VoiceRule>(e =>
+            {
+                e.HasKey(r => r.Id);
+                e.Property(r => r.Rank).HasMaxLength(250).IsRequired().UseCollation("BINARY");
+                e.Property(r => r.FromLevel).HasConversion<string>();
+                e.Property(r => r.ToLevel).HasConversion<string>();
+                // FromNodeId/ToNodeId are polymorphic across 5 tables and may dangle by design (ADR-0002).
+                // No FK constraints for these — dangling anchors are flagged in UI, never silently deleted.
+                e.HasOne(r => r.Character).WithMany()
+                    .HasForeignKey(r => r.CharacterId)
+                    // Cascade from Character: if a character is deleted, their rules go too (no orphans).
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(r => r.Voice).WithMany()
+                    .HasForeignKey(r => r.VoiceId)
+                    // Restrict cascade from Voice: voice-delete logic is handled explicitly in code.
+                    // DeleteVoiceHandler repoints the default rule and cascade-deletes non-default rules.
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<CharacterAlias>(e =>

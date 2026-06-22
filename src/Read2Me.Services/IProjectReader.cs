@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
+using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 using Read2Me.Services.NodeStatus;
+using Read2Me.Services.Voice;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Services
@@ -37,6 +40,22 @@ namespace Read2Me.Services
         List<Chapter>? Chapters,
         List<Paragraph>? Paragraphs);
 
+    /// <summary>A resolved voice rule row for UI rendering.</summary>
+    public sealed record VoiceRuleRow(
+        Guid Id,
+        bool IsDefault,
+        string Rank,
+        Guid VoiceId,
+        string VoiceName,
+        DataAnchorLevel? FromLevel,
+        Guid? FromNodeId,
+        string? FromDisplayName,
+        bool FromDangling,
+        DataAnchorLevel? ToLevel,
+        Guid? ToNodeId,
+        string? ToDisplayName,
+        bool ToDangling);
+
     public interface IProjectReader
     {
         Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId);
@@ -58,6 +77,23 @@ namespace Read2Me.Services
         Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId);
         Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId);
         Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId);
+        Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId);
+        /// <summary>
+        /// Returns the StoryPosition of the given item and the caller-resolved rule inputs for
+        /// the given character, ready for <see cref="VoiceRuleEvaluator.Evaluate"/>.
+        /// Dangling rules (anchor node no longer exists) are flagged rather than thrown.
+        /// </summary>
+        Task<(StoryPosition ItemPosition, IReadOnlyList<RuleInput> Rules)> GetVoiceRuleInputsAsync(
+            ProjectFolderId folderId, Guid itemId, Guid characterId);
+        Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId);
+        /// <summary>
+        /// Returns, for each item id in <paramref name="itemIds"/>, the voice name that
+        /// <see cref="VoiceRuleEvaluator"/> would select at generation time — the same
+        /// logic the audio processor uses.  Unresolvable items (no character, no voice)
+        /// map to null.
+        /// </summary>
+        Task<IReadOnlyDictionary<Guid, string?>> GetResolvedVoiceNamesAsync(
+            ProjectFolderId folderId, IEnumerable<Guid> itemIds, bool narratorOnlyMode);
         Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId);
         Task<int> GetTotalPartCountAsync(ProjectFolderId folderId);
         Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId);

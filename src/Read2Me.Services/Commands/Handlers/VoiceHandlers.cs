@@ -6,9 +6,13 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Core.Utils;
 using Read2Me.Data;
+using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
+using CoreAnchorLevel = Read2Me.Core.Models.VoiceAnchorLevel;
+using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 
 namespace Read2Me.Services.Commands.Handlers;
 
@@ -29,11 +33,25 @@ public sealed class CreateVoiceHandler(ProjectDbSession session) : ICommandHandl
             Id = Guid.NewGuid(),
             CharacterId = c.CharacterId,
             Name = effectiveName,
-            IsDefault = isFirst,
             Source = c.IsGenerated ? VoiceSource.Generated : VoiceSource.Uploaded,
             CreatedUtc = DateTime.UtcNow,
         };
         db.Voices.Add(voice);
+
+        if (isFirst)
+        {
+            // First voice: create the default VoiceRule (IsDefault=true, null anchors, floor Rank).
+            // Floor Rank = OrderHelper.GetBefore(null) = "a0" so it sorts before all non-default rules.
+            db.VoiceRules.Add(new VoiceRule
+            {
+                Id = Guid.NewGuid(),
+                CharacterId = c.CharacterId,
+                VoiceId = voice.Id,
+                IsDefault = true,
+                Rank = OrderHelper.GetBefore(null),
+            });
+        }
+
         await db.SaveChangesAsync(ct);
         return voice.Id;
     }
@@ -47,12 +65,27 @@ public sealed class SetVoiceDefaultHandler(ProjectDbSession session) : ICommandH
         var voice = await db.Voices.FindAsync(c.VoiceId);
         if (voice == null) return null;
 
-        await db.Voices
-            .Where(v => v.CharacterId == voice.CharacterId && v.IsDefault)
-            .ExecuteUpdateAsync(s => s.SetProperty(v => v.IsDefault, false), ct);
+        // Repoint the character's default rule to this voice (one rule, always exactly one).
+        var defaultRule = await db.VoiceRules
+            .FirstOrDefaultAsync(r => r.CharacterId == voice.CharacterId && r.IsDefault, ct);
 
-        voice.IsDefault = true;
-        db.Voices.Update(voice);
+        if (defaultRule != null)
+        {
+            defaultRule.VoiceId = voice.Id;
+        }
+        else
+        {
+            // Guard: voices exist but no default rule — create one.
+            db.VoiceRules.Add(new VoiceRule
+            {
+                Id = Guid.NewGuid(),
+                CharacterId = voice.CharacterId,
+                VoiceId = voice.Id,
+                IsDefault = true,
+                Rank = OrderHelper.GetBefore(null),
+            });
+        }
+
         await db.SaveChangesAsync(ct);
         return null;
     }
@@ -168,17 +201,109 @@ public sealed class SetVoiceSourceHandler(ProjectDbSession session, IFileSystem 
     }
 }
 
+public sealed class CreateVoiceRuleHandler(ProjectDbSession session) : ICommandHandler<CreateVoiceRuleCommand>
+{
+    public async Task<Guid?> HandleAsync(CreateVoiceRuleCommand c, CancellationToken ct)
+    {
+        var db = await session.OpenAsync(c.FolderId);
+
+        // Validate voice belongs to character.
+        var voiceBelongs = await db.Voices
+            .AnyAsync(v => v.Id == c.VoiceId && v.CharacterId == c.CharacterId, ct);
+        if (!voiceBelongs) return null;
+
+        // Append below all existing rules: Rank > current max.
+        var maxRank = await db.VoiceRules
+            .Where(r => r.CharacterId == c.CharacterId)
+            .Select(r => (string?)r.Rank)
+            .MaxAsync(ct);
+
+        var newRank = OrderHelper.GetNextOrder(maxRank);
+
+        var rule = new VoiceRule
+        {
+            Id = Guid.NewGuid(),
+            CharacterId = c.CharacterId,
+            VoiceId = c.VoiceId,
+            IsDefault = false,
+            Rank = newRank,
+            FromLevel = c.FromLevel.HasValue ? (DataAnchorLevel)c.FromLevel.Value : null,
+            FromNodeId = c.FromNodeId,
+            ToLevel = c.ToLevel.HasValue ? (DataAnchorLevel)c.ToLevel.Value : null,
+            ToNodeId = c.ToNodeId,
+        };
+        db.VoiceRules.Add(rule);
+        await db.SaveChangesAsync(ct);
+        return rule.Id;
+    }
+}
+
+public sealed class DeleteVoiceRuleHandler(ProjectDbSession session) : ICommandHandler<DeleteVoiceRuleCommand>
+{
+    public async Task<Guid?> HandleAsync(DeleteVoiceRuleCommand c, CancellationToken ct)
+    {
+        var db = await session.OpenAsync(c.FolderId);
+        var rule = await db.VoiceRules.FindAsync([c.RuleId], ct);
+        if (rule is null || rule.IsDefault) return null;
+
+        db.VoiceRules.Remove(rule);
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+}
+
+public sealed class MoveVoiceRuleHandler(ProjectDbSession session) : ICommandHandler<MoveVoiceRuleCommand>
+{
+    public async Task<Guid?> HandleAsync(MoveVoiceRuleCommand c, CancellationToken ct)
+    {
+        var db = await session.OpenAsync(c.FolderId);
+        var rule = await db.VoiceRules.FindAsync([c.RuleId], ct);
+        if (rule is null || rule.IsDefault) return null;
+
+        // Load all non-default rules for this character, sorted by Rank.
+        var nonDefaultRules = await db.VoiceRules
+            .Where(r => r.CharacterId == rule.CharacterId && !r.IsDefault)
+            .OrderBy(r => r.Rank)
+            .Select(r => new { r.Id, r.Rank })
+            .ToListAsync(ct);
+
+        var idx = nonDefaultRules.FindIndex(r => r.Id == c.RuleId);
+        if (idx < 0) return null;
+
+        if (c.Direction == RuleMoveDirection.Up)
+        {
+            if (idx == 0) return null; // already top-most non-default (can't go above default)
+
+            // Swap with predecessor: assign Rank between predecessor's predecessor and predecessor.
+            var prev = nonDefaultRules[idx - 1];
+            var prevPrev = idx - 2 >= 0 ? nonDefaultRules[idx - 2].Rank : null;
+            // Default rule rank is always the floor — must stay below all non-default rules.
+            // prevPrev is the rank before prev, or null (we'll get a key below prev).
+            rule.Rank = OrderHelper.GetBetween(prevPrev, prev.Rank);
+        }
+        else // Down
+        {
+            if (idx == nonDefaultRules.Count - 1) return null; // already bottom-most
+
+            var next = nonDefaultRules[idx + 1];
+            var nextNext = idx + 2 < nonDefaultRules.Count ? nonDefaultRules[idx + 2].Rank : null;
+            rule.Rank = OrderHelper.GetBetween(next.Rank, nextNext);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+}
+
 public sealed class DeleteVoiceHandler(ProjectDbSession session, IFileSystem fs) : ICommandHandler<DeleteVoiceCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteVoiceCommand c, CancellationToken ct)
     {
         var db = await session.OpenAsync(c.FolderId);
         var voice = await db.Voices
-            .Include(v => v.Character)
             .FirstOrDefaultAsync(v => v.Id == c.VoiceId, ct);
         if (voice == null) return null;
 
-        var wasDefault = voice.IsDefault;
         var characterId = voice.CharacterId;
 
         if (voice.AudioFileName != null)
@@ -189,24 +314,47 @@ public sealed class DeleteVoiceHandler(ProjectDbSession session, IFileSystem fs)
                 fs.DeleteFile(audioPath);
         }
 
-        db.Voices.Remove(voice);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await db.SaveChangesAsync(ct);
 
-        if (wasDefault)
+        // Cascade-delete all non-default rules pointing at this voice.
+        await db.VoiceRules
+            .Where(r => r.VoiceId == c.VoiceId && !r.IsDefault)
+            .ExecuteDeleteAsync(ct);
+
+        // Check whether the default rule targets the voice being deleted.
+        var defaultRuleTargetsThis = await db.VoiceRules
+            .AnyAsync(r => r.CharacterId == characterId && r.IsDefault && r.VoiceId == c.VoiceId, ct);
+
+        if (defaultRuleTargetsThis)
         {
+            // Find the oldest remaining voice (excluding the one being deleted).
             var firstRemaining = await db.Voices
-                .Where(v => v.CharacterId == characterId)
+                .Where(v => v.CharacterId == characterId && v.Id != c.VoiceId)
                 .OrderBy(v => v.CreatedUtc)
+                .Select(v => (Guid?)v.Id)
                 .FirstOrDefaultAsync(ct);
-            if (firstRemaining != null)
+
+            if (firstRemaining.HasValue)
             {
-                firstRemaining.IsDefault = true;
-                await db.SaveChangesAsync(ct);
+                // Repoint the default rule before deleting the voice (avoids FK constraint violation in tracker).
+                await db.VoiceRules
+                    .Where(r => r.CharacterId == characterId && r.IsDefault)
+                    .ExecuteUpdateAsync(s => s.SetProperty(r => r.VoiceId, firstRemaining.Value), ct);
+            }
+            else
+            {
+                // No remaining voices — delete the default rule first, then the voice.
+                await db.VoiceRules
+                    .Where(r => r.CharacterId == characterId && r.IsDefault)
+                    .ExecuteDeleteAsync(ct);
             }
         }
-        await tx.CommitAsync(ct);
 
+        await db.Voices
+            .Where(v => v.Id == c.VoiceId)
+            .ExecuteDeleteAsync(ct);
+
+        await tx.CommitAsync(ct);
         return null;
     }
 }
