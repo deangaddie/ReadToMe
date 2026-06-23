@@ -19,12 +19,14 @@ namespace Read2Me.App.Shared
         // Shared
         public string BaseUrl { get; set; } = "";
 
-        // VoxCpm2 settings
-        public int MaxLen { get; set; } = 4096;
+        // VoxCpm2 settings — full JSON for the tunable fields (BaseUrl held separately above)
+        public string? SettingsJson { get; set; }
 
         // Qwen3 settings
         public string? ApiKey { get; set; }
         public string? Model { get; set; }
+
+        private static readonly JsonSerializerOptions _jsonOpts = new(JsonSerializerDefaults.Web);
 
         public static VoiceDesignServiceConfigForm FromConfig(VoiceDesignServiceConfig c)
         {
@@ -39,10 +41,11 @@ namespace Read2Me.App.Shared
             {
                 case VoiceDesignServiceType.VoxCpm2:
                     var vox = string.IsNullOrWhiteSpace(c.SettingsJson)
-                        ? new VoxCpm2VoiceDesignSettings()
-                        : JsonSerializer.Deserialize<VoxCpm2VoiceDesignSettings>(c.SettingsJson) ?? new VoxCpm2VoiceDesignSettings();
+                        ? VoxCpm2VoiceDesignSettings.Recommended
+                        : JsonSerializer.Deserialize<VoxCpm2VoiceDesignSettings>(c.SettingsJson, _jsonOpts)
+                          ?? VoxCpm2VoiceDesignSettings.Recommended;
                     form.BaseUrl = vox.BaseUrl;
-                    form.MaxLen = vox.MaxLen;
+                    form.SettingsJson = JsonSerializer.Serialize(vox, _jsonOpts);
                     break;
                 case VoiceDesignServiceType.Qwen3:
                     var q3 = string.IsNullOrWhiteSpace(c.SettingsJson)
@@ -67,9 +70,6 @@ namespace Read2Me.App.Shared
             if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out _))
                 return "Base URL must be a valid absolute URL (e.g. http://localhost:8003).";
 
-            if (Type == VoiceDesignServiceType.VoxCpm2 && (MaxLen < 1 || MaxLen > 8192))
-                return "Max Len must be between 1 and 8192.";
-
             return null;
         }
 
@@ -77,12 +77,7 @@ namespace Read2Me.App.Shared
         {
             var settingsJson = Type switch
             {
-                VoiceDesignServiceType.VoxCpm2 =>
-                    JsonSerializer.Serialize(new VoxCpm2VoiceDesignSettings
-                    {
-                        BaseUrl = BaseUrl.Trim(),
-                        MaxLen = MaxLen,
-                    }),
+                VoiceDesignServiceType.VoxCpm2 => BuildVoxCpm2SettingsJson(),
                 VoiceDesignServiceType.Qwen3 =>
                     JsonSerializer.Serialize(new Qwen3VoiceDesignSettings
                     {
@@ -100,6 +95,18 @@ namespace Read2Me.App.Shared
                 Type = Type,
                 SettingsJson = settingsJson,
             };
+        }
+
+        private string BuildVoxCpm2SettingsJson()
+        {
+            var settings = string.IsNullOrWhiteSpace(SettingsJson)
+                ? VoxCpm2VoiceDesignSettings.Recommended
+                : JsonSerializer.Deserialize<VoxCpm2VoiceDesignSettings>(SettingsJson, _jsonOpts)
+                  ?? VoxCpm2VoiceDesignSettings.Recommended;
+
+            // BaseUrl owned by the form, not the editor — merge in here
+            settings = settings with { BaseUrl = BaseUrl.Trim() };
+            return JsonSerializer.Serialize(settings, _jsonOpts);
         }
     }
 }

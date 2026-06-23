@@ -1,5 +1,7 @@
 @using System.IO
 @using Read2Me.App.State
+@using Read2Me.App.Shared
+@using Read2Me.AppData.Entities
 @using Read2Me.Core.Models
 @using Read2Me.Data.Entities
 @using Read2Me.Data.Enums
@@ -191,11 +193,11 @@
 
                                 <MudExpansionPanel Text="Advanced settings" Dense="true">
                                     <MudStack Spacing="2">
-                                        <MudTextField Value="@GetOverrideDraft(v)"
-                                                      ValueChanged="@((string s) => _drafts.Set(v.Id, VoiceDraftField.Override, s))"
-                                                      Label="Settings override (JSON)" Variant="Variant.Outlined"
-                                                      Lines="3" Immediate="true"
-                                                      HelperText="Only the keys you set override the active provider's defaults. Leave blank for none." />
+                                        <TtsSettingsEditor Value="@GetOverrideDraft(v)"
+                                                           ValueChanged="@((string? s) => _drafts.Set(v.Id, VoiceDraftField.Override, s ?? ""))"
+                                                           ProviderType="@(_activeVoiceDesignConfig?.Type ?? VoiceDesignServiceType.VoxCpm2)"
+                                                           Mode="TtsSettingsEditorMode.VoiceOverride"
+                                                           ProviderDefaultsJson="@ActiveProviderDefaultsJson" />
                                         <MudButton Variant="Variant.Outlined" Size="Size.Small"
                                                    StartIcon="@Icons.Material.Filled.Save"
                                                    OnClick="@(() => SaveOverrideAsync(v))">Save</MudButton>

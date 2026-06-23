@@ -1,0 +1,247 @@
+@using Read2Me.AppData.Entities
+@using Read2Me.Services.Audio.VoiceDesign.Settings
+@using System.Text.Json
+@using System.Text.Json.Nodes
+
+@if (ProviderType == VoiceDesignServiceType.VoxCpm2)
+{
+    <MudStack Spacing="2">
+        <MudStack Spacing="0" Style="@FieldStyle("cfg_value")">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.body2">CFG Value</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body2">@_effective.CfgValue.ToString("F1")</MudText>
+                    @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("cfg_value"))
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                                       OnClick="@(() => ResetField(b => _effective with { CfgValue = b.CfgValue }))" />
+                    }
+                </MudStack>
+            </MudStack>
+            <MudSlider T="double" Value="_effective.CfgValue" Min="1.0" Max="5.0" Step="0.1"
+                       ValueChanged="@((double v) => OnFieldChanged(s => s with { CfgValue = v }))" />
+            <MudText Typo="Typo.caption" Color="Color.Default">Guidance scale — higher = closer to design prompt. (1.0–5.0)</MudText>
+        </MudStack>
+
+        <MudStack Spacing="0" Style="@FieldStyle("inference_timesteps")">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.body2">LocDiT Steps</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body2">@_effective.InferenceTimesteps</MudText>
+                    @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("inference_timesteps"))
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                                       OnClick="@(() => ResetField(b => _effective with { InferenceTimesteps = b.InferenceTimesteps }))" />
+                    }
+                </MudStack>
+            </MudStack>
+            <MudSlider T="int" Value="_effective.InferenceTimesteps" Min="1" Max="50" Step="1"
+                       ValueChanged="@((int v) => OnFieldChanged(s => s with { InferenceTimesteps = v }))" />
+            <MudText Typo="Typo.caption" Color="Color.Default">Flow-matching diffusion steps — speed vs quality. (1–50)</MudText>
+        </MudStack>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudNumericField T="int" Value="_effective.MinLen" Label="Min Length (s)"
+                             Variant="Variant.Outlined" Immediate="true"
+                             Min="1" Max="100"
+                             HelperText="Minimum output length in seconds."
+                             Style="@FieldStyle("min_len")"
+                             ValueChanged="@((int v) => OnFieldChanged(s => s with { MinLen = v }))" />
+            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("min_len"))
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                               OnClick="@(() => ResetField(b => _effective with { MinLen = b.MinLen }))" />
+            }
+        </MudStack>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudNumericField T="int" Value="_effective.MaxLen" Label="Max Length (tokens)"
+                             Variant="Variant.Outlined" Immediate="true"
+                             Min="10" Max="8192"
+                             HelperText="Maximum output length in tokens (server caps at 8192)."
+                             Style="@FieldStyle("max_len")"
+                             ValueChanged="@((int v) => OnFieldChanged(s => s with { MaxLen = v }))" />
+            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("max_len"))
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                               OnClick="@(() => ResetField(b => _effective with { MaxLen = b.MaxLen }))" />
+            }
+        </MudStack>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudCheckBox T="bool" Value="_effective.Normalize" Label="Text Normalization"
+                         Style="@FieldStyle("normalize")"
+                         ValueChanged="@((bool v) => OnFieldChanged(s => s with { Normalize = v }))" />
+            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("normalize"))
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                               OnClick="@(() => ResetField(b => _effective with { Normalize = b.Normalize }))" />
+            }
+        </MudStack>
+        <MudText Typo="Typo.caption" Color="Color.Default">Expand numbers, dates, abbreviations.</MudText>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudCheckBox T="bool" Value="_effective.Denoise" Label="Denoise Reference Audio"
+                         Style="@FieldStyle("denoise")"
+                         ValueChanged="@((bool v) => OnFieldChanged(s => s with { Denoise = v }))" />
+            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("denoise"))
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                               OnClick="@(() => ResetField(b => _effective with { Denoise = b.Denoise }))" />
+            }
+        </MudStack>
+        <MudText Typo="Typo.caption" Color="Color.Default">Clean the reference audio (ZipEnhancer).</MudText>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudCheckBox T="bool" Value="_effective.RetryBadcase" Label="Retry Bad Cases"
+                         Style="@FieldStyle("retry_badcase")"
+                         ValueChanged="@((bool v) => OnFieldChanged(s => s with { RetryBadcase = v }))" />
+            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("retry_badcase"))
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                               OnClick="@(() => ResetField(b => _effective with { RetryBadcase = b.RetryBadcase }))" />
+            }
+        </MudStack>
+        <MudText Typo="Typo.caption" Color="Color.Default">Re-synthesize when a bad result is detected.</MudText>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudNumericField T="int" Value="_effective.RetryBadcaseMaxTimes" Label="Max Retries"
+                             Variant="Variant.Outlined" Immediate="true"
+                             Min="1" Max="10"
+                             HelperText="Maximum retry attempts."
+                             Style="@FieldStyle("retry_badcase_max_times")"
+                             ValueChanged="@((int v) => OnFieldChanged(s => s with { RetryBadcaseMaxTimes = v }))" />
+            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("retry_badcase_max_times"))
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                               OnClick="@(() => ResetField(b => _effective with { RetryBadcaseMaxTimes = b.RetryBadcaseMaxTimes }))" />
+            }
+        </MudStack>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudNumericField T="double" Value="_effective.RetryBadcaseRatioThreshold" Label="Ratio Threshold"
+                             Variant="Variant.Outlined" Immediate="true"
+                             Min="1.0" Step="0.1"
+                             HelperText="Bad-case detection ratio threshold."
+                             Style="@FieldStyle("retry_badcase_ratio_threshold")"
+                             ValueChanged="@((double v) => OnFieldChanged(s => s with { RetryBadcaseRatioThreshold = v }))" />
+            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("retry_badcase_ratio_threshold"))
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
+                               OnClick="@(() => ResetField(b => _effective with { RetryBadcaseRatioThreshold = b.RetryBadcaseRatioThreshold }))" />
+            }
+        </MudStack>
+
+        <MudButton StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetToDefault">
+            Return to default
+        </MudButton>
+    </MudStack>
+}
+else if (ProviderType == VoiceDesignServiceType.Qwen3)
+{
+    <MudText>Typed settings for Qwen coming soon.</MudText>
+}
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public VoiceDesignServiceType ProviderType { get; set; }
+    [Parameter] public TtsSettingsEditorMode Mode { get; set; }
+    [Parameter] public string? ProviderDefaultsJson { get; set; }
+
+    // ProviderDefaults mode: tracks full settings object
+    private VoxCpm2VoiceDesignSettings _settings = VoxCpm2VoiceDesignSettings.Recommended;
+
+    // VoiceOverride mode: base = provider config, effective = base + patch applied
+    private VoxCpm2VoiceDesignSettings _base = VoxCpm2VoiceDesignSettings.Recommended;
+    private VoxCpm2VoiceDesignSettings _effective = VoxCpm2VoiceDesignSettings.Recommended;
+    private string _baseJson = "";
+
+    private static readonly JsonSerializerOptions _jsonOpts =
+        new(JsonSerializerDefaults.Web);
+
+    protected override void OnParametersSet()
+    {
+        if (ProviderType != VoiceDesignServiceType.VoxCpm2)
+            return;
+
+        if (Mode == TtsSettingsEditorMode.VoiceOverride)
+        {
+            _baseJson = string.IsNullOrWhiteSpace(ProviderDefaultsJson)
+                ? JsonSerializer.Serialize(VoxCpm2VoiceDesignSettings.Recommended, _jsonOpts)
+                : ProviderDefaultsJson;
+
+            _base = JsonSerializer.Deserialize<VoxCpm2VoiceDesignSettings>(_baseJson, _jsonOpts)
+                    ?? VoxCpm2VoiceDesignSettings.Recommended;
+
+            _effective = VoiceDesignSettingsMerge.Merge<VoxCpm2VoiceDesignSettings>(_baseJson, Value);
+        }
+        else
+        {
+            _settings = string.IsNullOrWhiteSpace(Value)
+                ? VoxCpm2VoiceDesignSettings.Recommended
+                : JsonSerializer.Deserialize<VoxCpm2VoiceDesignSettings>(Value, _jsonOpts)
+                  ?? VoxCpm2VoiceDesignSettings.Recommended;
+            _effective = _settings;
+        }
+    }
+
+    private bool IsOverridden(string jsonKey)
+    {
+        var patch = VoxCpm2SettingsDiff.Diff(_baseJson, _effective);
+        var obj = JsonNode.Parse(patch)?.AsObject();
+        return obj?.ContainsKey(jsonKey) == true;
+    }
+
+    private string? FieldStyle(string jsonKey)
+    {
+        if (Mode != TtsSettingsEditorMode.VoiceOverride) return null;
+        return IsOverridden(jsonKey) ? "border-left: 3px solid var(--mud-palette-warning);" : null;
+    }
+
+    private void OnFieldChanged(Func<VoxCpm2VoiceDesignSettings, VoxCpm2VoiceDesignSettings> update)
+    {
+        if (Mode == TtsSettingsEditorMode.VoiceOverride)
+        {
+            _effective = update(_effective);
+            _ = EmitOverrideAsync();
+        }
+        else
+        {
+            _settings = update(_settings);
+            _ = EmitAsync();
+        }
+    }
+
+    private async Task EmitAsync()
+    {
+        var json = JsonSerializer.Serialize(_settings, _jsonOpts);
+        await ValueChanged.InvokeAsync(json);
+    }
+
+    private async Task EmitOverrideAsync()
+    {
+        var patch = VoxCpm2SettingsDiff.Diff(_baseJson, _effective);
+        await ValueChanged.InvokeAsync(patch);
+    }
+
+    private async Task ResetToDefault()
+    {
+        if (Mode == TtsSettingsEditorMode.VoiceOverride)
+        {
+            _effective = _base;
+            await ValueChanged.InvokeAsync("{}");
+        }
+        else
+        {
+            _settings = VoxCpm2VoiceDesignSettings.Recommended;
+            await EmitAsync();
+        }
+    }
+
+    private async Task ResetField(Func<VoxCpm2VoiceDesignSettings, VoxCpm2VoiceDesignSettings> resetFn)
+    {
+        _effective = resetFn(_base);
+        await EmitOverrideAsync();
+    }
+}

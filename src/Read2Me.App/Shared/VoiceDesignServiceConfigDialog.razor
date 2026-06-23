@@ -20,9 +20,9 @@
 
             @if (_form.Type == VoiceDesignServiceType.VoxCpm2)
             {
-                <MudNumericField @bind-Value="_form.MaxLen" Label="Max Len" Variant="Variant.Outlined"
-                                 Min="1" Max="8192" Immediate="true"
-                                 HelperText="Max output length in tokens (server caps at 8192)." />
+                <TtsSettingsEditor @bind-Value="_form.SettingsJson"
+                                   ProviderType="VoiceDesignServiceType.VoxCpm2"
+                                   Mode="TtsSettingsEditorMode.ProviderDefaults" />
             }
 
             @if (_form.Type == VoiceDesignServiceType.Qwen3)

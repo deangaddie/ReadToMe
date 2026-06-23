@@ -122,6 +122,33 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
+  voxcpm2:
+    build:
+      context: .
+      dockerfile: Dockerfile.voxcpm2
+      target: app
+    image: read2me-voxcpm2
+    container_name: read2me-voxcpm2
+    ports:
+      - "8003:8003"
+    environment:
+      - HF_HOME=/cache
+      - UPLOAD_DIR=/uploads
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - MODEL_ID=openbmb/VoxCPM2
+      - OPTIMIZE=true
+    volumes:
+      - voxcpm2_cache:/cache
+      - voxcpm2_uploads:/uploads
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
   whisper:
     image: onerahmet/openai-whisper-asr-webservice:latest-gpu
     container_name: read2me-whisper
@@ -158,6 +185,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  voxcpm2_cache:
+  voxcpm2_uploads:
   chatterbox_cache:
   chatterbox_turbo_cache:
   qwen3_cache:

@@ -31,7 +31,20 @@ namespace Read2Me.Services.Audio.VoiceDesign
                 config.SettingsJson, settingsOverrideJson);
 
             var http = httpClientFactory.CreateClient();
-            var payload = new { text = sampleText, control = prompt, max_len = settings.MaxLen };
+            var payload = new
+            {
+                text = sampleText,
+                control = prompt,
+                cfg_value = settings.CfgValue,
+                inference_timesteps = settings.InferenceTimesteps,
+                min_len = settings.MinLen,
+                max_len = settings.MaxLen,
+                normalize = settings.Normalize,
+                denoise = settings.Denoise,
+                retry_badcase = settings.RetryBadcase,
+                retry_badcase_max_times = settings.RetryBadcaseMaxTimes,
+                retry_badcase_ratio_threshold = settings.RetryBadcaseRatioThreshold,
+            };
             var json = JsonSerializer.Serialize(payload);
 
             using var request = new HttpRequestMessage(

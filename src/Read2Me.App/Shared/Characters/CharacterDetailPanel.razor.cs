@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 using Read2Me.App.State;
+using Read2Me.AppData.Entities;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Services;
+using Read2Me.Services.Audio.VoiceDesign.Settings;
 
 namespace Read2Me.App.Shared.Characters
 {
@@ -22,6 +26,17 @@ namespace Read2Me.App.Shared.Characters
         [Inject] internal CharacterPresenter Presenter { get; set; } = null!;
         [Inject] IDialogService DialogService { get; set; } = null!;
         [Inject] ISnackbar Snackbar { get; set; } = null!;
+        [Inject] VoiceDesignSettingsService VoiceDesignSettingsService { get; set; } = null!;
+
+        VoiceDesignServiceConfig? _activeVoiceDesignConfig;
+
+        protected override async Task OnInitializedAsync()
+        {
+            _activeVoiceDesignConfig = await VoiceDesignSettingsService.GetActiveConfigAsync();
+        }
+
+        internal string? ActiveProviderDefaultsJson => _activeVoiceDesignConfig?.SettingsJson
+            ?? JsonSerializer.Serialize(VoxCpm2VoiceDesignSettings.Recommended, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         bool _addingAlias;
         string _newAlias = "";
