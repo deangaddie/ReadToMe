@@ -11,6 +11,7 @@
 /obj/
 **/bin/
 **/obj/
+**/binBuildCheck/
 
 # Rider
 .idea/
