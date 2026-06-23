@@ -125,7 +125,20 @@ public sealed class SetVoiceSettingsOverrideHandler(ProjectDbSession session) : 
         var db = await session.OpenAsync(c.FolderId);
         var voice = await db.Voices.FindAsync(c.VoiceId);
         if (voice == null) return null;
-        voice.SettingsOverrideJson = c.Json;
+        voice.VoiceDesignSettingsOverrideJson = c.Json;
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+}
+
+public sealed class SetVoiceTtsSettingsOverrideHandler(ProjectDbSession session) : ICommandHandler<SetVoiceTtsSettingsOverrideCommand>
+{
+    public async Task<Guid?> HandleAsync(SetVoiceTtsSettingsOverrideCommand c, CancellationToken ct)
+    {
+        var db = await session.OpenAsync(c.FolderId);
+        var voice = await db.Voices.FindAsync(c.VoiceId);
+        if (voice == null) return null;
+        voice.TtsSettingsOverrideJson = c.Json;
         await db.SaveChangesAsync(ct);
         return null;
     }

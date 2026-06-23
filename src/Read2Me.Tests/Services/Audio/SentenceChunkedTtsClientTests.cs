@@ -65,14 +65,17 @@ namespace Read2Me.Tests.Services.Audio
         private sealed class FakeInnerClient : IParagraphTtsClient
         {
             public readonly List<string> Texts = new();
+            public readonly List<string?> Overrides = new();
             public Func<string, byte[]> WavFor = _ => BuildWav(100, 0x11);
             public string? ThrowOnTextContaining;
 
             public Task<Stream> GenerateAsync(
                 string text, string? voiceInstructions, Stream referenceAudioStream,
-                ParagraphTtsServiceConfig settings, CancellationToken ct = default)
+                ParagraphTtsServiceConfig settings, string? settingsOverrideJson,
+                CancellationToken ct = default)
             {
                 Texts.Add(text);
+                Overrides.Add(settingsOverrideJson);
                 if (ThrowOnTextContaining != null && text.Contains(ThrowOnTextContaining))
                     throw new InvalidOperationException("synth failed");
                 return Task.FromResult<Stream>(new MemoryStream(WavFor(text)));
@@ -100,11 +103,12 @@ namespace Read2Me.Tests.Services.Audio
             new(inner, settings, NullLogger<SentenceChunkedTtsClient>.Instance);
 
         private static async Task<byte[]> Generate(
-            SentenceChunkedTtsClient client, string text, ParagraphTtsServiceConfig? config = null)
+            SentenceChunkedTtsClient client, string text, ParagraphTtsServiceConfig? config = null,
+            string? overrideJson = null)
         {
             using var refAudio = new MemoryStream(new byte[] { 9, 9, 9 });
             using var result = await client.GenerateAsync(
-                text, "instr", refAudio, config ?? new ParagraphTtsServiceConfig());
+                text, "instr", refAudio, config ?? new ParagraphTtsServiceConfig(), overrideJson);
             using var ms = new MemoryStream();
             await result.CopyToAsync(ms);
             return ms.ToArray();
@@ -169,6 +173,21 @@ namespace Read2Me.Tests.Services.Audio
             var config = ConfigWithMaxChunkChars(40);
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => Generate(client, text, config));
+        }
+
+        [Fact]
+        public async Task ForwardsOverrideUnchanged_ToInnerClient_OnEveryChunk()
+        {
+            var inner = new FakeInnerClient { WavFor = _ => BuildWav(100, 0x11) };
+            var client = NewClient(inner, new FakeSettings(pauseMs: 200));
+
+            const string overrideJson = """{"cfg_value":3.5}""";
+            // Cap=40 forces 3 chunks; override must reach every inner call unchanged.
+            var text = "The sun rose over the hills today. Birds began to sing so very loudly. A bright new day had finally started.";
+            await Generate(client, text, ConfigWithMaxChunkChars(40), overrideJson);
+
+            Assert.Equal(3, inner.Overrides.Count);
+            Assert.All(inner.Overrides, o => Assert.Equal(overrideJson, o));
         }
 
         [Fact]

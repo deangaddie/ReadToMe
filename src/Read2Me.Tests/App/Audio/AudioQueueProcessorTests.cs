@@ -742,7 +742,7 @@ namespace Read2Me.Tests.App.Audio
             public byte LastReferenceAudioFirstByte { get; private set; }
 
             public Task<Stream> GenerateAsync(string text, string? voiceInstructions, Stream referenceAudioStream,
-                ParagraphTtsServiceConfig settings, CancellationToken ct = default)
+                ParagraphTtsServiceConfig settings, string? settingsOverrideJson, CancellationToken ct = default)
             {
                 WasCalled = true;
                 LastVoiceInstructions = voiceInstructions;

@@ -17,6 +17,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             string? voiceInstructions,
             Stream referenceAudioStream,
             ParagraphTtsServiceConfig settings,
+            string? settingsOverrideJson,
             CancellationToken ct = default);
     }
 }

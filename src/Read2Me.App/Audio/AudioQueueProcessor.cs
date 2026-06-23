@@ -120,7 +120,7 @@ namespace Read2Me.App.Audio
                 // it into a greeting). Swap it for a semicolon, which reads as a neutral pause.
                 var ttsText = ReplaceTrailingComma(sourceText);
 
-                var wavStream = await client.GenerateAsync(ttsText, row.VoiceInstructions, refAudio, config, ct);
+                var wavStream = await client.GenerateAsync(ttsText, row.VoiceInstructions, refAudio, config, voice.TtsSettingsOverrideJson, ct);
                 broadcaster.Publish(new AudioGenerated(itemRef.ParagraphItemId));
 
                 // --- Post-processing pipeline (inline, blocking). Two independent stages:

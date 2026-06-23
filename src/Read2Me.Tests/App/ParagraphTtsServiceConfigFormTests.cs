@@ -63,6 +63,76 @@ namespace Read2Me.Tests.App
             Assert.Equal(750, round.MaxChunkChars);
         }
 
+        // ---- SettingsJson carries all 9 params + BaseUrl + MaxChunkChars ----
+
+        [Fact]
+        public void BuildConfig_SettingsJsonContainsAllNineParamsPlusBaseUrlAndChunkChars()
+        {
+            var form = Valid();
+            form.BaseUrl = "http://localhost:8000";
+            form.MaxChunkChars = 250;
+            // Editor binds full settings object (the 9 tunable params) to SettingsJson.
+            form.SettingsJson = JsonSerializer.Serialize(VoxCpm2ParagraphTtsSettings.Recommended with
+            {
+                CfgValue = 3.5,
+                InferenceTimesteps = 20,
+                MinLen = 5,
+                MaxLen = 2048,
+                Normalize = true,
+                Denoise = true,
+                RetryBadcase = false,
+                RetryBadcaseMaxTimes = 7,
+                RetryBadcaseRatioThreshold = 4.0,
+            });
+
+            var config = form.BuildConfig();
+            var s = JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(config.SettingsJson);
+
+            Assert.NotNull(s);
+            Assert.Equal("http://localhost:8000", s!.BaseUrl);
+            Assert.Equal(250, s.MaxChunkChars);
+            Assert.Equal(3.5, s.CfgValue);
+            Assert.Equal(20, s.InferenceTimesteps);
+            Assert.Equal(5, s.MinLen);
+            Assert.Equal(2048, s.MaxLen);
+            Assert.True(s.Normalize);
+            Assert.True(s.Denoise);
+            Assert.False(s.RetryBadcase);
+            Assert.Equal(7, s.RetryBadcaseMaxTimes);
+            Assert.Equal(4.0, s.RetryBadcaseRatioThreshold);
+        }
+
+        [Fact]
+        public void FromConfig_BuildConfig_RoundTripsAllNineParams()
+        {
+            var original = VoxCpm2ParagraphTtsSettings.Recommended with
+            {
+                BaseUrl = "http://localhost:8000",
+                CfgValue = 2.7,
+                InferenceTimesteps = 15,
+                MinLen = 4,
+                MaxLen = 1024,
+                Normalize = true,
+                Denoise = true,
+                RetryBadcase = false,
+                RetryBadcaseMaxTimes = 5,
+                RetryBadcaseRatioThreshold = 8.0,
+                MaxChunkChars = 333,
+            };
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = JsonSerializer.Serialize(original),
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+            var rebuilt = form.BuildConfig();
+            var s = JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(rebuilt.SettingsJson);
+
+            Assert.Equal(original, s);
+        }
+
         // ---- FromConfig reads MaxChunkChars ----
 
         [Fact]

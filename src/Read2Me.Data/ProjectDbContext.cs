@@ -92,7 +92,8 @@ namespace Read2Me.Data
                 e.Property(v => v.DesignPrompt).HasMaxLength(4000);
                 e.Property(v => v.Transcript).HasMaxLength(4000);
                 e.Property(v => v.AudioFileName).HasMaxLength(512);
-                e.Property(v => v.SettingsOverrideJson).HasMaxLength(4000);
+                e.Property(v => v.VoiceDesignSettingsOverrideJson).HasMaxLength(4000);
+                e.Property(v => v.TtsSettingsOverrideJson).HasMaxLength(4000);
                 e.HasOne(v => v.Character).WithMany(c => c.Voices).HasForeignKey(v => v.CharacterId);
             });
 

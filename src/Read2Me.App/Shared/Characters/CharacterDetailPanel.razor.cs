@@ -12,6 +12,7 @@ using Read2Me.AppData.Entities;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Audio.ParagraphTts.Settings;
 using Read2Me.Services.Audio.VoiceDesign.Settings;
 
 namespace Read2Me.App.Shared.Characters
@@ -27,16 +28,22 @@ namespace Read2Me.App.Shared.Characters
         [Inject] IDialogService DialogService { get; set; } = null!;
         [Inject] ISnackbar Snackbar { get; set; } = null!;
         [Inject] VoiceDesignSettingsService VoiceDesignSettingsService { get; set; } = null!;
+        [Inject] ParagraphTtsSettingsService ParagraphTtsSettingsService { get; set; } = null!;
 
         VoiceDesignServiceConfig? _activeVoiceDesignConfig;
+        ParagraphTtsServiceConfig? _activeParagraphTtsConfig;
 
         protected override async Task OnInitializedAsync()
         {
             _activeVoiceDesignConfig = await VoiceDesignSettingsService.GetActiveConfigAsync();
+            _activeParagraphTtsConfig = await ParagraphTtsSettingsService.GetActiveConfigAsync();
         }
 
         internal string? ActiveProviderDefaultsJson => _activeVoiceDesignConfig?.SettingsJson
             ?? JsonSerializer.Serialize(VoxCpm2VoiceDesignSettings.Recommended, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        internal string? ActiveTtsProviderDefaultsJson => _activeParagraphTtsConfig?.SettingsJson;
+        internal ParagraphTtsServiceType ActiveTtsProviderType => _activeParagraphTtsConfig?.Type ?? ParagraphTtsServiceType.VoxCpm2;
 
         bool _addingAlias;
         string _newAlias = "";
@@ -66,11 +73,12 @@ namespace Read2Me.App.Shared.Characters
 
         internal string GetPromptDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Prompt, v.DesignPrompt);
         internal string GetTranscriptDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Transcript, v.Transcript);
-        internal string GetOverrideDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Override, v.SettingsOverrideJson);
+        internal string GetOverrideDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Override, v.VoiceDesignSettingsOverrideJson);
+        internal string GetTtsOverrideDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.TtsOverride, v.TtsSettingsOverrideJson);
 
         async Task SaveOverrideAsync(Voice v)
         {
-            var raw = _drafts.Current(v.Id, VoiceDraftField.Override, v.SettingsOverrideJson);
+            var raw = _drafts.Current(v.Id, VoiceDraftField.Override, v.VoiceDesignSettingsOverrideJson);
             string? json = string.IsNullOrWhiteSpace(raw) ? null : raw;
             if (json is not null)
             {
@@ -80,6 +88,20 @@ namespace Read2Me.App.Shared.Characters
             await Presenter.SetVoiceSettingsOverrideAsync(v.Id, json);
             _drafts.Clear(v.Id, VoiceDraftField.Override);
             Snackbar.Add("Settings override saved.", Severity.Success);
+        }
+
+        async Task SaveTtsOverrideAsync(Voice v)
+        {
+            var raw = _drafts.Current(v.Id, VoiceDraftField.TtsOverride, v.TtsSettingsOverrideJson);
+            string? json = string.IsNullOrWhiteSpace(raw) ? null : raw;
+            if (json is not null)
+            {
+                try { System.Text.Json.JsonDocument.Parse(json); }
+                catch { Snackbar.Add("Override is not valid JSON.", Severity.Error); return; }
+            }
+            await Presenter.SetVoiceTtsSettingsOverrideAsync(v.Id, json);
+            _drafts.Clear(v.Id, VoiceDraftField.TtsOverride);
+            Snackbar.Add("TTS settings override saved.", Severity.Success);
         }
 
         // ── Alias ─────────────────────────────────────────────────────────────────

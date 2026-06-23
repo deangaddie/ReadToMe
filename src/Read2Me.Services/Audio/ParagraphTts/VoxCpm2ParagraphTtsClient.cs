@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.ParagraphTts.Settings;
 using Read2Me.Services.Audio.VoiceDesign;
+using Read2Me.Services.Audio.VoiceDesign.Settings;
 
 namespace Read2Me.Services.Audio.ParagraphTts
 {
@@ -26,10 +27,11 @@ namespace Read2Me.Services.Audio.ParagraphTts
             string? voiceInstructions,
             Stream referenceAudioStream,
             ParagraphTtsServiceConfig settings,
+            string? settingsOverrideJson,
             CancellationToken ct = default)
         {
-            var cfg = JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(settings.SettingsJson)
-                ?? new VoxCpm2ParagraphTtsSettings();
+            var cfg = VoiceDesignSettingsMerge.Merge<VoxCpm2ParagraphTtsSettings>(
+                settings.SettingsJson, settingsOverrideJson);
             var baseUrl = cfg.BaseUrl.TrimEnd('/');
 
             var http = httpClientFactory.CreateClient();
@@ -38,7 +40,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             var fileId = await UploadReferenceAudioAsync(http, baseUrl, referenceAudioStream, ct);
 
             // Step 2: stream synthesis
-            return await StreamSynthesisAsync(http, baseUrl, text, voiceInstructions, fileId, cfg.MaxLen, ct);
+            return await StreamSynthesisAsync(http, baseUrl, text, voiceInstructions, fileId, cfg, ct);
         }
 
         private static async Task<string> UploadReferenceAudioAsync(
@@ -60,10 +62,24 @@ namespace Read2Me.Services.Audio.ParagraphTts
 
         private async Task<Stream> StreamSynthesisAsync(
             HttpClient http, string baseUrl,
-            string text, string? control, string fileId, int maxLen,
+            string text, string? control, string fileId, VoxCpm2ParagraphTtsSettings cfg,
             CancellationToken ct)
         {
-            var payload = new { text, control = control ?? string.Empty, reference_wav_path = fileId, max_len = maxLen };
+            var payload = new
+            {
+                text,
+                control = control ?? string.Empty,
+                reference_wav_path = fileId,
+                cfg_value = cfg.CfgValue,
+                inference_timesteps = cfg.InferenceTimesteps,
+                min_len = cfg.MinLen,
+                max_len = cfg.MaxLen,
+                normalize = cfg.Normalize,
+                denoise = cfg.Denoise,
+                retry_badcase = cfg.RetryBadcase,
+                retry_badcase_max_times = cfg.RetryBadcaseMaxTimes,
+                retry_badcase_ratio_threshold = cfg.RetryBadcaseRatioThreshold,
+            };
             var json = JsonSerializer.Serialize(payload);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/api/stream")

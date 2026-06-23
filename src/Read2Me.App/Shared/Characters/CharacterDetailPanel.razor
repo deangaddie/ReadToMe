@@ -192,16 +192,32 @@
                                 }
 
                                 <MudExpansionPanel Text="Advanced settings" Dense="true">
-                                    <MudStack Spacing="2">
-                                        <TtsSettingsEditor Value="@GetOverrideDraft(v)"
-                                                           ValueChanged="@((string? s) => _drafts.Set(v.Id, VoiceDraftField.Override, s ?? ""))"
-                                                           ProviderType="@(_activeVoiceDesignConfig?.Type ?? VoiceDesignServiceType.VoxCpm2)"
-                                                           Mode="TtsSettingsEditorMode.VoiceOverride"
-                                                           ProviderDefaultsJson="@ActiveProviderDefaultsJson" />
-                                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                                   StartIcon="@Icons.Material.Filled.Save"
-                                                   OnClick="@(() => SaveOverrideAsync(v))">Save</MudButton>
-                                    </MudStack>
+                                    <MudTabs Elevation="0" Rounded="false">
+                                        <MudTabPanel Text="Voice Design">
+                                            <MudStack Spacing="2">
+                                                <TtsSettingsEditor Value="@GetOverrideDraft(v)"
+                                                                   ValueChanged="@((string? s) => _drafts.Set(v.Id, VoiceDraftField.Override, s ?? ""))"
+                                                                   ProviderType="@(_activeVoiceDesignConfig?.Type ?? VoiceDesignServiceType.VoxCpm2)"
+                                                                   Mode="TtsSettingsEditorMode.VoiceOverride"
+                                                                   ProviderDefaultsJson="@ActiveProviderDefaultsJson" />
+                                                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.Save"
+                                                           OnClick="@(() => SaveOverrideAsync(v))">Save</MudButton>
+                                            </MudStack>
+                                        </MudTabPanel>
+                                        <MudTabPanel Text="Text-to-Speech">
+                                            <MudStack Spacing="2">
+                                                <ParagraphTtsSettingsEditor Value="@GetTtsOverrideDraft(v)"
+                                                                            ValueChanged="@((string? s) => _drafts.Set(v.Id, VoiceDraftField.TtsOverride, s ?? ""))"
+                                                                            ProviderType="@ActiveTtsProviderType"
+                                                                            Mode="TtsSettingsEditorMode.VoiceOverride"
+                                                                            ProviderDefaultsJson="@ActiveTtsProviderDefaultsJson" />
+                                                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.Save"
+                                                           OnClick="@(() => SaveTtsOverrideAsync(v))">Save</MudButton>
+                                            </MudStack>
+                                        </MudTabPanel>
+                                    </MudTabs>
                                 </MudExpansionPanel>
 
                                 <MudExpansionPanel Text="Transcript" Dense="true">

@@ -206,6 +206,35 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("A gruff old man.", voice!.DesignPrompt);
         }
 
+        // ── SetVoiceTtsSettingsOverride ───────────────────────────────────────
+
+        [Fact]
+        public async Task SetVoiceTtsSettingsOverride_StoresTtsOverrideJson()
+        {
+            await using var db = await OpenDbAsync();
+            var charId = await SeedCharacterAsync(db);
+            var id = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V"));
+
+            await _svc.ExecuteAsync(new SetVoiceTtsSettingsOverrideCommand(_folder, id!.Value, "{\"cfg_value\":3.5}"));
+
+            var voice = await db.Voices.FindAsync(id!.Value);
+            Assert.Equal("{\"cfg_value\":3.5}", voice!.TtsSettingsOverrideJson);
+        }
+
+        [Fact]
+        public async Task SetVoiceTtsSettingsOverride_Null_ClearsTtsOverrideJson()
+        {
+            await using var db = await OpenDbAsync();
+            var charId = await SeedCharacterAsync(db);
+            var id = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V"));
+
+            await _svc.ExecuteAsync(new SetVoiceTtsSettingsOverrideCommand(_folder, id!.Value, "{\"cfg_value\":3.5}"));
+            await _svc.ExecuteAsync(new SetVoiceTtsSettingsOverrideCommand(_folder, id!.Value, null));
+
+            var voice = await db.Voices.FindAsync(id!.Value);
+            Assert.Null(voice!.TtsSettingsOverrideJson);
+        }
+
         [Fact]
         public async Task DeleteVoice_WithAudioFile_DeletesFile()
         {

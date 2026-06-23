@@ -158,7 +158,20 @@ namespace Read2Me.App.State
             try
             {
                 await commandHandler.ExecuteAsync(new SetVoiceSettingsOverrideCommand(folder, voiceId, json));
-                UpdateVoiceInPlace(voiceId, v => v.SettingsOverrideJson = json);
+                UpdateVoiceInPlace(voiceId, v => v.VoiceDesignSettingsOverrideJson = json);
+            }
+            catch (Exception ex) { Error = ex.Message; }
+            IsBusy = false; NotifyStateChanged();
+        }
+
+        public async Task SetVoiceTtsSettingsOverrideAsync(Guid voiceId, string? json)
+        {
+            if (_folderId is not { } folder) return;
+            IsBusy = true; Error = null; NotifyStateChanged();
+            try
+            {
+                await commandHandler.ExecuteAsync(new SetVoiceTtsSettingsOverrideCommand(folder, voiceId, json));
+                UpdateVoiceInPlace(voiceId, v => v.TtsSettingsOverrideJson = json);
             }
             catch (Exception ex) { Error = ex.Message; }
             IsBusy = false; NotifyStateChanged();
@@ -340,7 +353,7 @@ namespace Read2Me.App.State
                     VoiceId = voiceId,
                     VoiceName = voiceName,
                     DesignPrompt = designPrompt,
-                    SettingsOverrideJson = Voices.Find(v => v.Id == voiceId)?.SettingsOverrideJson
+                    SettingsOverrideJson = Voices.Find(v => v.Id == voiceId)?.VoiceDesignSettingsOverrideJson
                 };
 
                 var result = await voiceOrchestrator.GenerateVoiceAudioAsync(request, ct);

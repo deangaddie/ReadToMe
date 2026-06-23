@@ -33,6 +33,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             string? voiceInstructions,
             Stream referenceAudioStream,
             ParagraphTtsServiceConfig config,
+            string? settingsOverrideJson,
             CancellationToken ct = default)
         {
             var audioSettings = await settings.GetAsync();
@@ -46,7 +47,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
                 foreach (var sentence in sentences)
                 {
                     using var refCopy = new MemoryStream(refBytesLegacy, writable: false);
-                    wavsLegacy.Add(await inner.GenerateAsync(sentence, voiceInstructions, refCopy, config, ct));
+                    wavsLegacy.Add(await inner.GenerateAsync(sentence, voiceInstructions, refCopy, config, settingsOverrideJson, ct));
                 }
                 return WavStitcher.Stitch(wavsLegacy, audioSettings.ChunkPauseMs);
             }
@@ -65,7 +66,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             if (chunks.Count == 1)
             {
                 logger.LogDebug("Single chunk — passthrough");
-                return await inner.GenerateAsync(chunks[0], voiceInstructions, referenceAudioStream, config, ct);
+                return await inner.GenerateAsync(chunks[0], voiceInstructions, referenceAudioStream, config, settingsOverrideJson, ct);
             }
 
             var refBytes = await ReadAllAsync(referenceAudioStream, ct);
@@ -74,7 +75,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             {
                 var sw = Stopwatch.StartNew();
                 using var refCopy = new MemoryStream(refBytes, writable: false);
-                var wav = await inner.GenerateAsync(chunks[i], voiceInstructions, refCopy, config, ct);
+                var wav = await inner.GenerateAsync(chunks[i], voiceInstructions, refCopy, config, settingsOverrideJson, ct);
                 sw.Stop();
                 logger.LogDebug(
                     "Chunk {Index}/{Count}: {Chars} chars synthesised in {Ms} ms",

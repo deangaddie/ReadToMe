@@ -47,6 +47,7 @@ public record SetVoiceDefaultCommand(ProjectFolderId FolderId, Guid VoiceId) : B
 public record UpdateVoiceCommand(ProjectFolderId FolderId, Guid VoiceId, string Name, string? Description) : BookCommand(FolderId);
 public record SetVoiceDesignPromptCommand(ProjectFolderId FolderId, Guid VoiceId, string Prompt) : BookCommand(FolderId);
 public record SetVoiceSettingsOverrideCommand(ProjectFolderId FolderId, Guid VoiceId, string? Json) : BookCommand(FolderId);
+public record SetVoiceTtsSettingsOverrideCommand(ProjectFolderId FolderId, Guid VoiceId, string? Json) : BookCommand(FolderId);
 public record SetVoiceTranscriptCommand(ProjectFolderId FolderId, Guid VoiceId, string Transcript) : BookCommand(FolderId);
 public record SetVoiceAudioCommand(ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : BookCommand(FolderId);
 public record SetVoiceGeneratedCommand(ProjectFolderId FolderId, Guid VoiceId, string AudioFileName, string Transcript, string DesignPrompt) : BookCommand(FolderId);

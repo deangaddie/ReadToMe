@@ -50,7 +50,7 @@ namespace Read2Me.Tests.Services.Audio
             _handler.SetupUploadThenStream(fileId: "abc", streamBody: streamFrames);
 
             using var refAudio = new MemoryStream(new byte[4]);
-            var result = await _sut.GenerateAsync("hello", null, refAudio, Config);
+            var result = await _sut.GenerateAsync("hello", null, refAudio, Config, null);
 
             Assert.NotNull(result);
             var wav = new byte[result.Length];
@@ -67,7 +67,7 @@ namespace Read2Me.Tests.Services.Audio
 
             using var refAudio = new MemoryStream(new byte[4]);
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _sut.GenerateAsync("hello", null, refAudio, Config));
+                _sut.GenerateAsync("hello", null, refAudio, Config, null));
             Assert.Equal("BOOM", ex.Message);
         }
 
@@ -79,7 +79,7 @@ namespace Read2Me.Tests.Services.Audio
 
             using var refAudio = new MemoryStream(new byte[4]);
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _sut.GenerateAsync("hello", null, refAudio, Config));
+                _sut.GenerateAsync("hello", null, refAudio, Config, null));
             Assert.Equal("Truncated frame header.", ex.Message);
         }
 
@@ -92,7 +92,7 @@ namespace Read2Me.Tests.Services.Audio
             _handler.SetupUploadThenStream(fileId: "file-42", streamBody: streamFrames);
 
             using var refAudio = new MemoryStream(Encoding.UTF8.GetBytes("fake-wav"));
-            await _sut.GenerateAsync("text", "control instructions", refAudio, Config);
+            await _sut.GenerateAsync("text", "control instructions", refAudio, Config, null);
 
             Assert.Equal(2, _handler.Requests.Count);
 
@@ -113,7 +113,7 @@ namespace Read2Me.Tests.Services.Audio
             _handler.SetupUploadThenStream(fileId: "returned-file-id", streamBody: streamFrames);
 
             using var refAudio = new MemoryStream(new byte[4]);
-            await _sut.GenerateAsync("the text", "my control", refAudio, Config);
+            await _sut.GenerateAsync("the text", "my control", refAudio, Config, null);
 
             var body = _handler.RequestBodies[1];
             Assert.NotNull(body);
@@ -123,6 +123,36 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal("the text", root.GetProperty("text").GetString());
             Assert.Equal("my control", root.GetProperty("control").GetString());
             Assert.Equal("returned-file-id", root.GetProperty("reference_wav_path").GetString());
+        }
+
+        [Fact]
+        public async Task GenerateAsync_OneFieldOverride_PostsAllNineParams_OnlyOverriddenFieldChanges()
+        {
+            var streamFrames = BuildFrames(MetaFrame(24000), DoneFrame());
+            _handler.SetupUploadThenStream(fileId: "f", streamBody: streamFrames);
+
+            // Provider config carries no per-field params except MaxLen -> the rest
+            // resolve to recommended defaults. Override sets only cfg_value.
+            using var refAudio = new MemoryStream(new byte[4]);
+            await _sut.GenerateAsync("the text", "ctrl", refAudio, Config, """{"cfg_value":3.5}""");
+
+            var body = _handler.RequestBodies[1];
+            Assert.NotNull(body);
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            // Overridden field
+            Assert.Equal(3.5, root.GetProperty("cfg_value").GetDouble());
+
+            // Remaining 8 fall back to provider/recommended values
+            Assert.Equal(10, root.GetProperty("inference_timesteps").GetInt32());
+            Assert.Equal(2, root.GetProperty("min_len").GetInt32());
+            Assert.Equal(4096, root.GetProperty("max_len").GetInt32());
+            Assert.False(root.GetProperty("normalize").GetBoolean());
+            Assert.False(root.GetProperty("denoise").GetBoolean());
+            Assert.True(root.GetProperty("retry_badcase").GetBoolean());
+            Assert.Equal(3, root.GetProperty("retry_badcase_max_times").GetInt32());
+            Assert.Equal(6.0, root.GetProperty("retry_badcase_ratio_threshold").GetDouble());
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────

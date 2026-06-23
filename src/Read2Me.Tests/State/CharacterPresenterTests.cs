@@ -252,5 +252,36 @@ namespace Read2Me.Tests.State
             Assert.Equal("synced", voiceInList.Transcript);
             Assert.Equal("synced", voiceInChar.Transcript);
         }
+
+        // ── SetVoiceTtsSettingsOverrideAsync ──────────────────────────────────
+
+        [Fact]
+        public async Task SetVoiceTtsSettingsOverrideAsync_DispatchesCommand()
+        {
+            var voiceId = Guid.NewGuid();
+            var voice = new Read2Me.Data.Entities.Voice { Id = voiceId };
+            var character = new Read2Me.Data.Entities.Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [voice] };
+            var cmd = Substitute.For<IBookCommandHandler>();
+
+            var presenter = await CreatePresenterWithCharacterAsync(character, [voice], cmd);
+            await presenter.SetVoiceTtsSettingsOverrideAsync(voiceId, "{\"cfg_value\":3.5}");
+
+            await cmd.Received(1).ExecuteAsync(
+                Arg.Is<SetVoiceTtsSettingsOverrideCommand>(c => c.VoiceId == voiceId && c.Json == "{\"cfg_value\":3.5}"),
+                Arg.Any<CancellationToken>());
+        }
+
+        [Fact]
+        public async Task SetVoiceTtsSettingsOverrideAsync_UpdatesVoiceInPlace()
+        {
+            var voiceId = Guid.NewGuid();
+            var voice = new Read2Me.Data.Entities.Voice { Id = voiceId, TtsSettingsOverrideJson = null };
+            var character = new Read2Me.Data.Entities.Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [voice] };
+
+            var presenter = await CreatePresenterWithCharacterAsync(character, [voice]);
+            await presenter.SetVoiceTtsSettingsOverrideAsync(voiceId, "{\"cfg_value\":3.5}");
+
+            Assert.Equal("{\"cfg_value\":3.5}", voice.TtsSettingsOverrideJson);
+        }
     }
 }
