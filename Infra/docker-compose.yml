@@ -134,7 +134,7 @@ services:
     environment:
       - HF_HOME=/cache
       - UPLOAD_DIR=/uploads
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
       - MODEL_ID=openbmb/VoxCPM2
       - OPTIMIZE=true
     volumes:

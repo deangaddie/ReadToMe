@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import numpy as np
+import torch
 import soundfile as sf
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -184,18 +185,21 @@ def _run_generate(
     retry_badcase_max_times: int,
     retry_badcase_ratio_threshold: float,
 ) -> tuple[np.ndarray, int]:
-    audio = _model.generate(
-        text=text,
-        reference_wav_path=reference_wav_path,
-        cfg_value=cfg_value,
-        inference_timesteps=inference_timesteps,
-        min_len=min_len,
-        max_len=max_len,
-        normalize=normalize,
-        denoise=denoise,
-        retry_badcase=retry_badcase,
-        retry_badcase_max_times=retry_badcase_max_times,
-        retry_badcase_ratio_threshold=retry_badcase_ratio_threshold,
-    )
-    sample_rate = _model.tts_model.sample_rate
-    return np.asarray(audio, dtype=np.float32), sample_rate
+    try:
+        audio = _model.generate(
+            text=text,
+            reference_wav_path=reference_wav_path,
+            cfg_value=cfg_value,
+            inference_timesteps=inference_timesteps,
+            min_len=min_len,
+            max_len=max_len,
+            normalize=normalize,
+            denoise=denoise,
+            retry_badcase=retry_badcase,
+            retry_badcase_max_times=retry_badcase_max_times,
+            retry_badcase_ratio_threshold=retry_badcase_ratio_threshold,
+        )
+        sample_rate = _model.tts_model.sample_rate
+        return np.asarray(audio, dtype=np.float32), sample_rate
+    finally:
+        torch.cuda.empty_cache()
