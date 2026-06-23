@@ -22,7 +22,6 @@ public static class ServiceCollectionExtensions
 
         // Project/Hierarchy related dependencies
         services.AddScoped<ProjectDbSession>();
-        services.AddScoped<IFileSystem, FileSystemService>();
 
         // Update
         services.AddScoped<ICommandHandler<UpdateVolumeTitleCommand>, UpdateVolumeTitleHandler>();

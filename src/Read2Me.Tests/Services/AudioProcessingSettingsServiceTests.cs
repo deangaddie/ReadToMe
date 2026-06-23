@@ -124,5 +124,47 @@ namespace Read2Me.Tests.Services
             Assert.False(result.Success);
             Assert.Equal("not found", result.Message);
         }
+
+        [Fact]
+        public async Task Get_MissingRow_ReturnsPauseDurationDefaults()
+        {
+            var svc = NewService();
+
+            var settings = await svc.GetAsync();
+
+            Assert.Equal(4000, settings.VolumePauseMs);
+            Assert.Equal(3000, settings.PartPauseMs);
+            Assert.Equal(2500, settings.ChapterPauseMs);
+            Assert.Equal(800, settings.ParagraphPauseMs);
+            Assert.Equal(500, settings.PauseMs);
+        }
+
+        [Fact]
+        public async Task SetPauseDurations_RoundTrips()
+        {
+            var svc = NewService();
+
+            await svc.SetPauseDurationsAsync(
+                volumeMs: 5000, partMs: 4000, chapterMs: 3000, paragraphMs: 1000, pauseMs: 750);
+
+            var settings = await NewService().GetAsync();
+            Assert.Equal(5000, settings.VolumePauseMs);
+            Assert.Equal(4000, settings.PartPauseMs);
+            Assert.Equal(3000, settings.ChapterPauseMs);
+            Assert.Equal(1000, settings.ParagraphPauseMs);
+            Assert.Equal(750, settings.PauseMs);
+        }
+
+        [Fact]
+        public async Task SetPauseDurations_RaisesOnChanged()
+        {
+            var svc = NewService();
+            int count = 0;
+            svc.OnChanged += () => count++;
+
+            await svc.SetPauseDurationsAsync(5000, 4000, 3000, 1000, 750);
+
+            Assert.Equal(1, count);
+        }
     }
 }

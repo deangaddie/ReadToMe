@@ -263,7 +263,9 @@ namespace Read2Me.Tests.Services.Audio
             public override Task<AudioProcessingSettings> GetAsync() =>
                 Task.FromResult(new AudioProcessingSettings(
                     _ffmpegPath, WerThreshold: 0.15,
-                    SentenceSplitEnabled: false, SentencePauseMs: 300, SentenceMinChunkChars: 15));
+                    SentenceSplitEnabled: false, SentencePauseMs: 300, SentenceMinChunkChars: 15,
+                    VolumePauseMs: 4000, PartPauseMs: 3000, ChapterPauseMs: 2500,
+                    ParagraphPauseMs: 800, PauseMs: 500));
         }
     }
 }

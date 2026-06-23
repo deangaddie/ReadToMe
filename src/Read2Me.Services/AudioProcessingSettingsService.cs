@@ -23,7 +23,12 @@ namespace Read2Me.Services
         double WerThreshold,
         bool SentenceSplitEnabled,
         int SentencePauseMs,
-        int SentenceMinChunkChars);
+        int SentenceMinChunkChars,
+        int VolumePauseMs,
+        int PartPauseMs,
+        int ChapterPauseMs,
+        int ParagraphPauseMs,
+        int PauseMs);
 
     public class AudioProcessingSettingsService
     {
@@ -31,6 +36,11 @@ namespace Read2Me.Services
         public const bool DefaultSentenceSplitEnabled = true;
         public const int DefaultSentencePauseMs = 300;
         public const int DefaultSentenceMinChunkChars = 15;
+        public const int DefaultVolumePauseMs = 4000;
+        public const int DefaultPartPauseMs = 3000;
+        public const int DefaultChapterPauseMs = 2500;
+        public const int DefaultParagraphPauseMs = 800;
+        public const int DefaultPauseMs = 500;
 
         private readonly IDbContextFactory<Read2MeDbContext> _dbFactory;
         private readonly IFfmpegProber _prober;
@@ -57,7 +67,12 @@ namespace Read2Me.Services
                 settings?.WerThreshold ?? DefaultWerThreshold,
                 settings?.SentenceSplitEnabled ?? DefaultSentenceSplitEnabled,
                 settings?.SentencePauseMs ?? DefaultSentencePauseMs,
-                settings?.SentenceMinChunkChars ?? DefaultSentenceMinChunkChars);
+                settings?.SentenceMinChunkChars ?? DefaultSentenceMinChunkChars,
+                settings?.VolumePauseMs ?? DefaultVolumePauseMs,
+                settings?.PartPauseMs ?? DefaultPartPauseMs,
+                settings?.ChapterPauseMs ?? DefaultChapterPauseMs,
+                settings?.ParagraphPauseMs ?? DefaultParagraphPauseMs,
+                settings?.PauseMs ?? DefaultPauseMs);
         }
 
         /// <summary>Saves the ffmpeg path. Blank/whitespace is stored as null (rely on PATH).</summary>
@@ -88,6 +103,22 @@ namespace Read2Me.Services
                 s.SentenceSplitEnabled = enabled;
                 s.SentencePauseMs = pauseMs;
                 s.SentenceMinChunkChars = minChunkChars;
+            });
+            await db.SaveChangesAsync();
+            OnChanged?.Invoke();
+        }
+
+        /// <summary>Saves the per-kind pause durations used by the audiobook assembler.</summary>
+        public async Task SetPauseDurationsAsync(int volumeMs, int partMs, int chapterMs, int paragraphMs, int pauseMs)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            await MutateSettingsAsync(db, s =>
+            {
+                s.VolumePauseMs = volumeMs;
+                s.PartPauseMs = partMs;
+                s.ChapterPauseMs = chapterMs;
+                s.ParagraphPauseMs = paragraphMs;
+                s.PauseMs = pauseMs;
             });
             await db.SaveChangesAsync();
             OnChanged?.Invoke();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
@@ -35,6 +36,17 @@ namespace Read2Me.Services
     /// Exactly one list is populated; the others are null.
     /// parentLevel=Volume → Parts; Part → Chapters; Chapter → Paragraphs (with Items included).
     /// </summary>
+    public sealed record AssemblyManifestEntry(
+        Guid ParagraphItemId,
+        ParagraphItemType ItemType,
+        string? AudioRelativePath,
+        Guid VolumeId,
+        string? VolumeTitle,
+        Guid PartId,
+        string? PartTitle,
+        Guid ChapterId,
+        string? ChapterTitle);
+
     public sealed record HierarchyChildren(
         List<Part>? Parts,
         List<Chapter>? Chapters,
@@ -131,5 +143,11 @@ namespace Read2Me.Services
         /// </summary>
         Task<ParagraphContext?> GetParagraphContextAsync(
             ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after);
+
+        /// <summary>
+        /// Returns every ParagraphItem in the project in Position order (Volume→Part→Chapter→Paragraph→Item).
+        /// Pause-kind entries have null AudioRelativePath regardless of any stored value.
+        /// </summary>
+        Task<IReadOnlyList<AssemblyManifestEntry>> GetAssemblyManifestAsync(ProjectFolderId folder, CancellationToken ct);
     }
 }

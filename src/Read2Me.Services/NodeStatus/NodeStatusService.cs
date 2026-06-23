@@ -101,6 +101,17 @@ namespace Read2Me.Services.NodeStatus
             Changed?.Invoke();
         }
 
+        public int AudioRemainingForFolder(ProjectFolderId folder)
+        {
+            int audio = 0;
+            foreach (var (key, status) in _entries)
+            {
+                if (key.Folder != folder) continue;
+                if (status.MissingAudio > 0) audio++;
+            }
+            return audio;
+        }
+
         public NodeStatusSummary StatusForNode(ProjectFolderId folder, Guid nodeId)
         {
             int attribution = 0;

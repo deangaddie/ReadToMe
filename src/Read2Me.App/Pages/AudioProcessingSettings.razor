@@ -59,6 +59,36 @@
 
 <MudCard Outlined="true" Class="mb-5">
     <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Pause durations</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Silence inserted between sections during audiobook assembly. Each kind maps to a
+            millisecond duration.
+        </MudText>
+        <MudNumericField @bind-Value="_volumePauseMsDraft"
+                         Label="Volume pause (ms)" Variant="Variant.Outlined"
+                         Min="0" Step="100" Class="mb-3" />
+        <MudNumericField @bind-Value="_partPauseMsDraft"
+                         Label="Part pause (ms)" Variant="Variant.Outlined"
+                         Min="0" Step="100" Class="mb-3" />
+        <MudNumericField @bind-Value="_chapterPauseMsDraft"
+                         Label="Chapter pause (ms)" Variant="Variant.Outlined"
+                         Min="0" Step="100" Class="mb-3" />
+        <MudNumericField @bind-Value="_paragraphPauseMsDraft"
+                         Label="Paragraph pause (ms)" Variant="Variant.Outlined"
+                         Min="0" Step="50" Class="mb-3" />
+        <MudNumericField @bind-Value="_pauseMsDraft"
+                         Label="Pause (ms)" Variant="Variant.Outlined"
+                         Min="0" Step="50" />
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SavePauseDurationsAsync">Save</MudButton>
+    </MudCardActions>
+</MudCard>
+
+<MudCard Outlined="true" Class="mb-5">
+    <MudCardContent>
         <MudText Typo="Typo.h6" Class="mb-3">Transcript verification</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
             Word-error-rate threshold below which a generated clip passes verification.
@@ -80,6 +110,11 @@
     bool _sentenceSplitEnabledDraft = AudioProcessingSettingsService.DefaultSentenceSplitEnabled;
     int _sentencePauseMsDraft = AudioProcessingSettingsService.DefaultSentencePauseMs;
     int _sentenceMinChunkCharsDraft = AudioProcessingSettingsService.DefaultSentenceMinChunkChars;
+    int _volumePauseMsDraft = AudioProcessingSettingsService.DefaultVolumePauseMs;
+    int _partPauseMsDraft = AudioProcessingSettingsService.DefaultPartPauseMs;
+    int _chapterPauseMsDraft = AudioProcessingSettingsService.DefaultChapterPauseMs;
+    int _paragraphPauseMsDraft = AudioProcessingSettingsService.DefaultParagraphPauseMs;
+    int _pauseMsDraft = AudioProcessingSettingsService.DefaultPauseMs;
     bool _testing;
 
     protected override async Task OnInitializedAsync()
@@ -98,6 +133,11 @@
         _sentenceSplitEnabledDraft = settings.SentenceSplitEnabled;
         _sentencePauseMsDraft = settings.SentencePauseMs;
         _sentenceMinChunkCharsDraft = settings.SentenceMinChunkChars;
+        _volumePauseMsDraft = settings.VolumePauseMs;
+        _partPauseMsDraft = settings.PartPauseMs;
+        _chapterPauseMsDraft = settings.ChapterPauseMs;
+        _paragraphPauseMsDraft = settings.ParagraphPauseMs;
+        _pauseMsDraft = settings.PauseMs;
         StateHasChanged();
     }
 
@@ -128,6 +168,14 @@
         await SettingsService.SetSentenceChunkingAsync(
             _sentenceSplitEnabledDraft, _sentencePauseMsDraft, _sentenceMinChunkCharsDraft);
         Snackbar.Add("Sentence chunking saved.", Severity.Success);
+    }
+
+    async Task SavePauseDurationsAsync()
+    {
+        await SettingsService.SetPauseDurationsAsync(
+            _volumePauseMsDraft, _partPauseMsDraft, _chapterPauseMsDraft,
+            _paragraphPauseMsDraft, _pauseMsDraft);
+        Snackbar.Add("Pause durations saved.", Severity.Success);
     }
 
     async Task TestFfmpegAsync()

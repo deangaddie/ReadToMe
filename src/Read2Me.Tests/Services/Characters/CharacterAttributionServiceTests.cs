@@ -150,6 +150,8 @@ namespace Read2Me.Tests.Services.Characters
                 => Task.FromResult(new List<(Guid, Read2Me.Services.Audio.AudioReviewInfo)>());
             public Task<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>> GetNodeStatusSeedAsync(ProjectFolderId folderId)
                 => Task.FromResult<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>>([]);
+            public Task<IReadOnlyList<AssemblyManifestEntry>> GetAssemblyManifestAsync(ProjectFolderId folder, CancellationToken ct)
+                => Task.FromResult<IReadOnlyList<AssemblyManifestEntry>>([]);
             public Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId)
                 => Task.FromResult(new List<VoiceRuleRow>());
             public Task<IReadOnlyDictionary<Guid, string?>> GetResolvedVoiceNamesAsync(ProjectFolderId folderId, IEnumerable<Guid> itemIds, bool narratorOnlyMode)

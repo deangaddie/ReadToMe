@@ -83,7 +83,9 @@ namespace Read2Me.Tests.Services.Audio
             private readonly AudioProcessingSettings _settings;
             public FakeSettings(bool enabled, int pauseMs, int minChunkChars)
                 : base(null!, null!, NullLogger<AudioProcessingSettingsService>.Instance) =>
-                _settings = new AudioProcessingSettings(null, 0.15, enabled, pauseMs, minChunkChars);
+                _settings = new AudioProcessingSettings(null, 0.15, enabled, pauseMs, minChunkChars,
+                    VolumePauseMs: 4000, PartPauseMs: 3000, ChapterPauseMs: 2500,
+                    ParagraphPauseMs: 800, PauseMs: 500);
 
             public override Task<AudioProcessingSettings> GetAsync() => Task.FromResult(_settings);
         }

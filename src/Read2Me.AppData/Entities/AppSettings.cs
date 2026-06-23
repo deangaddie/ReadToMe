@@ -43,5 +43,11 @@ namespace Read2Me.AppData.Entities
         /// emitted as their own chunk. Defaults to 15. Not surfaced in the UI.
         /// </summary>
         public int SentenceMinChunkChars { get; set; } = 15;
+
+        public int VolumePauseMs { get; set; } = 4000;
+        public int PartPauseMs { get; set; } = 3000;
+        public int ChapterPauseMs { get; set; } = 2500;
+        public int ParagraphPauseMs { get; set; } = 800;
+        public int PauseMs { get; set; } = 500;
     }
 }

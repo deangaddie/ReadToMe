@@ -4,7 +4,13 @@
 @using Read2Me.Core.Models
 @using Read2Me.Data.Entities
 @using Read2Me.Data.Enums
+@using Read2Me.Services.Audio
+@using Read2Me.Services.Audio.Assembly
+@using Read2Me.Services.NodeStatus
 @inject BookHierarchyPresenter Presenter
+@inject AudiobookAssemblyService AssemblyService
+@inject AudioQueueService AudioQueue
+@inject NodeStatusService NodeStatus
 
 @if (Presenter.IsLoading)
 {
@@ -41,6 +47,31 @@ else
     @* Bottom padding reserves space so the fixed selection footer never hides content. *@
     <MudStack Spacing="3" Class="pa-3" Style="@($"padding-bottom:{(Presenter.SelectedParagraphCount > 0 || Presenter.SelectedAudioItemCount > 0 ? "72px" : "0")};")">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="1">
+            @{
+                var audioRemaining = NodeStatus.AudioRemainingForFolder(_folderId);
+                var audioSnap = AudioQueue.Snapshot();
+                var audioQueueBusy = audioSnap.QueuedCount > 0 || audioSnap.ProcessingCount > 0;
+                var assemblyVm = AssemblyButtonViewModel.For(
+                    audioRemaining, audioQueueBusy, AssemblyService.IsRunning,
+                    AssemblyService.CurrentPhase, AssemblyService.EncodePercent);
+                var assembleTooltip = AssemblyService.IsRunning
+                    ? "Assembly in progress"
+                    : assemblyVm.DisabledReason ?? "Assemble audiobook";
+            }
+            <MudTooltip Text="@assembleTooltip">
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           StartIcon="@(AssemblyService.IsRunning ? null : Icons.Material.Filled.LibraryMusic)"
+                           Disabled="@(!assemblyVm.IsEnabled)"
+                           OnClick="@(() => AssemblyService.StartAsync(_folderId))">
+                    @if (AssemblyService.IsRunning)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1"
+                                             Style="width:14px; height:14px;" />
+                    }
+                    Assemble audiobook
+                </MudButton>
+            </MudTooltip>
             @if (Presenter.Error != null)
             {
                 <MudText Color="Color.Error" Typo="Typo.caption">@Presenter.Error</MudText>

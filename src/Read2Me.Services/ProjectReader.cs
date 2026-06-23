@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -945,6 +946,37 @@ namespace Read2Me.Services
                 counts.TryGetValue(r.VolumeId,  out var v); counts[r.VolumeId]  = v + 1;
             }
             return counts;
+        }
+
+        public async Task<IReadOnlyList<AssemblyManifestEntry>> GetAssemblyManifestAsync(
+            ProjectFolderId folder, CancellationToken ct)
+        {
+            var db = await _session.OpenAsync(folder);
+
+            return await db.ParagraphItems
+                .AsNoTracking()
+                .OrderBy(i => i.Paragraph.Chapter.Part.Volume.Order)
+                .ThenBy(i => i.Paragraph.Chapter.Part.Order)
+                .ThenBy(i => i.Paragraph.Chapter.Order)
+                .ThenBy(i => i.Paragraph.Order)
+                .ThenBy(i => i.Order)
+                .Select(i => new AssemblyManifestEntry(
+                    i.Id,
+                    i.ItemType,
+                    i.ItemType == ParagraphItemType.VolumePause
+                        || i.ItemType == ParagraphItemType.PartPause
+                        || i.ItemType == ParagraphItemType.ChapterPause
+                        || i.ItemType == ParagraphItemType.ParagraphPause
+                        || i.ItemType == ParagraphItemType.Pause
+                        ? null
+                        : i.AudioFileName,
+                    i.Paragraph.Chapter.Part.VolumeId,
+                    i.Paragraph.Chapter.Part.Volume.Title,
+                    i.Paragraph.Chapter.PartId,
+                    i.Paragraph.Chapter.Part.Title,
+                    i.Paragraph.ChapterId,
+                    i.Paragraph.Chapter.Title))
+                .ToListAsync(ct);
         }
     }
 }

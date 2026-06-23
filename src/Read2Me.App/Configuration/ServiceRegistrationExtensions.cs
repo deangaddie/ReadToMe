@@ -15,6 +15,7 @@ using Read2Me.AppData;
 using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
@@ -91,6 +92,9 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<Read2Me.Services.Audio.AudioReviewService>();
         services.AddSingleton<Read2Me.Services.Audio.AudioGenBroadcaster>();
         services.AddScoped<IAudioNormalizer, FfmpegAudioNormalizer>();
+        services.AddSingleton<AudiobookAssemblyBroadcaster>();
+        services.AddSingleton<IAudiobookEncoder, AudiobookEncoder>();
+        services.AddSingleton<AudiobookAssemblyService>();
         services.AddScoped<ITranscriptionClientResolver, TranscriptionClientResolver>();
         services.AddKeyedScoped<ITranscriptionClient, WhisperTranscriptionClient>(Read2Me.AppData.Entities.TranscriptionServiceType.LocalWhisper);
         services.AddScoped<IVoiceDesignClientResolver, VoiceDesignClientResolver>();
