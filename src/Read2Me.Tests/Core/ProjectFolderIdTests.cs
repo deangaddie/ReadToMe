@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Read2Me.Core.Models;
 using Xunit;
 

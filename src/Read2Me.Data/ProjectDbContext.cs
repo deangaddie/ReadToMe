@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Data.Entities;
-using Read2Me.Data.Enums;
 
 namespace Read2Me.Data
 {

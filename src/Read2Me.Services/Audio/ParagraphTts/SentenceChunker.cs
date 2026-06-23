@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Read2Me.Services.Audio.ParagraphTts;
 
 public static class SentenceChunker

@@ -1,8 +1,4 @@
-using System.IO;
-using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.VoiceDesign.Settings;

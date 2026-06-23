@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using NSubstitute;
 using Read2Me.App.State;
 using Read2Me.Core.Models;

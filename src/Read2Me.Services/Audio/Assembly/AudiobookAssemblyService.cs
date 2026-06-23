@@ -1,14 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
-using Read2Me.Services.Audio;
 
 namespace Read2Me.Services.Audio.Assembly
 {

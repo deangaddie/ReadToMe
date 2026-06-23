@@ -1,5 +1,3 @@
-using System.Threading;
-
 namespace Read2Me.Services.Queueing
 {
     /// <summary>

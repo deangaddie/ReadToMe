@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Concurrent;
 
 namespace Read2Me.Services.Queueing

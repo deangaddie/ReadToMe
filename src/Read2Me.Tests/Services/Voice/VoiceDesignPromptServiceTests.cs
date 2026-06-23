@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using Read2Me.Services;
 using Read2Me.Services.Voice;
 using Xunit;

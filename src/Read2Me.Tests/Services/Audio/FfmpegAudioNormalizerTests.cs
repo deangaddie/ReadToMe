@@ -1,6 +1,3 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Services.Audio;
 using Xunit;

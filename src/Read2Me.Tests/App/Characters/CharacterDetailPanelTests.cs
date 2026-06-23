@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
+#pragma warning disable BL0005 // Component parameter set outside component — intentional in tests
 using MudBlazor;
 using NSubstitute;
 using Read2Me.App.Services;

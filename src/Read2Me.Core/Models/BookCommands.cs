@@ -1,5 +1,3 @@
-using System;
-
 namespace Read2Me.Core.Models;
 
 public enum MergeDirection { Previous, Next }

@@ -1,7 +1,6 @@
 using System.IO;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -10,17 +9,6 @@ using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using Read2Me.App.Configuration;
 using Read2Me.Core.Configuration;
-using Read2Me.Core.IO;
-using Read2Me.Services;
-using Read2Me.Services.Books;
-using Read2Me.App.Characters;
-using Read2Me.Services.Characters;
-using Read2Me.Services.IO;
-using Read2Me.Services.UseCases;
-using Read2Me.App.State;
-using Read2Me.App.Shared.BookMenus;
-using Read2Me.AppData;
-using Read2Me.Data;
 
 namespace Read2Me.App
 {

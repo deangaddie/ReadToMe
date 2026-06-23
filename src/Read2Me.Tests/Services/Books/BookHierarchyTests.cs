@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using FractionalIndexing;
 using Read2Me.Data.Entities;
 using Read2Me.Services.Books;

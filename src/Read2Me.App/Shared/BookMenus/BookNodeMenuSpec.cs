@@ -4,9 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
-using Read2Me.App.Shared;
 using Read2Me.App.State;
-using static Read2Me.Core.Models.PauseKind;
 
 namespace Read2Me.App.Shared.BookMenus;
 

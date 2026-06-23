@@ -1,4 +1,3 @@
-using System;
 using Read2Me.Core.Models;
 using Read2Me.Services.Characters;
 using Xunit;

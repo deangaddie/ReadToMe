@@ -1,6 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Read2Me.Services.Audio
 {
     /// <summary>

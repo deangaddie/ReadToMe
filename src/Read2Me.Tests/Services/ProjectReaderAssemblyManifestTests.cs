@@ -1,7 +1,3 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

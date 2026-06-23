@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Read2Me.Services.Audio.ParagraphTts.Settings;
-using Read2Me.Services.Audio.VoiceDesign.Settings;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio

@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Read2Me.Core.Exceptions;
+﻿namespace Read2Me.Core.Exceptions;
 
 public class Read2MeException : Exception
 {

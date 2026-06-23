@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Commands;

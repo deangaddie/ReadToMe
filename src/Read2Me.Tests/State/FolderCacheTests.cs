@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Read2Me.App.State;
 using Read2Me.Data.Entities;
 using Xunit;

@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using NSubstitute;
 using Read2Me.App.Shared.Characters;
 using Read2Me.App.Services;
@@ -9,7 +5,6 @@ using Read2Me.App.State;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
-using Read2Me.Data.Enums;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Audio;
 using Read2Me.Services;

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace Read2Me.Services.Audio.ParagraphTts

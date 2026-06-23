@@ -1,13 +1,9 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Exceptions;
-using Read2Me.Core.IO;
 using Read2Me.Core.Configuration;
 using Read2Me.Data;
 using Read2Me.Data.Entities;

@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 

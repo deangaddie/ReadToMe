@@ -12,7 +12,6 @@ using Read2Me.AppData.Entities;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
-using Read2Me.Services.Audio.ParagraphTts.Settings;
 using Read2Me.Services.Audio.VoiceDesign.Settings;
 
 namespace Read2Me.App.Shared.Characters

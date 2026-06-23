@@ -1,5 +1,3 @@
-using System;
-
 namespace Read2Me.Services.Voice
 {
     /// <summary>

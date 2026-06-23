@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,7 +7,6 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
-using Read2Me.Services.IO;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Read2Me.Services.Voice;
 using Xunit;
 

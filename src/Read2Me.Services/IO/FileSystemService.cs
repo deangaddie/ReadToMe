@@ -1,7 +1,3 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;

@@ -1,4 +1,3 @@
-using System;
 using Read2Me.App.State;
 using Xunit;
 

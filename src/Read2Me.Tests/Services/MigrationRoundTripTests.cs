@@ -1,9 +1,5 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Read2Me.Data;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 

@@ -1,14 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Audio;
 using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
-using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.App.Audio

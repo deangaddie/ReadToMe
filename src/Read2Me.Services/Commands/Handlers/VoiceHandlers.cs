@@ -1,17 +1,10 @@
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Core.Utils;
-using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
-using CoreAnchorLevel = Read2Me.Core.Models.VoiceAnchorLevel;
 using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 
 namespace Read2Me.Services.Commands.Handlers;

@@ -1,13 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
-using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.ParagraphTts.Settings;
 using Xunit;

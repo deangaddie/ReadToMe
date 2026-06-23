@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Threading;
 using Read2Me.App.Shared;
 using Read2Me.AppData.Entities;
 using Xunit;

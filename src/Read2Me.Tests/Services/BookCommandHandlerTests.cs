@@ -1,10 +1,6 @@
-using System;
-using System.Threading.Tasks;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
@@ -12,7 +8,6 @@ using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Books;
-using Read2Me.Services.IO;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 

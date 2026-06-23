@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using MudBlazor;
 using NSubstitute;
 using Read2Me.App.State;
@@ -14,7 +9,6 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.UseCases;
 using Xunit;
-using Read2Me.AppData.Entities;
 
 namespace Read2Me.Tests.State
 {

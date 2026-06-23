@@ -1,17 +1,9 @@
-﻿using System;
-using System.Linq;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Commands;
-using Read2Me.Services.IO;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 

@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using Read2Me.App.Audio;
 using Read2Me.Services.Audio;
 using Xunit;

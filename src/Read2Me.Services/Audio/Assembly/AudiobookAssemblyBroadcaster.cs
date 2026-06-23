@@ -1,5 +1,3 @@
-using System;
-
 namespace Read2Me.Services.Audio.Assembly
 {
     public abstract record AssemblyEvent;

@@ -1,7 +1,3 @@
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Read2Me.Services.Audio
 {
     /// <summary>Outcome status of a normalization attempt.</summary>
