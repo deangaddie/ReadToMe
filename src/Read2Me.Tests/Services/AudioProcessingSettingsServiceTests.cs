@@ -37,28 +37,25 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task Get_MissingRow_ReturnsSentenceChunkingDefaults()
+        public async Task Get_MissingRow_ReturnsChunkPauseDefaults()
         {
             var svc = NewService();
 
             var settings = await svc.GetAsync();
 
-            Assert.True(settings.SentenceSplitEnabled);
-            Assert.Equal(300, settings.SentencePauseMs);
-            Assert.Equal(15, settings.SentenceMinChunkChars);
+            Assert.False(settings.SentenceSplitEnabled);
+            Assert.Equal(300, settings.ChunkPauseMs);
         }
 
         [Fact]
-        public async Task SetSentenceChunking_RoundTrips()
+        public async Task SetChunkPause_RoundTrips()
         {
             var svc = NewService();
 
-            await svc.SetSentenceChunkingAsync(enabled: false, pauseMs: 750, minChunkChars: 40);
+            await svc.SetChunkPauseAsync(pauseMs: 750);
 
             var settings = await NewService().GetAsync();
-            Assert.False(settings.SentenceSplitEnabled);
-            Assert.Equal(750, settings.SentencePauseMs);
-            Assert.Equal(40, settings.SentenceMinChunkChars);
+            Assert.Equal(750, settings.ChunkPauseMs);
         }
 
         [Fact]

@@ -14,6 +14,7 @@ namespace Read2Me.App.Shared
         // VoxCpm2 settings.
         public string BaseUrl { get; set; } = "";
         public int MaxLen { get; set; } = 4096;
+        public int MaxChunkChars { get; set; } = 500;
 
         public static ParagraphTtsServiceConfigForm FromConfig(ParagraphTtsServiceConfig c)
         {
@@ -32,6 +33,7 @@ namespace Read2Me.App.Shared
                         : JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(c.SettingsJson) ?? new VoxCpm2ParagraphTtsSettings();
                     form.BaseUrl = s.BaseUrl;
                     form.MaxLen = s.MaxLen;
+                    form.MaxChunkChars = s.MaxChunkChars;
                     break;
             }
 
@@ -61,7 +63,7 @@ namespace Read2Me.App.Shared
             var settingsJson = Type switch
             {
                 ParagraphTtsServiceType.VoxCpm2 =>
-                    JsonSerializer.Serialize(new VoxCpm2ParagraphTtsSettings { BaseUrl = BaseUrl.Trim(), MaxLen = MaxLen }),
+                    JsonSerializer.Serialize(new VoxCpm2ParagraphTtsSettings { BaseUrl = BaseUrl.Trim(), MaxLen = MaxLen, MaxChunkChars = MaxChunkChars }),
                 _ => throw new NotSupportedException($"Unsupported paragraph TTS type '{Type}'."),
             };
 

@@ -11,7 +11,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             var text = "This is a single complete sentence.";
 
-            var chunks = SentenceSplitter.Split(text, minChunkChars: 15);
+            var chunks = SentenceSplitter.Split(text);
 
             Assert.Equal(new[] { text }, chunks);
         }
@@ -25,7 +25,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             var text = $"I spoke to {title} Smith about the matter yesterday afternoon.";
 
-            var chunks = SentenceSplitter.Split(text, minChunkChars: 15);
+            var chunks = SentenceSplitter.Split(text);
 
             Assert.Equal(new[] { text }, chunks);
         }
@@ -35,7 +35,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             var text = "The value of pi is 3.14 according to the textbook.";
 
-            var chunks = SentenceSplitter.Split(text, minChunkChars: 15);
+            var chunks = SentenceSplitter.Split(text);
 
             Assert.Equal(new[] { text }, chunks);
         }
@@ -45,31 +45,16 @@ namespace Read2Me.Tests.Services.Audio
         {
             var text = "He paused for a long while... then carried on regardless.";
 
-            var chunks = SentenceSplitter.Split(text, minChunkChars: 15);
+            var chunks = SentenceSplitter.Split(text);
 
             Assert.Equal(new[] { text }, chunks);
-        }
-
-        [Fact]
-        public void ShortFragment_MergedIntoNeighbour_NotEmittedAlone()
-        {
-            // "Yes." is below the min-chunk length and must fold into the next sentence.
-            var chunks = SentenceSplitter.Split(
-                "Yes. I will absolutely be there tomorrow morning without fail.",
-                minChunkChars: 15);
-
-            Assert.Equal(new[]
-            {
-                "Yes. I will absolutely be there tomorrow morning without fail.",
-            }, chunks);
         }
 
         [Fact]
         public void MultiSentenceProse_SplitsIntoOrderedChunks()
         {
             var chunks = SentenceSplitter.Split(
-                "The sun rose over the hills. Birds began to sing loudly. A new day had started.",
-                minChunkChars: 15);
+                "The sun rose over the hills. Birds began to sing loudly. A new day had started.");
 
             Assert.Equal(new[]
             {

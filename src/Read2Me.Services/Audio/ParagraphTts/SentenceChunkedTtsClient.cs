@@ -1,20 +1,27 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Audio.ParagraphTts.Settings;
 
 namespace Read2Me.Services.Audio.ParagraphTts
 {
     /// <summary>
-    /// Decorator over <see cref="IParagraphTtsClient"/> that splits an item's text into sentences,
-    /// synthesises each sentence with the inner client, and stitches the per-sentence WAVs into one
-    /// with a configurable pause between sentences. Self-gating: when <c>SentenceSplitEnabled</c> is
-    /// off it forwards the original text to the inner client unchanged. A single-sentence item makes
-    /// one inner call and returns a byte-identical passthrough. If any sentence's inner call throws,
-    /// the decorator throws — no partial audio is produced.
+    /// Decorator over <see cref="IParagraphTtsClient"/> that splits a paragraph's text into
+    /// sentences, packs them into chunks up to the provider's <c>MaxChunkChars</c>, synthesises
+    /// each chunk with the inner client, and stitches the per-chunk WAVs with <c>ChunkPauseMs</c>
+    /// of silence between them.
+    ///
+    /// Default path (SentenceSplitEnabled=false): chunking.
+    /// Legacy path (SentenceSplitEnabled=true): per-sentence synthesis (dormant; preserved for
+    /// rollback only — not the active code path).
+    ///
+    /// Single-chunk paragraphs return a byte-identical passthrough. If any chunk's inner call
+    /// throws, the decorator throws — no partial audio is produced.
     /// </summary>
     public sealed class SentenceChunkedTtsClient(
         IParagraphTtsClient inner,
@@ -28,16 +35,40 @@ namespace Read2Me.Services.Audio.ParagraphTts
             ParagraphTtsServiceConfig config,
             CancellationToken ct = default)
         {
-            var chunking = await settings.GetAsync();
+            var audioSettings = await settings.GetAsync();
 
-            if (!chunking.SentenceSplitEnabled)
-                return await inner.GenerateAsync(text, voiceInstructions, referenceAudioStream, config, ct);
+            if (audioSettings.SentenceSplitEnabled)
+            {
+                // Legacy per-sentence path — dormant, kept for rollback.
+                var sentences = SentenceSplitter.Split(text);
+                var refBytesLegacy = await ReadAllAsync(referenceAudioStream, ct);
+                var wavsLegacy = new List<Stream>(sentences.Count);
+                foreach (var sentence in sentences)
+                {
+                    using var refCopy = new MemoryStream(refBytesLegacy, writable: false);
+                    wavsLegacy.Add(await inner.GenerateAsync(sentence, voiceInstructions, refCopy, config, ct));
+                }
+                return WavStitcher.Stitch(wavsLegacy, audioSettings.ChunkPauseMs);
+            }
 
-            var chunks = SentenceSplitter.Split(text, chunking.SentenceMinChunkChars);
+            // Default: chunking path.
+            var providerSettings = JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(config.SettingsJson)
+                ?? new VoxCpm2ParagraphTtsSettings();
+            int maxChunkChars = providerSettings.MaxChunkChars;
 
-            // Buffer the reference audio once so each sentence gets a fresh, rewound stream.
+            var splitSentences = SentenceSplitter.Split(text);
+            var chunks = SentenceChunker.Chunk(splitSentences, maxChunkChars);
+
+            logger.LogDebug("Chunking paragraph ({Chars} chars) into {Count} chunks (max {Max} chars each)",
+                text.Length, chunks.Count, maxChunkChars);
+
+            if (chunks.Count == 1)
+            {
+                logger.LogDebug("Single chunk — passthrough");
+                return await inner.GenerateAsync(chunks[0], voiceInstructions, referenceAudioStream, config, ct);
+            }
+
             var refBytes = await ReadAllAsync(referenceAudioStream, ct);
-
             var wavs = new List<Stream>(chunks.Count);
             for (int i = 0; i < chunks.Count; i++)
             {
@@ -46,15 +77,15 @@ namespace Read2Me.Services.Audio.ParagraphTts
                 var wav = await inner.GenerateAsync(chunks[i], voiceInstructions, refCopy, config, ct);
                 sw.Stop();
                 logger.LogDebug(
-                    "Sentence chunk {Index}/{Count}: {Chars} chars synthesised in {Ms} ms",
+                    "Chunk {Index}/{Count}: {Chars} chars synthesised in {Ms} ms",
                     i + 1, chunks.Count, chunks[i].Length, sw.ElapsedMilliseconds);
                 wavs.Add(wav);
             }
 
-            var stitched = WavStitcher.Stitch(wavs, chunking.SentencePauseMs);
+            var stitched = WavStitcher.Stitch(wavs, audioSettings.ChunkPauseMs);
             logger.LogDebug(
-                "Stitched {Count} chunks into {Bytes} bytes with {Pause} ms pause between sentences",
-                chunks.Count, stitched.Length, chunking.SentencePauseMs);
+                "Stitched {Count} chunks into {Bytes} bytes with {Pause} ms pause between chunks",
+                chunks.Count, stitched.Length, audioSettings.ChunkPauseMs);
             return stitched;
         }
 

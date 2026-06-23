@@ -39,21 +39,18 @@
 
 <MudCard Outlined="true" Class="mb-5">
     <MudCardContent>
-        <MudText Typo="Typo.h6" Class="mb-3">Sentence chunking</MudText>
+        <MudText Typo="Typo.h6" Class="mb-3">Chunk pause</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            Split each item into sentences and synthesise them separately, stitching the
-            result with a short pause between sentences. Reduces peaking on long text.
+            Silence inserted between stitched audio chunks of a paragraph.
         </MudText>
-        <MudSwitch @bind-Value="_sentenceSplitEnabledDraft"
-                   Label="Enable sentence chunking" Color="Color.Primary" Class="mb-3" />
-        <MudNumericField @bind-Value="_sentencePauseMsDraft"
-                         Label="Pause between sentences (ms)" Variant="Variant.Outlined"
+        <MudNumericField @bind-Value="_chunkPauseMsDraft"
+                         Label="Pause between chunks (ms)" Variant="Variant.Outlined"
                          Min="0" Step="50" />
     </MudCardContent>
     <MudCardActions>
         <MudButton Variant="Variant.Filled" Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Save"
-                   OnClick="SaveSentenceChunkingAsync">Save</MudButton>
+                   OnClick="SaveChunkPauseAsync">Save</MudButton>
     </MudCardActions>
 </MudCard>
 
@@ -107,9 +104,7 @@
 @code {
     string _ffmpegPathDraft = "";
     double _werThresholdDraft = AudioProcessingSettingsService.DefaultWerThreshold;
-    bool _sentenceSplitEnabledDraft = AudioProcessingSettingsService.DefaultSentenceSplitEnabled;
-    int _sentencePauseMsDraft = AudioProcessingSettingsService.DefaultSentencePauseMs;
-    int _sentenceMinChunkCharsDraft = AudioProcessingSettingsService.DefaultSentenceMinChunkChars;
+    int _chunkPauseMsDraft = AudioProcessingSettingsService.DefaultChunkPauseMs;
     int _volumePauseMsDraft = AudioProcessingSettingsService.DefaultVolumePauseMs;
     int _partPauseMsDraft = AudioProcessingSettingsService.DefaultPartPauseMs;
     int _chapterPauseMsDraft = AudioProcessingSettingsService.DefaultChapterPauseMs;
@@ -130,9 +125,7 @@
         var settings = await SettingsService.GetAsync();
         _ffmpegPathDraft = settings.FfmpegPath ?? "";
         _werThresholdDraft = settings.WerThreshold;
-        _sentenceSplitEnabledDraft = settings.SentenceSplitEnabled;
-        _sentencePauseMsDraft = settings.SentencePauseMs;
-        _sentenceMinChunkCharsDraft = settings.SentenceMinChunkChars;
+        _chunkPauseMsDraft = settings.ChunkPauseMs;
         _volumePauseMsDraft = settings.VolumePauseMs;
         _partPauseMsDraft = settings.PartPauseMs;
         _chapterPauseMsDraft = settings.ChapterPauseMs;
@@ -158,16 +151,15 @@
         Snackbar.Add("WER threshold saved.", Severity.Success);
     }
 
-    async Task SaveSentenceChunkingAsync()
+    async Task SaveChunkPauseAsync()
     {
-        if (_sentencePauseMsDraft < 0)
+        if (_chunkPauseMsDraft < 0)
         {
             Snackbar.Add("Pause must be zero or greater.", Severity.Error);
             return;
         }
-        await SettingsService.SetSentenceChunkingAsync(
-            _sentenceSplitEnabledDraft, _sentencePauseMsDraft, _sentenceMinChunkCharsDraft);
-        Snackbar.Add("Sentence chunking saved.", Severity.Success);
+        await SettingsService.SetChunkPauseAsync(_chunkPauseMsDraft);
+        Snackbar.Add("Chunk pause saved.", Severity.Success);
     }
 
     async Task SavePauseDurationsAsync()

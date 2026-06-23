@@ -28,21 +28,14 @@ namespace Read2Me.AppData.Entities
         public double WerThreshold { get; set; } = 0.15;
 
         /// <summary>
-        /// Whether sentence chunking is applied before TTS synthesis. Defaults to true.
+        /// Legacy sentence-split path. Off by default; hidden from UI. Kept until chunking is proven.
         /// </summary>
-        public bool SentenceSplitEnabled { get; set; } = true;
+        public bool SentenceSplitEnabled { get; set; } = false;
 
         /// <summary>
-        /// Silence inserted between adjacent sentences when stitching chunked audio, in
-        /// milliseconds. Defaults to 300.
+        /// Silence inserted between stitched chunks, in milliseconds. Defaults to 300.
         /// </summary>
-        public int SentencePauseMs { get; set; } = 300;
-
-        /// <summary>
-        /// Sentence fragments shorter than this are merged into a neighbour rather than
-        /// emitted as their own chunk. Defaults to 15. Not surfaced in the UI.
-        /// </summary>
-        public int SentenceMinChunkChars { get; set; } = 15;
+        public int ChunkPauseMs { get; set; } = 300;
 
         public int VolumePauseMs { get; set; } = 4000;
         public int PartPauseMs { get; set; } = 3000;

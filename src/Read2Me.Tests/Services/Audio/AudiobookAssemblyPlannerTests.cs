@@ -13,9 +13,8 @@ namespace Read2Me.Tests.Services.Audio
         private static AudioProcessingSettings DefaultSettings() => new(
             FfmpegPath: null,
             WerThreshold: 0.15,
-            SentenceSplitEnabled: true,
-            SentencePauseMs: 300,
-            SentenceMinChunkChars: 15,
+            SentenceSplitEnabled: false,
+            ChunkPauseMs: 300,
             VolumePauseMs: 4000,
             PartPauseMs: 3000,
             ChapterPauseMs: 2500,

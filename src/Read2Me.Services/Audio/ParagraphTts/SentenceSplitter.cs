@@ -6,8 +6,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
     /// <summary>
     /// Pure sentence splitter for sentence-chunked TTS. Splits text on sentence terminators
     /// (<c>. ! ?</c>) followed by whitespace, guarding against abbreviations, decimals, and
-    /// ellipsis, then merges any fragment shorter than the minimum-chunk length into a
-    /// neighbour so titles and short exclamations don't become their own chunk.
+    /// ellipsis. Short fragments are handled by <see cref="SentenceChunker"/>'s greedy packing.
     /// </summary>
     public static class SentenceSplitter
     {
@@ -30,7 +29,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
         // Stand-in for a period that must not trigger a split; a control char unlikely in prose.
         private const char DotPlaceholder = '';
 
-        public static IReadOnlyList<string> Split(string text, int minChunkChars)
+        public static IReadOnlyList<string> Split(string text)
         {
             var guarded = Guard(text);
 
@@ -40,7 +39,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             foreach (var piece in pieces)
                 restored.Add(Unguard(piece));
 
-            return Merge(restored, minChunkChars);
+            return restored;
         }
 
         /// <summary>Masks periods that must not trigger a split (abbreviations, decimals, ellipsis).</summary>
@@ -56,34 +55,5 @@ namespace Read2Me.Services.Audio.ParagraphTts
         }
 
         private static string Unguard(string text) => text.Replace(DotPlaceholder, '.');
-
-        /// <summary>
-        /// Merges any fragment shorter than <paramref name="minChunkChars"/> into a neighbour so
-        /// titles and short exclamations don't become their own chunk. A fragment merges into the
-        /// previous chunk when one exists, otherwise into the next.
-        /// </summary>
-        private static IReadOnlyList<string> Merge(List<string> chunks, int minChunkChars)
-        {
-            if (chunks.Count <= 1)
-                return chunks;
-
-            var merged = new List<string>(chunks.Count);
-            foreach (var chunk in chunks)
-            {
-                if (chunk.Length < minChunkChars && merged.Count > 0)
-                    merged[^1] = merged[^1] + " " + chunk;
-                else
-                    merged.Add(chunk);
-            }
-
-            // A short leading fragment couldn't merge backwards; fold it into the next chunk.
-            while (merged.Count > 1 && merged[0].Length < minChunkChars)
-            {
-                merged[1] = merged[0] + " " + merged[1];
-                merged.RemoveAt(0);
-            }
-
-            return merged;
-        }
     }
 }

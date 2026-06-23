@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddBookCommandHandlers(this IServiceCollection services)
     {
         services.AddLogging();
+        services.AddSingleton<IFileSystem, FileSystemService>();
         // Delete
         services.AddScoped<ICommandHandler<DeleteVolumeCommand>, DeleteVolumeHandler>();
         services.AddScoped<ICommandHandler<DeletePartCommand>, DeletePartHandler>();

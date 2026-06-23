@@ -22,8 +22,7 @@ namespace Read2Me.Services
         string? FfmpegPath,
         double WerThreshold,
         bool SentenceSplitEnabled,
-        int SentencePauseMs,
-        int SentenceMinChunkChars,
+        int ChunkPauseMs,
         int VolumePauseMs,
         int PartPauseMs,
         int ChapterPauseMs,
@@ -33,9 +32,8 @@ namespace Read2Me.Services
     public class AudioProcessingSettingsService
     {
         public const double DefaultWerThreshold = 0.15;
-        public const bool DefaultSentenceSplitEnabled = true;
-        public const int DefaultSentencePauseMs = 300;
-        public const int DefaultSentenceMinChunkChars = 15;
+        public const bool DefaultSentenceSplitEnabled = false;
+        public const int DefaultChunkPauseMs = 300;
         public const int DefaultVolumePauseMs = 4000;
         public const int DefaultPartPauseMs = 3000;
         public const int DefaultChapterPauseMs = 2500;
@@ -66,8 +64,7 @@ namespace Read2Me.Services
                 settings?.FfmpegPath,
                 settings?.WerThreshold ?? DefaultWerThreshold,
                 settings?.SentenceSplitEnabled ?? DefaultSentenceSplitEnabled,
-                settings?.SentencePauseMs ?? DefaultSentencePauseMs,
-                settings?.SentenceMinChunkChars ?? DefaultSentenceMinChunkChars,
+                settings?.ChunkPauseMs ?? DefaultChunkPauseMs,
                 settings?.VolumePauseMs ?? DefaultVolumePauseMs,
                 settings?.PartPauseMs ?? DefaultPartPauseMs,
                 settings?.ChapterPauseMs ?? DefaultChapterPauseMs,
@@ -94,16 +91,11 @@ namespace Read2Me.Services
             OnChanged?.Invoke();
         }
 
-        /// <summary>Saves the sentence-chunking settings (toggle, pause, min-merge length).</summary>
-        public async Task SetSentenceChunkingAsync(bool enabled, int pauseMs, int minChunkChars)
+        /// <summary>Saves the pause between stitched audio chunks.</summary>
+        public async Task SetChunkPauseAsync(int pauseMs)
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
-            await MutateSettingsAsync(db, s =>
-            {
-                s.SentenceSplitEnabled = enabled;
-                s.SentencePauseMs = pauseMs;
-                s.SentenceMinChunkChars = minChunkChars;
-            });
+            await MutateSettingsAsync(db, s => s.ChunkPauseMs = pauseMs);
             await db.SaveChangesAsync();
             OnChanged?.Invoke();
         }

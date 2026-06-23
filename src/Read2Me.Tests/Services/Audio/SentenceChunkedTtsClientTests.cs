@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,6 +9,7 @@ using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Audio.ParagraphTts.Settings;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
@@ -77,61 +79,79 @@ namespace Read2Me.Tests.Services.Audio
             }
         }
 
-        // --- Fake settings service returning a fixed chunking config. ---
+        // --- Fake settings service: only ChunkPauseMs matters for chunking path. ---
         private sealed class FakeSettings : AudioProcessingSettingsService
         {
             private readonly AudioProcessingSettings _settings;
-            public FakeSettings(bool enabled, int pauseMs, int minChunkChars)
+            public FakeSettings(int pauseMs)
                 : base(null!, null!, NullLogger<AudioProcessingSettingsService>.Instance) =>
-                _settings = new AudioProcessingSettings(null, 0.15, enabled, pauseMs, minChunkChars,
-                    VolumePauseMs: 4000, PartPauseMs: 3000, ChapterPauseMs: 2500,
-                    ParagraphPauseMs: 800, PauseMs: 500);
+                _settings = new AudioProcessingSettings(null, 0.15, SentenceSplitEnabled: false,
+                    ChunkPauseMs: pauseMs, VolumePauseMs: 4000, PartPauseMs: 3000,
+                    ChapterPauseMs: 2500, ParagraphPauseMs: 800, PauseMs: 500);
 
             public override Task<AudioProcessingSettings> GetAsync() => Task.FromResult(_settings);
         }
+
+        private static ParagraphTtsServiceConfig ConfigWithMaxChunkChars(int maxChunkChars) =>
+            new() { SettingsJson = JsonSerializer.Serialize(new VoxCpm2ParagraphTtsSettings { MaxChunkChars = maxChunkChars }) };
 
         private static SentenceChunkedTtsClient NewClient(
             IParagraphTtsClient inner, AudioProcessingSettingsService settings) =>
             new(inner, settings, NullLogger<SentenceChunkedTtsClient>.Instance);
 
-        private static async Task<byte[]> Generate(SentenceChunkedTtsClient client, string text)
+        private static async Task<byte[]> Generate(
+            SentenceChunkedTtsClient client, string text, ParagraphTtsServiceConfig? config = null)
         {
             using var refAudio = new MemoryStream(new byte[] { 9, 9, 9 });
             using var result = await client.GenerateAsync(
-                text, "instr", refAudio, new ParagraphTtsServiceConfig());
+                text, "instr", refAudio, config ?? new ParagraphTtsServiceConfig());
             using var ms = new MemoryStream();
             await result.CopyToAsync(ms);
             return ms.ToArray();
         }
 
         [Fact]
-        public async Task ToggleOff_SingleInnerCall_OriginalText_ByteIdentical()
+        public async Task ShortParagraph_UnderCap_OneInnerCall_ByteIdentical()
         {
+            // Multi-sentence paragraph whose total length fits in one chunk.
             var innerWav = BuildWav(100, 0x11);
             var inner = new FakeInnerClient { WavFor = _ => innerWav };
-            var client = NewClient(inner, new FakeSettings(enabled: false, pauseMs: 200, minChunkChars: 15));
+            var client = NewClient(inner, new FakeSettings(pauseMs: 200));
 
-            var text = "First sentence here. Second sentence here. Third sentence here.";
-            var result = await Generate(client, text);
+            var text = "The sun rose. Birds sang."; // 25 chars, well under any reasonable cap
+            var config = ConfigWithMaxChunkChars(500);
+            var result = await Generate(client, text, config);
 
             Assert.Single(inner.Texts);
-            Assert.Equal(text, inner.Texts[0]);
+            // Chunker packs all sentences into one chunk -> joined text
+            Assert.Equal("The sun rose. Birds sang.", inner.Texts[0]);
             Assert.Equal(innerWav, result);
         }
 
         [Fact]
-        public async Task SingleSentence_OneInnerCall_ByteIdentical_RegardlessOfToggle()
+        public async Task LongParagraph_SplitsIntoChunks_StitchedWithChunkPauseMs()
         {
-            var innerWav = BuildWav(100, 0x11);
-            var inner = new FakeInnerClient { WavFor = _ => innerWav };
-            var client = NewClient(inner, new FakeSettings(enabled: true, pauseMs: 200, minChunkChars: 15));
+            var inner = new FakeInnerClient { WavFor = _ => BuildWav(100, 0x11) };
+            var client = NewClient(inner, new FakeSettings(pauseMs: 200));
 
-            var text = "This is a single complete sentence.";
-            var result = await Generate(client, text);
+            // Each sentence ~29 chars. Cap=40 forces each sentence into its own chunk.
+            var s1 = "The sun rose over the hills today.";   // 34
+            var s2 = "Birds began to sing so very loudly."; // 35
+            var s3 = "A bright new day had finally started."; // 37
+            var text = $"{s1} {s2} {s3}";
+            var config = ConfigWithMaxChunkChars(40);
 
-            Assert.Single(inner.Texts);
-            Assert.Equal(text, inner.Texts[0]);
-            Assert.Equal(innerWav, result); // one chunk → passthrough, no silence
+            var result = await Generate(client, text, config);
+
+            Assert.Equal(3, inner.Texts.Count);
+            Assert.Equal(s1, inner.Texts[0]);
+            Assert.Equal(s2, inner.Texts[1]);
+            Assert.Equal(s3, inner.Texts[2]);
+
+            int blockAlign = Channels * BitsPerSample / 8;
+            int pcmPerChunk = 100 * blockAlign;
+            int silenceBytes = (int)((long)SampleRate * 200 / 1000) * blockAlign;
+            Assert.Equal(3 * pcmPerChunk + 2 * silenceBytes, ReadDataLength(result));
         }
 
         [Fact]
@@ -142,31 +162,31 @@ namespace Read2Me.Tests.Services.Audio
                 WavFor = _ => BuildWav(100, 0x11),
                 ThrowOnTextContaining = "Birds",
             };
-            var client = NewClient(inner, new FakeSettings(enabled: true, pauseMs: 200, minChunkChars: 15));
+            var client = NewClient(inner, new FakeSettings(pauseMs: 200));
 
-            var text = "The sun rose over the hills. Birds began to sing loudly. A new day had started.";
+            // Cap=40 forces each sentence into its own chunk; "Birds" chunk throws.
+            var text = "The sun rose over the hills today. Birds began to sing so very loudly. A bright new day had finally started.";
+            var config = ConfigWithMaxChunkChars(40);
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => Generate(client, text));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Generate(client, text, config));
         }
 
         [Fact]
-        public async Task MultiSentence_OneInnerCallPerSentence_StitchedWithPause()
+        public async Task SingleOversizedSentence_OneInnerCall_ByteIdentical()
         {
-            var inner = new FakeInnerClient { WavFor = _ => BuildWav(100, 0x11) };
-            var client = NewClient(inner, new FakeSettings(enabled: true, pauseMs: 200, minChunkChars: 15));
+            // Sentence longer than MaxChunkChars; chunker returns it as a single chunk.
+            var innerWav = BuildWav(100, 0x11);
+            var inner = new FakeInnerClient { WavFor = _ => innerWav };
+            var client = NewClient(inner, new FakeSettings(pauseMs: 200));
 
-            var text = "The sun rose over the hills. Birds began to sing loudly. A new day had started.";
-            var result = await Generate(client, text);
+            var text = "This is a very long single sentence that exceeds the tiny chunk cap.";
+            var config = ConfigWithMaxChunkChars(10); // cap smaller than the sentence
 
-            Assert.Equal(3, inner.Texts.Count);
-            Assert.Equal("The sun rose over the hills.", inner.Texts[0]);
-            Assert.Equal("Birds began to sing loudly.", inner.Texts[1]);
-            Assert.Equal("A new day had started.", inner.Texts[2]);
+            var result = await Generate(client, text, config);
 
-            int blockAlign = Channels * BitsPerSample / 8;
-            int pcmPerChunk = 100 * blockAlign;
-            int silenceBytes = (int)((long)SampleRate * 200 / 1000) * blockAlign;
-            Assert.Equal(3 * pcmPerChunk + 2 * silenceBytes, ReadDataLength(result));
+            Assert.Single(inner.Texts);
+            Assert.Equal(text, inner.Texts[0]);
+            Assert.Equal(innerWav, result);
         }
     }
 }

@@ -22,6 +22,10 @@
                 <MudNumericField @bind-Value="_form.MaxLen" Label="Max Len" Variant="Variant.Outlined"
                                  Min="1" Max="8192" Immediate="true"
                                  HelperText="Max output length in tokens (server caps at 8192)." />
+
+                <MudNumericField @bind-Value="_form.MaxChunkChars" Label="Max Chunk Chars" Variant="Variant.Outlined"
+                                 Min="1" Immediate="true"
+                                 HelperText="Soft cap on characters per TTS chunk. Larger = more coherent but heavier for the provider." />
             }
 
             @if (_error != null)

@@ -836,7 +836,7 @@ namespace Read2Me.Tests.App.Audio
             public override Task<AudioProcessingSettings> GetAsync() =>
                 Task.FromResult(new AudioProcessingSettings(
                     _ffmpegPath, _werThreshold,
-                    SentenceSplitEnabled: false, SentencePauseMs: 300, SentenceMinChunkChars: 15,
+                    SentenceSplitEnabled: false, ChunkPauseMs: 300,
                     VolumePauseMs: 4000, PartPauseMs: 3000, ChapterPauseMs: 2500,
                     ParagraphPauseMs: 800, PauseMs: 500));
         }
