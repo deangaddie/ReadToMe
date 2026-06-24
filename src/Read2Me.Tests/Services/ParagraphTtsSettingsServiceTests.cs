@@ -140,5 +140,95 @@ namespace Read2Me.Tests.Services
             var reloaded = (await svc.GetAllConfigsAsync()).Single();
             Assert.Equal(["a", "b"], reloaded.EnabledStepIds);
         }
+
+        // ---- ToSentenceCaseConfig lifecycle ----
+
+        [Fact]
+        public async Task CreateConfig_WithToSentenceCaseConfig_PersistsRow()
+        {
+            var svc = NewService();
+            var cfg = Config("A");
+            cfg.ToSentenceCaseConfig = new ToSentenceCaseConfig
+            {
+                ParagraphEnabled = true,
+                WordEnabled = false,
+                WordMinLength = 9,
+            };
+            await svc.CreateConfigAsync(cfg);
+
+            var reloaded = (await svc.GetAllConfigsAsync()).Single();
+            Assert.NotNull(reloaded.ToSentenceCaseConfig);
+            Assert.True(reloaded.ToSentenceCaseConfig!.ParagraphEnabled);
+            Assert.False(reloaded.ToSentenceCaseConfig.WordEnabled);
+            Assert.Equal(9, reloaded.ToSentenceCaseConfig.WordMinLength);
+        }
+
+        [Fact]
+        public async Task UpdateConfig_EnableStep_CreatesRow()
+        {
+            var svc = NewService();
+            var created = await svc.CreateConfigAsync(Config("A"));
+
+            created.EnabledStepIds = ["to-sentence-case"];
+            created.ToSentenceCaseConfig = new ToSentenceCaseConfig
+            {
+                ParagraphEnabled = true,
+                WordEnabled = true,
+                WordMinLength = 5,
+            };
+            await svc.UpdateConfigAsync(created);
+
+            var reloaded = (await svc.GetAllConfigsAsync()).Single();
+            Assert.NotNull(reloaded.ToSentenceCaseConfig);
+            Assert.True(reloaded.ToSentenceCaseConfig!.ParagraphEnabled);
+            Assert.Equal(5, reloaded.ToSentenceCaseConfig.WordMinLength);
+        }
+
+        [Fact]
+        public async Task UpdateConfig_UpdateExistingRow_FieldsPersisted()
+        {
+            var svc = NewService();
+            var cfg = Config("A");
+            cfg.ToSentenceCaseConfig = new ToSentenceCaseConfig
+            {
+                ParagraphEnabled = true,
+                WordEnabled = true,
+                WordMinLength = 5,
+            };
+            var created = await svc.CreateConfigAsync(cfg);
+
+            created.ToSentenceCaseConfig = new ToSentenceCaseConfig
+            {
+                ParagraphEnabled = false,
+                WordEnabled = true,
+                WordMinLength = 10,
+            };
+            await svc.UpdateConfigAsync(created);
+
+            var reloaded = (await svc.GetAllConfigsAsync()).Single();
+            Assert.NotNull(reloaded.ToSentenceCaseConfig);
+            Assert.False(reloaded.ToSentenceCaseConfig!.ParagraphEnabled);
+            Assert.Equal(10, reloaded.ToSentenceCaseConfig.WordMinLength);
+        }
+
+        [Fact]
+        public async Task UpdateConfig_DisableStep_DeletesRow()
+        {
+            var svc = NewService();
+            var cfg = Config("A");
+            cfg.ToSentenceCaseConfig = new ToSentenceCaseConfig
+            {
+                ParagraphEnabled = true,
+                WordEnabled = true,
+                WordMinLength = 5,
+            };
+            var created = await svc.CreateConfigAsync(cfg);
+
+            created.ToSentenceCaseConfig = null;
+            await svc.UpdateConfigAsync(created);
+
+            var reloaded = (await svc.GetAllConfigsAsync()).Single();
+            Assert.Null(reloaded.ToSentenceCaseConfig);
+        }
     }
 }

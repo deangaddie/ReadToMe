@@ -14,6 +14,13 @@ namespace Read2Me.App.Shared
         public string ToText { get; set; } = "";
     }
 
+    public sealed class ToSentenceCaseFormItem
+    {
+        public bool ParagraphEnabled { get; set; } = true;
+        public bool WordEnabled { get; set; } = true;
+        public int WordMinLength { get; set; } = 5;
+    }
+
     public sealed class ParagraphTtsServiceConfigForm
     {
         public int Id { get; set; }
@@ -29,6 +36,7 @@ namespace Read2Me.App.Shared
 
         public List<string> EnabledStepIds { get; set; } = [];
         public List<SubstitutionStepFormItem> SubstitutionSteps { get; set; } = [];
+        public ToSentenceCaseFormItem ToSentenceCase { get; set; } = new();
 
         public bool IsStepEnabled(string id) => EnabledStepIds.Contains(id);
 
@@ -70,6 +78,14 @@ namespace Read2Me.App.Shared
                 SubstitutionSteps = [.. c.SubstitutionSteps
                     .OrderBy(s => s.Order)
                     .Select(s => new SubstitutionStepFormItem { Id = s.Id, FromText = s.FromText, ToText = s.ToText })],
+                ToSentenceCase = c.ToSentenceCaseConfig is { } tsc
+                    ? new ToSentenceCaseFormItem
+                    {
+                        ParagraphEnabled = tsc.ParagraphEnabled,
+                        WordEnabled = tsc.WordEnabled,
+                        WordMinLength = tsc.WordMinLength,
+                    }
+                    : new ToSentenceCaseFormItem(),
             };
 
             switch (c.Type)
@@ -123,6 +139,14 @@ namespace Read2Me.App.Shared
                 SubstitutionSteps = SubstitutionSteps
                     .Select((s, i) => new TextSubstitutionStep { Id = s.Id, FromText = s.FromText, ToText = s.ToText, Order = i })
                     .ToList(),
+                ToSentenceCaseConfig = EnabledStepIds.Contains("to-sentence-case")
+                    ? new ToSentenceCaseConfig
+                    {
+                        ParagraphEnabled = ToSentenceCase.ParagraphEnabled,
+                        WordEnabled = ToSentenceCase.WordEnabled,
+                        WordMinLength = ToSentenceCase.WordMinLength,
+                    }
+                    : null,
             };
         }
 

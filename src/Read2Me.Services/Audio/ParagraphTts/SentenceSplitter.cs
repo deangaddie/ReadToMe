@@ -36,7 +36,11 @@ namespace Read2Me.Services.Audio.ParagraphTts
 
             var restored = new List<string>(pieces.Length);
             foreach (var piece in pieces)
-                restored.Add(Unguard(piece));
+            {
+                var s = Unguard(piece);
+                if (!string.IsNullOrWhiteSpace(s))
+                    restored.Add(s);
+            }
 
             return restored;
         }

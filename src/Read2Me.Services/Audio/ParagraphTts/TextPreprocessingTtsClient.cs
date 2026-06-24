@@ -25,10 +25,13 @@ namespace Read2Me.Services.Audio.ParagraphTts
 
             var processed = text;
             using var scope = services.CreateScope();
+            var builtInSource = scope.ServiceProvider.GetRequiredService<IBuiltInStepSource>();
             var subSource = scope.ServiceProvider.GetRequiredService<ITextSubstitutionStepSource>();
             foreach (var id in config.EnabledStepIds)
             {
-                var step = services.GetKeyedService<ITextProcessingStep>(id) ?? subSource.Resolve(id);
+                var step = services.GetKeyedService<ITextProcessingStep>(id)
+                    ?? builtInSource.Resolve(id, config.Id)
+                    ?? subSource.Resolve(id);
                 if (step is null)
                 {
                     logger.LogWarning("Unknown text processing step ID '{StepId}' — skipping", id);

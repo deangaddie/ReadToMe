@@ -13,5 +13,6 @@ namespace Read2Me.AppData.Entities
         public string SettingsJson { get; set; } = string.Empty;
         public List<string> EnabledStepIds { get; set; } = [];
         public List<TextSubstitutionStep> SubstitutionSteps { get; set; } = [];
+        public ToSentenceCaseConfig? ToSentenceCaseConfig { get; set; }
     }
 }

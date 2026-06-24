@@ -418,5 +418,119 @@ namespace Read2Me.Tests.App
             Assert.Equal(",", form.SubstitutionSteps[0].ToText);
             Assert.Equal(id2, form.SubstitutionSteps[1].Id);
         }
+
+        // ---- ToSentenceCaseFormItem defaults ----
+
+        [Fact]
+        public void ToSentenceCaseFormItem_Defaults_AreCorrect()
+        {
+            var item = new ToSentenceCaseFormItem();
+
+            Assert.True(item.ParagraphEnabled);
+            Assert.True(item.WordEnabled);
+            Assert.Equal(5, item.WordMinLength);
+        }
+
+        // ---- FromConfig hydrates ToSentenceCase ----
+
+        [Fact]
+        public void FromConfig_WithToSentenceCaseConfig_HydratesFormItem()
+        {
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = JsonSerializer.Serialize(VoxCpm2ParagraphTtsSettings.Recommended),
+                ToSentenceCaseConfig = new ToSentenceCaseConfig
+                {
+                    ParagraphEnabled = false,
+                    WordEnabled = true,
+                    WordMinLength = 8,
+                },
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+
+            Assert.False(form.ToSentenceCase.ParagraphEnabled);
+            Assert.True(form.ToSentenceCase.WordEnabled);
+            Assert.Equal(8, form.ToSentenceCase.WordMinLength);
+        }
+
+        [Fact]
+        public void FromConfig_WithoutToSentenceCaseConfig_UsesDefaults()
+        {
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = JsonSerializer.Serialize(VoxCpm2ParagraphTtsSettings.Recommended),
+                ToSentenceCaseConfig = null,
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+
+            Assert.True(form.ToSentenceCase.ParagraphEnabled);
+            Assert.True(form.ToSentenceCase.WordEnabled);
+            Assert.Equal(5, form.ToSentenceCase.WordMinLength);
+        }
+
+        // ---- BuildConfig attaches / omits ToSentenceCaseConfig ----
+
+        [Fact]
+        public void BuildConfig_StepEnabled_AttachesToSentenceCaseConfig()
+        {
+            var form = Valid();
+            form.EnabledStepIds = ["to-sentence-case"];
+            form.ToSentenceCase = new ToSentenceCaseFormItem
+            {
+                ParagraphEnabled = true,
+                WordEnabled = false,
+                WordMinLength = 3,
+            };
+
+            var config = form.BuildConfig();
+
+            Assert.NotNull(config.ToSentenceCaseConfig);
+            Assert.True(config.ToSentenceCaseConfig!.ParagraphEnabled);
+            Assert.False(config.ToSentenceCaseConfig.WordEnabled);
+            Assert.Equal(3, config.ToSentenceCaseConfig.WordMinLength);
+        }
+
+        [Fact]
+        public void BuildConfig_StepDisabled_ToSentenceCaseConfigIsNull()
+        {
+            var form = Valid();
+            form.EnabledStepIds = [];
+
+            var config = form.BuildConfig();
+
+            Assert.Null(config.ToSentenceCaseConfig);
+        }
+
+        [Fact]
+        public void BuildConfig_ToSentenceCaseConfig_RoundTrips()
+        {
+            var original = new ParagraphTtsServiceConfig
+            {
+                Name = "Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = JsonSerializer.Serialize(VoxCpm2ParagraphTtsSettings.Recommended),
+                EnabledStepIds = ["to-sentence-case"],
+                ToSentenceCaseConfig = new ToSentenceCaseConfig
+                {
+                    ParagraphEnabled = false,
+                    WordEnabled = true,
+                    WordMinLength = 7,
+                },
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(original);
+            var rebuilt = form.BuildConfig();
+
+            Assert.NotNull(rebuilt.ToSentenceCaseConfig);
+            Assert.False(rebuilt.ToSentenceCaseConfig!.ParagraphEnabled);
+            Assert.True(rebuilt.ToSentenceCaseConfig.WordEnabled);
+            Assert.Equal(7, rebuilt.ToSentenceCaseConfig.WordMinLength);
+        }
     }
 }

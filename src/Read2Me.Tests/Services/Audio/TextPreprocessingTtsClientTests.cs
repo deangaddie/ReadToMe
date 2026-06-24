@@ -47,12 +47,24 @@ namespace Read2Me.Tests.Services.Audio
             public ITextProcessingStep? Resolve(string stepId) => null;
         }
 
+        private sealed class NullBuiltInStepSource : IBuiltInStepSource
+        {
+            public ITextProcessingStep? Resolve(string stepId, int paragraphTtsServiceConfigId) => null;
+        }
+
+        private sealed class FakeBuiltInStepSource(string knownId, ITextProcessingStep step) : IBuiltInStepSource
+        {
+            public ITextProcessingStep? Resolve(string stepId, int paragraphTtsServiceConfigId) =>
+                stepId == knownId ? step : null;
+        }
+
         private static TextPreprocessingTtsClient Build(
             IParagraphTtsClient inner,
             Action<ServiceCollection>? configure = null)
         {
             var sc = new ServiceCollection();
             sc.AddScoped<ITextSubstitutionStepSource, NullSubstitutionStepSource>();
+            sc.AddScoped<IBuiltInStepSource, NullBuiltInStepSource>();
             configure?.Invoke(sc);
             var sp = sc.BuildServiceProvider();
             return new TextPreprocessingTtsClient(inner, sp, NullLogger<TextPreprocessingTtsClient>.Instance);
@@ -167,6 +179,32 @@ namespace Read2Me.Tests.Services.Audio
             var captured = await RunAndCapture(client, inner, "hello", ConfigWith("completely-unknown-id"));
 
             Assert.Equal("hello", captured);
+        }
+
+        [Fact]
+        public async Task BuiltInSource_Fallback_AppliesWhenKeyedDiMisses()
+        {
+            var inner = new CapturingInnerClient();
+            var client = Build(inner, sc =>
+            {
+                sc.AddScoped<IBuiltInStepSource>(_ =>
+                    new FakeBuiltInStepSource("to-sentence-case", new ToSentenceCaseStep(true, false, 0)));
+            });
+
+            var captured = await RunAndCapture(client, inner, "HELLO WORLD", ConfigWith("to-sentence-case"));
+
+            Assert.Equal("Hello world", captured);
+        }
+
+        [Fact]
+        public async Task BuiltInSource_ReturnsNull_OriginalTextForwarded_NoThrow()
+        {
+            var inner = new CapturingInnerClient();
+            var client = Build(inner); // NullBuiltInStepSource registered
+
+            var captured = await RunAndCapture(client, inner, "HELLO WORLD", ConfigWith("to-sentence-case"));
+
+            Assert.Equal("HELLO WORLD", captured);
         }
 
         private sealed class FakeSubstitutionStepSource(string knownId, ITextProcessingStep step) : ITextSubstitutionStepSource

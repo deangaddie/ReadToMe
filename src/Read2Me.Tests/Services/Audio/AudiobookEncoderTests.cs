@@ -242,6 +242,20 @@ namespace Read2Me.Tests.Services.Audio
 
             Assert.Equal("out.m4b", args[^1]);
         }
+
+        [Fact]
+        public void BuildEncodeArgs_ContainerFormat_IsIpod()
+        {
+            // -f ipod required so ffmpeg can mux m4b/m4a even when output has a .tmp extension
+            var args = AudiobookEncoder.BuildEncodeArgs(
+                "concat.txt", "meta.txt", null, "out.m4b.tmp").ToList();
+
+            // Find the last -f before the output path (not the concat demuxer -f)
+            int outputIdx = args.IndexOf("out.m4b.tmp");
+            var formatIdx = args.LastIndexOf("-f", outputIdx - 1);
+            Assert.True(formatIdx >= 0, "missing -f before output path");
+            Assert.Equal("ipod", args[formatIdx + 1]);
+        }
     }
 
     // ── Integration tests (ffmpeg-gated) ─────────────────────────────────────

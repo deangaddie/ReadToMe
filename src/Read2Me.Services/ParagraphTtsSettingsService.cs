@@ -36,6 +36,7 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             return await db.ParagraphTtsServiceConfigs
                 .Include(c => c.SubstitutionSteps)
+                .Include(c => c.ToSentenceCaseConfig)
                 .OrderBy(c => c.Name)
                 .ToListAsync();
         }
@@ -52,6 +53,7 @@ namespace Read2Me.Services
 
             var existing = await db.ParagraphTtsServiceConfigs
                 .Include(c => c.SubstitutionSteps)
+                .Include(c => c.ToSentenceCaseConfig)
                 .SingleAsync(c => c.Id == config.Id);
 
             existing.Name = config.Name;
@@ -79,6 +81,25 @@ namespace Read2Me.Services
                     incoming.ParagraphTtsServiceConfigId = config.Id;
                     db.TextSubstitutionSteps.Add(incoming);
                 }
+            }
+
+            if (config.ToSentenceCaseConfig is { } incomingTsc)
+            {
+                if (existing.ToSentenceCaseConfig is null)
+                {
+                    incomingTsc.ParagraphTtsServiceConfigId = config.Id;
+                    db.ToSentenceCaseConfigs.Add(incomingTsc);
+                }
+                else
+                {
+                    existing.ToSentenceCaseConfig.ParagraphEnabled = incomingTsc.ParagraphEnabled;
+                    existing.ToSentenceCaseConfig.WordEnabled = incomingTsc.WordEnabled;
+                    existing.ToSentenceCaseConfig.WordMinLength = incomingTsc.WordMinLength;
+                }
+            }
+            else if (existing.ToSentenceCaseConfig is not null)
+            {
+                db.ToSentenceCaseConfigs.Remove(existing.ToSentenceCaseConfig);
             }
 
             await db.SaveChangesAsync();

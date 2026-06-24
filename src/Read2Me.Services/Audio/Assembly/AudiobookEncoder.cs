@@ -209,8 +209,9 @@ namespace Read2Me.Services.Audio.Assembly
             {
                 // Apply global metadata from the ffmetadata input
                 "-map_metadata", "1",
-                // Audio encode
+                // Audio encode; -f ipod = m4b/m4a container (needed when output has .tmp extension)
                 "-c:a", "aac", "-b:a", "64k", "-ac", "1", "-ar", "24000",
+                "-f", "ipod",
                 outputPath
             });
 

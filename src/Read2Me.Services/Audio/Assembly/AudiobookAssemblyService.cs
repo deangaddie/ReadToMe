@@ -73,7 +73,7 @@ namespace Read2Me.Services.Audio.Assembly
 
             try
             {
-                using var scope = _scopeFactory.CreateScope();
+                await using var scope = _scopeFactory.CreateAsyncScope();
                 var reader = scope.ServiceProvider.GetRequiredService<IProjectReader>();
                 var settingsSvc = scope.ServiceProvider.GetRequiredService<AudioProcessingSettingsService>();
                 var audioSettings = await settingsSvc.GetAsync();

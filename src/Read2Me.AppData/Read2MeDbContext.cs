@@ -20,6 +20,7 @@ namespace Read2Me.AppData
         public DbSet<TranscriptionServiceConfig> TranscriptionServiceConfigs => Set<TranscriptionServiceConfig>();
         public DbSet<ParagraphTtsServiceConfig> ParagraphTtsServiceConfigs => Set<ParagraphTtsServiceConfig>();
         public DbSet<TextSubstitutionStep> TextSubstitutionSteps => Set<TextSubstitutionStep>();
+        public DbSet<ToSentenceCaseConfig> ToSentenceCaseConfigs => Set<ToSentenceCaseConfig>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -77,6 +78,16 @@ namespace Read2Me.AppData
                     .HasForeignKey(s => s.ParagraphTtsServiceConfigId)
                     .OnDelete(DeleteBehavior.Cascade);
                 e.HasIndex(s => new { s.ParagraphTtsServiceConfigId, s.Order });
+            });
+
+            modelBuilder.Entity<ToSentenceCaseConfig>(e =>
+            {
+                e.HasKey(s => s.Id);
+                e.HasOne(s => s.Config)
+                    .WithOne(c => c.ToSentenceCaseConfig)
+                    .HasForeignKey<ToSentenceCaseConfig>(s => s.ParagraphTtsServiceConfigId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(s => s.ParagraphTtsServiceConfigId).IsUnique();
             });
         }
     }

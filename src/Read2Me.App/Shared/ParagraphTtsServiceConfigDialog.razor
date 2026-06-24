@@ -39,6 +39,21 @@
                                  ValueChanged="@((bool v) => _form.SetStepEnabled(s.Id, v))"
                                  Label="@s.DisplayName" />
                 </MudTooltip>
+                @if (s.Id == "to-sentence-case" && _form.IsStepEnabled("to-sentence-case"))
+                {
+                    <MudStack Class="ml-6" Spacing="2">
+                        <MudCheckBox T="bool" @bind-Value="_form.ToSentenceCase.ParagraphEnabled"
+                                     Label="Normalise all-caps paragraphs" />
+                        <MudCheckBox T="bool" @bind-Value="_form.ToSentenceCase.WordEnabled"
+                                     Label="De-shout long all-caps words" />
+                        @if (_form.ToSentenceCase.WordEnabled)
+                        {
+                            <MudNumericField T="int" @bind-Value="_form.ToSentenceCase.WordMinLength"
+                                             Label="Minimum word length" Variant="Variant.Outlined"
+                                             Min="1" Immediate="true" Style="max-width:180px" />
+                        }
+                    </MudStack>
+                }
             }
 
             <MudText Typo="Typo.subtitle2">Substitutions</MudText>

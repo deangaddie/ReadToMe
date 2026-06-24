@@ -107,7 +107,12 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IParagraphTtsClientResolver, ParagraphTtsClientResolver>();
         services.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.VoxCpm2);
         services.AddSingleton<ITextProcessingStepCatalog, TextProcessingStepCatalog>();
+        services.AddSingleton(new TextProcessingStepDescriptor(
+            "to-sentence-case",
+            "Sentence case (de-shout all-caps)",
+            "Converts fully all-caps paragraphs to sentence case and lowercases long all-caps words."));
         services.AddScoped<ITextSubstitutionStepSource, DbTextSubstitutionStepSource>();
+        services.AddScoped<IBuiltInStepSource, DbBuiltInStepSource>();
         return services;
     }
 

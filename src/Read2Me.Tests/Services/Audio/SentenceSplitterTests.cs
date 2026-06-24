@@ -49,6 +49,17 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(new[] { text }, chunks);
         }
 
+        [Theory]
+        [InlineData("The sun rose. ")]
+        [InlineData("The sun rose.  ")]
+        [InlineData("The sun rose!\t")]
+        public void TrailingWhitespaceAfterTerminator_DoesNotProduceEmptySentence(string text)
+        {
+            var chunks = SentenceSplitter.Split(text);
+
+            Assert.All(chunks, s => Assert.False(string.IsNullOrWhiteSpace(s)));
+        }
+
         [Fact]
         public void MultiSentenceProse_SplitsIntoOrderedChunks()
         {
