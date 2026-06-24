@@ -1,10 +1,19 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.ParagraphTts.Settings;
 
 namespace Read2Me.App.Shared
 {
+    public sealed class SubstitutionStepFormItem
+    {
+        public string Id { get; set; } = "";
+        public string FromText { get; set; } = "";
+        public string ToText { get; set; } = "";
+    }
+
     public sealed class ParagraphTtsServiceConfigForm
     {
         public int Id { get; set; }
@@ -18,6 +27,38 @@ namespace Read2Me.App.Shared
         // VoxCpm2 tunable params — full JSON the editor binds to (BaseUrl/MaxChunkChars held separately above).
         public string? SettingsJson { get; set; }
 
+        public List<string> EnabledStepIds { get; set; } = [];
+        public List<SubstitutionStepFormItem> SubstitutionSteps { get; set; } = [];
+
+        public bool IsStepEnabled(string id) => EnabledStepIds.Contains(id);
+
+        // Newly added substitutions default to enabled so they take effect immediately.
+        public void AddSubstitution()
+        {
+            var id = Guid.NewGuid().ToString();
+            SubstitutionSteps.Add(new SubstitutionStepFormItem { Id = id });
+            EnabledStepIds.Add(id);
+        }
+
+        public void RemoveSubstitution(string id)
+        {
+            SubstitutionSteps.RemoveAll(s => s.Id == id);
+            EnabledStepIds.Remove(id);
+        }
+
+        public void SetStepEnabled(string id, bool enabled)
+        {
+            if (enabled)
+            {
+                if (!EnabledStepIds.Contains(id))
+                    EnabledStepIds.Add(id);
+            }
+            else
+            {
+                EnabledStepIds.Remove(id);
+            }
+        }
+
         public static ParagraphTtsServiceConfigForm FromConfig(ParagraphTtsServiceConfig c)
         {
             var form = new ParagraphTtsServiceConfigForm
@@ -25,6 +66,10 @@ namespace Read2Me.App.Shared
                 Id = c.Id,
                 Name = c.Name,
                 Type = c.Type,
+                EnabledStepIds = [.. c.EnabledStepIds],
+                SubstitutionSteps = [.. c.SubstitutionSteps
+                    .OrderBy(s => s.Order)
+                    .Select(s => new SubstitutionStepFormItem { Id = s.Id, FromText = s.FromText, ToText = s.ToText })],
             };
 
             switch (c.Type)
@@ -74,6 +119,10 @@ namespace Read2Me.App.Shared
                 Name = Name.Trim(),
                 Type = Type,
                 SettingsJson = settingsJson,
+                EnabledStepIds = [.. EnabledStepIds],
+                SubstitutionSteps = SubstitutionSteps
+                    .Select((s, i) => new TextSubstitutionStep { Id = s.Id, FromText = s.FromText, ToText = s.ToText, Order = i })
+                    .ToList(),
             };
         }
 

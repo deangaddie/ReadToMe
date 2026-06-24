@@ -1,3 +1,6 @@
+@using Read2Me.Services.Text
+@inject ITextProcessingStepCatalog StepCatalog
+
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
@@ -25,6 +28,38 @@
                                             ProviderType="ParagraphTtsServiceType.VoxCpm2"
                                             Mode="TtsSettingsEditorMode.ProviderDefaults" />
             }
+
+            <MudText Typo="Typo.subtitle2">Text processing</MudText>
+            @foreach (var step in StepCatalog.GetAll(Config?.Id ?? 0))
+            {
+                var s = step;
+                <MudTooltip Text="@s.Description" Placement="Placement.Right">
+                    <MudCheckBox T="bool"
+                                 Value="@_form.IsStepEnabled(s.Id)"
+                                 ValueChanged="@((bool v) => _form.SetStepEnabled(s.Id, v))"
+                                 Label="@s.DisplayName" />
+                </MudTooltip>
+            }
+
+            <MudText Typo="Typo.subtitle2">Substitutions</MudText>
+            @foreach (var item in _form.SubstitutionSteps)
+            {
+                var row = item;
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="row.FromText" Label="From" Variant="Variant.Outlined"
+                                  Immediate="true" Style="max-width:140px" />
+                    <MudTextField @bind-Value="row.ToText" Label="To" Variant="Variant.Outlined"
+                                  Immediate="true" Style="max-width:140px" />
+                    <MudCheckBox T="bool"
+                                 Value="@_form.IsStepEnabled(row.Id)"
+                                 ValueChanged="@((bool v) => _form.SetStepEnabled(row.Id, v))"
+                                 Label="Enabled" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                   OnClick="@(() => _form.RemoveSubstitution(row.Id))" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small"
+                       OnClick="@(() => _form.AddSubstitution())">Add substitution</MudButton>
 
             @if (_error != null)
             {

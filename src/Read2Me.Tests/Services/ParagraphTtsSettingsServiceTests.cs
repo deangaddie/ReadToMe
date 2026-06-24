@@ -118,5 +118,27 @@ namespace Read2Me.Tests.Services
             Assert.Equal(ParagraphTtsServiceType.VoxCpm2, active!.Type);
             Assert.Contains("localhost:8000", active.SettingsJson);
         }
+
+        [Fact]
+        public async Task CreateConfig_EmptyEnabledStepIds_RemainsEmpty()
+        {
+            var svc = NewService();
+            await svc.CreateConfigAsync(Config("A"));
+
+            var reloaded = (await svc.GetAllConfigsAsync()).Single();
+            Assert.Empty(reloaded.EnabledStepIds);
+        }
+
+        [Fact]
+        public async Task EnabledStepIds_RoundTrips()
+        {
+            var svc = NewService();
+            var cfg = Config("B");
+            cfg.EnabledStepIds = ["a", "b"];
+            await svc.CreateConfigAsync(cfg);
+
+            var reloaded = (await svc.GetAllConfigsAsync()).Single();
+            Assert.Equal(["a", "b"], reloaded.EnabledStepIds);
+        }
     }
 }

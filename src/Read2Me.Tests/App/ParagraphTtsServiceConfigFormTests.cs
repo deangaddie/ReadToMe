@@ -155,5 +155,268 @@ namespace Read2Me.Tests.App
 
             Assert.Equal(1200, form.MaxChunkChars);
         }
+
+        // ---- EnabledStepIds ----
+
+        [Fact]
+        public void FromConfig_CopiesEnabledStepIds()
+        {
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = JsonSerializer.Serialize(VoxCpm2ParagraphTtsSettings.Recommended),
+                EnabledStepIds = ["escape-parens"],
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+
+            Assert.Equal(["escape-parens"], form.EnabledStepIds);
+        }
+
+        [Fact]
+        public void FromConfig_EmptyEnabledStepIds_FormHasNone()
+        {
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = JsonSerializer.Serialize(VoxCpm2ParagraphTtsSettings.Recommended),
+                EnabledStepIds = [],
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+
+            Assert.Empty(form.EnabledStepIds);
+        }
+
+        [Fact]
+        public void BuildConfig_PreservesEnabledStepIds()
+        {
+            var form = Valid();
+            form.EnabledStepIds = ["escape-parens"];
+
+            var config = form.BuildConfig();
+
+            Assert.Equal(["escape-parens"], config.EnabledStepIds);
+        }
+
+        [Fact]
+        public void IsStepEnabled_TrueWhenIdPresent()
+        {
+            var form = Valid();
+            form.EnabledStepIds = ["escape-parens"];
+
+            Assert.True(form.IsStepEnabled("escape-parens"));
+        }
+
+        [Fact]
+        public void IsStepEnabled_FalseWhenIdAbsent()
+        {
+            var form = Valid();
+            form.EnabledStepIds = [];
+
+            Assert.False(form.IsStepEnabled("escape-parens"));
+        }
+
+        [Fact]
+        public void SetStepEnabled_True_AddsId()
+        {
+            var form = Valid();
+            form.EnabledStepIds = [];
+
+            form.SetStepEnabled("escape-parens", true);
+
+            Assert.Contains("escape-parens", form.EnabledStepIds);
+        }
+
+        [Fact]
+        public void SetStepEnabled_False_RemovesId()
+        {
+            var form = Valid();
+            form.EnabledStepIds = ["escape-parens"];
+
+            form.SetStepEnabled("escape-parens", false);
+
+            Assert.DoesNotContain("escape-parens", form.EnabledStepIds);
+        }
+
+        [Fact]
+        public void SetStepEnabled_True_Idempotent()
+        {
+            var form = Valid();
+            form.EnabledStepIds = ["escape-parens"];
+
+            form.SetStepEnabled("escape-parens", true);
+
+            Assert.Equal(["escape-parens"], form.EnabledStepIds);
+        }
+
+        // ---- SubstitutionSteps ----
+
+        [Fact]
+        public void BuildConfig_WritesSubstitutionStepsWithOrderByIndex()
+        {
+            var form = Valid();
+            form.SubstitutionSteps =
+            [
+                new() { Id = "id-a", FromText = "(", ToText = "," },
+                new() { Id = "id-b", FromText = ")", ToText = "," },
+            ];
+
+            var config = form.BuildConfig();
+
+            Assert.Equal(2, config.SubstitutionSteps.Count);
+            var first = config.SubstitutionSteps.Single(s => s.Id == "id-a");
+            var second = config.SubstitutionSteps.Single(s => s.Id == "id-b");
+            Assert.Equal(0, first.Order);
+            Assert.Equal(1, second.Order);
+            Assert.Equal("(", first.FromText);
+            Assert.Equal(",", first.ToText);
+        }
+
+        [Fact]
+        public void SubstitutionSteps_RoundTrip_PreservesIdFromTextToTextAndOrder()
+        {
+            var id1 = Guid.NewGuid().ToString();
+            var id2 = Guid.NewGuid().ToString();
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = JsonSerializer.Serialize(VoxCpm2ParagraphTtsSettings.Recommended),
+                SubstitutionSteps =
+                [
+                    new() { Id = id1, FromText = "(", ToText = ",", Order = 0 },
+                    new() { Id = id2, FromText = ")", ToText = ",", Order = 1 },
+                ],
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+            var rebuilt = form.BuildConfig();
+
+            Assert.Equal(2, rebuilt.SubstitutionSteps.Count);
+            Assert.Equal(id1, rebuilt.SubstitutionSteps[0].Id);
+            Assert.Equal(0, rebuilt.SubstitutionSteps[0].Order);
+            Assert.Equal(id2, rebuilt.SubstitutionSteps[1].Id);
+            Assert.Equal(1, rebuilt.SubstitutionSteps[1].Order);
+        }
+
+        [Fact]
+        public void AddSubstitution_AppendsItemAndEnablesIt()
+        {
+            var form = Valid();
+
+            form.AddSubstitution();
+
+            Assert.Single(form.SubstitutionSteps);
+            var item = form.SubstitutionSteps[0];
+            Assert.False(string.IsNullOrEmpty(item.Id));
+            Assert.True(form.IsStepEnabled(item.Id));
+        }
+
+        [Fact]
+        public void AddSubstitution_MultipleCallsAppendInOrder()
+        {
+            var form = Valid();
+
+            form.AddSubstitution();
+            form.AddSubstitution();
+
+            Assert.Equal(2, form.SubstitutionSteps.Count);
+            Assert.NotEqual(form.SubstitutionSteps[0].Id, form.SubstitutionSteps[1].Id);
+        }
+
+        [Fact]
+        public void RemoveSubstitution_RemovesItemAndDisablesIt()
+        {
+            var form = Valid();
+            form.AddSubstitution();
+            var id = form.SubstitutionSteps[0].Id;
+
+            form.RemoveSubstitution(id);
+
+            Assert.Empty(form.SubstitutionSteps);
+            Assert.False(form.IsStepEnabled(id));
+        }
+
+        [Fact]
+        public void RemoveSubstitution_OnlyRemovesTargetItem()
+        {
+            var form = Valid();
+            form.AddSubstitution();
+            form.AddSubstitution();
+            var id0 = form.SubstitutionSteps[0].Id;
+            var id1 = form.SubstitutionSteps[1].Id;
+
+            form.RemoveSubstitution(id0);
+
+            Assert.Single(form.SubstitutionSteps);
+            Assert.Equal(id1, form.SubstitutionSteps[0].Id);
+            Assert.True(form.IsStepEnabled(id1));
+        }
+
+        [Fact]
+        public void EnableDisableSync_AddSubstitution_EnabledByDefault()
+        {
+            var form = Valid();
+            form.AddSubstitution();
+            var id = form.SubstitutionSteps[0].Id;
+
+            Assert.True(form.IsStepEnabled(id));
+        }
+
+        [Fact]
+        public void EnableDisableSync_SetStepEnabledFalse_RemovedFromEnabledStepIds()
+        {
+            var form = Valid();
+            form.AddSubstitution();
+            var id = form.SubstitutionSteps[0].Id;
+
+            form.SetStepEnabled(id, false);
+
+            Assert.False(form.IsStepEnabled(id));
+            Assert.DoesNotContain(id, form.EnabledStepIds);
+        }
+
+        [Fact]
+        public void EnableDisableSync_BuildConfig_ReflectsDisabledStep()
+        {
+            var form = Valid();
+            form.AddSubstitution();
+            var id = form.SubstitutionSteps[0].Id;
+            form.SetStepEnabled(id, false);
+
+            var config = form.BuildConfig();
+
+            Assert.DoesNotContain(id, config.EnabledStepIds);
+            Assert.Single(config.SubstitutionSteps);
+        }
+
+        [Fact]
+        public void FromConfig_PopulatesSubstitutionStepsOrderedByOrder()
+        {
+            var id1 = Guid.NewGuid().ToString();
+            var id2 = Guid.NewGuid().ToString();
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = JsonSerializer.Serialize(VoxCpm2ParagraphTtsSettings.Recommended),
+                SubstitutionSteps =
+                [
+                    new() { Id = id2, FromText = "(", ToText = ",", Order = 1 },
+                    new() { Id = id1, FromText = ")", ToText = ",", Order = 0 },
+                ],
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+
+            Assert.Equal(2, form.SubstitutionSteps.Count);
+            Assert.Equal(id1, form.SubstitutionSteps[0].Id);
+            Assert.Equal(")", form.SubstitutionSteps[0].FromText);
+            Assert.Equal(",", form.SubstitutionSteps[0].ToText);
+            Assert.Equal(id2, form.SubstitutionSteps[1].Id);
+        }
     }
 }

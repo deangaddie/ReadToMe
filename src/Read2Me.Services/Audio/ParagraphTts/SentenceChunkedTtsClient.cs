@@ -61,9 +61,12 @@ namespace Read2Me.Services.Audio.ParagraphTts
 
             if (chunks.Count == 1)
             {
-                logger.LogDebug("Single chunk — passthrough");
+                logger.LogDebug("Single chunk ({Chars} chars) — passthrough: {Text}", chunks[0].Length, chunks[0]);
                 return await inner.GenerateAsync(chunks[0], voiceInstructions, referenceAudioStream, config, settingsOverrideJson, ct);
             }
+
+            for (int i = 0; i < chunks.Count; i++)
+                logger.LogDebug("Chunk {Index}/{Count} ({Chars} chars): {Text}", i + 1, chunks.Count, chunks[i].Length, chunks[i]);
 
             var refBytes = await ReadAllAsync(referenceAudioStream, ct);
             var wavs = new List<Stream>(chunks.Count);

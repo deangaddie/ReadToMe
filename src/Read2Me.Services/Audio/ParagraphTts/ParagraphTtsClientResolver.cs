@@ -14,11 +14,14 @@ namespace Read2Me.Services.Audio.ParagraphTts
                 throw new NotSupportedException(
                     $"No paragraph-TTS client registered for type '{type}'.");
 
-            // Single wrap point: every provider type is wrapped in the self-gating chunking
-            // decorator, so chunking applies uniformly and the processor stays unaware of it.
             var settings = services.GetRequiredService<AudioProcessingSettingsService>();
-            var logger = services.GetRequiredService<ILogger<SentenceChunkedTtsClient>>();
-            return new SentenceChunkedTtsClient(client, settings, logger);
+            var chunkLogger = services.GetRequiredService<ILogger<SentenceChunkedTtsClient>>();
+            var chunked = new SentenceChunkedTtsClient(client, settings, chunkLogger);
+
+            // Preprocessing wraps chunking so escape/prosody steps run on whole-paragraph text
+            // before chunk boundaries are computed.
+            var prepLogger = services.GetRequiredService<ILogger<TextPreprocessingTtsClient>>();
+            return new TextPreprocessingTtsClient(chunked, services, prepLogger);
         }
     }
 }

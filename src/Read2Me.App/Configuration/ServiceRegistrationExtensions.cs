@@ -25,6 +25,7 @@ using Read2Me.Services.IO;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Llm;
 using Read2Me.Services.UseCases;
+using Read2Me.Services.Text;
 using Read2Me.Services.Voice;
 
 namespace Read2Me.App.Configuration;
@@ -105,6 +106,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<VoiceDesignPromptService>();
         services.AddScoped<IParagraphTtsClientResolver, ParagraphTtsClientResolver>();
         services.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.VoxCpm2);
+        services.AddSingleton<ITextProcessingStepCatalog, TextProcessingStepCatalog>();
+        services.AddScoped<ITextSubstitutionStepSource, DbTextSubstitutionStepSource>();
         return services;
     }
 
