@@ -33,13 +33,15 @@ namespace Read2Me.Tests.App.Audio
         private readonly FakeTranscriptionClient _transcriber;
         private readonly FakeTranscriptionResolver _transcriptionResolver;
         private readonly FakeTranscriptionSettings _transcriptionSettings;
-        private readonly FakeAudioProcessingSettings _audioProcessingSettings;
+        private FakeAudioProcessingSettings _audioProcessingSettings;
         private readonly FakeSemanticVerifier _semanticVerifier;
         private readonly AudioReviewService _reviews;
         private readonly AudioGenBroadcaster _broadcaster;
         private readonly List<AudioGenEvent> _events = new();
-        private readonly AudioQueueProcessor _sut;
+        private AudioQueueProcessor _sut;
         private readonly ProjectFolderId _folder;
+        private readonly ProjectReader _projectReader;
+        private readonly ProjectDbContextProvider _dbProvider;
 
         private static readonly ParagraphTtsServiceConfig ActiveConfig = new()
         {
@@ -86,30 +88,34 @@ namespace Read2Me.Tests.App.Audio
             var sp = services.BuildServiceProvider();
             _commands = sp.GetRequiredService<BookCommandHandler>();
 
-            var dbProvider = new ProjectDbContextProvider();
+            _dbProvider = new ProjectDbContextProvider();
             var fileSystem = new Read2Me.Services.IO.FileSystemService(
                 Microsoft.Extensions.Options.Options.Create(new Read2Me.Core.Configuration.WorkspaceOptions { FolderPath = TempDir }));
-            var dbSession = new ProjectDbSession(fileSystem, dbProvider, NullLogger<ProjectDbSession>.Instance);
-            var projectReader = new ProjectReader(dbSession, NullLogger<ProjectReader>.Instance);
+            var dbSession = new ProjectDbSession(fileSystem, _dbProvider, NullLogger<ProjectDbSession>.Instance);
+            _projectReader = new ProjectReader(dbSession, NullLogger<ProjectReader>.Instance);
 
-            _sut = new AudioQueueProcessor(
-                _queue,
-                _settings,
-                _resolver,
-                _commands,
-                _fs,
-                dbProvider,
-                projectReader,
-                _normalizer,
-                _wer,
-                _transcriptionResolver,
-                _transcriptionSettings,
-                _audioProcessingSettings,
-                _reviews,
-                _broadcaster,
-                _semanticVerifier,
-                NullLogger<AudioQueueProcessor>.Instance);
+            _sut = BuildSut();
         }
+
+        private AudioQueueProcessor BuildSut() => new(
+            _queue,
+            _settings,
+            _resolver,
+            _commands,
+            _fs,
+            _dbProvider,
+            _projectReader,
+            _normalizer,
+            _wer,
+            _transcriptionResolver,
+            _transcriptionSettings,
+            _audioProcessingSettings,
+            _reviews,
+            _broadcaster,
+            _semanticVerifier,
+            NullLogger<AudioQueueProcessor>.Instance);
+
+        private void RebuildSut() => _sut = BuildSut();
 
         private static string Key(string? prev = null, string? next = null) =>
             OrderKeyGenerator.GenerateKeyBetween(prev, next);
@@ -536,6 +542,167 @@ namespace Read2Me.Tests.App.Audio
             Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
         }
 
+        // --- Retry loop --------------------------------------------------------------
+
+        [Fact]
+        public async Task MaxAttempts1_ExactlyOneTtsCall_BehaviourIdenticalToPreFeature()
+        {
+            // audioMaxAttempts defaults to 1 in FakeAudioProcessingSettings — regression guard.
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Equal(1, _ttsClient.CallCount);
+            Assert.Null(_queue.OutcomeOf(_folder, itemId));
+            Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
+
+            await using var db = await OpenDbAsync();
+            var updated = await db.ParagraphItems.FindAsync(itemId);
+            Assert.Equal($"audio/{itemId}.wav", updated!.AudioFileName);
+        }
+
+        [Fact]
+        public async Task VerifyFailsTwice_PassesThird_ThreeTtsCalls_PersistOnce_ReviewCleared()
+        {
+            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
+            RebuildSut();
+
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            // Attempt 1 and 2 fail WER; attempt 3 passes.
+            _wer.EnqueueResults(0.42, 0.38, 0.05);
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Equal(3, _ttsClient.CallCount);
+            Assert.Null(await ReviewRowAsync(itemId));
+            Assert.Null(_reviews.ReviewOf(_folder, itemId));
+            Assert.Null(_queue.OutcomeOf(_folder, itemId));
+            Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
+
+            // Persist commands each called exactly once.
+            await using var db = await OpenDbAsync();
+            var updated = await db.ParagraphItems.FindAsync(itemId);
+            Assert.Equal($"audio/{itemId}.wav", updated!.AudioFileName);
+        }
+
+        [Fact]
+        public async Task VerifyFailsAllAttempts_NTtsCalls_MarkComplete_ReviewRowFinalAttempt()
+        {
+            const int max = 3;
+            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: max);
+            RebuildSut();
+
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _wer.Result = 0.42; // all attempts fail
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Equal(max, _ttsClient.CallCount);
+            Assert.Null(_queue.OutcomeOf(_folder, itemId));
+            Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
+
+            var row = await ReviewRowAsync(itemId);
+            Assert.NotNull(row);
+            Assert.False(row!.VerifyOk);
+            Assert.Equal(0.42, row.Wer);
+        }
+
+        [Fact]
+        public async Task VerifyPassesAttempt1_OneTtsCall_NoRetry()
+        {
+            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
+            RebuildSut();
+
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            // Default _wer.Result = 0.0 → verify passes first attempt.
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Equal(1, _ttsClient.CallCount);
+            Assert.Null(await ReviewRowAsync(itemId));
+        }
+
+        [Fact]
+        public async Task NormalizeFail_VerifyPass_OneTtsCall_NoRetry_ReviewNormalizeFail()
+        {
+            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
+            RebuildSut();
+
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _normalizer.Result = (NormalizeStatus.Skipped, "ffmpeg failed");
+            // verifyOk = true (wer = 0.0 < threshold) — normalize fail must not trigger retry
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Equal(1, _ttsClient.CallCount);
+            var row = await ReviewRowAsync(itemId);
+            Assert.NotNull(row);
+            Assert.False(row!.NormalizeOk);
+            Assert.True(row.VerifyOk);
+        }
+
+        [Fact]
+        public async Task InfraFail_NoTranscriptionConfig_OneTtsCall_NoRetry()
+        {
+            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
+            RebuildSut();
+
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _transcriptionSettings.Config = null;
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Equal(1, _ttsClient.CallCount);
+            var row = await ReviewRowAsync(itemId);
+            Assert.NotNull(row);
+            Assert.False(row!.VerifyOk);
+            Assert.Null(row.Wer);
+        }
+
+        [Fact]
+        public async Task MultiAttempt_AudioAndReviewCommandsEachCalledExactlyOnce()
+        {
+            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
+            RebuildSut();
+
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _wer.EnqueueResults(0.42, 0.42, 0.05); // pass on attempt 3
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Equal(3, _ttsClient.CallCount);
+
+            // Audio file written once.
+            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
+            Assert.True(_fs.FileExists(expectedPath));
+
+            // DB row has exactly one audio path (idempotent upsert, but invoked once).
+            await using var db = await OpenDbAsync();
+            var updated = await db.ParagraphItems.FindAsync(itemId);
+            Assert.Equal($"audio/{itemId}.wav", updated!.AudioFileName);
+
+            // Final attempt passed verify → no review row.
+            Assert.Null(await ReviewRowAsync(itemId));
+        }
+
+        [Fact]
+        public async Task RetryAttempts_EachPublishItemStartedWithCorrectAttemptNumber()
+        {
+            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
+            RebuildSut();
+
+            var (queuedItem, _) = await SeedCharacterItemAsync();
+            _wer.EnqueueResults(0.42, 0.42, 0.05);
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            var starts = _events.OfType<ItemStarted>().ToList();
+            Assert.Equal(3, starts.Count);
+            Assert.Equal(1, starts[0].Attempt);
+            Assert.Equal(2, starts[1].Attempt);
+            Assert.Equal(3, starts[2].Attempt);
+        }
+
         // --- Audio Gen Stream events --------------------------------------------------
 
         [Fact]
@@ -796,7 +963,8 @@ namespace Read2Me.Tests.App.Audio
 
         private sealed class FakeTtsClient : IParagraphTtsClient
         {
-            public bool WasCalled { get; private set; }
+            public bool WasCalled => CallCount > 0;
+            public int CallCount { get; private set; }
             public string? LastVoiceInstructions { get; private set; }
             public string? LastText { get; private set; }
             public byte LastReferenceAudioFirstByte { get; private set; }
@@ -804,7 +972,7 @@ namespace Read2Me.Tests.App.Audio
             public Task<Stream> GenerateAsync(string text, string? voiceInstructions, Stream referenceAudioStream,
                 ParagraphTtsServiceConfig settings, string? settingsOverrideJson, CancellationToken ct = default)
             {
-                WasCalled = true;
+                CallCount++;
                 LastVoiceInstructions = voiceInstructions;
                 LastText = text;
                 var buf = new byte[1];
@@ -862,9 +1030,18 @@ namespace Read2Me.Tests.App.Audio
 
         private sealed class FakeWerComparer : IWerComparer
         {
+            private readonly Queue<double> _queue = new();
             public double Result { get; set; }
             public FakeWerComparer(double result) => Result = result;
-            public double Compute(string reference, string hypothesis) => Result;
+
+            /// Queue per-call results; when exhausted falls back to Result.
+            public void EnqueueResults(params double[] results)
+            {
+                foreach (var r in results) _queue.Enqueue(r);
+            }
+
+            public double Compute(string reference, string hypothesis) =>
+                _queue.Count > 0 ? _queue.Dequeue() : Result;
         }
 
         private sealed class FakeTranscriptionClient : ITranscriptionClient
@@ -901,12 +1078,14 @@ namespace Read2Me.Tests.App.Audio
         {
             private readonly string? _ffmpegPath;
             private readonly double _werThreshold;
+            private readonly int _audioMaxAttempts;
 
-            public FakeAudioProcessingSettings(string? ffmpegPath, double werThreshold)
+            public FakeAudioProcessingSettings(string? ffmpegPath, double werThreshold, int audioMaxAttempts = 1)
                 : base(null!, null!, NullLogger<AudioProcessingSettingsService>.Instance)
             {
                 _ffmpegPath = ffmpegPath;
                 _werThreshold = werThreshold;
+                _audioMaxAttempts = audioMaxAttempts;
             }
 
             public override Task<AudioProcessingSettings> GetAsync() =>
@@ -914,7 +1093,7 @@ namespace Read2Me.Tests.App.Audio
                     _ffmpegPath, _werThreshold,
                     SentenceSplitEnabled: false, ChunkPauseMs: 300,
                     VolumePauseMs: 4000, PartPauseMs: 3000, ChapterPauseMs: 2500,
-                    ParagraphPauseMs: 800, PauseMs: 500));
+                    ParagraphPauseMs: 800, PauseMs: 500, AudioMaxAttempts: _audioMaxAttempts));
         }
     }
 }

@@ -17,7 +17,8 @@ namespace Read2Me.Tests.Services.Audio
             PartPauseMs: 3000,
             ChapterPauseMs: 2500,
             ParagraphPauseMs: 800,
-            PauseMs: 500);
+            PauseMs: 500,
+            AudioMaxAttempts: 1);
 
         // ── PauseMs ──────────────────────────────────────────────────────────
 

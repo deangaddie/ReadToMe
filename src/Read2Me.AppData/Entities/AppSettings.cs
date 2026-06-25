@@ -43,5 +43,10 @@ namespace Read2Me.AppData.Entities
         public int ChapterPauseMs { get; set; } = 2500;
         public int ParagraphPauseMs { get; set; } = 800;
         public int PauseMs { get; set; } = 500;
+
+        /// <summary>
+        /// Total audio-generation attempts per item, including the first. 1 = no retry.
+        /// </summary>
+        public int AudioMaxAttempts { get; set; } = 1;
     }
 }

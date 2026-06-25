@@ -18,7 +18,8 @@ namespace Read2Me.Tests.Services.Audio
                 Task.FromResult(new AudioProcessingSettings(
                     null, 0.15, SentenceSplitEnabled: false,
                     ChunkPauseMs: 0, VolumePauseMs: 4000, PartPauseMs: 3000,
-                    ChapterPauseMs: 2500, ParagraphPauseMs: 800, PauseMs: 500));
+                    ChapterPauseMs: 2500, ParagraphPauseMs: 800, PauseMs: 500,
+                    AudioMaxAttempts: 1));
         }
 
         private static ServiceProvider BuildServices(Action<ServiceCollection>? extra = null)

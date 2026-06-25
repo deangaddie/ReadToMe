@@ -13,7 +13,7 @@ namespace Read2Me.Tests.App.Audio
         {
             var id = Guid.NewGuid();
 
-            _model.Apply(new ItemStarted(id, "Bilbo", "In a hole"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "In a hole"));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal(id, card.Id);
@@ -25,9 +25,9 @@ namespace Read2Me.Tests.App.Audio
         public void LaterEventForSameId_UpdatesExistingCard_NoNewCard()
         {
             var id = Guid.NewGuid();
-            _model.Apply(new ItemStarted(id, "Bilbo", "In a hole"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "In a hole"));
 
-            _model.Apply(new AudioGenerated(id));
+            _model.Apply(new AudioGenerated(id, Attempt: 1));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal(PhaseState.Ok, card.AudioGen);
@@ -37,9 +37,9 @@ namespace Read2Me.Tests.App.Audio
         public void Normalized_Ok_SetsPhaseOk_WithReason()
         {
             var id = Guid.NewGuid();
-            _model.Apply(new ItemStarted(id, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
 
-            _model.Apply(new Normalized(id, Ok: true, Reason: null));
+            _model.Apply(new Normalized(id, Attempt: 1, Ok: true, Reason: null));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal(PhaseState.Ok, card.Normalize);
@@ -50,9 +50,9 @@ namespace Read2Me.Tests.App.Audio
         public void Normalized_NotOk_SetsPhaseFail_WithReason()
         {
             var id = Guid.NewGuid();
-            _model.Apply(new ItemStarted(id, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
 
-            _model.Apply(new Normalized(id, Ok: false, Reason: "ffmpeg boom"));
+            _model.Apply(new Normalized(id, Attempt: 1, Ok: false, Reason: "ffmpeg boom"));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal(PhaseState.Fail, card.Normalize);
@@ -63,9 +63,9 @@ namespace Read2Me.Tests.App.Audio
         public void Transcribed_SetsTranscript_AndTranscribePhaseOk()
         {
             var id = Guid.NewGuid();
-            _model.Apply(new ItemStarted(id, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
 
-            _model.Apply(new Transcribed(id, "In a hole transcript"));
+            _model.Apply(new Transcribed(id, Attempt: 1, "In a hole transcript"));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal("In a hole transcript", card.Transcript);
@@ -76,9 +76,9 @@ namespace Read2Me.Tests.App.Audio
         public void Verified_Ok_SetsPhaseOk_WithWer()
         {
             var id = Guid.NewGuid();
-            _model.Apply(new ItemStarted(id, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
 
-            _model.Apply(new Verified(id, Ok: true, Wer: 0.05, Reason: null));
+            _model.Apply(new Verified(id, Attempt: 1, Ok: true, Wer: 0.05, Reason: null));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal(PhaseState.Ok, card.Verify);
@@ -89,9 +89,9 @@ namespace Read2Me.Tests.App.Audio
         public void Verified_NotOk_SetsPhaseFail_WithWerAndReason()
         {
             var id = Guid.NewGuid();
-            _model.Apply(new ItemStarted(id, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
 
-            _model.Apply(new Verified(id, Ok: false, Wer: 0.42, Reason: "WER 0.42 > 0.15"));
+            _model.Apply(new Verified(id, Attempt: 1, Ok: false, Wer: 0.42, Reason: "WER 0.42 > 0.15"));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal(PhaseState.Fail, card.Verify);
@@ -103,9 +103,9 @@ namespace Read2Me.Tests.App.Audio
         public void Failed_SetsTerminalError_DistinctFromPhaseFail()
         {
             var id = Guid.NewGuid();
-            _model.Apply(new ItemStarted(id, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
 
-            _model.Apply(new Failed(id, "No active TTS configuration"));
+            _model.Apply(new Failed(id, Attempt: 1, "No active TTS configuration"));
 
             var card = Assert.Single(_model.Cards);
             Assert.True(card.HasFailed);
@@ -119,8 +119,8 @@ namespace Read2Me.Tests.App.Audio
         {
             var id = Guid.NewGuid();
             // Row not found ⇒ ItemStarted with null character/text, then Failed.
-            _model.Apply(new ItemStarted(id, null, null));
-            _model.Apply(new Failed(id, "ParagraphItem not found"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, null, null));
+            _model.Apply(new Failed(id, Attempt: 1, "ParagraphItem not found"));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal(id, card.Id);
@@ -133,9 +133,9 @@ namespace Read2Me.Tests.App.Audio
         public void Verified_Rescued_SetsRescuedTrue_OnCard()
         {
             var id = Guid.NewGuid();
-            _model.Apply(new ItemStarted(id, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
 
-            _model.Apply(new Verified(id, Ok: true, Wer: 0.42, Reason: "rescued by semantic 0.91", Rescued: true));
+            _model.Apply(new Verified(id, Attempt: 1, Ok: true, Wer: 0.42, Reason: "rescued by semantic 0.91", Rescued: true));
 
             var card = Assert.Single(_model.Cards);
             Assert.Equal(PhaseState.Ok, card.Verify);
@@ -147,13 +147,59 @@ namespace Read2Me.Tests.App.Audio
         {
             var ids = Enumerable.Range(0, 50).Select(_ => Guid.NewGuid()).ToArray();
             foreach (var id in ids)
-                _model.Apply(new ItemStarted(id, "C", "t"));
+                _model.Apply(new ItemStarted(id, Attempt: 1, "C", "t"));
 
             // A later event for the first item must not reorder it to the bottom.
-            _model.Apply(new AudioGenerated(ids[0]));
+            _model.Apply(new AudioGenerated(ids[0], Attempt: 1));
 
             Assert.Equal(50, _model.Cards.Count);
             Assert.Equal(ids, _model.Cards.Select(c => c.Id).ToArray());
+        }
+
+        [Fact]
+        public void SecondAttempt_ItemStarted_AppendsNewCard_ForSameId()
+        {
+            var id = Guid.NewGuid();
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 2, "Bilbo", "x"));
+
+            Assert.Equal(2, _model.Cards.Count);
+            Assert.Equal(1, _model.Cards[0].Attempt);
+            Assert.Equal(2, _model.Cards[1].Attempt);
+        }
+
+        [Fact]
+        public void SecondAttempt_LaterEvent_RoutesToSecondCard_NotFirst()
+        {
+            var id = Guid.NewGuid();
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 2, "Bilbo", "x"));
+
+            _model.Apply(new Verified(id, Attempt: 2, Ok: true, Wer: 0.05, Reason: null));
+
+            Assert.Equal(PhaseState.Pending, _model.Cards[0].Verify);
+            Assert.Equal(PhaseState.Ok, _model.Cards[1].Verify);
+        }
+
+        [Fact]
+        public void Attempt1_Card_HasAttempt1_NoRetryChipNeeded()
+        {
+            var id = Guid.NewGuid();
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
+
+            Assert.Equal(1, _model.Cards[0].Attempt);
+        }
+
+        [Fact]
+        public void Attempt2_Card_HasAttempt2_RetryChipShouldShowRetry1()
+        {
+            var id = Guid.NewGuid();
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
+            _model.Apply(new ItemStarted(id, Attempt: 2, "Bilbo", "x"));
+
+            var retryCard = _model.Cards[1];
+            Assert.Equal(2, retryCard.Attempt);
+            // View renders "retry N" where N = Attempt - 1 = 1
         }
     }
 }

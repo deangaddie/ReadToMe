@@ -35,5 +35,22 @@ namespace Read2Me.Tests.Services
             }
             Assert.True(found, "ActiveSemanticConfigId column should exist on Settings");
         }
+
+        [Fact]
+        public async Task MigrateAsync_AddsAudioMaxAttemptsToSettings()
+        {
+            await using var db = await OpenDbAsync();
+            var conn = (SqliteConnection)db.Database.GetDbConnection();
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "PRAGMA table_info(Settings)";
+            await using var reader = await cmd.ExecuteReaderAsync();
+            bool found = false;
+            while (await reader.ReadAsync())
+            {
+                if (reader.GetString(1) == "AudioMaxAttempts") { found = true; break; }
+            }
+            Assert.True(found, "AudioMaxAttempts column should exist on Settings");
+        }
     }
 }

@@ -161,5 +161,51 @@ namespace Read2Me.Tests.Services
 
             Assert.Equal(1, count);
         }
+
+        [Fact]
+        public async Task Get_MissingRow_ReturnsDefaultAudioMaxAttempts()
+        {
+            var svc = NewService();
+
+            var settings = await svc.GetAsync();
+
+            Assert.Equal(1, settings.AudioMaxAttempts);
+        }
+
+        [Fact]
+        public async Task SetAudioMaxAttempts_RoundTrips()
+        {
+            var svc = NewService();
+
+            await svc.SetAudioMaxAttemptsAsync(3);
+
+            var settings = await NewService().GetAsync();
+            Assert.Equal(3, settings.AudioMaxAttempts);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-3)]
+        public async Task SetAudioMaxAttempts_BelowOne_ClampsToOne(int value)
+        {
+            var svc = NewService();
+
+            await svc.SetAudioMaxAttemptsAsync(value);
+
+            var settings = await NewService().GetAsync();
+            Assert.Equal(1, settings.AudioMaxAttempts);
+        }
+
+        [Fact]
+        public async Task SetAudioMaxAttempts_RaisesOnChanged()
+        {
+            var svc = NewService();
+            int count = 0;
+            svc.OnChanged += () => count++;
+
+            await svc.SetAudioMaxAttemptsAsync(2);
+
+            Assert.Equal(1, count);
+        }
     }
 }

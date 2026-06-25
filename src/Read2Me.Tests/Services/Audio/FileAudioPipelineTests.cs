@@ -261,7 +261,7 @@ namespace Read2Me.Tests.Services.Audio
                     _ffmpegPath, WerThreshold: 0.15,
                     SentenceSplitEnabled: false, ChunkPauseMs: 300,
                     VolumePauseMs: 4000, PartPauseMs: 3000, ChapterPauseMs: 2500,
-                    ParagraphPauseMs: 800, PauseMs: 500));
+                    ParagraphPauseMs: 800, PauseMs: 500, AudioMaxAttempts: 1));
         }
     }
 }

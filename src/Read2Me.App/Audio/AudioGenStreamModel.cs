@@ -12,7 +12,7 @@ namespace Read2Me.App.Audio
     public sealed class AudioGenStreamModel
     {
         private readonly List<AudioGenCard> _cards = new();
-        private readonly Dictionary<Guid, AudioGenCard> _byId = new();
+        private readonly Dictionary<(Guid Id, int Attempt), AudioGenCard> _byId = new();
 
         public IReadOnlyList<AudioGenCard> Cards => _cards;
 
@@ -21,33 +21,33 @@ namespace Read2Me.App.Audio
             switch (e)
             {
                 case ItemStarted s:
-                    var card = new AudioGenCard(s.Id) { Character = s.Character, Text = s.Text };
+                    var card = new AudioGenCard(s.Id, s.Attempt) { Character = s.Character, Text = s.Text };
                     _cards.Add(card);
-                    _byId[s.Id] = card;
+                    _byId[(s.Id, s.Attempt)] = card;
                     break;
 
-                case AudioGenerated g when _byId.TryGetValue(g.Id, out var gc):
+                case AudioGenerated g when _byId.TryGetValue((g.Id, g.Attempt), out var gc):
                     gc.AudioGen = PhaseState.Ok;
                     break;
 
-                case Normalized n when _byId.TryGetValue(n.Id, out var nc):
+                case Normalized n when _byId.TryGetValue((n.Id, n.Attempt), out var nc):
                     nc.Normalize = n.Ok ? PhaseState.Ok : PhaseState.Fail;
                     nc.NormalizeReason = n.Reason;
                     break;
 
-                case Transcribed t when _byId.TryGetValue(t.Id, out var tc):
+                case Transcribed t when _byId.TryGetValue((t.Id, t.Attempt), out var tc):
                     tc.Transcript = t.Transcript;
                     tc.Transcribe = PhaseState.Ok;
                     break;
 
-                case Verified v when _byId.TryGetValue(v.Id, out var vc):
+                case Verified v when _byId.TryGetValue((v.Id, v.Attempt), out var vc):
                     vc.Verify = v.Ok ? PhaseState.Ok : PhaseState.Fail;
                     vc.Wer = v.Wer;
                     vc.VerifyReason = v.Reason;
                     vc.Rescued = v.Rescued;
                     break;
 
-                case Failed f when _byId.TryGetValue(f.Id, out var fc):
+                case Failed f when _byId.TryGetValue((f.Id, f.Attempt), out var fc):
                     fc.HasFailed = true;
                     fc.FailureReason = f.Reason;
                     break;
@@ -59,9 +59,10 @@ namespace Read2Me.App.Audio
 
     public sealed class AudioGenCard
     {
-        public AudioGenCard(Guid id) => Id = id;
+        public AudioGenCard(Guid id, int attempt) { Id = id; Attempt = attempt; }
 
         public Guid Id { get; }
+        public int Attempt { get; }
         public string? Character { get; set; }
         public string? Text { get; set; }
 

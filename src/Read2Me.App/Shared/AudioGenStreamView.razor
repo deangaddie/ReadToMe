@@ -22,6 +22,10 @@
                         <MudText Typo="Typo.caption" Style="opacity:0.8; font-weight:600;">
                             @(string.IsNullOrEmpty(card.Character) ? "—" : card.Character)
                         </MudText>
+                        @if (card.Attempt > 1)
+                        {
+                            <MudChip T="string" Color="Color.Warning" Size="Size.Small" Style="height:18px; font-size:0.7rem;">retry @(card.Attempt - 1)</MudChip>
+                        }
                     </MudStack>
                     <MudText Typo="Typo.body2" Style="white-space:pre-wrap; margin-top:4px;">@card.Text</MudText>
                 </CardHeaderContent>

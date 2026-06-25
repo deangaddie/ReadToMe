@@ -24,7 +24,8 @@ namespace Read2Me.Services
         int PartPauseMs,
         int ChapterPauseMs,
         int ParagraphPauseMs,
-        int PauseMs);
+        int PauseMs,
+        int AudioMaxAttempts);
 
     public class AudioProcessingSettingsService
     {
@@ -36,6 +37,7 @@ namespace Read2Me.Services
         public const int DefaultChapterPauseMs = 2500;
         public const int DefaultParagraphPauseMs = 800;
         public const int DefaultPauseMs = 500;
+        public const int DefaultAudioMaxAttempts = 1;
 
         private readonly IDbContextFactory<Read2MeDbContext> _dbFactory;
         private readonly IFfmpegProber _prober;
@@ -66,7 +68,8 @@ namespace Read2Me.Services
                 settings?.PartPauseMs ?? DefaultPartPauseMs,
                 settings?.ChapterPauseMs ?? DefaultChapterPauseMs,
                 settings?.ParagraphPauseMs ?? DefaultParagraphPauseMs,
-                settings?.PauseMs ?? DefaultPauseMs);
+                settings?.PauseMs ?? DefaultPauseMs,
+                settings?.AudioMaxAttempts ?? DefaultAudioMaxAttempts);
         }
 
         /// <summary>Saves the ffmpeg path. Blank/whitespace is stored as null (rely on PATH).</summary>
@@ -84,6 +87,16 @@ namespace Read2Me.Services
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.WerThreshold = werThreshold);
+            await db.SaveChangesAsync();
+            OnChanged?.Invoke();
+        }
+
+        /// <summary>Saves the total audio-generation attempts per item. Values below 1 clamp to 1.</summary>
+        public async Task SetAudioMaxAttemptsAsync(int maxAttempts)
+        {
+            var clamped = Math.Max(1, maxAttempts);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            await MutateSettingsAsync(db, s => s.AudioMaxAttempts = clamped);
             await db.SaveChangesAsync();
             OnChanged?.Invoke();
         }
