@@ -46,7 +46,7 @@
         var isAudioMode = viewMode == BookViewMode.SplitAudio;
         var isSplitSelected = isAttribution && isCharPara && Presenter.Selection.IsParagraphSelected(Para.Id);
         var splitBg = hasUnknown ? "rgba(var(--mud-palette-warning-rgb), 0.06)" : isSplitSelected ? "rgba(var(--mud-palette-primary-rgb), 0.10)" : "";
-        <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded"
+        <MudStack Spacing="1" Class="pl-2 pr-1 py-1 rounded paragraph-hover-block"
                   Style="@($"border-left: 2px solid {(hasUnknown ? "var(--mud-palette-warning)" : isSplitSelected ? "var(--mud-palette-primary)" : "var(--mud-palette-divider)") };{(splitBg != "" ? $" background: {splitBg};" : "")}")">
             @if (isAttribution && isCharPara)
             {
@@ -82,7 +82,7 @@
                     var audioOutcome = isAudioMode && audioStatus is null ? AudioQueue.OutcomeOf(FolderId, it.Id) : null;
                     var isAudioBusy = audioStatus is not null;
                     var isAudioSelected = isAudioMode && !isAudioBusy && Presenter.AudioSelection.IsItemSelected(it.Id);
-                    <div style="display:grid; grid-template-columns:@(isAudioMode ? "32px " : "")120px 1fr auto; align-items:start; gap:8px;">
+                    <div class="paragraph-item-hover-row" style="display:grid; grid-template-columns:@(isAudioMode ? "32px " : "")120px 1fr auto; align-items:start; gap:8px;">
                         @if (isAudioMode)
                         {
                             @if (isAudioBusy)
@@ -175,7 +175,7 @@
                 else
                 {
                     var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetItemDisplay(it.ItemType);
-                    <div style="@($"display:grid; grid-template-columns:{(isAudioMode ? "32px " : "")}120px 1fr auto; align-items:center; gap:8px; opacity:0.6; font-style:italic;")">
+                    <div class="paragraph-item-hover-row" style="@($"display:grid; grid-template-columns:{(isAudioMode ? "32px " : "")}120px 1fr auto; align-items:center; gap:8px; opacity:0.6; font-style:italic;")">
                         @if (isAudioMode)
                         {
                             <span></span>
@@ -218,6 +218,7 @@ else
     @if (!isPause)
     {
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"
+                  Class="paragraph-hover-row"
                   Style="@($"border-radius: 4px; padding: 0 4px;{(isSelected ? " color: var(--mud-palette-primary-text); background: rgba(var(--mud-palette-primary-rgb), 0.12);" : "")}")">
             @if (isBusy)
             {
@@ -268,6 +269,22 @@ else
         </MudStack>
     }
 }
+
+<style>
+    .paragraph-hover-row:hover,
+    .paragraph-hover-block:hover {
+        background-color: rgba(var(--mud-palette-text-primary-rgb), 0.04) !important;
+        outline: 1px solid rgba(var(--mud-palette-text-primary-rgb), 0.15);
+        outline-offset: 1px;
+    }
+
+    .paragraph-item-hover-row:hover {
+        background-color: rgba(var(--mud-palette-text-primary-rgb), 0.04);
+        outline: 1px solid rgba(var(--mud-palette-text-primary-rgb), 0.15);
+        outline-offset: 1px;
+        border-radius: 4px;
+    }
+</style>
 
 @code {
     [Parameter, EditorRequired] public Paragraph Para { get; set; } = null!;

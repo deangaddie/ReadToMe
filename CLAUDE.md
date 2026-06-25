@@ -18,8 +18,16 @@ dotnet run --project src/Read2Me.App
 
 # Infrastructure services (run from Infra/)
 docker compose up -d llama              # LLM service
-docker compose up -d read2me-chatterbox # TTS service
-docker compose stop llama
+docker compose up -d chatterbox        # TTS — expression + voice cloning
+docker compose up -d chatterbox-turbo  # TTS — paralinguistic tags
+docker compose up -d qwen3-tts         # TTS — voice design from description
+docker compose up -d qwen3-tts-base    # TTS — voice cloning from reference audio
+docker compose up -d voxcpm2           # TTS — VoxCPM2 voice cloning
+docker compose up -d whisper           # GPU transcription
+docker compose up -d whisper-cpu       # CPU transcription fallback
+docker compose up -d minilm-l6         # Semantic similarity
+docker compose up -d mpnet-base-v2     # Semantic similarity
+docker compose stop <service>
 docker compose up -d --build            # After Dockerfile/entrypoint changes
 docker logs -f read2me-llama
 ```
@@ -34,11 +42,9 @@ docker logs -f read2me-llama
 - **Entry**: `Program.cs` → `Startup.cs` → `ConfigureServices` / `Configure`
 - **UI**: Razor pages + Blazor components via SignalR
 
-Currently bootstrapped (placeholder `Index.razor`). Domain services, repositories, and HTTP clients to the AI infra services will be registered in `Startup.ConfigureServices`.
-
 ### AI Infrastructure (`Infra/`)
 
-Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB VRAM) — **only one GPU-resident container at a time**.
+Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB VRAM) — only one GPU-resident container at a time.
 
 | Container | Port | Role |
 |-----------|------|------|
@@ -47,7 +53,11 @@ Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB
 | `read2me-chatterbox-turbo` | 8001 | TTS — paralinguistic tags (`[laugh]`, `[sigh]`, etc.) + voice cloning (`POST /tts/turbo`) |
 | `read2me-qwen3-tts` | 8100 | TTS — voice design from text description, no reference audio (`POST /tts`) |
 | `read2me-qwen3-tts-base` | 8101 | TTS — voice cloning from reference audio + transcript (`POST /tts`) |
-| `read2me-whisper` | 9000 | Audio transcription for accuracy scoring — small enough to co-run with Chatterbox |
+| `read2me-voxcpm2` | 8003 | TTS — VoxCPM2 voice cloning (`POST /tts`) |
+| `read2me-whisper` | 9000 | GPU audio transcription for accuracy scoring |
+| `read2me-whisper-cpu` | 9001 | CPU-only transcription fallback |
+| `read2me-minilm-l6` | 8200 | Semantic similarity — MiniLM-L6 (`POST /similarity`) |
+| `read2me-mpnet-base-v2` | 8201 | Semantic similarity — MPNet-Base-v2 (`POST /similarity`) |
 
 **Chatterbox** requires `reference_audio` (WAV/MP3) on every request — no built-in voices.
 
@@ -59,6 +69,6 @@ Model presets: `gemma-26b`, `qwen-36b`, `gemma-4b`, `qwen-9b` — defined in `In
 
 GGUF model files live in `Infra/models/` (bind-mounted, not committed).
 
-### Intended Data Flow
+### Data Flow
 
-User script → LLM (`read2me-llama`) for character/script processing → TTS service for audio generation → Whisper for accuracy scoring → assembled audiobook output.
+User imports epub/text → LLM attributes dialog items to Characters → TTS synthesises audio per ParagraphItem → Whisper transcribes for WER/semantic accuracy check → items assembled into `.m4b` audiobook with chapter markers and cover art.

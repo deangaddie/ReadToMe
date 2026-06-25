@@ -29,63 +29,62 @@
             {
                 <div style="padding:8px 16px; border-bottom:1px solid var(--mud-palette-divider);">
                     <MudText Typo="Typo.caption"
-                             Style="white-space:pre-wrap; font-family:monospace; opacity:0.75; font-size:0.7rem; max-height:120px; overflow-y:auto; display:block;">
+                             Style="white-space:pre-wrap; font-family:monospace; opacity:0.75; font-size:0.7rem; overflow-y:auto; display:block;">
                         @turn.Prompt</MudText>
-                </div>
-            }
-            @if (turn.Thinking.Length > 0)
-            {
-                <div
-                    style="padding:8px 16px; border-bottom:1px solid var(--mud-palette-divider); background:var(--mud-palette-background-grey); opacity:0.8;">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="margin-bottom:4px;">
-                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Style="opacity:0.6;" />
-                        <MudText Typo="Typo.caption" Style="opacity:0.6; font-style:italic;">Thinking</MudText>
-                    </MudStack>
-                    <div style="max-height:200px; overflow-y:auto;">
-                        <MudText Typo="Typo.caption"
-                                 Style="white-space:pre-wrap; font-family:monospace; font-style:italic; opacity:0.65; font-size:0.7rem;">
-                            @turn.Thinking.ToString()</MudText>
                     </div>
-                </div>
-            }
-            @if (turn.Response.Length > 0 || turn.IsStreaming)
-            {
-                <div
-                    style="padding:8px 16px; @(turn.FailureReason != null ? "border-bottom:1px solid var(--mud-palette-divider);" : "")">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="margin-bottom:4px;">
-                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" Style="opacity:0.6;" />
-                        <MudText Typo="Typo.caption" Style="opacity:0.6;">Response</MudText>
-                        @if (turn.IsStreaming)
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true"
-                                                 Style="width:10px;height:10px;opacity:0.6;" />
+                }
+                @if (turn.Thinking.Length > 0)
+                {
+                    <div
+                        style="padding:8px 16px; border-bottom:1px solid var(--mud-palette-divider); background:var(--mud-palette-background-grey); opacity:0.8;">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="margin-bottom:4px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Style="opacity:0.6;" />
+                            <MudText Typo="Typo.caption" Style="opacity:0.6; font-style:italic;">Thinking</MudText>
+                        </MudStack>
+                        <div style="overflow-y:auto;">
+                            <MudText Typo="Typo.caption"
+                                     Style="white-space:pre-wrap; font-family:monospace; font-style:italic; opacity:0.65; font-size:0.7rem;">
+                                @turn.Thinking.ToString()</MudText>
+                            </div>
+                        </div>
+                    }
+                    @if (turn.Response.Length > 0 || turn.IsStreaming)
+                    {
+                        <div
+                            style="padding:8px 16px; @(turn.FailureReason != null ? "border-bottom:1px solid var(--mud-palette-divider);" : "")">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="margin-bottom:4px;">
+                                <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" Style="opacity:0.6;" />
+                                <MudText Typo="Typo.caption" Style="opacity:0.6;">Response</MudText>
+                                @if (turn.IsStreaming)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                                                         Style="width:10px;height:10px;opacity:0.6;" />
+                                }
+                            </MudStack>
+                            <div style="overflow-y:auto;">
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap; font-family:monospace; font-size:0.78rem;">
+                                    @turn.Response.ToString()</MudText>
+                                </div>
+                            </div>
                         }
-                    </MudStack>
-                    <div style="max-height:200px; overflow-y:auto;">
-                        <MudText Typo="Typo.body2"
-                                 Style="white-space:pre-wrap; font-family:monospace; font-size:0.78rem;">
-                            @turn.Response.ToString()</MudText>
-                    </div>
-                </div>
-            }
-            @if (turn.FailureReason != null)
-            {
-                <div style="padding:8px 16px;">
-                    <MudText Typo="Typo.caption" Color="Color.Error">@turn.FailureReason</MudText>
-                </div>
-            }
-            @if (turn.Stats != null)
-            {
-                <div style="padding:4px 16px 8px; opacity:0.5;">
-                    <MudText Typo="Typo.caption">
-                        @turn.Stats.TokensIn in · @turn.Stats.TokensOut out · @turn.Stats.ElapsedSeconds.ToString("F1")s
-                        · @turn.Stats.TokensPerSecond.ToString("F1") tok/s
-                    </MudText>
-                </div>
-            }
-        </MudCard>
-    }
-</div>
+                        @if (turn.FailureReason != null)
+                        {
+                            <div style="padding:8px 16px;">
+                                <MudText Typo="Typo.caption" Color="Color.Error">@turn.FailureReason</MudText>
+                            </div>
+                        }
+                        @if (turn.Stats != null)
+                        {
+                            <div style="padding:4px 16px 8px; opacity:0.5;">
+                                <MudText Typo="Typo.caption">
+                                    @turn.Stats.TokensIn in · @turn.Stats.TokensOut out · @turn.Stats.ElapsedSeconds.ToString("F1")s
+                                    · @turn.Stats.TokensPerSecond.ToString("F1") tok/s
+                                </MudText>
+                            </div>
+                        }
+                    </MudCard>
+                }
+            </div>
 
 @code {
     private readonly List<StreamTurn> _turns = new();

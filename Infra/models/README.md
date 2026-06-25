@@ -6,14 +6,20 @@ Model files (`.gguf`, `.bin`, etc.) are excluded from git — this folder exists
 
 ## Used by
 
-**Service:** `llamacpp` in [docker-compose.yml](../docker-compose.yml)  
+**Service:** `llama` in [docker-compose.yml](../docker-compose.yml)  
 **Mount:** `./Infra/models:/models:ro` (read-only inside container)  
-**Referenced via:** `LLAMA_MODEL` environment variable in [docker-compose.yml](../docker-compose.yml), e.g. `/models/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf`
+**Referenced via:** preset config in `llama/config/models.ini`
 
-To change the model, update `LLAMA_MODEL` in the `llamacpp.environment` section of `docker-compose.yml` and restart:
+Switch model without restart:
 
 ```bash
-docker compose up llamacpp
+curl -X POST http://localhost:8080/v1/models -d '{"model":"gemma-26b"}'
+```
+
+Or restart the service:
+
+```bash
+docker compose up -d llama
 ```
 
 ## Current target model

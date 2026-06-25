@@ -30,7 +30,11 @@ Infra/
 | Chatterbox Turbo     | `read2me-chatterbox-turbo`  | 8001 | TTS — turbo model, paralinguistic tags only, voice cloning       |
 | Qwen3 TTS            | `read2me-qwen3-tts`         | 8100 | TTS — voice design from text description, no reference audio     |
 | Qwen3 TTS Base       | `read2me-qwen3-tts-base`    | 8101 | TTS — voice cloning from reference audio + transcript            |
-| Whisper              | `read2me-whisper`           | 9000 | Audio transcription for accuracy scoring                         |
+| VoxCPM2              | `read2me-voxcpm2`           | 8003 | TTS — VoxCPM2 voice cloning                                      |
+| Whisper (GPU)        | `read2me-whisper`           | 9000 | GPU audio transcription for accuracy scoring                     |
+| Whisper (CPU)        | `read2me-whisper-cpu`       | 9001 | CPU-only transcription fallback                                  |
+| MiniLM-L6            | `read2me-minilm-l6`         | 8200 | Semantic similarity — MiniLM-L6-v2                               |
+| MPNet-Base-v2        | `read2me-mpnet-base-v2`     | 8201 | Semantic similarity — all-mpnet-base-v2                          |
 
 ## GPU / VRAM note
 
@@ -43,9 +47,13 @@ Configured for RTX 3070 (8 GB VRAM). All containers are GPU-resident — running
 | `read2me-chatterbox-turbo`  | TTS with paralinguistic tags                     |
 | `read2me-qwen3-tts`         | TTS with voice design from text description      |
 | `read2me-qwen3-tts-base`    | TTS with voice cloning from reference audio      |
-| `read2me-whisper`           | Audio transcription / accuracy scoring           |
+| `read2me-voxcpm2`           | TTS with VoxCPM2 voice cloning                   |
+| `read2me-whisper`           | GPU audio transcription / accuracy scoring       |
+| `read2me-whisper-cpu`       | CPU transcription when GPU is occupied           |
+| `read2me-minilm-l6`         | Semantic similarity (no GPU — CPU only)          |
+| `read2me-mpnet-base-v2`     | Semantic similarity (no GPU — CPU only)          |
 
-> **Note:** Whisper (`base.en`) is small enough to run alongside a Chatterbox container. During audio generation, start both `read2me-whisper` and the relevant Chatterbox container together.
+> **Note:** Whisper (`base.en`) is small enough to run alongside a Chatterbox container. During audio generation, start both `read2me-whisper` and the relevant Chatterbox container together. The semantic similarity containers (`minilm-l6`, `mpnet-base-v2`) are CPU-only and can run at any time.
 
 ## Usage
 
@@ -183,7 +191,25 @@ Custom image built from `Dockerfile.qwen3` (same image, `app_base` module). Expo
 
 Returns `audio/wav`.
 
-## Whisper
+## VoxCPM2
+
+Custom image built from `Dockerfile.voxcpm2`. Wraps `openbmb/VoxCPM2` for voice cloning.
+
+Port `8003`.
+
+| Method | Path      | Purpose                                       |
+| ------ | --------- | --------------------------------------------- |
+| GET    | `/health` | Liveness check                                |
+| POST   | `/tts`    | Voice cloning TTS                             |
+
+| Field             | Type   | Required | Notes                                  |
+| ----------------- | ------ | -------- | -------------------------------------- |
+| `text`            | string | yes      | Plain text to synthesize               |
+| `reference_audio` | file   | yes      | WAV/MP3 voice sample for cloning       |
+
+Returns `audio/wav`.
+
+## Whisper (GPU)
 
 Uses `onerahmet/openai-whisper-asr-webservice:latest-gpu` (GPU-enabled). Downloads the configured model on first API request.
 
@@ -199,3 +225,36 @@ Key environment variables (set in `docker-compose.yml`):
 | `ASR_DEVICE`     | `cuda`                 | GPU inference                                                      |
 
 Swagger UI available at `http://localhost:9000` when running.
+
+## Whisper (CPU)
+
+Same image as GPU Whisper (`onerahmet/openai-whisper-asr-webservice:latest`, no `-gpu` tag). CPU inference. Use when GPU is occupied by a TTS container.
+
+Port `9001`. Same API and environment variables; `ASR_DEVICE=cpu`.
+
+## Semantic Similarity — MiniLM-L6 and MPNet-Base-v2
+
+Two CPU-only sentence-transformer containers for semantic verification of TTS output. Both expose the same API.
+
+| Container               | Port | Model               |
+| ----------------------- | ---- | ------------------- |
+| `read2me-minilm-l6`     | 8200 | `all-MiniLM-L6-v2`  |
+| `read2me-mpnet-base-v2` | 8201 | `all-mpnet-base-v2` |
+
+| Method | Path           | Purpose                                     |
+| ------ | -------------- | ------------------------------------------- |
+| POST   | `/similarity`  | Cosine similarity between two strings       |
+
+Request body:
+
+```json
+{ "text1": "...", "text2": "..." }
+```
+
+Response:
+
+```json
+{ "similarity": 0.91 }
+```
+
+Similarity is cosine score in `[0,1]`. Higher = semantically closer. Used by the app's Semantic Rescue step: when WER fails, this score determines whether the clip is rescued (threshold configurable per service in app settings).
