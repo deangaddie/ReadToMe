@@ -381,6 +381,17 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
+        public void ApplyVoiceUpdate(Guid voiceId, string? designPrompt, string? audioFileName, string? transcript)
+        {
+            UpdateVoiceInPlace(voiceId, v =>
+            {
+                if (designPrompt is not null) v.DesignPrompt = designPrompt;
+                if (audioFileName is not null) { v.AudioFileName = audioFileName; BumpAudioToken(voiceId); }
+                if (transcript is not null) v.Transcript = transcript;
+            });
+            NotifyStateChanged();
+        }
+
         // ── Context helper ────────────────────────────────────────────────────
 
         public async Task<ParagraphContext?> GetLineContextAsync(CharacterLine line, int before, int after)

@@ -1,0 +1,66 @@
+@using Read2Me.App.Characters
+@inject CharacterBatchService Batch
+@inject VoiceBatchBroadcaster Broadcaster
+@implements IDisposable
+
+@{
+    var isRunning = Batch.IsRunning;
+    var isVisible = isRunning;
+}
+
+@if (isVisible)
+{
+    <div style="position:fixed; bottom:0; left:0; right:0; z-index:1290;
+                background:var(--mud-palette-dark);
+                color:var(--mud-palette-dark-text);
+                border-top:1px solid var(--mud-palette-divider);
+                padding:6px 16px;
+                display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:0.8rem;">
+
+        <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small" Style="opacity:0.7;" />
+
+        <span><strong>@Batch.CurrentOperation</strong></span>
+
+        @if (!string.IsNullOrEmpty(Batch.CurrentVoiceName))
+        {
+            <span style="opacity:0.7;">@Batch.CurrentVoiceName</span>
+        }
+
+        @if (Batch.Total > 0)
+        {
+            <span>@Batch.Processed / @Batch.Total</span>
+        }
+
+        @if (Batch.Failed > 0)
+        {
+            <span style="color:var(--mud-palette-warning-text);">@Batch.Failed failed</span>
+        }
+
+        <MudSpacer />
+
+        <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                             Style="color:var(--mud-palette-dark-text); opacity:0.7; width:16px; height:16px;" />
+        <MudTooltip Text="Cancel">
+            <MudIconButton Icon="@Icons.Material.Filled.Cancel"
+                           Size="Size.Small"
+                           Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                           OnClick="Cancel" />
+        </MudTooltip>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Broadcaster.Event += OnEvent;
+    }
+
+    void OnEvent(VoiceBatchEvent _) => InvokeAsync(StateHasChanged);
+
+    void Cancel() => Batch.Cancel();
+
+    public void Dispose()
+    {
+        Broadcaster.Event -= OnEvent;
+    }
+}

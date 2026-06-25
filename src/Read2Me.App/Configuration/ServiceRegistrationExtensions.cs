@@ -136,6 +136,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<CharacterResolver>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddScoped<CharacterPresenter>();
+        services.AddSingleton<VoiceBatchBroadcaster>();
+        services.AddSingleton<CharacterBatchService>();
         return services;
     }
 

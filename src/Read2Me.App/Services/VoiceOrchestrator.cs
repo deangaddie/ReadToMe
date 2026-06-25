@@ -40,7 +40,7 @@ namespace Read2Me.App.Services
             return await client.TranscribeAsync(config, audioStream, fileName, ct);
         }
 
-        public async Task<string> GenerateWithPromptAsync(
+        public virtual async Task<string> GenerateWithPromptAsync(
             string renderedPrompt,
             CancellationToken ct = default)
         {
@@ -50,13 +50,13 @@ namespace Read2Me.App.Services
             throw new InvalidOperationException(result.FailureReason ?? "Failed to generate voice prompt.");
         }
 
-        public async Task<string> BuildRenderedPromptAsync(
+        public virtual async Task<string> BuildRenderedPromptAsync(
             string bookTitle,
             string author,
             string characterName) =>
             await voiceDesignPromptService.BuildRenderedPromptAsync(bookTitle, author, characterName);
 
-        public async Task<VoiceGenerationResult> GenerateVoiceAudioAsync(
+        public virtual async Task<VoiceGenerationResult> GenerateVoiceAudioAsync(
             VoiceGenerationRequest request,
             CancellationToken ct = default) =>
             await voiceAudioGenerator.GenerateAsync(request, ct);

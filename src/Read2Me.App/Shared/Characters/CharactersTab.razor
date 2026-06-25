@@ -1,5 +1,7 @@
 @using Read2Me.App.State
+@using Read2Me.App.Characters
 @inject CharacterPresenter Presenter
+@inject CharacterBatchService BatchService
 @inject IDialogService DialogService
 @implements IDisposable
 
@@ -17,6 +19,17 @@ else if (Presenter.Characters.Count == 0)
 }
 else
 {
+    <MudStack Row="true" Spacing="2" Class="pa-4 pb-0">
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.AutoAwesome"
+                   Disabled="@BatchService.IsRunning"
+                   OnClick="GenerateVoicePromptsAsync">Generate voice prompts</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.VolumeUp"
+                   Disabled="@BatchService.IsRunning"
+                   OnClick="GenerateAudioAsync">Generate audio</MudButton>
+    </MudStack>
+
     <MudGrid Spacing="2" Class="pa-4">
         <MudItem xs="12" sm="4" md="3">
             <MudStack Spacing="1">
@@ -80,11 +93,14 @@ else
 @code {
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
 
+    [Inject] VoiceBatchBroadcaster Broadcaster { get; set; } = default!;
+
     Character? _selectedCharacter;
 
     protected override async Task OnParametersSetAsync()
     {
         Presenter.StateChanged += Refresh;
+        Broadcaster.Event += OnBatchEvent;
         await Presenter.LoadAsync(new Core.Models.ProjectFolderId(FolderName));
         _selectedCharacter = Presenter.SelectedCharacter;
     }
@@ -104,7 +120,41 @@ else
             await Presenter.AddCharacterAsync(name);
     }
 
+    void GenerateVoicePromptsAsync() =>
+        BatchService.StartGeneratePrompts(new Core.Models.ProjectFolderId(FolderName));
+
+    void GenerateAudioAsync() =>
+        BatchService.StartGenerateAudio(new Core.Models.ProjectFolderId(FolderName));
+
+    void OnBatchEvent(VoiceBatchEvent e)
+    {
+        switch (e)
+        {
+            case VoiceUpdated u:
+                InvokeAsync(() =>
+                {
+                    Presenter.ApplyVoiceUpdate(u.VoiceId, u.DesignPrompt, u.AudioFileName, u.Transcript);
+                    StateHasChanged();
+                });
+                break;
+            case BatchCompleted:
+                InvokeAsync(async () =>
+                {
+                    await Presenter.LoadAsync(Presenter._folderId!.Value);
+                    StateHasChanged();
+                });
+                break;
+            default:
+                InvokeAsync(StateHasChanged);
+                break;
+        }
+    }
+
     void Refresh() => InvokeAsync(StateHasChanged);
 
-    public void Dispose() => Presenter.StateChanged -= Refresh;
+    public void Dispose()
+    {
+        Presenter.StateChanged -= Refresh;
+        Broadcaster.Event -= OnBatchEvent;
+    }
 }
