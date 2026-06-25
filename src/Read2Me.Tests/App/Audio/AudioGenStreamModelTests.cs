@@ -130,6 +130,19 @@ namespace Read2Me.Tests.App.Audio
         }
 
         [Fact]
+        public void Verified_Rescued_SetsRescuedTrue_OnCard()
+        {
+            var id = Guid.NewGuid();
+            _model.Apply(new ItemStarted(id, "Bilbo", "x"));
+
+            _model.Apply(new Verified(id, Ok: true, Wer: 0.42, Reason: "rescued by semantic 0.91", Rescued: true));
+
+            var card = Assert.Single(_model.Cards);
+            Assert.Equal(PhaseState.Ok, card.Verify);
+            Assert.True(card.Rescued);
+        }
+
+        [Fact]
         public void MultipleItems_KeptInArrivalOrder_NewestLast_NoCap()
         {
             var ids = Enumerable.Range(0, 50).Select(_ => Guid.NewGuid()).ToArray();

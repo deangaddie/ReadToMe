@@ -13,6 +13,7 @@ using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Voice;
 
@@ -33,6 +34,7 @@ namespace Read2Me.App.Audio
         AudioProcessingSettingsService audioProcessingSettings,
         AudioReviewService reviews,
         AudioGenBroadcaster broadcaster,
+        ISemanticVerifier semanticVerifier,
         ILogger<AudioQueueProcessor> logger) : IAudioQueueProcessor
     {
         public async Task ProcessItemAsync(QueuedAudioItem queued, CancellationToken ct)
@@ -145,12 +147,12 @@ namespace Read2Me.App.Audio
                     new SetParagraphItemAudioCommand(folder, itemRef.ParagraphItemId, relativePath), ct);
 
                 // Stage 2: verify the stored audio against the source text (runs regardless of normalize outcome).
-                var (verifyOk, wer, verifyReason, transcript) =
+                var (verifyOk, wer, verifyReason, transcript, rescued) =
                     await VerifyAsync(folderPath, relativePath, sourceText, werThreshold, ct);
 
                 if (transcript is not null)
                     broadcaster.Publish(new Transcribed(itemRef.ParagraphItemId, transcript));
-                broadcaster.Publish(new Verified(itemRef.ParagraphItemId, verifyOk, wer, verifyReason));
+                broadcaster.Publish(new Verified(itemRef.ParagraphItemId, verifyOk, wer, verifyReason, rescued));
 
                 // Single review signal: both ok ⇒ row deleted, else upsert. Mirror in-memory for live UI.
                 await commands.ExecuteAsync(
@@ -198,12 +200,12 @@ namespace Read2Me.App.Audio
         /// source text. Each failure mode yields a distinct reason; on any non-success WER is null
         /// unless an over-threshold comparison actually produced one.
         /// </summary>
-        private async Task<(bool VerifyOk, double? Wer, string? Reason, string? Transcript)> VerifyAsync(
+        private async Task<(bool VerifyOk, double? Wer, string? Reason, string? Transcript, bool Rescued)> VerifyAsync(
             string folderPath, string relativePath, string sourceText, double werThreshold, CancellationToken ct)
         {
             var config = await transcriptionSettings.GetActiveConfigAsync();
             if (config is null)
-                return (false, null, "no transcription config", null);
+                return (false, null, "no transcription config", null, false);
 
             string transcript;
             try
@@ -219,18 +221,30 @@ namespace Read2Me.App.Audio
             }
             catch (Exception ex)
             {
-                return (false, null, $"could not verify: {ex.Message}", null);
+                return (false, null, $"could not verify: {ex.Message}", null, false);
             }
 
             var wer = werComparer.Compute(sourceText, transcript);
             if (wer > werThreshold)
             {
+                var (semanticPass, semanticScore, semanticThreshold) =
+                    await semanticVerifier.PassesAsync(sourceText, transcript, ct);
+                if (semanticPass)
+                {
+                    var rescueReason =
+                        $"WER {wer.ToString("0.00", CultureInfo.InvariantCulture)} > " +
+                        $"{werThreshold.ToString("0.00", CultureInfo.InvariantCulture)}; " +
+                        $"rescued by semantic {semanticScore!.Value.ToString("0.00", CultureInfo.InvariantCulture)} " +
+                        $">= {semanticThreshold!.Value.ToString("0.00", CultureInfo.InvariantCulture)}";
+                    return (true, wer, rescueReason, transcript, true);
+                }
+
                 var reason = $"WER {wer.ToString("0.00", CultureInfo.InvariantCulture)} > " +
                              werThreshold.ToString("0.00", CultureInfo.InvariantCulture);
-                return (false, wer, reason, transcript);
+                return (false, wer, reason, transcript, false);
             }
 
-            return (true, wer, null, transcript);
+            return (true, wer, null, transcript, false);
         }
 
         /// <summary>

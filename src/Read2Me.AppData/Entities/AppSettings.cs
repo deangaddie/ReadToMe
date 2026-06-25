@@ -8,6 +8,7 @@ namespace Read2Me.AppData.Entities
         public int? ActiveTranscriptionConfigId { get; set; }
         public int? ActiveVoiceDesignConfigId { get; set; }
         public int? ActiveParagraphTtsConfigId { get; set; }
+        public int? ActiveSemanticConfigId { get; set; }
         public bool FollowSystemPreference { get; set; }
 
         /// <summary>

@@ -184,6 +184,36 @@ services:
       - whisper_cpu_cache:/root/.cache/whisper
     restart: unless-stopped
 
+  minilm-l6:
+    build:
+      context: .
+      dockerfile: Dockerfile.minilm-l6
+      target: runtime
+    image: read2me-minilm-l6
+    container_name: read2me-minilm-l6
+    ports:
+      - "8200:8200"
+    environment:
+      - SENTENCE_TRANSFORMERS_HOME=/cache/sentence-transformers
+    volumes:
+      - minilm_l6_cache:/cache
+    restart: unless-stopped
+
+  mpnet-base-v2:
+    build:
+      context: .
+      dockerfile: Dockerfile.mpnet-base-v2
+      target: runtime
+    image: read2me-mpnet-base-v2
+    container_name: read2me-mpnet-base-v2
+    ports:
+      - "8201:8201"
+    environment:
+      - SENTENCE_TRANSFORMERS_HOME=/cache/sentence-transformers
+    volumes:
+      - mpnet_base_v2_cache:/cache
+    restart: unless-stopped
+
 volumes:
   voxcpm2_cache:
   voxcpm2_uploads:
@@ -193,3 +223,5 @@ volumes:
   qwen3_base_cache:
   whisper_cache:
   whisper_cpu_cache:
+  minilm_l6_cache:
+  mpnet_base_v2_cache:

@@ -21,6 +21,7 @@ namespace Read2Me.AppData
         public DbSet<ParagraphTtsServiceConfig> ParagraphTtsServiceConfigs => Set<ParagraphTtsServiceConfig>();
         public DbSet<TextSubstitutionStep> TextSubstitutionSteps => Set<TextSubstitutionStep>();
         public DbSet<ToSentenceCaseConfig> ToSentenceCaseConfigs => Set<ToSentenceCaseConfig>();
+        public DbSet<SemanticSimilarityServiceConfig> SemanticSimilarityServiceConfigs => Set<SemanticSimilarityServiceConfig>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -66,6 +67,14 @@ namespace Read2Me.AppData
                             (a, b) => a != null && b != null && a.SequenceEqual(b),
                             v => v.Aggregate(0, (h, s) => HashCode.Combine(h, s.GetHashCode())),
                             v => v.ToList()));
+            });
+
+            modelBuilder.Entity<SemanticSimilarityServiceConfig>(e =>
+            {
+                e.HasKey(a => a.Id);
+                e.Property(a => a.Name).HasMaxLength(250).IsRequired();
+                e.Property(a => a.Type).HasConversion<string>().IsRequired();
+                e.Property(a => a.SettingsJson).IsRequired();
             });
 
             modelBuilder.Entity<TextSubstitutionStep>(e =>

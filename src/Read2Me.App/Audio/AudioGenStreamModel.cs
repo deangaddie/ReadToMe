@@ -44,6 +44,7 @@ namespace Read2Me.App.Audio
                     vc.Verify = v.Ok ? PhaseState.Ok : PhaseState.Fail;
                     vc.Wer = v.Wer;
                     vc.VerifyReason = v.Reason;
+                    vc.Rescued = v.Rescued;
                     break;
 
                 case Failed f when _byId.TryGetValue(f.Id, out var fc):
@@ -73,6 +74,7 @@ namespace Read2Me.App.Audio
         public string? Transcript { get; set; }
         public string? VerifyReason { get; set; }
         public double? Wer { get; set; }
+        public bool Rescued { get; set; }
 
         /// <summary>A terminal <see cref="Failed"/> event — rendered as a red error in place of
         /// further phase rows, distinct from a phase ✗.</summary>

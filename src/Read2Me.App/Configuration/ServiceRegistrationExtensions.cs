@@ -17,6 +17,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Books;
@@ -85,6 +86,11 @@ public static class ServiceRegistrationExtensions
     {
         services.AddScoped<VoiceDesignSettingsService>();
         services.AddScoped<TranscriptionSettingsService>();
+        services.AddScoped<SemanticSimilaritySettingsService>();
+        services.AddScoped<ISemanticVerifier, SemanticVerifier>();
+        services.AddScoped<ISemanticSimilarityClientResolver, SemanticSimilarityClientResolver>();
+        services.AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(Read2Me.AppData.Entities.SemanticSimilarityServiceType.MiniLmL6);
+        services.AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(Read2Me.AppData.Entities.SemanticSimilarityServiceType.MpnetBaseV2);
         services.AddScoped<ParagraphTtsSettingsService>();
         services.AddScoped<IFfmpegProber, FfmpegProber>();
         services.AddScoped<AudioProcessingSettingsService>();

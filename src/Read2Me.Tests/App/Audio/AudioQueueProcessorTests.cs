@@ -12,6 +12,7 @@ using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Tests.Fakes;
 using Read2Me.Tests.Infrastructure;
@@ -33,6 +34,7 @@ namespace Read2Me.Tests.App.Audio
         private readonly FakeTranscriptionResolver _transcriptionResolver;
         private readonly FakeTranscriptionSettings _transcriptionSettings;
         private readonly FakeAudioProcessingSettings _audioProcessingSettings;
+        private readonly FakeSemanticVerifier _semanticVerifier;
         private readonly AudioReviewService _reviews;
         private readonly AudioGenBroadcaster _broadcaster;
         private readonly List<AudioGenEvent> _events = new();
@@ -72,6 +74,7 @@ namespace Read2Me.Tests.App.Audio
             _transcriptionResolver = new FakeTranscriptionResolver(_transcriber);
             _transcriptionSettings = new FakeTranscriptionSettings(TranscriptionConfig);
             _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15);
+            _semanticVerifier = new FakeSemanticVerifier();
             _reviews = new AudioReviewService();
             _broadcaster = new AudioGenBroadcaster();
             _broadcaster.Event += e => _events.Add(e);
@@ -104,6 +107,7 @@ namespace Read2Me.Tests.App.Audio
                 _audioProcessingSettings,
                 _reviews,
                 _broadcaster,
+                _semanticVerifier,
                 NullLogger<AudioQueueProcessor>.Instance);
         }
 
@@ -366,6 +370,68 @@ namespace Read2Me.Tests.App.Audio
             Assert.NotNull(info);
             Assert.False(info!.VerifyOk);
             Assert.Equal(0.42, info.Wer);
+        }
+
+        [Fact]
+        public async Task WerOverThreshold_SemanticRescues_VerifyOk_NoReviewRow_RescuedEventTrue()
+        {
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _wer.Result = 0.42;
+            _semanticVerifier.Passes = true;
+            _semanticVerifier.Score = 0.91;
+            _semanticVerifier.Threshold = 0.85;
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.Null(await ReviewRowAsync(itemId));
+            Assert.Null(_reviews.ReviewOf(_folder, itemId));
+
+            var verified = _events.OfType<Verified>().Single();
+            Assert.True(verified.Ok);
+            Assert.True(verified.Rescued);
+            Assert.Equal(0.42, verified.Wer);
+            Assert.Contains("rescued by semantic", verified.Reason);
+        }
+
+        [Fact]
+        public async Task WerOverThreshold_SemanticFails_VerifyFailed_ReviewRow_RescuedFalse()
+        {
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _wer.Result = 0.42;
+            _semanticVerifier.Passes = false;
+            _semanticVerifier.Score = 0.60;
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            var row = await ReviewRowAsync(itemId);
+            Assert.NotNull(row);
+            Assert.False(row!.VerifyOk);
+
+            var verified = _events.OfType<Verified>().Single();
+            Assert.False(verified.Ok);
+            Assert.False(verified.Rescued);
+        }
+
+        [Fact]
+        public async Task NoTranscriptionConfig_SemanticVerifierNotCalled()
+        {
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _transcriptionSettings.Config = null;
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.False(_semanticVerifier.WasCalled);
+        }
+
+        [Fact]
+        public async Task TranscribeThrows_SemanticVerifierNotCalled()
+        {
+            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            _transcriber.ThrowMessage = "service unavailable";
+
+            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+
+            Assert.False(_semanticVerifier.WasCalled);
         }
 
         [Fact]
@@ -776,6 +842,22 @@ namespace Read2Me.Tests.App.Audio
 
             public Task<Stream> NormalizeToWavAsync(Stream input, string? ffmpegPath, CancellationToken ct = default) =>
                 throw new NotSupportedException("Not used in audio queue processor tests.");
+        }
+
+        private sealed class FakeSemanticVerifier : ISemanticVerifier
+        {
+            // Default: no rescue (passes = false, score = null).
+            public bool Passes { get; set; } = false;
+            public double? Score { get; set; } = null;
+            public double? Threshold { get; set; } = null;
+            public bool WasCalled { get; private set; }
+
+            public Task<(bool Passes, double? Score, double? Threshold)> PassesAsync(
+                string source, string transcript, CancellationToken ct = default)
+            {
+                WasCalled = true;
+                return Task.FromResult((Passes, Score, Threshold));
+            }
         }
 
         private sealed class FakeWerComparer : IWerComparer

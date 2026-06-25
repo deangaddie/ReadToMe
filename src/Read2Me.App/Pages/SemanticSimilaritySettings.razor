@@ -1,0 +1,241 @@
+@page "/semantic-similarity-settings"
+@using System.Globalization
+@using System.Text.Json
+@using Read2Me.AppData.Entities
+@using Read2Me.App.Shared
+@using Read2Me.Services
+@using Read2Me.Services.Audio.SemanticSimilarity
+@inject SemanticSimilaritySettingsService SettingsService
+@inject ISemanticSimilarityClientResolver ClientResolver
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5">
+    <MudText Typo="Typo.h4">Semantic Similarity Settings</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenAddDialog">
+        New Configuration
+    </MudButton>
+</MudStack>
+
+@if (_configs == null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    @if (_configs.Count == 0)
+    {
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+            No semantic similarity configurations yet. Create one to get started.
+        </MudText>
+    }
+    else
+    {
+        <MudGrid Class="mb-6">
+            @foreach (var config in _configs)
+            {
+                var c = config;
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Outlined="true">
+                        <MudCardContent Class="pb-0">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.h6">@c.Name</MudText>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@c.Type</MudChip>
+                            </MudStack>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@DescribeConfig(c)</MudText>
+                        </MudCardContent>
+                        <MudCardActions>
+                            @if (_activeConfigId == c.Id)
+                            {
+                                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle"
+                                         Size="Size.Small" Variant="Variant.Filled">Active</MudChip>
+                            }
+                            else
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                           OnClick="() => SelectConfigAsync(c.Id)">Apply</MudButton>
+                            }
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           OnClick="() => OpenEditDialog(c)" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                           Color="Color.Error" OnClick="() => DeleteConfigAsync(c.Id)" />
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+
+    <MudDivider Class="mb-4" />
+    <MudText Typo="Typo.h5" Class="mb-3">Test Active Configuration</MudText>
+
+    @if (_activeConfig == null)
+    {
+        <MudAlert Severity="Severity.Info">
+            No active configuration. Create and activate one above before testing.
+        </MudAlert>
+    }
+    else
+    {
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_testText1" Label="Text 1" Variant="Variant.Outlined"
+                              Lines="3" Immediate="true" Placeholder="Enter first string…" />
+                <MudTextField @bind-Value="_testText2" Label="Text 2" Variant="Variant.Outlined"
+                              Lines="3" Immediate="true" Placeholder="Enter second string…" />
+
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.CompareArrows"
+                               OnClick="RunTestAsync"
+                               Disabled="@(_testRunning || string.IsNullOrWhiteSpace(_testText1) || string.IsNullOrWhiteSpace(_testText2))">
+                        Compare
+                    </MudButton>
+                    @if (_testRunning)
+                    {
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                    }
+                </MudStack>
+
+                @if (_testScore.HasValue)
+                {
+                    var settings = ParseSettings(_activeConfig);
+                    var passes = _testScore.Value >= settings.PassThreshold;
+                    <MudAlert Severity="@(passes ? Severity.Success : Severity.Warning)" Dense="true">
+                        Score: <strong>@_testScore.Value.ToString("0.0000", CultureInfo.InvariantCulture)</strong>
+                        &nbsp;—&nbsp;
+                        threshold @settings.PassThreshold.ToString("0.00", CultureInfo.InvariantCulture):
+                        <strong>@(passes ? "PASS" : "FAIL")</strong>
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+}
+
+@code {
+    List<SemanticSimilarityServiceConfig>? _configs;
+    int? _activeConfigId;
+    SemanticSimilarityServiceConfig? _activeConfig;
+
+    string _testText1 = "";
+    string _testText2 = "";
+    bool _testRunning;
+    double? _testScore;
+
+    async Task RunTestAsync()
+    {
+        if (_activeConfig is null) return;
+        _testScore = null;
+        _testRunning = true;
+        StateHasChanged();
+        try
+        {
+            var client = ClientResolver.Resolve(_activeConfig.Type);
+            _testScore = await client.ComputeAsync(_activeConfig, _testText1, _testText2);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Test failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _testRunning = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        SettingsService.OnChanged += HandleChanged;
+        await LoadAsync();
+    }
+
+    void HandleChanged() => InvokeAsync(LoadAsync);
+
+    async Task LoadAsync()
+    {
+        _configs = await SettingsService.GetAllConfigsAsync();
+        _activeConfigId = await SettingsService.GetActiveConfigIdAsync();
+        _activeConfig = _activeConfigId.HasValue
+            ? _configs.FirstOrDefault(c => c.Id == _activeConfigId.Value)
+            : null;
+        _testScore = null;
+        StateHasChanged();
+    }
+
+    static global::Read2Me.Services.Audio.SemanticSimilarity.Settings.SemanticSimilaritySettings ParseSettings(SemanticSimilarityServiceConfig c)
+    {
+        try
+        {
+            return string.IsNullOrWhiteSpace(c.SettingsJson)
+                ? new global::Read2Me.Services.Audio.SemanticSimilarity.Settings.SemanticSimilaritySettings()
+                : JsonSerializer.Deserialize<global::Read2Me.Services.Audio.SemanticSimilarity.Settings.SemanticSimilaritySettings>(c.SettingsJson)
+                  ?? new global::Read2Me.Services.Audio.SemanticSimilarity.Settings.SemanticSimilaritySettings();
+        }
+        catch
+        {
+            return new global::Read2Me.Services.Audio.SemanticSimilarity.Settings.SemanticSimilaritySettings();
+        }
+    }
+
+    static string DescribeConfig(SemanticSimilarityServiceConfig c)
+    {
+        var s = ParseSettings(c);
+        return string.IsNullOrWhiteSpace(s.BaseUrl)
+            ? $"Threshold: {s.PassThreshold:0.00}"
+            : $"{s.BaseUrl} — threshold {s.PassThreshold:0.00}";
+    }
+
+    async Task SelectConfigAsync(int configId)
+    {
+        await SettingsService.SetActiveConfigAsync(configId);
+        await LoadAsync();
+        Snackbar.Add("Configuration applied", Severity.Success);
+    }
+
+    static readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    async Task OpenAddDialog()
+    {
+        var dialog = await DialogService.ShowAsync<SemanticSimilarityServiceConfigDialog>("New Configuration", _dialogOptions);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: SemanticSimilarityServiceConfig saved })
+        {
+            await SettingsService.CreateConfigAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Configuration created", Severity.Success);
+        }
+    }
+
+    async Task OpenEditDialog(SemanticSimilarityServiceConfig config)
+    {
+        var dialog = await DialogService.ShowAsync<SemanticSimilarityServiceConfigDialog>(
+            "Edit Configuration",
+            new DialogParameters<SemanticSimilarityServiceConfigDialog> { { x => x.Config, config } },
+            _dialogOptions);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: SemanticSimilarityServiceConfig saved })
+        {
+            await SettingsService.UpdateConfigAsync(saved);
+            await LoadAsync();
+            Snackbar.Add("Configuration updated", Severity.Success);
+        }
+    }
+
+    async Task DeleteConfigAsync(int configId)
+    {
+        await SettingsService.DeleteConfigAsync(configId);
+        await LoadAsync();
+        Snackbar.Add("Configuration deleted", Severity.Info);
+    }
+
+    public void Dispose()
+    {
+        SettingsService.OnChanged -= HandleChanged;
+    }
+}

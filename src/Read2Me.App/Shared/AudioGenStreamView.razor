@@ -39,10 +39,10 @@
             else
             {
                 <div style="padding:8px 16px; display:flex; flex-direction:column; gap:6px;">
-                    @PhaseRow("Generate audio", card.AudioGen, null)
-                    @PhaseRow("Normalize", card.Normalize, card.NormalizeReason)
-                    @PhaseRow("Transcribe", card.Transcribe, null)
-                    @PhaseRow("Verify", card.Verify, VerifyDetail(card))
+                    @PhaseRow("Generate audio", card.AudioGen, null, false)
+                    @PhaseRow("Normalize", card.Normalize, card.NormalizeReason, false)
+                    @PhaseRow("Transcribe", card.Transcribe, null, false)
+                    @PhaseRow("Verify", card.Verify, VerifyDetail(card), card.Rescued)
 
                     @if (!string.IsNullOrEmpty(card.Transcript))
                     {
@@ -90,7 +90,7 @@
         return card.VerifyReason;
     }
 
-    private RenderFragment PhaseRow(string label, PhaseState state, string? detail) => __builder =>
+    private RenderFragment PhaseRow(string label, PhaseState state, string? detail, bool rescued) => __builder =>
     {
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             @switch (state)
@@ -107,6 +107,10 @@
                     break;
             }
             <MudText Typo="Typo.body2">@label</MudText>
+            @if (rescued)
+            {
+                <MudChip T="string" Color="Color.Success" Size="Size.Small" Style="height:18px; font-size:0.7rem;">rescued</MudChip>
+            }
             @if (!string.IsNullOrEmpty(detail))
             {
                 <MudText Typo="Typo.caption" Style="opacity:0.6;">— @detail</MudText>

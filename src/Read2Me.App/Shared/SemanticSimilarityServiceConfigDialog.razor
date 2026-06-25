@@ -1,0 +1,61 @@
+@using Read2Me.AppData.Entities
+@using Read2Me.App.Shared
+@using Read2Me.Services.Audio.SemanticSimilarity.Settings
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_form.Name" Label="Name" Variant="Variant.Outlined"
+                          Required="true" Immediate="true" />
+
+            <MudSelect T="SemanticSimilarityServiceType" @bind-Value="_form.Type" Label="Type" Variant="Variant.Outlined">
+                @foreach (var type in Enum.GetValues<SemanticSimilarityServiceType>())
+                {
+                    <MudSelectItem Value="@type">@type</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
+                          Placeholder="http://localhost:8200" Required="true" Immediate="true"
+                          UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
+
+            <MudNumericField @bind-Value="_form.PassThreshold" Label="Pass Threshold (0–1)"
+                             Variant="Variant.Outlined" Min="0.0" Max="1.0" Step="0.01"
+                             Format="0.00" Immediate="true" />
+
+            @if (_error != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public SemanticSimilarityServiceConfig? Config { get; set; }
+
+    SemanticSimilarityServiceConfigForm _form = new();
+    string? _error;
+
+    protected override void OnInitialized()
+    {
+        _form = Config != null
+            ? SemanticSimilarityServiceConfigForm.FromConfig(Config)
+            : new SemanticSimilarityServiceConfigForm();
+    }
+
+    void Submit()
+    {
+        _error = _form.Validate();
+        if (_error != null) return;
+        MudDialog.Close(DialogResult.Ok(_form.BuildConfig()));
+    }
+
+    void Cancel() => MudDialog.Cancel();
+}

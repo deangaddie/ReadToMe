@@ -8,7 +8,7 @@ namespace Read2Me.Services.Audio
     public sealed record AudioGenerated(Guid Id) : AudioGenEvent;
     public sealed record Normalized(Guid Id, bool Ok, string? Reason) : AudioGenEvent;
     public sealed record Transcribed(Guid Id, string Transcript) : AudioGenEvent;
-    public sealed record Verified(Guid Id, bool Ok, double? Wer, string? Reason) : AudioGenEvent;
+    public sealed record Verified(Guid Id, bool Ok, double? Wer, string? Reason, bool Rescued = false) : AudioGenEvent;
     public sealed record Failed(Guid Id, string Reason) : AudioGenEvent;
 
     /// Singleton bridge: scoped audio queue processor publishes; stream view subscribes.
