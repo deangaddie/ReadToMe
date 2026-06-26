@@ -56,9 +56,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var fakeReader = new FakeProjectReader2(chars, voicesMap, "Test Book", "Test Author");
             var fakeCommandHandler = new FakeCommandHandler();
-            var broadcaster = new VoiceBatchBroadcaster();
             var events = new List<VoiceBatchEvent>();
-            broadcaster.Event += e => { lock (events) events.Add(e); };
 
             var fakeOrchestrator = new FakeVoiceOrchestrator(
                 cannedPrompt, orchestratorThrows, orchestratorDelayMs,
@@ -73,10 +71,10 @@ namespace Read2Me.Tests.Services.Characters
 
             var sut = new CharacterBatchService(
                 sp.GetRequiredService<IServiceScopeFactory>(),
-                broadcaster,
                 NullLogger<CharacterBatchService>.Instance);
+            sut.BatchEvent += e => { lock (events) events.Add(e); };
 
-            return new Harness(sut, fakeCommandHandler, events, broadcaster);
+            return new Harness(sut, fakeCommandHandler, events);
         }
 
         // ── Tests ──────────────────────────────────────────────────────────────
@@ -210,9 +208,7 @@ namespace Read2Me.Tests.Services.Characters
                 "Book", "Author");
 
             var fakeCommandHandler = new FakeCommandHandler();
-            var broadcaster = new VoiceBatchBroadcaster();
             var events = new List<VoiceBatchEvent>();
-            broadcaster.Event += e => { lock (events) events.Add(e); };
 
             var services = new ServiceCollection();
             services.AddSingleton<IProjectReader>(fakeReader);
@@ -222,8 +218,8 @@ namespace Read2Me.Tests.Services.Characters
 
             var sut = new CharacterBatchService(
                 sp.GetRequiredService<IServiceScopeFactory>(),
-                broadcaster,
                 NullLogger<CharacterBatchService>.Instance);
+            sut.BatchEvent += e => { lock (events) events.Add(e); };
 
             sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(sut);
@@ -409,16 +405,15 @@ namespace Read2Me.Tests.Services.Characters
                 "Book", "Author");
 
             var fakeCommandHandler = new FakeCommandHandler();
-            var broadcaster = new VoiceBatchBroadcaster();
             var events = new List<VoiceBatchEvent>();
-            broadcaster.Event += e => { lock (events) events.Add(e); };
 
             var services = new ServiceCollection();
             services.AddSingleton<IProjectReader>(fakeReader);
             services.AddSingleton<IBookCommandHandler>(fakeCommandHandler);
             services.AddSingleton<VoiceOrchestrator>(fakeOrchestrator);
             var sp = services.BuildServiceProvider();
-            var sut = new CharacterBatchService(sp.GetRequiredService<IServiceScopeFactory>(), broadcaster, NullLogger<CharacterBatchService>.Instance);
+            var sut = new CharacterBatchService(sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<CharacterBatchService>.Instance);
+            sut.BatchEvent += e => { lock (events) events.Add(e); };
 
             sut.StartGenerateAudio(Folder);
             await WaitForIdleAsync(sut);
@@ -447,16 +442,15 @@ namespace Read2Me.Tests.Services.Characters
                 "Book", "Author");
 
             var fakeCommandHandler = new FakeCommandHandler();
-            var broadcaster = new VoiceBatchBroadcaster();
             var events = new List<VoiceBatchEvent>();
-            broadcaster.Event += e => { lock (events) events.Add(e); };
 
             var services = new ServiceCollection();
             services.AddSingleton<IProjectReader>(fakeReader);
             services.AddSingleton<IBookCommandHandler>(fakeCommandHandler);
             services.AddSingleton<VoiceOrchestrator>(fakeOrchestrator);
             var sp = services.BuildServiceProvider();
-            var sut = new CharacterBatchService(sp.GetRequiredService<IServiceScopeFactory>(), broadcaster, NullLogger<CharacterBatchService>.Instance);
+            var sut = new CharacterBatchService(sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<CharacterBatchService>.Instance);
+            sut.BatchEvent += e => { lock (events) events.Add(e); };
 
             sut.StartGenerateAudio(Folder);
             await WaitForIdleAsync(sut);
@@ -544,8 +538,7 @@ namespace Read2Me.Tests.Services.Characters
         private sealed record Harness(
             CharacterBatchService Sut,
             FakeCommandHandler CommandHandler,
-            List<VoiceBatchEvent> Events,
-            VoiceBatchBroadcaster Broadcaster);
+            List<VoiceBatchEvent> Events);
 
         private sealed class FakeProjectReader2 : IProjectReader
         {

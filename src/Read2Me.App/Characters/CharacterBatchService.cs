@@ -16,8 +16,9 @@ namespace Read2Me.App.Characters;
 public sealed class CharacterBatchService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly VoiceBatchBroadcaster _broadcaster;
     private readonly ILogger<CharacterBatchService> _logger;
+
+    public event Action<VoiceBatchEvent>? BatchEvent;
 
     private readonly object _lock = new();
     private CancellationTokenSource? _cts;
@@ -32,11 +33,9 @@ public sealed class CharacterBatchService
 
     public CharacterBatchService(
         IServiceScopeFactory scopeFactory,
-        VoiceBatchBroadcaster broadcaster,
         ILogger<CharacterBatchService> logger)
     {
         _scopeFactory = scopeFactory;
-        _broadcaster = broadcaster;
         _logger = logger;
     }
 
@@ -105,7 +104,7 @@ public sealed class CharacterBatchService
 
             var characters = await reader.GetCharactersWithAliasesAsync(folder);
 
-            _broadcaster.Publish(new BatchStarted("Generating prompts", characters.Count));
+            BatchEvent?.Invoke(new BatchStarted("Generating prompts", characters.Count));
 
             // Phase 1: ensure every character has at least one voice
             foreach (var character in characters)
@@ -142,7 +141,7 @@ public sealed class CharacterBatchService
                 ct.ThrowIfCancellationRequested();
 
                 lock (_lock) { CurrentVoiceName = characterName; }
-                _broadcaster.Publish(new BatchProgress(Processed, Total, Failed, characterName));
+                BatchEvent?.Invoke(new BatchProgress(Processed, Total, Failed, characterName));
 
                 try
                 {
@@ -153,7 +152,7 @@ public sealed class CharacterBatchService
                         new SetVoiceDesignPromptCommand(folder, voiceId, designPrompt), ct);
 
                     lock (_lock) { Processed++; }
-                    _broadcaster.Publish(new VoiceUpdated(characterId, voiceId, designPrompt, null, null));
+                    BatchEvent?.Invoke(new VoiceUpdated(characterId, voiceId, designPrompt, null, null));
                 }
                 catch (OperationCanceledException)
                 {
@@ -173,7 +172,7 @@ public sealed class CharacterBatchService
                 CurrentVoiceName = null;
                 CurrentOperation = null;
             }
-            _broadcaster.Publish(new BatchCompleted(Processed - Failed, Failed));
+            BatchEvent?.Invoke(new BatchCompleted(Processed - Failed, Failed));
         }
         catch (OperationCanceledException)
         {
@@ -183,7 +182,7 @@ public sealed class CharacterBatchService
                 CurrentVoiceName = null;
                 CurrentOperation = null;
             }
-            _broadcaster.Publish(new BatchCancelled());
+            BatchEvent?.Invoke(new BatchCancelled());
         }
         catch (Exception ex)
         {
@@ -195,7 +194,7 @@ public sealed class CharacterBatchService
                 CurrentOperation = null;
                 LastError = ex.Message;
             }
-            _broadcaster.Publish(new BatchCompleted(Processed - Failed, Failed));
+            BatchEvent?.Invoke(new BatchCompleted(Processed - Failed, Failed));
         }
     }
 
@@ -237,14 +236,14 @@ public sealed class CharacterBatchService
             }
 
             lock (_lock) { Total = voicesToGenerate.Count; }
-            _broadcaster.Publish(new BatchStarted("Generating audio", voicesToGenerate.Count));
+            BatchEvent?.Invoke(new BatchStarted("Generating audio", voicesToGenerate.Count));
 
             foreach (var (characterId, characterName, aliases, voiceId, voiceName, designPrompt, settingsOverrideJson) in voicesToGenerate)
             {
                 ct.ThrowIfCancellationRequested();
 
                 lock (_lock) { CurrentVoiceName = characterName; }
-                _broadcaster.Publish(new BatchProgress(Processed, Total, Failed, characterName));
+                BatchEvent?.Invoke(new BatchProgress(Processed, Total, Failed, characterName));
 
                 try
                 {
@@ -265,7 +264,7 @@ public sealed class CharacterBatchService
                     if (result.IsSuccess)
                     {
                         lock (_lock) { Processed++; }
-                        _broadcaster.Publish(new VoiceUpdated(characterId, voiceId, null, result.AudioFileName, result.Transcript));
+                        BatchEvent?.Invoke(new VoiceUpdated(characterId, voiceId, null, result.AudioFileName, result.Transcript));
                     }
                     else
                     {
@@ -292,7 +291,7 @@ public sealed class CharacterBatchService
                 CurrentVoiceName = null;
                 CurrentOperation = null;
             }
-            _broadcaster.Publish(new BatchCompleted(Processed - Failed, Failed));
+            BatchEvent?.Invoke(new BatchCompleted(Processed - Failed, Failed));
         }
         catch (OperationCanceledException)
         {
@@ -302,7 +301,7 @@ public sealed class CharacterBatchService
                 CurrentVoiceName = null;
                 CurrentOperation = null;
             }
-            _broadcaster.Publish(new BatchCancelled());
+            BatchEvent?.Invoke(new BatchCancelled());
         }
         catch (Exception ex)
         {
@@ -314,7 +313,7 @@ public sealed class CharacterBatchService
                 CurrentOperation = null;
                 LastError = ex.Message;
             }
-            _broadcaster.Publish(new BatchCompleted(Processed - Failed, Failed));
+            BatchEvent?.Invoke(new BatchCompleted(Processed - Failed, Failed));
         }
     }
 }

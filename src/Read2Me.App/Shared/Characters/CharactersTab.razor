@@ -93,14 +93,12 @@ else
 @code {
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
 
-    [Inject] VoiceBatchBroadcaster Broadcaster { get; set; } = default!;
-
     Character? _selectedCharacter;
 
     protected override async Task OnParametersSetAsync()
     {
         Presenter.StateChanged += Refresh;
-        Broadcaster.Event += OnBatchEvent;
+        BatchService.BatchEvent += OnBatchEvent;
         await Presenter.LoadAsync(new Core.Models.ProjectFolderId(FolderName));
         _selectedCharacter = Presenter.SelectedCharacter;
     }
@@ -155,6 +153,6 @@ else
     public void Dispose()
     {
         Presenter.StateChanged -= Refresh;
-        Broadcaster.Event -= OnBatchEvent;
+        BatchService.BatchEvent -= OnBatchEvent;
     }
 }
