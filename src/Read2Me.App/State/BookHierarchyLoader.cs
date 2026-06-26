@@ -44,18 +44,35 @@ namespace Read2Me.App.State
         private readonly Dictionary<Guid, List<Part>> _parts = new();
         private readonly Dictionary<Guid, List<Chapter>> _chapters = new();
         private readonly Dictionary<Guid, List<Paragraph>> _paragraphs = new();
+        private readonly Dictionary<Guid, Paragraph> _itemOwner = new();
 
         public List<Part>? GetParts(Guid volumeId) => _parts.GetValueOrDefault(volumeId);
         public List<Chapter>? GetChapters(Guid partId) => _chapters.GetValueOrDefault(partId);
         public List<Paragraph>? GetParagraphs(Guid chapterId) => _paragraphs.GetValueOrDefault(chapterId);
+        public Paragraph? TryGetOwner(Guid itemId) => _itemOwner.GetValueOrDefault(itemId);
 
         public void SetParts(Guid volumeId, List<Part> parts) => _parts[volumeId] = parts;
         public void SetChapters(Guid partId, List<Chapter> chapters) => _chapters[partId] = chapters;
-        public void SetParagraphs(Guid chapterId, List<Paragraph> paragraphs) => _paragraphs[chapterId] = paragraphs;
+
+        public void SetParagraphs(Guid chapterId, List<Paragraph> paragraphs)
+        {
+            _paragraphs[chapterId] = paragraphs;
+            foreach (var para in paragraphs)
+                foreach (var item in para.Items)
+                    _itemOwner[item.Id] = para;
+        }
 
         public void RemoveVolume(Guid volumeId) => _parts.Remove(volumeId);
         public void RemovePart(Guid partId) => _chapters.Remove(partId);
-        public void RemoveChapter(Guid chapterId) => _paragraphs.Remove(chapterId);
+
+        public void RemoveChapter(Guid chapterId)
+        {
+            if (_paragraphs.TryGetValue(chapterId, out var paras))
+                foreach (var para in paras)
+                    foreach (var item in para.Items)
+                        _itemOwner.Remove(item.Id);
+            _paragraphs.Remove(chapterId);
+        }
 
         public bool HasParts(Guid volumeId) => _parts.ContainsKey(volumeId);
 
@@ -69,7 +86,13 @@ namespace Read2Me.App.State
         public void RemoveParagraphEverywhere(Guid paragraphId)
         {
             foreach (var list in _paragraphs.Values)
+            {
+                var para = list.Find(p => p.Id == paragraphId);
+                if (para is not null)
+                    foreach (var item in para.Items)
+                        _itemOwner.Remove(item.Id);
                 list.RemoveAll(p => p.Id == paragraphId);
+            }
         }
     }
 }

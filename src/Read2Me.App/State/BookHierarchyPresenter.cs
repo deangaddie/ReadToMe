@@ -15,6 +15,7 @@ namespace Read2Me.App.State
 {
     public class BookHierarchyPresenter(
         IProjectReader reader,
+        IBookProjectLoader loader,
         IBookCommandHandler commandHandler,
         BookUseCases bookUseCases,
         BookTreeState treeState,
@@ -121,29 +122,25 @@ namespace Read2Me.App.State
             AudioSelection = audioSelectionState.For(folderId);
             ConfirmReread = false;
 
-            var overview = await reader.GetBookOverviewAsync(folderId);
-            var project = await reader.GetProjectAsync(folderId);
-            NarratorOnlyMode = project?.NarratorOnlyMode ?? false;
-            Filename = overview.Filename;
-            HasContent = overview.HasContent;
-            Volumes = overview.Volumes;
-            Characters = overview.Characters.ToList();
-            TotalParts = overview.TotalParts;
-            TotalChapters = overview.TotalChapters;
-            _selectableNodes = overview.SelectableNodeIds;
-            _nodeCounts = overview.NodeCharacterParagraphCounts;
+            var snapshot = await loader.LoadSnapshotAsync(folderId);
+            Filename = snapshot.Filename;
+            HasContent = snapshot.HasContent;
+            Volumes = snapshot.Volumes;
+            Characters = snapshot.Characters;
+            TotalParts = snapshot.TotalParts;
+            TotalChapters = snapshot.TotalChapters;
+            NarratorOnlyMode = snapshot.NarratorOnlyMode;
+            _selectableNodes = snapshot.SelectableNodeIds;
+            _nodeCounts = snapshot.NodeCharacterParagraphCounts;
             Selection.SetCounts(_nodeCounts);
-
-            _audioNodeCounts = overview.HasContent
-                ? await reader.GetNodeAudioItemCountsAsync(folderId)
-                : new Dictionary<Guid, int>();
+            _audioNodeCounts = snapshot.AudioNodeCounts;
             AudioSelection.SetCounts(_audioNodeCounts);
 
             // Load audio-review flags from prior sessions so they surface on project open.
-            if (overview.HasContent)
-                audioReviews.Hydrate(folderId, await reader.GetAudioReviewsAsync(folderId));
+            if (snapshot.HasContent)
+                audioReviews.Hydrate(folderId, snapshot.AudioReviews);
 
-            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
+            nodeStatus.Seed(folderId, snapshot.NodeStatusSeed);
 
             if (Volumes.Count == 1)
                 Tree.ExpandedVolumeIds.Add(Volumes[0].Id);
@@ -347,15 +344,12 @@ namespace Read2Me.App.State
 
         private void RecomputeParagraphReview(ProjectFolderId folderId, Guid paragraphItemId)
         {
-            foreach (var para in Tree.AllParagraphs())
-            {
-                if (!para.Items.Any(i => i.Id == paragraphItemId)) continue;
+            var para = Tree.TryGetOwner(paragraphItemId);
+            if (para is null) return;
 
-                var hasAnyNeedsReview = para.Items.Any(i =>
-                    audioReviews.ReviewOf(folderId, i.Id)?.State == AudioReviewState.NeedsReview);
-                nodeStatus.OnReviewChanged(folderId, para.Id, hasAnyNeedsReview);
-                break;
-            }
+            var hasAnyNeedsReview = para.Items.Any(i =>
+                audioReviews.ReviewOf(folderId, i.Id)?.State == AudioReviewState.NeedsReview);
+            nodeStatus.OnReviewChanged(folderId, para.Id, hasAnyNeedsReview);
         }
 
         public async Task AddSelectionToAudioQueue()
@@ -438,16 +432,12 @@ namespace Read2Me.App.State
         {
             if (_lastFolder is not { } current || current.Value != folder.Value) return;
 
-            foreach (var para in Tree.AllParagraphs())
-            {
-                var item = para.Items.FirstOrDefault(i => i.Id == paragraphItemId);
-                if (item is not null)
-                {
-                    item.AudioFileName = relativePath;
-                    nodeStatus.OnAudioAssigned(folder, item.ParagraphId);
-                    break;
-                }
-            }
+            var para = Tree.TryGetOwner(paragraphItemId);
+            if (para is null) return;
+
+            var item = para.Items.First(i => i.Id == paragraphItemId);
+            item.AudioFileName = relativePath;
+            nodeStatus.OnAudioAssigned(folder, item.ParagraphId);
         }
 
         public void Dispose()

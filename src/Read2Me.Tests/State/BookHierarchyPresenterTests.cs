@@ -7,6 +7,7 @@ using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
+using Read2Me.Services.NodeStatus;
 using Read2Me.Services.UseCases;
 using Xunit;
 
@@ -35,25 +36,48 @@ namespace Read2Me.Tests.State
         private record Context(
             BookHierarchyPresenter Presenter,
             IProjectReader Reader,
+            IBookProjectLoader Loader,
             IBookCommandHandler CommandHandler,
             FakeBookUseCases BookUseCases,
             BookTreeState TreeState,
             AudioReviewService AudioReviews,
-            Read2Me.Services.NodeStatus.NodeStatusService NodeStatus);
+            NodeStatusService NodeStatus);
+
+        private static BookProjectSnapshot EmptySnapshot(
+            IReadOnlyDictionary<Guid, int>? nodeCounts = null,
+            HashSet<Guid>? selectableNodes = null,
+            IReadOnlyList<Volume>? volumes = null,
+            List<Character>? characters = null,
+            bool hasContent = false,
+            IReadOnlyDictionary<Guid, int>? audioNodeCounts = null,
+            List<(Guid ParagraphItemId, AudioReviewInfo Info)>? audioReviews = null,
+            IReadOnlyList<ParagraphStatusSeedRow>? nodeStatusSeed = null) =>
+            new(
+                Filename: null,
+                HasContent: hasContent,
+                Volumes: volumes ?? [],
+                Characters: characters ?? [],
+                TotalParts: 0,
+                TotalChapters: 0,
+                SelectableNodeIds: selectableNodes ?? [],
+                NodeCharacterParagraphCounts: nodeCounts ?? new Dictionary<Guid, int>(),
+                NarratorOnlyMode: false,
+                AudioNodeCounts: audioNodeCounts ?? new Dictionary<Guid, int>(),
+                AudioReviews: audioReviews ?? [],
+                NodeStatusSeed: nodeStatusSeed ?? []
+            );
 
         private static Context Create(IReadOnlyDictionary<Guid, int>? nodeCounts = null)
         {
             var reader = Substitute.For<IProjectReader>();
+            var loader = Substitute.For<IBookProjectLoader>();
             var commandHandler = Substitute.For<IBookCommandHandler>();
             var bookUseCases = new FakeBookUseCases();
             var dialogService = Substitute.For<IDialogService>();
 
-            reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: false, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
-                NodeCharacterParagraphCounts: nodeCounts ?? new Dictionary<Guid, int>()));
+            loader.LoadSnapshotAsync(Arg.Any<ProjectFolderId>(), Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeCounts));
 
-            // Default: single method returns empty
             reader.GetCharacterParagraphsAsync(
                 Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>())
                 .Returns(new List<CharacterParagraphRef>());
@@ -61,12 +85,6 @@ namespace Read2Me.Tests.State
             reader.GetAudioItemRefsAsync(
                 Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<bool>())
                 .Returns(new List<AudioItemRef>());
-
-            reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<(Guid, AudioReviewInfo)>());
-
-            reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>());
 
             reader.GetCharactersAsync(Arg.Any<ProjectFolderId>())
                 .Returns(new List<Character>());
@@ -80,9 +98,9 @@ namespace Read2Me.Tests.State
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioReviews = new AudioReviewService();
-            var nodeStatus = new Read2Me.Services.NodeStatus.NodeStatusService();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, new AudioQueueService(), audioReviews, nodeStatus);
-            return new Context(presenter, reader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
+            var nodeStatus = new NodeStatusService();
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, new AudioQueueService(), audioReviews, nodeStatus);
+            return new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
         }
 
         // ---------------------------------------------------------------
@@ -104,10 +122,8 @@ namespace Read2Me.Tests.State
         {
             var ctx = Create();
             var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol1", Order = "a" };
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: true,
-                Volumes: new List<Volume> { vol }, Characters: [],
-                TotalParts: 1, TotalChapters: 1, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(hasContent: true, volumes: [vol]));
             ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Volume, vol.Id)
                 .Returns(new HierarchyChildren(new List<Part>(), null, null));
 
@@ -215,9 +231,8 @@ namespace Read2Me.Tests.State
             var charId = Guid.NewGuid();
             var character = new Character { Id = charId, Name = "Alice" };
 
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: true, Volumes: [], Characters: [character],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(hasContent: true, characters: [character]));
             await ctx.Presenter.LoadAsync(Folder);
 
             var item = new ParagraphItem { Id = Guid.NewGuid(), Order = "a" };
@@ -340,9 +355,8 @@ namespace Read2Me.Tests.State
             var ctx = Create();
             var other = new ProjectFolderId("other-book");
 
-            ctx.Reader.GetBookOverviewAsync(other).Returns(new BookOverview(
-                Filename: null, HasContent: false, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            ctx.Loader.LoadSnapshotAsync(other, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot());
 
             await ctx.Presenter.LoadAsync(Folder);
 
@@ -390,13 +404,10 @@ namespace Read2Me.Tests.State
         public async Task ToggleParagraphAsync_CompleteChapter_ChapterChecked()
         {
             var chId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var volId = Guid.NewGuid();
-            // Seed counts so NodeState can derive Checked
             var counts = new Dictionary<Guid, int> { [chId] = 1 };
             var ctx = Create(counts);
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: false, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
-                NodeCharacterParagraphCounts: counts));
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeCounts: counts));
             await ctx.Presenter.LoadAsync(Folder);
 
             var pId = Guid.NewGuid();
@@ -458,7 +469,6 @@ namespace Read2Me.Tests.State
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
             var pId1 = Guid.NewGuid(); var pId2 = Guid.NewGuid();
 
-            // Seed counts so derived NodeState returns Checked
             var counts = new Dictionary<Guid, int>
             {
                 [volId] = 2,
@@ -466,10 +476,8 @@ namespace Read2Me.Tests.State
                 [chId] = 2,
             };
             var ctx = Create(counts);
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: false, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
-                NodeCharacterParagraphCounts: counts));
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeCounts: counts));
             await ctx.Presenter.LoadAsync(Folder);
 
             ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Volume, volId, Arg.Any<bool>())
@@ -494,10 +502,8 @@ namespace Read2Me.Tests.State
 
             var counts = new Dictionary<Guid, int> { [chId] = 1 };
             var ctx = Create(counts);
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: false, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
-                NodeCharacterParagraphCounts: counts));
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeCounts: counts));
             await ctx.Presenter.LoadAsync(Folder);
 
             ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Part, ptId, Arg.Any<bool>())
@@ -589,10 +595,8 @@ namespace Read2Me.Tests.State
 
             var counts = new Dictionary<Guid, int> { [chId] = 1 };
             var ctx = Create(counts);
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: false, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
-                NodeCharacterParagraphCounts: counts));
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeCounts: counts));
             await ctx.Presenter.LoadAsync(Folder);
 
             ctx.Reader.GetCharacterParagraphsAsync(Folder, BookNodeLevel.Part, ptId, Arg.Any<bool>())
@@ -618,9 +622,8 @@ namespace Read2Me.Tests.State
         {
             var ctx = Create();
             var nodeId = Guid.NewGuid();
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: true, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [nodeId], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(hasContent: true, selectableNodes: [nodeId]));
 
             await ctx.Presenter.LoadAsync(Folder);
 
@@ -631,9 +634,8 @@ namespace Read2Me.Tests.State
         public async Task IsNodeSelectable_NodeWithoutCharacterParagraphs_False()
         {
             var ctx = Create();
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: true, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(hasContent: true));
 
             await ctx.Presenter.LoadAsync(Folder);
 
@@ -668,6 +670,7 @@ namespace Read2Me.Tests.State
         {
             var ctx = Create();
             var reader = ctx.Reader;
+            var loader = ctx.Loader;
             var commandHandler = ctx.CommandHandler;
             var dialogService = Substitute.For<IDialogService>();
             var queue = new CharacterQueueService();
@@ -678,8 +681,8 @@ namespace Read2Me.Tests.State
             var snackbar = Substitute.For<ISnackbar>();
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, queue, new AudioQueueService(), new AudioReviewService(), new Read2Me.Services.NodeStatus.NodeStatusService());
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, new FakeBookUseCases(),
+                treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, queue, new AudioQueueService(), new AudioReviewService(), new NodeStatusService());
             await presenter.LoadAsync(Folder);
 
             var paragraphId = Guid.NewGuid();
@@ -722,7 +725,7 @@ namespace Read2Me.Tests.State
         // DismissAudioReviewAsync — decrements review badge live (issue 0004)
         // ---------------------------------------------------------------
 
-        private static Read2Me.Services.NodeStatus.ParagraphStatusSeedRow MakeReviewSeedRow(
+        private static ParagraphStatusSeedRow MakeReviewSeedRow(
             Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int review) =>
             new(paragraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 0, Review: review);
 
@@ -743,22 +746,27 @@ namespace Read2Me.Tests.State
             };
 
             var reader = Substitute.For<IProjectReader>();
+            var loader = Substitute.For<IBookProjectLoader>();
             var commandHandler = Substitute.For<IBookCommandHandler>();
             var bookUseCases = new FakeBookUseCases();
             var dialogService = Substitute.For<IDialogService>();
 
-            reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: true, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            var seedRows = new List<ParagraphStatusSeedRow>
+            {
+                new(paraId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 0, Review: 1),
+            };
+            loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(new BookProjectSnapshot(
+                    Filename: null, HasContent: true, Volumes: [], Characters: [],
+                    TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
+                    NodeCharacterParagraphCounts: new Dictionary<Guid, int>(),
+                    NarratorOnlyMode: false,
+                    AudioNodeCounts: new Dictionary<Guid, int>(),
+                    AudioReviews: [],
+                    NodeStatusSeed: seedRows));
+
             reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
                 .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
-            reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<(Guid, AudioReviewInfo)>());
-            reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
-                {
-                    new(paraId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 0, Review: 1),
-                });
 
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
@@ -770,8 +778,8 @@ namespace Read2Me.Tests.State
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioReviews = new AudioReviewService();
-            var nodeStatus = new Read2Me.Services.NodeStatus.NodeStatusService();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, audioQueue, audioReviews, nodeStatus);
+            var nodeStatus = new NodeStatusService();
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, audioQueue, audioReviews, nodeStatus);
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraph is loaded into cache (item→paragraph mapping).
@@ -784,7 +792,7 @@ namespace Read2Me.Tests.State
                 VerifyOk: false, Wer: 0.3, VerifyReason: "WER too high",
                 Transcript: "t", OriginalTextSnapshot: "o"));
 
-            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
+            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
             return (ctx, itemId, chapterId, partId, volumeId);
         }
 
@@ -846,20 +854,23 @@ namespace Read2Me.Tests.State
             };
 
             var reader = Substitute.For<IProjectReader>();
+            var loader = Substitute.For<IBookProjectLoader>();
             var commandHandler = Substitute.For<IBookCommandHandler>();
             var bookUseCases = new FakeBookUseCases();
             var dialogService = Substitute.For<IDialogService>();
 
-            reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: true, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(new BookProjectSnapshot(
+                    Filename: null, HasContent: true, Volumes: [], Characters: [],
+                    TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
+                    NodeCharacterParagraphCounts: new Dictionary<Guid, int>(),
+                    NarratorOnlyMode: false,
+                    AudioNodeCounts: new Dictionary<Guid, int>(),
+                    AudioReviews: [],
+                    NodeStatusSeed: []));
+
             reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
                 .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
-            reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<(Guid, AudioReviewInfo)>());
-
-            reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>());
 
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
@@ -869,13 +880,13 @@ namespace Read2Me.Tests.State
             var snackbar2 = Substitute.For<ISnackbar>();
             var paragraphTtsSettings2 = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings2.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, paragraphTtsSettings2, queue, new AudioQueueService(), new AudioReviewService(), new Read2Me.Services.NodeStatus.NodeStatusService());
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, paragraphTtsSettings2, queue, new AudioQueueService(), new AudioReviewService(), new NodeStatusService());
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraphs are loaded into the cache.
             await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
 
-            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState, new AudioReviewService(), new Read2Me.Services.NodeStatus.NodeStatusService());
+            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, new AudioReviewService(), new NodeStatusService());
             var queuedPara = new QueuedParagraph(Folder, para.Id, "preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
             return (ctx, queue, para, queuedPara);
         }
@@ -934,7 +945,7 @@ namespace Read2Me.Tests.State
         // Live attribution badge updates (issue 0002)
         // ---------------------------------------------------------------
 
-        private static Read2Me.Services.NodeStatus.ParagraphStatusSeedRow MakeSeedRow(
+        private static ParagraphStatusSeedRow MakeSeedRow(
             Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int unattributed) =>
             new(paragraphId, chapterId, partId, volumeId, unattributed, MissingAudio: 0, Review: 0);
 
@@ -944,17 +955,12 @@ namespace Read2Me.Tests.State
             var ctx = Create();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
 
-            // Seed: paragraph has 1 unattributed item
-            ctx.Reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
-                {
-                    MakeSeedRow(paraId, ch, part, vol, unattributed: 1),
-                });
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 1)]));
 
             await ctx.Presenter.LoadAsync(Folder);
             Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
 
-            // One Character item in the paragraph — assigning it = last unattributed
             var para = new Paragraph { Id = paraId };
             var item = new ParagraphItem
             {
@@ -977,11 +983,8 @@ namespace Read2Me.Tests.State
             var ctx = Create();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
 
-            ctx.Reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
-                {
-                    MakeSeedRow(paraId, ch, part, vol, unattributed: 2),
-                });
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 2)]));
 
             await ctx.Presenter.LoadAsync(Folder);
 
@@ -1013,11 +1016,8 @@ namespace Read2Me.Tests.State
             var ctx = Create();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
 
-            ctx.Reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
-                {
-                    MakeSeedRow(paraId, ch, part, vol, unattributed: 3),
-                });
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 3)]));
 
             await ctx.Presenter.LoadAsync(Folder);
             Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
@@ -1110,7 +1110,7 @@ namespace Read2Me.Tests.State
         // Live audio badge updates (issue 0003)
         // ---------------------------------------------------------------
 
-        private static Read2Me.Services.NodeStatus.ParagraphStatusSeedRow MakeAudioSeedRow(
+        private static ParagraphStatusSeedRow MakeAudioSeedRow(
             Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int missingAudio) =>
             new(paragraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: missingAudio, Review: 0);
 
@@ -1131,22 +1131,27 @@ namespace Read2Me.Tests.State
             };
 
             var reader = Substitute.For<IProjectReader>();
+            var loader = Substitute.For<IBookProjectLoader>();
             var commandHandler = Substitute.For<IBookCommandHandler>();
             var bookUseCases = new FakeBookUseCases();
             var dialogService = Substitute.For<IDialogService>();
 
-            reader.GetBookOverviewAsync(Folder).Returns(new BookOverview(
-                Filename: null, HasContent: true, Volumes: [], Characters: [],
-                TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [], NodeCharacterParagraphCounts: new Dictionary<Guid, int>()));
+            var seedRows = new List<ParagraphStatusSeedRow>
+            {
+                new(paraId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: missingAudio, Review: 0),
+            };
+            loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(new BookProjectSnapshot(
+                    Filename: null, HasContent: true, Volumes: [], Characters: [],
+                    TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
+                    NodeCharacterParagraphCounts: new Dictionary<Guid, int>(),
+                    NarratorOnlyMode: false,
+                    AudioNodeCounts: new Dictionary<Guid, int>(),
+                    AudioReviews: [],
+                    NodeStatusSeed: seedRows));
+
             reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
                 .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
-            reader.GetAudioReviewsAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<(Guid, AudioReviewInfo)>());
-            reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
-                {
-                    new(paraId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: missingAudio, Review: 0),
-                });
 
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
@@ -1158,13 +1163,13 @@ namespace Read2Me.Tests.State
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioReviews = new AudioReviewService();
-            var nodeStatus = new Read2Me.Services.NodeStatus.NodeStatusService();
-            var presenter = new BookHierarchyPresenter(reader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, audioQueue, audioReviews, nodeStatus);
+            var nodeStatus = new NodeStatusService();
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, paragraphTtsSettings, characterQueue, audioQueue, audioReviews, nodeStatus);
 
             await presenter.LoadAsync(Folder);
             await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
 
-            var ctx = new Context(presenter, reader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
+            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus);
             return (ctx, audioQueue, para, chapterId, partId, volumeId);
         }
 
@@ -1203,12 +1208,8 @@ namespace Read2Me.Tests.State
             var ctx = Create();
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
 
-            // Paragraph already fully attributed (Unattributed=0)
-            ctx.Reader.GetNodeStatusSeedAsync(Arg.Any<ProjectFolderId>())
-                .Returns(new List<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>
-                {
-                    MakeSeedRow(paraId, ch, part, vol, unattributed: 0),
-                });
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 0)]));
 
             await ctx.Presenter.LoadAsync(Folder);
 
@@ -1226,6 +1227,121 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.SetItemCharacterAsync(Folder, item, null);
 
             Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+        }
+
+        // ---------------------------------------------------------------
+        // ViewMode setter (issue 003)
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task SetViewMode_NewValue_ClearsFolderSelection()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
+            await ctx.Presenter.ToggleParagraphAsync(Folder, Guid.NewGuid(), chId, ptId, volId, on: true);
+            Assert.Equal(1, ctx.Presenter.SelectedParagraphCount);
+
+            ctx.Presenter.ViewMode = BookViewMode.SplitAudio;
+
+            Assert.Equal(0, ctx.Presenter.SelectedParagraphCount);
+        }
+
+        [Fact]
+        public async Task SetViewMode_NewValue_ClearsAudioItemSelection()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid(); var paraId = Guid.NewGuid();
+            await ctx.Presenter.ToggleAudioItemAsync(new AudioItemRef(Guid.NewGuid(), paraId, chId, ptId, volId), on: true);
+            Assert.Equal(1, ctx.Presenter.SelectedAudioItemCount);
+
+            ctx.Presenter.ViewMode = BookViewMode.SplitAudio;
+
+            Assert.Equal(0, ctx.Presenter.SelectedAudioItemCount);
+        }
+
+        [Fact]
+        public async Task SetViewMode_NewValue_FiresStateChanged()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            int fired = 0;
+            ctx.Presenter.StateChanged += () => fired++;
+
+            ctx.Presenter.ViewMode = BookViewMode.SplitAudio;
+
+            Assert.Equal(1, fired);
+        }
+
+        [Fact]
+        public async Task SetViewMode_SameValue_DoesNotFireStateChanged()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            int fired = 0;
+            ctx.Presenter.StateChanged += () => fired++;
+
+            ctx.Presenter.ViewMode = BookViewMode.Combined; // already Combined
+
+            Assert.Equal(0, fired);
+        }
+
+        // ---------------------------------------------------------------
+        // OnAudioFileAssigned — item stamping and node status (issue 004)
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task OnAudioFileAssigned_KnownItem_StampsAudioFileName()
+        {
+            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
+
+            var item = para.Items.First();
+            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
+            audioQueue.MarkComplete(Folder, itemRef, "audio/chapter1/item.wav");
+
+            Assert.Equal("audio/chapter1/item.wav", item.AudioFileName);
+        }
+
+        [Fact]
+        public async Task OnAudioFileAssigned_KnownItem_NodeStatusDecrementsAudioBadge()
+        {
+            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+
+            var item = para.Items.First();
+            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
+            audioQueue.MarkComplete(Folder, itemRef, "audio/item.wav");
+
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+        }
+
+        [Fact]
+        public async Task OnAudioFileAssigned_UnknownItemId_NoException()
+        {
+            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
+
+            var unknownRef = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), chapterId, partId, volumeId);
+            var ex = Record.Exception(() => audioQueue.MarkComplete(Folder, unknownRef, "audio/ghost.wav"));
+
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public async Task OnAudioFileAssigned_WrongFolder_ItemNotStamped()
+        {
+            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
+
+            var item = para.Items.First();
+            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
+            var otherFolder = new ProjectFolderId("other-book");
+            audioQueue.MarkComplete(otherFolder, itemRef, "audio/item.wav");
+
+            Assert.Null(item.AudioFileName);
         }
     }
 }

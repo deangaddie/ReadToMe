@@ -53,6 +53,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ProjectUseCases>();
         services.AddScoped<BookUseCases>();
         services.AddScoped<BookHierarchyLoader>();
+        services.AddScoped<IBookProjectLoader, BookProjectLoader>();
         services.AddScoped<BookHierarchyPresenter>();
         
         services.AddSingleton<EpubFileReader>();
