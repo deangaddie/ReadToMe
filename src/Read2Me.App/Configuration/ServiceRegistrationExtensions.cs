@@ -109,6 +109,8 @@ public static class ServiceRegistrationExtensions
         services.AddKeyedScoped<IVoiceDesignClient, VoxCpm2VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.VoxCpm2);
         services.AddKeyedScoped<IVoiceDesignClient, Qwen3VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.Qwen3);
         services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, FileAudioPipeline>();
+        services.AddScoped<IAudioItemPipeline, AudioItemPipeline>();
+        services.AddScoped<IAudioItemResolver, AudioItemResolver>();
         services.AddScoped<VoiceDesignPromptService>();
         services.AddScoped<IParagraphTtsClientResolver, ParagraphTtsClientResolver>();
         services.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.VoxCpm2);

@@ -53,18 +53,18 @@ See [Infra/README.md](Infra/README.md) for full service details, ports, and API 
 
 ## AI services and when to use them
 
-| Service | Container | Use for |
-| ------- | --------- | ------- |
-| **llama.cpp** | `read2me-llama` | Character extraction and dialog attribution. Run this during the script-processing stage. |
-| **Chatterbox** | `read2me-chatterbox` | TTS with expression instructions ("speak sadly") and fine-grained parameter control. Requires a reference voice WAV. |
-| **Chatterbox Turbo** | `read2me-chatterbox-turbo` | TTS with paralinguistic tags (`[laugh]`, `[sigh]`, `[gasp]`, etc.). Requires a reference voice WAV. |
-| **Qwen3 TTS** | `read2me-qwen3-tts` | TTS where you describe the voice in text ("a gruff old man"). No reference audio needed — good for generating a first voice sample. |
-| **Qwen3 TTS Base** | `read2me-qwen3-tts-base` | TTS voice cloning from a reference audio clip and its transcript. |
-| **VoxCPM2** | `read2me-voxcpm2` | TTS voice cloning via VoxCPM2. Alternative to Chatterbox for cloning. |
-| **Whisper** | `read2me-whisper` | Transcribes generated audio to score accuracy (WER). Run alongside the active TTS container. |
-| **Whisper CPU** | `read2me-whisper-cpu` | Same as Whisper but CPU-only. Use when VRAM is fully occupied. |
-| **MiniLM-L6** | `read2me-minilm-l6` | Semantic similarity check — rescues clips that fail WER but are semantically correct. CPU-only. |
-| **MPNet-Base-v2** | `read2me-mpnet-base-v2` | Same as MiniLM-L6 but a larger model with a different score scale. CPU-only. |
+| Service              | Container                  | Use for                                                                                                                             |
+| -------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **llama.cpp**        | `read2me-llama`            | Character extraction and dialog attribution. Run this during the script-processing stage.                                           |
+| **Chatterbox**       | `read2me-chatterbox`       | TTS with expression instructions ("speak sadly") and fine-grained parameter control. Requires a reference voice WAV.                |
+| **Chatterbox Turbo** | `read2me-chatterbox-turbo` | TTS with paralinguistic tags (`[laugh]`, `[sigh]`, `[gasp]`, etc.). Requires a reference voice WAV.                                 |
+| **Qwen3 TTS**        | `read2me-qwen3-tts`        | TTS where you describe the voice in text ("a gruff old man"). No reference audio needed — good for generating a first voice sample. |
+| **Qwen3 TTS Base**   | `read2me-qwen3-tts-base`   | TTS voice cloning from a reference audio clip and its transcript.                                                                   |
+| **VoxCPM2**          | `read2me-voxcpm2`          | TTS voice cloning via VoxCPM2. Alternative to Chatterbox for cloning.                                                               |
+| **Whisper**          | `read2me-whisper`          | Transcribes generated audio to score accuracy (WER). Run alongside the active TTS container.                                        |
+| **Whisper CPU**      | `read2me-whisper-cpu`      | Same as Whisper but CPU-only. Use when VRAM is fully occupied.                                                                      |
+| **MiniLM-L6**        | `read2me-minilm-l6`        | Semantic similarity check — rescues clips that fail WER but are semantically correct. CPU-only.                                     |
+| **MPNet-Base-v2**    | `read2me-mpnet-base-v2`    | Same as MiniLM-L6 but a larger model with a different score scale. CPU-only.                                                        |
 
 Typical session: start `llama` for attribution, then stop it and start a TTS container + `whisper` for audio generation.
 
@@ -99,3 +99,4 @@ Audio files (WAV per ParagraphItem, reference voice WAVs) are stored in the same
 
 - Loading a new book pulls epub cover but requires server restart to display it.
 - Processing/thinking/response blocks in character assignment progress area should expand rather than sub-scroll.
+- More error/warning. eg: Audio gen failed because no voice

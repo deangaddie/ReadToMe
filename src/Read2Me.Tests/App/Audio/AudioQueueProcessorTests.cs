@@ -1,1099 +1,232 @@
-using FractionalIndexing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Audio;
 using Read2Me.AppData.Entities;
-using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
-using Read2Me.Data;
-using Read2Me.Data.Entities;
-using Read2Me.Data.Enums;
-using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.ParagraphTts;
-using Read2Me.Services.Audio.SemanticSimilarity;
-using Read2Me.Services.Audio.Transcription;
 using Read2Me.Tests.Fakes;
-using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.App.Audio
 {
-    public class AudioQueueProcessorTests : ProjectDbTestBase
+    public class AudioQueueProcessorTests
     {
         private readonly AudioQueueService _queue;
-        private readonly FakeTtsClient _ttsClient;
-        private readonly FakeTtsClientResolver _resolver;
-        private readonly FakeTtsSettingsService _settings;
-        private readonly BookCommandHandler _commands;
+        private readonly FakeAudioItemResolver _resolver;
+        private readonly FakeAudioItemPipeline _pipeline;
+        private readonly FakeBookCommandHandler _commands;
         private readonly FakeFileSystem _fs;
-        private readonly FakeNormalizer _normalizer;
-        private readonly FakeWerComparer _wer;
-        private readonly FakeTranscriptionClient _transcriber;
-        private readonly FakeTranscriptionResolver _transcriptionResolver;
-        private readonly FakeTranscriptionSettings _transcriptionSettings;
-        private FakeAudioProcessingSettings _audioProcessingSettings;
-        private readonly FakeSemanticVerifier _semanticVerifier;
         private readonly AudioReviewService _reviews;
         private readonly AudioGenBroadcaster _broadcaster;
         private readonly List<AudioGenEvent> _events = new();
-        private AudioQueueProcessor _sut;
         private readonly ProjectFolderId _folder;
-        private readonly ProjectReader _projectReader;
-        private readonly ProjectDbContextProvider _dbProvider;
+        private readonly AudioQueueProcessor _sut;
 
-        private static readonly ParagraphTtsServiceConfig ActiveConfig = new()
-        {
-            Id = 1,
-            Name = "Test",
-            Type = ParagraphTtsServiceType.VoxCpm2,
-            SettingsJson = "{}"
-        };
+        private const string FolderName = "test-book";
+        private const string FakeRoot = @"C:\fake-workspace";
 
-        private static readonly TranscriptionServiceConfig TranscriptionConfig = new()
-        {
-            Id = 1,
-            Name = "Whisper",
-            Type = TranscriptionServiceType.LocalWhisper,
-            SettingsJson = "{}"
-        };
+        private static readonly PipelineRequest DefaultRequest = new(
+            ParagraphItemId: Guid.NewGuid(),
+            SourceText: "In a hole in the ground",
+            Speaker: "Bilbo",
+            VoiceInstructions: "whispered",
+            RefAudioPath: "/voices/bilbo/voice.wav",
+            TtsConfig: new ParagraphTtsServiceConfig { Id = 1, Name = "Test", Type = ParagraphTtsServiceType.VoxCpm2, SettingsJson = "{}" },
+            TtsSettingsOverrideJson: null,
+            MaxAttempts: 1,
+            WerThreshold: 0.15,
+            FfmpegPath: "ffmpeg");
+
+        private static PipelineResult OkResult() => new(
+            AudioBytes: [0x52, 0x49, 0x46, 0x46],
+            Normalize: new NormalizeOutcome(Ok: true, Reason: null),
+            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "In a hole in the ground", Rescued: false));
+
+        private static ResolutionResult SuccessResolution(Guid? itemId = null) => new(
+            Speaker: "Bilbo",
+            SourceText: "In a hole in the ground",
+            Request: DefaultRequest with { ParagraphItemId = itemId ?? DefaultRequest.ParagraphItemId },
+            FailureReason: null);
+
+        private static ResolutionResult FailureResolution(string reason, string? speaker = "Bilbo", string? text = "In a hole in the ground") =>
+            new(Speaker: speaker, SourceText: text, Request: null, FailureReason: reason);
 
         public AudioQueueProcessorTests()
         {
             _folder = new ProjectFolderId(FolderName);
             _queue = new AudioQueueService();
-            _ttsClient = new FakeTtsClient();
-            _resolver = new FakeTtsClientResolver(_ttsClient);
-            _settings = new FakeTtsSettingsService(ActiveConfig);
-            _fs = new FakeFileSystem(TempDir);
+            _fs = new FakeFileSystem(FakeRoot);
             _fs.SeedFolder(FolderName);
-
-            // Defaults: normalize succeeds, transcript matches source (WER 0), threshold 0.15, config present.
-            _normalizer = new FakeNormalizer();
-            _wer = new FakeWerComparer(0.0);
-            _transcriber = new FakeTranscriptionClient("In a hole in the ground");
-            _transcriptionResolver = new FakeTranscriptionResolver(_transcriber);
-            _transcriptionSettings = new FakeTranscriptionSettings(TranscriptionConfig);
-            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15);
-            _semanticVerifier = new FakeSemanticVerifier();
             _reviews = new AudioReviewService();
             _broadcaster = new AudioGenBroadcaster();
             _broadcaster.Event += e => _events.Add(e);
+            _commands = new FakeBookCommandHandler();
 
-            var services = new ServiceCollection();
-            services.AddBookCommandHandlers();
-            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
-            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
-            var sp = services.BuildServiceProvider();
-            _commands = sp.GetRequiredService<BookCommandHandler>();
+            _resolver = new FakeAudioItemResolver { Result = SuccessResolution() };
+            _pipeline = new FakeAudioItemPipeline { Result = OkResult() };
 
-            _dbProvider = new ProjectDbContextProvider();
-            var fileSystem = new Read2Me.Services.IO.FileSystemService(
-                Microsoft.Extensions.Options.Options.Create(new Read2Me.Core.Configuration.WorkspaceOptions { FolderPath = TempDir }));
-            var dbSession = new ProjectDbSession(fileSystem, _dbProvider, NullLogger<ProjectDbSession>.Instance);
-            _projectReader = new ProjectReader(dbSession, NullLogger<ProjectReader>.Instance);
-
-            _sut = BuildSut();
+            _sut = new AudioQueueProcessor(
+                _queue, _resolver, _pipeline, _commands, _fs,
+                _reviews, _broadcaster, NullLogger<AudioQueueProcessor>.Instance);
         }
 
-        private AudioQueueProcessor BuildSut() => new(
-            _queue,
-            _settings,
-            _resolver,
-            _commands,
-            _fs,
-            _dbProvider,
-            _projectReader,
-            _normalizer,
-            _wer,
-            _transcriptionResolver,
-            _transcriptionSettings,
-            _audioProcessingSettings,
-            _reviews,
-            _broadcaster,
-            _semanticVerifier,
-            NullLogger<AudioQueueProcessor>.Instance);
-
-        private void RebuildSut() => _sut = BuildSut();
-
-        private static string Key(string? prev = null, string? next = null) =>
-            OrderKeyGenerator.GenerateKeyBetween(prev, next);
-
-        private async Task<AudioReview?> ReviewRowAsync(Guid itemId)
+        private QueuedAudioItem MakeItem(Guid? itemId = null)
         {
-            await using var db = await OpenDbAsync();
-            return await db.AudioReviews.FirstOrDefaultAsync(r => r.ParagraphItemId == itemId);
-        }
-
-        private async Task<(QueuedAudioItem item, Guid itemId)> SeedCharacterItemAsync(
-            bool hasDefaultVoice = true,
-            string voiceAudioFile = "voices/char1/voice.wav",
-            string text = "In a hole in the ground")
-        {
-            await using var db = await OpenDbAsync();
-
-            var charId = Guid.NewGuid();
-            var character = new Character { Id = charId, Name = "Bilbo" };
-            db.Characters.Add(character);
-
-            if (hasDefaultVoice)
-            {
-                var voice = new Voice
-                {
-                    Id = Guid.NewGuid(),
-                    CharacterId = charId,
-                    Name = "Bilbo Voice",
-                    Source = VoiceSource.Uploaded,
-                    AudioFileName = voiceAudioFile
-                };
-                db.Voices.Add(voice);
-                db.VoiceRules.Add(new VoiceRule
-                {
-                    Id = Guid.NewGuid(),
-                    CharacterId = charId,
-                    VoiceId = voice.Id,
-                    IsDefault = true,
-                    Rank = OrderKeyGenerator.GenerateKeyBetween(null, null),
-                });
-                // Seed the reference audio file so it can be opened
-                var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceAudioFile.Replace('/', Path.DirectorySeparatorChar));
-                _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
-            }
-
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key(), CharacterId = charId };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character,
-                CharacterId = charId,
-                Text = text,
-                VoiceInstructions = "whispered",
-                Order = Key()
-            };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-            await db.SaveChangesAsync();
-
-            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
-            return (new QueuedAudioItem(_folder, itemRef), item.Id);
-        }
-
-        private async Task<(QueuedAudioItem item, Guid itemId)> SeedNarrationItemAsync(
-            bool hasNarratorVoice = true,
-            string voiceAudioFile = "voices/narrator/voice.wav")
-        {
-            await using var db = await OpenDbAsync();
-
-            if (hasNarratorVoice)
-            {
-                var voice = new Voice
-                {
-                    Id = Guid.NewGuid(),
-                    CharacterId = ProjectDbContext.NarratorId,
-                    Name = "Narrator Voice",
-                    Source = VoiceSource.Uploaded,
-                    AudioFileName = voiceAudioFile
-                };
-                db.Voices.Add(voice);
-                db.VoiceRules.Add(new VoiceRule
-                {
-                    Id = Guid.NewGuid(),
-                    CharacterId = ProjectDbContext.NarratorId,
-                    VoiceId = voice.Id,
-                    IsDefault = true,
-                    Rank = OrderKeyGenerator.GenerateKeyBetween(null, null),
-                });
-                var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceAudioFile.Replace('/', Path.DirectorySeparatorChar));
-                _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
-            }
-
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Narration,
-                Text = "The narrator spoke",
-                Order = Key()
-            };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-            await db.SaveChangesAsync();
-
-            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
-            return (new QueuedAudioItem(_folder, itemRef), item.Id);
+            var id = itemId ?? Guid.NewGuid();
+            var itemRef = new AudioItemRef(id, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            return new QueuedAudioItem(_folder, itemRef);
         }
 
         [Fact]
-        public async Task CharacterItem_WithDefaultVoice_GeneratesWavAndSetsAudioFileName()
+        public async Task Success_WritesWavFile_AndCompletesQueue()
         {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            var queued = MakeItem(itemId);
 
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
-            Assert.True(_ttsClient.WasCalled);
-            Assert.Equal("whispered", _ttsClient.LastVoiceInstructions);
-
-            await using var db = await OpenDbAsync();
-            var updated = await db.ParagraphItems.FindAsync(itemId);
-            Assert.Equal($"audio/{itemId}.wav", updated!.AudioFileName);
-
-            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
+            var expectedPath = Path.Combine(FakeRoot, FolderName, "audio", $"{itemId}.wav");
             Assert.True(_fs.FileExists(expectedPath));
-
             Assert.Null(_queue.OutcomeOf(_folder, itemId));
         }
 
         [Fact]
-        public async Task TrailingComma_IsReplacedWithSemicolon_BeforeTts()
+        public async Task Success_PublishesItemStarted_WithSpeakerAndText()
         {
-            var (queuedItem, _) = await SeedCharacterItemAsync(text: "Turning it into a greeting,");
+            var queued = MakeItem();
 
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
-            Assert.Equal("Turning it into a greeting;", _ttsClient.LastText);
-        }
-
-        [Theory]
-        [InlineData("Hello there,", "Hello there;")]
-        [InlineData("Hello there,   ", "Hello there;")]
-        [InlineData("Hello there.", "Hello there.")]
-        [InlineData("Hello, there", "Hello, there")]
-        [InlineData("", "")]
-        [InlineData(",", ";")]
-        public void ReplaceTrailingComma_HandlesCases(string input, string expected)
-        {
-            Assert.Equal(expected, AudioQueueProcessor.ReplaceTrailingComma(input));
+            Assert.Single(_events.OfType<ItemStarted>(), e => e.Attempt == 1 && e.Character == "Bilbo");
         }
 
         [Fact]
-        public async Task NarrationItem_WithNarratorVoice_GeneratesWavAndSetsAudioFileName()
+        public async Task Success_ExecutesBothCommands()
         {
-            var (queuedItem, itemId) = await SeedNarrationItemAsync();
-            _transcriber.Transcript = "The narrator spoke";
+            var queued = MakeItem();
 
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
-            Assert.True(_ttsClient.WasCalled);
-
-            await using var db = await OpenDbAsync();
-            var updated = await db.ParagraphItems.FindAsync(itemId);
-            Assert.Equal($"audio/{itemId}.wav", updated!.AudioFileName);
+            Assert.Equal(2, _commands.Executed.Count);
+            Assert.Contains(_commands.Executed, c => c is SetParagraphItemAudioCommand);
+            Assert.Contains(_commands.Executed, c => c is SetAudioReviewCommand);
         }
 
         [Fact]
-        public async Task CharacterItem_NoDefaultVoice_MarksFailed_NoBilboName_NoTtsCall()
+        public async Task ResolutionFailure_PublishesItemStarted_ThenFailed()
         {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync(hasDefaultVoice: false);
+            var itemId = Guid.NewGuid();
+            _resolver.Result = FailureResolution("No character assigned to item", speaker: null, text: null);
+            var queued = MakeItem(itemId);
 
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
-            Assert.False(_ttsClient.WasCalled);
-
+            Assert.Contains(_events, e => e is ItemStarted s && s.Character == null && s.Text == null);
+            Assert.Contains(_events, e => e is Failed f && f.Reason.Contains("No character"));
             var outcome = _queue.OutcomeOf(_folder, itemId);
             Assert.NotNull(outcome);
-            Assert.Equal(AudioItemOutcomeKind.Failed, outcome.Kind);
-            Assert.Contains("Bilbo", outcome.Reason);
-
-            await using var db = await OpenDbAsync();
-            var item = await db.ParagraphItems.FindAsync(itemId);
-            Assert.Null(item!.AudioFileName);
+            Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
         }
 
         [Fact]
-        public async Task NarrationItem_NoNarratorVoice_MarksFailed_NoTtsCall()
+        public async Task ResolutionFailure_DoesNotCallPipeline()
         {
-            var (queuedItem, itemId) = await SeedNarrationItemAsync(hasNarratorVoice: false);
+            _resolver.Result = FailureResolution("No voice");
+            var queued = MakeItem();
 
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
-            Assert.False(_ttsClient.WasCalled);
+            Assert.Null(_pipeline.LastRequest);
+        }
 
+        [Fact]
+        public async Task PipelineException_MarksFailedAndPublishesFailed()
+        {
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _pipeline.Throws = new Exception("tts boom");
+            var queued = MakeItem(itemId);
+
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+
+            Assert.Contains(_events, e => e is Failed f && f.Reason.Contains("tts boom"));
             var outcome = _queue.OutcomeOf(_folder, itemId);
             Assert.NotNull(outcome);
-            Assert.Equal(AudioItemOutcomeKind.Failed, outcome.Kind);
-
-            await using var db = await OpenDbAsync();
-            var item = await db.ParagraphItems.FindAsync(itemId);
-            Assert.Null(item!.AudioFileName);
+            Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
         }
 
-        // --- Post-processing pipeline -------------------------------------------------
+        [Fact]
+        public async Task NormalizeOk_False_SetsReviewService()
+        {
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _pipeline.Result = new PipelineResult(
+                AudioBytes: [0x52, 0x49, 0x46, 0x46],
+                Normalize: new NormalizeOutcome(Ok: false, Reason: "ffmpeg failed"),
+                Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "text", Rescued: false));
+            var queued = MakeItem(itemId);
+
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+
+            var review = _reviews.ReviewOf(_folder, itemId);
+            Assert.NotNull(review);
+            Assert.False(review!.NormalizeOk);
+        }
 
         [Fact]
-        public async Task BothStagesPass_StoresAudio_NoReviewRow_ServiceCleared()
+        public async Task VerifyOk_False_SetsReviewService()
         {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            // Seed a stale in-memory review to prove a pass clears it.
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _pipeline.Result = new PipelineResult(
+                AudioBytes: [0x52, 0x49, 0x46, 0x46],
+                Normalize: new NormalizeOutcome(Ok: true, Reason: null),
+                Verify: new VerifyOutcome(Ok: false, Wer: 0.42, Reason: "WER 0.42", Transcript: "wrong", Rescued: false));
+            var queued = MakeItem(itemId);
+
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+
+            var review = _reviews.ReviewOf(_folder, itemId);
+            Assert.NotNull(review);
+            Assert.False(review!.VerifyOk);
+            Assert.Equal(0.42, review.Wer);
+        }
+
+        [Fact]
+        public async Task BothOutcomesOk_ClearsExistingReview()
+        {
+            var itemId = Guid.NewGuid();
             _reviews.Set(_folder, itemId, new AudioReviewInfo(
-                Read2Me.Core.Models.AudioReviewState.NeedsReview, false, "stale", false, 0.9, "stale", null, null));
+                AudioReviewState.NeedsReview, false, "stale", false, 0.9, "stale", null, null));
+            _resolver.Result = SuccessResolution(itemId);
+            var queued = MakeItem(itemId);
 
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
-            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
-
-            Assert.Null(await ReviewRowAsync(itemId));
-            Assert.Null(_reviews.ReviewOf(_folder, itemId));
-            Assert.Null(_queue.OutcomeOf(_folder, itemId));
-        }
-
-        [Fact]
-        public async Task WerOverThreshold_StoresAudio_RowVerifyFailedWithWerAndReason()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _wer.Result = 0.42; // > 0.15
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
-
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.True(row!.NormalizeOk);
-            Assert.False(row.VerifyOk);
-            Assert.Equal(0.42, row.Wer);
-            Assert.Equal("WER 0.42 > 0.15", row.VerifyReason);
-
-            var info = _reviews.ReviewOf(_folder, itemId);
-            Assert.NotNull(info);
-            Assert.False(info!.VerifyOk);
-            Assert.Equal(0.42, info.Wer);
-        }
-
-        [Fact]
-        public async Task WerOverThreshold_SemanticRescues_VerifyOk_NoReviewRow_RescuedEventTrue()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _wer.Result = 0.42;
-            _semanticVerifier.Passes = true;
-            _semanticVerifier.Score = 0.91;
-            _semanticVerifier.Threshold = 0.85;
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Null(await ReviewRowAsync(itemId));
-            Assert.Null(_reviews.ReviewOf(_folder, itemId));
-
-            var verified = _events.OfType<Verified>().Single();
-            Assert.True(verified.Ok);
-            Assert.True(verified.Rescued);
-            Assert.Equal(0.42, verified.Wer);
-            Assert.Contains("rescued by semantic", verified.Reason);
-        }
-
-        [Fact]
-        public async Task WerOverThreshold_SemanticFails_VerifyFailed_ReviewRow_RescuedFalse()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _wer.Result = 0.42;
-            _semanticVerifier.Passes = false;
-            _semanticVerifier.Score = 0.60;
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.False(row!.VerifyOk);
-
-            var verified = _events.OfType<Verified>().Single();
-            Assert.False(verified.Ok);
-            Assert.False(verified.Rescued);
-        }
-
-        [Fact]
-        public async Task NoTranscriptionConfig_SemanticVerifierNotCalled()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _transcriptionSettings.Config = null;
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.False(_semanticVerifier.WasCalled);
-        }
-
-        [Fact]
-        public async Task TranscribeThrows_SemanticVerifierNotCalled()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _transcriber.ThrowMessage = "service unavailable";
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.False(_semanticVerifier.WasCalled);
-        }
-
-        [Fact]
-        public async Task NormalizeSkipped_WithVerifyPass_StoresAudio_RowNormalizeFailedVerifyOk()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _normalizer.Result = (NormalizeStatus.Skipped, "ffmpeg failed: boom");
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
-
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.False(row!.NormalizeOk);
-            Assert.Equal("ffmpeg failed: boom", row.NormalizeReason);
-            Assert.True(row.VerifyOk); // verify still ran on the original audio
-        }
-
-        [Fact]
-        public async Task NormalizeSkipped_MissingFfmpeg_ReasonIsFfmpegNotFound()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _normalizer.Result = (NormalizeStatus.Skipped, "ffmpeg not found (set path in Audio Processing settings)");
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.False(row!.NormalizeOk);
-            Assert.StartsWith("ffmpeg not found", row.NormalizeReason);
-        }
-
-        [Fact]
-        public async Task NoTranscriptionConfig_StoresAudio_VerifyFailed_WerNull_NoConfigReason()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _transcriptionSettings.Config = null;
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
-
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.False(row!.VerifyOk);
-            Assert.Null(row.Wer);
-            Assert.Equal("no transcription config", row.VerifyReason);
-            Assert.False(_transcriber.WasCalled);
-        }
-
-        [Fact]
-        public async Task TranscribeThrows_StoresAudio_VerifyFailed_CouldNotVerifyReason()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _transcriber.ThrowMessage = "service unavailable";
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
-
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.False(row!.VerifyOk);
-            Assert.Null(row.Wer);
-            Assert.Equal("could not verify: service unavailable", row.VerifyReason);
-        }
-
-        [Fact]
-        public async Task RegenerateAndPass_AfterPriorFailure_RemovesRow()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-
-            // First pass fails verification, creating a row.
-            _wer.Result = 0.42;
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-            Assert.NotNull(await ReviewRowAsync(itemId));
-
-            // Re-process with both stages passing ⇒ row removed and service cleared.
-            _wer.Result = 0.0;
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Null(await ReviewRowAsync(itemId));
             Assert.Null(_reviews.ReviewOf(_folder, itemId));
         }
 
         [Fact]
-        public async Task StageFailure_NeverMarksFailed_AndMarksCompleteLast()
+        public async Task Cancellation_PropagatesCleanly()
         {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _normalizer.Result = (NormalizeStatus.Skipped, "ffmpeg failed: boom");
-            _wer.Result = 0.42;
+            var queued = MakeItem();
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
 
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            // No MarkFailed despite both stages failing.
-            Assert.Null(_queue.OutcomeOf(_folder, itemId));
-            // MarkComplete ran (audio version recorded).
-            Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
-        }
-
-        // --- Retry loop --------------------------------------------------------------
-
-        [Fact]
-        public async Task MaxAttempts1_ExactlyOneTtsCall_BehaviourIdenticalToPreFeature()
-        {
-            // audioMaxAttempts defaults to 1 in FakeAudioProcessingSettings — regression guard.
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Equal(1, _ttsClient.CallCount);
-            Assert.Null(_queue.OutcomeOf(_folder, itemId));
-            Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
-
-            await using var db = await OpenDbAsync();
-            var updated = await db.ParagraphItems.FindAsync(itemId);
-            Assert.Equal($"audio/{itemId}.wav", updated!.AudioFileName);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => _sut.ProcessItemAsync(queued, cts.Token));
         }
 
         [Fact]
-        public async Task VerifyFailsTwice_PassesThird_ThreeTtsCalls_PersistOnce_ReviewCleared()
+        public async Task ResolverFailure_WithSpeakerAndText_PublishesItemStartedWithThem()
         {
-            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
-            RebuildSut();
+            _resolver.Result = FailureResolution("No default voice for Bilbo", speaker: "Bilbo", text: "Some text");
+            var queued = MakeItem();
 
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            // Attempt 1 and 2 fail WER; attempt 3 passes.
-            _wer.EnqueueResults(0.42, 0.38, 0.05);
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Equal(3, _ttsClient.CallCount);
-            Assert.Null(await ReviewRowAsync(itemId));
-            Assert.Null(_reviews.ReviewOf(_folder, itemId));
-            Assert.Null(_queue.OutcomeOf(_folder, itemId));
-            Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
-
-            // Persist commands each called exactly once.
-            await using var db = await OpenDbAsync();
-            var updated = await db.ParagraphItems.FindAsync(itemId);
-            Assert.Equal($"audio/{itemId}.wav", updated!.AudioFileName);
-        }
-
-        [Fact]
-        public async Task VerifyFailsAllAttempts_NTtsCalls_MarkComplete_ReviewRowFinalAttempt()
-        {
-            const int max = 3;
-            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: max);
-            RebuildSut();
-
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _wer.Result = 0.42; // all attempts fail
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Equal(max, _ttsClient.CallCount);
-            Assert.Null(_queue.OutcomeOf(_folder, itemId));
-            Assert.NotNull(_queue.AudioVersionOf(_folder, itemId));
-
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.False(row!.VerifyOk);
-            Assert.Equal(0.42, row.Wer);
-        }
-
-        [Fact]
-        public async Task VerifyPassesAttempt1_OneTtsCall_NoRetry()
-        {
-            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
-            RebuildSut();
-
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            // Default _wer.Result = 0.0 → verify passes first attempt.
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Equal(1, _ttsClient.CallCount);
-            Assert.Null(await ReviewRowAsync(itemId));
-        }
-
-        [Fact]
-        public async Task NormalizeFail_VerifyPass_OneTtsCall_NoRetry_ReviewNormalizeFail()
-        {
-            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
-            RebuildSut();
-
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _normalizer.Result = (NormalizeStatus.Skipped, "ffmpeg failed");
-            // verifyOk = true (wer = 0.0 < threshold) — normalize fail must not trigger retry
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Equal(1, _ttsClient.CallCount);
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.False(row!.NormalizeOk);
-            Assert.True(row.VerifyOk);
-        }
-
-        [Fact]
-        public async Task InfraFail_NoTranscriptionConfig_OneTtsCall_NoRetry()
-        {
-            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
-            RebuildSut();
-
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _transcriptionSettings.Config = null;
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Equal(1, _ttsClient.CallCount);
-            var row = await ReviewRowAsync(itemId);
-            Assert.NotNull(row);
-            Assert.False(row!.VerifyOk);
-            Assert.Null(row.Wer);
-        }
-
-        [Fact]
-        public async Task MultiAttempt_AudioAndReviewCommandsEachCalledExactlyOnce()
-        {
-            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
-            RebuildSut();
-
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _wer.EnqueueResults(0.42, 0.42, 0.05); // pass on attempt 3
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.Equal(3, _ttsClient.CallCount);
-
-            // Audio file written once.
-            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
-
-            // DB row has exactly one audio path (idempotent upsert, but invoked once).
-            await using var db = await OpenDbAsync();
-            var updated = await db.ParagraphItems.FindAsync(itemId);
-            Assert.Equal($"audio/{itemId}.wav", updated!.AudioFileName);
-
-            // Final attempt passed verify → no review row.
-            Assert.Null(await ReviewRowAsync(itemId));
-        }
-
-        [Fact]
-        public async Task RetryAttempts_EachPublishItemStartedWithCorrectAttemptNumber()
-        {
-            _audioProcessingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15, audioMaxAttempts: 3);
-            RebuildSut();
-
-            var (queuedItem, _) = await SeedCharacterItemAsync();
-            _wer.EnqueueResults(0.42, 0.42, 0.05);
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var starts = _events.OfType<ItemStarted>().ToList();
-            Assert.Equal(3, starts.Count);
-            Assert.Equal(1, starts[0].Attempt);
-            Assert.Equal(2, starts[1].Attempt);
-            Assert.Equal(3, starts[2].Attempt);
-        }
-
-        // --- Audio Gen Stream events --------------------------------------------------
-
-        [Fact]
-        public async Task HappyPath_PublishesItemStartedAudioGeneratedNormalizedTranscribedVerified_InOrder()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var started = Assert.IsType<ItemStarted>(_events[0]);
-            Assert.Equal(itemId, started.Id);
-            Assert.Equal("Bilbo", started.Character);
-            Assert.Equal("In a hole in the ground", started.Text);
-
-            Assert.Equal(itemId, Assert.IsType<AudioGenerated>(_events[1]).Id);
-
-            var normalized = Assert.IsType<Normalized>(_events[2]);
-            Assert.True(normalized.Ok);
-
-            Assert.Equal(itemId, Assert.IsType<Transcribed>(_events[3]).Id);
-
-            var verified = Assert.IsType<Verified>(_events[4]);
-            Assert.True(verified.Ok);
-
-            Assert.DoesNotContain(_events, e => e is Failed);
-        }
-
-        [Fact]
-        public async Task WerOverThreshold_PublishesVerifiedFalseWithWer_NoFailed()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _wer.Result = 0.42;
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var verified = _events.OfType<Verified>().Single();
-            Assert.False(verified.Ok);
-            Assert.Equal(0.42, verified.Wer);
-            Assert.DoesNotContain(_events, e => e is Failed);
-        }
-
-        [Fact]
-        public async Task NormalizeSkipped_PublishesNormalizedFalseWithReason_NoFailed()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync();
-            _normalizer.Result = (NormalizeStatus.Skipped, "ffmpeg failed: boom");
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var normalized = _events.OfType<Normalized>().Single();
-            Assert.False(normalized.Ok);
-            Assert.Equal("ffmpeg failed: boom", normalized.Reason);
-            Assert.DoesNotContain(_events, e => e is Failed);
-        }
-
-        [Fact]
-        public async Task HardFail_CharacterKnown_NoDefaultVoice_PublishesItemStartedThenFailed_NoPhaseEvents()
-        {
-            var (queuedItem, itemId) = await SeedCharacterItemAsync(hasDefaultVoice: false);
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var started = Assert.IsType<ItemStarted>(_events[0]);
-            Assert.Equal("Bilbo", started.Character);
-            Assert.IsType<Failed>(_events[1]);
-            Assert.Equal(2, _events.Count);
-            Assert.DoesNotContain(_events, e => e is AudioGenerated or Normalized or Transcribed or Verified);
-        }
-
-        [Fact]
-        public async Task HardFail_RowNotFound_PublishesItemStartedNullThenFailed()
-        {
-            var missing = Guid.NewGuid();
-            var itemRef = new AudioItemRef(missing, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-            var queuedItem = new QueuedAudioItem(_folder, itemRef);
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var started = Assert.IsType<ItemStarted>(_events[0]);
-            Assert.Equal(missing, started.Id);
-            Assert.Null(started.Character);
-            Assert.Null(started.Text);
-            Assert.IsType<Failed>(_events[1]);
-        }
-
-        [Fact]
-        public async Task NarrationItem_ItemStartedReportsNarratorAsSpeaker()
-        {
-            var (queuedItem, itemId) = await SeedNarrationItemAsync();
-            _transcriber.Transcript = "The narrator spoke";
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            var started = Assert.IsType<ItemStarted>(_events[0]);
-            Assert.Equal("Narrator", started.Character);
-        }
-
-        // --- NarratorOnlyMode --------------------------------------------------------
-
-        private async Task<(QueuedAudioItem item, Guid itemId)> SeedUnattributedCharacterItemAsync(
-            bool narratorOnlyMode,
-            string voiceAudioFile = "voices/narrator/voice.wav")
-        {
-            await using var db = await OpenDbAsync();
-
-            // Seed Project row with NarratorOnlyMode setting
-            var project = new Project
-            {
-                Id = Guid.NewGuid(),
-                Title = "Test Project",
-                BookTitle = "Test Book",
-                Author = "Author",
-                Filename = "test.txt",
-                Type = Read2Me.Data.Enums.BookFileType.Text,
-                NarratorOnlyMode = narratorOnlyMode
-            };
-            db.Projects.Add(project);
-
-            // Seed narrator voice
-            var voice = new Voice
-            {
-                Id = Guid.NewGuid(),
-                CharacterId = ProjectDbContext.NarratorId,
-                Name = "Narrator Voice",
-                Source = VoiceSource.Uploaded,
-                AudioFileName = voiceAudioFile
-            };
-            db.Voices.Add(voice);
-            db.VoiceRules.Add(new VoiceRule
-            {
-                Id = Guid.NewGuid(),
-                CharacterId = ProjectDbContext.NarratorId,
-                VoiceId = voice.Id,
-                IsDefault = true,
-                Rank = OrderKeyGenerator.GenerateKeyBetween(null, null),
-            });
-            var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceAudioFile.Replace('/', Path.DirectorySeparatorChar));
-            _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
-
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character,
-                CharacterId = null,  // unattributed
-                Text = "He said something",
-                Order = Key()
-            };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-            await db.SaveChangesAsync();
-
-            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
-            return (new QueuedAudioItem(_folder, itemRef), item.Id);
-        }
-
-        [Fact]
-        public async Task ProcessItemAsync_NarratorOnlyMode_UnattributedCharacterItem_UsesNarratorVoice()
-        {
-            var (queuedItem, itemId) = await SeedUnattributedCharacterItemAsync(narratorOnlyMode: true);
-            _transcriber.Transcript = "He said something";
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            // TTS was called — item was not failed
-            Assert.True(_ttsClient.WasCalled);
-            // No Failed event published
-            Assert.DoesNotContain(_events, e => e is Failed);
-            // WAV stored
-            var expectedPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
-        }
-
-        [Fact]
-        public async Task ProcessItemAsync_NarratorOnlyMode_False_UnattributedCharacterItem_Fails()
-        {
-            var (queuedItem, itemId) = await SeedUnattributedCharacterItemAsync(narratorOnlyMode: false);
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.False(_ttsClient.WasCalled);
-            var failed = Assert.Single(_events.OfType<Failed>());
-            Assert.Contains("No character assigned", failed.Reason);
-        }
-
-        [Fact]
-        public async Task PositionalRule_CoveringItem_UsesRuleVoice_NotDefault()
-        {
-            // Seed: character with default voice A + chapter-scoped rule for voice B.
-            // Item is in the chapter covered by the rule → processor must pick voice B.
-            await using var db = await OpenDbAsync();
-
-            var charId = Guid.NewGuid();
-            db.Characters.Add(new Character { Id = charId, Name = "Alice" });
-
-            const string voiceAAudio = "voices/alice/voice_a.wav";
-            const string voiceBAudio = "voices/alice/voice_b.wav";
-            const byte voiceAByte = 0xAA;
-            const byte voiceBByte = 0xBB;
-
-            var voiceA = new Voice { Id = Guid.NewGuid(), CharacterId = charId, Name = "Voice A", Source = VoiceSource.Uploaded, AudioFileName = voiceAAudio };
-            var voiceB = new Voice { Id = Guid.NewGuid(), CharacterId = charId, Name = "Voice B", Source = VoiceSource.Uploaded, AudioFileName = voiceBAudio };
-            db.Voices.Add(voiceA);
-            db.Voices.Add(voiceB);
-
-            // Default rule (rank floor) → voice A
-            var defaultRank = OrderKeyGenerator.GenerateKeyBetween(null, null);
-            db.VoiceRules.Add(new VoiceRule { Id = Guid.NewGuid(), CharacterId = charId, VoiceId = voiceA.Id, IsDefault = true, Rank = defaultRank });
-
-            var vol  = new Volume    { Id = Guid.NewGuid(), Title = "V",  Order = Key() };
-            var part = new Part      { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch   = new Chapter   { Id = Guid.NewGuid(), PartId   = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id,  Order = Key(), CharacterId = charId };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character, CharacterId = charId,
-                Text = "Alice speaks", Order = Key()
-            };
-
-            // Positional rule (higher rank) → voice B, just this chapter
-            var posRank = OrderKeyGenerator.GenerateKeyBetween(defaultRank, null);
-            db.VoiceRules.Add(new VoiceRule
-            {
-                Id = Guid.NewGuid(), CharacterId = charId, VoiceId = voiceB.Id,
-                IsDefault = false, Rank = posRank,
-                FromLevel = Data.Enums.VoiceAnchorLevel.Chapter, FromNodeId = ch.Id,
-                ToLevel   = Data.Enums.VoiceAnchorLevel.Chapter, ToNodeId   = ch.Id,
-            });
-
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch);
-            db.Paragraphs.Add(para); db.ParagraphItems.Add(item);
-            await db.SaveChangesAsync();
-
-            // Seed reference audio files with distinct first bytes
-            var folderPath = _fs.GetProjectFolderPath(FolderName);
-            _fs.SeedFile(Path.Combine(folderPath, voiceAAudio.Replace('/', Path.DirectorySeparatorChar)), [voiceAByte]);
-            _fs.SeedFile(Path.Combine(folderPath, voiceBAudio.Replace('/', Path.DirectorySeparatorChar)), [voiceBByte]);
-
-            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
-            var queuedItem = new QueuedAudioItem(_folder, itemRef);
-
-            await _sut.ProcessItemAsync(queuedItem, CancellationToken.None);
-
-            Assert.True(_ttsClient.WasCalled);
-            Assert.Equal(voiceBByte, _ttsClient.LastReferenceAudioFirstByte);
-        }
-
-        // --- Fakes --------------------------------------------------------------------
-
-        private sealed class FakeTtsClient : IParagraphTtsClient
-        {
-            public bool WasCalled => CallCount > 0;
-            public int CallCount { get; private set; }
-            public string? LastVoiceInstructions { get; private set; }
-            public string? LastText { get; private set; }
-            public byte LastReferenceAudioFirstByte { get; private set; }
-
-            public Task<Stream> GenerateAsync(string text, string? voiceInstructions, Stream referenceAudioStream,
-                ParagraphTtsServiceConfig settings, string? settingsOverrideJson, CancellationToken ct = default)
-            {
-                CallCount++;
-                LastVoiceInstructions = voiceInstructions;
-                LastText = text;
-                var buf = new byte[1];
-                _ = referenceAudioStream.Read(buf, 0, 1);
-                LastReferenceAudioFirstByte = buf[0];
-                Stream result = new MemoryStream([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00]);
-                return Task.FromResult(result);
-            }
-        }
-
-        private sealed class FakeTtsClientResolver(IParagraphTtsClient client) : IParagraphTtsClientResolver
-        {
-            public IParagraphTtsClient Resolve(ParagraphTtsServiceType type) => client;
-        }
-
-        private sealed class FakeTtsSettingsService(ParagraphTtsServiceConfig config) : ParagraphTtsSettingsService(null!, null!)
-        {
-            public override Task<ParagraphTtsServiceConfig?> GetActiveConfigAsync() =>
-                Task.FromResult<ParagraphTtsServiceConfig?>(config);
-        }
-
-        private sealed class FakeNormalizer : IAudioNormalizer
-        {
-            // Default: normalized passthrough.
-            public (NormalizeStatus Status, string? Reason) Result { get; set; } = (NormalizeStatus.Normalized, null);
-
-            public async Task<NormalizeResult> NormalizeAsync(Stream wav, string? ffmpegPath, CancellationToken ct = default)
-            {
-                var ms = new MemoryStream();
-                if (wav.CanSeek) wav.Position = 0;
-                await wav.CopyToAsync(ms, ct);
-                ms.Position = 0;
-                return new NormalizeResult(Result.Status, ms, Result.Reason);
-            }
-
-            public Task<Stream> NormalizeToWavAsync(Stream input, string? ffmpegPath, CancellationToken ct = default) =>
-                throw new NotSupportedException("Not used in audio queue processor tests.");
-        }
-
-        private sealed class FakeSemanticVerifier : ISemanticVerifier
-        {
-            // Default: no rescue (passes = false, score = null).
-            public bool Passes { get; set; } = false;
-            public double? Score { get; set; } = null;
-            public double? Threshold { get; set; } = null;
-            public bool WasCalled { get; private set; }
-
-            public Task<(bool Passes, double? Score, double? Threshold)> PassesAsync(
-                string source, string transcript, CancellationToken ct = default)
-            {
-                WasCalled = true;
-                return Task.FromResult((Passes, Score, Threshold));
-            }
-        }
-
-        private sealed class FakeWerComparer : IWerComparer
-        {
-            private readonly Queue<double> _queue = new();
-            public double Result { get; set; }
-            public FakeWerComparer(double result) => Result = result;
-
-            /// Queue per-call results; when exhausted falls back to Result.
-            public void EnqueueResults(params double[] results)
-            {
-                foreach (var r in results) _queue.Enqueue(r);
-            }
-
-            public double Compute(string reference, string hypothesis) =>
-                _queue.Count > 0 ? _queue.Dequeue() : Result;
-        }
-
-        private sealed class FakeTranscriptionClient : ITranscriptionClient
-        {
-            public FakeTranscriptionClient(string transcript) => Transcript = transcript;
-            public string Transcript { get; set; }
-            public string? ThrowMessage { get; set; }
-            public bool WasCalled { get; private set; }
-
-            public Task<string> TranscribeAsync(TranscriptionServiceConfig config, Stream audio, string fileName,
-                CancellationToken ct = default)
-            {
-                WasCalled = true;
-                if (ThrowMessage is not null)
-                    throw new InvalidOperationException(ThrowMessage);
-                return Task.FromResult(Transcript);
-            }
-        }
-
-        private sealed class FakeTranscriptionResolver(ITranscriptionClient client) : ITranscriptionClientResolver
-        {
-            public ITranscriptionClient Resolve(TranscriptionServiceType type) => client;
-        }
-
-        private sealed class FakeTranscriptionSettings(TranscriptionServiceConfig? config)
-            : TranscriptionSettingsService(null!, NullLogger<TranscriptionSettingsService>.Instance)
-        {
-            public TranscriptionServiceConfig? Config { get; set; } = config;
-            public override Task<TranscriptionServiceConfig?> GetActiveConfigAsync() =>
-                Task.FromResult(Config);
-        }
-
-        private sealed class FakeAudioProcessingSettings : AudioProcessingSettingsService
-        {
-            private readonly string? _ffmpegPath;
-            private readonly double _werThreshold;
-            private readonly int _audioMaxAttempts;
-
-            public FakeAudioProcessingSettings(string? ffmpegPath, double werThreshold, int audioMaxAttempts = 1)
-                : base(null!, null!, NullLogger<AudioProcessingSettingsService>.Instance)
-            {
-                _ffmpegPath = ffmpegPath;
-                _werThreshold = werThreshold;
-                _audioMaxAttempts = audioMaxAttempts;
-            }
-
-            public override Task<AudioProcessingSettings> GetAsync() =>
-                Task.FromResult(new AudioProcessingSettings(
-                    _ffmpegPath, _werThreshold,
-                    SentenceSplitEnabled: false, ChunkPauseMs: 300,
-                    VolumePauseMs: 4000, PartPauseMs: 3000, ChapterPauseMs: 2500,
-                    ParagraphPauseMs: 800, PauseMs: 500, AudioMaxAttempts: _audioMaxAttempts));
+            Assert.Contains(_events, e => e is ItemStarted s && s.Character == "Bilbo" && s.Text == "Some text");
         }
     }
 }
