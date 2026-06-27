@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
@@ -20,7 +21,7 @@ namespace Read2Me.Services.Characters
         LlmPromptService prompts,
         IProjectReader reader,
         ILogger<CharacterAttributionService> logger,
-        LlmStreamBroadcaster broadcaster)
+        EventBroadcaster<LlmStreamEvent> broadcaster)
     {
         public virtual async Task<AttributionOutcome> AttributeAsync(QueuedParagraph item, CancellationToken ct)
         {

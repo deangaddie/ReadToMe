@@ -5,6 +5,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
@@ -31,10 +32,10 @@ namespace Read2Me.Tests.Services.Characters
 
         private CharacterAttributionService NewService(ILlmClient llm, IProjectReader reader,
             LlmSettingsService? settings = null, LlmPromptService? prompts = null,
-            LlmStreamBroadcaster? broadcaster = null) =>
+            EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
             new(llm, settings ?? NewSettings(), prompts ?? NewPrompts(), reader,
                 NullLogger<CharacterAttributionService>.Instance,
-                broadcaster ?? new LlmStreamBroadcaster());
+                broadcaster ?? new EventBroadcaster<LlmStreamEvent>());
 
         private static async Task<LlmServerConfig> RegisterActiveConfigAsync(LlmSettingsService svc)
         {
@@ -314,7 +315,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new FakeLlmClientWithThinking(
                 thinking: "Let me think...",
                 content: """{ "character": "Alice", "voice_instructions": "calm" }""");
-            var broadcaster = new LlmStreamBroadcaster();
+            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
             var events = new List<LlmStreamEvent>();
             broadcaster.Event += e => events.Add(e);
 
@@ -337,7 +338,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var llm = new FakeLlmClient("not json");
-            var broadcaster = new LlmStreamBroadcaster();
+            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
             var events = new List<LlmStreamEvent>();
             broadcaster.Event += e => events.Add(e);
 
@@ -356,7 +357,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var llm = new FakeLlmClient(throws: new InvalidOperationException("network down"));
-            var broadcaster = new LlmStreamBroadcaster();
+            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
             var events = new List<LlmStreamEvent>();
             broadcaster.Event += e => events.Add(e);
 

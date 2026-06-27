@@ -1,5 +1,6 @@
 @using System.Text
-@inject LlmStreamBroadcaster Broadcaster
+@using Read2Me.Services.Events
+@inject EventBroadcaster<LlmStreamEvent> Broadcaster
 @implements IDisposable
 
 <div @ref="_scrollContainer"

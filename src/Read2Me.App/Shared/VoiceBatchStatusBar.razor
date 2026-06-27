@@ -1,5 +1,7 @@
 @using Read2Me.App.Characters
-@inject CharacterBatchService Batch
+@using Read2Me.Services.Events
+@inject VoiceBatchRunner Batch
+@inject EventBroadcaster<VoiceBatchEvent> BatchEvents
 @implements IDisposable
 
 @{
@@ -51,7 +53,7 @@
 @code {
     protected override void OnInitialized()
     {
-        Batch.BatchEvent += OnEvent;
+        BatchEvents.Event += OnEvent;
     }
 
     void OnEvent(VoiceBatchEvent _) => InvokeAsync(StateHasChanged);
@@ -60,6 +62,6 @@
 
     public void Dispose()
     {
-        Batch.BatchEvent -= OnEvent;
+        BatchEvents.Event -= OnEvent;
     }
 }

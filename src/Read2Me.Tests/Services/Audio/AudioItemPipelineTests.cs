@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Events;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
@@ -127,7 +128,7 @@ namespace Read2Me.Tests.Services.Audio
         private readonly FakeTranscriptionClient _transcriber = new();
         private readonly FakeTranscriptionSettings _transcriptionSettings;
         private readonly FakeSemanticVerifier _semantic = new();
-        private readonly AudioGenBroadcaster _broadcaster = new();
+        private readonly EventBroadcaster<AudioGenEvent> _broadcaster = new();
         private readonly List<AudioGenEvent> _events = new();
         private readonly IAudioItemPipeline _sut;
         private readonly FakeFileSystem _fs = new();

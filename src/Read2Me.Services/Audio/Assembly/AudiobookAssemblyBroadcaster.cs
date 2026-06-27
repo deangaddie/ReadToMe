@@ -17,10 +17,5 @@ namespace Read2Me.Services.Audio.Assembly
         Finalize,
     }
 
-    /// Singleton bridge: background assembly job publishes; status bar subscribes.
-    public sealed class AudiobookAssemblyBroadcaster
-    {
-        public event Action<AssemblyEvent>? Event;
-        public void Publish(AssemblyEvent e) => Event?.Invoke(e);
-    }
+
 }

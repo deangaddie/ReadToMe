@@ -11,10 +11,5 @@ namespace Read2Me.Services.Audio
     public sealed record Verified(Guid Id, int Attempt, bool Ok, double? Wer, string? Reason, bool Rescued = false) : AudioGenEvent;
     public sealed record Failed(Guid Id, int Attempt, string Reason) : AudioGenEvent;
 
-    /// Singleton bridge: scoped audio queue processor publishes; stream view subscribes.
-    public sealed class AudioGenBroadcaster
-    {
-        public event Action<AudioGenEvent>? Event;
-        public void Publish(AudioGenEvent e) => Event?.Invoke(e);
-    }
+
 }

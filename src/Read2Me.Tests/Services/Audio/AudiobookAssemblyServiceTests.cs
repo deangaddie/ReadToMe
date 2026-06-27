@@ -6,6 +6,7 @@ using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
+using Read2Me.Services.Events;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -85,7 +86,7 @@ namespace Read2Me.Tests.Services.Audio
                 encodeDelayMs: encodeDelayMs,
                 encodeCts: encodeCts);
 
-            var broadcaster = new AudiobookAssemblyBroadcaster();
+            var broadcaster = new EventBroadcaster<AssemblyEvent>();
             var events = new List<AssemblyEvent>();
             broadcaster.Event += e => { lock (events) events.Add(e); };
 

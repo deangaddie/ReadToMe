@@ -22,6 +22,7 @@ using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Books;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Events;
 using Read2Me.Services.IO;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Llm;
@@ -67,7 +68,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<LlmSettingsService>();
         services.AddScoped<LlmPromptService>();
         services.AddScoped<ILlmClient, OpenAiLlmClient>();
-        services.AddSingleton<LlmStreamBroadcaster>();
+        services.AddSingleton<EventBroadcaster<LlmStreamEvent>>();
         return services;
     }
 
@@ -97,9 +98,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<AudioProcessingSettingsService>();
         services.AddSingleton<IWerComparer, WerComparer>();
         services.AddSingleton<Read2Me.Services.Audio.AudioReviewService>();
-        services.AddSingleton<Read2Me.Services.Audio.AudioGenBroadcaster>();
+        services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.AudioGenEvent>>();
         services.AddScoped<IAudioNormalizer, FfmpegAudioNormalizer>();
-        services.AddSingleton<AudiobookAssemblyBroadcaster>();
+        services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.Assembly.AssemblyEvent>>();
         services.AddSingleton<IAudiobookEncoder, AudiobookEncoder>();
         services.AddSingleton<AudiobookAssemblyService>();
         services.AddScoped<ITranscriptionClientResolver, TranscriptionClientResolver>();
@@ -112,6 +113,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, FileAudioPipeline>();
         services.AddScoped<IAudioItemPipeline, AudioItemPipeline>();
         services.AddScoped<IAudioItemResolver, AudioItemResolver>();
+        services.AddScoped<IAudioResultRecorder, AudioResultRecorder>();
         services.AddScoped<VoiceDesignPromptService>();
         services.AddScoped<IParagraphTtsClientResolver, ParagraphTtsClientResolver>();
         services.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.VoxCpm2);
@@ -139,7 +141,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<CharacterResolver>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddScoped<CharacterPresenter>();
-        services.AddSingleton<CharacterBatchService>();
+        services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();
+        services.AddSingleton<VoiceBatchRunner>();
         return services;
     }
 

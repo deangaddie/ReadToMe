@@ -3,6 +3,7 @@ using Read2Me.App.Audio;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Events;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -14,16 +15,13 @@ namespace Read2Me.Tests.App.Audio
         private readonly AudioQueueService _queue;
         private readonly FakeAudioItemResolver _resolver;
         private readonly FakeAudioItemPipeline _pipeline;
-        private readonly FakeBookCommandHandler _commands;
-        private readonly FakeFileSystem _fs;
-        private readonly AudioReviewService _reviews;
-        private readonly AudioGenBroadcaster _broadcaster;
+        private readonly FakeAudioResultRecorder _recorder;
+        private readonly EventBroadcaster<AudioGenEvent> _broadcaster;
         private readonly List<AudioGenEvent> _events = new();
         private readonly ProjectFolderId _folder;
         private readonly AudioQueueProcessor _sut;
 
         private const string FolderName = "test-book";
-        private const string FakeRoot = @"C:\fake-workspace";
 
         private static readonly PipelineRequest DefaultRequest = new(
             ParagraphItemId: Guid.NewGuid(),
@@ -55,19 +53,16 @@ namespace Read2Me.Tests.App.Audio
         {
             _folder = new ProjectFolderId(FolderName);
             _queue = new AudioQueueService();
-            _fs = new FakeFileSystem(FakeRoot);
-            _fs.SeedFolder(FolderName);
-            _reviews = new AudioReviewService();
-            _broadcaster = new AudioGenBroadcaster();
+            _broadcaster = new EventBroadcaster<AudioGenEvent>();
             _broadcaster.Event += e => _events.Add(e);
-            _commands = new FakeBookCommandHandler();
 
             _resolver = new FakeAudioItemResolver { Result = SuccessResolution() };
             _pipeline = new FakeAudioItemPipeline { Result = OkResult() };
+            _recorder = new FakeAudioResultRecorder();
 
             _sut = new AudioQueueProcessor(
-                _queue, _resolver, _pipeline, _commands, _fs,
-                _reviews, _broadcaster, NullLogger<AudioQueueProcessor>.Instance);
+                _queue, _resolver, _pipeline, _recorder,
+                _broadcaster, NullLogger<AudioQueueProcessor>.Instance);
         }
 
         private QueuedAudioItem MakeItem(Guid? itemId = null)
@@ -75,20 +70,6 @@ namespace Read2Me.Tests.App.Audio
             var id = itemId ?? Guid.NewGuid();
             var itemRef = new AudioItemRef(id, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
             return new QueuedAudioItem(_folder, itemRef);
-        }
-
-        [Fact]
-        public async Task Success_WritesWavFile_AndCompletesQueue()
-        {
-            var itemId = Guid.NewGuid();
-            _resolver.Result = SuccessResolution(itemId);
-            var queued = MakeItem(itemId);
-
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
-
-            var expectedPath = Path.Combine(FakeRoot, FolderName, "audio", $"{itemId}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
-            Assert.Null(_queue.OutcomeOf(_folder, itemId));
         }
 
         [Fact]
@@ -102,15 +83,16 @@ namespace Read2Me.Tests.App.Audio
         }
 
         [Fact]
-        public async Task Success_ExecutesBothCommands()
+        public async Task Success_MarkComplete_UsesRecorderReturnedPath()
         {
-            var queued = MakeItem();
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _recorder.CannedRelativePath = "audio/canned.wav";
+            var queued = MakeItem(itemId);
 
             await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
-            Assert.Equal(2, _commands.Executed.Count);
-            Assert.Contains(_commands.Executed, c => c is SetParagraphItemAudioCommand);
-            Assert.Contains(_commands.Executed, c => c is SetAudioReviewCommand);
+            Assert.Null(_queue.OutcomeOf(_folder, itemId));
         }
 
         [Fact]
@@ -154,57 +136,6 @@ namespace Read2Me.Tests.App.Audio
             var outcome = _queue.OutcomeOf(_folder, itemId);
             Assert.NotNull(outcome);
             Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
-        }
-
-        [Fact]
-        public async Task NormalizeOk_False_SetsReviewService()
-        {
-            var itemId = Guid.NewGuid();
-            _resolver.Result = SuccessResolution(itemId);
-            _pipeline.Result = new PipelineResult(
-                AudioBytes: [0x52, 0x49, 0x46, 0x46],
-                Normalize: new NormalizeOutcome(Ok: false, Reason: "ffmpeg failed"),
-                Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "text", Rescued: false));
-            var queued = MakeItem(itemId);
-
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
-
-            var review = _reviews.ReviewOf(_folder, itemId);
-            Assert.NotNull(review);
-            Assert.False(review!.NormalizeOk);
-        }
-
-        [Fact]
-        public async Task VerifyOk_False_SetsReviewService()
-        {
-            var itemId = Guid.NewGuid();
-            _resolver.Result = SuccessResolution(itemId);
-            _pipeline.Result = new PipelineResult(
-                AudioBytes: [0x52, 0x49, 0x46, 0x46],
-                Normalize: new NormalizeOutcome(Ok: true, Reason: null),
-                Verify: new VerifyOutcome(Ok: false, Wer: 0.42, Reason: "WER 0.42", Transcript: "wrong", Rescued: false));
-            var queued = MakeItem(itemId);
-
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
-
-            var review = _reviews.ReviewOf(_folder, itemId);
-            Assert.NotNull(review);
-            Assert.False(review!.VerifyOk);
-            Assert.Equal(0.42, review.Wer);
-        }
-
-        [Fact]
-        public async Task BothOutcomesOk_ClearsExistingReview()
-        {
-            var itemId = Guid.NewGuid();
-            _reviews.Set(_folder, itemId, new AudioReviewInfo(
-                AudioReviewState.NeedsReview, false, "stale", false, 0.9, "stale", null, null));
-            _resolver.Result = SuccessResolution(itemId);
-            var queued = MakeItem(itemId);
-
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
-
-            Assert.Null(_reviews.ReviewOf(_folder, itemId));
         }
 
         [Fact]

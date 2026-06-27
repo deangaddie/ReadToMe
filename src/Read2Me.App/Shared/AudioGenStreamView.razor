@@ -1,6 +1,7 @@
 @using Read2Me.Services.Audio
 @using Read2Me.App.Audio
-@inject AudioGenBroadcaster Broadcaster
+@using Read2Me.Services.Events
+@inject EventBroadcaster<AudioGenEvent> Broadcaster
 @inject IJSRuntime JS
 @implements IDisposable
 

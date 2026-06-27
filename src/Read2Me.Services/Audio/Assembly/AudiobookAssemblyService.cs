@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Services.Events;
 
 namespace Read2Me.Services.Audio.Assembly
 {
@@ -9,7 +10,7 @@ namespace Read2Me.Services.Audio.Assembly
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IAudiobookEncoder _encoder;
-        private readonly AudiobookAssemblyBroadcaster _broadcaster;
+        private readonly EventBroadcaster<AssemblyEvent> _broadcaster;
         private readonly IFileSystem _fs;
         private readonly ILogger<AudiobookAssemblyService> _logger;
 
@@ -25,7 +26,7 @@ namespace Read2Me.Services.Audio.Assembly
         public AudiobookAssemblyService(
             IServiceScopeFactory scopeFactory,
             IAudiobookEncoder encoder,
-            AudiobookAssemblyBroadcaster broadcaster,
+            EventBroadcaster<AssemblyEvent> broadcaster,
             IFileSystem fs,
             ILogger<AudiobookAssemblyService> logger)
         {

@@ -1,7 +1,9 @@
 @using Read2Me.App.State
 @using Read2Me.App.Characters
+@using Read2Me.Services.Events
 @inject CharacterPresenter Presenter
-@inject CharacterBatchService BatchService
+@inject VoiceBatchRunner BatchService
+@inject EventBroadcaster<VoiceBatchEvent> BatchEvents
 @inject IDialogService DialogService
 @implements IDisposable
 
@@ -98,7 +100,7 @@ else
     protected override async Task OnParametersSetAsync()
     {
         Presenter.StateChanged += Refresh;
-        BatchService.BatchEvent += OnBatchEvent;
+        BatchEvents.Event += OnBatchEvent;
         await Presenter.LoadAsync(new Core.Models.ProjectFolderId(FolderName));
         _selectedCharacter = Presenter.SelectedCharacter;
     }
@@ -153,6 +155,6 @@ else
     public void Dispose()
     {
         Presenter.StateChanged -= Refresh;
-        BatchService.BatchEvent -= OnBatchEvent;
+        BatchEvents.Event -= OnBatchEvent;
     }
 }

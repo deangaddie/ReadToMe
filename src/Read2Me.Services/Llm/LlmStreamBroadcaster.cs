@@ -8,10 +8,5 @@ namespace Read2Me.Services.Llm
         double ElapsedSeconds, double TokensPerSecond) : LlmStreamEvent;
     public sealed record StreamFailed(string Reason) : LlmStreamEvent;
 
-    /// Singleton bridge: scoped attribution service publishes; dialog subscribes.
-    public sealed class LlmStreamBroadcaster
-    {
-        public event Action<LlmStreamEvent>? Event;
-        public void Publish(LlmStreamEvent e) => Event?.Invoke(e);
-    }
+
 }

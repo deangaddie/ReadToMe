@@ -4,6 +4,7 @@ using Read2Me.Core.IO;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Services.Events;
 
 namespace Read2Me.Services.Audio
 {
@@ -14,7 +15,7 @@ namespace Read2Me.Services.Audio
         ITranscriptionClientResolver transcriptionResolver,
         TranscriptionSettingsService transcriptionSettings,
         ISemanticVerifier semanticVerifier,
-        AudioGenBroadcaster broadcaster,
+        EventBroadcaster<AudioGenEvent> broadcaster,
         IFileSystem fs,
         ILogger<AudioItemPipeline> logger) : IAudioItemPipeline
     {
