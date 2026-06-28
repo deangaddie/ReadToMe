@@ -9,6 +9,7 @@ using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.IO;
+using Read2Me.Services.Voice;
 using Read2Me.Tests.Infrastructure;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
@@ -17,20 +18,18 @@ using Xunit;
 namespace Read2Me.Tests.App.Audio
 {
     /// <summary>
-    /// Acceptance tests for Issue 006: SplitAudio resolved-voice preview.
-    /// Tests the reader method that backs the voice label; the presenter
-    /// just delegates to it, so the reader tests are the authoritative proof.
+    /// Acceptance tests for Issue 001c: SplitAudio resolved-voice preview via IVoiceResolver.
     /// </summary>
     public class SplitAudioVoicePreviewTests : ProjectDbTestBase
     {
-        private readonly ProjectReader _reader;
+        private readonly VoiceResolver _resolver;
         private readonly ProjectFolderId _folder;
 
         public SplitAudioVoicePreviewTests()
         {
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
             var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
+            _resolver = new VoiceResolver(session);
             _folder = new ProjectFolderId(FolderName);
         }
 
@@ -84,7 +83,6 @@ namespace Read2Me.Tests.App.Audio
         {
             await using var db = await OpenDbAsync();
             var narratorId = ProjectDbContext.NarratorId;
-            // Narrator char is seeded by migration; but voice+rule are not.
             if (!await db.VoiceRules.AnyAsync(r => r.CharacterId == narratorId))
             {
                 var nVoiceId = Guid.NewGuid();
@@ -145,7 +143,7 @@ namespace Read2Me.Tests.App.Audio
             await AddDefaultRuleAsync(charId, voiceId);
             var itemId = await AddCharItemAsync(paraId, charId);
 
-            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+            var result = await _resolver.ResolveNamesAsync(_folder, [itemId]);
 
             Assert.True(result.ContainsKey(itemId));
             Assert.Equal("Default Voice", result[itemId]);
@@ -157,7 +155,7 @@ namespace Read2Me.Tests.App.Audio
             var (_, _, _, paraId, _, _) = await SeedMinimalAsync();
             var itemId = await AddNarratorItemAsync(paraId);
 
-            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+            var result = await _resolver.ResolveNamesAsync(_folder, [itemId]);
 
             Assert.True(result.ContainsKey(itemId));
             Assert.Equal("Narrator Voice", result[itemId]);
@@ -171,7 +169,6 @@ namespace Read2Me.Tests.App.Audio
             var (volId, partId, chId, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
             await AddDefaultRuleAsync(charId, defaultVoiceId);
 
-            // Add second voice with a chapter-level positional rule.
             Guid posVoiceId;
             await using (var db = await OpenDbAsync())
             {
@@ -179,12 +176,11 @@ namespace Read2Me.Tests.App.Audio
                 db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "p.wav" });
                 await db.SaveChangesAsync();
             }
-            // Rule: from ch onward.
             await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, chId);
 
             var itemId = await AddCharItemAsync(paraId, charId);
 
-            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+            var result = await _resolver.ResolveNamesAsync(_folder, [itemId]);
 
             Assert.Equal("Positional Voice", result[itemId]);
         }
@@ -196,12 +192,10 @@ namespace Read2Me.Tests.App.Audio
         {
             var (_, _, _, paraId, charId, voiceId) = await SeedMinimalAsync();
             await AddDefaultRuleAsync(charId, voiceId);
-            // Item has no CharacterId assigned.
             var itemId = await AddCharItemAsync(paraId, charId: null);
 
-            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+            var result = await _resolver.ResolveNamesAsync(_folder, [itemId]);
 
-            // Not in result OR mapped to null — both are acceptable.
             var hasKey = result.TryGetValue(itemId, out var name);
             Assert.True(!hasKey || name == null);
         }
@@ -221,18 +215,98 @@ namespace Read2Me.Tests.App.Audio
                 db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "p.wav" });
                 await db.SaveChangesAsync();
             }
-            // Dangling rule: fromNodeId doesn't exist.
             await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, Guid.NewGuid());
 
             var itemId = await AddCharItemAsync(paraId, charId);
 
-            // Should NOT throw; should return the default voice (dangling rule doesn't match).
-            var result = await _reader.GetResolvedVoiceNamesAsync(_folder, [itemId], narratorOnlyMode: false);
+            var result = await _resolver.ResolveNamesAsync(_folder, [itemId]);
 
             Assert.Equal("Default Voice", result[itemId]);
         }
 
         // ── AC6: dotnet test green ────────────────────────────────────────────
         // (covered by running the suite — no additional test needed)
+
+        // ── 003a: staleness-after-mutation — resolver has no stale layer ─────
+
+        [Fact]
+        public async Task ResolveNamesAsync_RepointDefault_SecondCallReturnsNewVoiceName()
+        {
+            var (_, _, _, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
+            await AddDefaultRuleAsync(charId, defaultVoiceId);
+            var itemId = await AddCharItemAsync(paraId, charId);
+
+            var first = await _resolver.ResolveNamesAsync(_folder, [itemId]);
+            Assert.Equal("Default Voice", first[itemId]);
+
+            // Repoint the default rule to a new voice
+            Guid newVoiceId;
+            await using (var db = await OpenDbAsync())
+            {
+                newVoiceId = Guid.NewGuid();
+                db.Voices.Add(new VoiceEntity { Id = newVoiceId, CharacterId = charId, Name = "New Default Voice", Source = VoiceSource.Uploaded, AudioFileName = "nd.wav" });
+                var rule = await db.VoiceRules.SingleAsync(r => r.CharacterId == charId && r.IsDefault);
+                rule.VoiceId = newVoiceId;
+                await db.SaveChangesAsync();
+            }
+
+            var second = await _resolver.ResolveNamesAsync(_folder, [itemId]);
+            Assert.Equal("New Default Voice", second[itemId]);
+        }
+
+        [Fact]
+        public async Task ResolveNamesAsync_AddPositionalRule_SecondCallReturnsPositionalVoiceName()
+        {
+            var (_, _, chId, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
+            await AddDefaultRuleAsync(charId, defaultVoiceId);
+            var itemId = await AddCharItemAsync(paraId, charId);
+
+            var first = await _resolver.ResolveNamesAsync(_folder, [itemId]);
+            Assert.Equal("Default Voice", first[itemId]);
+
+            // Add positional rule covering this chapter
+            Guid posVoiceId;
+            await using (var db = await OpenDbAsync())
+            {
+                posVoiceId = Guid.NewGuid();
+                db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "pos.wav" });
+                await db.SaveChangesAsync();
+            }
+            await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, chId);
+
+            var second = await _resolver.ResolveNamesAsync(_folder, [itemId]);
+            Assert.Equal("Positional Voice", second[itemId]);
+        }
+
+        [Fact]
+        public async Task ResolveNamesAsync_DeletePositionalRule_SecondCallFallsBackToDefault()
+        {
+            var (_, _, chId, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
+            await AddDefaultRuleAsync(charId, defaultVoiceId);
+
+            Guid posVoiceId;
+            await using (var db = await OpenDbAsync())
+            {
+                posVoiceId = Guid.NewGuid();
+                db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "pos.wav" });
+                await db.SaveChangesAsync();
+            }
+            var posRuleId = await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, chId);
+            var itemId = await AddCharItemAsync(paraId, charId);
+
+            var first = await _resolver.ResolveNamesAsync(_folder, [itemId]);
+            Assert.Equal("Positional Voice", first[itemId]);
+
+            // Delete the positional rule
+            await using (var db = await OpenDbAsync())
+            {
+                var rule = await db.VoiceRules.SingleAsync(r => r.Id == posRuleId);
+                db.VoiceRules.Remove(rule);
+                await db.SaveChangesAsync();
+            }
+
+            var second = await _resolver.ResolveNamesAsync(_folder, [itemId]);
+            Assert.Equal("Default Voice", second[itemId]);
+        }
     }
 }

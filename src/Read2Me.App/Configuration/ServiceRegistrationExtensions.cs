@@ -44,6 +44,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IProjectWriter>(sp => sp.GetRequiredService<ProjectService>());
         services.AddScoped<ProjectReader>();
         services.AddScoped<IProjectReader>(sp => sp.GetRequiredService<ProjectReader>());
+        services.AddScoped<IVoiceResolver, VoiceResolver>();
         services.AddBookCommandHandlers();
         
         services.AddScoped<BookCommandHandler>();
@@ -55,6 +56,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<BookUseCases>();
         services.AddScoped<BookHierarchyLoader>();
         services.AddScoped<IBookProjectLoader, BookProjectLoader>();
+        services.AddScoped<ISelectionCoordinator, BookSelectionCoordinator>();
         services.AddScoped<BookHierarchyPresenter>();
         
         services.AddSingleton<EpubFileReader>();

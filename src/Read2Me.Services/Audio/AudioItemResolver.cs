@@ -12,7 +12,7 @@ namespace Read2Me.Services.Audio
     public sealed class AudioItemResolver(
         IFileSystem fs,
         IProjectDbContextFactory dbFactory,
-        IProjectReader reader,
+        IVoiceResolver voiceResolver,
         ParagraphTtsSettingsService ttsSettings,
         AudioProcessingSettingsService audioProcessingSettings) : IAudioItemResolver
     {
@@ -37,41 +37,31 @@ namespace Read2Me.Services.Audio
 
             var sourceText = row.Text ?? string.Empty;
 
-            var narratorOnly = await db.Projects
-                .AsNoTracking()
-                .Select(p => p.NarratorOnlyMode)
-                .FirstOrDefaultAsync(ct);
+            var map = await voiceResolver.ResolveAsync(folder, [itemRef.ParagraphItemId], ct);
+            map.TryGetValue(itemRef.ParagraphItemId, out var selectedVoiceId);
 
-            var characterId = narratorOnly || row.ItemType == ParagraphItemType.Narration
-                ? ProjectDbContext.NarratorId
-                : row.CharacterId;
-
-            if (characterId is null)
-                return new ResolutionResult(speaker, sourceText, null,
-                    "No character assigned to item");
-
-            var (itemPos, ruleInputs) = await reader.GetVoiceRuleInputsAsync(folder, itemRef.ParagraphItemId, characterId.Value);
-            var selectedVoiceId = VoiceRuleEvaluator.Evaluate(ruleInputs, itemPos);
-
-            var voice = selectedVoiceId.HasValue
-                ? await db.Voices
-                    .AsNoTracking()
-                    .Include(v => v.Character)
-                    .FirstOrDefaultAsync(v => v.Id == selectedVoiceId.Value, ct)
-                : null;
-
-            if (voice is null)
+            if (selectedVoiceId is null)
             {
+                // No CharacterId on a Character item → unattributed, not a missing-voice issue
+                if (row.ItemType == ParagraphItemType.Character && row.CharacterId is null)
+                    return new ResolutionResult(speaker, sourceText, null,
+                        "No character assigned to item");
+
                 var charName = row.ItemType == ParagraphItemType.Narration
                     ? "Narrator"
-                    : (row.Character?.Name ?? characterId.ToString());
+                    : (row.Character?.Name ?? row.CharacterId?.ToString() ?? "unknown");
                 return new ResolutionResult(speaker, sourceText, null,
                     $"No default voice for {charName}");
             }
 
-            if (string.IsNullOrEmpty(voice.AudioFileName))
+            var voice = await db.Voices
+                .AsNoTracking()
+                .Include(v => v.Character)
+                .FirstOrDefaultAsync(v => v.Id == selectedVoiceId.Value, ct);
+
+            if (voice is null || string.IsNullOrEmpty(voice.AudioFileName))
             {
-                var charName = voice.Character?.Name ?? voice.Id.ToString();
+                var charName = voice?.Character?.Name ?? voice?.Id.ToString() ?? selectedVoiceId.Value.ToString();
                 return new ResolutionResult(speaker, sourceText, null,
                     $"Voice '{charName}' has no reference audio");
             }

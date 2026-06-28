@@ -14,6 +14,7 @@ using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Events;
 using Read2Me.Services.Voice;
+using Read2Me.Tests.Fakes;
 using Xunit;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
@@ -548,7 +549,7 @@ namespace Read2Me.Tests.Services.Characters
             FakeCommandHandler CommandHandler,
             List<VoiceBatchEvent> Events);
 
-        private sealed class FakeProjectReader2 : IProjectReader
+        private sealed class FakeProjectReader2 : ProjectReaderFakeBase
         {
             private readonly IReadOnlyList<Character> _characters;
             private readonly Dictionary<Guid, List<VoiceEntity>> _voicesByCharacter;
@@ -567,46 +568,17 @@ namespace Read2Me.Tests.Services.Characters
                 _author = author;
             }
 
-            public Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) =>
+            public override Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) =>
                 Task.FromResult(_characters.ToList());
 
-            public Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId)
+            public override Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId)
             {
                 _voicesByCharacter.TryGetValue(characterId, out var voices);
                 return Task.FromResult(voices ?? new List<VoiceEntity>());
             }
 
-            public Task<Project?> GetProjectAsync(ProjectFolderId folderId) =>
+            public override Task<Project?> GetProjectAsync(ProjectFolderId folderId) =>
                 Task.FromResult<Project?>(new Project { BookTitle = _bookTitle, Author = _author });
-
-            // Unused — throw to catch accidental calls
-            public IReadOnlyList<string> GetProjects() => throw new NotImplementedException();
-            public Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync() => throw new NotImplementedException();
-            public Task<bool> HasBookContentAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<List<Part>> GetPartsAsync(ProjectFolderId folderId, Guid volumeId) => throw new NotImplementedException();
-            public Task<List<Chapter>> GetChaptersAsync(ProjectFolderId folderId, Guid partId) => throw new NotImplementedException();
-            public Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId folderId, Guid chapterId) => throw new NotImplementedException();
-            public Task<HierarchyChildren> GetChildrenAsync(ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId) => throw new NotImplementedException();
-            public Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => throw new NotImplementedException();
-            public Task<(StoryPosition ItemPosition, IReadOnlyList<RuleInput> Rules)> GetVoiceRuleInputsAsync(ProjectFolderId folderId, Guid itemId, Guid characterId) => throw new NotImplementedException();
-            public Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId) => throw new NotImplementedException();
-            public Task<IReadOnlyDictionary<Guid, string?>> GetResolvedVoiceNamesAsync(ProjectFolderId folderId, IEnumerable<Guid> itemIds, bool narratorOnlyMode) => throw new NotImplementedException();
-            public Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId) => throw new NotImplementedException();
-            public Task<int> GetTotalPartCountAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false) => throw new NotImplementedException();
-            public Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) => throw new NotImplementedException();
-            public Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false) => throw new NotImplementedException();
-            public Task<List<AudioItemRef>> GetOrderedAudioItemRefsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphItemIds) => throw new NotImplementedException();
-            public Task<IReadOnlyDictionary<Guid, int>> GetNodeAudioItemCountsAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<List<(Guid ParagraphItemId, AudioReviewInfo Info)>> GetAudioReviewsAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>> GetNodeStatusSeedAsync(ProjectFolderId folderId) => throw new NotImplementedException();
-            public Task<ParagraphContext?> GetParagraphContextAsync(ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after) => throw new NotImplementedException();
-            public Task<IReadOnlyList<AssemblyManifestEntry>> GetAssemblyManifestAsync(ProjectFolderId folder, CancellationToken ct) => throw new NotImplementedException();
         }
 
         private sealed class FakeCommandHandler : IBookCommandHandler

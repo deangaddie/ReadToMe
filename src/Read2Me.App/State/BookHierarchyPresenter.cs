@@ -10,6 +10,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.UseCases;
+using Read2Me.Services.Voice;
 
 namespace Read2Me.App.State
 {
@@ -27,7 +28,9 @@ namespace Read2Me.App.State
         CharacterQueueService characterQueue,
         AudioQueueService audioQueue,
         AudioReviewService audioReviews,
-        NodeStatusService nodeStatus) : IDisposable
+        NodeStatusService nodeStatus,
+        IVoiceResolver voiceResolver,
+        ISelectionCoordinator selectionCoordinator) : IDisposable
     {
         public bool IsLoading { get; private set; }
         public bool HasContent { get; private set; }
@@ -43,6 +46,10 @@ namespace Read2Me.App.State
                 _viewMode = value;
                 Selection?.Clear();
                 AudioSelection?.Clear();
+                // Voice rules can be edited on another tab without a reload; clear
+                // the preview cache on (re)entry so it re-resolves against the DB.
+                if (value == BookViewMode.SplitAudio)
+                    InvalidateVoicePreview();
                 NotifyStateChanged();
             }
         }
@@ -66,28 +73,33 @@ namespace Read2Me.App.State
 
         public bool NarratorOnlyMode { get; private set; }
 
-        // Voice preview cache for SplitAudio view: itemId → resolved voice name (null = no voice)
-        private readonly Dictionary<Guid, string?> _voicePreviewCache = new();
-        private readonly HashSet<Guid> _voicePreviewLoaded = new(); // item ids already fetched
+        private readonly Dictionary<Guid, string?> _resolvedVoiceNames = new();
 
         public string? ResolvedVoiceName(Guid itemId) =>
-            _voicePreviewCache.TryGetValue(itemId, out var name) ? name : null;
+            _resolvedVoiceNames.TryGetValue(itemId, out var name) ? name : null;
 
+        // Resolves voice names only for item ids not already cached, then merges
+        // (does not replace). Cheap no-op once an item is resolved, so it is safe
+        // to call from render — toggles no longer trigger resolver work.
         public async Task EnsureVoicePreviewAsync(ProjectFolderId folderId, IEnumerable<Guid> itemIds)
         {
-            var missing = itemIds.Where(id => !_voicePreviewLoaded.Contains(id)).ToList();
+            var missing = itemIds.Where(id => !_resolvedVoiceNames.ContainsKey(id)).ToList();
             if (missing.Count == 0) return;
-            foreach (var id in missing) _voicePreviewLoaded.Add(id);
-            var resolved = await reader.GetResolvedVoiceNamesAsync(folderId, missing, NarratorOnlyMode);
-            foreach (var (id, name) in resolved)
-                _voicePreviewCache[id] = name;
+
+            var names = await voiceResolver.ResolveNamesAsync(folderId, missing);
+            foreach (var (id, name) in names)
+                _resolvedVoiceNames[id] = name;
         }
+
+        // Drops cached voice previews so the next render re-resolves. Call when
+        // anything affecting voice selection changes (voice rules, attribution,
+        // narrator-only mode, reload).
+        public void InvalidateVoicePreview() => _resolvedVoiceNames.Clear();
 
         public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
         public bool IsNodeAudioSelectable(Guid nodeId) => _audioNodeCounts.ContainsKey(nodeId) && _audioNodeCounts[nodeId] > 0;
 
         private ProjectFolderId? _lastFolder;
-        private bool _queueSubscribed;
         private bool _audioQueueSubscribed;
 
         public event Action? StateChanged;
@@ -95,12 +107,6 @@ namespace Read2Me.App.State
         public async Task LoadAsync(ProjectFolderId folderId)
         {
             IsLoading = true;
-
-            if (!_queueSubscribed)
-            {
-                characterQueue.Changed += OnQueueChanged;
-                _queueSubscribed = true;
-            }
 
             if (!_audioQueueSubscribed)
             {
@@ -115,6 +121,7 @@ namespace Read2Me.App.State
             }
 
             _lastFolder = folderId;
+            selectionCoordinator.SetCurrentFolder(folderId);
             Tree = treeState.For(folderId);
             Tree.Changed -= NotifyStateChanged;
             Tree.Changed += NotifyStateChanged;
@@ -135,6 +142,7 @@ namespace Read2Me.App.State
             Selection.SetCounts(_nodeCounts);
             _audioNodeCounts = snapshot.AudioNodeCounts;
             AudioSelection.SetCounts(_audioNodeCounts);
+            InvalidateVoicePreview();
 
             // Load audio-review flags from prior sessions so they surface on project open.
             if (snapshot.HasContent)
@@ -156,8 +164,6 @@ namespace Read2Me.App.State
             selectionState.Reset(folderId);
             audioSelectionState.Reset(folderId);
             nodeStatus.Clear(folderId);
-            _voicePreviewCache.Clear();
-            _voicePreviewLoaded.Clear();
             Tree?.Reset();
             await LoadAsync(folderId);
         }
@@ -217,6 +223,7 @@ namespace Read2Me.App.State
                 .Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null) ?? 0;
             nodeStatus.OnCharacterAttributed(folderId, item.ParagraphId, remainingUnattributed);
 
+            InvalidateVoicePreview();
             NotifyStateChanged();
         }
 
@@ -231,6 +238,7 @@ namespace Read2Me.App.State
 
             nodeStatus.OnCharacterAttributed(folderId, paragraph.Id, remainingUnattributed: 0);
 
+            InvalidateVoicePreview();
             NotifyStateChanged();
         }
 
@@ -275,59 +283,43 @@ namespace Read2Me.App.State
         }
 
         // ---------------------------------------------------------------
-        // Selection mutators
+        // Selection mutators — delegate to ISelectionCoordinator
         // ---------------------------------------------------------------
 
-        public Task ToggleParagraphAsync(
+        public async Task ToggleParagraphAsync(
             ProjectFolderId folderId, Guid paragraphId,
             Guid chapterId, Guid partId, Guid volumeId, bool on)
         {
-            if (on)
-                Selection.AddParagraph(paragraphId, new ParagraphSelection(volumeId, partId, chapterId));
-            else
-                Selection.RemoveParagraph(paragraphId);
+            await selectionCoordinator.ToggleParagraphAsync(folderId, paragraphId, chapterId, partId, volumeId, on);
             NotifyStateChanged();
-            return Task.CompletedTask;
         }
 
         public async Task SetNodeAsync(
             ProjectFolderId folderId, BookNodeLevel level, Guid id, bool on, bool unprocessedOnly = false)
         {
-            var refs = await reader.GetCharacterParagraphsAsync(folderId, level, id, unprocessedOnly);
-            if (on)
-                Selection.AddParagraphs(refs);
-            else
-                Selection.RemoveParagraphs(refs.Select(r => r.ParagraphId));
+            await selectionCoordinator.SetNodeAsync(folderId, level, id, on, unprocessedOnly);
             NotifyStateChanged();
         }
 
-        public int SelectedParagraphCount => Selection?.SelectedParagraphCount ?? 0;
+        public int SelectedParagraphCount => selectionCoordinator.SelectedParagraphCount;
 
         // ---------------------------------------------------------------
-        // Audio item selection mutators
+        // Audio item selection mutators — delegate to ISelectionCoordinator
         // ---------------------------------------------------------------
 
-        public Task ToggleAudioItemAsync(AudioItemRef item, bool on)
+        public async Task ToggleAudioItemAsync(AudioItemRef item, bool on)
         {
-            if (on)
-                AudioSelection.AddItem(item);
-            else
-                AudioSelection.RemoveItem(item.ParagraphItemId);
+            await selectionCoordinator.ToggleAudioItemAsync(item, on);
             NotifyStateChanged();
-            return Task.CompletedTask;
         }
 
         public async Task SetAudioNodeAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool on, bool needsAudioOnly = false)
         {
-            var refs = await reader.GetAudioItemRefsAsync(folderId, level, nodeId, needsAudioOnly, narratorOnlyMode: NarratorOnlyMode);
-            if (on)
-                AudioSelection.AddItems(refs);
-            else
-                AudioSelection.RemoveItems(refs.Select(r => r.ParagraphItemId));
+            await selectionCoordinator.SetAudioNodeAsync(folderId, level, nodeId, on, needsAudioOnly, NarratorOnlyMode);
             NotifyStateChanged();
         }
 
-        public int SelectedAudioItemCount => AudioSelection?.SelectedItemCount ?? 0;
+        public int SelectedAudioItemCount => selectionCoordinator.SelectedAudioItemCount;
 
         public async Task DismissAudioReviewAsync(ProjectFolderId folderId, Guid paragraphItemId)
         {
@@ -352,47 +344,17 @@ namespace Read2Me.App.State
             nodeStatus.OnReviewChanged(folderId, para.Id, hasAnyNeedsReview);
         }
 
-        public async Task AddSelectionToAudioQueue()
+        public async Task AddSelectionToAudioQueueAsync()
         {
-            if (_lastFolder is not { } folder || AudioSelection is null) return;
-
-            var selectedIds = AudioSelection.SelectedItems().Select(r => r.ParagraphItemId).ToList();
-            if (selectedIds.Count == 0) return;
-
-            var activeConfig = await paragraphTtsSettings.GetActiveConfigAsync();
-            if (activeConfig is null)
-            {
-                snackbar.Add(
-                    "No paragraph TTS service configured. Go to Paragraph TTS Settings to add one.",
-                    Severity.Warning);
-                return;
-            }
-
-            var items = await reader.GetOrderedAudioItemRefsAsync(folder, selectedIds);
-            audioQueue.Enqueue(folder, items);
-            AudioSelection.Clear();
+            await selectionCoordinator.AddSelectionToAudioQueueAsync();
             NotifyStateChanged();
         }
 
         public ProjectFolderId? CurrentFolder => _lastFolder;
 
-        public async Task AddSelectionToCharacterQueue()
+        public async Task AddSelectionToCharacterQueueAsync()
         {
-            if (_lastFolder is not { } folder || Selection is null) return;
-
-            var selectedIds = Selection.SelectedParagraphIds().ToList();
-            if (selectedIds.Count == 0) return;
-
-            var ordered = await reader.GetOrderedParagraphsAsync(folder, selectedIds);
-            var items = ordered.Select(p =>
-            {
-                var anc = Selection.GetAncestry(p.ParagraphId);
-                return new QueuedParagraph(folder, p.ParagraphId, p.Preview,
-                    anc?.ChapterId ?? Guid.Empty, anc?.PartId ?? Guid.Empty, anc?.VolumeId ?? Guid.Empty);
-            });
-
-            characterQueue.Enqueue(items);
-            Selection.Clear();
+            await selectionCoordinator.AddSelectionToCharacterQueueAsync();
             NotifyStateChanged();
         }
 
@@ -421,13 +383,6 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
-        private void OnQueueChanged()
-        {
-            // ParagraphRow components subscribe to CharacterQueueService.Changed directly
-            // and re-render per-paragraph using Queue.ResolvedOf as a display overlay.
-            // No tree-wide mutation needed here.
-        }
-
         private void OnAudioFileAssigned(ProjectFolderId folder, Guid paragraphItemId, string relativePath)
         {
             if (_lastFolder is not { } current || current.Value != folder.Value) return;
@@ -442,12 +397,6 @@ namespace Read2Me.App.State
 
         public void Dispose()
         {
-            if (_queueSubscribed)
-            {
-                characterQueue.Changed -= OnQueueChanged;
-                _queueSubscribed = false;
-            }
-
             if (_audioQueueSubscribed)
             {
                 audioQueue.AudioFileAssigned -= OnAudioFileAssigned;

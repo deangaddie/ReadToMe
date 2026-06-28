@@ -86,22 +86,7 @@ namespace Read2Me.Services
         Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId);
         Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId);
         Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId);
-        /// <summary>
-        /// Returns the StoryPosition of the given item and the caller-resolved rule inputs for
-        /// the given character, ready for <see cref="VoiceRuleEvaluator.Evaluate"/>.
-        /// Dangling rules (anchor node no longer exists) are flagged rather than thrown.
-        /// </summary>
-        Task<(StoryPosition ItemPosition, IReadOnlyList<RuleInput> Rules)> GetVoiceRuleInputsAsync(
-            ProjectFolderId folderId, Guid itemId, Guid characterId);
         Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId);
-        /// <summary>
-        /// Returns, for each item id in <paramref name="itemIds"/>, the voice name that
-        /// <see cref="VoiceRuleEvaluator"/> would select at generation time — the same
-        /// logic the audio processor uses.  Unresolvable items (no character, no voice)
-        /// map to null.
-        /// </summary>
-        Task<IReadOnlyDictionary<Guid, string?>> GetResolvedVoiceNamesAsync(
-            ProjectFolderId folderId, IEnumerable<Guid> itemIds, bool narratorOnlyMode);
         Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId);
         Task<int> GetTotalPartCountAsync(ProjectFolderId folderId);
         Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId);

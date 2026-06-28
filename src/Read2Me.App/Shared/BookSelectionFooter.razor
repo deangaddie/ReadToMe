@@ -66,8 +66,8 @@
         AudioQueue.Changed += Refresh;
     }
 
-    Task AddToCharacterQueue() => Presenter.AddSelectionToCharacterQueue();
-    Task AddToAudioQueue() => Presenter.AddSelectionToAudioQueue();
+    Task AddToCharacterQueue() => Presenter.AddSelectionToCharacterQueueAsync();
+    Task AddToAudioQueue() => Presenter.AddSelectionToAudioQueueAsync();
 
     void Refresh() => InvokeAsync(StateHasChanged);
 
