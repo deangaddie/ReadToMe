@@ -90,12 +90,19 @@ Model presets are defined in `llama/config/models.ini`. Multiple models can be c
 curl -X POST http://localhost:8080/v1/models -d '{"model":"gemma-26b"}'
 ```
 
-| Preset | Model file | Context |
-| --- | --- | --- |
-| `gemma-26b` | `gemma-4-26B-A4B-it-UD-Q4_K_M.gguf` | 164000 |
-| `qwen-36b` | `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf` | 164000 |
-| `gemma-4b` | `gemma-4-E4B-it-UD-Q4_K_XL.gguf` | 32768 |
-| `qwen-9b` | `Qwen3.5-9B-UD-Q4_K_XL.gguf` | 32768 |
+All presets are configured for a 34000-token context (`c = 34000`).
+
+| Preset | Model file |
+| --- | --- |
+| `gemma-26b` | `gemma-4-26B-A4B-it-UD-Q4_K_M.gguf` |
+| `gemma-26b_QAT` | `gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf` |
+| `gemma-12b_QAT` | `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf` |
+| `gemma-4b` | `gemma-4-E4B-it-UD-Q4_K_XL.gguf` |
+| `qwen-28b` | `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf` |
+| `qwen-9b` | `Qwen3.5-9B-UD-Q4_K_XL.gguf` |
+| `qwen-4b` | `Qwen3.5-4B-UD-Q4_K_XL.gguf` |
+| `ornith-1.0-9b-q4` | `ornith-1.0-9b-Q4_K_M.gguf` |
+| `ornith-1.0-9b-q5` | `ornith-1.0-9b-Q5_K_M.gguf` |
 
 GGUF files must be placed in `models/` before building. Example:
 

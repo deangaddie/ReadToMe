@@ -279,5 +279,110 @@ namespace Read2Me.Tests.State
 
             Assert.Equal("{\"cfg_value\":3.5}", voice.TtsSettingsOverrideJson);
         }
+
+        // ── ReadyVoiceCount ───────────────────────────────────────────────────
+
+        [Fact]
+        public void ReadyVoiceCount_AllReady_ReturnsTotal()
+        {
+            var presenter = CreatePresenter();
+            var character = new Read2Me.Data.Entities.Character
+            {
+                Id = Guid.NewGuid(), Name = "Alice",
+                Voices =
+                [
+                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = "voices/a.wav" },
+                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = "voices/b.wav" },
+                ]
+            };
+            Assert.Equal(2, presenter.ReadyVoiceCount(character));
+        }
+
+        [Fact]
+        public void ReadyVoiceCount_NoneReady_ReturnsZero()
+        {
+            var presenter = CreatePresenter();
+            var character = new Read2Me.Data.Entities.Character
+            {
+                Id = Guid.NewGuid(), Name = "Bob",
+                Voices =
+                [
+                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = null },
+                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = string.Empty },
+                ]
+            };
+            Assert.Equal(0, presenter.ReadyVoiceCount(character));
+        }
+
+        [Fact]
+        public void ReadyVoiceCount_Partial_ReturnsReadyOnly()
+        {
+            var presenter = CreatePresenter();
+            var character = new Read2Me.Data.Entities.Character
+            {
+                Id = Guid.NewGuid(), Name = "Carol",
+                Voices =
+                [
+                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = "voices/a.wav" },
+                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = null },
+                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = string.Empty },
+                ]
+            };
+            Assert.Equal(1, presenter.ReadyVoiceCount(character));
+        }
+
+        [Fact]
+        public void ReadyVoiceCount_EmptyVoicesList_ReturnsZero()
+        {
+            var presenter = CreatePresenter();
+            var character = new Read2Me.Data.Entities.Character { Id = Guid.NewGuid(), Name = "Dan", Voices = [] };
+            Assert.Equal(0, presenter.ReadyVoiceCount(character));
+        }
+
+        // ── UpdateVoiceInPlace patches non-selected character voices ──────────
+
+        [Fact]
+        public async Task UpdateVoiceInPlace_PatchesNonSelectedCharacterVoices()
+        {
+            var voiceId = Guid.NewGuid();
+            var selectedVoice = new Read2Me.Data.Entities.Voice { Id = voiceId, Transcript = "selected-original" };
+            var otherVoice = new Read2Me.Data.Entities.Voice { Id = voiceId, Transcript = "other-original" };
+
+            var selectedChar = new Read2Me.Data.Entities.Character
+            {
+                Id = Guid.NewGuid(), Name = "Selected",
+                Voices = [selectedVoice]
+            };
+            var otherChar = new Read2Me.Data.Entities.Character
+            {
+                Id = Guid.NewGuid(), Name = "Other",
+                Voices = [otherVoice]
+            };
+
+            var reader = Substitute.For<IProjectReader>();
+            reader.GetCharactersWithAliasesAsync(Folder)
+                .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Character> { selectedChar, otherChar });
+            reader.GetCharacterLinesAsync(Folder, selectedChar.Id)
+                .Returns(new System.Collections.Generic.List<Read2Me.Core.Models.CharacterLine>());
+            reader.GetCharacterVoicesAsync(Folder, selectedChar.Id)
+                .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Voice> { selectedVoice });
+
+            var orchestrator = new VoiceOrchestrator(
+                audioPipeline: Substitute.For<IAudioPipeline>(),
+                transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
+                voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
+                transcriptionSettings: new FakeTranscriptionSettings(),
+                voiceDesignPromptService: new FakeVoiceDesignPromptService(),
+                fileSystem: Substitute.For<IFileSystem>());
+
+            var presenter = new CharacterPresenter(reader, Substitute.For<IBookCommandHandler>(), orchestrator);
+            await presenter.LoadAsync(Folder);
+            await presenter.SelectCharacterAsync(selectedChar);
+
+            await presenter.SetVoiceTranscriptDirectAsync(voiceId, "patched");
+
+            Assert.Equal("patched", selectedVoice.Transcript);
+            Assert.Equal("patched", otherVoice.Transcript);
+        }
     }
 }

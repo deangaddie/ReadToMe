@@ -65,7 +65,7 @@ Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB
 ```bash
 curl -X POST http://localhost:8080/v1/models -d '{"model":"gemma-26b"}'
 ```
-Model presets: `gemma-26b`, `qwen-36b`, `gemma-4b`, `qwen-9b` — defined in `Infra/llama/config/models.ini`.
+Model presets defined in `Infra/llama/config/models.ini` (e.g. `gemma-26b`, `qwen-28b`, `gemma-12b_QAT`, `gemma-4b`, `qwen-9b`, `qwen-4b`, `ornith-1.0-9b-q4`).
 
 GGUF model files live in `Infra/models/` (bind-mounted, not committed).
 
