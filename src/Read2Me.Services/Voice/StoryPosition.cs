@@ -11,6 +11,9 @@ namespace Read2Me.Services.Voice
         string Paragraph,
         string Item) : IComparable<StoryPosition>
     {
+        public const string MinKey = "";
+        public const string MaxKey = "￿￿";
+
         public int CompareTo(StoryPosition other)
         {
             var c = string.CompareOrdinal(Volume, other.Volume);

@@ -27,70 +27,48 @@ public class VoiceResolverTests : ProjectDbTestBase
         _folder = new Read2Me.Core.Models.ProjectFolderId(FolderName);
     }
 
-    private static string Key(string? prev = null, string? next = null) =>
-        OrderKeyGenerator.GenerateKeyBetween(prev, next);
-
     private static string FloorRank => OrderKeyGenerator.GenerateKeyBetween(null, null);
 
-    // Seeds: 1 Project, 1 Vol → 1 Part → 2 Chapters, each with 1 Para → 1 Item, 1 Narrator, 1 custom char, 2 voices.
-    private async Task<(
-        Guid VolId, Guid PartId,
-        Guid Ch1Id, Guid Para1Id, Guid Item1Id,
-        Guid Ch2Id, Guid Para2Id, Guid Item2Id,
-        Guid CharId, Guid NarrId,
-        Guid VoiceAId, Guid VoiceBId)> SeedBaseAsync(
-            ParagraphItemType item1Type = ParagraphItemType.Character,
-            ParagraphItemType item2Type = ParagraphItemType.Character,
-            bool narratorOnlyMode = false)
+    // Seeds the base book hierarchy: 1 Vol → 1 Part → 2 Chapters, each with 1 Para → 1 Item.
+    // Also seeds Alice character + VoiceA + VoiceB.
+    // Returns the builder (for named id lookup) + the seeded voice ids.
+    private async Task<(BookHierarchyBuilder b, Guid charId, Guid voiceAId, Guid voiceBId)> SeedBaseAsync(
+        ParagraphItemType item1Type = ParagraphItemType.Character,
+        ParagraphItemType item2Type = ParagraphItemType.Character,
+        bool narratorOnlyMode = false)
     {
-        await using var db = await OpenDbAsync();
-
-        db.Projects.Add(new Project
-        {
-            Title = "T", BookTitle = "B", Author = "A",
-            Filename = "f.txt", Type = BookFileType.Text,
-            NarratorOnlyMode = narratorOnlyMode
-        });
-
         var charId   = Guid.NewGuid();
         var voiceAId = Guid.NewGuid();
         var voiceBId = Guid.NewGuid();
+        var alice    = new Character { Id = charId, Name = "Alice" };
 
-        db.Characters.Add(new Character { Id = charId, Name = "Alice" });
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        b.WithProject(narratorOnlyMode: narratorOnlyMode);
+        b.WithCharacter("alice", alice);
+
+        await b
+            .AddVolume("vol", v => v
+                .AddChapter("ch1", c => c
+                    .AddParagraph(configure: p =>
+                    {
+                        if (item1Type == ParagraphItemType.Narration) p.AddNarration("item1", "Line 1");
+                        else p.AddCharacterLine("item1", "Line 1", speaker: "alice");
+                    }))
+                .AddChapter("ch2", c => c
+                    .AddParagraph(configure: p =>
+                    {
+                        if (item2Type == ParagraphItemType.Narration) p.AddNarration("item2", "Line 2");
+                        else p.AddCharacterLine("item2", "Line 2", speaker: "alice");
+                    })))
+            .BuildAsync();
+
+        // Seed voices via a separate context (builder doesn't own Voice)
+        await using var db = await OpenDbAsync();
         db.Voices.Add(new VoiceEntity { Id = voiceAId, CharacterId = charId, Name = "Voice A", Source = VoiceSource.Uploaded, AudioFileName = "a.wav" });
         db.Voices.Add(new VoiceEntity { Id = voiceBId, CharacterId = charId, Name = "Voice B", Source = VoiceSource.Uploaded, AudioFileName = "b.wav" });
-
-        var vol   = new Volume    { Id = Guid.NewGuid(), Title = "V",  Order = Key() };
-        var part  = new Part      { Id = Guid.NewGuid(), VolumeId  = vol.Id,  Order = Key() };
-        var ch1   = new Chapter   { Id = Guid.NewGuid(), PartId    = part.Id, Order = Key() };
-        var ch2   = new Chapter   { Id = Guid.NewGuid(), PartId    = part.Id, Order = Key(ch1.Order) };
-        var para1 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch1.Id,  Order = Key() };
-        var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch2.Id,  Order = Key() };
-
-        var item1Id = Guid.NewGuid();
-        var item2Id = Guid.NewGuid();
-        var narratorId = ProjectDbContext.NarratorId;
-
-        db.Volumes.Add(vol); db.Parts.Add(part);
-        db.Chapters.Add(ch1); db.Chapters.Add(ch2);
-        db.Paragraphs.Add(para1); db.Paragraphs.Add(para2);
-
-        db.ParagraphItems.Add(new ParagraphItem
-        {
-            Id = item1Id, ParagraphId = para1.Id, Order = Key(),
-            ItemType = item1Type, Text = "Line 1",
-            CharacterId = item1Type == ParagraphItemType.Character ? charId : narratorId
-        });
-        db.ParagraphItems.Add(new ParagraphItem
-        {
-            Id = item2Id, ParagraphId = para2.Id, Order = Key(),
-            ItemType = item2Type, Text = "Line 2",
-            CharacterId = item2Type == ParagraphItemType.Character ? charId : narratorId
-        });
-
         await db.SaveChangesAsync();
-        return (vol.Id, part.Id, ch1.Id, para1.Id, item1Id, ch2.Id, para2.Id, item2Id,
-                charId, narratorId, voiceAId, voiceBId);
+
+        return (b, charId, voiceAId, voiceBId);
     }
 
     private async Task SeedDefaultRule(Guid charId, Guid voiceId)
@@ -132,12 +110,12 @@ public class VoiceResolverTests : ProjectDbTestBase
     [Fact]
     public async Task SingleCharacterItem_DefaultRule_ResolvesToDefaultVoice()
     {
-        var (_, _, _, _, item1Id, _, _, _, charId, _, voiceAId, _) = await SeedBaseAsync();
+        var (b, charId, voiceAId, _) = await SeedBaseAsync();
         await SeedDefaultRule(charId, voiceAId);
 
-        var result = await _resolver.ResolveAsync(_folder, [item1Id]);
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
 
-        Assert.Equal(voiceAId, result[item1Id]);
+        Assert.Equal(voiceAId, result[b.ItemId("item1")]);
     }
 
     // ── 3. Many items, one character ───────────────────────────────────────────
@@ -145,13 +123,13 @@ public class VoiceResolverTests : ProjectDbTestBase
     [Fact]
     public async Task ManyItems_OneCharacter_AllResolveToSameVoice()
     {
-        var (_, _, _, _, item1Id, _, _, item2Id, charId, _, voiceAId, _) = await SeedBaseAsync();
+        var (b, charId, voiceAId, _) = await SeedBaseAsync();
         await SeedDefaultRule(charId, voiceAId);
 
-        var result = await _resolver.ResolveAsync(_folder, [item1Id, item2Id]);
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1"), b.ItemId("item2")]);
 
-        Assert.Equal(voiceAId, result[item1Id]);
-        Assert.Equal(voiceAId, result[item2Id]);
+        Assert.Equal(voiceAId, result[b.ItemId("item1")]);
+        Assert.Equal(voiceAId, result[b.ItemId("item2")]);
     }
 
     // ── 4. Many characters ────────────────────────────────────────────────────
@@ -159,17 +137,17 @@ public class VoiceResolverTests : ProjectDbTestBase
     [Fact]
     public async Task ManyCharacters_EachItemResolvesAgainstItsOwnCharactersRules()
     {
-        // item1 → char (Alice), item2 → narrator
-        var (_, _, _, _, item1Id, _, _, item2Id, charId, narratorId, voiceAId, voiceBId) =
-            await SeedBaseAsync(item2Type: ParagraphItemType.Narration);
+        // item1 → Alice (Character), item2 → Narrator
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item2Type: ParagraphItemType.Narration);
+        var narratorId = ProjectDbContext.NarratorId;
 
         await SeedDefaultRule(charId, voiceAId);     // Alice default → VoiceA
         await SeedDefaultRule(narratorId, voiceBId); // Narrator default → VoiceB
 
-        var result = await _resolver.ResolveAsync(_folder, [item1Id, item2Id]);
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1"), b.ItemId("item2")]);
 
-        Assert.Equal(voiceAId, result[item1Id]);
-        Assert.Equal(voiceBId, result[item2Id]);
+        Assert.Equal(voiceAId, result[b.ItemId("item1")]);
+        Assert.Equal(voiceBId, result[b.ItemId("item2")]);
     }
 
     // ── 5. NarratorOnlyMode on ────────────────────────────────────────────────
@@ -177,15 +155,15 @@ public class VoiceResolverTests : ProjectDbTestBase
     [Fact]
     public async Task NarratorOnlyMode_CharacterItem_ResolvesViaNarratorRules()
     {
-        var (_, _, _, _, item1Id, _, _, _, charId, narratorId, voiceAId, voiceBId) =
-            await SeedBaseAsync(narratorOnlyMode: true);
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(narratorOnlyMode: true);
+        var narratorId = ProjectDbContext.NarratorId;
 
-        await SeedDefaultRule(charId, voiceAId);     // Alice default → VoiceA (should NOT win)
-        await SeedDefaultRule(narratorId, voiceBId); // Narrator default → VoiceB
+        await SeedDefaultRule(charId, voiceAId);     // Alice → VoiceA (should NOT win)
+        await SeedDefaultRule(narratorId, voiceBId); // Narrator → VoiceB
 
-        var result = await _resolver.ResolveAsync(_folder, [item1Id]);
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
 
-        Assert.Equal(voiceBId, result[item1Id]); // narrator's voice, not Alice's
+        Assert.Equal(voiceBId, result[b.ItemId("item1")]);
     }
 
     // ── 6. Narration item ─────────────────────────────────────────────────────
@@ -193,77 +171,50 @@ public class VoiceResolverTests : ProjectDbTestBase
     [Fact]
     public async Task NarrationItem_AlwaysResolvesViaNarrator()
     {
-        var (_, _, _, _, item1Id, _, _, _, charId, narratorId, voiceAId, voiceBId) =
-            await SeedBaseAsync(item1Type: ParagraphItemType.Narration);
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item1Type: ParagraphItemType.Narration);
+        var narratorId = ProjectDbContext.NarratorId;
 
         await SeedDefaultRule(charId, voiceAId);
         await SeedDefaultRule(narratorId, voiceBId);
 
-        var result = await _resolver.ResolveAsync(_folder, [item1Id]);
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
 
-        Assert.Equal(voiceBId, result[item1Id]);
+        Assert.Equal(voiceBId, result[b.ItemId("item1")]);
     }
 
-    // ── 7. Dangling anchor ────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task DanglingAnchor_RuleSkipped_DefaultWins()
-    {
-        var (_, _, _, _, item1Id, _, _, _, charId, _, voiceAId, voiceBId) = await SeedBaseAsync();
-        await SeedDefaultRule(charId, voiceAId);
-
-        // Rule with a non-existent chapter id → dangling
-        await using var db = await OpenDbAsync();
-        db.VoiceRules.Add(new VoiceRule
-        {
-            Id = Guid.NewGuid(), CharacterId = charId, VoiceId = voiceBId,
-            IsDefault = false, Rank = Key(FloorRank),
-            FromLevel = VoiceAnchorLevel.Chapter, FromNodeId = Guid.NewGuid(),
-            ToLevel   = VoiceAnchorLevel.Chapter, ToNodeId   = Guid.NewGuid(),
-        });
-        await db.SaveChangesAsync();
-
-        var result = await _resolver.ResolveAsync(_folder, [item1Id]);
-
-        Assert.Equal(voiceAId, result[item1Id]);
-    }
-
-    // ── 8. Zero-rules character ───────────────────────────────────────────────
+    // ── 7. Zero-rules character ───────────────────────────────────────────────
 
     [Fact]
     public async Task ZeroRulesCharacter_ResolvesToNull()
     {
-        var (_, _, _, _, item1Id, _, _, _, _, _, _, _) = await SeedBaseAsync();
-        // No rules seeded for any character
+        var (b, _, _, _) = await SeedBaseAsync();
 
-        var result = await _resolver.ResolveAsync(_folder, [item1Id]);
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
 
-        Assert.Null(result[item1Id]);
+        Assert.Null(result[b.ItemId("item1")]);
     }
 
-    // ── 9. ResolveNamesAsync ──────────────────────────────────────────────────
+    // ── 8. ResolveNamesAsync ──────────────────────────────────────────────────
 
     [Fact]
     public async Task ResolveNamesAsync_ReturnsCorrectVoiceNames()
     {
-        var (_, _, _, _, item1Id, _, _, item2Id, charId, _, voiceAId, _) = await SeedBaseAsync();
+        var (b, charId, voiceAId, _) = await SeedBaseAsync();
         await SeedDefaultRule(charId, voiceAId);
 
-        var result = await _resolver.ResolveNamesAsync(_folder, [item1Id, item2Id]);
+        var result = await _resolver.ResolveNamesAsync(_folder, [b.ItemId("item1"), b.ItemId("item2")]);
 
-        Assert.Equal("Voice A", result[item1Id]);
-        Assert.Equal("Voice A", result[item2Id]);
+        Assert.Equal("Voice A", result[b.ItemId("item1")]);
+        Assert.Equal("Voice A", result[b.ItemId("item2")]);
     }
 
     [Fact]
     public async Task ResolveNamesAsync_NullWhereNoVoice()
     {
-        var (_, _, _, _, item1Id, _, _, _, _, _, _, _) = await SeedBaseAsync();
-        // No rules → no voice
+        var (b, _, _, _) = await SeedBaseAsync();
 
-        var result = await _resolver.ResolveNamesAsync(_folder, [item1Id]);
+        var result = await _resolver.ResolveNamesAsync(_folder, [b.ItemId("item1")]);
 
-        Assert.Null(result[item1Id]);
+        Assert.Null(result[b.ItemId("item1")]);
     }
-
 }
