@@ -1,12 +1,11 @@
-using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Core.IO;
 using Read2Me.Data;
-using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Books;
+using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.Services;
@@ -35,7 +34,7 @@ file sealed class FixedPathFileSystem(string fixedPath) : IFileSystem
 public class BookReadingServiceFlattenTests : IAsyncDisposable
 {
     private readonly string _tempDir;
-    private readonly ProjectDbContext _db;
+    private readonly string _dbPath;
     private readonly ProjectDbSession _session;
     private readonly BookReadingService _sut;
     private const string FolderName = "test";
@@ -45,12 +44,12 @@ public class BookReadingServiceFlattenTests : IAsyncDisposable
         _tempDir = Path.Combine(Path.GetTempPath(), $"Read2MeFlattenTest_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
 
-        var dbPath = Path.Combine(_tempDir, "project.db");
+        _dbPath = Path.Combine(_tempDir, "project.db");
         var options = new DbContextOptionsBuilder<ProjectDbContext>()
-            .UseSqlite($"Data Source={dbPath};Pooling=false")
+            .UseSqlite($"Data Source={_dbPath};Pooling=false")
             .Options;
-        _db = new ProjectDbContext(options);
-        _db.Database.Migrate();
+        using var db = new ProjectDbContext(options);
+        db.Database.Migrate();
 
         _session = new ProjectDbSession(
             new FixedPathFileSystem(_tempDir),
@@ -68,53 +67,53 @@ public class BookReadingServiceFlattenTests : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _session.DisposeAsync();
-        await _db.DisposeAsync();
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, recursive: true);
     }
 
+    private Task<ProjectDbContext> OpenFreshDbAsync()
+    {
+        var options = new DbContextOptionsBuilder<ProjectDbContext>()
+            .UseSqlite($"Data Source={_dbPath};Pooling=false")
+            .Options;
+        return Task.FromResult(new ProjectDbContext(options));
+    }
+
     private async Task SeedDbProjectAsync(string filename, BookFileType type)
     {
-        _db.Projects.Add(new Project
+        await using var db = await OpenFreshDbAsync();
+        db.Projects.Add(new Data.Entities.Project
         {
             Id = Guid.NewGuid(),
             Title = "Test Book",
             Filename = filename,
             Type = type,
         });
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
     }
 
     private async Task SeedParagraphsAsync(params string[][] itemsPerParagraph)
     {
-        var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol 1", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) };
-        _db.Volumes.Add(vol);
-        var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = null, Order = OrderKeyGenerator.GenerateKeyBetween(vol.Order, null) };
-        _db.Parts.Add(part);
-        var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch 1", Order = OrderKeyGenerator.GenerateKeyBetween(part.Order, null) };
-        _db.Chapters.Add(ch);
-
-        string? prev = ch.Order;
-        foreach (var items in itemsPerParagraph)
+        var b = new BookHierarchyBuilder(OpenFreshDbAsync);
+        b.WithProject();
+        var paraNames = itemsPerParagraph.Select((_, i) => $"para{i}").ToArray();
+        await b.AddVolume("vol", v => v.AddChapter("ch", c =>
         {
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = OrderKeyGenerator.GenerateKeyBetween(prev, null) };
-            _db.Paragraphs.Add(para);
-            prev = para.Order;
-            foreach (var text in items)
+            for (int i = 0; i < itemsPerParagraph.Length; i++)
             {
-                _db.ParagraphItems.Add(new ParagraphItem
+                var pname = paraNames[i];
+                var items = itemsPerParagraph[i];
+                c.AddParagraph(pname, p =>
                 {
-                    Id = Guid.NewGuid(),
-                    ParagraphId = para.Id,
-                    Order = OrderKeyGenerator.GenerateKeyBetween(prev, null),
-                    ItemType = Read2Me.Data.Enums.ParagraphItemType.Narration,
-                    Text = text,
+                    for (int j = 0; j < items.Length; j++)
+                    {
+                        var text = items[j];
+                        if (text != null)
+                            p.AddNarration($"item_{pname}_{j}", text);
+                    }
                 });
-                prev = _db.ParagraphItems.Local.Last().Order;
             }
-        }
-
-        await _db.SaveChangesAsync();
+        })).BuildAsync();
     }
 
     // ── FlattenFromDbAsync ────────────────────────────────────────────────────
@@ -186,7 +185,6 @@ public class BookReadingServiceFlattenTests : IAsyncDisposable
     [Fact]
     public async Task FlattenFromFile_TextFile_ChapterNumberLines_Preserved()
     {
-        // Simulate the painted-man scenario: digit-only lines are chapter headers
         var textFile = Path.Combine(_tempDir, "book.txt");
         await File.WriteAllTextAsync(textFile, "1\nFirst chapter content.\n2\nSecond chapter content.\n");
 
