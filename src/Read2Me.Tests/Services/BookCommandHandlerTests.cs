@@ -1,4 +1,3 @@
-using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Core.Configuration;
@@ -30,34 +29,6 @@ namespace Read2Me.Tests.Services
             _folder = new ProjectFolderId(FolderName);
         }
 
-        private static string Key(string? prev = null, string? next = null) =>
-            OrderKeyGenerator.GenerateKeyBetween(prev, next);
-
-        private async Task<ProjectDbContext> SeedProjectAsync()
-        {
-            var db = await OpenDbAsync();
-            db.Projects.Add(new Project { Title = "Test Book", BookTitle = "The Book", Author = "Author", Filename = "test.epub", Type = BookFileType.Epub });
-            await db.SaveChangesAsync();
-            return db;
-        }
-
-        private async Task<(Volume vol, Part part, Chapter ch, Paragraph para, ParagraphItem item)> SeedHierarchyAsync(ProjectDbContext db)
-        {
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol 1", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part 1", Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Chapter 1", Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var item = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Narration, Text = "Hello world", Order = Key() };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-            await db.SaveChangesAsync();
-            return (vol, part, ch, para, item);
-        }
-
         // ---------------------------------------------------------------
         // Delete commands
         // ---------------------------------------------------------------
@@ -65,66 +36,61 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task DeleteVolumeCommand_RemovesVolume()
         {
-            await using var db = await SeedProjectAsync();
-            var (vol, _, _, _, _) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeleteVolumeCommand(_folder, vol.Id));
+            await _svc.ExecuteAsync(new DeleteVolumeCommand(_folder, b.VolumeId("vol")));
 
             await using var verify = await OpenDbAsync();
-            Assert.False(await verify.Volumes.AnyAsync(v => v.Id == vol.Id));
+            Assert.False(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol")));
         }
 
         [Fact]
         public async Task DeletePartCommand_RemovesPart()
         {
-            await using var db = await SeedProjectAsync();
-            var (_, part, _, _, _) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddPart("part", p => p.AddChapter(configure: c => c.AddParagraph(configure: p2 => p2.AddNarration("item", "Hello world"))))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeletePartCommand(_folder, part.Id));
+            await _svc.ExecuteAsync(new DeletePartCommand(_folder, b.PartId("part")));
 
             await using var verify = await OpenDbAsync();
-            Assert.False(await verify.Parts.AnyAsync(p => p.Id == part.Id));
+            Assert.False(await verify.Parts.AnyAsync(p => p.Id == b.PartId("part")));
         }
 
         [Fact]
         public async Task DeleteChapterCommand_RemovesChapter()
         {
-            await using var db = await SeedProjectAsync();
-            var (_, _, ch, _, _) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeleteChapterCommand(_folder, ch.Id));
+            await _svc.ExecuteAsync(new DeleteChapterCommand(_folder, b.ChapterId("ch")));
 
             await using var verify = await OpenDbAsync();
-            Assert.False(await verify.Chapters.AnyAsync(c => c.Id == ch.Id));
+            Assert.False(await verify.Chapters.AnyAsync(c => c.Id == b.ChapterId("ch")));
         }
 
         [Fact]
         public async Task DeleteParagraphCommand_RemovesParagraph()
         {
-            await using var db = await SeedProjectAsync();
-            var (_, _, _, para, _) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeleteParagraphCommand(_folder, para.Id));
+            await _svc.ExecuteAsync(new DeleteParagraphCommand(_folder, b.ParagraphId("para")));
 
             await using var verify = await OpenDbAsync();
-            Assert.False(await verify.Paragraphs.AnyAsync(p => p.Id == para.Id));
+            Assert.False(await verify.Paragraphs.AnyAsync(p => p.Id == b.ParagraphId("para")));
         }
 
         [Fact]
         public async Task DeleteParagraphItemCommand_RemovesItem()
         {
-            await using var db = await SeedProjectAsync();
-            var (_, _, _, _, item) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeleteParagraphItemCommand(_folder, item.Id));
+            await _svc.ExecuteAsync(new DeleteParagraphItemCommand(_folder, b.ItemId("item")));
 
             await using var verify = await OpenDbAsync();
-            Assert.False(await verify.ParagraphItems.AnyAsync(i => i.Id == item.Id));
+            Assert.False(await verify.ParagraphItems.AnyAsync(i => i.Id == b.ItemId("item")));
         }
 
         // ---------------------------------------------------------------
@@ -134,27 +100,25 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task UpdateVolumeTitleCommand_UpdatesTitle()
         {
-            await using var db = await SeedProjectAsync();
-            var (vol, _, _, _, _) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new UpdateVolumeTitleCommand(_folder, vol.Id, "New Volume Title"));
+            await _svc.ExecuteAsync(new UpdateVolumeTitleCommand(_folder, b.VolumeId("vol"), "New Volume Title"));
 
             await using var verify = await OpenDbAsync();
-            Assert.Equal("New Volume Title", (await verify.Volumes.FindAsync(vol.Id))!.Title);
+            Assert.Equal("New Volume Title", (await verify.Volumes.FindAsync(b.VolumeId("vol")))!.Title);
         }
 
         [Fact]
         public async Task UpdateParagraphItemTextCommand_UpdatesText()
         {
-            await using var db = await SeedProjectAsync();
-            var (_, _, _, _, item) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new UpdateParagraphItemTextCommand(_folder, item.Id, "Updated text"));
+            await _svc.ExecuteAsync(new UpdateParagraphItemTextCommand(_folder, b.ItemId("item"), "Updated text"));
 
             await using var verify = await OpenDbAsync();
-            Assert.Equal("Updated text", (await verify.ParagraphItems.FindAsync(item.Id))!.Text);
+            Assert.Equal("Updated text", (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.Text);
         }
 
         // ---------------------------------------------------------------
@@ -164,47 +128,41 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task MergeVolumeCommand_Previous_MergesVolume()
         {
-            await using var db = await SeedProjectAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b
+                .AddVolume("vol1")
+                .AddVolume("vol2")
+                .BuildAsync();
 
-            var vol1 = new Volume { Id = Guid.NewGuid(), Title = "Vol 1", Order = Key() };
-            var vol2 = new Volume { Id = Guid.NewGuid(), Title = "Vol 2", Order = Key(vol1.Order) };
-            var part2 = new Part { Id = Guid.NewGuid(), VolumeId = vol2.Id, Order = Key() };
-            db.Volumes.AddRange(vol1, vol2);
-            db.Parts.Add(part2);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
-
-            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, vol2.Id, MergeDirection.Previous));
+            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol2"), MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync();
-            Assert.False(await verify.Volumes.AnyAsync(v => v.Id == vol2.Id));
-            Assert.True(await verify.Parts.AnyAsync(p => p.VolumeId == vol1.Id));
+            Assert.False(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol2")));
+            Assert.True(await verify.Parts.AnyAsync(p => p.VolumeId == b.VolumeId("vol1")));
         }
 
         [Fact]
         public async Task MergeVolumeCommand_Previous_FirstVolume_NoOp()
         {
-            await using var db = await SeedProjectAsync();
-            var (vol, _, _, _, _) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, vol.Id, MergeDirection.Previous));
+            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol"), MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync();
-            Assert.True(await verify.Volumes.AnyAsync(v => v.Id == vol.Id));
+            Assert.True(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol")));
         }
 
         [Fact]
         public async Task MergeVolumeCommand_Next_LastVolume_NoOp()
         {
-            await using var db = await SeedProjectAsync();
-            var (vol, _, _, _, _) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, vol.Id, MergeDirection.Next));
+            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol"), MergeDirection.Next));
 
             await using var verify = await OpenDbAsync();
-            Assert.True(await verify.Volumes.AnyAsync(v => v.Id == vol.Id));
+            Assert.True(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol")));
         }
 
         // ---------------------------------------------------------------
@@ -214,17 +172,15 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task SetItemCharacterCommand_AssignsCharacter()
         {
-            await using var db = await SeedProjectAsync();
-            var (_, _, _, _, item) = await SeedHierarchyAsync(db);
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
-            db.Characters.Add(character);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, item.Id, character.Id));
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
             await using var verify = await OpenDbAsync();
-            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(item.Id))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
         }
 
         // ---------------------------------------------------------------
@@ -234,9 +190,8 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task ClearBookContentCommand_RemovesAllHierarchy()
         {
-            await using var db = await SeedProjectAsync();
-            await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
             await _svc.ExecuteAsync(new ClearBookContentCommand(_folder));
 
@@ -265,35 +220,17 @@ namespace Read2Me.Tests.Services
         // AddPausesCommand
         // ---------------------------------------------------------------
 
-        private async Task<(Chapter ch1, Chapter ch2, Paragraph paraA, Paragraph paraB)> SeedTwoChapterHierarchyAsync(ProjectDbContext db)
-        {
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
-            var ch1 = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch1", Order = Key() };
-            var ch2 = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch2", Order = Key(ch1.Order) };
-
-            var paraA = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch1.Id, Order = Key() };
-            var paraB = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch1.Id, Order = Key(paraA.Order) };
-            var itemA = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paraA.Id, ItemType = ParagraphItemType.Narration, Text = "A", Order = Key() };
-            var itemB = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paraB.Id, ItemType = ParagraphItemType.Narration, Text = "B", Order = Key() };
-            var paraC = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch2.Id, Order = Key() };
-            var itemC = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paraC.Id, ItemType = ParagraphItemType.Narration, Text = "C", Order = Key() };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.AddRange(ch1, ch2);
-            db.Paragraphs.AddRange(paraA, paraB, paraC);
-            db.ParagraphItems.AddRange(itemA, itemB, itemC);
-            await db.SaveChangesAsync();
-            return (ch1, ch2, paraA, paraB);
-        }
-
         [Fact]
         public async Task AddPausesCommand_InsertsPauseParagraphs()
         {
-            await using var db = await SeedProjectAsync();
-            await SeedTwoChapterHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v
+                .AddChapter("ch1", c => c
+                    .AddParagraph(configure: p => p.AddNarration("itemA", "A"))
+                    .AddParagraph(configure: p => p.AddNarration("itemB", "B")))
+                .AddChapter("ch2", c => c
+                    .AddParagraph(configure: p => p.AddNarration("itemC", "C"))))
+                .BuildAsync();
 
             await _svc.ExecuteAsync(new AddPausesCommand(_folder));
 
@@ -305,9 +242,14 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task AddPausesCommand_IsIdempotent()
         {
-            await using var db = await SeedProjectAsync();
-            await SeedTwoChapterHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v
+                .AddChapter("ch1", c => c
+                    .AddParagraph(configure: p => p.AddNarration("itemA", "A"))
+                    .AddParagraph(configure: p => p.AddNarration("itemB", "B")))
+                .AddChapter("ch2", c => c
+                    .AddParagraph(configure: p => p.AddNarration("itemC", "C"))))
+                .BuildAsync();
 
             await _svc.ExecuteAsync(new AddPausesCommand(_folder));
 
@@ -338,41 +280,39 @@ namespace Read2Me.Tests.Services
         public async Task InsertPauseParagraphCommand_Before_InsertsCorrectPauseTypeBeforeParagraph(
             PauseKind kind, ParagraphItemType expectedType)
         {
-            await using var db = await SeedProjectAsync();
-            var (_, _, ch, para, item) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, item.Id, PauseInsertPosition.Before, kind));
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), PauseInsertPosition.Before, kind));
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
-                .Where(p => p.ChapterId == ch.Id)
+                .Where(p => p.ChapterId == b.ChapterId("ch"))
                 .OrderBy(p => p.Order)
                 .ToListAsync();
             Assert.Equal(2, paragraphs.Count);
             var pausePara = paragraphs[0];
-            Assert.NotEqual(para.Id, pausePara.Id);
+            Assert.NotEqual(b.ParagraphId("para"), pausePara.Id);
             var pauseItem = await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == pausePara.Id);
             Assert.Equal(expectedType, pauseItem.ItemType);
-            Assert.Equal(para.Id, paragraphs[1].Id);
+            Assert.Equal(b.ParagraphId("para"), paragraphs[1].Id);
         }
 
         [Fact]
         public async Task InsertPauseParagraphCommand_After_InsertsPauseAfterParagraph()
         {
-            await using var db = await SeedProjectAsync();
-            var (_, _, ch, para, item) = await SeedHierarchyAsync(db);
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, item.Id, PauseInsertPosition.After, PauseKind.ParagraphPause));
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), PauseInsertPosition.After, PauseKind.ParagraphPause));
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
-                .Where(p => p.ChapterId == ch.Id)
+                .Where(p => p.ChapterId == b.ChapterId("ch"))
                 .OrderBy(p => p.Order)
                 .ToListAsync();
             Assert.Equal(2, paragraphs.Count);
-            Assert.Equal(para.Id, paragraphs[0].Id);
+            Assert.Equal(b.ParagraphId("para"), paragraphs[0].Id);
             var pauseItem = await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == paragraphs[1].Id);
             Assert.Equal(ParagraphItemType.ParagraphPause, pauseItem.ItemType);
         }
@@ -380,25 +320,23 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task InsertPauseParagraphCommand_Between_InsertsPauseBetweenExistingParagraphs()
         {
-            await using var db = await SeedProjectAsync();
-            var (_, _, ch, para, item) = await SeedHierarchyAsync(db);
-            var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key(para.Order) };
-            var item2 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para2.Id, ItemType = ParagraphItemType.Narration, Text = "Second", Order = Key() };
-            db.Paragraphs.Add(para2);
-            db.ParagraphItems.Add(item2);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v
+                .AddChapter("ch", c => c
+                    .AddParagraph("para", p => p.AddNarration("item", "Hello world"))
+                    .AddParagraph("para2", p => p.AddNarration("item2", "Second"))))
+                .BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, item.Id, PauseInsertPosition.After, PauseKind.ChapterPause));
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), PauseInsertPosition.After, PauseKind.ChapterPause));
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
-                .Where(p => p.ChapterId == ch.Id)
+                .Where(p => p.ChapterId == b.ChapterId("ch"))
                 .OrderBy(p => p.Order)
                 .ToListAsync();
             Assert.Equal(3, paragraphs.Count);
-            Assert.Equal(para.Id,  paragraphs[0].Id);
-            Assert.Equal(para2.Id, paragraphs[2].Id);
+            Assert.Equal(b.ParagraphId("para"),  paragraphs[0].Id);
+            Assert.Equal(b.ParagraphId("para2"), paragraphs[2].Id);
             var pauseItem = await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == paragraphs[1].Id);
             Assert.Equal(ParagraphItemType.ChapterPause, pauseItem.ItemType);
             Assert.True(string.Compare(paragraphs[0].Order, paragraphs[1].Order, StringComparison.Ordinal) < 0);
@@ -412,29 +350,25 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task ApplyMutation_WithDetachedUpdatedEntity_PersistsFkChange()
         {
-            await using var seed = await SeedProjectAsync();
-            var vol1 = new Volume { Id = Guid.NewGuid(), Title = "Vol 1", Order = Key() };
-            var vol2 = new Volume { Id = Guid.NewGuid(), Title = "Vol 2", Order = Key(vol1.Order) };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol1.Id, Order = Key() };
-            seed.Volumes.AddRange(vol1, vol2);
-            seed.Parts.Add(part);
-            await seed.SaveChangesAsync();
-            await seed.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b
+                .AddVolume("vol1", v => v.AddPart("part"))
+                .AddVolume("vol2")
+                .BuildAsync();
 
             await using var db = await OpenDbAsync();
-            var trackedPart = await db.Parts.FindAsync(part.Id);
+            var trackedPart = await db.Parts.FindAsync(b.PartId("part"));
             db.Entry(trackedPart!).State = EntityState.Detached;
 
-            // Mutate FK in memory on the detached entity
-            trackedPart!.VolumeId = vol2.Id;
+            trackedPart!.VolumeId = b.VolumeId("vol2");
 
             var mutation = new HierarchyMutation(ToAdd: [], ToDelete: [], ToUpdate: [trackedPart]);
             await BookCommandHandler.ApplyMutationAsync(db, mutation);
             await db.DisposeAsync();
 
             await using var verify = await OpenDbAsync();
-            var saved = await verify.Parts.FindAsync(part.Id);
-            Assert.Equal(vol2.Id, saved!.VolumeId);
+            var saved = await verify.Parts.FindAsync(b.PartId("part"));
+            Assert.Equal(b.VolumeId("vol2"), saved!.VolumeId);
         }
 
         // ---------------------------------------------------------------
@@ -444,8 +378,8 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task CreateCharacterCommand_CreatesCharacter()
         {
-            await using var db = await SeedProjectAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.BuildAsync();
 
             var result = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Mr. Hyde"));
 
@@ -457,11 +391,10 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task CreateCharacterCommand_ReusesExistingByName()
         {
-            await using var db = await SeedProjectAsync();
             var existing = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            db.Characters.Add(existing);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", existing);
+            await b.BuildAsync();
 
             var result = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Alice"));
 
@@ -477,49 +410,39 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task SetParagraphCharacterCommand_AssignsAllCharacterItems()
         {
-            await using var db = await SeedProjectAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var charItem1 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "Hello", Order = Key() };
-            var charItem2 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "World", Order = Key(charItem1.Order) };
-            var narrationItem = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Narration, Text = "Narration", Order = Key(charItem2.Order) };
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
-            db.ParagraphItems.AddRange(charItem1, charItem2, narrationItem);
-            db.Characters.Add(character);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddRawItem("charItem1", ParagraphItemType.Character, "Hello")
+                    .AddRawItem("charItem2", ParagraphItemType.Character, "World")
+                    .AddRawItem("narrationItem", ParagraphItemType.Narration, "Narration"))))
+                .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para.Id, character.Id));
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
 
             await using var verify = await OpenDbAsync();
-            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(charItem1.Id))!.CharacterId);
-            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(charItem2.Id))!.CharacterId);
-            Assert.Null((await verify.ParagraphItems.FindAsync(narrationItem.Id))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("charItem1")))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("charItem2")))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("narrationItem")))!.CharacterId);
         }
 
         [Fact]
         public async Task SetParagraphCharacterCommand_WithVoiceInstructions_PersistsOnCharacterItems()
         {
-            await using var db = await SeedProjectAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var charItem = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "Hello", Order = Key() };
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(charItem);
-            db.Characters.Add(character);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddRawItem("charItem", ParagraphItemType.Character, "Hello"))))
+                .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para.Id, character.Id, "whispering, tense"));
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id, "whispering, tense"));
 
             await using var verify = await OpenDbAsync();
-            var item = await verify.ParagraphItems.FindAsync(charItem.Id);
+            var item = await verify.ParagraphItems.FindAsync(b.ItemId("charItem"));
             Assert.Equal(character.Id, item!.CharacterId);
             Assert.Equal("whispering, tense", item.VoiceInstructions);
         }
@@ -527,28 +450,25 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task SetParagraphCharacterCommand_NullVoiceInstructions_DoesNotClobberExisting()
         {
-            await using var db = await SeedProjectAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var charItem = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character,
-                Text = "Hello", Order = Key(), VoiceInstructions = "existing voice"
-            };
             var character = new Character { Id = Guid.NewGuid(), Name = "Bob" };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(charItem);
-            db.Characters.Add(character);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("bob", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddRawItem("charItem", ParagraphItemType.Character, "Hello"))))
+                .BuildAsync();
 
-            // No VoiceInstructions passed (null) — existing value must survive
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para.Id, character.Id));
+            // Seed voice instructions directly after build
+            await using var seed = await OpenDbAsync();
+            var charItem = await seed.ParagraphItems.FindAsync(b.ItemId("charItem"));
+            charItem!.VoiceInstructions = "existing voice";
+            await seed.SaveChangesAsync();
+            await seed.DisposeAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
 
             await using var verify = await OpenDbAsync();
-            var item = await verify.ParagraphItems.FindAsync(charItem.Id);
+            var item = await verify.ParagraphItems.FindAsync(b.ItemId("charItem"));
             Assert.Equal(character.Id, item!.CharacterId);
             Assert.Equal("existing voice", item.VoiceInstructions);
         }
@@ -556,77 +476,61 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task SetParagraphCharacterCommand_WithId_SetsAllCharacterItemsLeavesNarrationUntouched()
         {
-            await using var db = await SeedProjectAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var ci1 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "A", Order = Key() };
-            var ci2 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "B", Order = Key(ci1.Order) };
-            var ni = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Narration, Text = "N", Order = Key(ci2.Order) };
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
-            db.ParagraphItems.AddRange(ci1, ci2, ni);
-            db.Characters.Add(character);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddRawItem("ci1", ParagraphItemType.Character, "A")
+                    .AddRawItem("ci2", ParagraphItemType.Character, "B")
+                    .AddRawItem("ni", ParagraphItemType.Narration, "N"))))
+                .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para.Id, character.Id));
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
 
             await using var verify = await OpenDbAsync();
-            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(ci1.Id))!.CharacterId);
-            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(ci2.Id))!.CharacterId);
-            Assert.Null((await verify.ParagraphItems.FindAsync(ni.Id))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("ci1")))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("ci2")))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("ni")))!.CharacterId);
         }
 
         [Fact]
         public async Task SetParagraphCharacterCommand_WithNullId_ClearsAllCharacterItems()
         {
-            await using var db = await SeedProjectAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
             var existingChar = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            var ci1 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "A", Order = Key(), CharacterId = existingChar.Id };
-            var ci2 = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Character, Text = "B", Order = Key(ci1.Order), CharacterId = existingChar.Id };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
-            db.Characters.Add(existingChar);
-            db.ParagraphItems.AddRange(ci1, ci2);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", existingChar);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddRawItem("ci1", ParagraphItemType.Character, "A", existingChar.Id)
+                    .AddRawItem("ci2", ParagraphItemType.Character, "B", existingChar.Id))))
+                .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para.Id, null));
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), null));
 
             await using var verify = await OpenDbAsync();
-            Assert.Null((await verify.ParagraphItems.FindAsync(ci1.Id))!.CharacterId);
-            Assert.Null((await verify.ParagraphItems.FindAsync(ci2.Id))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("ci1")))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("ci2")))!.CharacterId);
         }
 
         [Fact]
         public async Task SetParagraphCharacterCommand_DoesNotTouchOtherParagraphs()
         {
-            await using var db = await SeedProjectAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
-            var para1 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key(para1.Order) };
-            var target = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para1.Id, ItemType = ParagraphItemType.Character, Text = "T", Order = Key() };
-            var other = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para2.Id, ItemType = ParagraphItemType.Character, Text = "O", Order = Key() };
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.AddRange(para1, para2);
-            db.ParagraphItems.AddRange(target, other);
-            db.Characters.Add(character);
-            await db.SaveChangesAsync();
-            await db.DisposeAsync();
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para1", p => p
+                    .AddRawItem("target", ParagraphItemType.Character, "T"))
+                .AddParagraph("para2", p => p
+                    .AddRawItem("other", ParagraphItemType.Character, "O"))))
+                .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, para1.Id, character.Id));
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para1"), character.Id));
 
             await using var verify = await OpenDbAsync();
-            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(target.Id))!.CharacterId);
-            Assert.Null((await verify.ParagraphItems.FindAsync(other.Id))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("target")))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("other")))!.CharacterId);
         }
-
     }
 }
