@@ -31,7 +31,52 @@ namespace Read2Me.Services.Audio
                 _ => throw new ArgumentException($"Not a pause kind: {kind}", nameof(kind)),
             };
 
-        // ── 2. Concat-entry list builder ─────────────────────────────────────
+        // ── 2. Partial-manifest filter ────────────────────────────────────────
+
+        public static IReadOnlyList<AssemblyManifestEntry> FilterPartialManifest(
+            IReadOnlyList<AssemblyManifestEntry> manifest)
+        {
+            var filtered = manifest
+                .Where(e => IsPause(e.ItemType) || e.AudioRelativePath != null)
+                .ToList();
+
+            var result = new List<AssemblyManifestEntry>(filtered.Count);
+            for (int i = 0; i < filtered.Count; i++)
+            {
+                var entry = filtered[i];
+                if (!IsPause(entry.ItemType))
+                {
+                    result.Add(entry);
+                    continue;
+                }
+
+                // Start of a pause run — find how far it extends
+                int runStart = i;
+                int runEnd = i;
+                while (runEnd + 1 < filtered.Count && IsPause(filtered[runEnd + 1].ItemType))
+                    runEnd++;
+
+                // Keep the highest-level pause in the run (lowest index in PauseKinds = highest level)
+                var best = filtered[runStart];
+                int bestRank = Array.IndexOf(PauseKinds, best.ItemType);
+                for (int j = runStart + 1; j <= runEnd; j++)
+                {
+                    int rank = Array.IndexOf(PauseKinds, filtered[j].ItemType);
+                    if (rank < bestRank)
+                    {
+                        bestRank = rank;
+                        best = filtered[j];
+                    }
+                }
+
+                result.Add(best);
+                i = runEnd; // skip rest of run
+            }
+
+            return result;
+        }
+
+        // ── 3. Concat-entry list builder ─────────────────────────────────────
 
         public static IReadOnlyList<ConcatEntry> BuildConcatEntries(
             IReadOnlyList<AssemblyManifestEntry> manifest,

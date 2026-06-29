@@ -408,6 +408,85 @@ namespace Read2Me.Tests.Services.Audio
                 Assert.False(File.Exists(tmpPath), "tmp file must be deleted on cancel");
         }
 
+        // ── Partial mode ──────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task StartAsync_AllowPartial_MissingAudio_ProceedsToEncode()
+        {
+            var item1 = Guid.NewGuid();
+            var manifest = new List<AssemblyManifestEntry>
+            {
+                AudioEntry(item1, "audio/a.wav"),
+                MissingAudioEntry(),
+            };
+            var h = BuildHarness(manifest);
+            Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
+            await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
+
+            var result = h.Sut.StartAsync(Folder, allowPartial: true);
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.True(result);
+            Assert.Equal(1, h.Encoder.EncodeCallCount);
+            Assert.Contains(h.Events, e => e is AssemblyCompleted);
+        }
+
+        [Fact]
+        public async Task StartAsync_AllowPartial_OutputFilenameContainsPartialDate()
+        {
+            var item1 = Guid.NewGuid();
+            var manifest = new List<AssemblyManifestEntry>
+            {
+                AudioEntry(item1, "audio/a.wav"),
+                MissingAudioEntry(),
+            };
+            var h = BuildHarness(manifest);
+            Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
+            await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
+
+            h.Sut.StartAsync(Folder, allowPartial: true);
+            await WaitForIdleAsync(h.Sut);
+
+            var outputDir = Path.Combine(_tempDir, _folderName, "output");
+            var m4b = Directory.GetFiles(outputDir, "*.m4b").FirstOrDefault();
+
+            Assert.NotNull(m4b);
+            var expectedDate = DateTime.Today.ToString("yyyyMMdd");
+            Assert.Contains($"_partial_{expectedDate}", Path.GetFileName(m4b));
+        }
+
+        [Fact]
+        public async Task StartAsync_AllowPartial_CollapsesConsecutivePausesBeforeSilence()
+        {
+            // ParagraphPause + missing item + ChapterPause → consecutive after filter.
+            // FilterPartialManifest keeps only ChapterPause (higher level).
+            // Without FilterPartialManifest: 2 distinct ms values → 2 silence calls.
+            // With FilterPartialManifest: 1 pause → 1 silence call.
+            var item1 = Guid.NewGuid();
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid();
+            var chap1 = Guid.NewGuid(); var chap2 = Guid.NewGuid();
+
+            var manifest = new List<AssemblyManifestEntry>
+            {
+                AudioEntry(item1, "audio/a.wav", vol, part, chap1),
+                new(Guid.NewGuid(), ParagraphItemType.ParagraphPause, null,
+                    vol, null, part, null, chap1, null),
+                new(Guid.NewGuid(), ParagraphItemType.Narration, null,           // missing
+                    vol, null, part, null, chap2, null),
+                new(Guid.NewGuid(), ParagraphItemType.ChapterPause, null,
+                    vol, null, part, null, chap2, null),
+            };
+            var h = BuildHarness(manifest);
+            Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
+            await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
+
+            h.Sut.StartAsync(Folder, allowPartial: true);
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.Equal(1, h.Encoder.SilenceCallCount);
+            Assert.Contains(h.Events, e => e is AssemblyCompleted);
+        }
+
         // ── Null-cover pass-through ────────────────────────────────────────────
 
         [Fact]
@@ -447,6 +526,7 @@ namespace Read2Me.Tests.Services.Audio
             private readonly CancellationTokenSource? _encodeCts;
 
             public int EncodeCallCount { get; private set; }
+            public int SilenceCallCount { get; private set; }
             public string? LastOutputPath { get; private set; }
             public string? LastCoverPath { get; private set; }
 
@@ -465,7 +545,7 @@ namespace Read2Me.Tests.Services.Audio
 
             public Task<string> GetSilenceAsync(int ms, string? ffmpegPath, CancellationToken ct = default)
             {
-                // Create a stub file so the concat list has a real path.
+                SilenceCallCount++;
                 File.WriteAllBytes(_silencePath, new byte[4]);
                 return Task.FromResult(_silencePath);
             }

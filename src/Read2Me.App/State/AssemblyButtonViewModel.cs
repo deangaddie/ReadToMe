@@ -40,12 +40,7 @@ namespace Read2Me.App.State
             string? disabledReason = null;
             bool isEnabled = true;
 
-            if (audioRemaining > 0)
-            {
-                isEnabled = false;
-                disabledReason = $"{audioRemaining} item{(audioRemaining == 1 ? "" : "s")} still need audio";
-            }
-            else if (audioQueueBusy)
+            if (audioQueueBusy)
             {
                 isEnabled = false;
                 disabledReason = "Audio queue is busy";

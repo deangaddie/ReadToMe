@@ -33,13 +33,13 @@ namespace Read2Me.Tests.State
         }
 
         [Theory]
-        [InlineData(1, "1 item still need audio")]
-        [InlineData(5, "5 items still need audio")]
-        public void AudioRemaining_IsDisabled_WithCount(int remaining, string expected)
+        [InlineData(1)]
+        [InlineData(5)]
+        public void AudioRemaining_IdleNotRunning_IsEnabled(int remaining)
         {
             var vm = Vm(audioRemaining: remaining);
-            Assert.False(vm.IsEnabled);
-            Assert.Equal(expected, vm.DisabledReason);
+            Assert.True(vm.IsEnabled);
+            Assert.Null(vm.DisabledReason);
         }
 
         [Fact]
@@ -51,12 +51,11 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
-        public void AudioRemaining_TakesPriorityOver_QueueBusy()
+        public void AudioRemaining_AndQueueBusy_IsDisabled()
         {
-            // both conditions true — audioRemaining message wins
             var vm = Vm(audioRemaining: 3, audioQueueBusy: true);
             Assert.False(vm.IsEnabled);
-            Assert.Contains("3 items", vm.DisabledReason);
+            Assert.Equal("Audio queue is busy", vm.DisabledReason);
         }
 
         // ── Phase labels ────────────────────────────────────────────────────

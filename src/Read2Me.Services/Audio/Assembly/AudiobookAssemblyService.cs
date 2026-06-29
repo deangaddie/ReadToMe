@@ -39,9 +39,10 @@ namespace Read2Me.Services.Audio.Assembly
 
         /// <summary>
         /// Starts an assembly job. No-op if already running; returns false.
-        /// Precondition failure also returns false; AudioRemainingCount > 0.
+        /// When allowPartial is false (default), returns false if any non-pause items are missing audio.
+        /// When allowPartial is true, missing non-pause items are filtered out of the manifest.
         /// </summary>
-        public bool StartAsync(ProjectFolderId folder)
+        public bool StartAsync(ProjectFolderId folder, bool allowPartial = false)
         {
             lock (_lock)
             {
@@ -54,7 +55,7 @@ namespace Read2Me.Services.Audio.Assembly
 
                 _cts = new CancellationTokenSource();
                 var ct = _cts.Token;
-                Task.Run(() => RunAsync(folder, ct));
+                Task.Run(() => RunAsync(folder, allowPartial, ct));
             }
             return true;
         }
@@ -65,7 +66,7 @@ namespace Read2Me.Services.Audio.Assembly
                 _cts?.Cancel();
         }
 
-        private async Task RunAsync(ProjectFolderId folder, CancellationToken ct)
+        private async Task RunAsync(ProjectFolderId folder, bool allowPartial, CancellationToken ct)
         {
             string? tmpPath = null;
             string? concatListPath = null;
@@ -83,12 +84,12 @@ namespace Read2Me.Services.Audio.Assembly
                 SetPhase(AssemblyPhase.Gather);
                 ct.ThrowIfCancellationRequested();
 
-                var manifest = await reader.GetAssemblyManifestAsync(folder, ct);
+                var rawManifest = await reader.GetAssemblyManifestAsync(folder, ct);
 
-                var remaining = manifest.Count(e =>
+                var remaining = rawManifest.Count(e =>
                     !AudiobookAssemblyPlanner.IsPause(e.ItemType) && e.AudioRelativePath == null);
 
-                if (remaining > 0)
+                if (remaining > 0 && !allowPartial)
                 {
                     lock (_lock)
                     {
@@ -98,6 +99,10 @@ namespace Read2Me.Services.Audio.Assembly
                     }
                     return;
                 }
+
+                var manifest = allowPartial
+                    ? AudiobookAssemblyPlanner.FilterPartialManifest(rawManifest)
+                    : rawManifest;
 
                 lock (_lock) { AudioRemainingCount = 0; }
 
@@ -176,7 +181,10 @@ namespace Read2Me.Services.Audio.Assembly
                 var outputDir = Path.Combine(projectFolder, "output");
                 Directory.CreateDirectory(outputDir);
 
-                var finalPath = Path.Combine(outputDir, SanitizeFileName(bookTitle) + ".m4b");
+                var outputSuffix = allowPartial
+                    ? $"_partial_{DateTime.Today:yyyyMMdd}"
+                    : string.Empty;
+                var finalPath = Path.Combine(outputDir, SanitizeFileName(bookTitle) + outputSuffix + ".m4b");
                 tmpPath = finalPath + ".tmp";
 
                 var progress = new Progress<double>(f =>

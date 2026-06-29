@@ -53,14 +53,16 @@ else
                     AssemblyService.CurrentPhase, AssemblyService.EncodePercent);
                 var assembleTooltip = AssemblyService.IsRunning
                     ? "Assembly in progress"
-                    : assemblyVm.DisabledReason ?? "Assemble audiobook";
+                    : audioRemaining > 0
+                        ? $"{audioRemaining} paragraphs missing audio — click to assemble partial"
+                        : assemblyVm.DisabledReason ?? "Assemble audiobook";
             }
             <MudTooltip Text="@assembleTooltip">
                 <MudButton Variant="Variant.Outlined"
                            Size="Size.Small"
                            StartIcon="@(AssemblyService.IsRunning ? null : Icons.Material.Filled.LibraryMusic)"
                            Disabled="@(!assemblyVm.IsEnabled)"
-                           OnClick="@(() => AssemblyService.StartAsync(_folderId))">
+                           OnClick="HandleAssembleClick">
                     @if (AssemblyService.IsRunning)
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1"
@@ -69,6 +71,15 @@ else
                     Assemble audiobook
                 </MudButton>
             </MudTooltip>
+
+            <MudMessageBox @ref="_partialDialog" Title="Assemble partial audiobook" CancelText="Cancel">
+                <MessageContent>
+                    <MudText>@_partialDialogCount paragraphs are missing audio. The partial audiobook will only include items that have been generated so far. Continue?</MudText>
+                </MessageContent>
+                <YesButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary">Assemble partial</MudButton>
+                </YesButton>
+            </MudMessageBox>
             @if (Presenter.Error != null)
             {
                 <MudText Color="Color.Error" Typo="Typo.caption">@Presenter.Error</MudText>
@@ -187,6 +198,24 @@ else
     [Parameter] public EventCallback OnBookImported { get; set; }
 
     ProjectFolderId _folderId;
+    int _partialDialogCount;
+    MudMessageBox? _partialDialog;
+
+    async Task HandleAssembleClick()
+    {
+        var audioRemaining = NodeStatus.AudioRemainingForFolder(_folderId);
+        if (audioRemaining > 0)
+        {
+            _partialDialogCount = audioRemaining;
+            var confirmed = await _partialDialog!.ShowAsync();
+            if (confirmed == true)
+                AssemblyService.StartAsync(_folderId, allowPartial: true);
+        }
+        else
+        {
+            AssemblyService.StartAsync(_folderId);
+        }
+    }
 
     async Task MergeAndResetAsync((Guid survivorId, Guid deletedId) merge)
     {

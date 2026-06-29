@@ -200,6 +200,126 @@ namespace Read2Me.Tests.Services.Audio
 
         // ── GenerateFfmetadata ────────────────────────────────────────────────
 
+        // ── FilterPartialManifest ─────────────────────────────────────────────
+
+        [Fact]
+        public void FilterPartialManifest_RemovesMissingNonPause_KeepsPresentAndPauses()
+        {
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var chap = Guid.NewGuid();
+            var presentId = Guid.NewGuid();
+            var manifest = new List<AssemblyManifestEntry>
+            {
+                AudioEntry(presentId, "audio/a.wav", vol, part, chap),
+                new(Guid.NewGuid(), ParagraphItemType.Narration, null,
+                    vol, null, part, null, chap, null),                 // missing — remove
+                PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap),
+            };
+
+            var result = AudiobookAssemblyPlanner.FilterPartialManifest(manifest);
+
+            Assert.Equal(2, result.Count);
+            Assert.Equal(presentId, result[0].ParagraphItemId);
+            Assert.Equal(ParagraphItemType.ChapterPause, result[1].ItemType);
+        }
+
+        [Fact]
+        public void FilterPartialManifest_ConsecutiveSameLevelPauses_CollapsesToOne()
+        {
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var chap = Guid.NewGuid();
+            var manifest = new List<AssemblyManifestEntry>
+            {
+                PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap),
+                PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap),
+                PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap),
+            };
+
+            var result = AudiobookAssemblyPlanner.FilterPartialManifest(manifest);
+
+            Assert.Single(result);
+            Assert.Equal(ParagraphItemType.ChapterPause, result[0].ItemType);
+        }
+
+        [Fact]
+        public void FilterPartialManifest_MixedLevelPauseRun_KeepsHighestLevel()
+        {
+            // VolumePause > ChapterPause > ParagraphPause
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var chap = Guid.NewGuid();
+            var volumePauseId = Guid.NewGuid();
+            var manifest = new List<AssemblyManifestEntry>
+            {
+                PauseEntry(ParagraphItemType.ParagraphPause, vol, part, chap),
+                new(volumePauseId, ParagraphItemType.VolumePause, null,
+                    vol, null, part, null, chap, null),
+                PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap),
+            };
+
+            var result = AudiobookAssemblyPlanner.FilterPartialManifest(manifest);
+
+            Assert.Single(result);
+            Assert.Equal(ParagraphItemType.VolumePause, result[0].ItemType);
+            Assert.Equal(volumePauseId, result[0].ParagraphItemId);
+        }
+
+        [Fact]
+        public void FilterPartialManifest_CrossPartBoundaryPauseRun_CollapseToHighest()
+        {
+            // Part1: audio present, ChapterPause, missing audio, PartPause
+            // Part2: audio present
+            // After filter: audio, ChapterPause+PartPause run (consecutive) → keep PartPause, audio
+            var vol = Guid.NewGuid();
+            var part1 = Guid.NewGuid(); var part2 = Guid.NewGuid();
+            var chap1 = Guid.NewGuid(); var chap2 = Guid.NewGuid();
+            var presentId = Guid.NewGuid();
+            var present2Id = Guid.NewGuid();
+            var partPauseId = Guid.NewGuid();
+
+            var manifest = new List<AssemblyManifestEntry>
+            {
+                AudioEntry(presentId, "audio/a.wav", vol, part1, chap1),
+                PauseEntry(ParagraphItemType.ChapterPause, vol, part1, chap1),
+                new(Guid.NewGuid(), ParagraphItemType.Narration, null,
+                    vol, null, part1, null, chap2, null),                   // missing
+                new(partPauseId, ParagraphItemType.PartPause, null,
+                    vol, null, part1, null, chap2, null),
+                AudioEntry(present2Id, "audio/b.wav", vol, part2, chap2),
+            };
+
+            var result = AudiobookAssemblyPlanner.FilterPartialManifest(manifest);
+
+            // Expect: audio(presentId), PartPause, audio(present2Id)
+            Assert.Equal(3, result.Count);
+            Assert.Equal(presentId, result[0].ParagraphItemId);
+            Assert.Equal(ParagraphItemType.PartPause, result[1].ItemType);
+            Assert.Equal(present2Id, result[2].ParagraphItemId);
+        }
+
+        [Fact]
+        public void FilterPartialManifest_AllMissingChapter_PausesCollapsedAudioNeighboursKept()
+        {
+            // Chap1 audio | ChapterPause | chap2 missing×2 | ChapterPause | Chap3 audio
+            // After filter: chap1-audio, ChapterPause+ChapterPause run → one ChapterPause, chap3-audio
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid();
+            var chap1 = Guid.NewGuid(); var chap2 = Guid.NewGuid(); var chap3 = Guid.NewGuid();
+            var id1 = Guid.NewGuid(); var id3 = Guid.NewGuid();
+
+            var manifest = new List<AssemblyManifestEntry>
+            {
+                AudioEntry(id1, "audio/a.wav", vol, part, chap1),
+                PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap1),
+                new(Guid.NewGuid(), ParagraphItemType.Narration, null, vol, null, part, null, chap2, null),
+                new(Guid.NewGuid(), ParagraphItemType.Narration, null, vol, null, part, null, chap2, null),
+                PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap2),
+                AudioEntry(id3, "audio/c.wav", vol, part, chap3),
+            };
+
+            var result = AudiobookAssemblyPlanner.FilterPartialManifest(manifest);
+
+            Assert.Equal(3, result.Count);
+            Assert.Equal(id1, result[0].ParagraphItemId);
+            Assert.Equal(ParagraphItemType.ChapterPause, result[1].ItemType);
+            Assert.Equal(id3, result[2].ParagraphItemId);
+        }
+
         [Fact]
         public void GenerateFfmetadata_ContainsHeader()
         {
