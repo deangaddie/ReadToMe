@@ -28,33 +28,27 @@ namespace Read2Me.Tests.Services
         private static string Key(string? prev = null) =>
             OrderKeyGenerator.GenerateKeyBetween(prev, null);
 
-        private async Task<(Guid VolumeId, Guid PartId, Guid ChapterId)> SeedSpineAsync()
+        private async Task<BookHierarchyBuilder> SeedSpineAsync()
         {
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            await db.SaveChangesAsync();
-            return (vol.Id, part.Id, ch.Id);
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddPart("part", p => p.AddChapter("ch"))).BuildAsync();
+            return b;
         }
 
         [Fact]
         public async Task GetNodeStatusSeed_UnattributedCharacterItem_CountsOne()
         {
-            var (volId, partId, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(),
                     ParagraphId = para.Id,
                     ItemType = ParagraphItemType.Character,
-                    CharacterId = null, // unattributed
+                    CharacterId = null,
                     Order = Key(),
                 };
                 db.Paragraphs.Add(para);
@@ -66,9 +60,9 @@ namespace Read2Me.Tests.Services
 
             Assert.Single(rows);
             Assert.Equal(1, rows[0].Unattributed);
-            Assert.Equal(chId, rows[0].ChapterId);
-            Assert.Equal(partId, rows[0].PartId);
-            Assert.Equal(volId, rows[0].VolumeId);
+            Assert.Equal(b.ChapterId("ch"), rows[0].ChapterId);
+            Assert.Equal(b.PartId("part"), rows[0].PartId);
+            Assert.Equal(b.VolumeId("vol"), rows[0].VolumeId);
             Assert.Equal(1, rows[0].MissingAudio);
             Assert.Equal(0, rows[0].Review);
         }
@@ -76,7 +70,7 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_AttributedCharacterItem_ZeroUnattributed()
         {
-            var (_, _, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
             var characterId = Guid.NewGuid();
 
             await using (var db = await OpenDbAsync())
@@ -84,13 +78,13 @@ namespace Read2Me.Tests.Services
                 var character = new Character { Id = characterId, Name = "Alice", IsNarrator = false };
                 db.Characters.Add(character);
 
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(),
                     ParagraphId = para.Id,
                     ItemType = ParagraphItemType.Character,
-                    CharacterId = characterId, // attributed
+                    CharacterId = characterId,
                     Order = Key(),
                 };
                 db.Paragraphs.Add(para);
@@ -107,11 +101,11 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_PauseItemOnly_NotIncluded()
         {
-            var (_, _, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(),
@@ -132,7 +126,7 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_MixedParagraphs_CorrectCounts()
         {
-            var (_, _, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
             var characterId = Guid.NewGuid();
 
             await using (var db = await OpenDbAsync())
@@ -140,8 +134,7 @@ namespace Read2Me.Tests.Services
                 var character = new Character { Id = characterId, Name = "Bob", IsNarrator = false };
                 db.Characters.Add(character);
 
-                // Para 1: one unattributed character item
-                var para1 = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para1 = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 db.Paragraphs.Add(para1);
                 db.ParagraphItems.Add(new ParagraphItem
                 {
@@ -149,8 +142,7 @@ namespace Read2Me.Tests.Services
                     ItemType = ParagraphItemType.Character, CharacterId = null, Order = Key(),
                 });
 
-                // Para 2: one attributed character item
-                var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 db.Paragraphs.Add(para2);
                 db.ParagraphItems.Add(new ParagraphItem
                 {
@@ -166,18 +158,18 @@ namespace Read2Me.Tests.Services
             Assert.Equal(2, rows.Count);
             var unattributedRow = rows.Single(r => r.Unattributed == 1);
             var attributedRow = rows.Single(r => r.Unattributed == 0);
-            Assert.Equal(chId, unattributedRow.ChapterId);
-            Assert.Equal(chId, attributedRow.ChapterId);
+            Assert.Equal(b.ChapterId("ch"), unattributedRow.ChapterId);
+            Assert.Equal(b.ChapterId("ch"), attributedRow.ChapterId);
         }
 
         [Fact]
         public async Task GetNodeStatusSeed_NarrationItem_IncludedWithZeroUnattributed()
         {
-            var (_, _, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(),
@@ -203,11 +195,11 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_ItemWithNoAudioFile_CountsOneMissingAudio()
         {
-            var (_, _, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
@@ -229,11 +221,11 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_ItemWithAudioFile_ZeroMissingAudio()
         {
-            var (_, _, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
@@ -255,12 +247,11 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_PauseItem_ExcludedFromMissingAudioCount()
         {
-            var (_, _, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                // One Pause item + one Character item with no audio
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 db.Paragraphs.Add(para);
                 db.ParagraphItems.Add(new ParagraphItem
                 {
@@ -288,11 +279,11 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_TwoItemsOneMissingAudio_MissingAudioIsOne()
         {
-            var (_, _, chId) = await SeedSpineAsync();
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 db.Paragraphs.Add(para);
                 db.ParagraphItems.Add(new ParagraphItem
                 {
@@ -324,12 +315,11 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_NeedsReviewItem_ReviewIsOne()
         {
-            var (_, _, chId) = await SeedSpineAsync();
-            Guid itemId;
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 db.Paragraphs.Add(para);
                 var item = new ParagraphItem
                 {
@@ -339,11 +329,10 @@ namespace Read2Me.Tests.Services
                     Order = Key(),
                 };
                 db.ParagraphItems.Add(item);
-                itemId = item.Id;
                 db.AudioReviews.Add(new AudioReview
                 {
                     Id = Guid.NewGuid(),
-                    ParagraphItemId = itemId,
+                    ParagraphItemId = item.Id,
                     State = Data.Enums.AudioReviewState.NeedsReview,
                     CreatedUtc = DateTime.UtcNow,
                     UpdatedUtc = DateTime.UtcNow,
@@ -360,12 +349,11 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetNodeStatusSeed_DismissedReviewItem_ReviewIsZero()
         {
-            var (_, _, chId) = await SeedSpineAsync();
-            Guid itemId;
+            var b = await SeedSpineAsync();
 
             await using (var db = await OpenDbAsync())
             {
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = chId, Order = Key() };
+                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
                 db.Paragraphs.Add(para);
                 var item = new ParagraphItem
                 {
@@ -375,11 +363,10 @@ namespace Read2Me.Tests.Services
                     Order = Key(),
                 };
                 db.ParagraphItems.Add(item);
-                itemId = item.Id;
                 db.AudioReviews.Add(new AudioReview
                 {
                     Id = Guid.NewGuid(),
-                    ParagraphItemId = itemId,
+                    ParagraphItemId = item.Id,
                     State = Data.Enums.AudioReviewState.Dismissed,
                     CreatedUtc = DateTime.UtcNow,
                     UpdatedUtc = DateTime.UtcNow,

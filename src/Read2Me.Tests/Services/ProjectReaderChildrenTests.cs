@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
-using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.IO;
 using Read2Me.Tests.Infrastructure;
@@ -29,65 +28,39 @@ namespace Read2Me.Tests.Services
 
         private async Task<(Guid VolumeId, Guid[] PartIds)> SeedVolumeWithPartsAsync(int partCount = 2)
         {
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            db.Volumes.Add(vol);
-
-            var partIds = new Guid[partCount];
-            string? prev = null;
-            for (int i = 0; i < partCount; i++)
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            var partNames = Enumerable.Range(0, partCount).Select(i => $"p{i}").ToArray();
+            var scope = b.AddVolume("vol", v =>
             {
-                var order = Key(prev); prev = order;
-                var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = order };
-                db.Parts.Add(part);
-                partIds[i] = part.Id;
-            }
-            await db.SaveChangesAsync();
-            return (vol.Id, partIds);
+                foreach (var name in partNames)
+                    v.AddPart(name);
+            });
+            await scope.BuildAsync();
+            return (b.VolumeId("vol"), partNames.Select(n => b.PartId(n)).ToArray());
         }
 
         private async Task<(Guid PartId, Guid[] ChapterIds)> SeedPartWithChaptersAsync(int chapterCount = 2)
         {
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-
-            var chapterIds = new Guid[chapterCount];
-            string? prev = null;
-            for (int i = 0; i < chapterCount; i++)
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            var chNames = Enumerable.Range(0, chapterCount).Select(i => $"ch{i}").ToArray();
+            await b.AddVolume("vol", v => v.AddPart("part", p =>
             {
-                var order = Key(prev); prev = order;
-                var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = order };
-                db.Chapters.Add(ch);
-                chapterIds[i] = ch.Id;
-            }
-            await db.SaveChangesAsync();
-            return (part.Id, chapterIds);
+                foreach (var name in chNames)
+                    p.AddChapter(name);
+            })).BuildAsync();
+            return (b.PartId("part"), chNames.Select(n => b.ChapterId(n)).ToArray());
         }
 
         private async Task<(Guid ChapterId, Guid[] ParagraphIds)> SeedChapterWithParagraphsAsync(int paragraphCount = 2)
         {
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-
-            var paraIds = new Guid[paragraphCount];
-            string? prev = null;
-            for (int i = 0; i < paragraphCount; i++)
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            var paraNames = Enumerable.Range(0, paragraphCount).Select(i => $"para{i}").ToArray();
+            await b.AddVolume("vol", v => v.AddChapter("ch", c =>
             {
-                var order = Key(prev); prev = order;
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = order };
-                db.Paragraphs.Add(para);
-                paraIds[i] = para.Id;
-            }
-            await db.SaveChangesAsync();
-            return (ch.Id, paraIds);
+                foreach (var name in paraNames)
+                    c.AddParagraph(name);
+            })).BuildAsync();
+            return (b.ChapterId("ch"), paraNames.Select(n => b.ParagraphId(n)).ToArray());
         }
 
         [Fact]
@@ -136,33 +109,38 @@ namespace Read2Me.Tests.Services
         public async Task GetChildren_OrdersByOrderKey()
         {
             // Seed parts out of insertion order: partB has earlier fractional key than partA.
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            db.Volumes.Add(vol);
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v
+                .AddPart("partA")
+                .AddPart("partB"))
+                .BuildAsync();
 
-            var orderFirst = Key();          // e.g. "a0"
-            var orderSecond = Key(orderFirst); // e.g. "a1"
+            // After build, swap the order keys in DB so partB sorts before partA
+            var orderFirst = Key();
+            var orderSecond = Key(orderFirst);
+            await using (var db = await OpenDbAsync())
+            {
+                var a = await db.Parts.FindAsync(b.PartId("partA"));
+                var bPart = await db.Parts.FindAsync(b.PartId("partB"));
+                a!.Order = orderSecond;
+                bPart!.Order = orderFirst;
+                await db.SaveChangesAsync();
+            }
 
-            // Insert partA with the later order key first, then partB with the earlier key.
-            var partA = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = orderSecond };
-            var partB = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = orderFirst };
-            db.Parts.Add(partA); // DB insertion order: first, but has later fractional key
-            db.Parts.Add(partB); // DB insertion order: second, but has earlier fractional key
-            await db.SaveChangesAsync();
-
-            var result = await _reader.GetChildrenAsync(_folder, BookNodeLevel.Volume, vol.Id);
+            var result = await _reader.GetChildrenAsync(_folder, BookNodeLevel.Volume, b.VolumeId("vol"));
 
             Assert.NotNull(result.Parts);
             Assert.Equal(2, result.Parts.Count);
-            // partB (orderFirst) should sort before partA (orderSecond).
-            Assert.Equal(partB.Id, result.Parts[0].Id);
-            Assert.Equal(partA.Id, result.Parts[1].Id);
+            Assert.Equal(b.PartId("partB"), result.Parts[0].Id);
+            Assert.Equal(b.PartId("partA"), result.Parts[1].Id);
         }
 
         [Fact]
         public async Task GetChildren_UnknownParent_ReturnsEmpty()
         {
-            await using var db = await OpenDbAsync(); // ensure DB exists and is migrated
+            // ensure DB exists and is migrated
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.BuildAsync();
 
             var result = await _reader.GetChildrenAsync(_folder, BookNodeLevel.Volume, Guid.NewGuid());
 
