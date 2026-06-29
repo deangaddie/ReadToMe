@@ -397,14 +397,9 @@ namespace Read2Me.App.State
             var para = Tree.AllParagraphs().FirstOrDefault(p => p.Id == paragraphId);
             if (para is null) return;
 
-            var character = Characters.Find(c => c.Id == resolved.CharacterId);
-            if (ParagraphCharacterStamp.Apply(para.Items, resolved.CharacterId, character))
-            {
-                var remaining = para.Items.Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null);
-                nodeStatus.OnCharacterAttributed(folder, paragraphId, remaining);
-                InvalidateVoicePreview();
-                NotifyStateChanged();
-            }
+            nodeStatus.OnCharacterAttributed(folder, paragraphId, remainingUnattributed: 0);
+            InvalidateVoicePreview();
+            NotifyStateChanged();
         }
 
         private void OnAudioFileAssigned(ProjectFolderId folder, Guid paragraphItemId, string relativePath)
