@@ -83,9 +83,6 @@ public sealed class VoiceResolver : IVoiceResolver
         }
 
         // 6. Resolve anchor node orders in 5 level-queries
-        const string MaxSentinel = "￿￿";
-        const string MinSentinel = "";
-
         var volOrders = volumeIds.Count > 0
             ? await db.Volumes.AsNoTracking()
                 .Where(v => volumeIds.Contains(v.Id))
@@ -161,30 +158,13 @@ public sealed class VoiceResolver : IVoiceResolver
             itemPositions[r.Id] = new StoryPosition(r.VolumeOrder, r.PartOrder, r.ChOrder, r.ParaOrder, r.ItemOrder);
 
         // Build RuleInputs per character (shared across items of same char)
+        var tables = new NodeOrderTables(volOrders, partOrders, chapterOrders, paraOrders, anchorItemPositions);
         var ruleInputsByChar = new Dictionary<Guid, List<RuleInput>>();
         foreach (var (charId, charRules) in rulesByChar)
         {
             var inputs = new List<RuleInput>(charRules.Count);
             foreach (var rule in charRules)
-            {
-                var fromPos = ResolveSpanBound(rule.FromLevel, rule.FromNodeId, isMin: true,
-                    volOrders, partOrders, chapterOrders, paraOrders, anchorItemPositions,
-                    MinSentinel, MaxSentinel, out var fromDangling);
-                var toPos = ResolveSpanBound(rule.ToLevel, rule.ToNodeId, isMin: false,
-                    volOrders, partOrders, chapterOrders, paraOrders, anchorItemPositions,
-                    MinSentinel, MaxSentinel, out var toDangling);
-
-                var isDangling = (rule.FromNodeId.HasValue && fromDangling) ||
-                                 (rule.ToNodeId.HasValue && toDangling);
-
-                inputs.Add(new RuleInput(
-                    rule.VoiceId,
-                    rule.Rank,
-                    rule.IsDefault,
-                    IsDangling: isDangling,
-                    From: (rule.FromLevel.HasValue && !fromDangling) ? fromPos : null,
-                    To:   (rule.ToLevel.HasValue   && !toDangling)  ? toPos   : null));
-            }
+                inputs.Add(AnchorSpanResolver.Build(rule, tables));
             ruleInputsByChar[charId] = inputs;
         }
 
@@ -257,62 +237,6 @@ public sealed class VoiceResolver : IVoiceResolver
             case DataAnchorLevel.Chapter:       chapterIds.Add(nodeId.Value);   break;
             case DataAnchorLevel.Paragraph:     paragraphIds.Add(nodeId.Value); break;
             case DataAnchorLevel.ParagraphItem: itemIds.Add(nodeId.Value);      break;
-        }
-    }
-
-    private static StoryPosition ResolveSpanBound(
-        DataAnchorLevel? level, Guid? nodeId, bool isMin,
-        Dictionary<Guid, string> volOrders,
-        Dictionary<Guid, (string VolOrder, string PartOrder)> partOrders,
-        Dictionary<Guid, (string VolOrder, string PartOrder, string ChOrder)> chapterOrders,
-        Dictionary<Guid, (string VolOrder, string PartOrder, string ChOrder, string ParaOrder)> paraOrders,
-        Dictionary<Guid, StoryPosition> itemPositions,
-        string minSentinel, string maxSentinel,
-        out bool isDangling)
-    {
-        isDangling = false;
-
-        if (level is null || nodeId is null)
-            return default;
-
-        switch (level.Value)
-        {
-            case DataAnchorLevel.Volume:
-                if (!volOrders.TryGetValue(nodeId.Value, out var volOrder))
-                { isDangling = true; return default; }
-                return isMin
-                    ? new StoryPosition(volOrder, minSentinel, minSentinel, minSentinel, minSentinel)
-                    : new StoryPosition(volOrder, maxSentinel, maxSentinel, maxSentinel, maxSentinel);
-
-            case DataAnchorLevel.Part:
-                if (!partOrders.TryGetValue(nodeId.Value, out var partRow))
-                { isDangling = true; return default; }
-                return isMin
-                    ? new StoryPosition(partRow.VolOrder, partRow.PartOrder, minSentinel, minSentinel, minSentinel)
-                    : new StoryPosition(partRow.VolOrder, partRow.PartOrder, maxSentinel, maxSentinel, maxSentinel);
-
-            case DataAnchorLevel.Chapter:
-                if (!chapterOrders.TryGetValue(nodeId.Value, out var chRow))
-                { isDangling = true; return default; }
-                return isMin
-                    ? new StoryPosition(chRow.VolOrder, chRow.PartOrder, chRow.ChOrder, minSentinel, minSentinel)
-                    : new StoryPosition(chRow.VolOrder, chRow.PartOrder, chRow.ChOrder, maxSentinel, maxSentinel);
-
-            case DataAnchorLevel.Paragraph:
-                if (!paraOrders.TryGetValue(nodeId.Value, out var paraRow))
-                { isDangling = true; return default; }
-                return isMin
-                    ? new StoryPosition(paraRow.VolOrder, paraRow.PartOrder, paraRow.ChOrder, paraRow.ParaOrder, minSentinel)
-                    : new StoryPosition(paraRow.VolOrder, paraRow.PartOrder, paraRow.ChOrder, paraRow.ParaOrder, maxSentinel);
-
-            case DataAnchorLevel.ParagraphItem:
-                if (!itemPositions.TryGetValue(nodeId.Value, out var itemPos))
-                { isDangling = true; return default; }
-                return itemPos;
-
-            default:
-                isDangling = true;
-                return default;
         }
     }
 }
