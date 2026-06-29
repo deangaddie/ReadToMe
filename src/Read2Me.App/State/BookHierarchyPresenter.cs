@@ -101,6 +101,7 @@ namespace Read2Me.App.State
 
         private ProjectFolderId? _lastFolder;
         private bool _audioQueueSubscribed;
+        private bool _characterAssignedSubscribed;
 
         public event Action? StateChanged;
 
@@ -112,6 +113,12 @@ namespace Read2Me.App.State
             {
                 audioQueue.AudioFileAssigned += OnAudioFileAssigned;
                 _audioQueueSubscribed = true;
+            }
+
+            if (!_characterAssignedSubscribed)
+            {
+                characterQueue.CharacterAssigned += OnCharacterAssigned;
+                _characterAssignedSubscribed = true;
             }
 
             if (_lastFolder.HasValue && _lastFolder.Value.Value != folderId.Value)
@@ -383,6 +390,23 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
+        private void OnCharacterAssigned(ProjectFolderId folder, Guid paragraphId, ResolvedCharacter resolved)
+        {
+            if (_lastFolder is not { } current || current.Value != folder.Value) return;
+
+            var para = Tree.AllParagraphs().FirstOrDefault(p => p.Id == paragraphId);
+            if (para is null) return;
+
+            var character = Characters.Find(c => c.Id == resolved.CharacterId);
+            if (ParagraphCharacterStamp.Apply(para.Items, resolved.CharacterId, character))
+            {
+                var remaining = para.Items.Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null);
+                nodeStatus.OnCharacterAttributed(folder, paragraphId, remaining);
+                InvalidateVoicePreview();
+                NotifyStateChanged();
+            }
+        }
+
         private void OnAudioFileAssigned(ProjectFolderId folder, Guid paragraphItemId, string relativePath)
         {
             if (_lastFolder is not { } current || current.Value != folder.Value) return;
@@ -401,6 +425,12 @@ namespace Read2Me.App.State
             {
                 audioQueue.AudioFileAssigned -= OnAudioFileAssigned;
                 _audioQueueSubscribed = false;
+            }
+
+            if (_characterAssignedSubscribed)
+            {
+                characterQueue.CharacterAssigned -= OnCharacterAssigned;
+                _characterAssignedSubscribed = false;
             }
         }
     }
