@@ -62,8 +62,15 @@ else
                                 }
                                 @if (c.Voices.Count > 0)
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info"
-                                             Variant="Variant.Text" Icon="@Icons.Material.Filled.RecordVoiceOver">@c.Voices.Count</MudChip>
+                                    var total = c.Voices.Count;
+                                    var ready = Presenter.ReadyVoiceCount(c);
+                                    var chipColor = ready == 0 ? Color.Error : ready < total ? Color.Warning : Color.Info;
+                                    var chipLabel = ready == total ? $"{total}" : $"{ready} / {total}";
+                                    var tooltip = $"{ready} of {total} {(total == 1 ? "voice" : "voices")} ready for TTS";
+                                    <MudTooltip Text="@tooltip">
+                                        <MudChip T="string" Size="Size.Small" Color="@chipColor"
+                                                 Variant="Variant.Text" Icon="@Icons.Material.Filled.RecordVoiceOver">@chipLabel</MudChip>
+                                    </MudTooltip>
                                 }
                             </MudStack>
                         </MudListItem>

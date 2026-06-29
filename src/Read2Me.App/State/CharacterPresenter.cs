@@ -280,12 +280,15 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
+        public int ReadyVoiceCount(Character character) =>
+            character.Voices?.Count(v => !string.IsNullOrEmpty(v.AudioFileName)) ?? 0;
+
         /// <summary>
         /// Applies a mutation to the in-memory <see cref="VoiceEntity"/> with the
-        /// given id (in both <see cref="Voices"/> and the selected character's voice
-        /// list) so a single-field change doesn't require reloading every character,
-        /// line, and voice from the database — which would replace all objects and
-        /// reset transient UI state (expanded panels, drafts).
+        /// given id (in <see cref="Voices"/>, the selected character's voice list, and
+        /// every character's voice list) so a single-field change doesn't require
+        /// reloading every character, line, and voice from the database — which would
+        /// replace all objects and reset transient UI state (expanded panels, drafts).
         /// </summary>
         private void UpdateVoiceInPlace(Guid voiceId, Action<VoiceEntity> mutate)
         {
@@ -294,6 +297,13 @@ namespace Read2Me.App.State
 
             var charVoice = SelectedCharacter?.Voices?.FirstOrDefault(v => v.Id == voiceId);
             if (charVoice is not null && !ReferenceEquals(charVoice, voice)) mutate(charVoice);
+
+            foreach (var c in Characters)
+            {
+                if (ReferenceEquals(c, SelectedCharacter)) continue;
+                var cv = c.Voices?.FirstOrDefault(v => v.Id == voiceId);
+                if (cv is not null) mutate(cv);
+            }
         }
 
         /// <summary>
