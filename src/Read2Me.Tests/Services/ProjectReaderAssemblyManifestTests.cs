@@ -1,4 +1,5 @@
 using FractionalIndexing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
@@ -29,77 +30,91 @@ namespace Read2Me.Tests.Services
 
         /// <summary>
         /// Seeds a 2-volume book:
-        ///   Vol1 > Part1 > Ch1: Narration (audio set), ChapterPause (no audio), Character (no audio)
-        ///   Vol2 > Part2 > Ch2: Character (audio set), Pause (no audio)
+        ///   Vol1 > Part1 (no title) > Ch1: Narration (audio set), ChapterPause (no audio), Character (no audio)
+        ///   Vol2 > Part2 ("Part Two") > Ch2: Character (audio set), Pause (no audio)
         /// Returns ids needed for assertions.
         /// </summary>
         private async Task<SeedResult> SeedBookAsync()
         {
+            // Builder creates the spine (vol/part/ch/para). Items seeded post-build for AudioFileName control.
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b
+                .AddVolume("vol1", v => v.AddPart(configure: p => p.AddChapter("ch1", c => c.AddParagraph("para1"))))
+                .AddVolume("vol2", v => v.AddPart("Part Two", p => p.AddChapter("ch2", c => c.AddParagraph("para2"))))
+                .BuildAsync();
+
+            // Update volume and chapter titles to match original seed expectations
+            Guid item1Id, item2Id, item3Id, item4Id, item5Id;
+            Guid vol1Id = b.VolumeId("vol1"), vol2Id = b.VolumeId("vol2");
+            Guid ch1Id = b.ChapterId("ch1"), ch2Id = b.ChapterId("ch2");
+            Guid part2Id = b.PartId("Part Two");
+
             await using var db = await OpenDbAsync();
 
-            var vol1Order = Key();
-            var vol1 = new Volume { Id = Guid.NewGuid(), Title = "Volume One", Order = vol1Order };
-            var part1 = new Part { Id = Guid.NewGuid(), VolumeId = vol1.Id, Title = null, Order = Key() };
-            var ch1 = new Chapter { Id = Guid.NewGuid(), PartId = part1.Id, Title = "Chapter One", Order = Key() };
-            var para1 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch1.Id, Order = Key() };
+            // Set chapter and volume titles
+            var vol1 = await db.Volumes.FindAsync(vol1Id);
+            vol1!.Title = "Volume One";
+            var vol2 = await db.Volumes.FindAsync(vol2Id);
+            vol2!.Title = "Volume Two";
+            var ch1 = await db.Chapters.FindAsync(ch1Id);
+            ch1!.Title = "Chapter One";
+            var ch2 = await db.Chapters.FindAsync(ch2Id);
+            ch2!.Title = "Chapter Two";
 
-            // item1: Narration with audio
-            var item1 = new ParagraphItem
+            // Retrieve part1 (implicit — no name registered; look up via vol1)
+            var part1 = await db.Parts.FirstAsync(p => p.VolumeId == vol1Id);
+            var part1Id = part1.Id;
+            // part1.Title is already null (implicit part has no name)
+
+            // Seed the 5 items
+            string? order = null;
+            item1Id = Guid.NewGuid();
+            db.ParagraphItems.Add(new ParagraphItem
             {
-                Id = Guid.NewGuid(), ParagraphId = para1.Id, Order = Key(),
+                Id = item1Id, ParagraphId = b.ParagraphId("para1"), Order = order = Key(order),
                 ItemType = ParagraphItemType.Narration, Text = "Narrate this",
                 AudioFileName = "audio/narration.wav"
-            };
-            // item2: ChapterPause (Pause-kind, no audio regardless)
-            var item2 = new ParagraphItem
+            });
+            item2Id = Guid.NewGuid();
+            db.ParagraphItems.Add(new ParagraphItem
             {
-                Id = Guid.NewGuid(), ParagraphId = para1.Id, Order = Key(item1.Order),
+                Id = item2Id, ParagraphId = b.ParagraphId("para1"), Order = order = Key(order),
                 ItemType = ParagraphItemType.ChapterPause,
-                AudioFileName = "audio/should-be-ignored.wav" // stored but must return null
-            };
-            // item3: Character without audio
-            var item3 = new ParagraphItem
+                AudioFileName = "audio/should-be-ignored.wav"
+            });
+            item3Id = Guid.NewGuid();
+            db.ParagraphItems.Add(new ParagraphItem
             {
-                Id = Guid.NewGuid(), ParagraphId = para1.Id, Order = Key(item2.Order),
+                Id = item3Id, ParagraphId = b.ParagraphId("para1"), Order = order = Key(order),
                 ItemType = ParagraphItemType.Character, Text = "Dialog line"
-            };
+            });
 
-            var vol2Order = Key(vol1Order);
-            var vol2 = new Volume { Id = Guid.NewGuid(), Title = "Volume Two", Order = vol2Order };
-            var part2 = new Part { Id = Guid.NewGuid(), VolumeId = vol2.Id, Title = "Part Two", Order = Key() };
-            var ch2 = new Chapter { Id = Guid.NewGuid(), PartId = part2.Id, Title = "Chapter Two", Order = Key() };
-            var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch2.Id, Order = Key() };
-
-            // item4: Character with audio
-            var item4 = new ParagraphItem
+            string? order2 = null;
+            item4Id = Guid.NewGuid();
+            db.ParagraphItems.Add(new ParagraphItem
             {
-                Id = Guid.NewGuid(), ParagraphId = para2.Id, Order = Key(),
+                Id = item4Id, ParagraphId = b.ParagraphId("para2"), Order = order2 = Key(order2),
                 ItemType = ParagraphItemType.Character, Text = "Vol2 dialog",
                 AudioFileName = "audio/character.wav"
-            };
-            // item5: Pause (Pause-kind, no audio)
-            var item5 = new ParagraphItem
+            });
+            item5Id = Guid.NewGuid();
+            db.ParagraphItems.Add(new ParagraphItem
             {
-                Id = Guid.NewGuid(), ParagraphId = para2.Id, Order = Key(item4.Order),
+                Id = item5Id, ParagraphId = b.ParagraphId("para2"), Order = order2 = Key(order2),
                 ItemType = ParagraphItemType.Pause
-            };
+            });
 
-            db.Volumes.AddRange(vol1, vol2);
-            db.Parts.AddRange(part1, part2);
-            db.Chapters.AddRange(ch1, ch2);
-            db.Paragraphs.AddRange(para1, para2);
-            db.ParagraphItems.AddRange(item1, item2, item3, item4, item5);
             await db.SaveChangesAsync();
 
             return new SeedResult(
-                Vol1Id: vol1.Id, Vol1Title: "Volume One",
-                Part1Id: part1.Id, Part1Title: null,
-                Ch1Id: ch1.Id, Ch1Title: "Chapter One",
-                Vol2Id: vol2.Id, Vol2Title: "Volume Two",
-                Part2Id: part2.Id, Part2Title: "Part Two",
-                Ch2Id: ch2.Id, Ch2Title: "Chapter Two",
-                Item1Id: item1.Id, Item2Id: item2.Id, Item3Id: item3.Id,
-                Item4Id: item4.Id, Item5Id: item5.Id);
+                Vol1Id: vol1Id, Vol1Title: "Volume One",
+                Part1Id: part1Id, Part1Title: null,
+                Ch1Id: ch1Id, Ch1Title: "Chapter One",
+                Vol2Id: vol2Id, Vol2Title: "Volume Two",
+                Part2Id: part2Id, Part2Title: "Part Two",
+                Ch2Id: ch2Id, Ch2Title: "Chapter Two",
+                Item1Id: item1Id, Item2Id: item2Id, Item3Id: item3Id,
+                Item4Id: item4Id, Item5Id: item5Id);
         }
 
         private sealed record SeedResult(

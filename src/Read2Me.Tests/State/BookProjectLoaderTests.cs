@@ -1,10 +1,10 @@
-using FractionalIndexing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.State;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using AudioReviewState = Read2Me.Data.Enums.AudioReviewState;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Tests.Infrastructure;
@@ -16,9 +16,6 @@ namespace Read2Me.Tests.State
     {
         private readonly ProjectFolderId _folder;
         private readonly IBookProjectLoader _sut;
-
-        private static string Key(string? prev = null, string? next = null) =>
-            OrderKeyGenerator.GenerateKeyBetween(prev, next);
 
         public BookProjectLoaderTests()
         {
@@ -33,41 +30,23 @@ namespace Read2Me.Tests.State
             _sut = new BookProjectLoader(reader);
         }
 
-        private async Task<(Volume vol, Character character)> SeedProjectWithContentAsync(bool narratorOnlyMode = false)
+        private async Task<(Guid volId, Guid characterId)> SeedProjectWithContentAsync(bool narratorOnlyMode = false)
         {
-            await using var db = await OpenDbAsync();
-
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            db.Characters.Add(character);
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithProject(narratorOnlyMode: narratorOnlyMode)
+             .WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "Hello world", character.Id))))
+                .BuildAsync();
 
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol1", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key(), CharacterId = character.Id };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character,
-                CharacterId = character.Id,
-                Text = "Hello world",
-                Order = Key()
-            };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-
-            db.Projects.Add(new Project
-            {
-                Filename = "book.epub",
-                NarratorOnlyMode = narratorOnlyMode
-            });
-
+            // para.CharacterId needs post-build update
+            await using var db = await OpenDbAsync();
+            var para = await db.Paragraphs.FindAsync(b.ParagraphId("para"));
+            para!.CharacterId = character.Id;
             await db.SaveChangesAsync();
-            return (vol, character);
+
+            return (b.VolumeId("vol"), character.Id);
         }
 
         // ---------------------------------------------------------------
@@ -77,15 +56,15 @@ namespace Read2Me.Tests.State
         [Fact]
         public async Task LoadSnapshotAsync_WithContent_ReturnsCorrectSnapshot()
         {
-            var (vol, character) = await SeedProjectWithContentAsync();
+            var (volId, characterId) = await SeedProjectWithContentAsync();
 
             var snapshot = await _sut.LoadSnapshotAsync(_folder);
 
-            Assert.Equal("book.epub", snapshot.Filename);
+            Assert.Equal("book.txt", snapshot.Filename);
             Assert.True(snapshot.HasContent);
             Assert.Single(snapshot.Volumes);
-            Assert.Equal(vol.Id, snapshot.Volumes[0].Id);
-            Assert.Contains(snapshot.Characters, c => c.Id == character.Id);
+            Assert.Equal(volId, snapshot.Volumes[0].Id);
+            Assert.Contains(snapshot.Characters, c => c.Id == characterId);
             Assert.False(snapshot.NarratorOnlyMode);
         }
 
@@ -96,7 +75,9 @@ namespace Read2Me.Tests.State
         [Fact]
         public async Task LoadSnapshotAsync_NoContent_AudioNodeCountsEmpty()
         {
-            // No volumes/items seeded — HasContent = false
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.BuildAsync();
+
             var snapshot = await _sut.LoadSnapshotAsync(_folder);
 
             Assert.False(snapshot.HasContent);
@@ -124,40 +105,24 @@ namespace Read2Me.Tests.State
         [Fact]
         public async Task LoadSnapshotAsync_WithAudioReview_SnapshotContainsIt()
         {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p.AddNarration("item", "Narrated text"))))
+                .BuildAsync();
+
             await using var db = await OpenDbAsync();
-
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var item = new ParagraphItem
+            db.AudioReviews.Add(new AudioReview
             {
-                Id = Guid.NewGuid(),
-                ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Narration,
-                Text = "Narrated text",
-                Order = Key()
-            };
-            var review = new Read2Me.Data.Entities.AudioReview
-            {
-                ParagraphItemId = item.Id,
-                State = Read2Me.Data.Enums.AudioReviewState.NeedsReview,
+                ParagraphItemId = b.ItemId("item"),
+                State = AudioReviewState.NeedsReview,
                 Wer = 0.1f
-            };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-            db.AudioReviews.Add(review);
-            db.Projects.Add(new Project { Filename = "b.epub" });
+            });
             await db.SaveChangesAsync();
 
             var snapshot = await _sut.LoadSnapshotAsync(_folder);
 
             Assert.Single(snapshot.AudioReviews);
-            Assert.Equal(item.Id, snapshot.AudioReviews[0].ParagraphItemId);
+            Assert.Equal(b.ItemId("item"), snapshot.AudioReviews[0].ParagraphItemId);
         }
 
         // ---------------------------------------------------------------

@@ -1,4 +1,3 @@
-using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Core.Configuration;
@@ -29,38 +28,25 @@ namespace Read2Me.Tests.Services.Characters
             _folder = new ProjectFolderId(FolderName);
         }
 
-        private static string Key(string? prev = null, string? next = null) =>
-            OrderKeyGenerator.GenerateKeyBetween(prev, next);
-
-        private async Task<ProjectDbContext> SeedProjectAsync()
+        private async Task InitProjectAsync()
         {
-            var db = await OpenDbAsync();
-            db.Projects.Add(new Project
-            {
-                Title = "T", BookTitle = "B", Author = "A",
-                Filename = "t.epub", Type = BookFileType.Epub
-            });
-            await db.SaveChangesAsync();
-            return db;
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.BuildAsync();
         }
 
-        private async Task<(Chapter ch, Paragraph para, ParagraphItem item)> SeedCharacterParagraphAsync(
-            ProjectDbContext db, Guid characterId)
+        private async Task<Guid> SeedCharacterParagraphWithCharIdAsync(Guid characterId)
         {
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key(), CharacterId = characterId };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character,
-                Order = Key(), CharacterId = characterId, Text = "\"Hello.\""
-            };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch);
-            db.Paragraphs.Add(para); db.ParagraphItems.Add(item);
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "\"Hello.\"", characterId))))
+                .AddHierarchyAsync();
+
+            await using var db = await OpenDbAsync();
+            var para = await db.Paragraphs.FindAsync(b.ParagraphId("para"));
+            para!.CharacterId = characterId;
             await db.SaveChangesAsync();
-            return (ch, para, item);
+
+            return b.ItemId("item");
         }
 
         // ---------------------------------------------------------------
@@ -70,9 +56,8 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task AddAlias_InsertsRow()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var charId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Alice"));
-            await db.DisposeAsync();
 
             await _svc.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Al"));
 
@@ -84,9 +69,8 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task AddAlias_Idempotent_WhenDuplicateName()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var charId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Alice"));
-            await db.DisposeAsync();
 
             await _svc.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Al"));
             await _svc.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "al")); // case-insensitive duplicate
@@ -98,9 +82,8 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task AddAlias_Idempotent_WhenSameAsCanonicalName()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var charId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Alice"));
-            await db.DisposeAsync();
 
             await _svc.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "alice"));
 
@@ -111,14 +94,13 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task RemoveAlias_DeletesRow()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var charId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Bob"));
-            await db.DisposeAsync();
             await _svc.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Bobby"));
 
-            await using var db2 = await OpenDbAsync();
-            var aliasId = (await db2.CharacterAliases.SingleAsync(a => a.CharacterId == charId.Value)).Id;
-            await db2.DisposeAsync();
+            Guid aliasId;
+            await using (var db2 = await OpenDbAsync())
+                aliasId = (await db2.CharacterAliases.SingleAsync(a => a.CharacterId == charId.Value)).Id;
 
             await _svc.ExecuteAsync(new RemoveCharacterAliasCommand(_folder, aliasId));
 
@@ -133,16 +115,15 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Merge_ReassignsParagraphItemsToSurvivor()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
             var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
-            var (_, _, item) = await SeedCharacterParagraphAsync(db, mergedId!.Value);
-            await db.DisposeAsync();
+            var itemId = await SeedCharacterParagraphWithCharIdAsync(mergedId!.Value);
 
-            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId!.Value, false));
+            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId.Value, false));
 
             await using var verify = await OpenDbAsync();
-            var reloadedItem = await verify.ParagraphItems.FindAsync(item.Id);
+            var reloadedItem = await verify.ParagraphItems.FindAsync(itemId);
             Assert.Equal(survivorId.Value, reloadedItem!.CharacterId);
             Assert.False(await verify.Characters.AnyAsync(c => c.Id == mergedId.Value));
         }
@@ -150,10 +131,9 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Merge_AddsMergedNameAsAlias_WhenFlagSet()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
             var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
-            await db.DisposeAsync();
 
             await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId!.Value, true));
 
@@ -166,10 +146,9 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Merge_DoesNotAddAlias_WhenFlagFalse()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
             var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
-            await db.DisposeAsync();
 
             await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId!.Value, false));
 
@@ -180,13 +159,12 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Merge_MovesAliasesFromMergedToSurvivor()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
             var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
-            await db.DisposeAsync();
             await _svc.ExecuteAsync(new AddCharacterAliasCommand(_folder, mergedId!.Value, "MergedAlias"));
 
-            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId!.Value, false));
+            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId.Value, false));
 
             await using var verify = await OpenDbAsync();
             Assert.True(await verify.CharacterAliases.AnyAsync(
@@ -196,11 +174,9 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Merge_IgnoresNarrator_WhenNarratorIsMerged()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
-            await db.DisposeAsync();
 
-            // Should be a no-op (narrator guarded)
             await _svc.ExecuteAsync(new MergeCharactersCommand(
                 _folder, survivorId!.Value, ProjectDbContext.NarratorId, false));
 
@@ -215,18 +191,15 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Delete_UnlinksParagraphItems_DoesNotDeleteThem()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var charId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Alice"));
-            var (_, _, item) = await SeedCharacterParagraphAsync(db, charId!.Value);
-            await db.DisposeAsync();
+            var itemId = await SeedCharacterParagraphWithCharIdAsync(charId!.Value);
 
             await _svc.ExecuteAsync(new DeleteCharacterCommand(_folder, charId.Value));
 
             await using var verify = await OpenDbAsync();
-            // Character deleted
             Assert.False(await verify.Characters.AnyAsync(c => c.Id == charId.Value));
-            // Item still exists but unlinked
-            var reloadedItem = await verify.ParagraphItems.FindAsync(item.Id);
+            var reloadedItem = await verify.ParagraphItems.FindAsync(itemId);
             Assert.NotNull(reloadedItem);
             Assert.Null(reloadedItem!.CharacterId);
         }
@@ -234,9 +207,8 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Delete_RemovesAliases()
         {
-            await using var db = await SeedProjectAsync();
+            await InitProjectAsync();
             var charId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Alice"));
-            await db.DisposeAsync();
             await _svc.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Al"));
 
             await _svc.ExecuteAsync(new DeleteCharacterCommand(_folder, charId.Value));
@@ -248,8 +220,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Delete_IgnoresNarrator()
         {
-            await using var db = await SeedProjectAsync();
-            await db.DisposeAsync();
+            await InitProjectAsync();
 
             await _svc.ExecuteAsync(new DeleteCharacterCommand(_folder, ProjectDbContext.NarratorId));
 

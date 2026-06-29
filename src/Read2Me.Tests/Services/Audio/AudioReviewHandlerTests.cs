@@ -1,10 +1,8 @@
-using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
-using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Tests.Infrastructure;
@@ -30,25 +28,13 @@ namespace Read2Me.Tests.Services.Audio
             _folder = new ProjectFolderId(FolderName);
         }
 
-        private static string Key(string? prev = null, string? next = null) =>
-            OrderKeyGenerator.GenerateKeyBetween(prev, next);
-
         private async Task<Guid> SeedItemAsync()
         {
-            await using var db = await OpenDbAsync();
-            db.Projects.Add(new Project { Title = "T", BookTitle = "B", Author = "A", Filename = "t.epub", Type = BookFileType.Epub });
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Title = "Part", Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Title = "Ch", Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var item = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = ParagraphItemType.Narration, Text = "Hello", Order = Key() };
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-            await db.SaveChangesAsync();
-            return item.Id;
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph(configure: p => p.AddNarration("item", "Hello"))))
+                .BuildAsync();
+            return b.ItemId("item");
         }
 
         private SetAudioReviewCommand SetFailure(Guid itemId) =>
