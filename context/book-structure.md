@@ -1,0 +1,30 @@
+# Book structure, view, selection & status
+
+Use these terms exactly in code, tests, and discussion.
+
+## Book structure
+
+- **Volume / Part / Chapter / Paragraph / ParagraphItem** — book hierarchy, top to leaf. A Paragraph holds ordered ParagraphItems. An item is one of: **Character** (spoken dialog needing attribution), **Narration**, or a **Pause** kind.
+- **Book Hierarchy** — in-memory `BookHierarchy` that plans structural mutations (split / merge / title / pause insertion) and returns a `HierarchyMutation` (ToAdd / ToDelete / ToUpdate). The deep planning module; `BookCommandHandler` dispatches commands to it.
+
+## Characters
+
+- **Alias** — alternate name for a Character (e.g. "Mr. Baggins" for "Bilbo Baggins"). Stored in `CharacterAliases`. Injected into the LLM attribution prompt alongside the canonical name and matched case-insensitively by the queue worker, so an alternate name resolves to the existing canonical Character instead of a duplicate.
+
+## Book view
+
+- **Book View Mode** (`BookViewMode { Combined, SplitAttribution, SplitAudio }`) — three mutually exclusive book-tab display states, selected via one dropdown. `Combined`: original paragraphs with attribution checkboxes. `SplitAttribution`: split ParagraphItems with Character-paragraph checkboxes for the attribution queue. `SplitAudio`: split ParagraphItems with per-item checkboxes for the audio queue plus play buttons. Replaces the old `bool SplitView`.
+
+## Selection
+
+- **Folder Selection** (`FolderSelection`) — the set of Character paragraphs selected (per project folder) for the Character Queue. Source of truth: selected paragraph ids + each one's ancestry `(VolumeId, PartId, ChapterId)`.
+- **Roll-up** — a node's tri-state (Unchecked / Indeterminate / Checked) is **derived** from how many of its selectable Character paragraphs are selected vs its total. Never stored; computed on read. Selecting a node selects all (or, **unprocessed-only**, the unprocessed subset of) its Character paragraphs; additive and idempotent.
+- **Book Node Level** (`BookNodeLevel { Volume, Part, Chapter }`, in Core) — the selectable triad. One enum used by both the reader (scope Character-paragraph queries) and Folder Selection (derive roll-up). Replaces the old `SelectionNodeKind`.
+- **Selectable node** — a Volume / Part / Chapter containing ≥1 Character paragraph. Only selectable nodes show a checkbox. Total counts (`NodeCharacterParagraphCounts`) seeded on load, held by `FolderSelection`. Selection cleared on any structural change (split / merge / reread), so derived state never mixes counts across structures.
+- **Audio Item Selection** (`AudioItemSelection`) — the set of ParagraphItems (Character or Narration only; Pause excluded) selected for the Audio Queue. Parallel to `FolderSelection` but at ParagraphItem granularity. Rolls up to Chapter/Part/Volume for tri-state. Cleared on view-mode switch or any structural change.
+- **Generatable item** — a non-Pause ParagraphItem that can have audio generated: **missing audio** (no WAV) **and** **attribution-ready** (Narration always qualifies; a Character item only once it has a Character). The audio analog of an **unprocessed** attribution paragraph. The node-level "select needs audio" (`needsAudioOnly`) selects only Generatable items; an unattributed Character item's checkbox is disabled (not yet Generatable). A node's audio roll-up denominator counts *all* non-Pause items, so a needs-audio select lands on Indeterminate, never Checked.
+
+## Node status
+
+- **Node Status Badge** — a per-node (Volume / Part / Chapter) count of remaining work in the expansion-panel header. Three **stages**: **attribution remaining** (paragraphs with an unattributed Character item), **audio remaining** (paragraphs with a non-Pause item lacking a WAV — regardless of attribution), **review** (paragraphs with an `AudioReview` row in `NeedsReview`; `Dismissed` excluded). Counts **normalised to Paragraph granularity** — a paragraph qualifies for a stage if *any* item qualifies, contributing 1. All three at zero → single "done" indicator. Shown in every Book View Mode.
+- **Node Status roll-up** — each badge is the **cumulative** count of qualifying paragraphs beneath it (Volume ≥ Part ≥ Chapter); the same paragraph echoes up every ancestor. Held by singleton `NodeStatusService`, storing per-paragraph stage **counters** (`unattributed`, `missingAudio`, `review`) + `(Chapter, Part, Volume)` ancestry. Seeded via `IProjectReader.GetNodeStatusSeedAsync`, updated **live**: `BookHierarchyPresenter` raises domain events — `OnCharacterAttributed` (with remaining unattributed count, assigned directly), `OnAudioAssigned` (decrements `missingAudio`), `OnReviewChanged` (sets review flag). The service owns the counter transition (assign vs decrement). **Cleared and reseeded** on any structural change — never patched incrementally, same discipline as `FolderSelection`.
