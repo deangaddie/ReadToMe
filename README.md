@@ -51,6 +51,30 @@ See [Infra/README.md](Infra/README.md) for full service details, ports, and API 
 4. Whisper transcribes generated audio; WER + semantic similarity verify accuracy
 5. Verified items assembled into `.m4b` with chapter markers, cover art, and metadata
 
+## First-time setup (in the app)
+
+After `dotnet run`, open <https://localhost:5001>. Configure the AI services from the left nav **before** processing a book — each settings page stores one or more named **configs** in `app.db`, with one marked **active**. Start the matching Docker container first (see [Infrastructure services](#infrastructure-services)).
+
+| Nav page | Configure | Needs container |
+| -------- | --------- | --------------- |
+| **LLM Settings** | LLM server URL + model preset for character attribution | `read2me-llama` |
+| **LLM Prompts** | Prompt templates for extraction / attribution | — |
+| **Transcription Settings** | Whisper endpoint for accuracy scoring | `read2me-whisper` (or `-cpu`) |
+| **Semantic Similarity** | Embedding endpoint + pass threshold for Semantic Rescue | `read2me-minilm-l6` / `read2me-mpnet-base-v2` |
+| **Voice Design Settings** | Service for generating voices from a text description | `read2me-qwen3-tts` |
+| **Paragraph TTS Settings** | TTS service(s) used to synthesise paragraph audio | a TTS container (Chatterbox / VoxCPM2 / Qwen3 Base) |
+| **Audio Processing** | WER threshold, retry attempts, pause durations, sentence chunking, **ffmpeg path** | — |
+
+Set the **ffmpeg path** on the Audio Processing page — audio normalisation and m4b assembly fail without it.
+
+## Using the app
+
+1. **Create a project** — Home → add a project, then import an `.epub` or `.txt`. The book is parsed into the Volume → Part → Chapter → Paragraph → ParagraphItem hierarchy and shown on the project's **Book** tab.
+2. **Attribute characters** — on the **Book** tab, switch the view-mode dropdown to **Split (attribution)**. Select Character paragraphs (per node or whole chapters) and queue them. The Character Queue drains in the background, asking the LLM who speaks each line. Review/correct assignments on the **Characters** tab; add aliases there so alternate names resolve to one Character.
+3. **Give each Character a voice** — on the **Characters** tab, add a voice per Character: upload a reference WAV, design one from a text description (Qwen3 TTS), or clone from a reference clip. Optionally add **Voice Rules** to switch voice over a position range. The batch buttons generate prompts/audio for all Characters at once.
+4. **Generate audio** — back on the **Book** tab, switch to **Split (audio)**. Select items needing audio and queue them. Each item is synthesised, loudness-normalised, transcribed by Whisper, and verified (WER, with Semantic Rescue as fallback). The status bar streams per-item progress; failures surface as review items on the node badges.
+5. **Assemble the audiobook** — once every non-Pause item has audio, click **Assemble**. The app concatenates all clips (with per-kind pauses), adds chapter markers and cover art, and writes `{projectFolder}/output/{BookTitle}.m4b`.
+
 ## AI services and when to use them
 
 | Service              | Container                  | Use for                                                                                                                             |

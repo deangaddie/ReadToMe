@@ -22,22 +22,30 @@ Or restart the service:
 docker compose up -d llama
 ```
 
-## Current target model
+## Required files
 
-**Gemma 4 26B A4B** — a Mixture-of-Experts model. Only ~4B parameters active per token, allowing it to run on consumer GPUs with 8–12 GB VRAM using CPU offloading for expert layers.
+Each preset in `llama/config/models.ini` points at a `.gguf` file expected in this folder. Download whichever preset(s) you intend to use (the default served preset is `gemma-26b`). Filenames must match the `model = /models/...` path in the preset exactly.
 
-Download from HuggingFace:
+| Preset | Expected file |
+| --- | --- |
+| `gemma-26b` | `gemma-4-26B-A4B-it-UD-Q4_K_M.gguf` |
+| `gemma-26b_QAT` | `gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf` |
+| `gemma-12b_QAT` | `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf` |
+| `gemma-4b` | `gemma-4-E4B-it-UD-Q4_K_XL.gguf` |
+| `qwen-28b` | `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf` |
+| `qwen-9b` | `Qwen3.5-9B-UD-Q4_K_XL.gguf` |
+| `qwen-4b` | `Qwen3.5-4B-UD-Q4_K_XL.gguf` |
+| `ornith-1.0-9b-q4` | `ornith-1.0-9b-Q4_K_M.gguf` |
+| `ornith-1.0-9b-q5` | `ornith-1.0-9b-Q5_K_M.gguf` |
 
-- [Model page](https://huggingface.co/google/gemma-4-26b-a4b-GGUF) — look for a GGUF quantized variant (Q4_K_M or similar)
+The `gemma-26b` default is a Mixture-of-Experts model (~4B active params per token), runnable on 8–12 GB VRAM with CPU offload of expert layers (`n-cpu-moe`).
 
-Download with `huggingface-cli`:
+Download GGUF quants from HuggingFace — search the model name and pick the matching quant (Q4_K_M / Q4_K_XL), then place it here:
 
 ```bash
 pip install huggingface-hub
-huggingface-cli download google/gemma-4-26b-a4b-GGUF --local-dir ./Infra/models
+huggingface-cli download <repo-id> <filename.gguf> --local-dir ./Infra/models
 ```
-
-Or directly via browser from the Files tab on the model page above.
 
 ## TurboQuant KV cache
 
