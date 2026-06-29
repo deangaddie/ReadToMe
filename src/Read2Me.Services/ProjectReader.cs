@@ -8,7 +8,6 @@ using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Voice;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 using ProjectEntity = Read2Me.Data.Entities.Project;
-using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 
 namespace Read2Me.Services
 {
@@ -281,7 +280,7 @@ namespace Read2Me.Services
                 foreach (var r in rows) itemNames[r.Id] = "\"" + r.Name + (r.Name.Length == 30 ? "…" : "") + "\"";
             }
 
-            string? ResolveDisplayName(DataAnchorLevel? level, Guid? nodeId, out bool dangling)
+            string? ResolveDisplayName(VoiceAnchorLevel? level, Guid? nodeId, out bool dangling)
             {
                 dangling = false;
                 if (level is null || nodeId is null) return null;
@@ -290,19 +289,19 @@ namespace Read2Me.Services
                 string? name;
                 switch (level.Value)
                 {
-                    case DataAnchorLevel.Volume:
+                    case VoiceAnchorLevel.Volume:
                         found = volumeNames.TryGetValue(id, out name);
                         break;
-                    case DataAnchorLevel.Part:
+                    case VoiceAnchorLevel.Part:
                         found = partNames.TryGetValue(id, out name);
                         break;
-                    case DataAnchorLevel.Chapter:
+                    case VoiceAnchorLevel.Chapter:
                         found = chapterNames.TryGetValue(id, out name);
                         break;
-                    case DataAnchorLevel.Paragraph:
+                    case VoiceAnchorLevel.Paragraph:
                         found = paragraphNames.TryGetValue(id, out name);
                         break;
-                    case DataAnchorLevel.ParagraphItem:
+                    case VoiceAnchorLevel.ParagraphItem:
                         found = itemNames.TryGetValue(id, out name);
                         break;
                     default:
@@ -329,18 +328,18 @@ namespace Read2Me.Services
         }
 
         private static void CollectId(
-            DataAnchorLevel? level, Guid? nodeId,
+            VoiceAnchorLevel? level, Guid? nodeId,
             HashSet<Guid> volumeIds, HashSet<Guid> partIds, HashSet<Guid> chapterIds,
             HashSet<Guid> paragraphIds, HashSet<Guid> itemIds)
         {
             if (level is null || nodeId is null) return;
             switch (level.Value)
             {
-                case DataAnchorLevel.Volume:       volumeIds.Add(nodeId.Value);    break;
-                case DataAnchorLevel.Part:         partIds.Add(nodeId.Value);      break;
-                case DataAnchorLevel.Chapter:      chapterIds.Add(nodeId.Value);   break;
-                case DataAnchorLevel.Paragraph:    paragraphIds.Add(nodeId.Value); break;
-                case DataAnchorLevel.ParagraphItem: itemIds.Add(nodeId.Value);     break;
+                case VoiceAnchorLevel.Volume:       volumeIds.Add(nodeId.Value);    break;
+                case VoiceAnchorLevel.Part:         partIds.Add(nodeId.Value);      break;
+                case VoiceAnchorLevel.Chapter:      chapterIds.Add(nodeId.Value);   break;
+                case VoiceAnchorLevel.Paragraph:    paragraphIds.Add(nodeId.Value); break;
+                case VoiceAnchorLevel.ParagraphItem: itemIds.Add(nodeId.Value);     break;
             }
         }
 

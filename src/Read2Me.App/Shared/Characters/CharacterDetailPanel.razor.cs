@@ -10,6 +10,7 @@ using MudBlazor;
 using Read2Me.App.State;
 using Read2Me.AppData.Entities;
 using Read2Me.Data.Entities;
+using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Audio.VoiceDesign.Settings;
@@ -339,16 +340,16 @@ namespace Read2Me.App.Shared.Characters
             if (r.IsDefault)
                 return $"Default → {r.VoiceName}";
 
-            string NodeLabel(Read2Me.Data.Enums.VoiceAnchorLevel? level, string? display, bool dangling)
+            string NodeLabel(VoiceAnchorLevel? level, string? display, bool dangling)
             {
                 if (dangling || display is null) return "(missing node)";
                 var prefix = level switch
                 {
-                    Read2Me.Data.Enums.VoiceAnchorLevel.Volume       => "Volume ",
-                    Read2Me.Data.Enums.VoiceAnchorLevel.Part         => "Part ",
-                    Read2Me.Data.Enums.VoiceAnchorLevel.Chapter      => "Chapter ",
-                    Read2Me.Data.Enums.VoiceAnchorLevel.Paragraph    => "Paragraph ",
-                    Read2Me.Data.Enums.VoiceAnchorLevel.ParagraphItem => "",
+                    VoiceAnchorLevel.Volume       => "Volume ",
+                    VoiceAnchorLevel.Part         => "Part ",
+                    VoiceAnchorLevel.Chapter      => "Chapter ",
+                    VoiceAnchorLevel.Paragraph    => "Paragraph ",
+                    VoiceAnchorLevel.ParagraphItem => "",
                     _ => ""
                 };
                 return prefix + display;

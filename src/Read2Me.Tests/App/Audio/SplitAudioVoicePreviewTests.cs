@@ -12,7 +12,6 @@ using Read2Me.Services.IO;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Infrastructure;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
-using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 using Xunit;
 
 namespace Read2Me.Tests.App.Audio
@@ -106,8 +105,8 @@ namespace Read2Me.Tests.App.Audio
         }
 
         private async Task<Guid> AddPositionalRuleAsync(Guid charId, Guid voiceId,
-            DataAnchorLevel fromLevel, Guid fromNodeId,
-            DataAnchorLevel? toLevel = null, Guid? toNodeId = null, string? rank = null)
+            VoiceAnchorLevel fromLevel, Guid fromNodeId,
+            VoiceAnchorLevel? toLevel = null, Guid? toNodeId = null, string? rank = null)
         {
             await using var db = await OpenDbAsync();
             var ruleId = Guid.NewGuid();
@@ -170,7 +169,7 @@ namespace Read2Me.Tests.App.Audio
                 db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "p.wav" });
                 await db.SaveChangesAsync();
             }
-            await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, chId);
+            await AddPositionalRuleAsync(charId, posVoiceId, VoiceAnchorLevel.Chapter, chId);
 
             var itemId = await AddCharItemAsync(paraId, charId);
 
@@ -209,7 +208,7 @@ namespace Read2Me.Tests.App.Audio
                 db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "p.wav" });
                 await db.SaveChangesAsync();
             }
-            await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, Guid.NewGuid());
+            await AddPositionalRuleAsync(charId, posVoiceId, VoiceAnchorLevel.Chapter, Guid.NewGuid());
 
             var itemId = await AddCharItemAsync(paraId, charId);
 
@@ -262,7 +261,7 @@ namespace Read2Me.Tests.App.Audio
                 db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "pos.wav" });
                 await db.SaveChangesAsync();
             }
-            await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, chId);
+            await AddPositionalRuleAsync(charId, posVoiceId, VoiceAnchorLevel.Chapter, chId);
 
             var second = await _resolver.ResolveNamesAsync(_folder, [itemId]);
             Assert.Equal("Positional Voice", second[itemId]);
@@ -281,7 +280,7 @@ namespace Read2Me.Tests.App.Audio
                 db.Voices.Add(new VoiceEntity { Id = posVoiceId, CharacterId = charId, Name = "Positional Voice", Source = VoiceSource.Uploaded, AudioFileName = "pos.wav" });
                 await db.SaveChangesAsync();
             }
-            var posRuleId = await AddPositionalRuleAsync(charId, posVoiceId, DataAnchorLevel.Chapter, chId);
+            var posRuleId = await AddPositionalRuleAsync(charId, posVoiceId, VoiceAnchorLevel.Chapter, chId);
             var itemId = await AddCharItemAsync(paraId, charId);
 
             var first = await _resolver.ResolveNamesAsync(_folder, [itemId]);

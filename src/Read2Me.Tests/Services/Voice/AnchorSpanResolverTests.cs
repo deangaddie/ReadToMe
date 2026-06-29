@@ -1,4 +1,5 @@
 using Read2Me.Data.Entities;
+using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Voice;
 using Xunit;

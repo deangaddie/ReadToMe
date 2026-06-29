@@ -2,7 +2,6 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
-using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Voice;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
@@ -55,11 +54,11 @@ namespace Read2Me.Services
         string Rank,
         Guid VoiceId,
         string VoiceName,
-        DataAnchorLevel? FromLevel,
+        VoiceAnchorLevel? FromLevel,
         Guid? FromNodeId,
         string? FromDisplayName,
         bool FromDangling,
-        DataAnchorLevel? ToLevel,
+        VoiceAnchorLevel? ToLevel,
         Guid? ToNodeId,
         string? ToDisplayName,
         bool ToDangling);

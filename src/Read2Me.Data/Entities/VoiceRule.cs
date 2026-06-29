@@ -1,3 +1,4 @@
+using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
 
 namespace Read2Me.Data.Entities
