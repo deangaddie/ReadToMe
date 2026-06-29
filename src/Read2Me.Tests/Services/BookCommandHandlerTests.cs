@@ -131,7 +131,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b
                 .AddVolume("vol1")
-                .AddVolume("vol2")
+                .AddVolume("vol2", v => v.AddPart("part2"))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol2"), MergeDirection.Previous));

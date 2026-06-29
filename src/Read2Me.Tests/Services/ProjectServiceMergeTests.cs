@@ -1,13 +1,12 @@
-using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Core.Configuration;
 using Read2Me.Data;
-using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.Services
@@ -41,9 +40,6 @@ namespace Read2Me.Tests.Services
                 Directory.Delete(_tempDir, recursive: true);
         }
 
-        private static string Key(string? prev = null, string? next = null) =>
-            OrderKeyGenerator.GenerateKeyBetween(prev, next);
-
         private static async Task<ProjectDbContext> OpenDbAsync(string folderPath)
         {
             var options = new DbContextOptionsBuilder<ProjectDbContext>()
@@ -53,6 +49,9 @@ namespace Read2Me.Tests.Services
             await db.Database.MigrateAsync();
             return db;
         }
+
+        private BookHierarchyBuilder BuilderFor(string folderPath) =>
+            new BookHierarchyBuilder(() => OpenDbAsync(folderPath));
 
         private async Task<string> CreateProjectAsync(string name)
         {
@@ -64,46 +63,34 @@ namespace Read2Me.Tests.Services
         // Helpers: seed a full hierarchy
         // ---------------------------------------------------------------
 
+        // Seeds: Vol1 > Part1 > Ch1 > Para1 + Para2 (each with 1 item)
+        //        Vol1 > Part2 (no children)
+        //        Vol2 (no children)
         private record SeedIds(Guid Vol1, Guid Vol2, Guid Part1, Guid Part2,
             Guid Ch1, Guid Ch2, Guid Para1, Guid Para2, Guid Item1, Guid Item2);
 
         private async Task<SeedIds> SeedTwoOfEachAsync(string folderPath)
         {
-            var ids = new SeedIds(
-                Guid.NewGuid(), Guid.NewGuid(),
-                Guid.NewGuid(), Guid.NewGuid(),
-                Guid.NewGuid(), Guid.NewGuid(),
-                Guid.NewGuid(), Guid.NewGuid(),
-                Guid.NewGuid(), Guid.NewGuid());
+            var b = BuilderFor(folderPath);
+            await b
+                .AddVolume("vol1", v => v
+                    .AddPart("part1", p => p
+                        .AddChapter("ch1", c => c
+                            .AddParagraph("para1", para => para
+                                .AddNarration("item1", "hello")
+                                .AddNarration("item2", "world"))
+                            .AddParagraph("para2"))
+                        .AddChapter("ch2"))
+                    .AddPart("part2"))
+                .AddVolume("vol2")
+                .AddHierarchyAsync();
 
-            await using var db = await OpenDbAsync(folderPath);
-            string vk1 = Key(), vk2 = Key(vk1);
-            db.Volumes.AddRange(
-                new Volume { Id = ids.Vol1, Title = "V1", Order = vk1 },
-                new Volume { Id = ids.Vol2, Title = "V2", Order = vk2 });
-
-            string pk1 = Key(), pk2 = Key(pk1);
-            db.Parts.AddRange(
-                new Part { Id = ids.Part1, VolumeId = ids.Vol1, Title = "P1", Order = pk1 },
-                new Part { Id = ids.Part2, VolumeId = ids.Vol1, Title = "P2", Order = pk2 });
-
-            string ck1 = Key(), ck2 = Key(ck1);
-            db.Chapters.AddRange(
-                new Chapter { Id = ids.Ch1, PartId = ids.Part1, Title = "C1", Order = ck1 },
-                new Chapter { Id = ids.Ch2, PartId = ids.Part1, Title = "C2", Order = ck2 });
-
-            string pgk1 = Key(), pgk2 = Key(pgk1);
-            db.Paragraphs.AddRange(
-                new Paragraph { Id = ids.Para1, ChapterId = ids.Ch1, Order = pgk1 },
-                new Paragraph { Id = ids.Para2, ChapterId = ids.Ch1, Order = pgk2 });
-
-            string ik1 = Key(), ik2 = Key(ik1);
-            db.ParagraphItems.AddRange(
-                new ParagraphItem { Id = ids.Item1, ParagraphId = ids.Para1, Text = "hello", Order = ik1 },
-                new ParagraphItem { Id = ids.Item2, ParagraphId = ids.Para1, Text = "world", Order = ik2 });
-
-            await db.SaveChangesAsync();
-            return ids;
+            return new SeedIds(
+                Vol1: b.VolumeId("vol1"), Vol2: b.VolumeId("vol2"),
+                Part1: b.PartId("part1"), Part2: b.PartId("part2"),
+                Ch1: b.ChapterId("ch1"), Ch2: b.ChapterId("ch2"),
+                Para1: b.ParagraphId("para1"), Para2: b.ParagraphId("para2"),
+                Item1: b.ItemId("item1"), Item2: b.ItemId("item2"));
         }
 
         // ---------------------------------------------------------------
@@ -120,7 +107,7 @@ namespace Read2Me.Tests.Services
             // Vol2 has no parts in seed — add one
             await using (var db = await OpenDbAsync(folderPath))
             {
-                db.Parts.Add(new Part { Id = Guid.NewGuid(), VolumeId = ids.Vol2, Title = "P3", Order = Key() });
+                db.Parts.Add(new Data.Entities.Part { Id = Guid.NewGuid(), VolumeId = ids.Vol2, Title = "P3", Order = "a" });
                 await db.SaveChangesAsync();
             }
 
@@ -131,7 +118,7 @@ namespace Read2Me.Tests.Services
             var remainingVol = await verify.Volumes.SingleAsync();
             Assert.Equal(ids.Vol1, remainingVol.Id);
             var parts = await verify.Parts.Where(p => p.VolumeId == ids.Vol1).ToListAsync();
-            Assert.Equal(3, parts.Count); // P1, P2 (original) + P3 (moved)
+            Assert.Equal(3, parts.Count); // part1, part2 (original) + P3 (moved)
         }
 
         [Fact]
@@ -168,7 +155,7 @@ namespace Read2Me.Tests.Services
 
             await using (var db = await OpenDbAsync(folderPath))
             {
-                db.Parts.Add(new Part { Id = Guid.NewGuid(), VolumeId = ids.Vol2, Title = "P3", Order = Key() });
+                db.Parts.Add(new Data.Entities.Part { Id = Guid.NewGuid(), VolumeId = ids.Vol2, Title = "P3", Order = "a" });
                 await db.SaveChangesAsync();
             }
 
@@ -207,7 +194,7 @@ namespace Read2Me.Tests.Services
             // Add chapter to Part2
             await using (var db = await OpenDbAsync(folderPath))
             {
-                db.Chapters.Add(new Chapter { Id = Guid.NewGuid(), PartId = ids.Part2, Title = "C3", Order = Key() });
+                db.Chapters.Add(new Data.Entities.Chapter { Id = Guid.NewGuid(), PartId = ids.Part2, Title = "C3", Order = "a" });
                 await db.SaveChangesAsync();
             }
 
@@ -253,7 +240,7 @@ namespace Read2Me.Tests.Services
 
             await using (var db = await OpenDbAsync(folderPath))
             {
-                db.Chapters.Add(new Chapter { Id = Guid.NewGuid(), PartId = ids.Part2, Title = "C3", Order = Key() });
+                db.Chapters.Add(new Data.Entities.Chapter { Id = Guid.NewGuid(), PartId = ids.Part2, Title = "C3", Order = "a" });
                 await db.SaveChangesAsync();
             }
 
@@ -292,7 +279,7 @@ namespace Read2Me.Tests.Services
             // Add paragraph to Ch2
             await using (var db = await OpenDbAsync(folderPath))
             {
-                db.Paragraphs.Add(new Paragraph { Id = Guid.NewGuid(), ChapterId = ids.Ch2, Order = Key() });
+                db.Paragraphs.Add(new Data.Entities.Paragraph { Id = Guid.NewGuid(), ChapterId = ids.Ch2, Order = "a" });
                 await db.SaveChangesAsync();
             }
 
@@ -338,7 +325,7 @@ namespace Read2Me.Tests.Services
 
             await using (var db = await OpenDbAsync(folderPath))
             {
-                db.Paragraphs.Add(new Paragraph { Id = Guid.NewGuid(), ChapterId = ids.Ch2, Order = Key() });
+                db.Paragraphs.Add(new Data.Entities.Paragraph { Id = Guid.NewGuid(), ChapterId = ids.Ch2, Order = "a" });
                 await db.SaveChangesAsync();
             }
 
@@ -377,7 +364,7 @@ namespace Read2Me.Tests.Services
             // Add item to Para2
             await using (var db = await OpenDbAsync(folderPath))
             {
-                db.ParagraphItems.Add(new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = ids.Para2, Text = "extra", Order = Key() });
+                db.ParagraphItems.Add(new Data.Entities.ParagraphItem { Id = Guid.NewGuid(), ParagraphId = ids.Para2, Text = "extra", Order = "a" });
                 await db.SaveChangesAsync();
             }
 
@@ -423,7 +410,7 @@ namespace Read2Me.Tests.Services
 
             await using (var db = await OpenDbAsync(folderPath))
             {
-                db.ParagraphItems.Add(new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = ids.Para2, Text = "extra", Order = Key() });
+                db.ParagraphItems.Add(new Data.Entities.ParagraphItem { Id = Guid.NewGuid(), ParagraphId = ids.Para2, Text = "extra", Order = "a" });
                 await db.SaveChangesAsync();
             }
 
@@ -532,26 +519,17 @@ namespace Read2Me.Tests.Services
             var folder = await CreateProjectAsync("MergeChPrevEmpty");
             var folderPath = Path.Combine(_tempDir, folder);
 
-            Guid ch1Id, ch2Id;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-                db.Volumes.Add(vol);
-                var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-                db.Parts.Add(part);
-                string ck1 = Key(), ck2 = Key(ck1);
-                db.Chapters.AddRange(
-                    new Chapter { Id = ch1Id = Guid.NewGuid(), PartId = part.Id, Title = "C1", Order = ck1 },
-                    new Chapter { Id = ch2Id = Guid.NewGuid(), PartId = part.Id, Title = "C2", Order = ck2 });
-                // Ch2 has no paragraphs
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v.AddPart(configure: p => p
+                .AddChapter("ch1")
+                .AddChapter("ch2")))
+                .AddHierarchyAsync();
 
-            await _svc.ExecuteAsync(new MergeChapterCommand(folder, ch2Id, MergeDirection.Previous));
+            await _svc.ExecuteAsync(new MergeChapterCommand(folder, b.ChapterId("ch2"), MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Chapters.CountAsync());
-            Assert.Equal(ch1Id, (await verify.Chapters.SingleAsync()).Id);
+            Assert.Equal(b.ChapterId("ch1"), (await verify.Chapters.SingleAsync()).Id);
         }
 
         // ---------------------------------------------------------------
@@ -564,16 +542,11 @@ namespace Read2Me.Tests.Services
             var folder = await CreateProjectAsync("MergePartOnlySibling");
             var folderPath = Path.Combine(_tempDir, folder);
 
-            Guid partId;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-                db.Volumes.Add(vol);
-                db.Parts.Add(new Part { Id = partId = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() });
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v.AddPart("part"))
+                .AddHierarchyAsync();
 
-            await _svc.ExecuteAsync(new MergePartCommand(folder, partId, MergeDirection.Previous));
+            await _svc.ExecuteAsync(new MergePartCommand(folder, b.PartId("part"), MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync(folderPath);
             Assert.Equal(1, await verify.Parts.CountAsync());

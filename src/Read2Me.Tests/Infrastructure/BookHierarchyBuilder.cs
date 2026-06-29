@@ -191,10 +191,6 @@ public sealed class BookHierarchyBuilder
 
         internal void Flush()
         {
-            // If no parts were added at all, add a default implicit part + chapter
-            if (_parts.Count == 0)
-                _parts.Add(new PartSpec(null, null) { IsImplicit = true });
-
             foreach (var pSpec in _parts)
             {
                 _lastPartOrder = OrderKeyGenerator.GenerateKeyBetween(_lastPartOrder, null);
@@ -208,7 +204,7 @@ public sealed class BookHierarchyBuilder
                 if (pSpec.Name != null) _root.Register(pSpec.Name, part.Id);
                 _db.Parts.Add(part);
 
-                var pScope = new PartScope(part.Id, _root, _db);
+                var pScope = new PartScope(part.Id, _root, _db, pSpec.IsImplicit);
                 pSpec.Configure?.Invoke(pScope);
                 // Chapters added directly via AddChapter shortcut
                 foreach (var cSpec in pSpec.Chapters)
@@ -225,12 +221,14 @@ public sealed class BookHierarchyBuilder
         private readonly ProjectDbContext _db;
         private readonly List<ChapterSpec> _chapters = new();
         private string? _lastChapterOrder;
+        private readonly bool _isImplicit;
 
-        internal PartScope(Guid partId, BookHierarchyBuilder root, ProjectDbContext db)
+        internal PartScope(Guid partId, BookHierarchyBuilder root, ProjectDbContext db, bool isImplicit = false)
         {
             _partId = partId;
             _root = root;
             _db = db;
+            _isImplicit = isImplicit;
         }
 
         internal void AddChapterSpec(ChapterSpec spec) => _chapters.Add(spec);
@@ -243,8 +241,10 @@ public sealed class BookHierarchyBuilder
 
         internal void Flush()
         {
-            if (_chapters.Count == 0)
-                _chapters.Add(new ChapterSpec(null, null));
+            // Only auto-add implicit chapter when this part was implicitly created (via AddChapter shortcut on Volume).
+            // Explicitly added empty parts (AddPart("name")) stay empty.
+            if (_chapters.Count == 0 && _isImplicit)
+                _chapters.Add(new ChapterSpec(null, null) { IsImplicit = true });
 
             foreach (var cSpec in _chapters)
             {
@@ -259,7 +259,7 @@ public sealed class BookHierarchyBuilder
                 if (cSpec.Name != null) _root.Register(cSpec.Name, chapter.Id);
                 _db.Chapters.Add(chapter);
 
-                var cScope = new ChapterScope(chapter.Id, _root, _db);
+                var cScope = new ChapterScope(chapter.Id, _root, _db, cSpec.IsImplicit);
                 cSpec.Configure?.Invoke(cScope);
                 cScope.Flush();
             }
@@ -273,12 +273,14 @@ public sealed class BookHierarchyBuilder
         private readonly ProjectDbContext _db;
         private readonly List<ParagraphSpec> _paragraphs = new();
         private string? _lastParaOrder;
+        private readonly bool _isImplicit;
 
-        internal ChapterScope(Guid chapterId, BookHierarchyBuilder root, ProjectDbContext db)
+        internal ChapterScope(Guid chapterId, BookHierarchyBuilder root, ProjectDbContext db, bool isImplicit = false)
         {
             _chapterId = chapterId;
             _root = root;
             _db = db;
+            _isImplicit = isImplicit;
         }
 
         public ChapterScope AddParagraph(string? name = null, Action<ParagraphScope>? configure = null)
@@ -289,7 +291,9 @@ public sealed class BookHierarchyBuilder
 
         internal void Flush()
         {
-            if (_paragraphs.Count == 0)
+            // Only auto-add an implicit paragraph when this chapter was implicitly created.
+            // Explicitly named empty chapters (AddChapter("name")) stay empty.
+            if (_paragraphs.Count == 0 && _isImplicit)
                 _paragraphs.Add(new ParagraphSpec(null, null));
 
             foreach (var pSpec in _paragraphs)
@@ -402,6 +406,7 @@ public sealed class BookHierarchyBuilder
     {
         public string? Name { get; } = Name;
         public Action<ChapterScope>? Configure { get; } = Configure;
+        public bool IsImplicit { get; set; }
     }
 
     private sealed class ParagraphSpec(string? Name, Action<ParagraphScope>? Configure)

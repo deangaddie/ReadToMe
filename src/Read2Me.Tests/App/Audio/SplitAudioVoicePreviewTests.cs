@@ -33,9 +33,6 @@ namespace Read2Me.Tests.App.Audio
             _folder = new ProjectFolderId(FolderName);
         }
 
-        private static string Key(string? prev = null, string? next = null) =>
-            OrderKeyGenerator.GenerateKeyBetween(prev, next);
-
         private static string FloorRank => OrderKeyGenerator.GenerateKeyBetween(null, null);
 
         // ── seed helpers ──────────────────────────────────────────────────────
@@ -44,22 +41,19 @@ namespace Read2Me.Tests.App.Audio
             Guid VolId, Guid PartId, Guid ChId, Guid ParaId,
             Guid CharId, Guid DefaultVoiceId)> SeedMinimalAsync()
         {
-            await using var db = await OpenDbAsync();
-            db.Projects.Add(new Project { Title = "T", BookTitle = "B", Author = "A", Filename = "f.txt", Type = BookFileType.Text });
-
             var charId = Guid.NewGuid();
             var voiceId = Guid.NewGuid();
-            db.Characters.Add(new Character { Id = charId, Name = "Alice" });
+            var character = new Character { Id = charId, Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddPart("part", p => p.AddChapter("ch", c => c.AddParagraph("para"))))
+                .BuildAsync();
+
+            await using var db = await OpenDbAsync();
             db.Voices.Add(new VoiceEntity { Id = voiceId, CharacterId = charId, Name = "Default Voice", Source = VoiceSource.Uploaded, AudioFileName = "d.wav" });
-
-            var vol  = new Volume    { Id = Guid.NewGuid(), Title = "V",  Order = Key() };
-            var part = new Part      { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch   = new Chapter   { Id = Guid.NewGuid(), PartId   = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id,  Order = Key() };
-
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch); db.Paragraphs.Add(para);
             await db.SaveChangesAsync();
-            return (vol.Id, part.Id, ch.Id, para.Id, charId, voiceId);
+
+            return (b.VolumeId("vol"), b.PartId("part"), b.ChapterId("ch"), b.ParagraphId("para"), charId, voiceId);
         }
 
         private async Task<Guid> AddCharItemAsync(Guid paraId, Guid? charId, string text = "Hello")
@@ -69,7 +63,7 @@ namespace Read2Me.Tests.App.Audio
             {
                 Id = Guid.NewGuid(),
                 ParagraphId = paraId,
-                Order = Key(),
+                Order = FloorRank,
                 ItemType = ParagraphItemType.Character,
                 Text = text,
                 CharacterId = charId
@@ -94,7 +88,7 @@ namespace Read2Me.Tests.App.Audio
             {
                 Id = Guid.NewGuid(),
                 ParagraphId = paraId,
-                Order = Key(),
+                Order = FloorRank,
                 ItemType = ParagraphItemType.Narration,
                 Text = text,
                 CharacterId = null
@@ -117,7 +111,7 @@ namespace Read2Me.Tests.App.Audio
         {
             await using var db = await OpenDbAsync();
             var ruleId = Guid.NewGuid();
-            rank ??= Key(FloorRank);
+            rank ??= OrderKeyGenerator.GenerateKeyBetween(FloorRank, null);
             db.VoiceRules.Add(new VoiceRule
             {
                 Id = ruleId,
@@ -166,7 +160,7 @@ namespace Read2Me.Tests.App.Audio
         [Fact]
         public async Task ResolvedVoiceNames_PositionalRule_WinsOverDefault()
         {
-            var (volId, partId, chId, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
+            var (_, _, chId, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
             await AddDefaultRuleAsync(charId, defaultVoiceId);
 
             Guid posVoiceId;
@@ -205,7 +199,7 @@ namespace Read2Me.Tests.App.Audio
         [Fact]
         public async Task ResolvedVoiceNames_DanglingRule_FallsBackToDefault()
         {
-            var (volId, partId, chId, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
+            var (_, _, _, paraId, charId, defaultVoiceId) = await SeedMinimalAsync();
             await AddDefaultRuleAsync(charId, defaultVoiceId);
 
             Guid posVoiceId;
@@ -223,9 +217,6 @@ namespace Read2Me.Tests.App.Audio
 
             Assert.Equal("Default Voice", result[itemId]);
         }
-
-        // ── AC6: dotnet test green ────────────────────────────────────────────
-        // (covered by running the suite — no additional test needed)
 
         // ── 003a: staleness-after-mutation — resolver has no stale layer ─────
 
@@ -264,7 +255,6 @@ namespace Read2Me.Tests.App.Audio
             var first = await _resolver.ResolveNamesAsync(_folder, [itemId]);
             Assert.Equal("Default Voice", first[itemId]);
 
-            // Add positional rule covering this chapter
             Guid posVoiceId;
             await using (var db = await OpenDbAsync())
             {
