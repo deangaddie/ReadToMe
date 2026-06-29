@@ -25,7 +25,7 @@ else if (!Presenter.HasContent)
             }
             <MudButton Variant="Variant.Filled" Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.AutoStories"
-                       OnClick="@(() => Presenter.ReadBookAsync(_folderId))" Disabled="Presenter.IsBusy">
+                       OnClick="ReadBookAsync" Disabled="Presenter.IsBusy">
                 @if (Presenter.IsBusy)
                 {
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
@@ -184,6 +184,7 @@ else
 
 @code {
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
+    [Parameter] public EventCallback OnBookImported { get; set; }
 
     ProjectFolderId _folderId;
 
@@ -195,6 +196,13 @@ else
 
     Task HandleSplitAsync(BookSplit s) =>
         Presenter.SplitAndReloadAsync(_folderId, s.Command, s.Level, s.SourceParentId);
+
+    async Task ReadBookAsync()
+    {
+        await Presenter.ReadBookAsync(_folderId);
+        if (Presenter.Error is null)
+            await OnBookImported.InvokeAsync();
+    }
 
     protected override async Task OnParametersSetAsync()
     {

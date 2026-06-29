@@ -11,7 +11,7 @@
 <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true"
          ActivePanelIndex="@_activeTab" ActivePanelIndexChanged="OnTabChanged">
     <MudTabPanel Text="Book" Class="pa-4">
-        <BookTab FolderName="@FolderName" />
+        <BookTab FolderName="@FolderName" OnBookImported="ReloadProjectAsync" />
     </MudTabPanel>
     <MudTabPanel Text="Characters" Class="pa-4">
         <Read2Me.App.Shared.Characters.CharactersTab FolderName="@FolderName" />
