@@ -55,7 +55,7 @@ docker logs -f <container>     # follow logs
 ## Relevant files
 
 - `CLAUDE.md` — repository overview, build/run commands, and architecture summary
-- `CONTEXT.md` — domain glossary; read before any architecture work
+- `CONTEXT.md` — domain glossary index; read before any architecture work, then load only the `context/*.md` section file(s) for the area you're touching
 - `Infra/README.md` — Docker service details, ports, supported endpoints, and usage notes
 - `Infra/docker-compose.yml` — container orchestration for all services
 - `src/Read2Me.App/Program.cs` and `Startup.cs` — application startup and middleware configuration
