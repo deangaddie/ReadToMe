@@ -51,10 +51,6 @@ namespace Read2Me.Tests.Services.Audio
         private static string Key(string? prev = null, string? next = null) =>
             OrderKeyGenerator.GenerateKeyBetween(prev, next);
 
-        /// <summary>
-        /// Seeds a Character item. Returns the queued item and seeded voiceId (if hasVoice).
-        /// Registers voiceId with the fake resolver when hasVoice=true and resolverReturnsVoice=true.
-        /// </summary>
         private async Task<(QueuedAudioItem queued, Guid itemId, Guid? voiceId)> SeedCharacterItemAsync(
             bool hasVoice = true,
             bool hasRefAudio = true,
@@ -63,11 +59,22 @@ namespace Read2Me.Tests.Services.Audio
             string voiceAudioFile = "voices/char1/voice.wav",
             string text = "In a hole in the ground")
         {
-            await using var db = await OpenDbAsync();
-
             var charId = Guid.NewGuid();
-            var character = new Character { Id = charId, Name = "Bilbo" };
-            db.Characters.Add(character);
+            var character = new Data.Entities.Character { Id = charId, Name = "Bilbo" };
+
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("bilbo", character);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character,
+                    text, hasCharacter ? charId : null))))
+                .BuildAsync();
+
+            // Paragraph.CharacterId and item VoiceInstructions need post-build update
+            await using var db = await OpenDbAsync();
+            var para = await db.Paragraphs.FindAsync(b.ParagraphId("para"));
+            para!.CharacterId = charId;
+            var item = await db.ParagraphItems.FindAsync(b.ItemId("item"));
+            item!.VoiceInstructions = "whispered";
 
             Guid? seededVoiceId = null;
             if (hasVoice)
@@ -89,36 +96,17 @@ namespace Read2Me.Tests.Services.Audio
                     _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
                 }
             }
-
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key(), CharacterId = charId };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character,
-                CharacterId = hasCharacter ? charId : null,
-                Text = text,
-                VoiceInstructions = "whispered",
-                Order = Key()
-            };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
             await db.SaveChangesAsync();
 
             if (hasVoice && resolverReturnsVoice)
-                _voiceResolver.SetVoice(item.Id, seededVoiceId);
+                _voiceResolver.SetVoice(b.ItemId("item"), seededVoiceId);
             else if (!resolverReturnsVoice)
-                _voiceResolver.SetVoice(item.Id, null);
+                _voiceResolver.SetVoice(b.ItemId("item"), null);
 
-            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
-            return (new QueuedAudioItem(_folder, itemRef), item.Id, seededVoiceId);
+            var partId = (await db.Chapters.FindAsync(b.ChapterId("ch")))?.PartId ?? throw new InvalidOperationException("Part not found");
+            var volId = b.VolumeId("vol");
+            var itemRef = new AudioItemRef(b.ItemId("item"), b.ParagraphId("para"), b.ChapterId("ch"), partId, volId);
+            return (new QueuedAudioItem(_folder, itemRef), b.ItemId("item"), seededVoiceId);
         }
 
         private async Task<(QueuedAudioItem queued, Guid itemId)> SeedNarrationItemAsync(
@@ -126,6 +114,11 @@ namespace Read2Me.Tests.Services.Audio
             bool resolverReturnsVoice = true,
             string voiceAudioFile = "voices/narrator/voice.wav")
         {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddNarration("item", "The narrator spoke"))))
+                .BuildAsync();
+
             await using var db = await OpenDbAsync();
 
             Guid? seededVoiceId = null;
@@ -141,38 +134,21 @@ namespace Read2Me.Tests.Services.Audio
                 };
                 db.Voices.Add(voice);
                 seededVoiceId = voice.Id;
+                await db.SaveChangesAsync();
 
                 var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceAudioFile.Replace('/', Path.DirectorySeparatorChar));
                 _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
             }
 
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Narration,
-                Text = "The narrator spoke",
-                Order = Key()
-            };
-
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-            await db.SaveChangesAsync();
-
             if (hasNarratorVoice && resolverReturnsVoice)
-                _voiceResolver.SetVoice(item.Id, seededVoiceId);
+                _voiceResolver.SetVoice(b.ItemId("item"), seededVoiceId);
             else if (!resolverReturnsVoice)
-                _voiceResolver.SetVoice(item.Id, null);
+                _voiceResolver.SetVoice(b.ItemId("item"), null);
 
-            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
-            return (new QueuedAudioItem(_folder, itemRef), item.Id);
+            var partId = (await db.Chapters.FindAsync(b.ChapterId("ch")))?.PartId ?? throw new InvalidOperationException("Part not found");
+            var volId = b.VolumeId("vol");
+            var itemRef = new AudioItemRef(b.ItemId("item"), b.ParagraphId("para"), b.ChapterId("ch"), partId, volId);
+            return (new QueuedAudioItem(_folder, itemRef), b.ItemId("item"));
         }
 
         [Fact]
@@ -220,7 +196,6 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task NoCharacterAssigned_ReturnsFailure()
         {
-            // No CharacterId on item → resolver returns null (no effective character)
             var (queued, _, _) = await SeedCharacterItemAsync(hasCharacter: false, resolverReturnsVoice: false);
 
             var result = await _sut.ResolveAsync(queued, CancellationToken.None);
@@ -233,7 +208,6 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task NoVoice_ReturnsFailureWithCharacterName()
         {
-            // hasVoice=false means no Voice entity in DB; resolver returns null
             var (queued, _, _) = await SeedCharacterItemAsync(hasVoice: false, resolverReturnsVoice: false);
 
             var result = await _sut.ResolveAsync(queued, CancellationToken.None);
@@ -245,7 +219,6 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task ResolverReturnsNull_ReturnsNoDefaultVoiceFailure()
         {
-            // Voice exists but resolver returns null (e.g. no winning rule)
             var (queued, _, _) = await SeedCharacterItemAsync(hasVoice: true, resolverReturnsVoice: false);
 
             var result = await _sut.ResolveAsync(queued, CancellationToken.None);
@@ -284,53 +257,42 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task NarratorOnlyMode_CharacterItem_UsesNarratorVoice()
         {
-            // NarratorOnlyMode is now owned by VoiceResolver — fake it by returning narrator voiceId
-            await using var db = await OpenDbAsync();
-
             const string voiceFile = "voices/narrator/voice.wav";
-            var narratorVoice = new VoiceEntity
-            {
-                Id = Guid.NewGuid(),
-                CharacterId = ProjectDbContext.NarratorId,
-                Name = "Narrator",
-                Source = VoiceSource.Uploaded,
-                AudioFileName = voiceFile
-            };
-            db.Voices.Add(narratorVoice);
 
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
-            var item = new ParagraphItem
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "He said something", null))))
+                .BuildAsync();
+
+            Guid narratorVoiceId;
+            await using (var db = await OpenDbAsync())
             {
-                Id = Guid.NewGuid(),
-                ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character,
-                CharacterId = null,
-                Text = "He said something",
-                Order = Key()
-            };
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-            db.Paragraphs.Add(para);
-            db.ParagraphItems.Add(item);
-            await db.SaveChangesAsync();
+                var narratorVoice = new VoiceEntity
+                {
+                    Id = Guid.NewGuid(),
+                    CharacterId = ProjectDbContext.NarratorId,
+                    Name = "Narrator",
+                    Source = VoiceSource.Uploaded,
+                    AudioFileName = voiceFile
+                };
+                db.Voices.Add(narratorVoice);
+                narratorVoiceId = narratorVoice.Id;
+                await db.SaveChangesAsync();
+            }
 
             var fullPath = Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceFile.Replace('/', Path.DirectorySeparatorChar));
             _fs.SeedFile(fullPath, [0x52, 0x49, 0x46, 0x46]);
 
-            // Resolver handles NarratorOnly substitution — returns narrator voice for this item
-            _voiceResolver.SetVoice(item.Id, narratorVoice.Id);
+            _voiceResolver.SetVoice(b.ItemId("item"), narratorVoiceId);
 
-            var itemRef = new AudioItemRef(item.Id, para.Id, ch.Id, part.Id, vol.Id);
+            await using var db2 = await OpenDbAsync();
+            var partId = (await db2.Chapters.FindAsync(b.ChapterId("ch")))!.PartId;
+            var itemRef = new AudioItemRef(b.ItemId("item"), b.ParagraphId("para"), b.ChapterId("ch"), partId, b.VolumeId("vol"));
             var queued = new QueuedAudioItem(_folder, itemRef);
 
             var result = await _sut.ResolveAsync(queued, CancellationToken.None);
 
             Assert.True(result.Succeeded);
-            // CharacterId is null on item and not Narration type → speaker is null
             Assert.Null(result.Speaker);
         }
 

@@ -28,38 +28,27 @@ namespace Read2Me.Tests.Services
         private static string Key(string? prev = null, string? next = null) =>
             OrderKeyGenerator.GenerateKeyBetween(prev, next);
 
-        /// <summary>Seeds a chapter with N character-type paragraphs, each with a single item containing the given texts.</summary>
+        // Seeds a chapter with N character-type paragraphs, each with a single item containing the given texts.
+        // Returns (chapterId, paragraphIds[]).
         private async Task<(Guid ChapterId, Guid[] ParagraphIds)> SeedChapterAsync(params string[] paragraphTexts)
         {
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            var paraNames = paragraphTexts.Select((_, i) => $"para{i}").ToArray();
+            var itemNames = paragraphTexts.Select((_, i) => $"item{i}").ToArray();
 
-            var ids = new Guid[paragraphTexts.Length];
-            string? prevOrder = null;
-            for (int i = 0; i < paragraphTexts.Length; i++)
+            var builder = b.AddVolume("vol", v => v.AddChapter("ch", c =>
             {
-                var paraOrder = Key(prevOrder);
-                prevOrder = paraOrder;
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = paraOrder };
-                var item = new ParagraphItem
+                for (int i = 0; i < paragraphTexts.Length; i++)
                 {
-                    Id = Guid.NewGuid(),
-                    ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
-                    Text = paragraphTexts[i],
-                    Order = Key(),
-                };
-                db.Paragraphs.Add(para);
-                db.ParagraphItems.Add(item);
-                ids[i] = para.Id;
-            }
-            await db.SaveChangesAsync();
-            return (ch.Id, ids);
+                    var pname = paraNames[i];
+                    var iname = itemNames[i];
+                    var text = paragraphTexts[i];
+                    c.AddParagraph(pname, p => p.AddRawItem(iname, ParagraphItemType.Character, text));
+                }
+            }));
+            await builder.BuildAsync();
+
+            return (b.ChapterId("ch"), paraNames.Select(n => b.ParagraphId(n)).ToArray());
         }
 
         [Fact]
@@ -75,7 +64,6 @@ namespace Read2Me.Tests.Services
         public async Task GetParagraphContext_ReturnsPrecedingParagraphs_InBookOrder()
         {
             var (chId, ids) = await SeedChapterAsync("P1", "P2", "P3", "Q", "F1");
-            // Query = ids[3] ("Q"), before=4 → should get "P1","P2","P3"
             var ctx = await _reader.GetParagraphContextAsync(_folder, chId, ids[3], 4, 0);
             Assert.NotNull(ctx);
             Assert.Equal(["P1", "P2", "P3"], ctx.Preceding.Select(p => p.Text).ToArray());
@@ -85,7 +73,6 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetParagraphContext_ClampsAtChapterStart()
         {
-            // Only 2 paragraphs before query, but before=10
             var (chId, ids) = await SeedChapterAsync("A", "B", "Q");
             var ctx = await _reader.GetParagraphContextAsync(_folder, chId, ids[2], 10, 0);
             Assert.NotNull(ctx);
@@ -132,31 +119,16 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetParagraphContext_ExcludesPauseParagraphsFromContext()
         {
-            // Seed: P1, [pause], P2(query), [pause], P3
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch);
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para_p1", p => p.AddRawItem("i_p1", ParagraphItemType.Character, "P1"))
+                .AddParagraph("para_pause1", p => p.AddPause("pause1", ParagraphItemType.ParagraphPause))
+                .AddParagraph("para_query", p => p.AddRawItem("i_query", ParagraphItemType.Character, "P2"))
+                .AddParagraph("para_pause2", p => p.AddPause("pause2", ParagraphItemType.ChapterPause))
+                .AddParagraph("para_p3", p => p.AddNarration("i_p3", "P3"))))
+                .BuildAsync();
 
-            Guid AddPara(string? text, ParagraphItemType type, ref string? prev)
-            {
-                var order = Key(prev); prev = order;
-                var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = order };
-                var item = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = para.Id, ItemType = type, Text = text, Order = Key() };
-                db.Paragraphs.Add(para); db.ParagraphItems.Add(item);
-                return para.Id;
-            }
-
-            string? prevKey = null;
-            AddPara("P1", ParagraphItemType.Character, ref prevKey);
-            AddPara(null, ParagraphItemType.ParagraphPause, ref prevKey);
-            var queryId = AddPara("P2", ParagraphItemType.Character, ref prevKey);
-            AddPara(null, ParagraphItemType.ChapterPause, ref prevKey);
-            AddPara("P3", ParagraphItemType.Narration, ref prevKey);
-            await db.SaveChangesAsync();
-
-            var ctx = await _reader.GetParagraphContextAsync(_folder, ch.Id, queryId, 4, 2);
+            var ctx = await _reader.GetParagraphContextAsync(_folder, b.ChapterId("ch"), b.ParagraphId("para_query"), 4, 2);
             Assert.NotNull(ctx);
             Assert.Equal("P2", ctx.Query.Text);
             Assert.Equal(["P1"], ctx.Preceding.Select(p => p.Text).ToArray());
@@ -164,65 +136,35 @@ namespace Read2Me.Tests.Services
         }
 
         // Seeds a chapter with explicit ParagraphItem configurations for audio-selection tests.
+        // Returns (chapterId, narrationNoWavId, charAttributedNoWavId, charUnattributedId, charWithWavId, narrationWithWavId, pauseId)
         private async Task<(Guid ChapterId, Guid NarrationNoWavId, Guid CharAttributedNoWavId, Guid CharUnattributedId, Guid CharWithWavId, Guid NarrationWithWavId, Guid PauseId)>
             SeedAudioItemsAsync()
         {
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "Vol", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            db.Volumes.Add(vol);
-            db.Parts.Add(part);
-            db.Chapters.Add(ch);
-
+            var b = new BookHierarchyBuilder(OpenDbAsync);
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            db.Characters.Add(character);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para")))
+                .BuildAsync();
 
-            var paraOrder = Key();
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = paraOrder };
-            db.Paragraphs.Add(para);
+            var narrationNoWavId = Guid.NewGuid();
+            var charAttributedNoWavId = Guid.NewGuid();
+            var charUnattributedId = Guid.NewGuid();
+            var charWithWavId = Guid.NewGuid();
+            var narrationWithWavId = Guid.NewGuid();
+            var pauseId = Guid.NewGuid();
 
-            // Narration, no WAV — should be included when needsAudioOnly
-            var narrationNoWav = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = null,
-            };
-            // Character with CharacterId, no WAV — should be included when needsAudioOnly
-            var charAttributedNoWav = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = null,
-            };
-            // Character without CharacterId (unattributed) — excluded when needsAudioOnly
-            var charUnattributed = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character, CharacterId = null, Order = Key(), AudioFileName = null,
-            };
-            // Character with CharacterId AND WAV — excluded when needsAudioOnly (already has audio)
-            var charWithWav = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = "audio/item.wav",
-            };
-            // Narration with WAV — excluded when needsAudioOnly
-            var narrationWithWav = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id,
-                ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = "audio/narr.wav",
-            };
-            // Pause — always excluded regardless of needsAudioOnly
-            var pause = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = para.Id,
-                ItemType = ParagraphItemType.ParagraphPause, Order = Key(),
-            };
-
-            db.ParagraphItems.AddRange(narrationNoWav, charAttributedNoWav, charUnattributed, charWithWav, narrationWithWav, pause);
+            await using var db = await OpenDbAsync();
+            db.ParagraphItems.AddRange(
+                new ParagraphItem { Id = narrationNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = null },
+                new ParagraphItem { Id = charAttributedNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = null },
+                new ParagraphItem { Id = charUnattributedId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = null, Order = Key(), AudioFileName = null },
+                new ParagraphItem { Id = charWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = "audio/item.wav" },
+                new ParagraphItem { Id = narrationWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = "audio/narr.wav" },
+                new ParagraphItem { Id = pauseId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.ParagraphPause, Order = Key() }
+            );
             await db.SaveChangesAsync();
 
-            return (ch.Id, narrationNoWav.Id, charAttributedNoWav.Id, charUnattributed.Id, charWithWav.Id, narrationWithWav.Id, pause.Id);
+            return (b.ChapterId("ch"), narrationNoWavId, charAttributedNoWavId, charUnattributedId, charWithWavId, narrationWithWavId, pauseId);
         }
 
         [Fact]
@@ -279,24 +221,21 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task GetAudioItemRefsAsync_NeedsAudioOnly_NarratorOnlyMode_ExcludesUnattributedCharacterWithExistingWav()
         {
-            await using var db = await OpenDbAsync();
-            var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-            var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-            var ch = new Chapter { Id = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = ch.Id, Order = Key() };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para"))).BuildAsync();
+
             var itemId = Guid.NewGuid();
-            var item = new ParagraphItem
+            await using var db = await OpenDbAsync();
+            db.ParagraphItems.Add(new ParagraphItem
             {
-                Id = itemId, ParagraphId = para.Id,
+                Id = itemId, ParagraphId = b.ParagraphId("para"),
                 ItemType = ParagraphItemType.Character, CharacterId = null,
                 Order = Key(), AudioFileName = "audio/existing.wav"
-            };
-            db.Volumes.Add(vol); db.Parts.Add(part); db.Chapters.Add(ch);
-            db.Paragraphs.Add(para); db.ParagraphItems.Add(item);
+            });
             await db.SaveChangesAsync();
 
             var refs = await _reader.GetAudioItemRefsAsync(
-                _folder, BookNodeLevel.Chapter, ch.Id,
+                _folder, BookNodeLevel.Chapter, b.ChapterId("ch"),
                 needsAudioOnly: true, narratorOnlyMode: true);
             Assert.DoesNotContain(refs, r => r.ParagraphItemId == itemId);
         }
@@ -318,13 +257,11 @@ namespace Read2Me.Tests.Services
             var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, needsAudioOnly: false);
             var ids = refs.Select(r => r.ParagraphItemId).ToHashSet();
 
-            // All non-Pause items included
             Assert.Contains(narrationNoWavId, ids);
             Assert.Contains(charAttributedNoWavId, ids);
             Assert.Contains(charUnattributedId, ids);
             Assert.Contains(charWithWavId, ids);
             Assert.Contains(narrationWithWavId, ids);
-            // Pause excluded
             Assert.DoesNotContain(pauseId, ids);
         }
 
@@ -335,7 +272,6 @@ namespace Read2Me.Tests.Services
 
             await using (var db = await OpenDbAsync())
             {
-                // One review row per the first two character paragraphs' items.
                 var items = db.ParagraphItems
                     .Where(i => i.ParagraphId == ids[0] || i.ParagraphId == ids[1])
                     .Select(i => i.Id)
