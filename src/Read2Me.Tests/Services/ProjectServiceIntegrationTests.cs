@@ -1,4 +1,3 @@
-using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -6,11 +5,11 @@ using Microsoft.Extensions.Options;
 using Read2Me.Core.Exceptions;
 using Read2Me.Core.Configuration;
 using Read2Me.Data;
-using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.IO;
+using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.Services
@@ -55,16 +54,19 @@ namespace Read2Me.Tests.Services
             return new ProjectReader(session, NullLogger<ProjectReader>.Instance);
         }
 
-        private static async Task<ProjectDbContext> OpenDbAsync(string folderPath)
+        private static Task<ProjectDbContext> OpenDbAsync(string folderPath)
         {
             var dbPath = Path.Combine(folderPath, "project.db");
             var options = new DbContextOptionsBuilder<ProjectDbContext>()
                 .UseSqlite($"Data Source={dbPath};Pooling=false")
                 .Options;
             var db = new ProjectDbContext(options);
-            await db.Database.MigrateAsync();
-            return db;
+            db.Database.Migrate();
+            return Task.FromResult(db);
         }
+
+        private BookHierarchyBuilder BuilderFor(string folderPath) =>
+            new BookHierarchyBuilder(() => OpenDbAsync(folderPath));
 
         // ---------------------------------------------------------------
         // GetProjects
@@ -219,17 +221,8 @@ namespace Read2Me.Tests.Services
             var folderName = await _writer.CreateProjectAsync(
                 "Has Content", "Title", "Author", "file.txt", stream, BookFileType.Text);
 
-            var folderPath = Path.Combine(_tempDir, folderName);
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.Volumes.Add(new Volume
-                {
-                    Id = Guid.NewGuid(),
-                    Title = "Volume 1",
-                    Order = OrderKeyGenerator.GenerateKeyBetween(null, null)
-                });
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(Path.Combine(_tempDir, folderName));
+            await b.AddVolume("vol").AddHierarchyAsync();
 
             var result = await _reader.HasBookContentAsync(folderName);
 
@@ -314,17 +307,14 @@ namespace Read2Me.Tests.Services
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("Vol Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
-            var volumeId = Guid.NewGuid();
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.Volumes.Add(new Volume { Id = volumeId, Title = "Old Title", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                await db.SaveChangesAsync();
-            }
 
-            await _cmd.ExecuteAsync(new UpdateVolumeTitleCommand(folderName, volumeId, "New Title"));
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol").AddHierarchyAsync();
+
+            await _cmd.ExecuteAsync(new UpdateVolumeTitleCommand(folderName, b.VolumeId("vol"), "New Title"));
 
             await using var db2 = await OpenDbAsync(folderPath);
-            var vol = await db2.Volumes.FindAsync(volumeId);
+            var vol = await db2.Volumes.FindAsync(b.VolumeId("vol"));
             Assert.Equal("New Title", vol!.Title);
         }
 
@@ -349,19 +339,14 @@ namespace Read2Me.Tests.Services
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("Part Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
-            var volumeId = Guid.NewGuid();
-            var partId = Guid.NewGuid();
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.Volumes.Add(new Volume { Id = volumeId, Title = "V", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                db.Parts.Add(new Part { Id = partId, VolumeId = volumeId, Title = "Old Part", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                await db.SaveChangesAsync();
-            }
 
-            await _cmd.ExecuteAsync(new UpdatePartTitleCommand(folderName, partId, "New Part"));
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v.AddPart("part")).AddHierarchyAsync();
+
+            await _cmd.ExecuteAsync(new UpdatePartTitleCommand(folderName, b.PartId("part"), "New Part"));
 
             await using var db2 = await OpenDbAsync(folderPath);
-            var part = await db2.Parts.FindAsync(partId);
+            var part = await db2.Parts.FindAsync(b.PartId("part"));
             Assert.Equal("New Part", part!.Title);
         }
 
@@ -386,21 +371,14 @@ namespace Read2Me.Tests.Services
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("Ch Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
-            var volumeId = Guid.NewGuid();
-            var partId = Guid.NewGuid();
-            var chapterId = Guid.NewGuid();
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.Volumes.Add(new Volume { Id = volumeId, Title = "V", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                db.Parts.Add(new Part { Id = partId, VolumeId = volumeId, Title = "P", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                db.Chapters.Add(new Chapter { Id = chapterId, PartId = partId, Title = "Old Chapter", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                await db.SaveChangesAsync();
-            }
 
-            await _cmd.ExecuteAsync(new UpdateChapterTitleCommand(folderName, chapterId, "New Chapter"));
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v.AddChapter("ch")).AddHierarchyAsync();
+
+            await _cmd.ExecuteAsync(new UpdateChapterTitleCommand(folderName, b.ChapterId("ch"), "New Chapter"));
 
             await using var db2 = await OpenDbAsync(folderPath);
-            var ch = await db2.Chapters.FindAsync(chapterId);
+            var ch = await db2.Chapters.FindAsync(b.ChapterId("ch"));
             Assert.Equal("New Chapter", ch!.Title);
         }
 
@@ -425,25 +403,16 @@ namespace Read2Me.Tests.Services
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("Item Update", "Title", "Author", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
-            var volumeId = Guid.NewGuid();
-            var partId = Guid.NewGuid();
-            var chapterId = Guid.NewGuid();
-            var paragraphId = Guid.NewGuid();
-            var itemId = Guid.NewGuid();
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.Volumes.Add(new Volume { Id = volumeId, Title = "V", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                db.Parts.Add(new Part { Id = partId, VolumeId = volumeId, Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                db.Chapters.Add(new Chapter { Id = chapterId, PartId = partId, Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                db.Paragraphs.Add(new Paragraph { Id = paragraphId, ChapterId = chapterId, Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                db.ParagraphItems.Add(new ParagraphItem { Id = itemId, ParagraphId = paragraphId, Text = "Old text", Order = OrderKeyGenerator.GenerateKeyBetween(null, null) });
-                await db.SaveChangesAsync();
-            }
 
-            await _cmd.ExecuteAsync(new UpdateParagraphItemTextCommand(folderName, itemId, "New text"));
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph(configure: p => p.AddNarration("item", "Old text"))))
+                .AddHierarchyAsync();
+
+            await _cmd.ExecuteAsync(new UpdateParagraphItemTextCommand(folderName, b.ItemId("item"), "New text"));
 
             await using var db2 = await OpenDbAsync(folderPath);
-            var item = await db2.ParagraphItems.FindAsync(itemId);
+            var item = await db2.ParagraphItems.FindAsync(b.ItemId("item"));
             Assert.Equal("New text", item!.Text);
         }
 
@@ -459,13 +428,6 @@ namespace Read2Me.Tests.Services
         }
 
         // ---------------------------------------------------------------
-        // Helpers for split tests
-        // ---------------------------------------------------------------
-
-        private static string Key(string? prev = null, string? next = null) =>
-            OrderKeyGenerator.GenerateKeyBetween(prev, next);
-
-        // ---------------------------------------------------------------
         // SplitVolumeAsync (splits at Part boundary — creates new Volume)
         // ---------------------------------------------------------------
 
@@ -476,34 +438,25 @@ namespace Read2Me.Tests.Services
             var folderName = await _writer.CreateProjectAsync("SplitVol", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
-            Guid vol1Id, part1Id, part2Id, part3Id;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                string vk = Key();
-                var vol1 = new Volume { Id = vol1Id = Guid.NewGuid(), Title = "Vol1", Order = vk };
-                db.Volumes.Add(vol1);
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol1", v => v
+                .AddPart("p1")
+                .AddPart("p2")
+                .AddPart("p3"))
+                .AddHierarchyAsync();
 
-                string pk1 = Key(), pk2 = Key(pk1), pk3 = Key(pk2);
-                db.Parts.AddRange(
-                    new Part { Id = part1Id = Guid.NewGuid(), VolumeId = vol1Id, Title = "P1", Order = pk1 },
-                    new Part { Id = part2Id = Guid.NewGuid(), VolumeId = vol1Id, Title = "P2", Order = pk2 },
-                    new Part { Id = part3Id = Guid.NewGuid(), VolumeId = vol1Id, Title = "P3", Order = pk3 });
-                await db.SaveChangesAsync();
-            }
-
-            // Split at Part2: Vol1 keeps P1, new Volume gets P2 + P3
-            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, part2Id, "Vol2"));
+            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, b.PartId("p2"), "Vol2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
             Assert.Equal(2, volumes.Count);
-            Assert.Equal("Vol1", volumes[0].Title);
+            Assert.Equal("vol1", volumes[0].Title);
             Assert.Equal("Vol2", volumes[1].Title);
 
             var oldVolParts = await verify.Parts.Where(p => p.VolumeId == volumes[0].Id).OrderBy(p => p.Order).ToListAsync();
             var newVolParts = await verify.Parts.Where(p => p.VolumeId == volumes[1].Id).OrderBy(p => p.Order).ToListAsync();
-            Assert.Equal([part1Id], oldVolParts.Select(p => p.Id));
-            Assert.Equal([part2Id, part3Id], newVolParts.Select(p => p.Id));
+            Assert.Equal([b.PartId("p1")], oldVolParts.Select(p => p.Id));
+            Assert.Equal([b.PartId("p2"), b.PartId("p3")], newVolParts.Select(p => p.Id));
         }
 
         [Fact]
@@ -513,24 +466,17 @@ namespace Read2Me.Tests.Services
             var folderName = await _writer.CreateProjectAsync("SplitVolFirst", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
-            Guid vol1Id, part1Id, part2Id;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                var vol1 = new Volume { Id = vol1Id = Guid.NewGuid(), Title = "Vol1", Order = Key() };
-                db.Volumes.Add(vol1);
-                string pk1 = Key(), pk2 = Key(pk1);
-                db.Parts.AddRange(
-                    new Part { Id = part1Id = Guid.NewGuid(), VolumeId = vol1Id, Order = pk1 },
-                    new Part { Id = part2Id = Guid.NewGuid(), VolumeId = vol1Id, Order = pk2 });
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol1", v => v
+                .AddPart("p1")
+                .AddPart("p2"))
+                .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, part1Id, "NewVol"));
+            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, b.PartId("p1"), "NewVol"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
             Assert.Equal(2, volumes.Count);
-            // New volume after original; gets both parts (all parts move when splitting at first part)
             var newVolParts = await verify.Parts.Where(p => p.VolumeId == volumes[1].Id).ToListAsync();
             Assert.Equal(2, newVolParts.Count);
         }
@@ -555,35 +501,26 @@ namespace Read2Me.Tests.Services
             var folderName = await _writer.CreateProjectAsync("SplitPart", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
-            Guid volId, part1Id, ch1Id, ch2Id, ch3Id;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                var vol = new Volume { Id = volId = Guid.NewGuid(), Title = "V", Order = Key() };
-                db.Volumes.Add(vol);
-                string pk1 = Key(), pk2 = Key(pk1);
-                var part1 = new Part { Id = part1Id = Guid.NewGuid(), VolumeId = volId, Title = "P1", Order = pk1 };
-                db.Parts.Add(part1);
-                string ck1 = Key(), ck2 = Key(ck1), ck3 = Key(ck2);
-                db.Chapters.AddRange(
-                    new Chapter { Id = ch1Id = Guid.NewGuid(), PartId = part1Id, Title = "Ch1", Order = ck1 },
-                    new Chapter { Id = ch2Id = Guid.NewGuid(), PartId = part1Id, Title = "Ch2", Order = ck2 },
-                    new Chapter { Id = ch3Id = Guid.NewGuid(), PartId = part1Id, Title = "Ch3", Order = ck3 });
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v
+                .AddPart("p1", p => p
+                    .AddChapter("ch1")
+                    .AddChapter("ch2")
+                    .AddChapter("ch3")))
+                .AddHierarchyAsync();
 
-            // Split at Ch2: P1 keeps Ch1, new Part gets Ch2 + Ch3
-            await _cmd.ExecuteAsync(new SplitAtChapterCommand(folderName, ch2Id, "P2"));
+            await _cmd.ExecuteAsync(new SplitAtChapterCommand(folderName, b.ChapterId("ch2"), "P2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var parts = await verify.Parts.OrderBy(p => p.Order).ToListAsync();
             Assert.Equal(2, parts.Count);
-            Assert.Equal("P1", parts[0].Title);
+            Assert.Equal("p1", parts[0].Title);
             Assert.Equal("P2", parts[1].Title);
 
             var oldPartChs = await verify.Chapters.Where(c => c.PartId == parts[0].Id).OrderBy(c => c.Order).ToListAsync();
             var newPartChs = await verify.Chapters.Where(c => c.PartId == parts[1].Id).OrderBy(c => c.Order).ToListAsync();
-            Assert.Equal([ch1Id], oldPartChs.Select(c => c.Id));
-            Assert.Equal([ch2Id, ch3Id], newPartChs.Select(c => c.Id));
+            Assert.Equal([b.ChapterId("ch1")], oldPartChs.Select(c => c.Id));
+            Assert.Equal([b.ChapterId("ch2"), b.ChapterId("ch3")], newPartChs.Select(c => c.Id));
         }
 
         [Fact]
@@ -606,35 +543,26 @@ namespace Read2Me.Tests.Services
             var folderName = await _writer.CreateProjectAsync("SplitCh", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
-            Guid partId, ch1Id, pg1Id, pg2Id, pg3Id;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-                db.Volumes.Add(vol);
-                var part = new Part { Id = partId = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-                db.Parts.Add(part);
-                var ch1 = new Chapter { Id = ch1Id = Guid.NewGuid(), PartId = partId, Title = "Ch1", Order = Key() };
-                db.Chapters.Add(ch1);
-                string pgk1 = Key(), pgk2 = Key(pgk1), pgk3 = Key(pgk2);
-                db.Paragraphs.AddRange(
-                    new Paragraph { Id = pg1Id = Guid.NewGuid(), ChapterId = ch1Id, Order = pgk1 },
-                    new Paragraph { Id = pg2Id = Guid.NewGuid(), ChapterId = ch1Id, Order = pgk2 },
-                    new Paragraph { Id = pg3Id = Guid.NewGuid(), ChapterId = ch1Id, Order = pgk3 });
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v
+                .AddChapter("ch1", c => c
+                    .AddParagraph("pg1", configure: p => p.AddNarration("i1"))
+                    .AddParagraph("pg2", configure: p => p.AddNarration("i2"))
+                    .AddParagraph("pg3", configure: p => p.AddNarration("i3"))))
+                .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtParagraphCommand(folderName, pg2Id, "Ch2"));
+            await _cmd.ExecuteAsync(new SplitAtParagraphCommand(folderName, b.ParagraphId("pg2"), "Ch2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var chapters = await verify.Chapters.OrderBy(c => c.Order).ToListAsync();
             Assert.Equal(2, chapters.Count);
-            Assert.Equal("Ch1", chapters[0].Title);
+            Assert.Equal("ch1", chapters[0].Title);
             Assert.Equal("Ch2", chapters[1].Title);
 
             var oldChPgs = await verify.Paragraphs.Where(p => p.ChapterId == chapters[0].Id).OrderBy(p => p.Order).ToListAsync();
             var newChPgs = await verify.Paragraphs.Where(p => p.ChapterId == chapters[1].Id).OrderBy(p => p.Order).ToListAsync();
-            Assert.Equal([pg1Id], oldChPgs.Select(p => p.Id));
-            Assert.Equal([pg2Id, pg3Id], newChPgs.Select(p => p.Id));
+            Assert.Equal([b.ParagraphId("pg1")], oldChPgs.Select(p => p.Id));
+            Assert.Equal([b.ParagraphId("pg2"), b.ParagraphId("pg3")], newChPgs.Select(p => p.Id));
         }
 
         [Fact]
@@ -657,26 +585,16 @@ namespace Read2Me.Tests.Services
             var folderName = await _writer.CreateProjectAsync("SplitPg", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
-            Guid chapterId, pg1Id, item1Id, item2Id, item3Id;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-                db.Volumes.Add(vol);
-                var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-                db.Parts.Add(part);
-                var ch = new Chapter { Id = chapterId = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-                db.Chapters.Add(ch);
-                var pg1 = new Paragraph { Id = pg1Id = Guid.NewGuid(), ChapterId = chapterId, Order = Key() };
-                db.Paragraphs.Add(pg1);
-                string ik1 = Key(), ik2 = Key(ik1), ik3 = Key(ik2);
-                db.ParagraphItems.AddRange(
-                    new ParagraphItem { Id = item1Id = Guid.NewGuid(), ParagraphId = pg1Id, Order = ik1, Text = "a" },
-                    new ParagraphItem { Id = item2Id = Guid.NewGuid(), ParagraphId = pg1Id, Order = ik2, Text = "b" },
-                    new ParagraphItem { Id = item3Id = Guid.NewGuid(), ParagraphId = pg1Id, Order = ik3, Text = "c" });
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v
+                .AddChapter(configure: c => c
+                    .AddParagraph("pg1", p => p
+                        .AddNarration("item1", "a")
+                        .AddNarration("item2", "b")
+                        .AddNarration("item3", "c"))))
+                .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, item2Id));
+            await _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, b.ItemId("item2")));
 
             await using var verify = await OpenDbAsync(folderPath);
             var paragraphs = await verify.Paragraphs.OrderBy(p => p.Order).ToListAsync();
@@ -684,8 +602,8 @@ namespace Read2Me.Tests.Services
 
             var oldPgItems = await verify.ParagraphItems.Where(i => i.ParagraphId == paragraphs[0].Id).OrderBy(i => i.Order).ToListAsync();
             var newPgItems = await verify.ParagraphItems.Where(i => i.ParagraphId == paragraphs[1].Id).OrderBy(i => i.Order).ToListAsync();
-            Assert.Equal([item1Id], oldPgItems.Select(i => i.Id));
-            Assert.Equal([item2Id, item3Id], newPgItems.Select(i => i.Id));
+            Assert.Equal([b.ItemId("item1")], oldPgItems.Select(i => i.Id));
+            Assert.Equal([b.ItemId("item2"), b.ItemId("item3")], newPgItems.Select(i => i.Id));
         }
 
         [Fact]
@@ -708,25 +626,15 @@ namespace Read2Me.Tests.Services
             var folderName = await _writer.CreateProjectAsync("SplitLine", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
-            Guid chapterId, pg1Id, item1Id, item2Id;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                var vol = new Volume { Id = Guid.NewGuid(), Title = "V", Order = Key() };
-                db.Volumes.Add(vol);
-                var part = new Part { Id = Guid.NewGuid(), VolumeId = vol.Id, Order = Key() };
-                db.Parts.Add(part);
-                var ch = new Chapter { Id = chapterId = Guid.NewGuid(), PartId = part.Id, Order = Key() };
-                db.Chapters.Add(ch);
-                var pg1 = new Paragraph { Id = pg1Id = Guid.NewGuid(), ChapterId = chapterId, Order = Key() };
-                db.Paragraphs.Add(pg1);
-                string ik1 = Key(), ik2 = Key(ik1);
-                db.ParagraphItems.AddRange(
-                    new ParagraphItem { Id = item1Id = Guid.NewGuid(), ParagraphId = pg1Id, Order = ik1, Text = "x" },
-                    new ParagraphItem { Id = item2Id = Guid.NewGuid(), ParagraphId = pg1Id, Order = ik2, Text = "y" });
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol", v => v
+                .AddChapter(configure: c => c
+                    .AddParagraph("pg1", p => p
+                        .AddNarration("item1", "x")
+                        .AddNarration("item2", "y"))))
+                .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, item2Id));
+            await _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, b.ItemId("item2")));
 
             await using var verify = await OpenDbAsync(folderPath);
             var paragraphs = await verify.Paragraphs.OrderBy(p => p.Order).ToListAsync();
@@ -734,7 +642,7 @@ namespace Read2Me.Tests.Services
 
             var newPgItems = await verify.ParagraphItems.Where(i => i.ParagraphId == paragraphs[1].Id).ToListAsync();
             Assert.Single(newPgItems);
-            Assert.Equal(item2Id, newPgItems[0].Id);
+            Assert.Equal(b.ItemId("item2"), newPgItems[0].Id);
         }
 
         [Fact]
@@ -757,17 +665,10 @@ namespace Read2Me.Tests.Services
             var folderName = await _writer.CreateProjectAsync("SplitVolOrder", "T", "A", "f.txt", stream, BookFileType.Text);
             var folderPath = Path.Combine(_tempDir, folderName);
 
-            Guid vol1Id, part1Id;
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                var vol1 = new Volume { Id = vol1Id = Guid.NewGuid(), Title = "Vol1", Order = Key() };
-                db.Volumes.Add(vol1);
-                var part1 = new Part { Id = part1Id = Guid.NewGuid(), VolumeId = vol1Id, Order = Key() };
-                db.Parts.Add(part1);
-                await db.SaveChangesAsync();
-            }
+            var b = BuilderFor(folderPath);
+            await b.AddVolume("vol1", v => v.AddPart("p1")).AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, part1Id, "NewVol"));
+            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, b.PartId("p1"), "NewVol"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
