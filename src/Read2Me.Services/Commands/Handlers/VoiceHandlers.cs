@@ -5,7 +5,6 @@ using Read2Me.Core.Utils;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
-using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 
 namespace Read2Me.Services.Commands.Handlers;
 
@@ -233,9 +232,9 @@ public sealed class CreateVoiceRuleHandler(ProjectDbSession session) : ICommandH
             VoiceId = c.VoiceId,
             IsDefault = false,
             Rank = newRank,
-            FromLevel = c.FromLevel.HasValue ? (DataAnchorLevel)c.FromLevel.Value : null,
+            FromLevel = c.FromLevel,
             FromNodeId = c.FromNodeId,
-            ToLevel = c.ToLevel.HasValue ? (DataAnchorLevel)c.ToLevel.Value : null,
+            ToLevel = c.ToLevel,
             ToNodeId = c.ToNodeId,
         };
         db.VoiceRules.Add(rule);

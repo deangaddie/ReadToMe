@@ -98,5 +98,6 @@ Audio files (WAV per ParagraphItem, reference voice WAVs) are stored in the same
 ## Known issues
 
 - Loading a new book pulls epub cover but requires server restart to display it.
+- As character assignment runs, it updates the statuses of paragraph items, but when it completes, all assignments are reset to "unknown" in the UI until reloading.
 - Processing/thinking/response blocks in character assignment progress area should expand rather than sub-scroll.
-- More error/warning. eg: Audio gen failed because no voice
+- More betterer error/warning. eg: Audio gen failed because no voice

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
+using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.IO;

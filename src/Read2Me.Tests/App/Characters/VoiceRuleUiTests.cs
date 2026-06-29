@@ -12,7 +12,6 @@ using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
 using Xunit;
-using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 
 namespace Read2Me.Tests.App.Characters
 {
@@ -40,7 +39,7 @@ namespace Read2Me.Tests.App.Characters
         {
             var row = new VoiceRuleRow(Guid.NewGuid(), IsDefault: false, Rank: "b0",
                 VoiceId: Guid.NewGuid(), VoiceName: "Alice Voice",
-                FromLevel: DataAnchorLevel.Chapter, FromNodeId: Guid.NewGuid(), FromDisplayName: "Chapter 5", FromDangling: false,
+                FromLevel: VoiceAnchorLevel.Chapter, FromNodeId: Guid.NewGuid(), FromDisplayName: "Chapter 5", FromDangling: false,
                 ToLevel: null, ToNodeId: null, ToDisplayName: null, ToDangling: false);
 
             var desc = CharacterDetailPanel.RuleDescription(row);
@@ -54,8 +53,8 @@ namespace Read2Me.Tests.App.Characters
             var nodeId = Guid.NewGuid();
             var row = new VoiceRuleRow(Guid.NewGuid(), IsDefault: false, Rank: "b0",
                 VoiceId: Guid.NewGuid(), VoiceName: "Bob Voice",
-                FromLevel: DataAnchorLevel.Chapter, FromNodeId: nodeId, FromDisplayName: "Chapter 3", FromDangling: false,
-                ToLevel: DataAnchorLevel.Chapter, ToNodeId: nodeId, ToDisplayName: "Chapter 3", ToDangling: false);
+                FromLevel: VoiceAnchorLevel.Chapter, FromNodeId: nodeId, FromDisplayName: "Chapter 3", FromDangling: false,
+                ToLevel: VoiceAnchorLevel.Chapter, ToNodeId: nodeId, ToDisplayName: "Chapter 3", ToDangling: false);
 
             var desc = CharacterDetailPanel.RuleDescription(row);
 
@@ -67,7 +66,7 @@ namespace Read2Me.Tests.App.Characters
         {
             var row = new VoiceRuleRow(Guid.NewGuid(), IsDefault: false, Rank: "b0",
                 VoiceId: Guid.NewGuid(), VoiceName: "Voice",
-                FromLevel: DataAnchorLevel.Chapter, FromNodeId: Guid.NewGuid(), FromDisplayName: null, FromDangling: true,
+                FromLevel: VoiceAnchorLevel.Chapter, FromNodeId: Guid.NewGuid(), FromDisplayName: null, FromDangling: true,
                 ToLevel: null, ToNodeId: null, ToDisplayName: null, ToDangling: false);
 
             var desc = CharacterDetailPanel.RuleDescription(row);

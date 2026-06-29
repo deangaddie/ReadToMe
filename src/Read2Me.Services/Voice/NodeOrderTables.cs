@@ -1,4 +1,4 @@
-using Read2Me.Data.Enums;
+using Read2Me.Core.Models;
 
 namespace Read2Me.Services.Voice;
 
@@ -55,8 +55,7 @@ public readonly record struct NodeOrderTables(
                 return true;
 
             default:
-                position = default;
-                return false;
+                throw new ArgumentOutOfRangeException(nameof(level), level, null);
         }
     }
 }

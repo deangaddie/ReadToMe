@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Enums;
-using DataAnchorLevel = Read2Me.Data.Enums.VoiceAnchorLevel;
 
 namespace Read2Me.Services.Voice;
 
@@ -23,10 +22,19 @@ public sealed class VoiceResolver : IVoiceResolver
 
         var db = await _session.OpenAsync(folder);
 
-        // 1. Load items (Id, ItemType, CharacterId)
+        // 1. Load items with ancestry orders (single query replaces former step 7)
         var items = await db.ParagraphItems.AsNoTracking()
             .Where(pi => itemIds.Contains(pi.Id))
-            .Select(pi => new { pi.Id, pi.ItemType, pi.CharacterId })
+            .Select(pi => new {
+                pi.Id,
+                pi.ItemType,
+                pi.CharacterId,
+                ItemOrder   = pi.Order,
+                ParaOrder   = pi.Paragraph.Order,
+                ChOrder     = pi.Paragraph.Chapter.Order,
+                PartOrder   = pi.Paragraph.Chapter.Part.Order,
+                VolumeOrder = pi.Paragraph.Chapter.Part.Volume.Order
+            })
             .ToListAsync(ct);
 
         // 2. Read NarratorOnlyMode
@@ -139,22 +147,9 @@ public sealed class VoiceResolver : IVoiceResolver
                 anchorItemPositions[r.Id] = new StoryPosition(r.VolumeOrder, r.PartOrder, r.ChOrder, r.ParaOrder, r.ItemOrder);
         }
 
-        // 7. Batch-load item StoryPositions (all input itemIds)
-        var inputItemRows = await db.ParagraphItems.AsNoTracking()
-            .Where(pi => itemIds.Contains(pi.Id))
-            .Select(pi => new
-            {
-                pi.Id,
-                ItemOrder  = pi.Order,
-                ParaOrder  = pi.Paragraph.Order,
-                ChOrder    = pi.Paragraph.Chapter.Order,
-                PartOrder  = pi.Paragraph.Chapter.Part.Order,
-                VolumeOrder = pi.Paragraph.Chapter.Part.Volume.Order
-            })
-            .ToListAsync(ct);
-
-        var itemPositions = new Dictionary<Guid, StoryPosition>(inputItemRows.Count);
-        foreach (var r in inputItemRows)
+        // 7. Build item StoryPositions from step-1 rows (no second query)
+        var itemPositions = new Dictionary<Guid, StoryPosition>(items.Count);
+        foreach (var r in items)
             itemPositions[r.Id] = new StoryPosition(r.VolumeOrder, r.PartOrder, r.ChOrder, r.ParaOrder, r.ItemOrder);
 
         // Build RuleInputs per character (shared across items of same char)
@@ -225,18 +220,18 @@ public sealed class VoiceResolver : IVoiceResolver
     }
 
     private static void CollectId(
-        DataAnchorLevel? level, Guid? nodeId,
+        VoiceAnchorLevel? level, Guid? nodeId,
         HashSet<Guid> volumeIds, HashSet<Guid> partIds, HashSet<Guid> chapterIds,
         HashSet<Guid> paragraphIds, HashSet<Guid> itemIds)
     {
         if (level is null || nodeId is null) return;
         switch (level.Value)
         {
-            case DataAnchorLevel.Volume:        volumeIds.Add(nodeId.Value);    break;
-            case DataAnchorLevel.Part:          partIds.Add(nodeId.Value);      break;
-            case DataAnchorLevel.Chapter:       chapterIds.Add(nodeId.Value);   break;
-            case DataAnchorLevel.Paragraph:     paragraphIds.Add(nodeId.Value); break;
-            case DataAnchorLevel.ParagraphItem: itemIds.Add(nodeId.Value);      break;
+            case VoiceAnchorLevel.Volume:        volumeIds.Add(nodeId.Value);    break;
+            case VoiceAnchorLevel.Part:          partIds.Add(nodeId.Value);      break;
+            case VoiceAnchorLevel.Chapter:       chapterIds.Add(nodeId.Value);   break;
+            case VoiceAnchorLevel.Paragraph:     paragraphIds.Add(nodeId.Value); break;
+            case VoiceAnchorLevel.ParagraphItem: itemIds.Add(nodeId.Value);      break;
         }
     }
 }
