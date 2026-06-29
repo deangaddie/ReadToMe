@@ -51,6 +51,12 @@ namespace Read2Me.Services.Characters
 
         public event Action? Changed;
 
+        /// <summary>
+        /// Fires when a paragraph is successfully assigned a character by the queue processor.
+        /// Subscribers (e.g. BookHierarchyPresenter) should stamp in-memory items and update node status.
+        /// </summary>
+        public event Action<ProjectFolderId, Guid, ResolvedCharacter>? CharacterAssigned;
+
         public CharacterQueueService()
         {
             _map.Changed += () => Changed?.Invoke();
@@ -103,6 +109,8 @@ namespace Read2Me.Services.Characters
                 _map.SetResolved(key, resolved);
             _map.Finish(key, elapsedSeconds);
             _processingPreview = null;
+            if (resolved is not null)
+                CharacterAssigned?.Invoke(item.Folder, item.ParagraphId, resolved);
             Changed?.Invoke();
         }
 
