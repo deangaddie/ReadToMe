@@ -23,8 +23,6 @@ namespace Read2Me.App.State
         BookSelectionState selectionState,
         AudioItemSelectionState audioSelectionState,
         IDialogService dialogService,
-        ISnackbar snackbar,
-        ParagraphTtsSettingsService paragraphTtsSettings,
         CharacterQueueService characterQueue,
         AudioQueueService audioQueue,
         AudioReviewService audioReviews,

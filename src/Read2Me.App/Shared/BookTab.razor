@@ -8,6 +8,7 @@
 @inject AudiobookAssemblyService AssemblyService
 @inject AudioQueueService AudioQueue
 @inject NodeStatusService NodeStatus
+@implements IDisposable
 
 @if (Presenter.IsLoading)
 {
@@ -236,7 +237,15 @@ else
     protected override async Task OnParametersSetAsync()
     {
         _folderId = new ProjectFolderId(FolderName);
-        Presenter.StateChanged += StateHasChanged;
+        Presenter.StateChanged -= Refresh;
+        Presenter.StateChanged += Refresh;
         await Presenter.LoadAsync(_folderId);
+    }
+
+    void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Presenter.StateChanged -= Refresh;
     }
 }
