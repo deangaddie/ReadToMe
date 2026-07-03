@@ -63,12 +63,18 @@ namespace Read2Me.Services
         string? ToDisplayName,
         bool ToDangling);
 
-    public interface IProjectReader
+    /// <summary>Workspace-level project catalog: which projects exist and their metadata.</summary>
+    public interface IProjectCatalogReader
     {
-        Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId);
         IReadOnlyList<string> GetProjects();
         Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync();
         Task<Project?> GetProjectAsync(ProjectFolderId folderId);
+    }
+
+    /// <summary>Book structure and text: volumes/parts/chapters/paragraphs and their content.</summary>
+    public interface IBookContentReader
+    {
+        Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId);
         Task<bool> HasBookContentAsync(ProjectFolderId folderId);
         Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId);
         Task<List<Part>> GetPartsAsync(ProjectFolderId folderId, Guid volumeId);
@@ -81,25 +87,42 @@ namespace Read2Me.Services
         /// Returns an empty result if the parent is not found.
         /// </summary>
         Task<HierarchyChildren> GetChildrenAsync(ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId);
+        Task<int> GetTotalPartCountAsync(ProjectFolderId folderId);
+        Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId);
+
+        // Returns paragraphs from the given id set ordered by book position (Volume→Part→Chapter→Paragraph order).
+        // Preview is the first character item's text, truncated.
+        Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds);
+
+        /// <summary>
+        /// Returns the text of <paramref name="paragraphId"/> plus up to <paramref name="before"/> preceding
+        /// and <paramref name="after"/> following paragraphs within the same chapter.
+        /// Returns null if the paragraph is not found.
+        /// </summary>
+        Task<ParagraphContext?> GetParagraphContextAsync(
+            ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after);
+    }
+
+    /// <summary>Characters, their aliases/voices/voice rules, and character-paragraph attribution queries.</summary>
+    public interface ICharacterReader
+    {
         Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId);
         Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId);
         Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId);
         Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId);
         Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId);
         Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId);
-        Task<int> GetTotalPartCountAsync(ProjectFolderId folderId);
-        Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId);
 
         Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
             ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false);
 
         // All volume/part/chapter node ids that contain at least one character paragraph.
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);
+    }
 
-        // Returns paragraphs from the given id set ordered by book position (Volume→Part→Chapter→Paragraph order).
-        // Preview is the first character item's text, truncated.
-        Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds);
-
+    /// <summary>Audio-generation state: item refs, review rows, status seeds, and the assembly manifest.</summary>
+    public interface IAudioItemReader
+    {
         // Returns non-Pause ParagraphItems (Character + Narration) scoped to the given node, for audio selection.
         // When needsAudioOnly is true, filters to items missing a WAV and attribution-ready (Narration always; Character only when CharacterId != null, unless narratorOnlyMode is true in which case unattributed Character items are also included).
         Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false);
@@ -117,17 +140,19 @@ namespace Read2Me.Services
         Task<IReadOnlyList<ParagraphStatusSeedRow>> GetNodeStatusSeedAsync(ProjectFolderId folderId);
 
         /// <summary>
-        /// Returns the text of <paramref name="paragraphId"/> plus up to <paramref name="before"/> preceding
-        /// and <paramref name="after"/> following paragraphs within the same chapter.
-        /// Returns null if the paragraph is not found.
-        /// </summary>
-        Task<ParagraphContext?> GetParagraphContextAsync(
-            ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after);
-
-        /// <summary>
         /// Returns every ParagraphItem in the project in Position order (Volume→Part→Chapter→Paragraph→Item).
         /// Pause-kind entries have null AudioRelativePath regardless of any stored value.
         /// </summary>
         Task<IReadOnlyList<AssemblyManifestEntry>> GetAssemblyManifestAsync(ProjectFolderId folder, CancellationToken ct);
+    }
+
+    /// <summary>
+    /// Composite of all read areas. Prefer the narrow interfaces
+    /// (<see cref="IProjectCatalogReader"/>, <see cref="IBookContentReader"/>,
+    /// <see cref="ICharacterReader"/>, <see cref="IAudioItemReader"/>) in new code;
+    /// depend on this only when a consumer genuinely spans several areas.
+    /// </summary>
+    public interface IProjectReader : IProjectCatalogReader, IBookContentReader, ICharacterReader, IAudioItemReader
+    {
     }
 }

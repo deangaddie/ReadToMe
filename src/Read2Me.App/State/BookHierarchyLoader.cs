@@ -7,7 +7,7 @@ using Read2Me.Services;
 
 namespace Read2Me.App.State
 {
-    public class BookHierarchyLoader(IProjectReader reader)
+    public class BookHierarchyLoader(IBookContentReader reader)
     {
         private readonly Dictionary<ProjectFolderId, FolderCache> _caches = new();
 

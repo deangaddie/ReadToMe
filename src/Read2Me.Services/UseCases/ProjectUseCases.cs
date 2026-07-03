@@ -3,7 +3,7 @@ using Read2Me.Data.Enums;
 
 namespace Read2Me.Services.UseCases
 {
-    public class ProjectUseCases(IProjectReader reader, IProjectWriter writer)
+    public class ProjectUseCases(IProjectCatalogReader reader, IProjectWriter writer)
     {
         public async Task<Result<string>> CreateAsync(
             string title, string bookTitle, string author,

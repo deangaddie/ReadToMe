@@ -106,8 +106,21 @@ namespace Read2Me.Services
 
         public async Task UpdateThemeAsync(AppTheme theme)
         {
-            _logger.LogInformation("Updating theme '{Name}' (ID {Id})", theme.Name, theme.Id);
             await using var db = await _dbFactory.CreateDbContextAsync();
+
+            // Check the stored row, not the caller's copy — built-in presets are immutable.
+            var isBuiltIn = await db.Themes
+                .Where(t => t.Id == theme.Id)
+                .Select(t => (bool?)t.IsBuiltIn)
+                .SingleOrDefaultAsync();
+            if (isBuiltIn != false)
+            {
+                _logger.LogWarning("UpdateThemeAsync: theme ID {ThemeId} not found or is built-in", theme.Id);
+                return;
+            }
+
+            _logger.LogInformation("Updating theme '{Name}' (ID {Id})", theme.Name, theme.Id);
+            theme.IsBuiltIn = false;
             db.Themes.Update(theme);
             await db.SaveChangesAsync();
 

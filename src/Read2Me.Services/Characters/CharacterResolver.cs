@@ -3,7 +3,7 @@ using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.Characters
 {
-    public class CharacterResolver(IProjectReader reader, IBookCommandHandler commands)
+    public class CharacterResolver(ICharacterReader reader, IBookCommandHandler commands)
     {
         public static bool Matches(Character c, string name) =>
             string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase) ||

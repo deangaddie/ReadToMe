@@ -76,7 +76,8 @@ namespace Read2Me.Services.Audio.Assembly
             try
             {
                 await using var scope = _scopeFactory.CreateAsyncScope();
-                var reader = scope.ServiceProvider.GetRequiredService<IProjectReader>();
+                var reader = scope.ServiceProvider.GetRequiredService<IAudioItemReader>();
+                var catalog = scope.ServiceProvider.GetRequiredService<IProjectCatalogReader>();
                 var settingsSvc = scope.ServiceProvider.GetRequiredService<AudioProcessingSettingsService>();
                 var audioSettings = await settingsSvc.GetAsync();
 
@@ -106,7 +107,7 @@ namespace Read2Me.Services.Audio.Assembly
 
                 lock (_lock) { AudioRemainingCount = 0; }
 
-                var project = await reader.GetProjectAsync(folder);
+                var project = await catalog.GetProjectAsync(folder);
                 var bookTitle = project?.BookTitle ?? folder.Value;
                 var author = project?.Author ?? string.Empty;
                 var coverRelPath = project?.CoverImage;
@@ -253,10 +254,17 @@ namespace Read2Me.Services.Audio.Assembly
             return string.Concat(name.Select(c => Array.IndexOf(invalid, c) >= 0 ? '_' : c));
         }
 
-        private static void TryDelete(string? path)
+        private void TryDelete(string? path)
         {
             if (path == null) return;
-            try { if (File.Exists(path)) File.Delete(path); } catch { }
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Best-effort cleanup failed for {Path}", path);
+            }
         }
     }
 }

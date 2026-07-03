@@ -95,6 +95,8 @@ namespace Read2Me.Tests.Services.Audio
 
             var services = new ServiceCollection();
             services.AddSingleton<IProjectReader>(fakeReader);
+            services.AddSingleton<IAudioItemReader>(fakeReader);
+            services.AddSingleton<IProjectCatalogReader>(fakeReader);
             services.AddSingleton<AudioProcessingSettingsService>(fakeSettings);
             var sp = services.BuildServiceProvider();
 
