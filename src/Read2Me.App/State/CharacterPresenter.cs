@@ -100,6 +100,9 @@ namespace Read2Me.App.State
         public Task DeleteCharacterAsync(Guid characterId) =>
             ExecuteAndReloadAsync(new DeleteCharacterCommand(_folderId!.Value, characterId));
 
+        public Task RenameCharacterAsync(Guid characterId, string name) =>
+            ExecuteAndReloadAsync(new RenameCharacterCommand(_folderId!.Value, characterId, name));
+
         // ── Voice DB commands ─────────────────────────────────────────────────
 
         public Task AddVoiceAsync(Guid characterId, string name) =>

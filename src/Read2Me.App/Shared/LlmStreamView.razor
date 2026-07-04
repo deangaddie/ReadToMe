@@ -1,10 +1,11 @@
 @using System.Text
 @using Read2Me.Services.Events
 @inject EventBroadcaster<LlmStreamEvent> Broadcaster
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div @ref="_scrollContainer"
-     style="height:100%; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:4px;">
+     style="height:100%; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:12px; padding:4px;">
     @if (_turns.Count == 0)
     {
         <MudText Typo="Typo.body2" Color="Color.Secondary" Style="padding:16px; text-align:center;">
@@ -90,6 +91,7 @@
 @code {
     private readonly List<StreamTurn> _turns = new();
     private ElementReference _scrollContainer;
+    private bool _needsScroll;
 
     protected override void OnInitialized() => Broadcaster.Event += OnEvent;
 
@@ -98,8 +100,18 @@
         InvokeAsync(() =>
         {
             Apply(e);
+            _needsScroll = true;
             StateHasChanged();
         });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender || _needsScroll)
+        {
+            _needsScroll = false;
+            await JS.InvokeVoidAsync("read2meAutoScroll", _scrollContainer);
+        }
     }
 
     private void Apply(LlmStreamEvent e)

@@ -50,6 +50,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<RemoveCharacterAliasCommand>, RemoveCharacterAliasHandler>();
         services.AddScoped<ICommandHandler<MergeCharactersCommand>, MergeCharactersHandler>();
         services.AddScoped<ICommandHandler<DeleteCharacterCommand>, DeleteCharacterHandler>();
+        services.AddScoped<ICommandHandler<RenameCharacterCommand>, RenameCharacterHandler>();
 
         // Voice
         services.AddScoped<ICommandHandler<CreateVoiceCommand>, CreateVoiceHandler>();

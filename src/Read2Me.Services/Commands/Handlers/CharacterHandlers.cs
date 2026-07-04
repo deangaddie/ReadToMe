@@ -149,6 +149,22 @@ public sealed class MergeCharactersHandler(ProjectDbSession session) : ICommandH
     }
 }
 
+public sealed class RenameCharacterHandler(ProjectDbSession session) : ICommandHandler<RenameCharacterCommand>
+{
+    public async Task<Guid?> HandleAsync(RenameCharacterCommand c, CancellationToken ct)
+    {
+        if (c.CharacterId == ProjectDbContext.NarratorId) return null;
+
+        var db = await session.OpenAsync(c.FolderId);
+        var character = await db.Characters.FindAsync([c.CharacterId], ct);
+        if (character == null) return null;
+
+        character.Name = c.Name;
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+}
+
 public sealed class DeleteCharacterHandler(ProjectDbSession session) : ICommandHandler<DeleteCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteCharacterCommand c, CancellationToken ct)

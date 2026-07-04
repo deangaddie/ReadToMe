@@ -124,6 +124,28 @@ namespace Read2Me.App.Shared.Characters
 
         async Task RemoveAliasAsync(Guid aliasId) => await Presenter.RemoveAliasAsync(aliasId);
 
+        // ── Character rename ─────────────────────────────────────────────────────
+
+        bool _renamingCharacter;
+        string _renameCharacterValue = "";
+
+        void BeginRenameCharacter() { _renamingCharacter = true; _renameCharacterValue = Character.Name; }
+        void CancelRenameCharacter() { _renamingCharacter = false; _renameCharacterValue = ""; }
+
+        async Task CommitRenameCharacterAsync()
+        {
+            var name = _renameCharacterValue.Trim();
+            if (!string.IsNullOrEmpty(name) && name != Character.Name)
+                await Presenter.RenameCharacterAsync(Character.Id, name);
+            CancelRenameCharacter();
+        }
+
+        async Task OnRenameCharacterKeyDownAsync(KeyboardEventArgs e)
+        {
+            if (e.Key == "Enter") await CommitRenameCharacterAsync();
+            else if (e.Key == "Escape") CancelRenameCharacter();
+        }
+
         // ── Add voice ─────────────────────────────────────────────────────────────
 
         async Task AddVoiceAsync()

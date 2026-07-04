@@ -2,7 +2,30 @@
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween">
-        <MudText Typo="Typo.h6">@Character.Name</MudText>
+        @if (_renamingCharacter)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudTextField @bind-Value="_renameCharacterValue" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Style="width:220px;" Immediate="true"
+                              OnKeyDown="OnRenameCharacterKeyDownAsync" AutoFocus="true" />
+                <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary"
+                               OnClick="CommitRenameCharacterAsync" />
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelRenameCharacter" />
+            </MudStack>
+        }
+        else
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h6">@Character.Name</MudText>
+                @if (!Character.IsNarrator)
+                {
+                    <MudTooltip Text="Rename">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="BeginRenameCharacter" />
+                    </MudTooltip>
+                }
+            </MudStack>
+        }
         <MudStack Row="true" Spacing="1">
             @if (!Character.IsNarrator)
             {

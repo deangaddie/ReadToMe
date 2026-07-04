@@ -38,6 +38,7 @@ public record AddCharacterAliasCommand(ProjectFolderId FolderId, Guid CharacterI
 public record RemoveCharacterAliasCommand(ProjectFolderId FolderId, Guid AliasId) : BookCommand(FolderId);
 public record MergeCharactersCommand(ProjectFolderId FolderId, Guid SurvivorId, Guid MergedId, bool AddNameAsAlias) : BookCommand(FolderId);
 public record DeleteCharacterCommand(ProjectFolderId FolderId, Guid CharacterId) : BookCommand(FolderId);
+public record RenameCharacterCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
 
 // Voice
 public record CreateVoiceCommand(ProjectFolderId FolderId, Guid CharacterId, string Name, bool IsGenerated = false) : BookCommand(FolderId);

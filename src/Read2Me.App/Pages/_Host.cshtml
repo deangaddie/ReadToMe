@@ -38,8 +38,18 @@
     <script src="_framework/blazor.server.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script>
-        window.read2meScrollToBottom = function (el) {
-            if (el) { el.scrollTop = el.scrollHeight; }
+        // Follows the bottom of a streaming log, but only while the user is
+        // already there: scrolling up unpins, scrolling back down re-pins.
+        window.read2meAutoScroll = function (el) {
+            if (!el) { return; }
+            if (!el._r2mAutoScroll) {
+                el._r2mAutoScroll = { pinned: true };
+                el.addEventListener('scroll', function () {
+                    el._r2mAutoScroll.pinned =
+                        el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+                });
+            }
+            if (el._r2mAutoScroll.pinned) { el.scrollTop = el.scrollHeight; }
         };
     </script>
 </body>
