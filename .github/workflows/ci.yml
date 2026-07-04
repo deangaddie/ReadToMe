@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build src/Read2Me.slnx --configuration Release
+
+      - name: Unit tests
+        run: dotnet test src/Read2Me.Tests --configuration Release --no-build
+
+      - name: Install Playwright browsers
+        run: pwsh src/Read2Me.E2eTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+
+      - name: E2E tests
+        run: dotnet test src/Read2Me.E2eTests --configuration Release --no-build
+
+      - name: Upload E2E failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: src/Read2Me.E2eTests/bin/Release/net10.0/artifacts/
+          if-no-files-found: ignore

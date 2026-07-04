@@ -70,6 +70,9 @@ public sealed class E2eAppFixture : IAsyncLifetime
         string folderName, string title, string author, string characterName = "Alice") =>
         WorkspaceSeeder.SeedProjectAsync(Services, WorkspaceDir, folderName, title, author, characterName);
 
+    public Task SeedNarratorVoiceAsync(string folderName) =>
+        WorkspaceSeeder.SeedNarratorVoiceAsync(Services, WorkspaceDir, folderName);
+
     public async ValueTask DisposeAsync()
     {
         if (_host != null)

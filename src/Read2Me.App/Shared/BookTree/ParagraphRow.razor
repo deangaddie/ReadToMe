@@ -146,6 +146,7 @@
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.PlayCircleOutline"
                                                    Size="Size.Small"
+                                                   data-testid="@($"audio-play-{it.Id}")"
                                                    OnClick="@(() => _playingItemId = _playingItemId == it.Id ? null : it.Id)"
                                                    Color="@(_playingItemId == it.Id ? Color.Primary : Color.Default)" />
                                 }

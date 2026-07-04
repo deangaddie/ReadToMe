@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Read2Me.AppData.Entities;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
+using Read2Me.E2eTests.Infrastructure.FakeAi;
 using Read2Me.Services;
 using Read2Me.Services.Audio.ParagraphTts.Settings;
 using Read2Me.Services.Audio.SemanticSimilarity.Settings;
@@ -85,5 +87,40 @@ public static class WorkspaceSeeder
                         .AddNarration("n2", "The rain kept falling."))));
         await builder.BuildAsync();
         return builder;
+    }
+
+    /// <summary>
+    /// Gives the built-in Narrator character a cloned voice with on-disk reference audio
+    /// and the default VoiceRule, so narration items resolve a voice and can be synthesised.
+    /// </summary>
+    public static async Task SeedNarratorVoiceAsync(
+        IServiceProvider services, string workspaceDir, string folderName)
+    {
+        var folderPath = Path.Combine(workspaceDir, folderName);
+        var voicesDir = Path.Combine(folderPath, "voices");
+        Directory.CreateDirectory(voicesDir);
+        await File.WriteAllBytesAsync(Path.Combine(voicesDir, "narrator.wav"), FakeAiResponses.SilentWav());
+
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        await using var db = await factory.CreateAsync(folderPath);
+
+        var voice = new Data.Entities.Voice
+        {
+            Id = Guid.NewGuid(),
+            CharacterId = ProjectDbContext.NarratorId,
+            Name = "Narrator Voice",
+            Source = VoiceSource.Uploaded,
+            AudioFileName = "voices/narrator.wav",
+        };
+        db.Voices.Add(voice);
+        db.VoiceRules.Add(new VoiceRule
+        {
+            Id = Guid.NewGuid(),
+            CharacterId = ProjectDbContext.NarratorId,
+            VoiceId = voice.Id,
+            IsDefault = true,
+            Rank = "a0", // floor rank, same as CreateVoiceHandler's default rule
+        });
+        await db.SaveChangesAsync();
     }
 }

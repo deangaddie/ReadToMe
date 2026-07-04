@@ -18,9 +18,11 @@ public sealed class PlaywrightFixture : IAsyncLifetime
             throw new InvalidOperationException($"playwright install chromium failed with exit code {exit}");
 
         _playwright = await Playwright.CreateAsync();
+        var slowMo = float.TryParse(Environment.GetEnvironmentVariable("E2E_SLOWMO"), out var ms) ? ms : 0;
         Browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
             Headless = Environment.GetEnvironmentVariable("E2E_HEADED") != "1",
+            SlowMo = slowMo,
         });
     }
 
