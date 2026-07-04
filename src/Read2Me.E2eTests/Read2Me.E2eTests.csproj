@@ -4,7 +4,6 @@
     <IsPackable>false</IsPackable>
     <!-- xunit v3 test projects are executables -->
     <OutputType>Exe</OutputType>
-    <!-- xUnit1051 (prefer TestContext cancellation token) is advisory; not worth 600+ edits -->
     <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>
 
@@ -13,13 +12,9 @@
     <!-- Explicit override: transitive 2.1.11 has a known vulnerability (GHSA-2m69-gcr7-jv3q) -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
-    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.61.0" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="coverlet.collector" Version="10.0.1">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -27,9 +22,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Read2Me.App\Read2Me.App.csproj" />
-    <ProjectReference Include="..\Read2Me.Core\Read2Me.Core.csproj" />
-    <ProjectReference Include="..\Read2Me.Services\Read2Me.Services.csproj" />
     <ProjectReference Include="..\Read2Me.TestUtils\Read2Me.TestUtils.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

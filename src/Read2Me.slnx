@@ -5,4 +5,6 @@
   <Project Path="Read2Me.Core/Read2Me.Core.csproj" />
   <Project Path="Read2Me.Services/Read2Me.Services.csproj" />
   <Project Path="Read2Me.Tests/Read2Me.Tests.csproj" />
+  <Project Path="Read2Me.TestUtils/Read2Me.TestUtils.csproj" />
+  <Project Path="Read2Me.E2eTests/Read2Me.E2eTests.csproj" />
 </Solution>

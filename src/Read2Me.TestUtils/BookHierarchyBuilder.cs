@@ -3,7 +3,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 
-namespace Read2Me.Tests.Infrastructure;
+namespace Read2Me.TestUtils;
 
 /// <summary>
 /// Object Mother for the book hierarchy (Volume/Part/Chapter/Paragraph/ParagraphItem).
