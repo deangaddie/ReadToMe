@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
+using Read2Me.Data.Enums;
 using ProjectEntity = Read2Me.Data.Entities.Project;
 
 namespace Read2Me.Services
@@ -35,7 +36,26 @@ namespace Read2Me.Services
             foreach (var folder in folders)
             {
                 var project = await GetProjectAsync(folder);
-                summaries.Add(new ProjectSummary(folder, project?.Title ?? folder));
+                if (project is null)
+                {
+                    summaries.Add(new ProjectSummary(folder, folder));
+                    continue;
+                }
+
+                var db = await _session.OpenAsync(folder);
+                var counts = await db.ParagraphItems
+                    .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                    .GroupBy(_ => 1)
+                    .Select(g => new { Total = g.Count(), Done = g.Count(i => i.AudioFileName != null) })
+                    .SingleOrDefaultAsync();
+
+                summaries.Add(new ProjectSummary(
+                    folder,
+                    project.Title,
+                    string.IsNullOrWhiteSpace(project.Author) ? null : project.Author,
+                    project.CoverImage,
+                    counts?.Total ?? 0,
+                    counts?.Done ?? 0));
             }
             return summaries;
         }

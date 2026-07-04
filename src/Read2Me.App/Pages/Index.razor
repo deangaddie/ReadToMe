@@ -3,6 +3,8 @@
 @inject NavigationManager Nav
 @inject IDialogService DialogService
 
+<PageTitle>Projects | Read2Me</PageTitle>
+
 <MudMessageBox @ref="_deleteConfirm" Title="Delete Project" CancelText="Cancel">
     <MessageContent>
         Delete <b>@_projectToDelete</b> and all its contents? This cannot be undone.
@@ -25,7 +27,12 @@
 }
 else if (_projects.Count == 0)
 {
-    <MudText Typo="Typo.body1" Color="Color.Secondary">No projects yet. Create one to get started.</MudText>
+    <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="pa-16">
+        <MudIcon Icon="@Icons.Material.Filled.LibraryBooks" Style="font-size:4rem; opacity:0.3;" />
+        <MudText Typo="Typo.body1" Color="Color.Secondary">No projects yet. Create one to get started.</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenAddDialogAsync">Add Project</MudButton>
+    </MudStack>
 }
 else
 {
@@ -33,18 +40,51 @@ else
         @foreach (var project in _projects)
         {
             var p = project;
+            var openUrl = $"/project/{p.FolderName}";
             <MudItem xs="12" sm="6" md="4" lg="3">
-                <MudCard Elevation="2" Style="cursor:pointer">
-                    <MudCardHeader @onclick="@(() => Nav.NavigateTo($"/project/{p.FolderName}"))">
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">@p.Title</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardActions>
+                <MudCard Elevation="2" Class="project-card" Style="height:100%; display:flex; flex-direction:column;">
+                    <div style="cursor:pointer;" @onclick="@(() => Nav.NavigateTo(openUrl))">
+                        @if (p.CoverImage != null)
+                        {
+                            <MudCardMedia Image="@($"/workspace/{p.FolderName}/{p.CoverImage}")" Height="220" />
+                        }
+                        else
+                        {
+                            <div style="height:220px; display:flex; align-items:center; justify-content:center;
+                                        background:linear-gradient(160deg, rgba(var(--mud-palette-primary-rgb),0.15), rgba(var(--mud-palette-primary-rgb),0.04));">
+                                <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="font-size:4rem; opacity:0.35;" />
+                            </div>
+                        }
+                        <MudCardContent Class="pb-2">
+                            <MudText Typo="Typo.h6" Style="line-height:1.3;">@p.Title</MudText>
+                            @if (p.Author != null)
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">@p.Author</MudText>
+                            }
+                            @if (p.AudioItemTotal > 0)
+                            {
+                                <MudTooltip Text="@($"{p.AudioItemDone} of {p.AudioItemTotal} audio items generated")">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                                        <MudProgressLinear Value="@p.AudioPercent" Rounded="true"
+                                                           Color="@(p.AudioPercent == 100 ? Color.Success : Color.Primary)"
+                                                           Style="flex:1; height:6px;" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@p.AudioPercent%</MudText>
+                                    </MudStack>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block">Not read in yet</MudText>
+                            }
+                        </MudCardContent>
+                    </div>
+                    <MudSpacer />
+                    <MudCardActions Class="pt-0">
                         <MudButton Variant="Variant.Text" Color="Color.Primary"
-                                   OnClick="@(() => Nav.NavigateTo($"/project/{p.FolderName}"))">Open</MudButton>
+                                   OnClick="@(() => Nav.NavigateTo(openUrl))">Open</MudButton>
                         <MudSpacer />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                       aria-label="@($"Delete {p.Title}")" title="Delete project"
                                        OnClick="@(() => DeleteProjectAsync(p))" />
                     </MudCardActions>
                 </MudCard>

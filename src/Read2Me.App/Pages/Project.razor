@@ -4,8 +4,6 @@
 
 <PageTitle>@_title | Read2Me</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true">@_title</MudText>
-
 <ProjectDetailsPanel FolderName="@FolderName" Project="@_project" OnProjectChanged="ReloadProjectAsync" />
 
 <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true"
@@ -18,7 +16,6 @@
     </MudTabPanel>
 </MudTabs>
 
-<BookSelectionFooter />
 
 @code {
     [Parameter] public string FolderName { get; set; } = "";

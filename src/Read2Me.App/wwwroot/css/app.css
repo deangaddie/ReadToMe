@@ -1,0 +1,16 @@
+/* App-wide styles. MudBlazor provides the base; only cross-component rules live here. */
+
+/* Book tree paragraph hover affordances (ParagraphRow) */
+.paragraph-hover-row:hover,
+.paragraph-hover-block:hover {
+    background-color: rgba(var(--mud-palette-text-primary-rgb), 0.04) !important;
+    outline: 1px solid rgba(var(--mud-palette-text-primary-rgb), 0.15);
+    outline-offset: 1px;
+}
+
+.paragraph-item-hover-row:hover {
+    background-color: rgba(var(--mud-palette-text-primary-rgb), 0.04);
+    outline: 1px solid rgba(var(--mud-palette-text-primary-rgb), 0.15);
+    outline-offset: 1px;
+    border-radius: 4px;
+}

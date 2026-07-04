@@ -6,6 +6,7 @@
         position: relative;
         display: inline-block;
         line-height: 0;
+        flex-shrink: 0;
     }
 
     .cover-overlay {
@@ -26,70 +27,88 @@
     }
 </style>
 
-<MudExpansionPanels Class="mb-6">
-    <MudExpansionPanel Text="Project Details">
-        <MudGrid Spacing="3">
-            <MudItem xs="12" sm="9">
-                <MudGrid Spacing="3">
-                    <MudItem xs="12" sm="6">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Title</MudText>
-                        <MudText Typo="Typo.body1">@Project?.Title</MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Author</MudText>
-                        <MudText Typo="Typo.body1">@Project?.Author</MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Filename</MudText>
-                        <MudText Typo="Typo.body1">@Project?.Filename</MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Type</MudText>
-                        <MudText Typo="Typo.body1">@Project?.Type</MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudSwitch T="bool"
-                                   Label="Narrator-Only Mode"
-                                   Value="@(Project?.NarratorOnlyMode ?? false)"
-                                   ValueChanged="@OnNarratorOnlyModeChangedAsync"
-                                   Color="Color.Primary" />
-                    </MudItem>
-                </MudGrid>
-            </MudItem>
-            <MudItem xs="12" sm="3" Style="display:flex; flex-direction:column; align-items:flex-end">
-                @if (Project?.CoverImage != null)
-                {
-                    <div class="cover-container">
-                        <img src="/workspace/@FolderName/@Project!.CoverImage"
-                             alt="Cover" style="height:200px; border-radius:4px" />
-                        <div class="cover-overlay">
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                           Style="color:white" Size="Size.Medium"
-                                           HtmlTag="label" for="cover-image-input" title="Change cover" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                           Color="Color.Error" Size="Size.Medium"
-                                           OnClick="DeleteCoverAsync" title="Remove cover" />
-                        </div>
+<MudPaper Elevation="1" Class="pa-4 mb-6">
+    <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Start">
+        @if (Project?.CoverImage != null)
+        {
+            <div class="cover-container">
+                <img src="/workspace/@FolderName/@Project!.CoverImage"
+                     alt="Cover of @Project?.Title" style="height:140px; border-radius:4px" />
+                <div class="cover-overlay">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                   Style="color:white" Size="Size.Small"
+                                   HtmlTag="label" for="cover-image-input" title="Change cover" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                   Color="Color.Error" Size="Size.Small"
+                                   OnClick="DeleteCoverAsync" title="Remove cover" />
+                </div>
+            </div>
+        }
+        else
+        {
+            <MudTooltip Text="Add cover image">
+                <label for="cover-image-input" style="cursor:pointer;">
+                    <div style="height:140px; width:95px; border-radius:4px; flex-shrink:0;
+                                display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+                                border:1px dashed var(--mud-palette-lines-default);
+                                background:rgba(var(--mud-palette-primary-rgb),0.04);">
+                        <MudIcon Icon="@Icons.Material.Filled.AddPhotoAlternate" Style="opacity:0.5;" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">Add cover</MudText>
                     </div>
-                }
-                else
+                </label>
+            </MudTooltip>
+        }
+        <InputFile id="cover-image-input" OnChange="OnCoverImageChangedAsync"
+                   accept=".jpg,.jpeg,.png,.webp" style="display:none" />
+
+        <MudStack Spacing="1" Style="flex:1; min-width:0;">
+            <MudText Typo="Typo.h4" Style="line-height:1.2;">@(Project?.Title ?? FolderName)</MudText>
+            @if (!string.IsNullOrWhiteSpace(Project?.Author))
+            {
+                <MudText Typo="Typo.subtitle1" Color="Color.Secondary">@Project!.Author</MudText>
+            }
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1" Wrap="Wrap.Wrap">
+                @if (Project != null)
                 {
-                    <MudButton Variant="Variant.Outlined"
-                               StartIcon="@Icons.Material.Filled.AddPhotoAlternate"
-                               HtmlTag="label" for="cover-image-input" Style="cursor:pointer">
-                        Add Cover Image
-                    </MudButton>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                             Icon="@Icons.Material.Filled.Description">@Project.Type</MudChip>
+                    @if (Project.NarratorOnlyMode)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info"
+                                 Icon="@Icons.Material.Filled.MenuBook">Narrator only</MudChip>
+                    }
                 }
-                <InputFile id="cover-image-input" OnChange="OnCoverImageChangedAsync"
-                           accept=".jpg,.jpeg,.png,.webp" style="display:none" />
-                @if (_coverError != null)
-                {
-                    <MudText Color="Color.Error" Typo="Typo.caption" Class="mt-1 d-block">@_coverError</MudText>
-                }
+            </MudStack>
+            @if (_coverError != null)
+            {
+                <MudText Color="Color.Error" Typo="Typo.caption">@_coverError</MudText>
+            }
+        </MudStack>
+
+        <MudTooltip Text="@(_detailsOpen ? "Hide details" : "Show details")">
+            <MudIconButton Icon="@(_detailsOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                           aria-label="Toggle project details"
+                           OnClick="@(() => _detailsOpen = !_detailsOpen)" />
+        </MudTooltip>
+    </MudStack>
+
+    <MudCollapse Expanded="_detailsOpen">
+        <MudDivider Class="my-3" />
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Filename</MudText>
+                <MudText Typo="Typo.body1">@Project?.Filename</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSwitch T="bool"
+                           Label="Narrator-Only Mode"
+                           Value="@(Project?.NarratorOnlyMode ?? false)"
+                           ValueChanged="@OnNarratorOnlyModeChangedAsync"
+                           Color="Color.Primary" />
             </MudItem>
         </MudGrid>
-    </MudExpansionPanel>
-</MudExpansionPanels>
+    </MudCollapse>
+</MudPaper>
 
 @code {
     [Parameter, EditorRequired] public string FolderName { get; set; } = "";
@@ -97,6 +116,7 @@
     [Parameter] public EventCallback OnProjectChanged { get; set; }
 
     string? _coverError;
+    bool _detailsOpen;
 
     async Task OnCoverImageChangedAsync(InputFileChangeEventArgs e)
     {

@@ -14,7 +14,7 @@
         <MudText Typo="Typo.h5" Class="ml-3">Read2Me</MudText>
         <MudSpacer />
         <MudIconButton Icon="@Icons.Material.Filled.Palette" Color="Color.Inherit" Edge="Edge.End"
-                       Href="/themes" />
+                       aria-label="Themes" Href="/themes" />
     </MudAppBar>
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
         <NavMenu />
@@ -25,10 +25,7 @@
         </MudContainer>
     </MudMainContent>
 </MudLayout>
-<AudiobookAssemblyStatusBar />
-<CharacterQueueStatusBar />
-<AudioQueueStatusBar />
-<VoiceBatchStatusBar />
+<StatusDock />
 
 @code {
     MudTheme _theme = new();

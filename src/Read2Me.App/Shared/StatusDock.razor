@@ -1,0 +1,291 @@
+@using Read2Me.App.Characters
+@using Read2Me.App.State
+@using Read2Me.Services.Audio
+@using Read2Me.Services.Audio.Assembly
+@using Read2Me.Services.Characters
+@using Read2Me.Services.Events
+@inject BookHierarchyPresenter Presenter
+@inject CharacterQueueService CharQueue
+@inject AudioQueueService AudioQueue
+@inject AudiobookAssemblyService Assembly
+@inject VoiceBatchRunner Batch
+@inject EventBroadcaster<VoiceBatchEvent> BatchEvents
+@implements IDisposable
+
+@*
+    Single fixed dock replacing the four independent status bars + selection footer.
+    Rows stack in one flex column, so no per-bar bottom-offset math is needed
+    and simultaneous jobs can never overlap each other.
+*@
+
+@{
+    var charSnap = CharQueue.Snapshot();
+    var charVm = QueueStatusViewModel.For(
+        charSnap.QueuedCount, charSnap.ProcessingCount, charSnap.AverageSecondsPerParagraph,
+        charSnap.EstimatedSecondsRemaining, charSnap.CompletedCount, charSnap.CurrentItemElapsedSeconds,
+        averageUnit: "para");
+
+    var audioSnap = AudioQueue.Snapshot();
+    var audioVm = QueueStatusViewModel.For(
+        audioSnap.QueuedCount, audioSnap.ProcessingCount, audioSnap.AverageSecondsPerItem,
+        audioSnap.EstimatedSecondsRemaining, audioSnap.CompletedCount, audioSnap.CurrentItemElapsedSeconds,
+        averageUnit: "item");
+
+    var assemblyRunning = Assembly.IsRunning;
+    var assemblyError = Assembly.LastError;
+    var assemblyVm = AssemblyButtonViewModel.For(
+        audioRemaining: 0, audioQueueBusy: false, isRunning: assemblyRunning,
+        currentPhase: Assembly.CurrentPhase, encodePercent: Assembly.EncodePercent);
+
+    var showAssembly = assemblyRunning || assemblyError != null;
+    var showBatch = Batch.IsRunning;
+    var showChar = charVm.IsActive || _expanded == ExpandedStream.Llm;
+    var showAudio = audioVm.IsActive || _expanded == ExpandedStream.Audio;
+
+    var isAudioMode = Presenter.ViewMode == BookViewMode.SplitAudio;
+    var audioSelCount = Presenter.SelectedAudioItemCount;
+    var attrSelCount = Presenter.SelectedParagraphCount;
+    var showSelection = isAudioMode ? audioSelCount > 0 : attrSelCount > 0;
+
+    var anyRow = showAssembly || showBatch || showChar || showAudio || showSelection;
+}
+
+@if (anyRow)
+{
+    @if (_expanded != ExpandedStream.None)
+    {
+        <div style="position:fixed; inset:0; z-index:1289; background:rgba(0,0,0,0.5);"
+             @onclick="CollapseStream"></div>
+    }
+
+    <div style="position:fixed; bottom:0; left:0; right:0; z-index:1290;
+                display:flex; flex-direction:column;
+                @(_expanded != ExpandedStream.None ? "height:50vh;" : "")">
+
+        @if (_expanded != ExpandedStream.None)
+        {
+            <div style="flex:1; min-height:0; overflow:hidden; background:var(--mud-palette-surface);
+                        border-top:1px solid var(--mud-palette-divider);">
+                @if (_expanded == ExpandedStream.Llm)
+                {
+                    <LlmStreamView />
+                }
+                else
+                {
+                    <AudioGenStreamView />
+                }
+            </div>
+        }
+
+        @if (showSelection)
+        {
+            <div style="background:var(--mud-palette-surface);
+                        border-top:1px solid var(--mud-palette-divider);
+                        box-shadow:0 -2px 8px rgba(0,0,0,0.15);
+                        padding:8px 16px;
+                        display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                @if (isAudioMode)
+                {
+                    <MudText Typo="Typo.body2">
+                        <b>@audioSelCount</b> item@(audioSelCount == 1 ? "" : "s") selected
+                    </MudText>
+                    <MudSpacer />
+                    <MudButton StartIcon="@Icons.Material.Filled.GraphicEq"
+                               Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small"
+                               OnClick="@(() => Presenter.AddSelectionToAudioQueueAsync())">
+                        Add to Audio queue
+                    </MudButton>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">
+                        <b>@attrSelCount</b> paragraph@(attrSelCount == 1 ? "" : "s") selected
+                    </MudText>
+                    <MudSpacer />
+                    <MudButton StartIcon="@Icons.Material.Filled.Add"
+                               Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small"
+                               OnClick="@(() => Presenter.AddSelectionToCharacterQueueAsync())">
+                        Add to Character queue
+                    </MudButton>
+                }
+            </div>
+        }
+
+        @if (showAssembly)
+        {
+            <div style="@RowStyle(assemblyError != null)">
+                <MudIcon Icon="@Icons.Material.Filled.LibraryMusic" Size="Size.Small" Style="opacity:0.7;" />
+                @if (assemblyError != null)
+                {
+                    <span style="color:var(--mud-palette-error-text);">
+                        <strong>Assembly failed:</strong> @assemblyError
+                    </span>
+                }
+                else
+                {
+                    <span><strong>Assembling audiobook</strong></span>
+                    @if (!string.IsNullOrEmpty(assemblyVm.PhaseLabel))
+                    {
+                        <span style="opacity:0.7;">@assemblyVm.PhaseLabel</span>
+                    }
+                    @if (!string.IsNullOrEmpty(assemblyVm.EncodePercentText))
+                    {
+                        <span style="opacity:0.9; font-weight:600;">@assemblyVm.EncodePercentText</span>
+                    }
+                }
+                <MudSpacer />
+                @if (assemblyRunning)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                                         Style="color:var(--mud-palette-dark-text); opacity:0.7; width:16px; height:16px;" />
+                    <MudTooltip Text="Cancel assembly">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small"
+                                       aria-label="Cancel assembly"
+                                       Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                       OnClick="@(() => Assembly.Cancel())" />
+                    </MudTooltip>
+                }
+            </div>
+        }
+
+        @if (showBatch)
+        {
+            <div style="@RowStyle(false)">
+                <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small" Style="opacity:0.7;" />
+                <span><strong>@Batch.CurrentOperation</strong></span>
+                @if (!string.IsNullOrEmpty(Batch.CurrentVoiceName))
+                {
+                    <span style="opacity:0.7;">@Batch.CurrentVoiceName</span>
+                }
+                @if (Batch.Total > 0)
+                {
+                    <span>@Batch.Processed / @Batch.Total</span>
+                }
+                @if (Batch.Failed > 0)
+                {
+                    <span style="color:var(--mud-palette-warning-text);">@Batch.Failed failed</span>
+                }
+                <MudSpacer />
+                <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                                     Style="color:var(--mud-palette-dark-text); opacity:0.7; width:16px; height:16px;" />
+                <MudTooltip Text="Cancel">
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small"
+                                   aria-label="Cancel voice batch"
+                                   Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                   OnClick="@(() => Batch.Cancel())" />
+                </MudTooltip>
+            </div>
+        }
+
+        @if (showChar)
+        {
+            <div style="@RowStyle(false)">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" Style="opacity:0.7;" />
+                @if (charVm.ShowProcessing)
+                {
+                    <span><strong>Attributing characters</strong> <span style="opacity:0.6;">@charVm.ElapsedText</span></span>
+                }
+                else
+                {
+                    <span style="opacity:0.6;">Idle</span>
+                }
+                @if (charVm.ShowQueued) { <span style="opacity:0.7;">@charVm.QueuedText</span> }
+                @if (charVm.ShowAverage) { <span style="opacity:0.7;">@charVm.AverageText</span> }
+                @if (charVm.ShowEta) { <span style="opacity:0.7;">@charVm.EtaText</span> }
+                @if (charVm.ShowCompleted) { <span style="opacity:0.5;">@charVm.CompletedText</span> }
+                <MudSpacer />
+                <MudTooltip Text="@(_expanded == ExpandedStream.Llm ? "Hide live stream" : "Show live stream")">
+                    <MudIconButton Icon="@(_expanded == ExpandedStream.Llm ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowUp)"
+                                   Size="Size.Small" aria-label="Toggle LLM stream"
+                                   Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                   OnClick="@(() => ToggleStream(ExpandedStream.Llm))" />
+                </MudTooltip>
+                @if (charVm.IsActive)
+                {
+                    <MudTooltip Text="Cancel all">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small"
+                                       aria-label="Cancel character queue"
+                                       Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                       OnClick="@(() => CharQueue.CancelAll())" />
+                    </MudTooltip>
+                }
+            </div>
+        }
+
+        @if (showAudio)
+        {
+            <div style="@RowStyle(false)">
+                <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Size="Size.Small" Style="opacity:0.7;" />
+                @if (audioVm.ShowProcessing)
+                {
+                    <span><strong>Generating audio</strong> <span style="opacity:0.6;">@audioVm.ElapsedText</span></span>
+                }
+                else
+                {
+                    <span style="opacity:0.6;">Idle</span>
+                }
+                @if (audioVm.ShowQueued) { <span style="opacity:0.7;">@audioVm.QueuedText</span> }
+                @if (audioVm.ShowAverage) { <span style="opacity:0.7;">@audioVm.AverageText</span> }
+                @if (audioVm.ShowEta) { <span style="opacity:0.7;">@audioVm.EtaText</span> }
+                @if (audioVm.ShowCompleted) { <span style="opacity:0.5;">@audioVm.CompletedText</span> }
+                <MudSpacer />
+                <MudTooltip Text="@(_expanded == ExpandedStream.Audio ? "Hide live stream" : "Show live stream")">
+                    <MudIconButton Icon="@(_expanded == ExpandedStream.Audio ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowUp)"
+                                   Size="Size.Small" aria-label="Toggle audio stream"
+                                   Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                   OnClick="@(() => ToggleStream(ExpandedStream.Audio))" />
+                </MudTooltip>
+                @if (audioVm.IsActive)
+                {
+                    <MudTooltip Text="Cancel all">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small"
+                                       aria-label="Cancel audio queue"
+                                       Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                       OnClick="@(() => AudioQueue.CancelAll())" />
+                    </MudTooltip>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    enum ExpandedStream { None, Llm, Audio }
+
+    ExpandedStream _expanded;
+    System.Threading.Timer? _ticker;
+
+    static string RowStyle(bool isError) =>
+        $"background:{(isError ? "var(--mud-palette-error-dark)" : "var(--mud-palette-dark)")};" +
+        "color:var(--mud-palette-dark-text);" +
+        "border-top:1px solid var(--mud-palette-divider);" +
+        "padding:6px 16px;" +
+        "display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:0.8rem;";
+
+    protected override void OnInitialized()
+    {
+        Presenter.StateChanged += Refresh;
+        CharQueue.Changed += Refresh;
+        AudioQueue.Changed += Refresh;
+        BatchEvents.Event += OnBatchEvent;
+        _ticker = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null,
+            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    void Refresh() => InvokeAsync(StateHasChanged);
+    void OnBatchEvent(VoiceBatchEvent _) => Refresh();
+
+    void ToggleStream(ExpandedStream stream) =>
+        _expanded = _expanded == stream ? ExpandedStream.None : stream;
+
+    void CollapseStream() => _expanded = ExpandedStream.None;
+
+    public void Dispose()
+    {
+        Presenter.StateChanged -= Refresh;
+        CharQueue.Changed -= Refresh;
+        AudioQueue.Changed -= Refresh;
+        BatchEvents.Event -= OnBatchEvent;
+        _ticker?.Dispose();
+    }
+}

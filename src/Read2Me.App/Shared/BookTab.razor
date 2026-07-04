@@ -97,27 +97,17 @@ else
                     <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Size="Size.Small" Class="mr-1" /> Split: Audio
                 </MudToggleItem>
             </MudToggleGroup>
-            @if (Presenter.ConfirmReread)
-            {
-                <MudText Typo="Typo.caption" Color="Color.Warning">Delete all book data and reprocess?</MudText>
-                <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
-                           OnClick="@(() => Presenter.ConfirmRereadAsync(_folderId))" Disabled="Presenter.IsBusy">
-                    @if (Presenter.IsBusy)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" />
-                    }
-                    Confirm
-                </MudButton>
-                <MudButton Variant="Variant.Text" Size="Size.Small"
-                           OnClick="@(() => Presenter.CancelConfirmReread())">
-                    Cancel
-                </MudButton>
-            }
-            else
-            {
-                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+            <MudMessageBox @ref="_rereadDialog" Title="Reread book" CancelText="Cancel">
+                <MessageContent>
+                    <MudText>This deletes all book data — attribution, generated audio, and edits — and reprocesses the source file from scratch. This cannot be undone. Continue?</MudText>
+                </MessageContent>
+                <YesButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error">Delete and reread</MudButton>
+                </YesButton>
+            </MudMessageBox>
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                     <MudMenuItem Icon="@Icons.Material.Filled.Refresh" IconColor="Color.Warning"
-                                 OnClick="@(() => Presenter.RequestConfirmReread())" Disabled="Presenter.IsBusy">
+                                 OnClick="HandleRereadClickAsync" Disabled="Presenter.IsBusy">
                         Reread Book
                     </MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.EditNote" IconColor="Color.Info"
@@ -156,7 +146,6 @@ else
                         Add pauses
                     </MudMenuItem>
                 </MudMenu>
-            }
         </MudStack>
 
         @if (Presenter.Volumes.Count == 1)
@@ -201,6 +190,14 @@ else
     ProjectFolderId _folderId;
     int _partialDialogCount;
     MudMessageBox? _partialDialog;
+    MudMessageBox? _rereadDialog;
+
+    async Task HandleRereadClickAsync()
+    {
+        var confirmed = await _rereadDialog!.ShowAsync();
+        if (confirmed == true)
+            await Presenter.ConfirmRereadAsync(_folderId);
+    }
 
     async Task HandleAssembleClick()
     {
