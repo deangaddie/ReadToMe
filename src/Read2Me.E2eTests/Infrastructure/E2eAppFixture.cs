@@ -21,6 +21,7 @@ namespace Read2Me.E2eTests.Infrastructure;
 public sealed class E2eAppFixture : IAsyncLifetime
 {
     public FakeAiRoutingHandler FakeAi { get; } = new();
+    public FakeAiServiceControl FakeControl { get; } = new();
     public string WorkspaceDir { get; private set; } = "";
     public string BaseUrl { get; private set; } = "";
     public IServiceProvider Services => _host!.Services;
@@ -46,6 +47,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
             {
                 s.AddSingleton(FakeAi);
                 s.AddSingleton<IHttpClientFactory>(new FakeHttpClientFactory(FakeAi));
+                s.AddSingleton<Read2Me.Services.Health.IAiServiceControl>(FakeControl);
                 s.AddSingleton<IAudioNormalizer, PassThroughAudioNormalizer>();
                 s.AddSingleton<IFfmpegProber, FakeFfmpegProber>();
             })

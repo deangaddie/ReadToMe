@@ -1,0 +1,135 @@
+@using System.Threading
+@using Read2Me.Services.Health
+@inject IAiServiceControl Control
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+@if (_presenter is { IsManaged: true })
+{
+    var chip = ChipFor(_presenter.Status);
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-3">
+        <MudChip T="string" Size="Size.Small" Color="@chip.Color" Variant="Variant.Outlined">
+            @if (chip.Spinner)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-1" />
+            }
+            @chip.Label
+        </MudChip>
+
+        @if (_presenter.IsBusy && !string.IsNullOrEmpty(_presenter.BusyLabel))
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@_presenter.BusyLabel</MudText>
+        }
+
+        <MudSpacer />
+
+        @if (_presenter.CanStart)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.PlayArrow"
+                       OnClick="@(() => RunAsync(DockerServiceControlsPresenter.Op.Start))">Start</MudButton>
+        }
+        @if (_presenter.CanRestart)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.RestartAlt"
+                       OnClick="@(() => RunAsync(DockerServiceControlsPresenter.Op.Restart))">Restart</MudButton>
+        }
+        @if (_presenter.CanShutdown)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Stop"
+                       OnClick="@(() => RunAsync(DockerServiceControlsPresenter.Op.Shutdown))">Shutdown</MudButton>
+        }
+
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small"
+                       Disabled="@(!_presenter.CanRefresh)" OnClick="RefreshAsync"
+                       aria-label="Refresh status" />
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string? BaseUrl { get; set; }
+
+    private DockerServiceControlsPresenter? _presenter;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        _presenter = new DockerServiceControlsPresenter(Control);
+        if (_presenter.Resolve(BaseUrl))
+        {
+            _cts = new CancellationTokenSource();
+            _ = LoadStatusAsync();
+        }
+    }
+
+    private async Task RefreshAsync() => await LoadStatusAsync();
+
+    private async Task LoadStatusAsync()
+    {
+        // A single probe, but fired off the initial render so the card paints immediately with a
+        // "Checking…" chip; completion is marshalled back onto the circuit.
+        StateHasChanged();
+        try
+        {
+            await _presenter!.RefreshStatusAsync(_cts!.Token);
+        }
+        catch (OperationCanceledException) { /* component disposed */ }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Status check failed: {ex.Message}", Severity.Error);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RunAsync(DockerServiceControlsPresenter.Op op)
+    {
+        // ExecuteAsync flips IsBusy before its first await, so this StateHasChanged already shows the
+        // in-flight state; the op itself (start/restart warm-up can take minutes) awaits without
+        // blocking the circuit, and completion re-renders with the facade's resulting status.
+        var task = _presenter!.ExecuteAsync(op, _cts!.Token);
+        StateHasChanged();
+        try
+        {
+            var result = await task;
+            if (result.Succeeded)
+                Snackbar.Add($"{_presenter.Service!.Name}: {SuccessText(op)}", Severity.Success);
+            else
+                Snackbar.Add(result.Error ?? "Operation failed.", Severity.Error);
+        }
+        catch (OperationCanceledException) { /* component disposed */ }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Operation failed: {ex.Message}", Severity.Error);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string SuccessText(DockerServiceControlsPresenter.Op op) => op switch
+    {
+        DockerServiceControlsPresenter.Op.Start => "started",
+        DockerServiceControlsPresenter.Op.Restart => "restarted",
+        DockerServiceControlsPresenter.Op.Shutdown => "shut down",
+        _ => "done",
+    };
+
+    private static (Color Color, string Label, bool Spinner) ChipFor(AiServiceStatus? status) => status switch
+    {
+        AiServiceStatus.Ready => (Color.Success, "Ready", false),
+        AiServiceStatus.Starting => (Color.Warning, "Starting", false),
+        AiServiceStatus.Stopped => (Color.Default, "Stopped", false),
+        AiServiceStatus.Recovering => (Color.Warning, "Recovering", true),
+        AiServiceStatus.Down => (Color.Error, "Down", false),
+        AiServiceStatus.NotFound => (Color.Default, "Not found", false),
+        AiServiceStatus.Unknown => (Color.Default, "Unknown", false),
+        _ => (Color.Default, "Checking…", true),
+    };
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

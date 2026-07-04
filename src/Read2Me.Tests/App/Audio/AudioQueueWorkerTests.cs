@@ -4,6 +4,7 @@ using Read2Me.App.Audio;
 using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.App.Audio
@@ -36,7 +37,7 @@ namespace Read2Me.Tests.App.Audio
             var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
             var worker = new QueueWorker<QueuedAudioItem>(
-                queue, scopeFactory, NullLogger<QueueWorker<QueuedAudioItem>>.Instance);
+                queue, new ProcessingGate<QueuedAudioItem>(), scopeFactory, NullLogger<QueueWorker<QueuedAudioItem>>.Instance);
             using var cts = new CancellationTokenSource();
 
             var item1 = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());

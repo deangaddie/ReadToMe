@@ -102,6 +102,12 @@ namespace Read2Me.Services.Audio
             {
                 throw;
             }
+            catch (Read2Me.Services.Health.AiServiceUnavailableException)
+            {
+                // Managed transcription service is down — let it propagate so the item requeues
+                // instead of being recorded as an unverifiable failure.
+                throw;
+            }
             catch (Exception ex)
             {
                 var reason = $"could not verify: {ex.Message}";

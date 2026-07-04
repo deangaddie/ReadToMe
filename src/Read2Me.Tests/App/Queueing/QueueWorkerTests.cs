@@ -30,7 +30,7 @@ namespace Read2Me.Tests.App.Queueing
             var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
             var worker = new QueueWorker<int>(
-                source, scopeFactory, NullLogger<QueueWorker<int>>.Instance);
+                source, new ProcessingGate<int>(), scopeFactory, NullLogger<QueueWorker<int>>.Instance);
             using var cts = new CancellationTokenSource();
 
             channel.Writer.TryWrite(1);
@@ -59,7 +59,7 @@ namespace Read2Me.Tests.App.Queueing
             var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
             var worker = new QueueWorker<int>(
-                source, scopeFactory, NullLogger<QueueWorker<int>>.Instance);
+                source, new ProcessingGate<int>(), scopeFactory, NullLogger<QueueWorker<int>>.Instance);
             using var cts = new CancellationTokenSource();
 
             await worker.StartAsync(cts.Token);
@@ -88,7 +88,7 @@ namespace Read2Me.Tests.App.Queueing
             var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
             var worker = new QueueWorker<int>(
-                swappableSource, scopeFactory, NullLogger<QueueWorker<int>>.Instance);
+                swappableSource, new ProcessingGate<int>(), scopeFactory, NullLogger<QueueWorker<int>>.Instance);
             using var cts = new CancellationTokenSource();
 
             second.Writer.TryWrite(99);
@@ -102,6 +102,114 @@ namespace Read2Me.Tests.App.Queueing
             await worker.StopAsync(CancellationToken.None);
 
             Assert.Equal(tcs.Task, completed);
+        }
+
+        [Fact]
+        public async Task Worker_DoesNotProcessWhileGateClosed_ResumesOnOpen()
+        {
+            var channel = Channel.CreateUnbounded<int>();
+            var source = new FakeSource(channel.Reader);
+            var processed = new List<int>();
+            var tcs = new TaskCompletionSource();
+
+            var processor = new FakeProcessor(i =>
+            {
+                processed.Add(i);
+                tcs.TrySetResult();
+            });
+
+            var services = new ServiceCollection();
+            services.AddSingleton<IQueueProcessor<int>>(processor);
+            var provider = services.BuildServiceProvider();
+            var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+
+            var gate = new ProcessingGate<int>();
+            gate.Close("paused");
+
+            var worker = new QueueWorker<int>(
+                source, gate, scopeFactory, NullLogger<QueueWorker<int>>.Instance);
+            using var cts = new CancellationTokenSource();
+
+            channel.Writer.TryWrite(7);
+            await worker.StartAsync(cts.Token);
+
+            // Gate closed: item must not be processed.
+            var early = await Task.WhenAny(tcs.Task, Task.Delay(300));
+            Assert.NotEqual(tcs.Task, early);
+            Assert.Empty(processed);
+
+            // Open: worker resumes and processes the queued item.
+            gate.Open();
+            var completed = await Task.WhenAny(tcs.Task, Task.Delay(5000));
+
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+
+            Assert.Equal(tcs.Task, completed);
+            Assert.Equal([7], processed);
+        }
+
+        [Fact]
+        public async Task Gate_StartsOpen_WaitCompletesImmediately()
+        {
+            var gate = new ProcessingGate<int>();
+            Assert.True(gate.IsOpen);
+            Assert.Null(gate.CloseReason);
+            await gate.WaitAsync(CancellationToken.None); // completes synchronously
+        }
+
+        [Fact]
+        public async Task Gate_Close_BlocksWait_ExposesReason()
+        {
+            var gate = new ProcessingGate<int>();
+            gate.Close("recovering");
+
+            Assert.False(gate.IsOpen);
+            Assert.Equal("recovering", gate.CloseReason);
+
+            var wait = gate.WaitAsync(CancellationToken.None);
+            var raced = await Task.WhenAny(wait, Task.Delay(200));
+            Assert.NotEqual(wait, raced); // still blocked
+        }
+
+        [Fact]
+        public async Task Gate_Open_ReleasesPendingWait_AndSubsequentWaitImmediate()
+        {
+            var gate = new ProcessingGate<int>();
+            gate.Close("x");
+            var pending = gate.WaitAsync(CancellationToken.None);
+
+            gate.Open();
+
+            await pending.WaitAsync(TimeSpan.FromSeconds(5)); // released
+            Assert.True(gate.IsOpen);
+            Assert.Null(gate.CloseReason);
+            await gate.WaitAsync(CancellationToken.None); // subsequent wait immediate
+        }
+
+        [Fact]
+        public async Task Gate_CloseTwiceThenOpenOnce_IsOpen()
+        {
+            var gate = new ProcessingGate<int>();
+            gate.Close("first");
+            gate.Close("second"); // idempotent, no counting
+            gate.Open();
+
+            Assert.True(gate.IsOpen);
+            await gate.WaitAsync(CancellationToken.None);
+        }
+
+        [Fact]
+        public async Task Gate_WaitAsync_HonoursCancellationWhileClosed()
+        {
+            var gate = new ProcessingGate<int>();
+            gate.Close("paused");
+            using var cts = new CancellationTokenSource();
+
+            var wait = gate.WaitAsync(cts.Token);
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wait);
         }
 
         private sealed class FakeSource(ChannelReader<int> reader) : IQueueSource<int>

@@ -6,7 +6,9 @@ using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
+using Read2Me.Services.Health;
 using Read2Me.Services.Llm;
+using Read2Me.Tests.Fakes;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -32,10 +34,12 @@ namespace Read2Me.Tests.Services.Characters
 
         private CharacterAttributionService NewService(ILlmClient llm, IProjectReader reader,
             LlmSettingsService? settings = null, LlmPromptService? prompts = null,
-            EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
+            EventBroadcaster<LlmStreamEvent>? broadcaster = null,
+            IAiServiceReporter? reporter = null) =>
             new(llm, settings ?? NewSettings(), prompts ?? NewPrompts(), reader,
                 NullLogger<CharacterAttributionService>.Instance,
-                broadcaster ?? new EventBroadcaster<LlmStreamEvent>());
+                broadcaster ?? new EventBroadcaster<LlmStreamEvent>(),
+                reporter ?? new FakeAiServiceReporter());
 
         private static async Task<LlmServerConfig> RegisterActiveConfigAsync(LlmSettingsService svc)
         {
@@ -296,6 +300,59 @@ namespace Read2Me.Tests.Services.Characters
 
             Assert.Equal(7, fakeReader.ReceivedBefore);
             Assert.Equal(3, fakeReader.ReceivedAfter);
+        }
+
+        // ---------------------------------------------------------------
+        // Watchdog reporting
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task ManagedServiceThrows_ReportsFailure_ReturnsServiceUnavailable()
+        {
+            var settings = NewSettings();
+            var config = await RegisterActiveConfigAsync(settings);
+
+            var reporter = new FakeAiServiceReporter { Managed = true };
+            var llm = new FakeLlmClient(throws: new AiServiceStalledException(config.BaseUrl, TimeSpan.FromSeconds(120)));
+            var svc = NewService(llm, new FakeProjectReader(DefaultContext(), DefaultProject()), settings, reporter: reporter);
+
+            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+
+            Assert.Equal(AttributionStatus.ServiceUnavailable, result.Status);
+            var (baseUrl, _) = Assert.Single(reporter.Failures);
+            Assert.Equal(config.BaseUrl, baseUrl);
+        }
+
+        [Fact]
+        public async Task RemoteServiceThrows_NotReported_ReturnsFailed()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var reporter = new FakeAiServiceReporter { Managed = false }; // registry miss
+            var llm = new FakeLlmClient(throws: new InvalidOperationException("connection refused"));
+            var svc = NewService(llm, new FakeProjectReader(DefaultContext(), DefaultProject()), settings, reporter: reporter);
+
+            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+
+            Assert.Equal(AttributionStatus.Failed, result.Status);
+            Assert.Contains("connection refused", result.FailureReason);
+        }
+
+        [Fact]
+        public async Task ManagedServiceSucceeds_ReportsSuccess()
+        {
+            var settings = NewSettings();
+            var config = await RegisterActiveConfigAsync(settings);
+
+            var reporter = new FakeAiServiceReporter { Managed = true };
+            var llm = new FakeLlmClient("""{ "character": "Alice", "voice_instructions": "" }""");
+            var svc = NewService(llm, new FakeProjectReader(DefaultContext(), DefaultProject()), settings, reporter: reporter);
+
+            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+
+            Assert.Equal(AttributionStatus.Resolved, result.Status);
+            Assert.Contains(config.BaseUrl, reporter.Successes);
         }
 
         // ---------------------------------------------------------------

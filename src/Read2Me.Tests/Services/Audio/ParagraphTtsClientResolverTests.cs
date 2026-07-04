@@ -28,6 +28,7 @@ namespace Read2Me.Tests.Services.Audio
             sc.AddHttpClient();
             sc.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
             sc.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(ParagraphTtsServiceType.VoxCpm2);
+            sc.AddSingleton<Read2Me.Services.Health.IAiServiceReporter, Read2Me.Tests.Fakes.FakeAiServiceReporter>();
             sc.AddSingleton<AudioProcessingSettingsService, FakeAudioSettings>();
             sc.AddScoped<IParagraphTtsClientResolver, ParagraphTtsClientResolver>();
             extra?.Invoke(sc);

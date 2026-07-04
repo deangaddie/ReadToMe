@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
@@ -27,7 +28,8 @@ namespace Read2Me.Tests.Services.Audio
             _httpFactory = new FakeHttpClientFactory(_handler);
             _sut = new VoxCpm2ParagraphTtsClient(
                 _httpFactory,
-                NullLogger<VoxCpm2ParagraphTtsClient>.Instance);
+                NullLogger<VoxCpm2ParagraphTtsClient>.Instance,
+                new FakeAiServiceReporter());
         }
 
         // ── Frame protocol ──────────────────────────────────────────────────

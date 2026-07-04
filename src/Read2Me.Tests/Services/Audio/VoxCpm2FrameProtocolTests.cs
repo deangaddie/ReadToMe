@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.VoiceDesign;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
@@ -15,7 +16,7 @@ namespace Read2Me.Tests.Services.Audio
         public VoxCpm2VoiceDesignClientTests()
         {
             _httpFactory = new FakeHttpClientFactory();
-            _sut = new VoxCpm2VoiceDesignClient(_httpFactory, NullLogger<VoxCpm2VoiceDesignClient>.Instance);
+            _sut = new VoxCpm2VoiceDesignClient(_httpFactory, NullLogger<VoxCpm2VoiceDesignClient>.Instance, new FakeAiServiceReporter());
         }
 
         [Fact]

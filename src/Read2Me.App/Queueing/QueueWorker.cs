@@ -11,6 +11,7 @@ namespace Read2Me.App.Queueing;
 
 public sealed class QueueWorker<TItem>(
     IQueueSource<TItem> source,
+    IProcessingGate<TItem> gate,
     IServiceScopeFactory scopeFactory,
     ILogger<QueueWorker<TItem>> logger) : BackgroundService
 {
@@ -20,6 +21,7 @@ public sealed class QueueWorker<TItem>(
         {
             try
             {
+                await gate.WaitAsync(ct);
                 var item = await source.Reader.ReadAsync(ct);
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var processor = scope.ServiceProvider.GetRequiredService<IQueueProcessor<TItem>>();

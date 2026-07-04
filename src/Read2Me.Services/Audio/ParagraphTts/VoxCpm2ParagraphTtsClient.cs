@@ -6,6 +6,7 @@ using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.ParagraphTts.Settings;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Audio.VoiceDesign.Settings;
+using Read2Me.Services.Health;
 
 namespace Read2Me.Services.Audio.ParagraphTts
 {
@@ -15,7 +16,8 @@ namespace Read2Me.Services.Audio.ParagraphTts
     /// </summary>
     public sealed class VoxCpm2ParagraphTtsClient(
         IHttpClientFactory httpClientFactory,
-        ILogger<VoxCpm2ParagraphTtsClient> logger) : IParagraphTtsClient
+        ILogger<VoxCpm2ParagraphTtsClient> logger,
+        IAiServiceReporter reporter) : IParagraphTtsClient
     {
         public async Task<Stream> GenerateAsync(
             string text,
@@ -31,11 +33,26 @@ namespace Read2Me.Services.Audio.ParagraphTts
 
             var http = httpClientFactory.CreateClient();
 
-            // Step 1: upload reference audio
-            var fileId = await UploadReferenceAudioAsync(http, baseUrl, referenceAudioStream, ct);
+            try
+            {
+                // Step 1: upload reference audio
+                var fileId = await UploadReferenceAudioAsync(http, baseUrl, referenceAudioStream, ct);
 
-            // Step 2: stream synthesis
-            return await StreamSynthesisAsync(http, baseUrl, text, voiceInstructions, fileId, cfg, ct);
+                // Step 2: stream synthesis
+                var result = await StreamSynthesisAsync(http, baseUrl, text, voiceInstructions, fileId, cfg, ct);
+                reporter.ReportSuccess(baseUrl);
+                return result;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (reporter.ReportFailure(baseUrl, ex))
+                    throw new AiServiceUnavailableException(baseUrl, ex);
+                throw;
+            }
         }
 
         private static async Task<string> UploadReferenceAudioAsync(

@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
@@ -9,12 +10,38 @@ namespace Read2Me.Tests.Services.Audio
     public class WhisperTranscriptionClientTests
     {
         private readonly FakeHttpClientFactory _httpFactory;
+        private readonly FakeAiServiceReporter _reporter = new();
         private readonly WhisperTranscriptionClient _sut;
 
         public WhisperTranscriptionClientTests()
         {
             _httpFactory = new FakeHttpClientFactory();
-            _sut = new WhisperTranscriptionClient(_httpFactory, NullLogger<WhisperTranscriptionClient>.Instance);
+            _sut = new WhisperTranscriptionClient(_httpFactory, NullLogger<WhisperTranscriptionClient>.Instance, _reporter);
+        }
+
+        [Fact]
+        public async Task ManagedServiceFailure_ReportsAndThrowsServiceUnavailable()
+        {
+            _reporter.Managed = true; // base URL resolves to a docker service
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://localhost:9000\"}" };
+
+            await Assert.ThrowsAsync<Read2Me.Services.Health.AiServiceUnavailableException>(
+                () => _sut.TranscribeAsync(config, new MemoryStream([1]), "a.wav"));
+
+            var (baseUrl, _) = Assert.Single(_reporter.Failures);
+            Assert.Equal("http://localhost:9000", baseUrl);
+        }
+
+        [Fact]
+        public async Task RemoteServiceFailure_StaysSilent_PropagatesOriginal()
+        {
+            _reporter.Managed = false; // remote endpoint — registry miss
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"https://remote.example.com\"}" };
+
+            await Assert.ThrowsAsync<HttpRequestException>(
+                () => _sut.TranscribeAsync(config, new MemoryStream([1]), "a.wav"));
         }
 
         [Fact]

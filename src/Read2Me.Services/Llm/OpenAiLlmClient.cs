@@ -3,8 +3,10 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Exceptions;
+using Read2Me.Services.Health;
 
 namespace Read2Me.Services.Llm
 {
@@ -16,11 +18,16 @@ namespace Read2Me.Services.Llm
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<OpenAiLlmClient> _logger;
+        private readonly AiWatchdogOptions _watchdogOptions;
 
-        public OpenAiLlmClient(IHttpClientFactory httpClientFactory, ILogger<OpenAiLlmClient> logger)
+        public OpenAiLlmClient(
+            IHttpClientFactory httpClientFactory,
+            ILogger<OpenAiLlmClient> logger,
+            IOptions<AiWatchdogOptions> watchdogOptions)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _watchdogOptions = watchdogOptions.Value;
         }
 
         public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
@@ -59,8 +66,29 @@ namespace Read2Me.Services.Llm
             var thinkingBuilder = new StringBuilder();
             var responseBuilder = new StringBuilder();
 
-            while (await reader.ReadLineAsync(ct) is { } line)
+            // Inactivity watchdog: race each read against a sliding timeout reset on every line, so a
+            // wedged stream (no chunk for the window) is aborted instead of waited on forever.
+            var inactivity = TimeSpan.FromSeconds(Math.Max(1, _watchdogOptions.StreamInactivitySeconds));
+
+            while (true)
             {
+                string? line;
+                using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    timeoutCts.CancelAfter(inactivity);
+                    try
+                    {
+                        line = await reader.ReadLineAsync(timeoutCts.Token);
+                    }
+                    catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+                    {
+                        throw new AiServiceStalledException(config.BaseUrl, inactivity);
+                    }
+                }
+
+                if (line is null)
+                    break;
+
                 var result = OpenAiStreamParser.ParseLine(line);
                 if (result.Kind == OpenAiStreamParser.LineKind.Done)
                     break;

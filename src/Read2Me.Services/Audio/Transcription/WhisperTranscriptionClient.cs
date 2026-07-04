@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.Transcription.Settings;
+using Read2Me.Services.Health;
 
 namespace Read2Me.Services.Audio.Transcription
 {
@@ -15,7 +16,8 @@ namespace Read2Me.Services.Audio.Transcription
     /// </summary>
     public sealed class WhisperTranscriptionClient(
         IHttpClientFactory httpClientFactory,
-        ILogger<WhisperTranscriptionClient> logger) : ITranscriptionClient
+        ILogger<WhisperTranscriptionClient> logger,
+        IAiServiceReporter reporter) : ITranscriptionClient
     {
         public async Task<string> TranscribeAsync(
             TranscriptionServiceConfig config,
@@ -30,17 +32,31 @@ namespace Read2Me.Services.Audio.Transcription
 
             var http = httpClientFactory.CreateClient();
 
-            using var content = new MultipartFormDataContent();
-            var fileContent = new StreamContent(audio);
-            fileContent.Headers.ContentType = new MediaTypeHeaderValue(GetMimeType(fileName));
-            content.Add(fileContent, "audio_file", fileName);
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                var fileContent = new StreamContent(audio);
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue(GetMimeType(fileName));
+                content.Add(fileContent, "audio_file", fileName);
 
-            var url = settings.BaseUrl.TrimEnd('/') + "/asr?task=transcribe&output=txt";
-            var response = await http.PostAsync(url, content, ct);
-            response.EnsureSuccessStatusCode();
+                var url = settings.BaseUrl.TrimEnd('/') + "/asr?task=transcribe&output=txt";
+                var response = await http.PostAsync(url, content, ct);
+                response.EnsureSuccessStatusCode();
 
-            var text = await response.Content.ReadAsStringAsync(ct);
-            return text.Trim();
+                var text = await response.Content.ReadAsStringAsync(ct);
+                reporter.ReportSuccess(settings.BaseUrl);
+                return text.Trim();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (reporter.ReportFailure(settings.BaseUrl, ex))
+                    throw new AiServiceUnavailableException(settings.BaseUrl, ex);
+                throw;
+            }
         }
 
         private static string GetMimeType(string fileName) =>

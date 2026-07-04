@@ -30,6 +30,14 @@ namespace Read2Me.Services.Characters
 
         public void MarkProcessing(ParagraphKey key) => _store.MarkProcessing(key);
 
+        /// <summary>Returns the key to Queued (retaining ancestry) so an interrupted item can be re-driven.</summary>
+        public void Requeue(ParagraphKey key, Guid chapter, Guid part, Guid volume)
+        {
+            _resolved.TryRemove(key, out _);
+            _ancestry[key] = (chapter, part, volume);
+            _store.Requeue(key);
+        }
+
         public void RemoveOutcome(ParagraphKey key) => _store.RemoveOutcome(key);
 
         public void SetResolved(ParagraphKey key, ResolvedCharacter resolved) => _resolved[key] = resolved;

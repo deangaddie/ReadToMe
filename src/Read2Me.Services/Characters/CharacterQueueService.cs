@@ -11,7 +11,8 @@ namespace Read2Me.Services.Characters
         string Preview,
         Guid ChapterId,
         Guid PartId,
-        Guid VolumeId);
+        Guid VolumeId,
+        bool Requeued = false);
 
     public enum ParagraphQueueStatus { Queued, Processing }
 
@@ -98,6 +99,20 @@ namespace Read2Me.Services.Characters
             var key = Key(item);
             _map.MarkProcessing(key);
             _processingPreview = item.Preview;
+            Changed?.Invoke();
+        }
+
+        /// <summary>
+        /// Puts an interrupted item back on the queue with its retry flag set (watchdog recovery path):
+        /// status returns to Queued and it re-enters the channel, waiting on the closed gate until
+        /// recovery reopens it. The flag guards against an endless requeue if the service is down.
+        /// </summary>
+        public void Requeue(QueuedParagraph item)
+        {
+            var key = Key(item);
+            _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
+            _channel.Writer.TryWrite(item with { Requeued = true });
+            _processingPreview = null;
             Changed?.Invoke();
         }
 

@@ -31,6 +31,17 @@ namespace Read2Me.Services.Queueing
             return _status.TryAdd(key, QueueItemStatus.Queued);
         }
 
+        /// <summary>
+        /// Returns a currently-tracked (typically Processing) key to Queued and clears any prior
+        /// outcome, so an interrupted item can be re-driven. Stops the elapsed clock.
+        /// </summary>
+        public void Requeue(TKey key)
+        {
+            _outcomes.TryRemove(key, out _);
+            _status[key] = QueueItemStatus.Queued;
+            ClearProcessing();
+        }
+
         /// <summary>Moves the key to Processing and starts the single-reader elapsed clock.</summary>
         public void MarkProcessing(TKey key)
         {

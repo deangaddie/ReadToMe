@@ -4,6 +4,7 @@ using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.App.Characters
@@ -36,7 +37,7 @@ namespace Read2Me.Tests.App.Characters
             var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
             var worker = new QueueWorker<QueuedParagraph>(
-                queue, scopeFactory, NullLogger<QueueWorker<QueuedParagraph>>.Instance);
+                queue, new ProcessingGate<QueuedParagraph>(), scopeFactory, NullLogger<QueueWorker<QueuedParagraph>>.Instance);
             using var cts = new CancellationTokenSource();
 
             var p1 = new QueuedParagraph(Folder, Guid.NewGuid(), "a", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());

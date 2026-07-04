@@ -23,6 +23,7 @@ using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Books;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
+using Read2Me.Services.Health;
 using Read2Me.Services.IO;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Llm;
@@ -86,6 +87,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAudioQueueProcessor, AudioQueueProcessor>();
         services.AddScoped<IQueueProcessor<Read2Me.Services.Audio.QueuedAudioItem>>(
             sp => sp.GetRequiredService<IAudioQueueProcessor>());
+        services.AddSingleton<IProcessingGate<Read2Me.Services.Audio.QueuedAudioItem>, ProcessingGate<Read2Me.Services.Audio.QueuedAudioItem>>();
         services.AddHostedService<QueueWorker<Read2Me.Services.Audio.QueuedAudioItem>>();
         return services;
     }
@@ -142,6 +144,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ICharacterQueueProcessor, CharacterQueueProcessor>();
         services.AddScoped<IQueueProcessor<QueuedParagraph>>(
             sp => sp.GetRequiredService<ICharacterQueueProcessor>());
+        services.AddSingleton<IProcessingGate<QueuedParagraph>, ProcessingGate<QueuedParagraph>>();
         services.AddHostedService<QueueWorker<QueuedParagraph>>();
         services.AddScoped<CharacterAttributionService>();
         services.AddScoped<CharacterResolver>();
@@ -150,6 +153,44 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();
         services.AddSingleton<VoiceBatchRunner>();
         return services;
+    }
+
+    public static IServiceCollection AddAiWatchdogServices(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<AiWatchdogOptions>(configuration.GetSection(AiWatchdogOptions.SectionName));
+        services.AddSingleton<DockerAiServiceRegistry>();
+        services.AddSingleton<IProcessRunner, ProcessRunner>();
+        services.AddSingleton<IContainerController, DockerCliContainerController>();
+        services.AddSingleton<IAiServiceProbe, AiServiceProbe>();
+        services.AddSingleton<EventBroadcaster<WatchdogEvent>>();
+        services.AddSingleton(BuildGateMap);
+        services.AddSingleton<AiServiceHealthMonitor>();
+        services.AddSingleton<IAiServiceReporter, AiServiceReporter>();
+        services.AddSingleton<IAiServiceControl, AiServiceControl>();
+        return services;
+    }
+
+    // Maps each registered service to the gate(s) recovery must hold: llama gates the paragraph
+    // (character-attribution) queue; every TTS/whisper/similarity service gates the audio queue.
+    private static WatchdogGateMap BuildGateMap(System.IServiceProvider sp)
+    {
+        var registry = sp.GetRequiredService<DockerAiServiceRegistry>();
+        IWatchdogGate paragraphGate = new ProcessingGateAdapter<QueuedParagraph>(
+            sp.GetRequiredService<IProcessingGate<QueuedParagraph>>(),
+            sp.GetRequiredService<IQueueSource<QueuedParagraph>>());
+        IWatchdogGate audioGate = new ProcessingGateAdapter<Read2Me.Services.Audio.QueuedAudioItem>(
+            sp.GetRequiredService<IProcessingGate<Read2Me.Services.Audio.QueuedAudioItem>>(),
+            sp.GetRequiredService<IQueueSource<Read2Me.Services.Audio.QueuedAudioItem>>());
+
+        var map = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.IReadOnlyList<IWatchdogGate>>(
+            System.StringComparer.OrdinalIgnoreCase);
+        foreach (var svc in registry.All)
+        {
+            map[svc.Name] = svc.Name.Equals("llama", System.StringComparison.OrdinalIgnoreCase)
+                ? new[] { paragraphGate }
+                : new[] { audioGate };
+        }
+        return new WatchdogGateMap(map);
     }
 
     public static IServiceCollection AddAppState(this IServiceCollection services)

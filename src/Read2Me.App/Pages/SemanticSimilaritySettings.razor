@@ -46,6 +46,7 @@ else
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@c.Type</MudChip>
                             </MudStack>
                             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@DescribeConfig(c)</MudText>
+                            <DockerServiceControls BaseUrl="@ParseSettings(c).BaseUrl" />
                         </MudCardContent>
                         <MudCardActions>
                             @if (_activeConfigId == c.Id)

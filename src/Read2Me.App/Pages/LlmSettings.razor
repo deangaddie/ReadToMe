@@ -44,6 +44,7 @@ else
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Model: @c.Model</MudText>
                         }
+                        <DockerServiceControls BaseUrl="@c.BaseUrl" />
                     </MudCardContent>
                     <MudCardActions>
                         @if (_activeConfigId == c.Id)

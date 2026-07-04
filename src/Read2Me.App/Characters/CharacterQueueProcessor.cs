@@ -56,6 +56,23 @@ namespace Read2Me.App.Characters
                             item.ParagraphId, outcome.FailureReason);
                         queue.MarkFailed(item, outcome.FailureReason);
                         break;
+
+                    case AttributionStatus.ServiceUnavailable:
+                        // Watchdog is recovering the service. Requeue once so recovery is invisible in
+                        // the results; a second outage for the same item (service down) fails it.
+                        if (item.Requeued)
+                        {
+                            logger.LogWarning("Paragraph {ParagraphId} service unavailable again after requeue — failing: {Reason}",
+                                item.ParagraphId, outcome.FailureReason);
+                            queue.MarkFailed(item, outcome.FailureReason);
+                        }
+                        else
+                        {
+                            logger.LogInformation("Paragraph {ParagraphId} service unavailable — requeuing: {Reason}",
+                                item.ParagraphId, outcome.FailureReason);
+                            queue.Requeue(item);
+                        }
+                        break;
                 }
             }
             catch (OperationCanceledException) when (hostCt.IsCancellationRequested)

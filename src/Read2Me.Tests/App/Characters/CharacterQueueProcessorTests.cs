@@ -105,6 +105,32 @@ namespace Read2Me.Tests.App.Characters
         }
 
         [Fact]
+        public async Task ServiceUnavailable_FirstTime_RequeuesInsteadOfFailing()
+        {
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, null, "stalled");
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            // Back on the queue, waiting for recovery — not a terminal failure.
+            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(_item.Folder, _item.ParagraphId));
+            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
+        }
+
+        [Fact]
+        public async Task ServiceUnavailable_SecondTimeForRequeuedItem_MarksFailed()
+        {
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, null, "stalled");
+            var requeued = _item with { Requeued = true };
+
+            await _sut.ProcessItemAsync(requeued, CancellationToken.None);
+
+            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
+            Assert.NotNull(outcome);
+            Assert.Equal(ParagraphOutcomeKind.Failed, outcome.Kind);
+            Assert.Equal("stalled", outcome.Reason);
+        }
+
+        [Fact]
         public async Task ItemLevelCancel_DoesNotMarkFailed()
         {
             _attribution.ThrowException = new OperationCanceledException();
@@ -120,7 +146,7 @@ namespace Read2Me.Tests.App.Characters
             Assert.Null(outcome);
         }
 
-        private class FakeAttributionService() : CharacterAttributionService(null!, null!, null!, null!, NullLogger<CharacterAttributionService>.Instance, null!)
+        private class FakeAttributionService() : CharacterAttributionService(null!, null!, null!, null!, NullLogger<CharacterAttributionService>.Instance, null!, null!)
         {
             public AttributionOutcome? Outcome { get; set; }
             public Exception? ThrowException { get; set; }

@@ -42,6 +42,7 @@ else
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@c.Type</MudChip>
                         </MudStack>
                         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@DescribeUrl(c)</MudText>
+                        <DockerServiceControls BaseUrl="@DescribeUrl(c)" />
 
                         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-3" Spacing="2">
                             <MudButton Variant="Variant.Outlined" Size="Size.Small"

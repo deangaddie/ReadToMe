@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.VoiceDesign;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
@@ -14,7 +15,7 @@ namespace Read2Me.Tests.Services.Audio
         public Qwen3VoiceDesignClientTests()
         {
             _httpFactory = new FakeHttpClientFactory();
-            _sut = new Qwen3VoiceDesignClient(_httpFactory, NullLogger<Qwen3VoiceDesignClient>.Instance);
+            _sut = new Qwen3VoiceDesignClient(_httpFactory, NullLogger<Qwen3VoiceDesignClient>.Instance, new FakeAiServiceReporter());
         }
 
         [Fact]

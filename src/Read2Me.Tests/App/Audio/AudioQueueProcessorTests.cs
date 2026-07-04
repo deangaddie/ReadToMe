@@ -5,6 +5,7 @@ using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Health;
 using Read2Me.Tests.Fakes;
 using Xunit;
 
@@ -133,6 +134,35 @@ namespace Read2Me.Tests.App.Audio
             await _sut.ProcessItemAsync(queued, CancellationToken.None);
 
             Assert.Contains(_events, e => e is Failed f && f.Reason.Contains("tts boom"));
+            var outcome = _queue.OutcomeOf(_folder, itemId);
+            Assert.NotNull(outcome);
+            Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
+        }
+
+        [Fact]
+        public async Task ServiceUnavailable_FirstTime_RequeuesInsteadOfFailing()
+        {
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _pipeline.Throws = new AiServiceUnavailableException("http://localhost:8003", new Exception("timeout"));
+            var queued = MakeItem(itemId);
+
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+
+            Assert.Equal(AudioItemQueueStatus.Queued, _queue.StatusOf(_folder, itemId));
+            Assert.Null(_queue.OutcomeOf(_folder, itemId));
+        }
+
+        [Fact]
+        public async Task ServiceUnavailable_SecondTimeForRequeuedItem_MarksFailed()
+        {
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _pipeline.Throws = new AiServiceUnavailableException("http://localhost:8003", new Exception("timeout"));
+            var queued = MakeItem(itemId) with { Requeued = true };
+
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+
             var outcome = _queue.OutcomeOf(_folder, itemId);
             Assert.NotNull(outcome);
             Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
