@@ -464,3 +464,6 @@ FodyWeavers.xsd
 readtome.db
 readtome.db-shm
 readtome.db-wal
+
+# Junie
+.junie/

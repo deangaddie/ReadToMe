@@ -65,6 +65,15 @@ namespace Read2Me.App.State
         public FolderSelection Selection { get; private set; } = null!;
         public AudioItemSelection AudioSelection { get; private set; } = null!;
 
+        public Guid? PlayingAudioItemId { get; private set; }
+        public event Action? PlayingItemChanged;
+
+        public void TogglePlayingAudioItem(Guid itemId)
+        {
+            PlayingAudioItemId = PlayingAudioItemId == itemId ? null : itemId;
+            PlayingItemChanged?.Invoke();
+        }
+
         private HashSet<Guid> _selectableNodes = [];
         private IReadOnlyDictionary<Guid, int> _nodeCounts = new Dictionary<Guid, int>();
         private IReadOnlyDictionary<Guid, int> _audioNodeCounts = new Dictionary<Guid, int>();

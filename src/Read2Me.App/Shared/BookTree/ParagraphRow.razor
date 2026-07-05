@@ -147,8 +147,8 @@
                                     <MudIconButton Icon="@Icons.Material.Filled.PlayCircleOutline"
                                                    Size="Size.Small"
                                                    data-testid="@($"audio-play-{it.Id}")"
-                                                   OnClick="@(() => _playingItemId = _playingItemId == it.Id ? null : it.Id)"
-                                                   Color="@(_playingItemId == it.Id ? Color.Primary : Color.Default)" />
+                                                   OnClick="@(() => Presenter.TogglePlayingAudioItem(it.Id))"
+                                                   Color="@(Presenter.PlayingAudioItemId == it.Id ? Color.Primary : Color.Default)" />
                                 }
                                 @if (!isAudioBusy)
                                 {
@@ -165,7 +165,7 @@
                             <span></span>
                         }
                     </div>
-                    @if (isAudioMode && _playingItemId == it.Id && it.AudioFileName != null)
+                    @if (isAudioMode && Presenter.PlayingAudioItemId == it.Id && it.AudioFileName != null)
                     {
                         var audioVersion = AudioQueue.AudioVersionOf(FolderId, it.Id);
                         var audioSrc = $"/workspace/{FolderId.Value}/{it.AudioFileName.Replace('\\', '/')}";
@@ -282,13 +282,12 @@ else
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
-    Guid? _playingItemId;
-
     protected override void OnInitialized()
     {
         Queue.Changed += Refresh;
         AudioQueue.Changed += Refresh;
         AudioReviews.Changed += Refresh;
+        Presenter.PlayingItemChanged += Refresh;
     }
 
     protected override async Task OnParametersSetAsync()
@@ -309,5 +308,6 @@ else
         Queue.Changed -= Refresh;
         AudioQueue.Changed -= Refresh;
         AudioReviews.Changed -= Refresh;
+        Presenter.PlayingItemChanged -= Refresh;
     }
 }
