@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
+using Read2Me.App.Services.Preflight;
 using Read2Me.App.State;
 using Read2Me.AppData.Entities;
 using Read2Me.Data.Entities;
@@ -29,6 +30,8 @@ namespace Read2Me.App.Shared.Characters
         [Inject] ISnackbar Snackbar { get; set; } = null!;
         [Inject] VoiceDesignSettingsService VoiceDesignSettingsService { get; set; } = null!;
         [Inject] ParagraphTtsSettingsService ParagraphTtsSettingsService { get; set; } = null!;
+        [Inject] IAiPreflight Preflight { get; set; } = null!;
+        [Inject] internal VoicePromptGenerationState VoicePromptState { get; set; } = null!;
 
         VoiceDesignServiceConfig? _activeVoiceDesignConfig;
         ParagraphTtsServiceConfig? _activeParagraphTtsConfig;
@@ -70,7 +73,9 @@ namespace Read2Me.App.Shared.Characters
 
         internal bool HasPromptDraft(Voice v) => _drafts.IsDirty(v.Id, VoiceDraftField.Prompt, v.DesignPrompt);
         internal bool HasTranscriptDraft(Voice v) => _drafts.IsDirty(v.Id, VoiceDraftField.Transcript, v.Transcript);
+        internal bool HasDescriptionDraft(Voice v) => _drafts.IsDirty(v.Id, VoiceDraftField.Description, v.Description);
 
+        internal string GetDescriptionDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Description, v.Description);
         internal string GetPromptDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Prompt, v.DesignPrompt);
         internal string GetTranscriptDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Transcript, v.Transcript);
         internal string GetOverrideDraft(Voice v) => _drafts.Current(v.Id, VoiceDraftField.Override, v.VoiceDesignSettingsOverrideJson);
@@ -205,6 +210,17 @@ namespace Read2Me.App.Shared.Characters
             }
         }
 
+        // ── Description editing ───────────────────────────────────────────────────
+
+        async Task SaveDescriptionAsync(Voice voice)
+        {
+            if (!HasDescriptionDraft(voice)) return;
+            var raw = _drafts.Current(voice.Id, VoiceDraftField.Description, voice.Description);
+            var description = string.IsNullOrWhiteSpace(raw) ? null : raw;
+            await Presenter.UpdateVoiceAsync(voice.Id, voice.Name, description);
+            _drafts.Clear(voice.Id, VoiceDraftField.Description);
+        }
+
         // ── Prompt editing ────────────────────────────────────────────────────────
 
         async Task SavePromptAsync(Voice voice)
@@ -225,7 +241,18 @@ namespace Read2Me.App.Shared.Characters
             var result = await showDialog(builtPrompt);
             if (result?.Canceled != false || result.Data is not string userPrompt) return false;
 
-            var designPrompt = await Presenter.GenerateDesignPromptWithTextAsync(userPrompt);
+            // Publish the live LLM stream to the status dock while the model generates,
+            // so the per-voice regenerate is expandable just like the batch/attribution runs.
+            VoicePromptState.Begin(Character.Name);
+            string? designPrompt;
+            try
+            {
+                designPrompt = await Presenter.GenerateDesignPromptWithTextAsync(userPrompt);
+            }
+            finally
+            {
+                VoicePromptState.End();
+            }
             if (designPrompt != null)
                 _drafts.Set(voice.Id, VoiceDraftField.Prompt, designPrompt);
             return true;
@@ -234,23 +261,27 @@ namespace Read2Me.App.Shared.Characters
         // Razor-bound wrapper that provides the real MudBlazor dialog and manages UI state.
         async Task RegeneratePromptAsync(Voice voice)
         {
-            var builtPrompt = await Presenter.BuildDesignPromptAsync(Character.Id);
-            if (builtPrompt == null) return;
+            // Guard before the prompt-edit dialog so the user is not shown a flow that then dies.
+            if (!await Preflight.EnsureReadyAsync(AiTaskKind.VoicePromptGeneration)) return;
 
-            var parameters = new DialogParameters<GenerateWithAiDialog>
+            await RegeneratePromptCoreAsync(voice, async builtPrompt =>
             {
-                { d => d.Prompt, builtPrompt },
-            };
-            var dialog = await DialogService.ShowAsync<GenerateWithAiDialog>("Generate with AI", parameters);
-            var result = await dialog.Result;
-            if (result?.Canceled != false || result.Data is not string userPrompt) return;
+                var parameters = new DialogParameters<GenerateWithAiDialog>
+                {
+                    { d => d.Prompt, builtPrompt },
+                };
+                var dialog = await DialogService.ShowAsync<GenerateWithAiDialog>("Generate with AI", parameters);
+                var result = await dialog.Result;
+                // User confirmed — show the per-voice spinner while the core generates.
+                if (result?.Canceled == false && result.Data is string)
+                {
+                    _regeneratingPrompt = voice.Id;
+                    StateHasChanged();
+                }
+                return result;
+            });
 
-            _regeneratingPrompt = voice.Id;
-            StateHasChanged();
-            var designPrompt = await Presenter.GenerateDesignPromptWithTextAsync(userPrompt);
             _regeneratingPrompt = null;
-            if (designPrompt != null)
-                _drafts.Set(voice.Id, VoiceDraftField.Prompt, designPrompt);
             StateHasChanged();
         }
 
@@ -258,6 +289,7 @@ namespace Read2Me.App.Shared.Characters
         {
             var prompt = _drafts.Current(voice.Id, VoiceDraftField.Prompt, voice.DesignPrompt);
             if (string.IsNullOrWhiteSpace(prompt)) return;
+            if (!await Preflight.EnsureReadyAsync(AiTaskKind.VoiceDesignAudio)) return;
             _generatingAudio = voice.Id;
             StateHasChanged();
             await Presenter.GenerateVoiceAudioAsync(Character.Id, voice.Id, voice.Name, prompt);
@@ -284,6 +316,7 @@ namespace Read2Me.App.Shared.Characters
         async Task TranscribeAsync(Voice voice)
         {
             if (voice.AudioFileName == null) return;
+            if (!await Preflight.EnsureReadyAsync(AiTaskKind.Transcription)) return;
 
             _transcribing = voice.Id;
             StateHasChanged();

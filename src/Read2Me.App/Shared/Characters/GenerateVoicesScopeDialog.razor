@@ -1,0 +1,29 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Generate voice prompts</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Class="mb-2">
+            Some characters already have voices. Choose what to generate.
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            <strong>Clear and regenerate all</strong> deletes every character's existing voices (and their audio and
+            rules) first. This cannot be undone.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Outlined"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(false)))">
+            Only characters without voices
+        </MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(true)))">
+            Clear and regenerate all
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+}

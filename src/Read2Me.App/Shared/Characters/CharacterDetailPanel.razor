@@ -111,7 +111,13 @@
                                 }
                                 else
                                 {
-                                    <MudText Typo="Typo.body1">@v.Name</MudText>
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body1">@v.Name</MudText>
+                                        @if (!string.IsNullOrWhiteSpace(v.Description))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@v.Description</MudText>
+                                        }
+                                    </MudStack>
                                     <span @onclick:stopPropagation="true">
                                         <MudTooltip Text="Rename">
                                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
@@ -133,6 +139,18 @@
                         </TitleContent>
                         <ChildContent>
                             <MudStack Spacing="3" Class="pt-2">
+
+                                <MudStack Spacing="1">
+                                    <MudTextField Value="@GetDescriptionDraft(v)"
+                                                  ValueChanged="@((string s) => _drafts.Set(v.Id, VoiceDraftField.Description, s))"
+                                                  Label="Voice description (where in the book this voice applies)"
+                                                  Variant="Variant.Outlined" Lines="2" Immediate="true" />
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Save" Disabled="@(!HasDescriptionDraft(v))"
+                                               OnClick="@(() => SaveDescriptionAsync(v))" Style="align-self:flex-start">
+                                        Save description
+                                    </MudButton>
+                                </MudStack>
 
                                 <MudToggleGroup T="VoiceSource" Value="@v.Source"
                                                 ValueChanged="@(s => SwitchVoiceSourceAsync(v, s))"

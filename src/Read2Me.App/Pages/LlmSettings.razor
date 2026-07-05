@@ -215,7 +215,7 @@ else
 
         try
         {
-            await foreach (var chunk in LlmClient.StreamChatAsync(_activeConfig, _prompt, _cts.Token))
+            await foreach (var chunk in LlmClient.StreamChatAsync(_activeConfig, _prompt, ct: _cts.Token))
             {
                 bool changed = false;
                 if (chunk.Thinking != null)

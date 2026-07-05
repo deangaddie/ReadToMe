@@ -1,0 +1,153 @@
+@using System.Threading
+@using Read2Me.App.Services.Preflight
+@using Read2Me.Services.Health
+@inject IAiServiceControl Control
+@implements IDisposable
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">AI services required</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!_started)
+        {
+            <MudText Class="mb-3">This task needs AI services that are not running yet.</MudText>
+            <MudStack Spacing="1">
+                @foreach (var item in Plan.ToStart)
+                {
+                    var chip = ChipFor(item.Status);
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body1">@item.Service.Name</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@chip.Color" Variant="Variant.Outlined">@chip.Label</MudChip>
+                    </MudStack>
+                }
+            </MudStack>
+            @if (Plan.Conflicts.Count > 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                    These GPU services are running but not needed by this task and will be stopped first
+                    to free video memory: <strong>@string.Join(", ", Plan.Conflicts.Select(c => c.Name))</strong>
+                </MudAlert>
+            }
+        }
+        else
+        {
+            <MudStack Spacing="2">
+                @foreach (var row in _presenter.Rows)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        @switch (row.Stage)
+                        {
+                            case AiPreflightDialogPresenter.ServiceStage.Stopping:
+                            case AiPreflightDialogPresenter.ServiceStage.Starting:
+                                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                                break;
+                            case AiPreflightDialogPresenter.ServiceStage.Stopped:
+                            case AiPreflightDialogPresenter.ServiceStage.Ready:
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                break;
+                            case AiPreflightDialogPresenter.ServiceStage.Failed:
+                                <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                                break;
+                            default:
+                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Default" Size="Size.Small" />
+                                break;
+                        }
+                        <MudText Typo="Typo.body1">@row.Service.Name</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@StageText(row)</MudText>
+                    </MudStack>
+                    @if (row.Error is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Error" Class="ml-8">@row.Error</MudText>
+                    }
+                }
+            </MudStack>
+            @if (_presenter.HasFailed)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">
+                    @_presenter.FailureMessage The task was not started. Check the container logs
+                    or the service's settings page, then try again.
+                </MudAlert>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (!_started)
+        {
+            <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                       StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="StartAsync">
+                Start services
+            </MudButton>
+        }
+        else if (_presenter.HasFailed)
+        {
+            <MudButton OnClick="@(() => MudDialog.Cancel())">Close</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public AiPreflightPlan Plan { get; set; } = new([], []);
+
+    private AiPreflightDialogPresenter _presenter = default!;
+    private readonly CancellationTokenSource _cts = new();
+    private bool _started;
+
+    protected override void OnInitialized()
+    {
+        _presenter = new AiPreflightDialogPresenter(Control);
+        _presenter.Load(Plan);
+        _presenter.Changed += OnPresenterChanged;
+    }
+
+    private async Task StartAsync()
+    {
+        _started = true;
+        try
+        {
+            // One awaited run: stop conflicts, then start each service (health check + warm-up
+            // can take minutes per service). No abort mid-run — ops are not safely cancellable.
+            var succeeded = await _presenter.RunAsync(_cts.Token);
+            if (succeeded)
+                MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (OperationCanceledException)
+        {
+            // Circuit torn down while starting; the dialog is already gone.
+        }
+    }
+
+    private void OnPresenterChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private static string StageText(AiPreflightDialogPresenter.Row row) => row.Stage switch
+    {
+        AiPreflightDialogPresenter.ServiceStage.Pending => row.IsConflict ? "Waiting to stop…" : "Waiting to start…",
+        AiPreflightDialogPresenter.ServiceStage.Stopping => "Stopping…",
+        AiPreflightDialogPresenter.ServiceStage.Stopped => "Stopped",
+        AiPreflightDialogPresenter.ServiceStage.Starting => "Starting — health check & warm-up may take a few minutes…",
+        AiPreflightDialogPresenter.ServiceStage.Ready => "Ready",
+        AiPreflightDialogPresenter.ServiceStage.Failed => "Failed",
+        _ => "",
+    };
+
+    private static (Color Color, string Label) ChipFor(AiServiceStatus status) => status switch
+    {
+        AiServiceStatus.Ready => (Color.Success, "Ready"),
+        AiServiceStatus.Starting => (Color.Warning, "Starting"),
+        AiServiceStatus.Stopped => (Color.Default, "Stopped"),
+        AiServiceStatus.Recovering => (Color.Warning, "Recovering"),
+        AiServiceStatus.Down => (Color.Error, "Down"),
+        AiServiceStatus.NotFound => (Color.Default, "Not found"),
+        _ => (Color.Default, "Unknown"),
+    };
+
+    public void Dispose()
+    {
+        _presenter.Changed -= OnPresenterChanged;
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

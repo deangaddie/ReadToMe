@@ -138,6 +138,9 @@ namespace Read2Me.AppData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("BatchCharacterPrompt")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("CharacterPrompt")
                         .HasColumnType("TEXT");
 
@@ -146,6 +149,12 @@ namespace Read2Me.AppData.Migrations
 
                     b.Property<int?>("ContextParagraphsBefore")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("NarratorVoicePlanPrompt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VoicePlanPrompt")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("VoicePrompt")
                         .HasColumnType("TEXT");
@@ -165,6 +174,9 @@ namespace Read2Me.AppData.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("ApiType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AttributionBatchSize")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("BaseUrl")

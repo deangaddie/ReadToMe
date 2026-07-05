@@ -36,7 +36,7 @@ namespace Read2Me.Tests.Services.Llm
 
             var ex = await Assert.ThrowsAsync<AiServiceStalledException>(async () =>
             {
-                await foreach (var _ in client.StreamChatAsync(Config, "prompt", CancellationToken.None)) { }
+                await foreach (var _ in client.StreamChatAsync(Config, "prompt", ct: CancellationToken.None)) { }
             });
 
             Assert.Equal(Config.BaseUrl, ex.BaseUrl);
@@ -57,7 +57,7 @@ namespace Read2Me.Tests.Services.Llm
             var client = NewClient(body, inactivitySeconds: 1);
 
             var content = new StringBuilder();
-            await foreach (var chunk in client.StreamChatAsync(Config, "prompt", CancellationToken.None))
+            await foreach (var chunk in client.StreamChatAsync(Config, "prompt", ct: CancellationToken.None))
             {
                 if (chunk.Content is { } c) content.Append(c);
             }

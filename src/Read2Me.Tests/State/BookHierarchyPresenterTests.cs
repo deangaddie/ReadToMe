@@ -104,7 +104,7 @@ namespace Read2Me.Tests.State
             var nodeStatus = new NodeStatusService();
             var voiceResolver = new FakeVoiceResolver();
             var audioQueue = new AudioQueueService();
-            var coordinator = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState);
+            var coordinator = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
             var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, voiceResolver, coordinator);
             return new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver);
         }
@@ -688,7 +688,7 @@ namespace Read2Me.Tests.State
             var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioQueueLocal = new AudioQueueService();
-            var coordinatorLocal = new BookSelectionCoordinator(reader, queue, audioQueueLocal, paragraphTtsSettings, snackbar, selectionState, audioSelectionState);
+            var coordinatorLocal = new BookSelectionCoordinator(reader, queue, audioQueueLocal, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
             var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, new FakeBookUseCases(),
                 treeState, selectionState, audioSelectionState, dialogService, queue, audioQueueLocal, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinatorLocal);
             await presenter.LoadAsync(Folder);
@@ -787,7 +787,7 @@ namespace Read2Me.Tests.State
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioReviews = new AudioReviewService();
             var nodeStatus = new NodeStatusService();
-            var coordinator788 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState);
+            var coordinator788 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
             var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator788);
 
             await presenter.LoadAsync(Folder);
@@ -890,7 +890,7 @@ namespace Read2Me.Tests.State
             var paragraphTtsSettings2 = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
             paragraphTtsSettings2.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioQueue889 = new AudioQueueService();
-            var coordinator889 = new BookSelectionCoordinator(reader, queue, audioQueue889, paragraphTtsSettings2, snackbar2, selectionState, audioSelectionState);
+            var coordinator889 = new BookSelectionCoordinator(reader, queue, audioQueue889, paragraphTtsSettings2, snackbar2, selectionState, audioSelectionState, new FakeAiPreflight());
             var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, queue, audioQueue889, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinator889);
 
             await presenter.LoadAsync(Folder);
@@ -1175,7 +1175,7 @@ namespace Read2Me.Tests.State
             paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioReviews = new AudioReviewService();
             var nodeStatus = new NodeStatusService();
-            var coordinator1173 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState);
+            var coordinator1173 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
             var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator1173);
 
             await presenter.LoadAsync(Folder);

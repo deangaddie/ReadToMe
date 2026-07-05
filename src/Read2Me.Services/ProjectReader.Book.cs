@@ -153,34 +153,11 @@ namespace Read2Me.Services
         public async Task<ParagraphContext?> GetParagraphContextAsync(
             ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after)
         {
-            var db = await _session.OpenAsync(folderId);
-
-            var paragraphs = await db.Paragraphs
-                .Where(p => p.ChapterId == chapterId)
-                .OrderBy(p => p.Order)
-                .Select(p => new
-                {
-                    p.Id,
-                    HasCharacterItem = p.Items.Any(i => i.ItemType == ParagraphItemType.Character),
-                    HasContentItem = p.Items.Any(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration),
-                    CharacterName = p.Items
-                        .Where(i => i.ItemType == ParagraphItemType.Character && i.Character != null)
-                        .Select(i => i.Character!.Name)
-                        .FirstOrDefault(),
-                    Text = string.Join(" ", p.Items
-                        .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
-                        .OrderBy(i => i.Order)
-                        .Select(i => i.Text ?? ""))
-                })
-                .ToListAsync();
+            var paragraphs = await LoadChapterContextRowsAsync(folderId, chapterId);
 
             var idx = paragraphs.FindIndex(p => p.Id == paragraphId);
             if (idx < 0)
                 return null;
-
-            // CharacterId set -> known speaker name. No CharacterId + has Character item -> dialog unattributed -> null. No Character items -> narration.
-            static string? ResolveSpeaker(string? characterName, bool hasCharacterItem)
-                => characterName ?? (hasCharacterItem ? null : "Narrator");
 
             var contentParagraphs = paragraphs.Where(p => p.HasContentItem).ToList();
             var contentIdx = contentParagraphs.FindIndex(p => p.Id == paragraphId);
@@ -203,6 +180,99 @@ namespace Read2Me.Services
             return new ParagraphContext(
                 new ContextParagraph(q.Text, ResolveSpeaker(q.CharacterName, q.HasCharacterItem)),
                 preceding, following);
+        }
+
+        public async Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
+            ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after)
+        {
+            if (paragraphIds.Count == 0)
+                return null;
+
+            var paragraphs = await LoadChapterContextRowsAsync(folderId, chapterId);
+            var contentParagraphs = paragraphs.Where(p => p.HasContentItem).ToList();
+
+            var firstIdx = contentParagraphs.FindIndex(p => p.Id == paragraphIds[0]);
+            if (firstIdx < 0)
+                return null;
+
+            // Walk forward from the first target collecting the leading contiguous run of the
+            // requested ids. Narration and already-attributed character paragraphs are context and
+            // never break the run; an unassigned character paragraph that is not the next requested
+            // id ends it — everything requested beyond that point is deferred.
+            var included = new List<Guid> { paragraphIds[0] };
+            var lastIncludedIdx = firstIdx;
+            var nextRequested = 1;
+            for (int i = firstIdx + 1; i < contentParagraphs.Count && nextRequested < paragraphIds.Count; i++)
+            {
+                var p = contentParagraphs[i];
+                if (p.Id == paragraphIds[nextRequested])
+                {
+                    included.Add(p.Id);
+                    lastIncludedIdx = i;
+                    nextRequested++;
+                }
+                else if (p.HasCharacterItem && p.CharacterName == null)
+                {
+                    break;
+                }
+            }
+            var deferred = paragraphIds.Skip(nextRequested).ToList();
+
+            var entries = new List<BatchContextEntry>();
+            int precedingStart = Math.Max(0, firstIdx - before);
+            for (int i = precedingStart; i < firstIdx; i++)
+            {
+                var p = contentParagraphs[i];
+                entries.Add(new BatchContextEntry(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem), null));
+            }
+
+            var targetIndex = 0;
+            for (int i = firstIdx; i <= lastIncludedIdx; i++)
+            {
+                var p = contentParagraphs[i];
+                if (targetIndex < included.Count && p.Id == included[targetIndex])
+                    entries.Add(new BatchContextEntry(p.Text, null, targetIndex++));
+                else
+                    entries.Add(new BatchContextEntry(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem), null));
+            }
+
+            int followingEnd = Math.Min(contentParagraphs.Count, lastIncludedIdx + 1 + after);
+            for (int i = lastIncludedIdx + 1; i < followingEnd; i++)
+            {
+                var p = contentParagraphs[i];
+                entries.Add(new BatchContextEntry(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem), null));
+            }
+
+            return new ParagraphBatchContext(entries, included, deferred);
+        }
+
+        // CharacterId set -> known speaker name. No CharacterId + has Character item -> dialog unattributed -> null. No Character items -> narration.
+        private static string? ResolveSpeaker(string? characterName, bool hasCharacterItem)
+            => characterName ?? (hasCharacterItem ? null : "Narrator");
+
+        private sealed record ChapterContextRow(
+            Guid Id, bool HasCharacterItem, bool HasContentItem, string? CharacterName, string Text);
+
+        private async Task<List<ChapterContextRow>> LoadChapterContextRowsAsync(ProjectFolderId folderId, Guid chapterId)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            return await db.Paragraphs
+                .Where(p => p.ChapterId == chapterId)
+                .OrderBy(p => p.Order)
+                .Select(p => new ChapterContextRow(
+                    p.Id,
+                    p.Items.Any(i => i.ItemType == ParagraphItemType.Character),
+                    p.Items.Any(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration),
+                    p.Items
+                        .Where(i => i.ItemType == ParagraphItemType.Character && i.Character != null)
+                        .Select(i => i.Character!.Name)
+                        .FirstOrDefault(),
+                    string.Join(" ", p.Items
+                        .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                        .OrderBy(i => i.Order)
+                        .Select(i => i.Text ?? ""))))
+                .ToListAsync();
         }
     }
 }

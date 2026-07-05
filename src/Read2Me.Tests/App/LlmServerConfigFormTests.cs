@@ -90,6 +90,46 @@ namespace Read2Me.Tests.App
             Assert.Equal("Temperature must be a number.", form.Validate());
         }
 
+        // ---- Validate: attribution batch size ----
+
+        [Theory]
+        [InlineData("0")]
+        [InlineData("-1")]
+        [InlineData("abc")]
+        [InlineData("1.5")]
+        public void Validate_InvalidBatchSize_ReturnsError(string text)
+        {
+            var form = Valid();
+            form.AttributionBatchSize = text;
+            Assert.Equal("Paragraphs per request must be a whole number of 1 or more.", form.Validate());
+        }
+
+        [Theory]
+        [InlineData("1")]
+        [InlineData("5")]
+        [InlineData("")]
+        [InlineData(null)]
+        public void Validate_ValidOrBlankBatchSize_Passes(string? text)
+        {
+            var form = Valid();
+            form.AttributionBatchSize = text;
+            Assert.Null(form.Validate());
+        }
+
+        [Fact]
+        public void BuildConfig_BlankBatchSize_DefaultsToOne()
+        {
+            Assert.Equal(1, Valid().BuildConfig().AttributionBatchSize);
+        }
+
+        [Fact]
+        public void BuildConfig_BatchSize_Parses()
+        {
+            var form = Valid();
+            form.AttributionBatchSize = "4";
+            Assert.Equal(4, form.BuildConfig().AttributionBatchSize);
+        }
+
         // ---- BuildConfig: trimming + omit semantics ----
 
         [Fact]
@@ -172,6 +212,7 @@ namespace Read2Me.Tests.App
                 MaxTokens = 1024,
                 FrequencyPenalty = 0.1,
                 PresencePenalty = 0.2,
+                AttributionBatchSize = 3,
             };
 
             var rebuilt = LlmServerConfigForm.FromConfig(original).BuildConfig();
@@ -184,6 +225,7 @@ namespace Read2Me.Tests.App
             Assert.Equal(original.Temperature, rebuilt.Temperature);
             Assert.Equal(original.MaxTokens, rebuilt.MaxTokens);
             Assert.Equal(original.PresencePenalty, rebuilt.PresencePenalty);
+            Assert.Equal(original.AttributionBatchSize, rebuilt.AttributionBatchSize);
         }
     }
 }

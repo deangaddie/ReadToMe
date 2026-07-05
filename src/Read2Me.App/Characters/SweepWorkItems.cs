@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Read2Me.App.Characters;
 
-public sealed record PromptWorkItem(Guid CharacterId, Guid VoiceId, string CharacterName);
+public sealed record PromptWorkItem(Guid CharacterId, string CharacterName, bool IsNarrator = false);
 
 public sealed record AudioWorkItem(
     Guid CharacterId,

@@ -6,10 +6,12 @@ namespace Read2Me.Services
     public class BookCommandHandler : IBookCommandHandler
     {
         private readonly IServiceProvider _serviceProvider;
+        private readonly ProjectDbSession _session;
 
-        public BookCommandHandler(IServiceProvider serviceProvider)
+        public BookCommandHandler(IServiceProvider serviceProvider, ProjectDbSession session)
         {
             _serviceProvider = serviceProvider;
+            _session = session;
         }
 
         public async Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
@@ -17,13 +19,23 @@ namespace Read2Me.Services
             var handlerType = typeof(ICommandHandler<>).MakeGenericType(command.GetType());
             var handler = _serviceProvider.GetService(handlerType);
 
-            if (handler != null)
+            if (handler == null)
+                throw new NotSupportedException($"Unhandled command type: {command.GetType().Name}");
+
+            var method = handlerType.GetMethod(nameof(ICommandHandler<BookCommand>.HandleAsync));
+            try
             {
-                var method = handlerType.GetMethod(nameof(ICommandHandler<BookCommand>.HandleAsync));
                 return await (Task<Guid?>)method!.Invoke(handler, [command, ct])!;
             }
-
-            throw new NotSupportedException($"Unhandled command type: {command.GetType().Name}");
+            finally
+            {
+                // Evict the cached tracking context so the next read opens a fresh one.
+                // Handlers mutate through the session's long-lived DbContext (and some use
+                // ExecuteDelete/ExecuteUpdate, which bypass the change tracker entirely), so
+                // without eviction a follow-up read returns stale tracked entities — e.g. a
+                // deleted voice still counted in Character.Voices. Mirrors BookUseCases.ImportAsync.
+                _session.Evict(command.FolderId);
+            }
         }
 
         // Keep for backward compat with tests that reference BookCommandHandler.ApplyMutationAsync directly.

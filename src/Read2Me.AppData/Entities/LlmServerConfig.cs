@@ -24,5 +24,11 @@ namespace Read2Me.AppData.Entities
         public int? MaxTokens { get; set; }
         public double? FrequencyPenalty { get; set; }
         public double? PresencePenalty { get; set; }
+
+        /// <summary>
+        /// Character paragraphs sent per attribution request. 1 = one paragraph per request;
+        /// greater values batch consecutive unassigned character paragraphs into a single prompt.
+        /// </summary>
+        public int AttributionBatchSize { get; set; } = 1;
     }
 }

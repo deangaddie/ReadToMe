@@ -31,14 +31,14 @@ namespace Read2Me.Services.Llm
         }
 
         public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
-            LlmServerConfig config, string prompt,
+            LlmServerConfig config, string prompt, string? jsonSchema = null,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             _logger.LogTrace("LLM prompt:\n{Prompt}", prompt);
 
             var http = CreateClient(config);
 
-            var body = OpenAiRequestBuilder.BuildChatBody(config, prompt, stream: true);
+            var body = OpenAiRequestBuilder.BuildChatBody(config, prompt, stream: true, jsonSchema);
             using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiStreamParser.Combine(config.BaseUrl, "v1/chat/completions"))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),

@@ -66,7 +66,7 @@ namespace Read2Me.Tests.Services.Characters
             }
 
             public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
-                LlmServerConfig config, string prompt,
+                LlmServerConfig config, string prompt, string? jsonSchema = null,
                 [EnumeratorCancellation] CancellationToken ct = default)
             {
                 WasCalled = true;
@@ -104,6 +104,18 @@ namespace Read2Me.Tests.Services.Characters
                 ReceivedBefore = before;
                 ReceivedAfter = after;
                 return Task.FromResult(_context);
+            }
+
+            public ParagraphBatchContext? BatchContext { get; set; }
+            public IReadOnlyList<Guid>? ReceivedBatchIds { get; private set; }
+
+            public Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
+                ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after)
+            {
+                ReceivedBefore = before;
+                ReceivedAfter = after;
+                ReceivedBatchIds = paragraphIds;
+                return Task.FromResult(BatchContext);
             }
 
             public Task<Data.Entities.Project?> GetProjectAsync(ProjectFolderId folderId)
@@ -184,6 +196,23 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var llm = new FakeLlmClient("""{ "character": "Alice", "voice_instructions": "calm" }""");
+            var svc = NewService(llm, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+
+            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+
+            Assert.Equal(AttributionStatus.Resolved, result.Status);
+            Assert.Equal("Alice", result.Character);
+            Assert.Equal("calm", result.VoiceInstructions);
+        }
+
+        [Fact]
+        public async Task ResponseWithReasoningField_ParsesAndResolves()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var llm = new FakeLlmClient(
+                """{ "reasoning": "the tag 'said Alice' follows the quote", "character": "Alice", "voice_instructions": "calm" }""");
             var svc = NewService(llm, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
 
             var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
@@ -279,8 +308,8 @@ namespace Read2Me.Tests.Services.Characters
 
             await svc.AttributeAsync(TestItem, CancellationToken.None);
 
-            Assert.Equal(4, fakeReader.ReceivedBefore);
-            Assert.Equal(2, fakeReader.ReceivedAfter);
+            Assert.Equal(PromptTemplates.DefaultContextParagraphsBefore, fakeReader.ReceivedBefore);
+            Assert.Equal(PromptTemplates.DefaultContextParagraphsAfter, fakeReader.ReceivedAfter);
         }
 
         [Fact]
@@ -421,6 +450,316 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Contains(events, e => e is StreamFailed sf && sf.Reason.Contains("network down"));
         }
 
+        // ---------------------------------------------------------------
+        // Batch attribution
+        // ---------------------------------------------------------------
+
+        private sealed class SequenceLlmClient(params string[] responses) : ILlmClient
+        {
+            public int CallCount { get; private set; }
+            public List<string> Prompts { get; } = [];
+
+            public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
+                LlmServerConfig config, string prompt, string? jsonSchema = null,
+                [EnumeratorCancellation] CancellationToken ct = default)
+            {
+                Prompts.Add(prompt);
+                var response = responses[Math.Min(CallCount, responses.Length - 1)];
+                CallCount++;
+                yield return new LlmChatChunk(null, response, false);
+                yield return new LlmChatChunk(null, null, Done: true);
+                await Task.CompletedTask;
+            }
+
+            public Task<IReadOnlyList<string>> GetModelsAsync(LlmServerConfig config, CancellationToken ct = default)
+                => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+        }
+
+        private static (List<QueuedParagraph> Batch, ParagraphBatchContext Ctx) MakeBatch(int count)
+        {
+            var chapterId = Guid.NewGuid();
+            var batch = Enumerable.Range(0, count)
+                .Select(i => new QueuedParagraph(Folder, Guid.NewGuid(), $"P{i}", chapterId, Guid.NewGuid(), Guid.NewGuid()))
+                .ToList();
+            var entries = batch
+                .Select((_, i) => new BatchContextEntry($"Text {i}", null, i))
+                .ToList();
+            var ctx = new ParagraphBatchContext(
+                entries, [.. batch.Select(b => b.ParagraphId)], []);
+            return (batch, ctx);
+        }
+
+        [Fact]
+        public async Task Batch_ValidResponse_ResolvesEachIndex_SingleLlmCall()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var (batch, ctx) = MakeBatch(3);
+            var llm = new SequenceLlmClient("""
+                [ { "index": 0, "character": "Alice", "voice_instructions": "calm" },
+                  { "index": 1, "character": "unknown" },
+                  { "index": 2, "character": "Bob" } ]
+                """);
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal(1, llm.CallCount);
+            Assert.Empty(result.Deferred);
+            Assert.Equal(3, result.Outcomes.Count);
+            Assert.Equal(batch[0], result.Outcomes[0].Item);
+            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[0].Outcome.Status);
+            Assert.Equal("Alice", result.Outcomes[0].Outcome.Character);
+            Assert.Equal("calm", result.Outcomes[0].Outcome.VoiceInstructions);
+            Assert.Equal(AttributionStatus.Unknown, result.Outcomes[1].Outcome.Status);
+            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[2].Outcome.Status);
+            Assert.Equal("Bob", result.Outcomes[2].Outcome.Character);
+        }
+
+        [Fact]
+        public async Task Batch_ResponseWithReasoningField_ParsesAndResolves()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var (batch, ctx) = MakeBatch(2);
+            var llm = new SequenceLlmClient("""
+                [ { "index": 0, "reasoning": "attribution tag after the quote", "character": "Alice", "voice_instructions": "calm" },
+                  { "index": 1, "reasoning": "two-person alternation", "character": "Bob", "voice_instructions": "gruff" } ]
+                """);
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal(1, llm.CallCount);
+            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[0].Outcome.Status);
+            Assert.Equal("Alice", result.Outcomes[0].Outcome.Character);
+            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[1].Outcome.Status);
+            Assert.Equal("Bob", result.Outcomes[1].Outcome.Character);
+        }
+
+        [Fact]
+        public async Task Batch_OfOne_DelegatesToSinglePath()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var llm = new SequenceLlmClient("""{ "character": "Alice", "voice_instructions": "calm" }""");
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject());
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync([TestItem], CancellationToken.None);
+
+            var (item, outcome) = Assert.Single(result.Outcomes);
+            Assert.Equal(TestItem, item);
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
+            Assert.Equal("Alice", outcome.Character);
+            // Single path — the single-paragraph reader method was used, not the batch one.
+            Assert.Null(reader.ReceivedBatchIds);
+        }
+
+        [Fact]
+        public async Task Batch_UnparseableResponse_FallsBackToSinglePerItem()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var (batch, ctx) = MakeBatch(2);
+            var llm = new SequenceLlmClient(
+                "not json at all",
+                """{ "character": "Alice", "voice_instructions": "" }""");
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            // 1 batch call + 2 single fallbacks
+            Assert.Equal(3, llm.CallCount);
+            Assert.Equal(2, result.Outcomes.Count);
+            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
+        }
+
+        [Fact]
+        public async Task Batch_MissingIndex_FallsBackToSingleForThatItemOnly()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var (batch, ctx) = MakeBatch(3);
+            var llm = new SequenceLlmClient(
+                """[ { "index": 0, "character": "Alice" }, { "index": 2, "character": "Bob" } ]""",
+                """{ "character": "Fallback", "voice_instructions": "" }""");
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal(2, llm.CallCount);
+            Assert.Equal("Alice", result.Outcomes[0].Outcome.Character);
+            Assert.Equal("Fallback", result.Outcomes[1].Outcome.Character);
+            Assert.Equal("Bob", result.Outcomes[2].Outcome.Character);
+        }
+
+        [Fact]
+        public async Task Batch_DeferredIds_ReturnedAsDeferredItems()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var (batch, _) = MakeBatch(3);
+            // Context only includes the first two; the third was trimmed off the run.
+            var ctx = new ParagraphBatchContext(
+                [new BatchContextEntry("Text 0", null, 0), new BatchContextEntry("Text 1", null, 1)],
+                [batch[0].ParagraphId, batch[1].ParagraphId],
+                [batch[2].ParagraphId]);
+            var llm = new SequenceLlmClient(
+                """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Bob" } ]""");
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal(2, result.Outcomes.Count);
+            var deferred = Assert.Single(result.Deferred);
+            Assert.Equal(batch[2], deferred);
+        }
+
+        [Fact]
+        public async Task Batch_IncludedRunOfOne_UsesSinglePathAndReturnsDeferred()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var (batch, _) = MakeBatch(2);
+            var ctx = new ParagraphBatchContext(
+                [new BatchContextEntry("Text 0", null, 0)],
+                [batch[0].ParagraphId],
+                [batch[1].ParagraphId]);
+            var llm = new SequenceLlmClient("""{ "character": "Alice", "voice_instructions": "" }""");
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            var (item, outcome) = Assert.Single(result.Outcomes);
+            Assert.Equal(batch[0], item);
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
+            Assert.Equal(batch[1], Assert.Single(result.Deferred));
+        }
+
+        [Fact]
+        public async Task Batch_NoActiveConfig_AllItemsNoLlmConfigured()
+        {
+            var (batch, _) = MakeBatch(2);
+            var llm = new SequenceLlmClient("unused");
+            var svc = NewService(llm, new FakeProjectReader(DefaultContext(), DefaultProject()));
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal(0, llm.CallCount);
+            Assert.Equal(2, result.Outcomes.Count);
+            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.NoLlmConfigured, o.Outcome.Status));
+        }
+
+        [Fact]
+        public async Task Batch_NullContext_FallsBackToSinglePerItem()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var (batch, _) = MakeBatch(2);
+            var llm = new SequenceLlmClient("""{ "character": "Alice", "voice_instructions": "" }""");
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = null };
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal(2, llm.CallCount);
+            Assert.Equal(2, result.Outcomes.Count);
+            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
+        }
+
+        [Fact]
+        public async Task Batch_ManagedServiceThrows_AllItemsServiceUnavailable()
+        {
+            var settings = NewSettings();
+            var config = await RegisterActiveConfigAsync(settings);
+
+            var (batch, ctx) = MakeBatch(2);
+            var reporter = new FakeAiServiceReporter { Managed = true };
+            var llm = new FakeLlmClient(throws: new AiServiceStalledException(config.BaseUrl, TimeSpan.FromSeconds(120)));
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(llm, reader, settings, reporter: reporter);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal(2, result.Outcomes.Count);
+            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.ServiceUnavailable, o.Outcome.Status));
+        }
+
+        // ---------------------------------------------------------------
+        // Early stream stop (runaway reasoning after the JSON answer)
+        // ---------------------------------------------------------------
+
+        private sealed class RunawayLlmClient(string answer) : ILlmClient
+        {
+            /// <summary>Set only if the consumer keeps reading past the answer chunk.</summary>
+            public bool StreamedPastAnswer { get; private set; }
+
+            public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
+                LlmServerConfig config, string prompt, string? jsonSchema = null,
+                [EnumeratorCancellation] CancellationToken ct = default)
+            {
+                yield return new LlmChatChunk(null, answer, false);
+                StreamedPastAnswer = true;
+                yield return new LlmChatChunk("wait, let me re-check that...", null, false);
+                yield return new LlmChatChunk(null, " Actually the answer above stands.", false);
+                yield return new LlmChatChunk(null, null, Done: true);
+                await Task.CompletedTask;
+            }
+
+            public Task<IReadOnlyList<string>> GetModelsAsync(LlmServerConfig config, CancellationToken ct = default)
+                => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+        }
+
+        [Fact]
+        public async Task Single_StopsReadingStream_OnceAnswerObjectCloses()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var llm = new RunawayLlmClient("""{ "character": "Alice", "voice_instructions": "calm" }""");
+            var svc = NewService(llm, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+
+            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+
+            Assert.Equal(AttributionStatus.Resolved, result.Status);
+            Assert.Equal("Alice", result.Character);
+            Assert.False(llm.StreamedPastAnswer);
+        }
+
+        [Fact]
+        public async Task Batch_StopsReadingStream_OnceAnswerArrayCloses()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            var (batch, ctx) = MakeBatch(2);
+            var llm = new RunawayLlmClient(
+                """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Bob" } ]""");
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(llm, reader, settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal("Alice", result.Outcomes[0].Outcome.Character);
+            Assert.Equal("Bob", result.Outcomes[1].Outcome.Character);
+            Assert.False(llm.StreamedPastAnswer);
+        }
+
         private sealed class FakeLlmClientWithThinking : ILlmClient
         {
             private readonly string _thinking;
@@ -433,7 +772,7 @@ namespace Read2Me.Tests.Services.Characters
             }
 
             public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
-                LlmServerConfig config, string prompt,
+                LlmServerConfig config, string prompt, string? jsonSchema = null,
                 [EnumeratorCancellation] CancellationToken ct = default)
             {
                 yield return new LlmChatChunk(_thinking, null, false);

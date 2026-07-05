@@ -1,10 +1,12 @@
 using MudBlazor;
 using NSubstitute;
+using Read2Me.App.Services.Preflight;
 using Read2Me.App.State;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.State
@@ -20,13 +22,14 @@ namespace Read2Me.Tests.State
             AudioQueueService AudioQueue,
             ISnackbar Snackbar,
             BookSelectionState SelectionState,
-            AudioItemSelectionState AudioSelectionState)
+            AudioItemSelectionState AudioSelectionState,
+            FakeAiPreflight Preflight)
         {
             public FolderSelection Selection => SelectionState.For(Folder);
             public AudioItemSelection AudioSelection => AudioSelectionState.For(Folder);
         }
 
-        private static Context Create(bool hasTtsConfig = false)
+        private static Context Create(bool hasTtsConfig = false, bool preflightResult = true)
         {
             var reader = Substitute.For<IProjectReader>();
             var characterQueue = new CharacterQueueService();
@@ -54,11 +57,12 @@ namespace Read2Me.Tests.State
                 hasTtsConfig ? new Read2Me.AppData.Entities.ParagraphTtsServiceConfig() : null;
             paragraphTtsSettings.GetActiveConfigAsync().Returns(config);
 
+            var preflight = new FakeAiPreflight { Result = preflightResult };
             var coordinator = new BookSelectionCoordinator(
                 reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar,
-                selectionState, audioSelectionState);
+                selectionState, audioSelectionState, preflight);
 
-            return new Context(coordinator, reader, characterQueue, audioQueue, snackbar, selectionState, audioSelectionState);
+            return new Context(coordinator, reader, characterQueue, audioQueue, snackbar, selectionState, audioSelectionState, preflight);
         }
 
         // Prime _lastFolder without adding to selection
@@ -303,6 +307,73 @@ namespace Read2Me.Tests.State
 
             Assert.Equal(0, ctx.Coordinator.SelectedAudioItemCount);
             Assert.Equal(AudioItemQueueStatus.Queued, ctx.AudioQueue.StatusOf(Folder, itemId));
+        }
+
+        // ---------------------------------------------------------------
+        // AI pre-flight gating
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task AddSelectionToCharacterQueueAsync_PreflightDeclined_NothingEnqueued_SelectionKept()
+        {
+            var ctx = Create(preflightResult: false);
+            var pId = Guid.NewGuid();
+
+            await ctx.Coordinator.ToggleParagraphAsync(Folder, pId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), on: true);
+
+            await ctx.Coordinator.AddSelectionToCharacterQueueAsync();
+
+            Assert.Equal([AiTaskKind.CharacterAttribution], ctx.Preflight.Calls);
+            Assert.Equal(1, ctx.Coordinator.SelectedParagraphCount);
+            await ctx.Reader.DidNotReceive().GetOrderedParagraphsAsync(
+                Arg.Any<ProjectFolderId>(), Arg.Any<IEnumerable<Guid>>());
+        }
+
+        [Fact]
+        public async Task AddSelectionToCharacterQueueAsync_EmptySelection_PreflightNotCalled()
+        {
+            var ctx = Create();
+            await SetFolder(ctx.Coordinator);
+
+            await ctx.Coordinator.AddSelectionToCharacterQueueAsync();
+
+            Assert.Empty(ctx.Preflight.Calls);
+        }
+
+        [Fact]
+        public async Task AddSelectionToAudioQueueAsync_PreflightDeclined_NothingEnqueued_SelectionKept()
+        {
+            var ctx = Create(hasTtsConfig: true, preflightResult: false);
+            var chId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var volId = Guid.NewGuid();
+            var itemId = Guid.NewGuid(); var paraId = Guid.NewGuid();
+            var item = new AudioItemRef(itemId, paraId, chId, ptId, volId);
+
+            ctx.Reader.GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, Arg.Any<bool>(), Arg.Any<bool>())
+                .Returns(new List<AudioItemRef> { item });
+            await ctx.Coordinator.SetAudioNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true);
+
+            await ctx.Coordinator.AddSelectionToAudioQueueAsync();
+
+            Assert.Equal([AiTaskKind.AudioGeneration], ctx.Preflight.Calls);
+            Assert.Equal(1, ctx.Coordinator.SelectedAudioItemCount);
+            await ctx.Reader.DidNotReceive().GetOrderedAudioItemRefsAsync(
+                Arg.Any<ProjectFolderId>(), Arg.Any<IEnumerable<Guid>>());
+        }
+
+        [Fact]
+        public async Task AddSelectionToAudioQueueAsync_NoTtsConfig_PreflightNotCalled()
+        {
+            var ctx = Create(hasTtsConfig: false);
+            var chId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var volId = Guid.NewGuid();
+            var itemId = Guid.NewGuid(); var paraId = Guid.NewGuid();
+
+            ctx.Reader.GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, Arg.Any<bool>(), Arg.Any<bool>())
+                .Returns(new List<AudioItemRef> { new AudioItemRef(itemId, paraId, chId, ptId, volId) });
+            await ctx.Coordinator.SetAudioNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true);
+
+            await ctx.Coordinator.AddSelectionToAudioQueueAsync();
+
+            Assert.Empty(ctx.Preflight.Calls);
         }
     }
 }

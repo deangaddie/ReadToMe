@@ -25,13 +25,13 @@ public sealed class DockerAiServiceRegistry
     {
         var services = new[]
         {
-            new DockerAiService("llama",            "read2me-llama",          "http://localhost:8080", "/health", LlamaWarmup("http://localhost:8080")),
-            new DockerAiService("chatterbox",       "read2me-chatterbox",     "http://localhost:8000", "/docs"),
-            new DockerAiService("chatterbox-turbo", "read2me-chatterbox-turbo", "http://localhost:8001", "/docs"),
-            new DockerAiService("qwen3-tts",        "read2me-qwen3-tts",      "http://localhost:8100", "/docs"),
-            new DockerAiService("qwen3-tts-base",   "read2me-qwen3-tts-base", "http://localhost:8101", "/docs"),
-            new DockerAiService("voxcpm2",          "read2me-voxcpm2",        "http://localhost:8003", "/docs"),
-            new DockerAiService("whisper",          "read2me-whisper",        "http://localhost:9000", "/docs"),
+            new DockerAiService("llama",            "read2me-llama",          "http://localhost:8080", "/health", LlamaWarmup("http://localhost:8080"), UsesGpu: true),
+            new DockerAiService("chatterbox",       "read2me-chatterbox",     "http://localhost:8000", "/docs", UsesGpu: true),
+            new DockerAiService("chatterbox-turbo", "read2me-chatterbox-turbo", "http://localhost:8001", "/docs", UsesGpu: true),
+            new DockerAiService("qwen3-tts",        "read2me-qwen3-tts",      "http://localhost:8100", "/docs", UsesGpu: true),
+            new DockerAiService("qwen3-tts-base",   "read2me-qwen3-tts-base", "http://localhost:8101", "/docs", UsesGpu: true),
+            new DockerAiService("voxcpm2",          "read2me-voxcpm2",        "http://localhost:8003", "/docs", UsesGpu: true),
+            new DockerAiService("whisper",          "read2me-whisper",        "http://localhost:9000", "/docs", UsesGpu: true),
             new DockerAiService("whisper-cpu",      "read2me-whisper-cpu",    "http://localhost:9001", "/docs"),
             new DockerAiService("minilm-l6",        "read2me-minilm-l6",      "http://localhost:8200", "/docs", SimilarityWarmup("http://localhost:8200")),
             new DockerAiService("mpnet-base-v2",    "read2me-mpnet-base-v2",  "http://localhost:8201", "/docs", SimilarityWarmup("http://localhost:8201")),
@@ -111,7 +111,7 @@ public sealed class DockerAiServiceRegistry
                 Model = active.Model,
                 MaxTokens = 1,
             };
-            await foreach (var _ in llm.StreamChatAsync(warm, "hi", ct))
+            await foreach (var _ in llm.StreamChatAsync(warm, "hi", ct: ct))
             {
                 // Drain the stream; the load happens server-side as the first token is produced.
             }

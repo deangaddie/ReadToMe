@@ -5,7 +5,7 @@
 
 <MudText Typo="Typo.h4" Class="mb-6">LLM Prompts</MudText>
 
-@if (_characterPrompt == null || _voicePrompt == null)
+@if (_characterPrompt == null || _batchCharacterPrompt == null || _voicePrompt == null || _voicePlanPrompt == null || _narratorVoicePlanPrompt == null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
@@ -54,11 +54,145 @@ else
         </MudStack>
     </MudPaper>
 
+    @* Batch Character Prompt *@
+    <MudPaper Class="pa-5 mb-6" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-1">Batch Character Prompt</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Used instead of the single-paragraph prompt when the active LLM server's "Paragraphs per request" is greater than 1.
+            Attributes several indexed paragraphs in one request.
+        </MudText>
+
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
+            @foreach (var token in _characterTokens)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@("{{" + token + "}}")</MudChip>
+            }
+        </MudStack>
+
+        <MudTextField @bind-Value="_batchCharacterPrompt" Label="Prompt template" Variant="Variant.Outlined"
+                      Lines="14" Class="mb-3" />
+
+        <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@CharacterBatchAttributionSchema.JsonExample</MudText>
+        </MudPaper>
+
+        <MudExpansionPanels Elevation="0" Class="mb-3">
+            <MudExpansionPanel Text="Preview with sample values">
+                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@RenderBatchCharacterPreview()</MudText>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveBatchCharacterPromptAsync">
+                Save
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.RestartAlt"
+                       OnClick="ResetBatchCharacterPromptAsync">
+                Reset to default
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @* Character Voice Plan Prompt *@
+    <MudPaper Class="pa-5 mb-6" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-1">Character Voice Plan Prompt</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Sent to the LLM by "Generate voice prompts" for each character without voices. Expects a JSON array of all
+            the voices the character needs — each with a name, a description (including where in the book it applies)
+            and a voice-design prompt.
+        </MudText>
+
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
+            @foreach (var token in _voicePlanTokens)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@("{{" + token + "}}")</MudChip>
+            }
+        </MudStack>
+
+        <MudTextField @bind-Value="_voicePlanPrompt" Label="Prompt template" Variant="Variant.Outlined"
+                      Lines="14" Class="mb-3" />
+
+        <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@VoicePlanSchema.JsonExample</MudText>
+        </MudPaper>
+
+        <MudExpansionPanels Elevation="0" Class="mb-3">
+            <MudExpansionPanel Text="Preview with sample values">
+                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@RenderVoicePlanPreview()</MudText>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveVoicePlanPromptAsync">
+                Save
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.RestartAlt"
+                       OnClick="ResetVoicePlanPromptAsync">
+                Reset to default
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @* Narrator Voice Plan Prompt *@
+    <MudPaper Class="pa-5 mb-6" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-1">Narrator Voice Plan Prompt</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Used instead of the character voice-plan prompt when "Generate voice prompts" runs for the narrator.
+            Asks for one steady narration voice, never a set of per-character voices. Expects the same JSON array shape.
+        </MudText>
+
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
+            @foreach (var token in _voicePlanTokens)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@("{{" + token + "}}")</MudChip>
+            }
+        </MudStack>
+
+        <MudTextField @bind-Value="_narratorVoicePlanPrompt" Label="Prompt template" Variant="Variant.Outlined"
+                      Lines="14" Class="mb-3" />
+
+        <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@VoicePlanSchema.JsonExample</MudText>
+        </MudPaper>
+
+        <MudExpansionPanels Elevation="0" Class="mb-3">
+            <MudExpansionPanel Text="Preview with sample values">
+                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@RenderNarratorVoicePlanPreview()</MudText>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveNarratorVoicePlanPromptAsync">
+                Save
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.RestartAlt"
+                       OnClick="ResetNarratorVoicePlanPromptAsync">
+                Reset to default
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
     @* Character Voice Prompt *@
     <MudPaper Class="pa-5" Outlined="true">
         <MudText Typo="Typo.h6" Class="mb-1">Character Voice Prompt</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            Sent to the LLM to generate a voice-design prompt for a specific character. Expects a single plain-text response.
+            Sent to the LLM to generate a voice-design prompt for a single existing voice (per-voice regenerate on the
+            character detail panel). Expects a single plain-text response.
         </MudText>
 
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
@@ -95,7 +229,10 @@ else
 
 @code {
     string? _characterPrompt;
+    string? _batchCharacterPrompt;
     string? _voicePrompt;
+    string? _voicePlanPrompt;
+    string? _narratorVoicePlanPrompt;
 
     static readonly string[] _characterTokens =
     [
@@ -111,6 +248,14 @@ else
         PromptTemplates.BookTitle,
         PromptTemplates.BookAuthor,
         PromptTemplates.CharacterName,
+    ];
+
+    static readonly string[] _voicePlanTokens =
+    [
+        PromptTemplates.BookTitle,
+        PromptTemplates.BookAuthor,
+        PromptTemplates.CharacterName,
+        PromptTemplates.ResponseFormat,
     ];
 
     static readonly IReadOnlyDictionary<string, string> _sampleValues =
@@ -135,6 +280,23 @@ else
             [PromptTemplates.ResponseFormat]  = CharacterAttributionSchema.JsonExample,
         };
 
+    static readonly IReadOnlyDictionary<string, string> _batchSampleValues =
+        new Dictionary<string, string>(_sampleValues)
+        {
+            [PromptTemplates.ContextJson]     = """
+                {
+                  "paragraphs": [
+                    { "paragraph": "The road goes ever on and on, down from the door where it began.", "speaker": "Narrator" },
+                    { "paragraph": "\"You are a very fine person, Mr. Baggins,\" said Gandalf.", "speaker": "Gandalf" },
+                    { "index": 0, "paragraph": "\"I'm going on an adventure!\" he cried." },
+                    { "paragraph": "He paused and looked back. The sun was already westering.", "speaker": "Narrator" },
+                    { "index": 1, "paragraph": "\"Then it is settled,\" said the dwarf." }
+                  ]
+                }
+                """,
+            [PromptTemplates.ResponseFormat]  = CharacterBatchAttributionSchema.JsonExample,
+        };
+
     protected override async Task OnInitializedAsync()
     {
         PromptService.OnChanged += HandleChanged;
@@ -146,15 +308,39 @@ else
     async Task LoadAsync()
     {
         _characterPrompt = await PromptService.GetCharacterPromptAsync();
+        _batchCharacterPrompt = await PromptService.GetBatchCharacterPromptAsync();
         _voicePrompt = await PromptService.GetVoicePromptAsync();
+        _voicePlanPrompt = await PromptService.GetVoicePlanPromptAsync();
+        _narratorVoicePlanPrompt = await PromptService.GetNarratorVoicePlanPromptAsync();
         StateHasChanged();
     }
 
     string RenderCharacterPreview() =>
         _characterPrompt is null ? string.Empty : PromptTemplates.Render(_characterPrompt, _sampleValues);
 
+    string RenderBatchCharacterPreview() =>
+        _batchCharacterPrompt is null ? string.Empty : PromptTemplates.Render(_batchCharacterPrompt, _batchSampleValues);
+
     string RenderVoicePreview() =>
         _voicePrompt is null ? string.Empty : PromptTemplates.Render(_voicePrompt, _sampleValues);
+
+    static readonly IReadOnlyDictionary<string, string> _voicePlanSampleValues =
+        new Dictionary<string, string>(_sampleValues)
+        {
+            [PromptTemplates.ResponseFormat] = VoicePlanSchema.JsonExample,
+        };
+
+    string RenderVoicePlanPreview() =>
+        _voicePlanPrompt is null ? string.Empty : PromptTemplates.Render(_voicePlanPrompt, _voicePlanSampleValues);
+
+    static readonly IReadOnlyDictionary<string, string> _narratorVoicePlanSampleValues =
+        new Dictionary<string, string>(_voicePlanSampleValues)
+        {
+            [PromptTemplates.CharacterName] = "Narrator",
+        };
+
+    string RenderNarratorVoicePlanPreview() =>
+        _narratorVoicePlanPrompt is null ? string.Empty : PromptTemplates.Render(_narratorVoicePlanPrompt, _narratorVoicePlanSampleValues);
 
     async Task SaveCharacterPromptAsync()
     {
@@ -169,6 +355,19 @@ else
         Snackbar.Add("Character prompt reset to default", Severity.Info);
     }
 
+    async Task SaveBatchCharacterPromptAsync()
+    {
+        await PromptService.SetBatchCharacterPromptAsync(_batchCharacterPrompt ?? string.Empty);
+        Snackbar.Add("Batch character prompt saved", Severity.Success);
+    }
+
+    async Task ResetBatchCharacterPromptAsync()
+    {
+        await PromptService.ResetBatchCharacterPromptAsync();
+        await LoadAsync();
+        Snackbar.Add("Batch character prompt reset to default", Severity.Info);
+    }
+
     async Task SaveVoicePromptAsync()
     {
         await PromptService.SetVoicePromptAsync(_voicePrompt ?? string.Empty);
@@ -180,6 +379,32 @@ else
         await PromptService.ResetVoicePromptAsync();
         await LoadAsync();
         Snackbar.Add("Voice prompt reset to default", Severity.Info);
+    }
+
+    async Task SaveVoicePlanPromptAsync()
+    {
+        await PromptService.SetVoicePlanPromptAsync(_voicePlanPrompt ?? string.Empty);
+        Snackbar.Add("Voice plan prompt saved", Severity.Success);
+    }
+
+    async Task ResetVoicePlanPromptAsync()
+    {
+        await PromptService.ResetVoicePlanPromptAsync();
+        await LoadAsync();
+        Snackbar.Add("Voice plan prompt reset to default", Severity.Info);
+    }
+
+    async Task SaveNarratorVoicePlanPromptAsync()
+    {
+        await PromptService.SetNarratorVoicePlanPromptAsync(_narratorVoicePlanPrompt ?? string.Empty);
+        Snackbar.Add("Narrator voice plan prompt saved", Severity.Success);
+    }
+
+    async Task ResetNarratorVoicePlanPromptAsync()
+    {
+        await PromptService.ResetNarratorVoicePlanPromptAsync();
+        await LoadAsync();
+        Snackbar.Add("Narrator voice plan prompt reset to default", Severity.Info);
     }
 
     public void Dispose()

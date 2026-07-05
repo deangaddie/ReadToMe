@@ -10,6 +10,7 @@
 @inject AudiobookAssemblyService Assembly
 @inject VoiceBatchRunner Batch
 @inject EventBroadcaster<VoiceBatchEvent> BatchEvents
+@inject VoicePromptGenerationState VoicePromptState
 @implements IDisposable
 
 @*
@@ -39,7 +40,12 @@
 
     var showAssembly = assemblyRunning || assemblyError != null;
     var showBatch = Batch.IsRunning;
-    var showChar = charVm.IsActive || _expanded == ExpandedStream.Llm;
+    var showSingleVoice = VoicePromptState.IsRunning;
+    // The prompt-generation batch and the single per-voice regenerate both drive the LLM,
+    // so their live stream is the LLM stream. Either owns the LLM expander while active.
+    var batchDrivesLlm = showBatch && Batch.CurrentOperation == GeneratePromptsPhase.OperationName;
+    var llmOwnedByVoice = batchDrivesLlm || showSingleVoice;
+    var showChar = charVm.IsActive || (_expanded == ExpandedStream.Llm && !llmOwnedByVoice);
     var showAudio = audioVm.IsActive || _expanded == ExpandedStream.Audio;
 
     var isAudioMode = Presenter.ViewMode == BookViewMode.SplitAudio;
@@ -47,7 +53,7 @@
     var attrSelCount = Presenter.SelectedParagraphCount;
     var showSelection = isAudioMode ? audioSelCount > 0 : attrSelCount > 0;
 
-    var anyRow = showAssembly || showBatch || showChar || showAudio || showSelection;
+    var anyRow = showAssembly || showBatch || showSingleVoice || showChar || showAudio || showSelection;
 }
 
 @if (anyRow)
@@ -168,11 +174,41 @@
                 <MudSpacer />
                 <MudProgressCircular Size="Size.Small" Indeterminate="true"
                                      Style="color:var(--mud-palette-dark-text); opacity:0.7; width:16px; height:16px;" />
+                @if (batchDrivesLlm)
+                {
+                    <MudTooltip Text="@(_expanded == ExpandedStream.Llm ? "Hide live stream" : "Show live stream")">
+                        <MudIconButton Icon="@(_expanded == ExpandedStream.Llm ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowUp)"
+                                       Size="Size.Small" aria-label="Toggle LLM stream"
+                                       Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                       OnClick="@(() => ToggleStream(ExpandedStream.Llm))" />
+                    </MudTooltip>
+                }
                 <MudTooltip Text="Cancel">
                     <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small"
                                    aria-label="Cancel voice batch"
                                    Style="color:var(--mud-palette-dark-text); opacity:0.7;"
                                    OnClick="@(() => Batch.Cancel())" />
+                </MudTooltip>
+            </div>
+        }
+
+        @if (showSingleVoice)
+        {
+            <div style="@RowStyle(false)">
+                <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small" Style="opacity:0.7;" />
+                <span><strong>Generating voice prompt</strong></span>
+                @if (!string.IsNullOrEmpty(VoicePromptState.CharacterName))
+                {
+                    <span style="opacity:0.7;">@VoicePromptState.CharacterName</span>
+                }
+                <MudSpacer />
+                <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                                     Style="color:var(--mud-palette-dark-text); opacity:0.7; width:16px; height:16px;" />
+                <MudTooltip Text="@(_expanded == ExpandedStream.Llm ? "Hide live stream" : "Show live stream")">
+                    <MudIconButton Icon="@(_expanded == ExpandedStream.Llm ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowUp)"
+                                   Size="Size.Small" aria-label="Toggle LLM stream"
+                                   Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                   OnClick="@(() => ToggleStream(ExpandedStream.Llm))" />
                 </MudTooltip>
             </div>
         }
@@ -268,6 +304,7 @@
         CharQueue.Changed += Refresh;
         AudioQueue.Changed += Refresh;
         BatchEvents.Event += OnBatchEvent;
+        VoicePromptState.Changed += Refresh;
         _ticker = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -286,6 +323,7 @@
         CharQueue.Changed -= Refresh;
         AudioQueue.Changed -= Refresh;
         BatchEvents.Event -= OnBatchEvent;
+        VoicePromptState.Changed -= Refresh;
         _ticker?.Dispose();
     }
 }

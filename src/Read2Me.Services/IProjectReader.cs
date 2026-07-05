@@ -27,6 +27,25 @@ namespace Read2Me.Services
         IReadOnlyList<ContextParagraph> Following);
 
     /// <summary>
+    /// One paragraph in a batch attribution context. <see cref="TargetIndex"/> is set only on
+    /// the paragraphs to attribute (0-based, in order); context paragraphs carry a speaker instead.
+    /// </summary>
+    public sealed record BatchContextEntry(string Text, string? Speaker, int? TargetIndex);
+
+    /// <summary>
+    /// Context for a multi-paragraph attribution request: a flat ordered span of paragraphs
+    /// covering [before window … contiguous target run … after window].
+    /// <see cref="IncludedIds"/> is the leading contiguous run of the requested paragraph ids
+    /// (indexes match <see cref="BatchContextEntry.TargetIndex"/>); <see cref="DeferredIds"/> are
+    /// requested ids trimmed off because an unassigned character paragraph not in the request
+    /// sits between them and the run.
+    /// </summary>
+    public sealed record ParagraphBatchContext(
+        IReadOnlyList<BatchContextEntry> Entries,
+        IReadOnlyList<Guid> IncludedIds,
+        IReadOnlyList<Guid> DeferredIds);
+
+    /// <summary>
     /// Ordered children of a node at a given hierarchy level.
     /// Exactly one list is populated; the others are null.
     /// parentLevel=Volume → Parts; Part → Chapters; Chapter → Paragraphs (with Items included).
@@ -101,6 +120,16 @@ namespace Read2Me.Services
         /// </summary>
         Task<ParagraphContext?> GetParagraphContextAsync(
             ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after);
+
+        /// <summary>
+        /// Returns a batch attribution context for <paramref name="paragraphIds"/> (chapter order
+        /// assumed): the leading contiguous run of those paragraphs plus up to <paramref name="before"/>
+        /// preceding and <paramref name="after"/> following context paragraphs. A character paragraph
+        /// that still needs attribution and is not in the request ends the run; ids beyond that point
+        /// are returned as deferred. Returns null if the first paragraph is not found.
+        /// </summary>
+        Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
+            ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after);
     }
 
     /// <summary>Characters, their aliases/voices/voice rules, and character-paragraph attribution queries.</summary>

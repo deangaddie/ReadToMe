@@ -13,6 +13,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Events;
+using Read2Me.Services.Llm;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -46,6 +47,7 @@ namespace Read2Me.Tests.Services.Characters
             IReadOnlyList<Character>? characters = null,
             Dictionary<Guid, List<VoiceEntity>>? voicesByCharacter = null,
             string cannedPrompt = "a warm, resonant voice",
+            IReadOnlyList<VoicePlanVoice>? cannedPlan = null,
             bool orchestratorThrows = false,
             int orchestratorDelayMs = 0,
             bool audioGenerationFails = false,
@@ -63,7 +65,7 @@ namespace Read2Me.Tests.Services.Characters
             var fakeOrchestrator = new FakeVoiceOrchestrator(
                 cannedPrompt, orchestratorThrows, orchestratorDelayMs,
                 audioGenerationFails, audioGenerationThrows,
-                cannedAudioFileName, cannedTranscript);
+                cannedAudioFileName, cannedTranscript, cannedPlan);
 
             var services = new ServiceCollection();
             services.AddSingleton<IProjectReader>(fakeReader);
@@ -85,7 +87,7 @@ namespace Read2Me.Tests.Services.Characters
         // ── Tests ──────────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task GeneratePrompts_CharacterWithNoVoice_CreatesDefaultVoice()
+        public async Task GeneratePrompts_CharacterWithNoVoice_CreatesAllPlannedVoices()
         {
             var character = MakeCharacter("Alice");
             var h = BuildHarness(
@@ -93,7 +95,12 @@ namespace Read2Me.Tests.Services.Characters
                 voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
                 {
                     [character.Id] = new List<VoiceEntity>()
-                });
+                },
+                cannedPlan:
+                [
+                    new VoicePlanVoice("Young Alice", "Part 1, Chapter 1 to Part 1, Chapter 7", "a girl's voice"),
+                    new VoicePlanVoice("Adult Alice", "Part 2 onwards", "a grown woman's voice"),
+                ]);
 
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
@@ -103,9 +110,17 @@ namespace Read2Me.Tests.Services.Characters
                 .Where(c => c.CharacterId == character.Id)
                 .ToList();
 
-            Assert.Single(createCommands);
-            Assert.Equal("Default", createCommands[0].Name);
-            Assert.True(createCommands[0].IsGenerated);
+            Assert.Equal(2, createCommands.Count);
+            Assert.Equal(new[] { "Young Alice", "Adult Alice" }, createCommands.Select(c => c.Name));
+            Assert.All(createCommands, c => Assert.True(c.IsGenerated));
+
+            var updateCommands = h.CommandHandler.Issued.OfType<UpdateVoiceCommand>().ToList();
+            Assert.Equal(2, updateCommands.Count);
+            Assert.Equal("Part 1, Chapter 1 to Part 1, Chapter 7", updateCommands[0].Description);
+
+            var promptCommands = h.CommandHandler.Issued.OfType<SetVoiceDesignPromptCommand>().ToList();
+            Assert.Equal(2, promptCommands.Count);
+            Assert.Equal(new[] { "a girl's voice", "a grown woman's voice" }, promptCommands.Select(c => c.Prompt));
         }
 
         [Fact]
@@ -131,8 +146,10 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task GeneratePrompts_BlankPromptVoices_SetDesignPromptCommandIssued()
+        public async Task GeneratePrompts_CharacterAlreadyHasVoice_Skipped()
         {
+            // Characters with any existing voice are left alone — the plan sweep only
+            // fills in characters that have no voices at all.
             var character = MakeCharacter("Bob");
             var voice = MakeGeneratedVoice(character.Id, designPrompt: null);
             var h = BuildHarness(
@@ -140,19 +157,12 @@ namespace Read2Me.Tests.Services.Characters
                 voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
                 {
                     [character.Id] = new List<VoiceEntity> { voice }
-                },
-                cannedPrompt: "deep baritone");
+                });
 
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            var setCommands = h.CommandHandler.Issued
-                .OfType<SetVoiceDesignPromptCommand>()
-                .Where(c => c.VoiceId == voice.Id)
-                .ToList();
-
-            Assert.Single(setCommands);
-            Assert.Equal("deep baritone", setCommands[0].Prompt);
+            Assert.Empty(h.CommandHandler.Issued);
         }
 
         [Fact]
@@ -192,12 +202,10 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task GeneratePrompts_OrchestratorThrowsForOneVoice_SweepContinuesOtherVoicesProcessed()
+        public async Task GeneratePrompts_OrchestratorThrowsForOneCharacter_SweepContinuesOthersProcessed()
         {
             var c1 = MakeCharacter("Eve");
             var c2 = MakeCharacter("Frank");
-            var v1 = MakeGeneratedVoice(c1.Id);
-            var v2 = MakeGeneratedVoice(c2.Id);
 
             // first orchestrator call throws, second succeeds
             var fakeOrchestrator = new SequencedFakeVoiceOrchestrator(
@@ -207,8 +215,8 @@ namespace Read2Me.Tests.Services.Characters
                 new[] { c1, c2 },
                 new Dictionary<Guid, List<VoiceEntity>>
                 {
-                    [c1.Id] = new List<VoiceEntity> { v1 },
-                    [c2.Id] = new List<VoiceEntity> { v2 },
+                    [c1.Id] = new List<VoiceEntity>(),
+                    [c2.Id] = new List<VoiceEntity>(),
                 },
                 "Book", "Author");
 
@@ -231,8 +239,9 @@ namespace Read2Me.Tests.Services.Characters
             sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(sut);
 
-            // c2's voice should still get prompted even though c1 failed
-            Assert.Contains(fakeCommandHandler.Issued, c => c is SetVoiceDesignPromptCommand s && s.VoiceId == v2.Id);
+            // c2 should still get its voices even though c1 failed
+            Assert.Contains(fakeCommandHandler.Issued, c => c is CreateVoiceCommand cv && cv.CharacterId == c2.Id);
+            Assert.DoesNotContain(fakeCommandHandler.Issued, c => c is CreateVoiceCommand cv && cv.CharacterId == c1.Id);
             Assert.Equal(1, sut.Failed);
         }
 
@@ -260,12 +269,11 @@ namespace Read2Me.Tests.Services.Characters
         public async Task StartGeneratePrompts_WhileRunning_ReturnsFalse()
         {
             var character = MakeCharacter("Hank");
-            var voice = MakeGeneratedVoice(character.Id);
             var h = BuildHarness(
                 characters: new[] { character },
                 voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
                 {
-                    [character.Id] = new List<VoiceEntity> { voice }
+                    [character.Id] = new List<VoiceEntity>()
                 },
                 orchestratorDelayMs: 3000);
 
@@ -280,23 +288,23 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task GeneratePrompts_Success_PublishesVoiceUpdatedAndBatchCompleted()
+        public async Task GeneratePrompts_Success_CreatesVoicesAndPublishesBatchCompleted()
         {
             var character = MakeCharacter("Iris");
-            var voice = MakeGeneratedVoice(character.Id);
             var h = BuildHarness(
                 characters: new[] { character },
                 voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
                 {
-                    [character.Id] = new List<VoiceEntity> { voice }
+                    [character.Id] = new List<VoiceEntity>()
                 },
                 cannedPrompt: "silky smooth");
 
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.Contains(h.Events, e => e is VoiceUpdated vu && vu.VoiceId == voice.Id && vu.DesignPrompt == "silky smooth");
-            Assert.Contains(h.Events, e => e is BatchCompleted);
+            Assert.Contains(h.CommandHandler.Issued, c => c is CreateVoiceCommand cv && cv.CharacterId == character.Id);
+            Assert.Contains(h.CommandHandler.Issued, c => c is SetVoiceDesignPromptCommand s && s.Prompt == "silky smooth");
+            Assert.Contains(h.Events, e => e is BatchCompleted bc && bc.Processed == 1 && bc.Failed == 0);
         }
 
         [Fact]
@@ -308,7 +316,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ToArray();
             var voicesMap = characters.ToDictionary(
                 c => c.Id,
-                c => new List<VoiceEntity> { MakeGeneratedVoice(c.Id) });
+                c => new List<VoiceEntity>());
 
             var h = BuildHarness(
                 characters: characters,
@@ -488,10 +496,9 @@ namespace Read2Me.Tests.Services.Characters
         public async Task StartGenerateAudio_WhileGeneratePromptsRunning_ReturnsFalse()
         {
             var character = MakeCharacter("Jack");
-            var voice = MakeGeneratedVoice(character.Id);
             var h = BuildHarness(
                 characters: new[] { character },
-                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>> { [character.Id] = new List<VoiceEntity> { voice } },
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>> { [character.Id] = new List<VoiceEntity>() },
                 orchestratorDelayMs: 3000);
 
             var r1 = h.Sut.StartGeneratePrompts(Folder);
@@ -604,11 +611,13 @@ namespace Read2Me.Tests.Services.Characters
             private readonly bool _audioThrows;
             private readonly string _cannedAudioFileName;
             private readonly string _cannedTranscript;
+            private readonly IReadOnlyList<VoicePlanVoice>? _cannedPlan;
 
             public FakeVoiceOrchestrator(
                 string cannedPrompt, bool throws = false, int delayMs = 0,
                 bool audioFails = false, bool audioThrows = false,
-                string cannedAudioFileName = "voices/voice.wav", string cannedTranscript = "sample text")
+                string cannedAudioFileName = "voices/voice.wav", string cannedTranscript = "sample text",
+                IReadOnlyList<VoicePlanVoice>? cannedPlan = null)
                 : base(
                     audioPipeline: Substitute.For<IAudioPipeline>(),
                     transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
@@ -624,10 +633,22 @@ namespace Read2Me.Tests.Services.Characters
                 _audioThrows = audioThrows;
                 _cannedAudioFileName = cannedAudioFileName;
                 _cannedTranscript = cannedTranscript;
+                _cannedPlan = cannedPlan;
             }
 
             public override Task<string> BuildRenderedPromptAsync(string bookTitle, string author, string characterName) =>
                 Task.FromResult($"[rendered: {characterName}]");
+
+            public override async Task<IReadOnlyList<VoicePlanVoice>> GenerateVoicePlanAsync(
+                string bookTitle, string author, string characterName, bool isNarrator = false, CancellationToken ct = default)
+            {
+                if (_delayMs > 0)
+                    await Task.Delay(_delayMs, ct);
+                ct.ThrowIfCancellationRequested();
+                if (_throws)
+                    throw new InvalidOperationException("Simulated LLM failure");
+                return _cannedPlan ?? [new VoicePlanVoice("Default", "Covers the whole book", _cannedPrompt)];
+            }
 
             public override async Task<string> GenerateWithPromptAsync(string renderedPrompt, CancellationToken ct = default)
             {
@@ -681,6 +702,16 @@ namespace Read2Me.Tests.Services.Characters
                 if (idx < _shouldThrow.Length && _shouldThrow[idx])
                     throw new InvalidOperationException($"Simulated failure at call {idx}");
                 return Task.FromResult(_cannedPrompt);
+            }
+
+            public override Task<IReadOnlyList<VoicePlanVoice>> GenerateVoicePlanAsync(
+                string bookTitle, string author, string characterName, bool isNarrator = false, CancellationToken ct = default)
+            {
+                var idx = Interlocked.Increment(ref _callIndex) - 1;
+                if (idx < _shouldThrow.Length && _shouldThrow[idx])
+                    throw new InvalidOperationException($"Simulated failure at call {idx}");
+                return Task.FromResult<IReadOnlyList<VoicePlanVoice>>(
+                    [new VoicePlanVoice("Default", "Covers the whole book", _cannedPrompt)]);
             }
         }
 

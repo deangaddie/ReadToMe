@@ -1,16 +1,21 @@
 using System.Reflection;
 using FractionalIndexing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
+using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Commands;
+using Read2Me.Services.Commands.Handlers;
 using Read2Me.Services.IO;
 using Xunit;
+using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Tests.Services
 {
@@ -18,14 +23,15 @@ namespace Read2Me.Tests.Services
     {
         private readonly string _tempDir;
         private readonly ProjectDbSession _session;
+        private readonly IFileSystem _fs;
         private readonly ProjectFolderId _folder;
 
         public ProjectDbSessionConsistencyTests()
         {
             _tempDir = Path.Combine(Path.GetTempPath(), "SessionConsistency_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempDir);
-            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = _tempDir }));
-            _session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            _fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = _tempDir }));
+            _session = new ProjectDbSession(_fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
             _folder = new ProjectFolderId("test-session");
         }
 
@@ -89,6 +95,87 @@ namespace Read2Me.Tests.Services
             var second = await _session.OpenAsync(_folder);
 
             Assert.NotSame(first, second);
+        }
+
+        // Regression: adding/deleting a voice through BookCommandHandler must be visible to a
+        // follow-up tracked read on the same session. The session caches one long-lived tracking
+        // DbContext per folder; without eviction after a write, the tracker returns stale entities
+        // (a deleted voice still counted in Character.Voices — DeleteVoiceHandler uses ExecuteDelete
+        // which bypasses the tracker). This drove the "voice chip doesn't update until you navigate
+        // away and back" bug.
+
+        [Fact]
+        public async Task DeleteVoiceCommand_ThenTrackedRead_ReflectsDeletion()
+        {
+            await SeedProjectDbAsync();
+            var (characterId, voiceIds) = await SeedCharacterWithVoicesAsync(count: 2);
+            var handler = BuildCommandHandler();
+
+            // Load into the cached tracking context first (this is what the UI does before deleting).
+            Assert.Equal(2, await ReadTrackedVoiceCountAsync(characterId));
+
+            await handler.ExecuteAsync(new DeleteVoiceCommand(_folder, voiceIds[0]));
+
+            Assert.Equal(1, await ReadTrackedVoiceCountAsync(characterId));
+        }
+
+        [Fact]
+        public async Task CreateVoiceCommand_ThenTrackedRead_ReflectsAddition()
+        {
+            await SeedProjectDbAsync();
+            var (characterId, _) = await SeedCharacterWithVoicesAsync(count: 1);
+            var handler = BuildCommandHandler();
+
+            Assert.Equal(1, await ReadTrackedVoiceCountAsync(characterId));
+
+            await handler.ExecuteAsync(new CreateVoiceCommand(_folder, characterId, "Second"));
+
+            Assert.Equal(2, await ReadTrackedVoiceCountAsync(characterId));
+        }
+
+        private async Task<(Guid CharacterId, List<Guid> VoiceIds)> SeedCharacterWithVoicesAsync(int count)
+        {
+            var db = await _session.OpenAsync(_folder);
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            db.Characters.Add(character);
+            var voiceIds = new List<Guid>();
+            for (var i = 0; i < count; i++)
+            {
+                var voice = new VoiceEntity
+                {
+                    Id = Guid.NewGuid(),
+                    CharacterId = character.Id,
+                    Name = $"Voice {i}",
+                    Source = VoiceSource.Uploaded,
+                    CreatedUtc = DateTime.UtcNow.AddSeconds(i),
+                };
+                db.Voices.Add(voice);
+                voiceIds.Add(voice.Id);
+            }
+            await db.SaveChangesAsync();
+            _session.Evict(_folder); // start each test from a clean tracker, like a fresh circuit
+            return (character.Id, voiceIds);
+        }
+
+        // Mirrors ProjectReader.GetCharactersWithAliasesAsync: tracked, Include(Voices).
+        private async Task<int> ReadTrackedVoiceCountAsync(Guid characterId)
+        {
+            var db = await _session.OpenAsync(_folder);
+            var character = await db.Characters
+                .Include(c => c.Voices)
+                .FirstAsync(c => c.Id == characterId);
+            return character.Voices.Count;
+        }
+
+        private BookCommandHandler BuildCommandHandler()
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton(_session);
+            services.AddSingleton(_fs);
+            services.AddSingleton<ICommandHandler<CreateVoiceCommand>>(new CreateVoiceHandler(_session));
+            services.AddSingleton<ICommandHandler<DeleteVoiceCommand>>(new DeleteVoiceHandler(_session, _fs));
+            var sp = services.BuildServiceProvider();
+            return new BookCommandHandler(sp, _session);
         }
 
         [Fact]

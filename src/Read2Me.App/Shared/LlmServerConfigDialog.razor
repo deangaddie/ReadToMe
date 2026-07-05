@@ -49,6 +49,9 @@
                               HelperText="@_modelsHint" />
             }
 
+            <MudTextField @bind-Value="_form.AttributionBatchSize" Label="Paragraphs per request" Variant="Variant.Outlined"
+                          HelperText="Character paragraphs attributed per LLM request. 1 = one at a time; higher values batch consecutive paragraphs into a single prompt." />
+
             <MudExpansionPanels Elevation="0">
                 <MudExpansionPanel Text="Request parameters (optional)">
                     <MudStack Spacing="3">

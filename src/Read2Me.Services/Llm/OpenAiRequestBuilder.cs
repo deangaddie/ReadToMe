@@ -10,7 +10,8 @@ namespace Read2Me.Services.Llm
     /// </summary>
     public static class OpenAiRequestBuilder
     {
-        public static string BuildChatBody(LlmServerConfig config, string prompt, bool stream)
+        public static string BuildChatBody(
+            LlmServerConfig config, string prompt, bool stream, string? jsonSchema = null)
         {
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
@@ -35,6 +36,21 @@ namespace Read2Me.Services.Llm
                 if (config.MaxTokens is { } maxTokens) writer.WriteNumber("max_tokens", maxTokens);
                 if (config.FrequencyPenalty is { } freq) writer.WriteNumber("frequency_penalty", freq);
                 if (config.PresencePenalty is { } pres) writer.WriteNumber("presence_penalty", pres);
+
+                if (!string.IsNullOrWhiteSpace(jsonSchema))
+                {
+                    writer.WritePropertyName("response_format");
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "json_schema");
+                    writer.WritePropertyName("json_schema");
+                    writer.WriteStartObject();
+                    writer.WriteString("name", "response");
+                    writer.WritePropertyName("schema");
+                    using (var doc = JsonDocument.Parse(jsonSchema))
+                        doc.RootElement.WriteTo(writer);
+                    writer.WriteEndObject();
+                    writer.WriteEndObject();
+                }
 
                 writer.WriteEndObject();
             }

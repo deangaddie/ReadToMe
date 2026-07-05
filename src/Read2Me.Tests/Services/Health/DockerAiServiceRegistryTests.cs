@@ -51,6 +51,18 @@ public class DockerAiServiceRegistryTests
     }
 
     [Fact]
+    public void UsesGpu_MatchesComposeNvidiaReservations()
+    {
+        var gpu = new[] { "llama", "chatterbox", "chatterbox-turbo", "qwen3-tts", "qwen3-tts-base", "voxcpm2", "whisper" };
+        var cpu = new[] { "whisper-cpu", "minilm-l6", "mpnet-base-v2" };
+
+        foreach (var name in gpu)
+            Assert.True(Registry.GetByName(name).UsesGpu, $"{name} should be GPU");
+        foreach (var name in cpu)
+            Assert.False(Registry.GetByName(name).UsesGpu, $"{name} should be CPU");
+    }
+
+    [Fact]
     public void GetByName_Whisper_ReturnsWhisperEntry()
     {
         var svc = Registry.GetByName("whisper");

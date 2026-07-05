@@ -9,6 +9,9 @@ using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using Read2Me.App.Configuration;
 using Read2Me.Core.Configuration;
+using Read2Me.Services.Audio;
+using Read2Me.Services.Events;
+using Read2Me.Services.Llm;
 
 namespace Read2Me.App
 {
@@ -67,6 +70,11 @@ namespace Read2Me.App
                     ctx.Context.Response.Headers.CacheControl = "no-cache, must-revalidate";
                 }
             });
+
+            // Journals must attach to their broadcasters before any queue events flow, so a
+            // stream view expanded mid-request can replay the in-progress turn.
+            app.ApplicationServices.GetRequiredService<EventJournal<LlmStreamEvent>>();
+            app.ApplicationServices.GetRequiredService<EventJournal<AudioGenEvent>>();
 
             app.UseRouting();
 

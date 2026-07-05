@@ -1,7 +1,7 @@
 @using Read2Me.Services.Audio
 @using Read2Me.App.Audio
 @using Read2Me.Services.Events
-@inject EventBroadcaster<AudioGenEvent> Broadcaster
+@inject EventJournal<AudioGenEvent> Journal
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -67,7 +67,9 @@
     private ElementReference _scrollContainer;
     private bool _needsScroll;
 
-    protected override void OnInitialized() => Broadcaster.Event += OnEvent;
+    // Journal subscription replays the in-progress item first, so expanding the
+    // view mid-generation shows the current item instead of waiting for the next one.
+    protected override void OnInitialized() => Journal.Subscribe(OnEvent);
 
     private void OnEvent(AudioGenEvent e)
     {
@@ -123,5 +125,5 @@
         </MudStack>
     };
 
-    public void Dispose() => Broadcaster.Event -= OnEvent;
+    public void Dispose() => Journal.Unsubscribe(OnEvent);
 }

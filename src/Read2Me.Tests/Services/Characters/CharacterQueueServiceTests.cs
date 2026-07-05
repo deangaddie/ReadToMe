@@ -17,6 +17,75 @@ namespace Read2Me.Tests.Services.Characters
             svc.MarkProcessing(item);
         }
 
+        // ── DrainBatch ────────────────────────────────────────────────────────
+
+        private static QueuedParagraph MakeChapterItem(Guid chapterId) =>
+            new(Folder, Guid.NewGuid(), "Preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
+
+        [Fact]
+        public async Task DrainBatch_TakesQueuedItemsFromSameChapter_UpToMax()
+        {
+            var svc = new CharacterQueueService();
+            var chapterId = Guid.NewGuid();
+            var items = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(chapterId)).ToArray();
+            svc.Enqueue(items);
+
+            var first = await svc.Reader.ReadAsync();
+            var batch = svc.DrainBatch(first, 3);
+
+            Assert.Equal([items[0], items[1], items[2]], batch);
+            // Fourth item still queued.
+            Assert.True(svc.Reader.TryPeek(out var remaining));
+            Assert.Equal(items[3].ParagraphId, remaining.ParagraphId);
+        }
+
+        [Fact]
+        public async Task DrainBatch_StopsAtChapterBoundary()
+        {
+            var svc = new CharacterQueueService();
+            var chapterA = Guid.NewGuid();
+            var chapterB = Guid.NewGuid();
+            var a1 = MakeChapterItem(chapterA);
+            var a2 = MakeChapterItem(chapterA);
+            var b1 = MakeChapterItem(chapterB);
+            svc.Enqueue([a1, a2, b1]);
+
+            var first = await svc.Reader.ReadAsync();
+            var batch = svc.DrainBatch(first, 10);
+
+            Assert.Equal([a1, a2], batch);
+            Assert.True(svc.Reader.TryPeek(out var remaining));
+            Assert.Equal(b1.ParagraphId, remaining.ParagraphId);
+        }
+
+        [Fact]
+        public async Task DrainBatch_MaxOne_ReturnsOnlyFirst()
+        {
+            var svc = new CharacterQueueService();
+            var chapterId = Guid.NewGuid();
+            var i1 = MakeChapterItem(chapterId);
+            var i2 = MakeChapterItem(chapterId);
+            svc.Enqueue([i1, i2]);
+
+            var first = await svc.Reader.ReadAsync();
+            var batch = svc.DrainBatch(first, 1);
+
+            Assert.Equal([i1], batch);
+        }
+
+        [Fact]
+        public async Task DrainBatch_EmptyQueue_ReturnsFirstOnly()
+        {
+            var svc = new CharacterQueueService();
+            var item = MakeChapterItem(Guid.NewGuid());
+            svc.Enqueue([item]);
+
+            var first = await svc.Reader.ReadAsync();
+            var batch = svc.DrainBatch(first, 5);
+
+            Assert.Equal([item], batch);
+        }
+
         [Fact]
         public void MarkFailed_RecordsOutcome()
         {

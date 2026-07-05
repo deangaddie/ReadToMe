@@ -1,6 +1,6 @@
 @using System.Text
 @using Read2Me.Services.Events
-@inject EventBroadcaster<LlmStreamEvent> Broadcaster
+@inject EventJournal<LlmStreamEvent> Journal
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -93,7 +93,9 @@
     private ElementReference _scrollContainer;
     private bool _needsScroll;
 
-    protected override void OnInitialized() => Broadcaster.Event += OnEvent;
+    // Journal subscription replays the in-progress turn first, so expanding the
+    // view mid-request shows the current item instead of waiting for the next one.
+    protected override void OnInitialized() => Journal.Subscribe(OnEvent);
 
     private void OnEvent(LlmStreamEvent e)
     {
@@ -150,7 +152,7 @@
 
     private StreamTurn? CurrentTurn => _turns.LastOrDefault();
 
-    public void Dispose() => Broadcaster.Event -= OnEvent;
+    public void Dispose() => Journal.Unsubscribe(OnEvent);
 
     private sealed class StreamTurn
     {

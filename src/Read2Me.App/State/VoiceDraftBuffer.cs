@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Read2Me.App.State;
 
-public enum VoiceDraftField { Prompt, Transcript, Override, TtsOverride }
+public enum VoiceDraftField { Prompt, Transcript, Override, TtsOverride, Description }
 
 public sealed class VoiceDraftBuffer
 {

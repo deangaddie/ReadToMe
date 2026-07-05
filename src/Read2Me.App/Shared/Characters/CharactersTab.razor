@@ -1,10 +1,12 @@
 @using Read2Me.App.State
 @using Read2Me.App.Characters
+@using Read2Me.App.Services.Preflight
 @using Read2Me.Services.Events
 @inject CharacterPresenter Presenter
 @inject VoiceBatchRunner BatchService
 @inject EventBroadcaster<VoiceBatchEvent> BatchEvents
 @inject IDialogService DialogService
+@inject IAiPreflight Preflight
 @implements IDisposable
 
 @if (Presenter.IsLoading)
@@ -127,11 +129,29 @@ else
             await Presenter.AddCharacterAsync(name);
     }
 
-    void GenerateVoicePromptsAsync() =>
-        BatchService.StartGeneratePrompts(new Core.Models.ProjectFolderId(FolderName));
+    async Task GenerateVoicePromptsAsync()
+    {
+        // Preflight lives here, not in the runner: VoiceBatchRunner is a singleton and the
+        // dialog service is per-circuit.
+        if (!await Preflight.EnsureReadyAsync(AiTaskKind.VoicePromptGeneration)) return;
 
-    void GenerateAudioAsync() =>
+        var regenerateAll = false;
+        if (Presenter.Characters.Any(c => c.Voices.Count > 0))
+        {
+            var dialog = await DialogService.ShowAsync<GenerateVoicesScopeDialog>("Generate voice prompts");
+            var result = await dialog.Result;
+            if (result?.Canceled != false) return;
+            if (result.Data is bool clearAll) regenerateAll = clearAll;
+        }
+
+        BatchService.StartGeneratePrompts(new Core.Models.ProjectFolderId(FolderName), regenerateAll);
+    }
+
+    async Task GenerateAudioAsync()
+    {
+        if (!await Preflight.EnsureReadyAsync(AiTaskKind.VoiceDesignAudio)) return;
         BatchService.StartGenerateAudio(new Core.Models.ProjectFolderId(FolderName));
+    }
 
     void OnBatchEvent(VoiceBatchEvent e)
     {

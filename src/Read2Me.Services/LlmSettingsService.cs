@@ -29,7 +29,7 @@ namespace Read2Me.Services
 
         public Task<List<LlmServerConfig>> GetAllConfigsAsync() => _store.GetAllConfigsAsync();
         public Task<int?> GetActiveConfigIdAsync() => _store.GetActiveConfigIdAsync();
-        public Task<LlmServerConfig?> GetActiveConfigAsync() => _store.GetActiveConfigAsync();
+        public virtual Task<LlmServerConfig?> GetActiveConfigAsync() => _store.GetActiveConfigAsync();
         public Task SetActiveConfigAsync(int configId) => _store.SetActiveConfigAsync(configId);
         public Task<LlmServerConfig> CreateConfigAsync(LlmServerConfig config) => _store.CreateConfigAsync(config);
         public Task UpdateConfigAsync(LlmServerConfig config) => _store.UpdateConfigAsync(config);

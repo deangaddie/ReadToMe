@@ -135,6 +135,107 @@ namespace Read2Me.Tests.Services
             Assert.Equal(["P3"], ctx.Following.Select(p => p.Text).ToArray());
         }
 
+        // ── GetParagraphBatchContextAsync ─────────────────────────────────────
+
+        [Fact]
+        public async Task GetParagraphBatchContext_ContiguousRun_IncludesAllTargetsIndexedInOrder()
+        {
+            var (chId, ids) = await SeedChapterAsync("A", "B", "C", "D", "E");
+            var ctx = await _reader.GetParagraphBatchContextAsync(_folder, chId, [ids[1], ids[2], ids[3]], 1, 1);
+
+            Assert.NotNull(ctx);
+            Assert.Equal([ids[1], ids[2], ids[3]], ctx.IncludedIds);
+            Assert.Empty(ctx.DeferredIds);
+            Assert.Equal(["A", "B", "C", "D", "E"], ctx.Entries.Select(e => e.Text).ToArray());
+            Assert.Equal([null, 0, 1, 2, null], ctx.Entries.Select(e => e.TargetIndex).ToArray());
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_UnassignedCharacterParagraphGap_DefersRemainder()
+        {
+            var (chId, ids) = await SeedChapterAsync("A", "B", "C", "D");
+            // Request B and D; unassigned character paragraph C sits between them and is not requested.
+            var ctx = await _reader.GetParagraphBatchContextAsync(_folder, chId, [ids[1], ids[3]], 0, 0);
+
+            Assert.NotNull(ctx);
+            Assert.Equal([ids[1]], ctx.IncludedIds);
+            Assert.Equal([ids[3]], ctx.DeferredIds);
+            Assert.Equal(["B"], ctx.Entries.Select(e => e.Text).ToArray());
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_AttributedCharacterParagraphBetween_DoesNotBreakRun()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Character, "Q1"))
+                .AddParagraph("p1", p => p.AddCharacterLine("i1", "Known line", speaker: "alice"))
+                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Character, "Q2"))))
+                .BuildAsync();
+
+            var ctx = await _reader.GetParagraphBatchContextAsync(
+                _folder, b.ChapterId("ch"), [b.ParagraphId("p0"), b.ParagraphId("p2")], 0, 0);
+
+            Assert.NotNull(ctx);
+            Assert.Equal([b.ParagraphId("p0"), b.ParagraphId("p2")], ctx.IncludedIds);
+            Assert.Empty(ctx.DeferredIds);
+            Assert.Equal(["Q1", "Known line", "Q2"], ctx.Entries.Select(e => e.Text).ToArray());
+            Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
+            Assert.Equal("Alice", ctx.Entries[1].Speaker);
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_NarrationBetween_DoesNotBreakRun()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Character, "Q1"))
+                .AddParagraph("p1", p => p.AddNarration("i1", "Narration"))
+                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Character, "Q2"))))
+                .BuildAsync();
+
+            var ctx = await _reader.GetParagraphBatchContextAsync(
+                _folder, b.ChapterId("ch"), [b.ParagraphId("p0"), b.ParagraphId("p2")], 0, 0);
+
+            Assert.NotNull(ctx);
+            Assert.Equal([b.ParagraphId("p0"), b.ParagraphId("p2")], ctx.IncludedIds);
+            Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
+            Assert.Equal("Narrator", ctx.Entries[1].Speaker);
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_WindowsClampAtChapterEdges()
+        {
+            var (chId, ids) = await SeedChapterAsync("A", "B", "C");
+            var ctx = await _reader.GetParagraphBatchContextAsync(_folder, chId, [ids[0], ids[1], ids[2]], 5, 5);
+
+            Assert.NotNull(ctx);
+            Assert.Equal(["A", "B", "C"], ctx.Entries.Select(e => e.Text).ToArray());
+            Assert.Equal([0, 1, 2], ctx.Entries.Select(e => e.TargetIndex).ToArray());
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_FirstParagraphUnknown_ReturnsNull()
+        {
+            var (chId, _) = await SeedChapterAsync("A");
+            var ctx = await _reader.GetParagraphBatchContextAsync(_folder, chId, [Guid.NewGuid()], 4, 2);
+            Assert.Null(ctx);
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_SingleTarget_MatchesSingleContextShape()
+        {
+            var (chId, ids) = await SeedChapterAsync("A", "B", "C");
+            var ctx = await _reader.GetParagraphBatchContextAsync(_folder, chId, [ids[1]], 1, 1);
+
+            Assert.NotNull(ctx);
+            Assert.Equal([ids[1]], ctx.IncludedIds);
+            Assert.Equal(["A", "B", "C"], ctx.Entries.Select(e => e.Text).ToArray());
+            Assert.Equal([null, 0, null], ctx.Entries.Select(e => e.TargetIndex).ToArray());
+        }
+
         // Seeds a chapter with explicit ParagraphItem configurations for audio-selection tests.
         // Returns (chapterId, narrationNoWavId, charAttributedNoWavId, charUnattributedId, charWithWavId, narrationWithWavId, pauseId)
         private async Task<(Guid ChapterId, Guid NarrationNoWavId, Guid CharAttributedNoWavId, Guid CharUnattributedId, Guid CharWithWavId, Guid NarrationWithWavId, Guid PauseId)>

@@ -23,6 +23,9 @@ namespace Read2Me.App.Shared
         public string? FrequencyPenalty { get; set; }
         public string? PresencePenalty { get; set; }
 
+        /// <summary>Paragraphs per attribution request; blank means 1 (single-paragraph mode).</summary>
+        public string? AttributionBatchSize { get; set; }
+
         public static LlmServerConfigForm FromConfig(LlmServerConfig c) => new()
         {
             Id = c.Id,
@@ -36,6 +39,7 @@ namespace Read2Me.App.Shared
             MaxTokens = c.MaxTokens?.ToString(CultureInfo.InvariantCulture),
             FrequencyPenalty = c.FrequencyPenalty?.ToString(CultureInfo.InvariantCulture),
             PresencePenalty = c.PresencePenalty?.ToString(CultureInfo.InvariantCulture),
+            AttributionBatchSize = c.AttributionBatchSize.ToString(CultureInfo.InvariantCulture),
         };
 
         public string? Validate()
@@ -52,6 +56,8 @@ namespace Read2Me.App.Shared
             if (!TryParseInt(MaxTokens, out _)) return "Max tokens must be a whole number.";
             if (!TryParseDouble(FrequencyPenalty, out _)) return "Frequency penalty must be a number.";
             if (!TryParseDouble(PresencePenalty, out _)) return "Presence penalty must be a number.";
+            if (!TryParseInt(AttributionBatchSize, out var batchSize) || batchSize is < 1)
+                return "Paragraphs per request must be a whole number of 1 or more.";
 
             return null;
         }
@@ -63,6 +69,7 @@ namespace Read2Me.App.Shared
             TryParseInt(MaxTokens, out var maxTokens);
             TryParseDouble(FrequencyPenalty, out var freq);
             TryParseDouble(PresencePenalty, out var pres);
+            TryParseInt(AttributionBatchSize, out var batchSize);
 
             return new LlmServerConfig
             {
@@ -77,6 +84,7 @@ namespace Read2Me.App.Shared
                 MaxTokens = maxTokens,
                 FrequencyPenalty = freq,
                 PresencePenalty = pres,
+                AttributionBatchSize = batchSize ?? 1,
             };
         }
 

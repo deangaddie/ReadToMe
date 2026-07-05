@@ -43,14 +43,14 @@ public sealed class VoiceBatchRunner
         _batchEvents = batchEvents;
     }
 
-    public bool StartGeneratePrompts(ProjectFolderId folder)
+    public bool StartGeneratePrompts(ProjectFolderId folder, bool regenerateAll = false)
     {
         lock (_lock)
         {
             if (IsRunning) return false;
             ResetState("Generating prompts");
             var ct = _cts!.Token;
-            Task.Run(() => RunWithScopeAsync(new GeneratePromptsPhase(), folder, ct));
+            Task.Run(() => RunWithScopeAsync(new GeneratePromptsPhase(regenerateAll), folder, ct));
         }
         return true;
     }

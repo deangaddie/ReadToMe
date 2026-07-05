@@ -64,10 +64,34 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public void DefaultVoicePrompt_ContainsWholeBookVoiceRule()
+        {
+            Assert.Contains("One voice must serve the entire book", PromptTemplates.DefaultVoicePrompt);
+        }
+
+        [Fact]
+        public void DefaultCharacterPrompt_ContainsReasoningAndHeuristics()
+        {
+            var prompt = PromptTemplates.DefaultCharacterPrompt;
+            Assert.Contains("\"reasoning\"", prompt);
+            Assert.Contains("How to identify the speaker", prompt);
+            Assert.Contains("Vocatives", prompt);
+        }
+
+        [Fact]
+        public void DefaultBatchCharacterPrompt_ContainsReasoningAndHeuristics()
+        {
+            var prompt = PromptTemplates.DefaultBatchCharacterPrompt;
+            Assert.Contains("\"reasoning\"", prompt);
+            Assert.Contains("How to identify each speaker", prompt);
+            Assert.Contains("Vocatives", prompt);
+        }
+
+        [Fact]
         public void DefaultContextWindowConstants_AreCorrect()
         {
-            Assert.Equal(4, PromptTemplates.DefaultContextParagraphsBefore);
-            Assert.Equal(2, PromptTemplates.DefaultContextParagraphsAfter);
+            Assert.Equal(6, PromptTemplates.DefaultContextParagraphsBefore);
+            Assert.Equal(4, PromptTemplates.DefaultContextParagraphsAfter);
         }
 
         [Fact]
@@ -117,6 +141,46 @@ namespace Read2Me.Tests.Services
 
             var following = doc.RootElement.GetProperty("following")[0];
             Assert.Equal("Narrator", following.GetProperty("speaker").GetString());
+        }
+
+        [Fact]
+        public void DefaultBatchCharacterPrompt_ContainsAllDeclaredTokens()
+        {
+            var prompt = PromptTemplates.DefaultBatchCharacterPrompt;
+            Assert.Contains("{{" + PromptTemplates.BookTitle + "}}", prompt);
+            Assert.Contains("{{" + PromptTemplates.BookAuthor + "}}", prompt);
+            Assert.Contains("{{" + PromptTemplates.KnownCharacters + "}}", prompt);
+            Assert.Contains("{{" + PromptTemplates.ContextJson + "}}", prompt);
+            Assert.Contains("{{" + PromptTemplates.ResponseFormat + "}}", prompt);
+        }
+
+        [Fact]
+        public void BuildBatchContextJson_TargetsGetIndex_ContextGetsSpeaker()
+        {
+            var ctx = new ParagraphBatchContext(
+                [
+                    new BatchContextEntry("Before.", "Narrator", null),
+                    new BatchContextEntry("\"First target.\"", null, 0),
+                    new BatchContextEntry("\"Known line.\"", "Alice", null),
+                    new BatchContextEntry("\"Second target.\"", null, 1),
+                ],
+                [Guid.NewGuid(), Guid.NewGuid()],
+                []);
+
+            var json = PromptTemplates.BuildBatchContextJson(ctx);
+            var doc = JsonDocument.Parse(json);
+
+            var paragraphs = doc.RootElement.GetProperty("paragraphs");
+            Assert.Equal(4, paragraphs.GetArrayLength());
+
+            Assert.Equal("Narrator", paragraphs[0].GetProperty("speaker").GetString());
+            Assert.False(paragraphs[0].TryGetProperty("index", out _));
+
+            Assert.Equal(0, paragraphs[1].GetProperty("index").GetInt32());
+            Assert.False(paragraphs[1].TryGetProperty("speaker", out _));
+
+            Assert.Equal("Alice", paragraphs[2].GetProperty("speaker").GetString());
+            Assert.Equal(1, paragraphs[3].GetProperty("index").GetInt32());
         }
 
         [Fact]

@@ -29,6 +29,15 @@ namespace Read2Me.Services
                 : row.CharacterPrompt;
         }
 
+        public async Task<string> GetBatchCharacterPromptAsync()
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await db.PromptSettings.SingleOrDefaultAsync();
+            return string.IsNullOrWhiteSpace(row?.BatchCharacterPrompt)
+                ? PromptTemplates.DefaultBatchCharacterPrompt
+                : row.BatchCharacterPrompt;
+        }
+
         public virtual async Task<string> GetVoicePromptAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
@@ -38,12 +47,40 @@ namespace Read2Me.Services
                 : row.VoicePrompt;
         }
 
+        public virtual async Task<string> GetVoicePlanPromptAsync()
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await db.PromptSettings.SingleOrDefaultAsync();
+            return string.IsNullOrWhiteSpace(row?.VoicePlanPrompt)
+                ? PromptTemplates.DefaultVoicePlanPrompt
+                : row.VoicePlanPrompt;
+        }
+
+        public virtual async Task<string> GetNarratorVoicePlanPromptAsync()
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await db.PromptSettings.SingleOrDefaultAsync();
+            return string.IsNullOrWhiteSpace(row?.NarratorVoicePlanPrompt)
+                ? PromptTemplates.DefaultNarratorVoicePlanPrompt
+                : row.NarratorVoicePlanPrompt;
+        }
+
         public async Task SetCharacterPromptAsync(string template)
         {
             _logger.LogInformation("Saving character prompt template");
             await using var db = await _dbFactory.CreateDbContextAsync();
             var row = await EnsureRowAsync(db);
             row.CharacterPrompt = template;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task SetBatchCharacterPromptAsync(string template)
+        {
+            _logger.LogInformation("Saving batch character prompt template");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.BatchCharacterPrompt = template;
             await db.SaveChangesAsync();
             NotifyChanged();
         }
@@ -68,6 +105,16 @@ namespace Read2Me.Services
             NotifyChanged();
         }
 
+        public async Task ResetBatchCharacterPromptAsync()
+        {
+            _logger.LogInformation("Resetting batch character prompt to built-in default");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.BatchCharacterPrompt = null;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
         public async Task<(int Before, int After)> GetContextWindowAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
@@ -85,6 +132,46 @@ namespace Read2Me.Services
             var row = await EnsureRowAsync(db);
             row.ContextParagraphsBefore = before;
             row.ContextParagraphsAfter = after;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task SetVoicePlanPromptAsync(string template)
+        {
+            _logger.LogInformation("Saving voice plan prompt template");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.VoicePlanPrompt = template;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task ResetVoicePlanPromptAsync()
+        {
+            _logger.LogInformation("Resetting voice plan prompt to built-in default");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.VoicePlanPrompt = null;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task SetNarratorVoicePlanPromptAsync(string template)
+        {
+            _logger.LogInformation("Saving narrator voice plan prompt template");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.NarratorVoicePlanPrompt = template;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task ResetNarratorVoicePlanPromptAsync()
+        {
+            _logger.LogInformation("Resetting narrator voice plan prompt to built-in default");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.NarratorVoicePlanPrompt = null;
             await db.SaveChangesAsync();
             NotifyChanged();
         }

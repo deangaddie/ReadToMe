@@ -77,7 +77,9 @@ namespace Read2Me.Tests.App.Characters
             return new CharacterPresenter(reader, Substitute.For<IBookCommandHandler>(), orchestrator);
         }
 
-        private static CharacterDetailPanel CreatePanel(CharacterPresenter presenter, Guid characterId)
+        private static CharacterDetailPanel CreatePanel(
+            CharacterPresenter presenter, Guid characterId,
+            VoicePromptGenerationState? voicePromptState = null)
         {
             var panel = new CharacterDetailPanel
             {
@@ -86,6 +88,7 @@ namespace Read2Me.Tests.App.Characters
                 AllCharacters = [],
                 FolderName = "test-book",
                 Presenter = presenter,
+                VoicePromptState = voicePromptState ?? new VoicePromptGenerationState(),
             };
             return panel;
         }
@@ -176,6 +179,84 @@ namespace Read2Me.Tests.App.Characters
                 prompt => Task.FromResult<DialogResult?>(DialogResult.Ok(prompt)));
 
             Assert.False(panel.HasPromptDraft(voice));
+        }
+
+        [Fact]
+        public async Task RegeneratePrompt_LlmSucceeds_SignalsVoicePromptRunningThenIdle()
+        {
+            var characterId = Guid.NewGuid();
+            var presenter = BuildPresenter(
+                characterId,
+                buildResult: "rendered prompt",
+                generateResult: new VoiceDesignPromptService.GenerateResult(
+                    VoiceDesignPromptService.GenerateStatus.Success, "rich voice description", null));
+
+            await presenter.LoadAsync(Folder);
+            var state = new VoicePromptGenerationState();
+            var transitions = new List<(bool Running, string? Character)>();
+            state.Changed += () => transitions.Add((state.IsRunning, state.CharacterName));
+
+            var panel = CreatePanel(presenter, characterId, state);
+            var voice = new Voice { Id = Guid.NewGuid(), DesignPrompt = null };
+
+            await panel.RegeneratePromptCoreAsync(
+                voice,
+                prompt => Task.FromResult<DialogResult?>(DialogResult.Ok(prompt)));
+
+            Assert.Equal(
+                new[] { (true, (string?)"Alice"), (false, (string?)null) },
+                transitions);
+            Assert.False(state.IsRunning);
+        }
+
+        [Fact]
+        public async Task RegeneratePrompt_UserCancels_NeverSignalsVoicePromptRunning()
+        {
+            var characterId = Guid.NewGuid();
+            var presenter = BuildPresenter(
+                characterId,
+                buildResult: "rendered prompt",
+                generateResult: new VoiceDesignPromptService.GenerateResult(
+                    VoiceDesignPromptService.GenerateStatus.Success, "generated", null));
+
+            await presenter.LoadAsync(Folder);
+            var state = new VoicePromptGenerationState();
+            var changes = 0;
+            state.Changed += () => changes++;
+
+            var panel = CreatePanel(presenter, characterId, state);
+            var voice = new Voice { Id = Guid.NewGuid() };
+
+            await panel.RegeneratePromptCoreAsync(
+                voice,
+                _ => Task.FromResult<DialogResult?>(DialogResult.Cancel()));
+
+            Assert.Equal(0, changes);
+            Assert.False(state.IsRunning);
+        }
+
+        [Fact]
+        public async Task RegeneratePrompt_LlmFails_SignalsIdleAfterRun()
+        {
+            var characterId = Guid.NewGuid();
+            var presenter = BuildPresenter(
+                characterId,
+                buildResult: "rendered prompt",
+                generateResult: new VoiceDesignPromptService.GenerateResult(
+                    VoiceDesignPromptService.GenerateStatus.Failed, null, "LLM timeout"));
+
+            await presenter.LoadAsync(Folder);
+            var state = new VoicePromptGenerationState();
+            var panel = CreatePanel(presenter, characterId, state);
+            var voice = new Voice { Id = Guid.NewGuid(), DesignPrompt = null };
+
+            await panel.RegeneratePromptCoreAsync(
+                voice,
+                prompt => Task.FromResult<DialogResult?>(DialogResult.Ok(prompt)));
+
+            // Even though the LLM failed, the running flag is reset (finally block).
+            Assert.False(state.IsRunning);
+            Assert.Null(state.CharacterName);
         }
 
         [Fact]

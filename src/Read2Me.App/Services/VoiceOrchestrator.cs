@@ -56,6 +56,23 @@ namespace Read2Me.App.Services
             string characterName) =>
             await voiceDesignPromptService.BuildRenderedPromptAsync(bookTitle, author, characterName);
 
+        /// <summary>
+        /// Asks the LLM for the full set of voices a character needs across the book.
+        /// Throws when no LLM is configured or the response cannot be parsed.
+        /// </summary>
+        public virtual async Task<System.Collections.Generic.IReadOnlyList<Read2Me.Services.Llm.VoicePlanVoice>> GenerateVoicePlanAsync(
+            string bookTitle,
+            string author,
+            string characterName,
+            bool isNarrator = false,
+            CancellationToken ct = default)
+        {
+            var result = await voiceDesignPromptService.GeneratePlanAsync(bookTitle, author, characterName, isNarrator, ct);
+            if (result.Status == VoiceDesignPromptService.GenerateStatus.Success && result.Voices is not null)
+                return result.Voices;
+            throw new InvalidOperationException(result.FailureReason ?? "Failed to generate voice plan.");
+        }
+
         public virtual async Task<VoiceGenerationResult> GenerateVoiceAudioAsync(
             VoiceGenerationRequest request,
             CancellationToken ct = default) =>

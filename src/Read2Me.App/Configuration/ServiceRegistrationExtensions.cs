@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Read2Me.App.Audio;
 using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
+using Read2Me.App.Services.Preflight;
 using Read2Me.App.State;
 using Read2Me.Services.Queueing;
 using Read2Me.Core.Configuration;
@@ -76,6 +77,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<LlmPromptService>();
         services.AddScoped<ILlmClient, OpenAiLlmClient>();
         services.AddSingleton<EventBroadcaster<LlmStreamEvent>>();
+        services.AddSingleton(sp => new EventJournal<LlmStreamEvent>(
+            sp.GetRequiredService<EventBroadcaster<LlmStreamEvent>>(),
+            e => e is RequestStarted));
         return services;
     }
 
@@ -107,6 +111,9 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IWerComparer, WerComparer>();
         services.AddSingleton<Read2Me.Services.Audio.AudioReviewService>();
         services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.AudioGenEvent>>();
+        services.AddSingleton(sp => new Read2Me.Services.Events.EventJournal<Read2Me.Services.Audio.AudioGenEvent>(
+            sp.GetRequiredService<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.AudioGenEvent>>(),
+            e => e is Read2Me.Services.Audio.ItemStarted));
         services.AddScoped<IAudioNormalizer, FfmpegAudioNormalizer>();
         services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.Assembly.AssemblyEvent>>();
         services.AddSingleton<IAudiobookEncoder, AudiobookEncoder>();
@@ -150,6 +157,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<CharacterResolver>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddScoped<CharacterPresenter>();
+        services.AddScoped<Read2Me.App.State.VoicePromptGenerationState>();
         services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();
         services.AddSingleton<VoiceBatchRunner>();
         return services;
@@ -167,6 +175,9 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<AiServiceHealthMonitor>();
         services.AddSingleton<IAiServiceReporter, AiServiceReporter>();
         services.AddSingleton<IAiServiceControl, AiServiceControl>();
+        // Pre-flight is scoped: it shows a dialog, and IDialogService lives per circuit.
+        services.AddScoped<IAiTaskRequirementsResolver, AiTaskRequirementsResolver>();
+        services.AddScoped<IAiPreflight, AiPreflight>();
         return services;
     }
 

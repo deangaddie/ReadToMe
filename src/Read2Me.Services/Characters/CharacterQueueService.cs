@@ -94,6 +94,27 @@ namespace Read2Me.Services.Characters
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Returns <paramref name="first"/> plus up to <paramref name="max"/>-1 further queued
+        /// paragraphs from the same folder and chapter, drained from the head of the queue.
+        /// The queue is enqueued in book order, so the result is in book order. Must only be
+        /// called from the channel's single reader (the queue worker).
+        /// </summary>
+        public IReadOnlyList<QueuedParagraph> DrainBatch(QueuedParagraph first, int max)
+        {
+            var batch = new List<QueuedParagraph> { first };
+            while (batch.Count < max &&
+                   _channel.Reader.TryPeek(out var next) &&
+                   next.Folder == first.Folder &&
+                   next.ChapterId == first.ChapterId)
+            {
+                if (!_channel.Reader.TryRead(out var item))
+                    break;
+                batch.Add(item);
+            }
+            return batch;
+        }
+
         public void MarkProcessing(QueuedParagraph item)
         {
             var key = Key(item);

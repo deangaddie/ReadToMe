@@ -19,9 +19,15 @@ namespace Read2Me.Services.Health;
 /// <see cref="IServiceProvider"/> so a config-driven warm-up (e.g. llama, which must send the
 /// user's configured model) can resolve scoped services. Null when health alone is readiness.
 /// </param>
+/// <param name="UsesGpu">
+/// True when the container holds GPU VRAM while running (compose nvidia reservation). The single
+/// RTX 3070 fits roughly one model at a time, so pre-flight offers to stop running GPU services
+/// a task does not need.
+/// </param>
 public sealed record DockerAiService(
     string Name,
     string ContainerName,
     string BaseUrl,
     string HealthPath,
-    Func<IServiceProvider, CancellationToken, Task>? Warmup = null);
+    Func<IServiceProvider, CancellationToken, Task>? Warmup = null,
+    bool UsesGpu = false);

@@ -17,6 +17,15 @@ namespace Read2Me.Services.Characters
         string? VoiceInstructions,
         string? FailureReason);
 
+    /// <summary>
+    /// Result of a multi-paragraph attribution request. <see cref="Deferred"/> holds items trimmed
+    /// off the contiguous run (an unassigned character paragraph outside the batch sat between
+    /// them); the caller should process them as a fresh batch.
+    /// </summary>
+    public sealed record BatchAttributionResult(
+        IReadOnlyList<(QueuedParagraph Item, AttributionOutcome Outcome)> Outcomes,
+        IReadOnlyList<QueuedParagraph> Deferred);
+
     public class CharacterAttributionService(
         ILlmClient llm,
         LlmSettingsService settings,
@@ -70,7 +79,8 @@ namespace Read2Me.Services.Characters
                 var metrics = new StreamMetrics(prompt);
                 var sw = Stopwatch.StartNew();
                 var sb = new StringBuilder();
-                await foreach (var chunk in llm.StreamChatAsync(config, prompt, ct))
+                var scanner = JsonCompletionScanner.ForObject();
+                await foreach (var chunk in llm.StreamChatAsync(config, prompt, CharacterAttributionSchema.JsonSchema, ct))
                 {
                     if (chunk.Thinking is { } t)
                         broadcaster.Publish(new ThinkingDelta(t));
@@ -79,6 +89,10 @@ namespace Read2Me.Services.Characters
                         sb.Append(c);
                         metrics.AddOutput(c);
                         broadcaster.Publish(new ContentDelta(c));
+                        // Answer object is closed — stop reading. Breaking disposes the stream,
+                        // which cancels the request if the model keeps generating past the JSON.
+                        if (scanner.Append(c))
+                            break;
                     }
                 }
                 sw.Stop();
@@ -128,6 +142,167 @@ namespace Read2Me.Services.Characters
                 return new AttributionOutcome(
                     reported ? AttributionStatus.ServiceUnavailable : AttributionStatus.Failed,
                     null, null, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Attributes several queued paragraphs (same chapter, book order) in one LLM request.
+        /// A single-item batch delegates to <see cref="AttributeAsync"/> so batch size 1 behaves
+        /// exactly like the single-paragraph flow. An unparseable batch response, or an index
+        /// missing from an otherwise valid response, falls back to the single-paragraph path for
+        /// the affected items.
+        /// </summary>
+        public virtual async Task<BatchAttributionResult> AttributeBatchAsync(
+            IReadOnlyList<QueuedParagraph> batch, CancellationToken ct)
+        {
+            if (batch.Count == 1)
+                return new BatchAttributionResult(
+                    [(batch[0], await AttributeAsync(batch[0], ct))], []);
+
+            LlmServerConfig? config = null;
+            var outcomes = new List<(QueuedParagraph Item, AttributionOutcome Outcome)>();
+            var remaining = new List<QueuedParagraph>(batch);
+            var deferred = new List<QueuedParagraph>();
+            try
+            {
+                config = await settings.GetActiveConfigAsync();
+                if (config == null)
+                {
+                    logger.LogWarning("No active LLM config — skipping batch of {Count} paragraphs", batch.Count);
+                    var outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null, null,
+                        "No active LLM server configured");
+                    return new BatchAttributionResult([.. batch.Select(b => (b, outcome))], []);
+                }
+
+                var (before, after) = await prompts.GetContextWindowAsync();
+                var first = batch[0];
+
+                var ctx = await reader.GetParagraphBatchContextAsync(
+                    first.Folder, first.ChapterId, [.. batch.Select(b => b.ParagraphId)], before, after);
+
+                if (ctx == null)
+                {
+                    // First paragraph not found — let the single path give each item its usual outcome.
+                    foreach (var item in batch)
+                        outcomes.Add((item, await AttributeAsync(item, ct)));
+                    return new BatchAttributionResult(outcomes, []);
+                }
+
+                var byId = batch.ToDictionary(b => b.ParagraphId);
+                var included = ctx.IncludedIds.Select(id => byId[id]).ToList();
+                deferred = [.. ctx.DeferredIds.Select(id => byId[id])];
+                remaining = new List<QueuedParagraph>(included);
+
+                if (included.Count == 1)
+                {
+                    outcomes.Add((included[0], await AttributeAsync(included[0], ct)));
+                    return new BatchAttributionResult(outcomes, deferred);
+                }
+
+                var project = await reader.GetProjectAsync(first.Folder);
+                var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
+                var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
+
+                var template = await prompts.GetBatchCharacterPromptAsync();
+                var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
+                {
+                    [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,
+                    [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
+                    [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
+                    [PromptTemplates.ContextJson]     = PromptTemplates.BuildBatchContextJson(ctx),
+                    [PromptTemplates.ResponseFormat]  = CharacterBatchAttributionSchema.JsonExample,
+                });
+
+                logger.LogDebug("Sending batch character attribution prompt for {Count} paragraphs", included.Count);
+
+                broadcaster.Publish(new RequestStarted($"{included.Count} paragraphs: {first.Preview}", prompt));
+                var metrics = new StreamMetrics(prompt);
+                var sw = Stopwatch.StartNew();
+                var sb = new StringBuilder();
+                var scanner = JsonCompletionScanner.ForArray();
+                await foreach (var chunk in llm.StreamChatAsync(config, prompt, CharacterBatchAttributionSchema.JsonSchema, ct))
+                {
+                    if (chunk.Thinking is { } t)
+                        broadcaster.Publish(new ThinkingDelta(t));
+                    if (chunk.Content is { } c)
+                    {
+                        sb.Append(c);
+                        metrics.AddOutput(c);
+                        broadcaster.Publish(new ContentDelta(c));
+                        // Answer array is closed — stop reading. Breaking disposes the stream,
+                        // which cancels the request if the model keeps generating past the JSON.
+                        if (scanner.Append(c))
+                            break;
+                    }
+                }
+                sw.Stop();
+                broadcaster.Publish(new StreamCompleted(metrics.TokensIn, metrics.TokensOut,
+                    sw.Elapsed.TotalSeconds, metrics.TokensPerSecond(sw.Elapsed.TotalSeconds)));
+
+                // Stream completed against a managed service — clear its failure streak.
+                reporter.ReportSuccess(config.BaseUrl);
+
+                var raw = sb.ToString();
+
+                if (!CharacterBatchAttributionParser.TryParse(raw, out var parsed))
+                {
+                    var reason = $"Could not parse batch LLM response: {raw[..Math.Min(200, raw.Length)]}";
+                    logger.LogWarning("Failed to parse batch LLM response — falling back to single attribution: {Raw}", raw);
+                    broadcaster.Publish(new StreamFailed(reason));
+
+                    foreach (var item in included)
+                    {
+                        outcomes.Add((item, await AttributeAsync(item, ct)));
+                        remaining.Remove(item);
+                    }
+                    return new BatchAttributionResult(outcomes, deferred);
+                }
+
+                for (var i = 0; i < included.Count; i++)
+                {
+                    var item = included[i];
+                    if (!parsed.TryGetValue(i, out var entry))
+                    {
+                        logger.LogWarning("Batch response missing index {Index} — falling back to single attribution for {ParagraphId}",
+                            i, item.ParagraphId);
+                        outcomes.Add((item, await AttributeAsync(item, ct)));
+                    }
+                    else if (entry.Character.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger.LogInformation("LLM returned unknown for paragraph {ParagraphId}", item.ParagraphId);
+                        outcomes.Add((item, new AttributionOutcome(AttributionStatus.Unknown, null, null, null)));
+                    }
+                    else
+                    {
+                        logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
+                            item.ParagraphId, entry.Character);
+                        outcomes.Add((item, new AttributionOutcome(AttributionStatus.Resolved,
+                            entry.Character, entry.VoiceInstructions, null)));
+                    }
+                    remaining.Remove(item);
+                }
+
+                return new BatchAttributionResult(outcomes, deferred);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Same failure semantics as the single path, applied to every item that has no
+                // outcome yet. Deferred items are returned untouched; the caller retries them and
+                // they hit the same failure (and its requeue handling) individually.
+                logger.LogError(ex, "Error attributing batch of {Count} paragraphs", batch.Count);
+                broadcaster.Publish(new StreamFailed(ex.Message));
+
+                var reported = config is not null && reporter.ReportFailure(config.BaseUrl, ex);
+                var outcome = new AttributionOutcome(
+                    reported ? AttributionStatus.ServiceUnavailable : AttributionStatus.Failed,
+                    null, null, ex.Message);
+                foreach (var item in remaining)
+                    outcomes.Add((item, outcome));
+                return new BatchAttributionResult(outcomes, deferred);
             }
         }
     }

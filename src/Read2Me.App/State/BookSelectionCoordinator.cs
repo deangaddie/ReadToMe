@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using MudBlazor;
+using Read2Me.App.Services.Preflight;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
@@ -16,7 +17,8 @@ namespace Read2Me.App.State
         ParagraphTtsSettingsService paragraphTtsSettings,
         ISnackbar snackbar,
         BookSelectionState selectionState,
-        AudioItemSelectionState audioSelectionState) : ISelectionCoordinator
+        AudioItemSelectionState audioSelectionState,
+        IAiPreflight preflight) : ISelectionCoordinator
     {
         private ProjectFolderId? _lastFolder;
 
@@ -67,6 +69,8 @@ namespace Read2Me.App.State
 
             var selectedIds = sel.SelectedParagraphIds().ToList();
             if (selectedIds.Count == 0) return;
+
+            if (!await preflight.EnsureReadyAsync(AiTaskKind.CharacterAttribution)) return;
 
             var ordered = await reader.GetOrderedParagraphsAsync(folder, selectedIds);
             var items = ordered.Select(p =>
@@ -119,6 +123,8 @@ namespace Read2Me.App.State
                     Severity.Warning);
                 return;
             }
+
+            if (!await preflight.EnsureReadyAsync(AiTaskKind.AudioGeneration)) return;
 
             var items = await reader.GetOrderedAudioItemRefsAsync(folder, selectedIds);
             audioQueue.Enqueue(folder, items);

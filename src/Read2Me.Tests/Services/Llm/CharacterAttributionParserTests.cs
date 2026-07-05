@@ -15,6 +15,15 @@ namespace Read2Me.Tests.Services.Llm
         }
 
         [Fact]
+        public void JsonWithReasoning_ParsesAndCapturesReasoning()
+        {
+            var raw = """{ "reasoning": "tag after quote", "character": "Alice", "voice_instructions": "calm" }""";
+            Assert.True(CharacterAttributionParser.TryParse(raw, out var result));
+            Assert.Equal("Alice", result.Character);
+            Assert.Equal("tag after quote", result.Reasoning);
+        }
+
+        [Fact]
         public void JsonInCodeFence_Parses()
         {
             var raw = "```json\n{ \"character\": \"Bob\", \"voice_instructions\": \"gruff\" }\n```";

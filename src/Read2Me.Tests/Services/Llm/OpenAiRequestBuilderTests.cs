@@ -46,6 +46,28 @@ namespace Read2Me.Tests.Services.Llm
         }
 
         [Fact]
+        public void BuildChatBody_OmitsResponseFormatWhenNoSchema()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true);
+            Assert.DoesNotContain("response_format", json);
+        }
+
+        [Fact]
+        public void BuildChatBody_EmitsJsonSchemaResponseFormat()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var schema = """{ "type": "object", "properties": { "character": { "type": "string" } } }""";
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true, schema);
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var format = doc.RootElement.GetProperty("response_format");
+            Assert.Equal("json_schema", format.GetProperty("type").GetString());
+            var inner = format.GetProperty("json_schema").GetProperty("schema");
+            Assert.Equal("object", inner.GetProperty("type").GetString());
+        }
+
+        [Fact]
         public void BuildChatBody_SingleUserMessageWithPrompt()
         {
             var cfg = new LlmServerConfig { BaseUrl = "http://x" };

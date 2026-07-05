@@ -63,6 +63,41 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task GetBatchCharacterPrompt_WhenUnset_ReturnsBuiltInDefault()
+        {
+            var svc = NewService();
+            var result = await svc.GetBatchCharacterPromptAsync();
+            Assert.Equal(PromptTemplates.DefaultBatchCharacterPrompt, result);
+        }
+
+        [Fact]
+        public async Task SetBatchCharacterPrompt_ThenGet_ReturnsStoredValue()
+        {
+            var svc = NewService();
+            await svc.SetBatchCharacterPromptAsync("custom batch prompt");
+            Assert.Equal("custom batch prompt", await svc.GetBatchCharacterPromptAsync());
+        }
+
+        [Fact]
+        public async Task ResetBatchCharacterPrompt_AfterSet_ReturnsDefaultAgain()
+        {
+            var svc = NewService();
+            await svc.SetBatchCharacterPromptAsync("overridden");
+            await svc.ResetBatchCharacterPromptAsync();
+            Assert.Equal(PromptTemplates.DefaultBatchCharacterPrompt, await svc.GetBatchCharacterPromptAsync());
+        }
+
+        [Fact]
+        public async Task BatchAndSinglePrompts_StoredIndependently()
+        {
+            var svc = NewService();
+            await svc.SetCharacterPromptAsync("single");
+            await svc.SetBatchCharacterPromptAsync("batch");
+            Assert.Equal("single", await svc.GetCharacterPromptAsync());
+            Assert.Equal("batch", await svc.GetBatchCharacterPromptAsync());
+        }
+
+        [Fact]
         public async Task SetThenSet_OverwritesSameRow_NoSecondRow()
         {
             var svc = NewService();

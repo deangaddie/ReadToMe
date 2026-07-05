@@ -47,7 +47,7 @@ namespace Read2Me.Services.Llm
                 if (dto == null || string.IsNullOrWhiteSpace(dto.Character))
                     return false;
 
-                result = new CharacterAttributionResult(dto.Character, dto.VoiceInstructions ?? string.Empty);
+                result = new CharacterAttributionResult(dto.Character, dto.VoiceInstructions ?? string.Empty, dto.Reasoning);
                 return true;
             }
             catch (JsonException)
@@ -58,6 +58,9 @@ namespace Read2Me.Services.Llm
 
         private sealed class AttributionDto
         {
+            [JsonPropertyName("reasoning")]
+            public string? Reasoning { get; set; }
+
             [JsonPropertyName("character")]
             public string? Character { get; set; }
 
