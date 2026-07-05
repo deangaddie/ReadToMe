@@ -42,11 +42,17 @@ namespace Read2Me.Services
         public static string? For(SemanticSimilarityServiceConfig config) =>
             NullIfBlank(Parse<SemanticSimilaritySettings>(config.SettingsJson)?.BaseUrl);
 
+        // Web defaults (case-insensitive, camelCase): SettingsJson blobs are written by different
+        // forms — some serialize PascalCase (plain Serialize), some camelCase (Web options). The
+        // VoxCpm2 voice-design form writes "baseUrl", which a case-sensitive parse silently misses,
+        // making pre-flight treat the endpoint as unmanaged (no GPU-swap dialog).
+        private static readonly JsonSerializerOptions ParseOptions = new(JsonSerializerDefaults.Web);
+
         private static T? Parse<T>(string json) where T : class
         {
             try
             {
-                return JsonSerializer.Deserialize<T>(json);
+                return JsonSerializer.Deserialize<T>(json, ParseOptions);
             }
             catch
             {

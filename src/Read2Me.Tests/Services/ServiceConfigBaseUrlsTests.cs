@@ -55,6 +55,22 @@ namespace Read2Me.Tests.Services
             Assert.Equal(url, ServiceConfigBaseUrls.For(config));
         }
 
+        [Theory]
+        [InlineData(VoiceDesignServiceType.VoxCpm2)]
+        [InlineData(VoiceDesignServiceType.Qwen3)]
+        public void VoiceDesign_CamelCaseSettingsJson_StillResolves(VoiceDesignServiceType type)
+        {
+            // The VoxCpm2 voice-design form serializes SettingsJson with Web options — "baseUrl",
+            // not "BaseUrl". A case-sensitive parse here made pre-flight treat the endpoint as
+            // unmanaged, so the GPU-swap dialog (stop llama → start voxcpm2) never appeared.
+            var config = new VoiceDesignServiceConfig
+            {
+                Type = type,
+                SettingsJson = """{"baseUrl":"http://localhost:8003"}""",
+            };
+            Assert.Equal("http://localhost:8003", ServiceConfigBaseUrls.For(config));
+        }
+
         [Fact]
         public void SemanticSimilarity_ReadsBaseUrlFromSettingsJson()
         {

@@ -45,7 +45,8 @@ namespace Read2Me.Tests.App.Preflight
                 voiceDesignUrl is null ? null : new VoiceDesignServiceConfig
                 {
                     Type = VoiceDesignServiceType.VoxCpm2,
-                    SettingsJson = $$"""{"BaseUrl":"{{voiceDesignUrl}}"}""",
+                    // The VoxCpm2 form serializes with Web options — camelCase, as stored in the DB.
+                    SettingsJson = $$"""{"baseUrl":"{{voiceDesignUrl}}"}""",
                 });
         }
 
