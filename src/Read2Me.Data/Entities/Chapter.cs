@@ -1,6 +1,6 @@
 namespace Read2Me.Data.Entities
 {
-    public class Chapter
+    public class Chapter : IBookEntity
     {
         public Guid Id { get; set; }
         public Guid PartId { get; set; }

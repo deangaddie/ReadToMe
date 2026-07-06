@@ -20,6 +20,18 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
 
     public List<string> LlmPromptsSeen { get; } = [];
 
+    /// <summary>
+    /// Restores per-test defaults. The handler is shared across the collection, so anything a
+    /// test sets (LlmReply) or the pipeline records (_lastTtsText, prompts) would otherwise
+    /// leak into the next test.
+    /// </summary>
+    public void Reset()
+    {
+        LlmReply = _ => FakeAiResponses.AttributionReply("Narrator");
+        _lastTtsText = "";
+        lock (LlmPromptsSeen) LlmPromptsSeen.Clear();
+    }
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken ct)
     {

@@ -35,6 +35,7 @@ internal static class BookMutationApplier
                 case Chapter c: db.Chapters.Add(c); break;
                 case Paragraph pg: db.Paragraphs.Add(pg); break;
                 case ParagraphItem i: db.ParagraphItems.Add(i); break;
+                default: throw new NotSupportedException($"Unhandled book entity {entity.GetType().Name}");
             }
         }
         foreach (var entity in mutation.ToDelete)
@@ -46,6 +47,7 @@ internal static class BookMutationApplier
                 case Chapter c: db.Chapters.Remove(c); break;
                 case Paragraph pg: db.Paragraphs.Remove(pg); break;
                 case ParagraphItem i: db.ParagraphItems.Remove(i); break;
+                default: throw new NotSupportedException($"Unhandled book entity {entity.GetType().Name}");
             }
         }
         foreach (var entity in mutation.ToUpdate)

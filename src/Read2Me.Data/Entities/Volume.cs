@@ -1,6 +1,6 @@
 namespace Read2Me.Data.Entities
 {
-    public class Volume
+    public class Volume : IBookEntity
     {
         public Guid Id { get; set; }
         public string Title { get; set; } = string.Empty;

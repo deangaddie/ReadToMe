@@ -21,6 +21,13 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
 
     public async ValueTask InitializeAsync()
     {
+        // The app fixture is collection-shared and tests mutate its fakes (e.g.
+        // DockerServiceControlsTests shuts the fake service down, which makes the
+        // AI preflight dialog block every later "Add to ... queue" click). Restore
+        // defaults so test order can't leak state.
+        app.FakeControl.Status = Read2Me.Services.Health.AiServiceStatus.Ready;
+        app.FakeAi.Reset();
+
         var testName = TestContext.Current.Test?.TestDisplayName ?? "unknown-test";
         var safeName = string.Concat(testName.Select(c => char.IsLetterOrDigit(c) ? c : '-'));
         _artifactsDir = Path.Combine(AppContext.BaseDirectory, "artifacts", safeName);

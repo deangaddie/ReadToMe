@@ -52,7 +52,7 @@ namespace Read2Me.Services.Books
             return new HierarchyMutation(
                 ToAdd: [newVolume],
                 ToDelete: [],
-                ToUpdate: movedParts.Cast<object>().ToList());
+                ToUpdate: movedParts.Cast<IBookEntity>().ToList());
         }
 
         // ---------------------------------------------------------------
@@ -87,7 +87,7 @@ namespace Read2Me.Services.Books
             return new HierarchyMutation(
                 ToAdd: [newPart],
                 ToDelete: [],
-                ToUpdate: movedChapters.Cast<object>().ToList());
+                ToUpdate: movedChapters.Cast<IBookEntity>().ToList());
         }
 
         // ---------------------------------------------------------------
@@ -122,7 +122,7 @@ namespace Read2Me.Services.Books
             return new HierarchyMutation(
                 ToAdd: [newChapter],
                 ToDelete: [],
-                ToUpdate: movedParagraphs.Cast<object>().ToList());
+                ToUpdate: movedParagraphs.Cast<IBookEntity>().ToList());
         }
 
         // ---------------------------------------------------------------
@@ -156,7 +156,7 @@ namespace Read2Me.Services.Books
             return new HierarchyMutation(
                 ToAdd: [newParagraph],
                 ToDelete: [],
-                ToUpdate: movedItems.Cast<object>().ToList());
+                ToUpdate: movedItems.Cast<IBookEntity>().ToList());
         }
 
         // ---------------------------------------------------------------
@@ -170,10 +170,10 @@ namespace Read2Me.Services.Books
             if (idx < 0) return null;
             return dir == MergeDirection.Previous
                 ? MergeSiblings(Volumes, idx - 1, idx, v => v.Id,
-                    id => Parts.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    id => Parts.TryGetValue(id, out var ch) ? ch.Cast<IBookEntity>().ToList() : [],
                     (child, winnerId) => ((Part)child).VolumeId = winnerId)
                 : MergeSiblings(Volumes, idx, idx + 1, v => v.Id,
-                    id => Parts.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    id => Parts.TryGetValue(id, out var ch) ? ch.Cast<IBookEntity>().ToList() : [],
                     (child, winnerId) => ((Part)child).VolumeId = winnerId);
         }
 
@@ -184,10 +184,10 @@ namespace Read2Me.Services.Books
             if (idx < 0) return null;
             return dir == MergeDirection.Previous
                 ? MergeSiblings(siblings, idx - 1, idx, p => p.Id,
-                    id => Chapters.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    id => Chapters.TryGetValue(id, out var ch) ? ch.Cast<IBookEntity>().ToList() : [],
                     (child, winnerId) => ((Chapter)child).PartId = winnerId)
                 : MergeSiblings(siblings, idx, idx + 1, p => p.Id,
-                    id => Chapters.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    id => Chapters.TryGetValue(id, out var ch) ? ch.Cast<IBookEntity>().ToList() : [],
                     (child, winnerId) => ((Chapter)child).PartId = winnerId);
         }
 
@@ -198,10 +198,10 @@ namespace Read2Me.Services.Books
             if (idx < 0) return null;
             return dir == MergeDirection.Previous
                 ? MergeSiblings(siblings, idx - 1, idx, c => c.Id,
-                    id => Paragraphs.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    id => Paragraphs.TryGetValue(id, out var ch) ? ch.Cast<IBookEntity>().ToList() : [],
                     (child, winnerId) => ((Paragraph)child).ChapterId = winnerId)
                 : MergeSiblings(siblings, idx, idx + 1, c => c.Id,
-                    id => Paragraphs.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    id => Paragraphs.TryGetValue(id, out var ch) ? ch.Cast<IBookEntity>().ToList() : [],
                     (child, winnerId) => ((Paragraph)child).ChapterId = winnerId);
         }
 
@@ -212,10 +212,10 @@ namespace Read2Me.Services.Books
             if (idx < 0) return null;
             return dir == MergeDirection.Previous
                 ? MergeSiblings(siblings, idx - 1, idx, p => p.Id,
-                    id => Items.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    id => Items.TryGetValue(id, out var ch) ? ch.Cast<IBookEntity>().ToList() : [],
                     (child, winnerId) => ((ParagraphItem)child).ParagraphId = winnerId)
                 : MergeSiblings(siblings, idx, idx + 1, p => p.Id,
-                    id => Items.TryGetValue(id, out var ch) ? ch.Cast<object>().ToList() : [],
+                    id => Items.TryGetValue(id, out var ch) ? ch.Cast<IBookEntity>().ToList() : [],
                     (child, winnerId) => ((ParagraphItem)child).ParagraphId = winnerId);
         }
 
@@ -254,8 +254,9 @@ namespace Read2Me.Services.Books
             int winnerIdx,
             int loserIdx,
             Func<TEntity, Guid> getId,
-            Func<Guid, List<object>> getChildren,
-            Action<object, Guid> reassign)
+            Func<Guid, List<IBookEntity>> getChildren,
+            Action<IBookEntity, Guid> reassign)
+            where TEntity : IBookEntity
         {
             if (winnerIdx < 0 || loserIdx >= siblings.Count) return null;
             var winner = siblings[winnerIdx];
@@ -278,7 +279,7 @@ namespace Read2Me.Services.Books
             if (Volumes.Count == 0) return null;
 
             Guid chapterId;
-            var toAdd = new List<object>();
+            var toAdd = new List<IBookEntity>();
 
             if (Volumes.Count > 1)
             {
@@ -518,9 +519,9 @@ namespace Read2Me.Services.Books
     }
 
     public record HierarchyMutation(
-        IReadOnlyList<object> ToAdd,
-        IReadOnlyList<object> ToDelete,
-        IReadOnlyList<object> ToUpdate);
+        IReadOnlyList<IBookEntity> ToAdd,
+        IReadOnlyList<IBookEntity> ToDelete,
+        IReadOnlyList<IBookEntity> ToUpdate);
 
     public record PlannedPause(Guid ChapterId, ParagraphItemType PauseType, string? AfterOrder, string? BeforeOrder);
 }

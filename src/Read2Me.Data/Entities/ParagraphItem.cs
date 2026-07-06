@@ -2,7 +2,7 @@ using Read2Me.Data.Enums;
 
 namespace Read2Me.Data.Entities
 {
-    public class ParagraphItem
+    public class ParagraphItem : IBookEntity
     {
         public Guid Id { get; set; }
         public Guid ParagraphId { get; set; }
