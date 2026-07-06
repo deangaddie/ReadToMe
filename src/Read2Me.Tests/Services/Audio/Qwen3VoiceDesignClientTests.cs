@@ -47,6 +47,34 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public async Task Design_SendsLanguageAndNonNullSamplingParams()
+        {
+            var audioData = new byte[] { 0x52, 0x49, 0x46, 0x46 }; // RIFF
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(audioData)
+            };
+
+            var config = new VoiceDesignServiceConfig
+            {
+                SettingsJson = "{\"BaseUrl\":\"http://test\",\"Language\":\"en\",\"Temperature\":0.7,\"TopK\":40}"
+            };
+            await _sut.DesignVoiceAsync(config, "prompt", "text", null);
+
+            var content = Assert.IsType<MultipartFormDataContent>(_httpFactory.LastRequest!.Content);
+            var strContent = await content.ReadAsStringAsync();
+            Assert.Contains("language", strContent);
+            Assert.Contains("en", strContent);
+            Assert.Contains("temperature", strContent);
+            Assert.Contains("0.7", strContent);
+            Assert.Contains("top_k", strContent);
+            Assert.Contains("40", strContent);
+            Assert.DoesNotContain("top_p", strContent);
+            Assert.DoesNotContain("repetition_penalty", strContent);
+            Assert.DoesNotContain("max_new_tokens", strContent);
+        }
+
+        [Fact]
         public async Task Design_NonSuccessStatus_Throws()
         {
             _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.InternalServerError);

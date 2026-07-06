@@ -19,13 +19,16 @@ namespace Read2Me.Tests.Services.Audio
         {
             public int CallCount { get; private set; }
             public string? LastText { get; private set; }
+            public string? LastReferenceTranscript { get; private set; }
             public Exception? Throws { get; set; }
 
             public Task<Stream> GenerateAsync(string text, string? voiceInstructions, Stream referenceAudioStream,
-                ParagraphTtsServiceConfig settings, string? settingsOverrideJson, CancellationToken ct = default)
+                ParagraphTtsServiceConfig settings, string? settingsOverrideJson,
+                string? referenceTranscript = null, CancellationToken ct = default)
             {
                 CallCount++;
                 LastText = text;
+                LastReferenceTranscript = referenceTranscript;
                 if (Throws is not null) throw Throws;
                 Stream s = new MemoryStream([0x52, 0x49, 0x46, 0x46]);
                 return Task.FromResult(s);
@@ -154,7 +157,8 @@ namespace Read2Me.Tests.Services.Audio
             string sourceText = "Hello world",
             int maxAttempts = 1,
             double werThreshold = 0.15,
-            string? speaker = "Bilbo") => new(
+            string? speaker = "Bilbo",
+            string? referenceTranscript = null) => new(
             ParagraphItemId: Guid.NewGuid(),
             SourceText: sourceText,
             VoiceInstructions: null,
@@ -164,7 +168,8 @@ namespace Read2Me.Tests.Services.Audio
             MaxAttempts: maxAttempts,
             WerThreshold: werThreshold,
             FfmpegPath: null,
-            Speaker: speaker);
+            Speaker: speaker,
+            ReferenceTranscript: referenceTranscript);
 
         // ── tests ─────────────────────────────────────────────────────────────
 
@@ -280,6 +285,16 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Null(result.Verify.Wer);
             Assert.Equal(1, _tts.CallCount);
             Assert.False(_semantic.WasCalled);
+        }
+
+        [Fact]
+        public async Task ReferenceTranscript_ForwardedToTtsClient()
+        {
+            var req = MakeRequest(referenceTranscript: "the sample text");
+
+            await _sut.RunAsync(req, CancellationToken.None);
+
+            Assert.Equal("the sample text", _tts.LastReferenceTranscript);
         }
 
         [Fact]

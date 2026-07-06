@@ -16,11 +16,12 @@ namespace Read2Me.Tests.Services.Audio
             public string? CapturedVoiceInstructions;
             public byte[]? CapturedReferenceAudio;
             public string? CapturedSettingsOverrideJson;
+            public string? CapturedReferenceTranscript;
 
             public async Task<Stream> GenerateAsync(
                 string text, string? voiceInstructions, Stream referenceAudioStream,
                 ParagraphTtsServiceConfig config, string? settingsOverrideJson,
-                CancellationToken ct = default)
+                string? referenceTranscript = null, CancellationToken ct = default)
             {
                 CapturedText = text;
                 CapturedVoiceInstructions = voiceInstructions;
@@ -28,6 +29,7 @@ namespace Read2Me.Tests.Services.Audio
                 await referenceAudioStream.CopyToAsync(ms, ct);
                 CapturedReferenceAudio = ms.ToArray();
                 CapturedSettingsOverrideJson = settingsOverrideJson;
+                CapturedReferenceTranscript = referenceTranscript;
                 return new MemoryStream(new byte[] { 1, 2, 3 });
             }
         }
@@ -146,11 +148,12 @@ namespace Read2Me.Tests.Services.Audio
             const string voiceInstructions = "speak slowly";
 
             using var refAudio = new MemoryStream(refBytes);
-            await client.GenerateAsync("text", voiceInstructions, refAudio, ConfigWith(), overrideJson);
+            await client.GenerateAsync("text", voiceInstructions, refAudio, ConfigWith(), overrideJson, "the transcript");
 
             Assert.Equal(voiceInstructions, inner.CapturedVoiceInstructions);
             Assert.Equal(refBytes, inner.CapturedReferenceAudio);
             Assert.Equal(overrideJson, inner.CapturedSettingsOverrideJson);
+            Assert.Equal("the transcript", inner.CapturedReferenceTranscript);
         }
 
         [Fact]

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
@@ -35,7 +36,19 @@ namespace Read2Me.Services.Audio.VoiceDesign
                 {
                     { new StringContent(sampleText), "text" },
                     { new StringContent(prompt), "voice_description" },
+                    { new StringContent(settings.Language), "language" },
                 };
+
+                if (settings.Temperature is { } temperature)
+                    form.Add(new StringContent(Inv(temperature)), "temperature");
+                if (settings.TopP is { } topP)
+                    form.Add(new StringContent(Inv(topP)), "top_p");
+                if (settings.TopK is { } topK)
+                    form.Add(new StringContent(topK.ToString(CultureInfo.InvariantCulture)), "top_k");
+                if (settings.RepetitionPenalty is { } repetitionPenalty)
+                    form.Add(new StringContent(Inv(repetitionPenalty)), "repetition_penalty");
+                if (settings.MaxNewTokens is { } maxNewTokens)
+                    form.Add(new StringContent(maxNewTokens.ToString(CultureInfo.InvariantCulture)), "max_new_tokens");
 
                 var request = new HttpRequestMessage(
                     HttpMethod.Post, settings.BaseUrl.TrimEnd('/') + "/tts")
@@ -64,5 +77,7 @@ namespace Read2Me.Services.Audio.VoiceDesign
                 throw;
             }
         }
+
+        private static string Inv(double value) => value.ToString(CultureInfo.InvariantCulture);
     }
 }

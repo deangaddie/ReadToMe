@@ -24,6 +24,7 @@ namespace Read2Me.Tests.Services.Audio
         private readonly FakeVoiceResolver _voiceResolver;
         private readonly FakeTtsSettingsService _ttsSettings;
         private readonly FakeAudioProcessingSettings _processingSettings;
+        private readonly FakeVoiceDesignSettingsService _voiceDesignSettings;
         private readonly IAudioItemResolver _sut;
 
         private static readonly ParagraphTtsServiceConfig ActiveConfig = new()
@@ -44,8 +45,9 @@ namespace Read2Me.Tests.Services.Audio
             _voiceResolver = new FakeVoiceResolver();
             _ttsSettings = new FakeTtsSettingsService(ActiveConfig);
             _processingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15);
+            _voiceDesignSettings = new FakeVoiceDesignSettingsService("the sample text");
 
-            _sut = new AudioItemResolver(_fs, _dbProvider, _voiceResolver, _ttsSettings, _processingSettings);
+            _sut = new AudioItemResolver(_fs, _dbProvider, _voiceResolver, _ttsSettings, _processingSettings, _voiceDesignSettings);
         }
 
         private static string Key(string? prev = null, string? next = null) =>
@@ -57,7 +59,8 @@ namespace Read2Me.Tests.Services.Audio
             bool hasCharacter = true,
             bool resolverReturnsVoice = true,
             string voiceAudioFile = "voices/char1/voice.wav",
-            string text = "In a hole in the ground")
+            string text = "In a hole in the ground",
+            string? voiceTranscript = null)
         {
             var charId = Guid.NewGuid();
             var character = new Data.Entities.Character { Id = charId, Name = "Bilbo" };
@@ -85,7 +88,8 @@ namespace Read2Me.Tests.Services.Audio
                     CharacterId = charId,
                     Name = "Bilbo Voice",
                     Source = VoiceSource.Uploaded,
-                    AudioFileName = hasRefAudio ? voiceAudioFile : null
+                    AudioFileName = hasRefAudio ? voiceAudioFile : null,
+                    Transcript = voiceTranscript
                 };
                 db.Voices.Add(voice);
                 seededVoiceId = voice.Id;
@@ -246,7 +250,8 @@ namespace Read2Me.Tests.Services.Audio
             var noConfigResolver = new AudioItemResolver(
                 _fs, _dbProvider, _voiceResolver,
                 new FakeTtsSettingsService(null!),
-                _processingSettings);
+                _processingSettings,
+                _voiceDesignSettings);
 
             var result = await noConfigResolver.ResolveAsync(queued, CancellationToken.None);
 
@@ -311,7 +316,35 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(ActiveConfig, req.TtsConfig);
         }
 
+        [Fact]
+        public async Task PipelineRequest_ReferenceTranscript_FallsBackToVoiceDesignSampleText()
+        {
+            var (queued, _, _) = await SeedCharacterItemAsync();
+
+            var result = await _sut.ResolveAsync(queued, CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("the sample text", result.Request!.ReferenceTranscript);
+        }
+
+        [Fact]
+        public async Task PipelineRequest_ReferenceTranscript_PrefersVoiceTranscript()
+        {
+            var (queued, _, _) = await SeedCharacterItemAsync(voiceTranscript: "the voice's own transcript");
+
+            var result = await _sut.ResolveAsync(queued, CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("the voice's own transcript", result.Request!.ReferenceTranscript);
+        }
+
         // ── fakes ──────────────────────────────────────────────────────────────
+
+        private sealed class FakeVoiceDesignSettingsService(string? sampleText)
+            : VoiceDesignSettingsService(null!, NullLogger<VoiceDesignSettingsService>.Instance)
+        {
+            public override Task<string?> GetSampleTextAsync() => Task.FromResult(sampleText);
+        }
 
         private sealed class FakeTtsSettingsService(ParagraphTtsServiceConfig config) : ParagraphTtsSettingsService(null!, null!)
         {

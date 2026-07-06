@@ -98,6 +98,33 @@ namespace Read2Me.App.Shared
                     form.MaxChunkChars = s.MaxChunkChars;
                     form.SettingsJson = JsonSerializer.Serialize(s);
                     break;
+
+                case ParagraphTtsServiceType.Chatterbox:
+                    var cb = string.IsNullOrWhiteSpace(c.SettingsJson)
+                        ? ChatterboxParagraphTtsSettings.Recommended
+                        : JsonSerializer.Deserialize<ChatterboxParagraphTtsSettings>(c.SettingsJson) ?? ChatterboxParagraphTtsSettings.Recommended;
+                    form.BaseUrl = cb.BaseUrl;
+                    form.MaxChunkChars = cb.MaxChunkChars;
+                    form.SettingsJson = JsonSerializer.Serialize(cb);
+                    break;
+
+                case ParagraphTtsServiceType.ChatterboxTurbo:
+                    var cbt = string.IsNullOrWhiteSpace(c.SettingsJson)
+                        ? ChatterboxTurboParagraphTtsSettings.Recommended
+                        : JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(c.SettingsJson) ?? ChatterboxTurboParagraphTtsSettings.Recommended;
+                    form.BaseUrl = cbt.BaseUrl;
+                    form.MaxChunkChars = cbt.MaxChunkChars;
+                    form.SettingsJson = JsonSerializer.Serialize(cbt);
+                    break;
+
+                case ParagraphTtsServiceType.Qwen3Base:
+                    var qb = string.IsNullOrWhiteSpace(c.SettingsJson)
+                        ? Qwen3ParagraphTtsSettings.Recommended
+                        : JsonSerializer.Deserialize<Qwen3ParagraphTtsSettings>(c.SettingsJson) ?? Qwen3ParagraphTtsSettings.Recommended;
+                    form.BaseUrl = qb.BaseUrl;
+                    form.MaxChunkChars = qb.MaxChunkChars;
+                    form.SettingsJson = JsonSerializer.Serialize(qb);
+                    break;
             }
 
             return form;
@@ -111,6 +138,9 @@ namespace Read2Me.App.Shared
             switch (Type)
             {
                 case ParagraphTtsServiceType.VoxCpm2:
+                case ParagraphTtsServiceType.Chatterbox:
+                case ParagraphTtsServiceType.ChatterboxTurbo:
+                case ParagraphTtsServiceType.Qwen3Base:
                     if (string.IsNullOrWhiteSpace(BaseUrl))
                         return "Base URL is required.";
                     if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out _))
@@ -126,6 +156,9 @@ namespace Read2Me.App.Shared
             var settingsJson = Type switch
             {
                 ParagraphTtsServiceType.VoxCpm2 => BuildVoxCpm2SettingsJson(),
+                ParagraphTtsServiceType.Chatterbox => BuildChatterboxSettingsJson(),
+                ParagraphTtsServiceType.ChatterboxTurbo => BuildChatterboxTurboSettingsJson(),
+                ParagraphTtsServiceType.Qwen3Base => BuildQwen3BaseSettingsJson(),
                 _ => throw new NotSupportedException($"Unsupported paragraph TTS type '{Type}'."),
             };
 
@@ -157,6 +190,42 @@ namespace Read2Me.App.Shared
                 ? VoxCpm2ParagraphTtsSettings.Recommended
                 : JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(SettingsJson)
                   ?? VoxCpm2ParagraphTtsSettings.Recommended;
+
+            settings = settings with { BaseUrl = BaseUrl.Trim(), MaxChunkChars = MaxChunkChars };
+            return JsonSerializer.Serialize(settings);
+        }
+
+        // BaseUrl + MaxChunkChars owned by the form, the 6 tunable params by the editor's SettingsJson — merge here.
+        private string BuildChatterboxSettingsJson()
+        {
+            var settings = string.IsNullOrWhiteSpace(SettingsJson)
+                ? ChatterboxParagraphTtsSettings.Recommended
+                : JsonSerializer.Deserialize<ChatterboxParagraphTtsSettings>(SettingsJson)
+                  ?? ChatterboxParagraphTtsSettings.Recommended;
+
+            settings = settings with { BaseUrl = BaseUrl.Trim(), MaxChunkChars = MaxChunkChars };
+            return JsonSerializer.Serialize(settings);
+        }
+
+        // BaseUrl + MaxChunkChars owned by the form, the 2 tunable params by the editor's SettingsJson — merge here.
+        private string BuildChatterboxTurboSettingsJson()
+        {
+            var settings = string.IsNullOrWhiteSpace(SettingsJson)
+                ? ChatterboxTurboParagraphTtsSettings.Recommended
+                : JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(SettingsJson)
+                  ?? ChatterboxTurboParagraphTtsSettings.Recommended;
+
+            settings = settings with { BaseUrl = BaseUrl.Trim(), MaxChunkChars = MaxChunkChars };
+            return JsonSerializer.Serialize(settings);
+        }
+
+        // BaseUrl + MaxChunkChars owned by the form, the language + 5 sampling params by the editor's SettingsJson — merge here.
+        private string BuildQwen3BaseSettingsJson()
+        {
+            var settings = string.IsNullOrWhiteSpace(SettingsJson)
+                ? Qwen3ParagraphTtsSettings.Recommended
+                : JsonSerializer.Deserialize<Qwen3ParagraphTtsSettings>(SettingsJson)
+                  ?? Qwen3ParagraphTtsSettings.Recommended;
 
             settings = settings with { BaseUrl = BaseUrl.Trim(), MaxChunkChars = MaxChunkChars };
             return JsonSerializer.Serialize(settings);

@@ -60,16 +60,18 @@ namespace Read2Me.Tests.Services.Audio
         {
             public readonly List<string> Texts = new();
             public readonly List<string?> Overrides = new();
+            public readonly List<string?> ReferenceTranscripts = new();
             public Func<string, byte[]> WavFor = _ => BuildWav(100, 0x11);
             public string? ThrowOnTextContaining;
 
             public Task<Stream> GenerateAsync(
                 string text, string? voiceInstructions, Stream referenceAudioStream,
                 ParagraphTtsServiceConfig settings, string? settingsOverrideJson,
-                CancellationToken ct = default)
+                string? referenceTranscript = null, CancellationToken ct = default)
             {
                 Texts.Add(text);
                 Overrides.Add(settingsOverrideJson);
+                ReferenceTranscripts.Add(referenceTranscript);
                 if (ThrowOnTextContaining != null && text.Contains(ThrowOnTextContaining))
                     throw new InvalidOperationException("synth failed");
                 return Task.FromResult<Stream>(new MemoryStream(WavFor(text)));
@@ -99,11 +101,11 @@ namespace Read2Me.Tests.Services.Audio
 
         private static async Task<byte[]> Generate(
             SentenceChunkedTtsClient client, string text, ParagraphTtsServiceConfig? config = null,
-            string? overrideJson = null)
+            string? overrideJson = null, string? referenceTranscript = null)
         {
             using var refAudio = new MemoryStream(new byte[] { 9, 9, 9 });
             using var result = await client.GenerateAsync(
-                text, "instr", refAudio, config ?? new ParagraphTtsServiceConfig(), overrideJson);
+                text, "instr", refAudio, config ?? new ParagraphTtsServiceConfig(), overrideJson, referenceTranscript);
             using var ms = new MemoryStream();
             await result.CopyToAsync(ms);
             return ms.ToArray();
@@ -183,6 +185,20 @@ namespace Read2Me.Tests.Services.Audio
 
             Assert.Equal(3, inner.Overrides.Count);
             Assert.All(inner.Overrides, o => Assert.Equal(overrideJson, o));
+        }
+
+        [Fact]
+        public async Task ReferenceTranscript_ForwardedToInnerClient_OnEveryChunk()
+        {
+            var inner = new FakeInnerClient { WavFor = _ => BuildWav(100, 0x11) };
+            var client = NewClient(inner, new FakeSettings(pauseMs: 200));
+
+            // Cap=40 forces 3 chunks; transcript must reach every inner call unchanged.
+            var text = "The sun rose over the hills today. Birds began to sing so very loudly. A bright new day had finally started.";
+            await Generate(client, text, ConfigWithMaxChunkChars(40), referenceTranscript: "sample transcript");
+
+            Assert.Equal(3, inner.ReferenceTranscripts.Count);
+            Assert.All(inner.ReferenceTranscripts, t => Assert.Equal("sample transcript", t));
         }
 
         [Fact]

@@ -30,6 +30,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             Stream referenceAudioStream,
             ParagraphTtsServiceConfig config,
             string? settingsOverrideJson,
+            string? referenceTranscript = null,
             CancellationToken ct = default)
         {
             var audioSettings = await settings.GetAsync();
@@ -43,7 +44,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
                 foreach (var sentence in sentences)
                 {
                     using var refCopy = new MemoryStream(refBytesLegacy, writable: false);
-                    wavsLegacy.Add(await inner.GenerateAsync(sentence, voiceInstructions, refCopy, config, settingsOverrideJson, ct));
+                    wavsLegacy.Add(await inner.GenerateAsync(sentence, voiceInstructions, refCopy, config, settingsOverrideJson, referenceTranscript, ct));
                 }
                 return WavStitcher.Stitch(wavsLegacy, audioSettings.ChunkPauseMs);
             }
@@ -62,7 +63,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             if (chunks.Count == 1)
             {
                 logger.LogDebug("Single chunk ({Chars} chars) — passthrough: {Text}", chunks[0].Length, chunks[0]);
-                return await inner.GenerateAsync(chunks[0], voiceInstructions, referenceAudioStream, config, settingsOverrideJson, ct);
+                return await inner.GenerateAsync(chunks[0], voiceInstructions, referenceAudioStream, config, settingsOverrideJson, referenceTranscript, ct);
             }
 
             for (int i = 0; i < chunks.Count; i++)
@@ -74,7 +75,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             {
                 var sw = Stopwatch.StartNew();
                 using var refCopy = new MemoryStream(refBytes, writable: false);
-                var wav = await inner.GenerateAsync(chunks[i], voiceInstructions, refCopy, config, settingsOverrideJson, ct);
+                var wav = await inner.GenerateAsync(chunks[i], voiceInstructions, refCopy, config, settingsOverrideJson, referenceTranscript, ct);
                 sw.Stop();
                 logger.LogDebug(
                     "Chunk {Index}/{Count}: {Chars} chars synthesised in {Ms} ms",

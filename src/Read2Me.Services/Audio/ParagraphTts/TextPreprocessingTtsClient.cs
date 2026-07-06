@@ -16,6 +16,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             Stream referenceAudioStream,
             ParagraphTtsServiceConfig config,
             string? settingsOverrideJson,
+            string? referenceTranscript = null,
             CancellationToken ct = default)
         {
             logger.LogDebug("TextPreprocessing: {StepCount} enabled steps [{Steps}], input {Chars} chars",
@@ -49,7 +50,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             if (processed != text)
                 logger.LogDebug("TextPreprocessing complete: output {Chars} chars", processed.Length);
 
-            return inner.GenerateAsync(processed, voiceInstructions, referenceAudioStream, config, settingsOverrideJson, ct);
+            return inner.GenerateAsync(processed, voiceInstructions, referenceAudioStream, config, settingsOverrideJson, referenceTranscript, ct);
         }
     }
 }

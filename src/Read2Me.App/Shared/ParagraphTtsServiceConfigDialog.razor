@@ -29,6 +29,51 @@
                                             Mode="TtsSettingsEditorMode.ProviderDefaults" />
             }
 
+            @if (_form.Type == ParagraphTtsServiceType.Chatterbox)
+            {
+                <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
+                              Placeholder="http://localhost:8000" Required="true" Immediate="true"
+                              UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
+
+                <MudNumericField @bind-Value="_form.MaxChunkChars" Label="Max Chunk Chars" Variant="Variant.Outlined"
+                                 Min="1" Immediate="true"
+                                 HelperText="Soft cap on characters per TTS chunk. Larger = more coherent but heavier for the provider." />
+
+                <ParagraphTtsSettingsEditor @bind-Value="_form.SettingsJson"
+                                            ProviderType="ParagraphTtsServiceType.Chatterbox"
+                                            Mode="TtsSettingsEditorMode.ProviderDefaults" />
+            }
+
+            @if (_form.Type == ParagraphTtsServiceType.ChatterboxTurbo)
+            {
+                <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
+                              Placeholder="http://localhost:8001" Required="true" Immediate="true"
+                              UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
+
+                <MudNumericField @bind-Value="_form.MaxChunkChars" Label="Max Chunk Chars" Variant="Variant.Outlined"
+                                 Min="1" Immediate="true"
+                                 HelperText="Soft cap on characters per TTS chunk. Larger = more coherent but heavier for the provider." />
+
+                <ParagraphTtsSettingsEditor @bind-Value="_form.SettingsJson"
+                                            ProviderType="ParagraphTtsServiceType.ChatterboxTurbo"
+                                            Mode="TtsSettingsEditorMode.ProviderDefaults" />
+            }
+
+            @if (_form.Type == ParagraphTtsServiceType.Qwen3Base)
+            {
+                <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
+                              Placeholder="http://localhost:8101" Required="true" Immediate="true"
+                              UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
+
+                <MudNumericField @bind-Value="_form.MaxChunkChars" Label="Max Chunk Chars" Variant="Variant.Outlined"
+                                 Min="1" Immediate="true"
+                                 HelperText="Soft cap on characters per TTS chunk. Larger = more coherent but heavier for the provider." />
+
+                <ParagraphTtsSettingsEditor @bind-Value="_form.SettingsJson"
+                                            ProviderType="ParagraphTtsServiceType.Qwen3Base"
+                                            Mode="TtsSettingsEditorMode.ProviderDefaults" />
+            }
+
             <MudText Typo="Typo.subtitle2">Text processing</MudText>
             @foreach (var step in StepCatalog.GetAll(Config?.Id ?? 0))
             {

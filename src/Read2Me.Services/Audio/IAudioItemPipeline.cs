@@ -21,7 +21,8 @@ namespace Read2Me.Services.Audio
         int MaxAttempts,
         double WerThreshold,
         string? FfmpegPath,
-        string? Speaker);
+        string? Speaker,
+        string? ReferenceTranscript = null);
 
     public interface IAudioItemPipeline
     {

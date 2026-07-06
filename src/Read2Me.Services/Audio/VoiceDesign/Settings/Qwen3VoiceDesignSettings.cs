@@ -11,5 +11,18 @@ namespace Read2Me.Services.Audio.VoiceDesign.Settings
 
         /// <summary>Optional model id sent on the request.</summary>
         public string? Model { get; init; }
+
+        /// <summary>Language code or "auto" (auto/en/zh/ja/ko/de/fr/ru/pt/es/it).</summary>
+        public string Language { get; init; } = "auto";
+
+        public double? Temperature { get; init; }
+
+        public double? TopP { get; init; }
+
+        public int? TopK { get; init; }
+
+        public double? RepetitionPenalty { get; init; }
+
+        public int? MaxNewTokens { get; init; }
     }
 }

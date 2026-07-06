@@ -132,6 +132,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<VoiceDesignPromptService>();
         services.AddScoped<IParagraphTtsClientResolver, ParagraphTtsClientResolver>();
         services.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.VoxCpm2);
+        services.AddKeyedScoped<IParagraphTtsClient, ChatterboxParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.Chatterbox);
+        services.AddKeyedScoped<IParagraphTtsClient, ChatterboxTurboParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.ChatterboxTurbo);
+        services.AddKeyedScoped<IParagraphTtsClient, Qwen3ParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.Qwen3Base);
         services.AddSingleton<ITextProcessingStepCatalog, TextProcessingStepCatalog>();
         services.AddSingleton(new TextProcessingStepDescriptor(
             "to-sentence-case",

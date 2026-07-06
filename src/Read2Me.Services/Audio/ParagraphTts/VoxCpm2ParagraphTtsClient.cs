@@ -25,6 +25,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             Stream referenceAudioStream,
             ParagraphTtsServiceConfig settings,
             string? settingsOverrideJson,
+            string? referenceTranscript = null,
             CancellationToken ct = default)
         {
             var cfg = VoiceDesignSettingsMerge.Merge<VoxCpm2ParagraphTtsSettings>(

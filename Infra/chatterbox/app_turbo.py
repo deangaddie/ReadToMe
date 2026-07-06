@@ -111,6 +111,8 @@ async def synthesize_turbo(
     request: Request,
     text: str = Form(...),
     reference_audio: UploadFile = File(...),
+    temperature: float = Form(0.8),
+    repetition_penalty: float = Form(1.2),
 ):
     """
     Generate speech using ChatterboxTurboTTS.
@@ -120,6 +122,8 @@ async def synthesize_turbo(
 
     - text: text with optional paralinguistic tags
     - reference_audio: WAV/MP3 for voice cloning, ~10 seconds ideal (required)
+    - temperature: sampling temperature (default 0.8)
+    - repetition_penalty: penalizes repeated tokens (default 1.2)
 
     Note: exaggeration and cfg_weight are not supported by the turbo model.
     """
@@ -134,7 +138,12 @@ async def synthesize_turbo(
         async with _gen_lock:
             wav = await _run_with_cancel(
                 request,
-                lambda: model_turbo.generate(text, audio_prompt_path=tmp_ref),
+                lambda: model_turbo.generate(
+                    text,
+                    audio_prompt_path=tmp_ref,
+                    temperature=temperature,
+                    repetition_penalty=repetition_penalty,
+                ),
             )
             response = _wav_response(wav, model_turbo.sr)
             del wav

@@ -39,7 +39,8 @@ namespace Read2Me.Services.Audio
                 // TTS — propagate hard exceptions to caller
                 using var refAudio = fs.OpenRead(req.RefAudioPath);
                 var wavStream = await client.GenerateAsync(
-                    ttsText, req.VoiceInstructions, refAudio, req.TtsConfig, req.TtsSettingsOverrideJson, ct);
+                    ttsText, req.VoiceInstructions, refAudio, req.TtsConfig, req.TtsSettingsOverrideJson,
+                    req.ReferenceTranscript, ct);
                 broadcaster.Publish(new AudioGenerated(id, attempt));
 
                 var normalizeResult = await normalizer.NormalizeAsync(wavStream, req.FfmpegPath, ct);

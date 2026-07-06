@@ -125,26 +125,29 @@ Two containers, same `Dockerfile.chatterbox`, different entry modules selected v
 
 ### Standard — port 8000 (`read2me-chatterbox`)
 
-Loads `ChatterboxTTS`. Supports expression instructions and tuning parameters.
+Loads `ChatterboxTTS`. **No free-text instruction channel** — expression comes from `exaggeration`/`temperature`, not an `instructions` param (removed).
 
-| Method | Path      | Purpose                             |
-| ------ | --------- | ----------------------------------- |
-| GET    | `/health` | Liveness check, reports device      |
-| POST   | `/tts`    | Speech with expression instructions |
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/health` | Liveness check, reports device |
+| POST | `/tts` | Speech with voice cloning |
 
 #### POST /tts
 
-| Field             | Type   | Required | Notes                                       |
-| ----------------- | ------ | -------- | ------------------------------------------- |
-| `text`            | string | yes      | Plain text — no paralinguistic tags         |
-| `reference_audio` | file   | yes      | WAV/MP3 for voice cloning                   |
-| `instructions`    | string | no       | Expression hint e.g. "speak slowly, sadly"  |
-| `exaggeration`    | float  | no       | 0–1, expressiveness (default 0.5)           |
-| `cfg_weight`      | float  | no       | 0–1, guidance weight (default 0.5)          |
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `text` | string | yes | Plain text — no paralinguistic tags |
+| `reference_audio` | file | yes | WAV/MP3 for voice cloning |
+| `exaggeration` | float | no | 0–1, expressiveness (default 0.5) |
+| `cfg_weight` | float | no | 0–1, guidance weight (default 0.5) |
+| `temperature` | float | no | Sampling randomness (default 0.8) |
+| `min_p` | float | no | Nucleus sampling floor (default 0.05) |
+| `top_p` | float | no | Nucleus sampling ceiling (default 1.0) |
+| `repetition_penalty` | float | no | Penalizes repeated tokens (default 1.2) |
 
 ### Turbo — port 8001 (`read2me-chatterbox-turbo`)
 
-Loads `ChatterboxTurboTTS` only. Use when text contains paralinguistic tags. Does not support `exaggeration`, `cfg_weight`, or `instructions`.
+Loads `ChatterboxTurboTTS` only. Use when text contains paralinguistic tags. Does not support `exaggeration`, `cfg_weight`, or `instructions`. **English-only** — no free-text instruction channel; expression comes from inline tags.
 
 | Method | Path         | Purpose                         |
 | ------ | ------------ | ------------------------------- |
@@ -153,10 +156,12 @@ Loads `ChatterboxTurboTTS` only. Use when text contains paralinguistic tags. Doe
 
 #### POST /tts/turbo
 
-| Field             | Type   | Required | Notes                                         |
-| ----------------- | ------ | -------- | --------------------------------------------- |
-| `text`            | string | yes      | Text with paralinguistic tags                 |
-| `reference_audio` | file   | yes      | WAV/MP3 for voice cloning (~10 seconds ideal) |
+| Field                | Type   | Required | Notes                                         |
+| -------------------- | ------ | -------- | --------------------------------------------- |
+| `text`               | string | yes      | Text with paralinguistic tags                 |
+| `reference_audio`    | file   | yes      | WAV/MP3 for voice cloning (~10 seconds ideal) |
+| `temperature`        | float  | no       | Sampling temperature (default 0.8)            |
+| `repetition_penalty` | float  | no       | Penalizes repeated tokens (default 1.2)       |
 
 Supported paralinguistic tags: `[laugh]` `[chuckle]` `[sigh]` `[cough]` `[clear throat]` `[gasp]` `[groan]` `[sniff]` `[shush]`
 
@@ -173,10 +178,16 @@ Generates voices from text descriptions — no reference audio required.
 | GET    | `/health` | Liveness check, reports device and model name |
 | POST   | `/tts`    | Text-to-speech generation using Qwen3 TTS     |
 
-| Field               | Type   | Required | Notes                                 |
-| ------------------- | ------ | -------- | ------------------------------------- |
-| `text`              | string | yes      | Plain text to synthesize              |
-| `voice_description` | string | yes      | Text description of the desired voice |
+| Field                | Type   | Required | Notes                                                  |
+| -------------------- | ------ | -------- | ------------------------------------------------------ |
+| `text`               | string | yes      | Plain text to synthesize                               |
+| `voice_description`  | string | yes      | Text description of the desired voice                  |
+| `language`           | string | no       | Default `"auto"` (auto/en/zh/ja/ko/de/fr/ru/pt/es/it)  |
+| `temperature`        | float  | no       | HF sampling kwarg, omitted when unset                  |
+| `top_p`              | float  | no       | HF sampling kwarg, omitted when unset                  |
+| `top_k`              | int    | no       | HF sampling kwarg, omitted when unset                  |
+| `repetition_penalty` | float  | no       | HF sampling kwarg, omitted when unset                  |
+| `max_new_tokens`     | int    | no       | HF sampling kwarg, omitted when unset                  |
 
 Returns `audio/wav`.
 
@@ -189,32 +200,62 @@ Custom image built from `Dockerfile.qwen3` (same image, `app_base` module). Expo
 | GET    | `/health` | Liveness check, reports device and model name |
 | POST   | `/tts`    | Voice cloning with reference audio            |
 
-| Field              | Type   | Required | Notes                             |
-| ------------------ | ------ | -------- | --------------------------------- |
-| `text`             | string | yes      | Plain text to synthesize          |
-| `reference_audio`  | file   | yes      | WAV/MP3 voice sample for cloning  |
-| `voice_transcript` | string | yes      | Transcript of the reference audio |
-| `language`         | string | no       | Default `"auto"`                  |
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `text` | string | yes | Plain text to synthesize |
+| `reference_audio` | file | yes | WAV/MP3 voice sample for cloning |
+| `voice_transcript` | string | yes | Transcript of the reference audio |
+| `language` | string | no | Default `"auto"` (auto/en/zh/ja/ko/de/fr/ru/pt/es/it) |
+| `temperature` | float | no | HF sampling kwarg, omitted when unset |
+| `top_p` | float | no | HF sampling kwarg, omitted when unset |
+| `top_k` | int | no | HF sampling kwarg, omitted when unset |
+| `repetition_penalty` | float | no | HF sampling kwarg, omitted when unset |
+| `max_new_tokens` | int | no | HF sampling kwarg, omitted when unset |
 
 Returns `audio/wav`.
 
 ## VoxCPM2
 
-Custom image built from `Dockerfile.voxcpm2`. Wraps `openbmb/VoxCPM2` for voice cloning.
+Native inference server (`voxcpm2/server.py`), no vLLM backend. Wraps `openbmb/VoxCPM2` for voice cloning.
 
-Port `8003`.
+Port `8003`. Two-step protocol — upload the reference clip once, then stream generation referencing its `file_id`.
 
-| Method | Path      | Purpose                                       |
-| ------ | --------- | --------------------------------------------- |
-| GET    | `/health` | Liveness check                                |
-| POST   | `/tts`    | Voice cloning TTS                             |
+| Method | Path            | Purpose                                         |
+| ------ | --------------- | ------------------------------------------------ |
+| GET    | `/health`       | Liveness check, reports model-loaded state      |
+| POST   | `/upload-audio` | Upload reference audio, returns a `file_id`     |
+| POST   | `/api/stream`   | Streaming generation using an uploaded `file_id`|
 
-| Field             | Type   | Required | Notes                                  |
-| ----------------- | ------ | -------- | -------------------------------------- |
-| `text`            | string | yes      | Plain text to synthesize               |
-| `reference_audio` | file   | yes      | WAV/MP3 voice sample for cloning       |
+### POST /upload-audio
 
-Returns `audio/wav`.
+Multipart. Field `file` (WAV/MP3/FLAC/OGG/M4A). Response:
+
+```json
+{ "file_id": "<uuid>" }
+```
+
+Uploads are cached server-side and expire after `UPLOAD_TTL_SECONDS` (default 3600s).
+
+### POST /api/stream
+
+JSON body. Response is `application/octet-stream`, a sequence of framed binary messages: **1 type byte** + **4-byte little-endian length** (`<I`) + payload. Type `0` = JSON control frame (`meta`/`done`/`error`); type `1` = raw `float32` PCM chunk.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `text` | string | yes | Plain text to synthesize |
+| `control` | string | no | Prepended as `(control)text` — style/emotion hint |
+| `reference_wav_path` | string | no | `file_id` from `/upload-audio` (voice cloning) |
+| `cfg_value` | float | no | Classifier-free guidance weight (default 2.0) |
+| `inference_timesteps` | int | no | Diffusion steps (default 10) |
+| `min_len` | int | no | Minimum output length (default 2) |
+| `max_len` | int | no | Maximum output length (default 4096) |
+| `normalize` | bool | no | Loudness normalization (default false) |
+| `denoise` | bool | no | Denoise reference audio (default false) |
+| `retry_badcase` | bool | no | Retry generation on bad-case detection (default true) |
+| `retry_badcase_max_times` | int | no | Max retries (default 3) |
+| `retry_badcase_ratio_threshold` | float | no | Bad-case detection threshold (default 6.0) |
+
+Stream sequence: one `meta` frame (`{"type": "meta", "sample_rate": ...}`) → N audio frames (raw float32 PCM) → one `done` frame (`{"type": "done", "chunks": N}`), or an `error` frame if generation fails.
 
 ## Whisper (GPU)
 

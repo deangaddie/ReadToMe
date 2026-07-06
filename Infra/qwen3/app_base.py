@@ -92,7 +92,7 @@ _LANG_MAP = {
     "ko": "korean", "fr": "french", "ru": "russian",
 }
 
-def _generate(text: str, reference_audio_bytes: bytes, voice_transcript: str, language: str = "auto") -> bytes:
+def _generate(text: str, reference_audio_bytes: bytes, voice_transcript: str, language: str, gen_kwargs: dict) -> bytes:
     import numpy as np
     audio_array, sr = sf.read(io.BytesIO(reference_audio_bytes))
     if audio_array.ndim > 1:
@@ -105,6 +105,7 @@ def _generate(text: str, reference_audio_bytes: bytes, voice_transcript: str, la
         language=lang,
         ref_audio=(audio_array, sr),
         ref_text=voice_transcript,
+        **gen_kwargs,
     )
     buf = io.BytesIO()
     sf.write(buf, wavs[0], out_sr, format="wav")
@@ -119,6 +120,11 @@ async def synthesize(
     reference_audio: UploadFile = File(...),
     voice_transcript: str = Form(...),
     language: str = Form("auto"),
+    temperature: Optional[float] = Form(None),
+    top_p: Optional[float] = Form(None),
+    top_k: Optional[int] = Form(None),
+    repetition_penalty: Optional[float] = Form(None),
+    max_new_tokens: Optional[int] = Form(None),
 ):
     """
     Generate speech using Qwen3 TTS Base model (voice cloning).
@@ -127,6 +133,7 @@ async def synthesize(
     - reference_audio: WAV/MP3 voice sample file
     - voice_transcript: transcript of the reference audio
     - language: language code or "auto" (auto/en/zh/de/it/pt/es/ja/ko/fr/ru)
+    - temperature, top_p, top_k, repetition_penalty, max_new_tokens: optional HF sampling kwargs
     """
     if not text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
@@ -139,10 +146,20 @@ async def synthesize(
 
     logger.info("Qwen3 TTS Base: language '%s', transcript len=%d", language, len(voice_transcript))
 
+    gen_kwargs = {
+        k: v for k, v in {
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "repetition_penalty": repetition_penalty,
+            "max_new_tokens": max_new_tokens,
+        }.items() if v is not None
+    }
+
     async with _gen_lock:
         wav_bytes = await _run_with_cancel(
             request,
-            lambda: _generate(text, audio_bytes, voice_transcript, language)
+            lambda: _generate(text, audio_bytes, voice_transcript, language, gen_kwargs)
         )
 
     return _wav_response(wav_bytes)

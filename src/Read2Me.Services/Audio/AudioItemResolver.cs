@@ -14,7 +14,8 @@ namespace Read2Me.Services.Audio
         IProjectDbContextFactory dbFactory,
         IVoiceResolver voiceResolver,
         ParagraphTtsSettingsService ttsSettings,
-        AudioProcessingSettingsService audioProcessingSettings) : IAudioItemResolver
+        AudioProcessingSettingsService audioProcessingSettings,
+        VoiceDesignSettingsService voiceDesignSettings) : IAudioItemResolver
     {
         public async Task<ResolutionResult> ResolveAsync(QueuedAudioItem queued, CancellationToken ct)
         {
@@ -74,6 +75,11 @@ namespace Read2Me.Services.Audio
             var refAudioPath = Path.Combine(folderPath, voice.AudioFileName.Replace('/', Path.DirectorySeparatorChar));
 
             var processingSettings = await audioProcessingSettings.GetAsync();
+            // Prefer the voice's own transcript — it matches the reference audio; the global
+            // sample text only applies when the voice predates per-voice transcripts.
+            var referenceTranscript = !string.IsNullOrWhiteSpace(voice.Transcript)
+                ? voice.Transcript
+                : await voiceDesignSettings.GetSampleTextAsync();
 
             var request = new PipelineRequest(
                 ParagraphItemId: itemRef.ParagraphItemId,
@@ -85,7 +91,8 @@ namespace Read2Me.Services.Audio
                 TtsSettingsOverrideJson: voice.TtsSettingsOverrideJson,
                 MaxAttempts: Math.Max(1, processingSettings.AudioMaxAttempts),
                 WerThreshold: processingSettings.WerThreshold,
-                FfmpegPath: processingSettings.FfmpegPath);
+                FfmpegPath: processingSettings.FfmpegPath,
+                ReferenceTranscript: referenceTranscript);
 
             return new ResolutionResult(speaker, sourceText, request, null);
         }

@@ -4,5 +4,8 @@ namespace Read2Me.AppData.Entities
     public enum ParagraphTtsServiceType
     {
         VoxCpm2 = 0,
+        Chatterbox = 1,
+        ChatterboxTurbo = 2,
+        Qwen3Base = 3,
     }
 }

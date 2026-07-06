@@ -37,7 +37,7 @@ namespace Read2Me.Services
         public Task UpdateConfigAsync(VoiceDesignServiceConfig config) => _store.UpdateConfigAsync(config);
         public Task DeleteConfigAsync(int configId) => _store.DeleteConfigAsync(configId);
 
-        public async Task<string?> GetSampleTextAsync()
+        public virtual async Task<string?> GetSampleTextAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var settings = await db.Settings.SingleOrDefaultAsync();

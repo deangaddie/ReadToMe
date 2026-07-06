@@ -47,5 +47,31 @@ namespace Read2Me.Tests.App
             Assert.Equal("http://localhost:8003", reloaded.BaseUrl);
             Assert.Equal(type, reloaded.Type);
         }
+
+        [Fact]
+        public void BuildConfig_Qwen3_RoundTripsLanguageAndSamplingParams()
+        {
+            var form = new VoiceDesignServiceConfigForm
+            {
+                Name = "test",
+                Type = VoiceDesignServiceType.Qwen3,
+                BaseUrl = "http://localhost:8100",
+                Language = "ja",
+                Temperature = 0.6,
+                TopP = 0.9,
+                TopK = 40,
+                RepetitionPenalty = 1.1,
+                MaxNewTokens = 512,
+            };
+
+            var reloaded = VoiceDesignServiceConfigForm.FromConfig(form.BuildConfig());
+
+            Assert.Equal("ja", reloaded.Language);
+            Assert.Equal(0.6, reloaded.Temperature);
+            Assert.Equal(0.9, reloaded.TopP);
+            Assert.Equal(40, reloaded.TopK);
+            Assert.Equal(1.1, reloaded.RepetitionPenalty);
+            Assert.Equal(512, reloaded.MaxNewTokens);
+        }
     }
 }

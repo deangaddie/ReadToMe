@@ -30,6 +30,38 @@
                               UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
                 <MudTextField @bind-Value="_form.Model" Label="Model (optional)" Variant="Variant.Outlined"
                               Immediate="true" Placeholder="Leave blank to use server default" />
+
+                <MudSelect T="string" @bind-Value="_form.Language" Label="Language" Variant="Variant.Outlined">
+                    @foreach (var lang in new[] { "auto", "en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it" })
+                    {
+                        <MudSelectItem Value="@lang">@lang</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudNumericField T="double?" @bind-Value="_form.Temperature" Label="Temperature"
+                                  Variant="Variant.Outlined" Immediate="true"
+                                  Min="0.0" Max="2.0" Step="0.05"
+                                  HelperText="Sampling randomness. Leave blank to use server default." />
+
+                <MudNumericField T="double?" @bind-Value="_form.TopP" Label="Top P"
+                                  Variant="Variant.Outlined" Immediate="true"
+                                  Min="0.0" Max="1.0" Step="0.01"
+                                  HelperText="Nucleus sampling ceiling. Leave blank to use server default." />
+
+                <MudNumericField T="int?" @bind-Value="_form.TopK" Label="Top K"
+                                  Variant="Variant.Outlined" Immediate="true"
+                                  Min="1"
+                                  HelperText="Top-K sampling cutoff. Leave blank to use server default." />
+
+                <MudNumericField T="double?" @bind-Value="_form.RepetitionPenalty" Label="Repetition Penalty"
+                                  Variant="Variant.Outlined" Immediate="true"
+                                  Min="1.0" Max="2.0" Step="0.05"
+                                  HelperText="Penalizes repeated tokens. Leave blank to use server default." />
+
+                <MudNumericField T="int?" @bind-Value="_form.MaxNewTokens" Label="Max New Tokens"
+                                  Variant="Variant.Outlined" Immediate="true"
+                                  Min="1"
+                                  HelperText="Caps generated token count. Leave blank to use server default." />
             }
 
             @if (_error != null)

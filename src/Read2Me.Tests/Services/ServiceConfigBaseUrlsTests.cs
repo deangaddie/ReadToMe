@@ -31,6 +31,45 @@ namespace Read2Me.Tests.Services
             Assert.Equal("http://localhost:8003", ServiceConfigBaseUrls.For(config));
         }
 
+        [Theory]
+        [InlineData("""{"BaseUrl":"http://localhost:8000"}""")]
+        [InlineData("""{"baseUrl":"http://localhost:8000"}""")]
+        public void ParagraphTts_Chatterbox_ReadsBaseUrlFromSettingsJson(string settingsJson)
+        {
+            var config = new ParagraphTtsServiceConfig
+            {
+                Type = ParagraphTtsServiceType.Chatterbox,
+                SettingsJson = settingsJson,
+            };
+            Assert.Equal("http://localhost:8000", ServiceConfigBaseUrls.For(config));
+        }
+
+        [Theory]
+        [InlineData("""{"BaseUrl":"http://localhost:8001"}""")]
+        [InlineData("""{"baseUrl":"http://localhost:8001"}""")]
+        public void ParagraphTts_ChatterboxTurbo_ReadsBaseUrlFromSettingsJson(string settingsJson)
+        {
+            var config = new ParagraphTtsServiceConfig
+            {
+                Type = ParagraphTtsServiceType.ChatterboxTurbo,
+                SettingsJson = settingsJson,
+            };
+            Assert.Equal("http://localhost:8001", ServiceConfigBaseUrls.For(config));
+        }
+
+        [Theory]
+        [InlineData("""{"BaseUrl":"http://localhost:8101"}""")]
+        [InlineData("""{"baseUrl":"http://localhost:8101"}""")]
+        public void ParagraphTts_Qwen3Base_ReadsBaseUrlFromSettingsJson(string settingsJson)
+        {
+            var config = new ParagraphTtsServiceConfig
+            {
+                Type = ParagraphTtsServiceType.Qwen3Base,
+                SettingsJson = settingsJson,
+            };
+            Assert.Equal("http://localhost:8101", ServiceConfigBaseUrls.For(config));
+        }
+
         [Fact]
         public void Transcription_LocalWhisper_ReadsBaseUrlFromSettingsJson()
         {

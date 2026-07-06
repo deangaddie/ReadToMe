@@ -156,6 +156,141 @@ namespace Read2Me.Tests.App
             Assert.Equal(1200, form.MaxChunkChars);
         }
 
+        // ---- Chatterbox ----
+
+        [Fact]
+        public void FromConfig_BuildConfig_RoundTripsChatterboxSettings()
+        {
+            var original = ChatterboxParagraphTtsSettings.Recommended with
+            {
+                BaseUrl = "http://localhost:8000",
+                Exaggeration = 0.7,
+                CfgWeight = 0.4,
+                Temperature = 0.9,
+                MinP = 0.1,
+                TopP = 0.95,
+                RepetitionPenalty = 1.5,
+                MaxChunkChars = 333,
+            };
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Chatterbox",
+                Type = ParagraphTtsServiceType.Chatterbox,
+                SettingsJson = JsonSerializer.Serialize(original),
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+            Assert.Equal("http://localhost:8000", form.BaseUrl);
+            Assert.Equal(333, form.MaxChunkChars);
+
+            var rebuilt = form.BuildConfig();
+            var s = JsonSerializer.Deserialize<ChatterboxParagraphTtsSettings>(rebuilt.SettingsJson);
+
+            Assert.Equal(original, s);
+        }
+
+        [Fact]
+        public void Validate_Chatterbox_RequiresBaseUrl()
+        {
+            var form = new ParagraphTtsServiceConfigForm
+            {
+                Name = "Chatterbox",
+                Type = ParagraphTtsServiceType.Chatterbox,
+                BaseUrl = "",
+            };
+
+            Assert.Equal("Base URL is required.", form.Validate());
+        }
+
+        // ---- ChatterboxTurbo ----
+
+        [Fact]
+        public void FromConfig_BuildConfig_RoundTripsChatterboxTurboSettings()
+        {
+            var original = ChatterboxTurboParagraphTtsSettings.Recommended with
+            {
+                BaseUrl = "http://localhost:8001",
+                Temperature = 0.9,
+                RepetitionPenalty = 1.5,
+                MaxChunkChars = 333,
+            };
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "ChatterboxTurbo",
+                Type = ParagraphTtsServiceType.ChatterboxTurbo,
+                SettingsJson = JsonSerializer.Serialize(original),
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+            Assert.Equal("http://localhost:8001", form.BaseUrl);
+            Assert.Equal(333, form.MaxChunkChars);
+
+            var rebuilt = form.BuildConfig();
+            var s = JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(rebuilt.SettingsJson);
+
+            Assert.Equal(original, s);
+        }
+
+        [Fact]
+        public void Validate_ChatterboxTurbo_RequiresBaseUrl()
+        {
+            var form = new ParagraphTtsServiceConfigForm
+            {
+                Name = "ChatterboxTurbo",
+                Type = ParagraphTtsServiceType.ChatterboxTurbo,
+                BaseUrl = "",
+            };
+
+            Assert.Equal("Base URL is required.", form.Validate());
+        }
+
+        // ---- Qwen3Base ----
+
+        [Fact]
+        public void FromConfig_BuildConfig_RoundTripsQwen3BaseSettings()
+        {
+            var original = Qwen3ParagraphTtsSettings.Recommended with
+            {
+                BaseUrl = "http://localhost:8101",
+                ApiKey = "secret",
+                Language = "en",
+                Temperature = 0.7,
+                TopP = 0.9,
+                TopK = 40,
+                RepetitionPenalty = 1.1,
+                MaxNewTokens = 512,
+                MaxChunkChars = 333,
+            };
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Qwen3Base",
+                Type = ParagraphTtsServiceType.Qwen3Base,
+                SettingsJson = JsonSerializer.Serialize(original),
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+            Assert.Equal("http://localhost:8101", form.BaseUrl);
+            Assert.Equal(333, form.MaxChunkChars);
+
+            var rebuilt = form.BuildConfig();
+            var s = JsonSerializer.Deserialize<Qwen3ParagraphTtsSettings>(rebuilt.SettingsJson);
+
+            Assert.Equal(original, s);
+        }
+
+        [Fact]
+        public void Validate_Qwen3Base_RequiresBaseUrl()
+        {
+            var form = new ParagraphTtsServiceConfigForm
+            {
+                Name = "Qwen3Base",
+                Type = ParagraphTtsServiceType.Qwen3Base,
+                BaseUrl = "",
+            };
+
+            Assert.Equal("Base URL is required.", form.Validate());
+        }
+
         // ---- EnabledStepIds ----
 
         [Fact]

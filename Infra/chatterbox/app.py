@@ -111,18 +111,25 @@ async def synthesize(
     request: Request,
     text: str = Form(...),
     reference_audio: UploadFile = File(...),
-    instructions: Optional[str] = Form(None),
     exaggeration: float = Form(0.5),
     cfg_weight: float = Form(0.5),
+    temperature: float = Form(0.8),
+    min_p: float = Form(0.05),
+    top_p: float = Form(1.0),
+    repetition_penalty: float = Form(1.2),
 ):
     """
     Generate speech using ChatterboxTTS (standard model).
 
+    No free-text instruction channel — expression comes from exaggeration/temperature.
+
     - text: plain text; do NOT include paralinguistic tags here — use /tts/turbo for those
     - reference_audio: WAV/MP3 for voice cloning (required)
-    - instructions: expression instructions e.g. "speak slowly and sadly"
     - exaggeration: 0–1, controls expressiveness (default 0.5)
     - cfg_weight: 0–1, classifier-free guidance weight (default 0.5)
+    - temperature: sampling randomness (default 0.8)
+    - min_p / top_p: nucleus sampling bounds (defaults 0.05 / 1.0)
+    - repetition_penalty: penalizes repeated tokens (default 1.2)
     """
     if not text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
@@ -140,6 +147,10 @@ async def synthesize(
                     audio_prompt_path=tmp_ref,
                     exaggeration=exaggeration,
                     cfg_weight=cfg_weight,
+                    temperature=temperature,
+                    min_p=min_p,
+                    top_p=top_p,
+                    repetition_penalty=repetition_penalty,
                 ),
             )
             response = _wav_response(wav, model.sr)

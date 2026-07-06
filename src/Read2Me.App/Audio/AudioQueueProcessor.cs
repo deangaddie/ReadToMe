@@ -31,6 +31,8 @@ namespace Read2Me.App.Audio
 
                 if (!resolution.Succeeded)
                 {
+                    logger.LogWarning("Resolution failed for item {ItemId}: {Reason}",
+                        itemRef.ParagraphItemId, resolution.FailureReason);
                     broadcaster.Publish(new Failed(itemRef.ParagraphItemId, Attempt: 1, resolution.FailureReason!));
                     queue.MarkFailed(folder, itemRef, resolution.FailureReason!);
                     return;

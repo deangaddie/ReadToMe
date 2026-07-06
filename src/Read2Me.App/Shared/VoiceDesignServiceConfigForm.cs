@@ -25,6 +25,12 @@ namespace Read2Me.App.Shared
         // Qwen3 settings
         public string? ApiKey { get; set; }
         public string? Model { get; set; }
+        public string Language { get; set; } = "auto";
+        public double? Temperature { get; set; }
+        public double? TopP { get; set; }
+        public int? TopK { get; set; }
+        public double? RepetitionPenalty { get; set; }
+        public int? MaxNewTokens { get; set; }
 
         private static readonly JsonSerializerOptions _jsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -54,6 +60,12 @@ namespace Read2Me.App.Shared
                     form.BaseUrl = q3.BaseUrl;
                     form.ApiKey = q3.ApiKey;
                     form.Model = q3.Model;
+                    form.Language = q3.Language;
+                    form.Temperature = q3.Temperature;
+                    form.TopP = q3.TopP;
+                    form.TopK = q3.TopK;
+                    form.RepetitionPenalty = q3.RepetitionPenalty;
+                    form.MaxNewTokens = q3.MaxNewTokens;
                     break;
             }
 
@@ -84,6 +96,12 @@ namespace Read2Me.App.Shared
                         BaseUrl = BaseUrl.Trim(),
                         ApiKey = string.IsNullOrWhiteSpace(ApiKey) ? null : ApiKey.Trim(),
                         Model = string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
+                        Language = Language,
+                        Temperature = Temperature,
+                        TopP = TopP,
+                        TopK = TopK,
+                        RepetitionPenalty = RepetitionPenalty,
+                        MaxNewTokens = MaxNewTokens,
                     }),
                 _ => throw new NotSupportedException($"Unsupported voice design type '{Type}'."),
             };
