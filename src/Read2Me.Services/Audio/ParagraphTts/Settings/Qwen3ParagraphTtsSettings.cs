@@ -35,11 +35,21 @@ namespace Read2Me.Services.Audio.ParagraphTts.Settings
         [JsonPropertyName("maxChunkChars")]
         public int MaxChunkChars { get; init; } = 500;
 
+        /// <summary>Prepend the voice's reference transcript to short text, then trim it off. App-level, not a Qwen3 API param.</summary>
+        [JsonPropertyName("carrierPrefixEnabled")]
+        public bool CarrierPrefixEnabled { get; init; } = false;
+
+        /// <summary>Carrier prefix applies when the target text is at most this many characters. App-level, not a Qwen3 API param.</summary>
+        [JsonPropertyName("carrierMaxTargetChars")]
+        public int CarrierMaxTargetChars { get; init; } = 30;
+
         public static Qwen3ParagraphTtsSettings Recommended => new()
         {
             BaseUrl = string.Empty,
             Language = "auto",
             MaxChunkChars = 500,
+            CarrierPrefixEnabled = false,
+            CarrierMaxTargetChars = 30,
         };
     }
 }

@@ -67,6 +67,82 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Contains("test.wav", strContent);
         }
 
+        [Fact]
+        public async Task TranscribeWithWordTimestamps_RequestsJsonOutput_FlattensSegmentWords()
+        {
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""
+                    {
+                      "text": "hello world again",
+                      "segments": [
+                        { "words": [
+                            { "word": " hello", "start": 0.0, "end": 0.4 },
+                            { "word": " world", "start": 0.5, "end": 0.9 }
+                        ] },
+                        { "words": [
+                            { "word": " again", "start": 1.2, "end": 1.6 }
+                        ] }
+                      ]
+                    }
+                    """)
+            };
+
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
+            var words = await _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "test.wav");
+
+            Assert.Contains("/asr?task=transcribe&output=json&word_timestamps=true",
+                _httpFactory.LastRequest?.RequestUri?.ToString() ?? "");
+            Assert.IsType<MultipartFormDataContent>(_httpFactory.LastRequest?.Content);
+            Assert.Contains("audio_file", _httpFactory.LastRequestContent ?? "");
+
+            Assert.Equal(3, words.Count);
+            Assert.Equal(new TranscribedWord(" hello", 0.0, 0.4), words[0]);
+            Assert.Equal(new TranscribedWord(" world", 0.5, 0.9), words[1]);
+            Assert.Equal(new TranscribedWord(" again", 1.2, 1.6), words[2]);
+        }
+
+        [Fact]
+        public async Task TranscribeWithWordTimestamps_SegmentWithoutWords_IsSkipped()
+        {
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""
+                    { "segments": [ { "text": "no words here" }, { "words": [] } ] }
+                    """)
+            };
+
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
+            var words = await _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "test.wav");
+
+            Assert.Empty(words);
+        }
+
+        [Fact]
+        public async Task TranscribeWithWordTimestamps_MissingSegments_ReturnsEmpty()
+        {
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{ "text": "hello" }""")
+            };
+
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
+            var words = await _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "test.wav");
+
+            Assert.Empty(words);
+        }
+
+        [Fact]
+        public async Task TranscribeWithWordTimestamps_ManagedServiceFailure_ThrowsServiceUnavailable()
+        {
+            _reporter.Managed = true;
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://localhost:9000\"}" };
+
+            await Assert.ThrowsAsync<Read2Me.Services.Health.AiServiceUnavailableException>(
+                () => _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "a.wav"));
+        }
+
         private class FakeHttpClientFactory : IHttpClientFactory
         {
             public HttpResponseMessage? Response { get; set; }

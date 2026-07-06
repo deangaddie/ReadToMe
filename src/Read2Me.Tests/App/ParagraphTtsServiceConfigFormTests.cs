@@ -156,6 +156,39 @@ namespace Read2Me.Tests.App
             Assert.Equal(1200, form.MaxChunkChars);
         }
 
+        // ---- Carrier prefix ----
+
+        [Fact]
+        public void FromConfig_SettingsJsonLackingCarrierFields_UsesDefaults()
+        {
+            var json = JsonSerializer.Serialize(new { BaseUrl = "http://localhost:8000", MaxLen = 4096 });
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Old Provider",
+                Type = ParagraphTtsServiceType.VoxCpm2,
+                SettingsJson = json,
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+
+            Assert.False(form.CarrierPrefixEnabled);
+            Assert.Equal(30, form.CarrierMaxTargetChars);
+        }
+
+        [Fact]
+        public void FromConfig_BuildConfig_RoundTripsCarrierFields()
+        {
+            var form = Valid();
+            form.CarrierPrefixEnabled = true;
+            form.CarrierMaxTargetChars = 42;
+
+            var config = form.BuildConfig();
+            var round = ParagraphTtsServiceConfigForm.FromConfig(config);
+
+            Assert.True(round.CarrierPrefixEnabled);
+            Assert.Equal(42, round.CarrierMaxTargetChars);
+        }
+
         // ---- Chatterbox ----
 
         [Fact]

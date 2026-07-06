@@ -30,6 +30,8 @@ namespace Read2Me.App.Shared
         // VoxCpm2 connection/app fields owned by the form (not the editor).
         public string BaseUrl { get; set; } = "";
         public int MaxChunkChars { get; set; } = 500;
+        public bool CarrierPrefixEnabled { get; set; }
+        public int CarrierMaxTargetChars { get; set; } = 30;
 
         // VoxCpm2 tunable params — full JSON the editor binds to (BaseUrl/MaxChunkChars held separately above).
         public string? SettingsJson { get; set; }
@@ -96,6 +98,8 @@ namespace Read2Me.App.Shared
                         : JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(c.SettingsJson) ?? VoxCpm2ParagraphTtsSettings.Recommended;
                     form.BaseUrl = s.BaseUrl;
                     form.MaxChunkChars = s.MaxChunkChars;
+                    form.CarrierPrefixEnabled = s.CarrierPrefixEnabled;
+                    form.CarrierMaxTargetChars = s.CarrierMaxTargetChars;
                     form.SettingsJson = JsonSerializer.Serialize(s);
                     break;
 
@@ -105,6 +109,8 @@ namespace Read2Me.App.Shared
                         : JsonSerializer.Deserialize<ChatterboxParagraphTtsSettings>(c.SettingsJson) ?? ChatterboxParagraphTtsSettings.Recommended;
                     form.BaseUrl = cb.BaseUrl;
                     form.MaxChunkChars = cb.MaxChunkChars;
+                    form.CarrierPrefixEnabled = cb.CarrierPrefixEnabled;
+                    form.CarrierMaxTargetChars = cb.CarrierMaxTargetChars;
                     form.SettingsJson = JsonSerializer.Serialize(cb);
                     break;
 
@@ -114,6 +120,8 @@ namespace Read2Me.App.Shared
                         : JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(c.SettingsJson) ?? ChatterboxTurboParagraphTtsSettings.Recommended;
                     form.BaseUrl = cbt.BaseUrl;
                     form.MaxChunkChars = cbt.MaxChunkChars;
+                    form.CarrierPrefixEnabled = cbt.CarrierPrefixEnabled;
+                    form.CarrierMaxTargetChars = cbt.CarrierMaxTargetChars;
                     form.SettingsJson = JsonSerializer.Serialize(cbt);
                     break;
 
@@ -123,6 +131,8 @@ namespace Read2Me.App.Shared
                         : JsonSerializer.Deserialize<Qwen3ParagraphTtsSettings>(c.SettingsJson) ?? Qwen3ParagraphTtsSettings.Recommended;
                     form.BaseUrl = qb.BaseUrl;
                     form.MaxChunkChars = qb.MaxChunkChars;
+                    form.CarrierPrefixEnabled = qb.CarrierPrefixEnabled;
+                    form.CarrierMaxTargetChars = qb.CarrierMaxTargetChars;
                     form.SettingsJson = JsonSerializer.Serialize(qb);
                     break;
             }
@@ -191,7 +201,13 @@ namespace Read2Me.App.Shared
                 : JsonSerializer.Deserialize<VoxCpm2ParagraphTtsSettings>(SettingsJson)
                   ?? VoxCpm2ParagraphTtsSettings.Recommended;
 
-            settings = settings with { BaseUrl = BaseUrl.Trim(), MaxChunkChars = MaxChunkChars };
+            settings = settings with
+            {
+                BaseUrl = BaseUrl.Trim(),
+                MaxChunkChars = MaxChunkChars,
+                CarrierPrefixEnabled = CarrierPrefixEnabled,
+                CarrierMaxTargetChars = CarrierMaxTargetChars,
+            };
             return JsonSerializer.Serialize(settings);
         }
 
@@ -203,7 +219,13 @@ namespace Read2Me.App.Shared
                 : JsonSerializer.Deserialize<ChatterboxParagraphTtsSettings>(SettingsJson)
                   ?? ChatterboxParagraphTtsSettings.Recommended;
 
-            settings = settings with { BaseUrl = BaseUrl.Trim(), MaxChunkChars = MaxChunkChars };
+            settings = settings with
+            {
+                BaseUrl = BaseUrl.Trim(),
+                MaxChunkChars = MaxChunkChars,
+                CarrierPrefixEnabled = CarrierPrefixEnabled,
+                CarrierMaxTargetChars = CarrierMaxTargetChars,
+            };
             return JsonSerializer.Serialize(settings);
         }
 
@@ -215,7 +237,13 @@ namespace Read2Me.App.Shared
                 : JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(SettingsJson)
                   ?? ChatterboxTurboParagraphTtsSettings.Recommended;
 
-            settings = settings with { BaseUrl = BaseUrl.Trim(), MaxChunkChars = MaxChunkChars };
+            settings = settings with
+            {
+                BaseUrl = BaseUrl.Trim(),
+                MaxChunkChars = MaxChunkChars,
+                CarrierPrefixEnabled = CarrierPrefixEnabled,
+                CarrierMaxTargetChars = CarrierMaxTargetChars,
+            };
             return JsonSerializer.Serialize(settings);
         }
 
@@ -227,7 +255,13 @@ namespace Read2Me.App.Shared
                 : JsonSerializer.Deserialize<Qwen3ParagraphTtsSettings>(SettingsJson)
                   ?? Qwen3ParagraphTtsSettings.Recommended;
 
-            settings = settings with { BaseUrl = BaseUrl.Trim(), MaxChunkChars = MaxChunkChars };
+            settings = settings with
+            {
+                BaseUrl = BaseUrl.Trim(),
+                MaxChunkChars = MaxChunkChars,
+                CarrierPrefixEnabled = CarrierPrefixEnabled,
+                CarrierMaxTargetChars = CarrierMaxTargetChars,
+            };
             return JsonSerializer.Serialize(settings);
         }
     }

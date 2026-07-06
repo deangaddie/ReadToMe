@@ -99,6 +99,22 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public void Diff_NeverIncludesCarrierSettings_EvenIfTheyDiffer()
+        {
+            var edited = VoxCpm2ParagraphTtsSettings.Recommended with
+            {
+                CarrierPrefixEnabled = true,
+                CarrierMaxTargetChars = 99,
+            };
+
+            var diff = VoxCpm2ParagraphTtsSettingsDiff.Diff(RecommendedJson, edited);
+
+            var obj = JsonNode.Parse(diff)!.AsObject();
+            Assert.DoesNotContain("carrierPrefixEnabled", obj.Select(kvp => kvp.Key));
+            Assert.DoesNotContain("carrierMaxTargetChars", obj.Select(kvp => kvp.Key));
+        }
+
+        [Fact]
         public void Apply_ReconstructsFullObject_ChangedFromPatch_RestFromBase()
         {
             const string patch = """{"cfg_value":3.5}""";

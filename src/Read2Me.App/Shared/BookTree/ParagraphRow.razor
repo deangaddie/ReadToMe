@@ -111,10 +111,22 @@
                                 @if (isAudioMode)
                                 {
                                     var voiceName = Presenter.ResolvedVoiceName(it.Id);
-                                    <MudText Typo="Typo.caption" Style="opacity:0.65;"
-                                             data-testid="@($"voice-preview-{it.Id}")">
-                                        @(voiceName != null ? $"Voice: {voiceName}" : "—")
-                                    </MudText>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1"
+                                              Style="flex-wrap:wrap;">
+                                        <MudText Typo="Typo.caption" Style="opacity:0.65;"
+                                                 data-testid="@($"voice-preview-{it.Id}")">
+                                            @(voiceName != null ? $"Voice: {voiceName}" : "—")
+                                        </MudText>
+                                        @if (!string.IsNullOrWhiteSpace(it.VoiceInstructions))
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small"
+                                                     Style="opacity:0.55; font-size:1rem;" />
+                                            <MudText Typo="Typo.caption" Style="opacity:0.65; font-style:italic;"
+                                                     data-testid="@($"voice-instructions-{it.Id}")">
+                                                @it.VoiceInstructions
+                                            </MudText>
+                                        }
+                                    </MudStack>
                                 }
                             </div>
                         }
@@ -170,7 +182,7 @@
                         var audioVersion = AudioQueue.AudioVersionOf(FolderId, it.Id);
                         var audioSrc = $"/workspace/{FolderId.Value}/{it.AudioFileName.Replace('\\', '/')}";
                         if (audioVersion.HasValue) audioSrc += $"?v={audioVersion.Value}";
-                        <audio src="@audioSrc" controls autoplay style="width:100%; margin-top:4px;"></audio>
+                        <audio src="@audioSrc" controls style="width:100%; margin-top:4px;"></audio>
                     }
                 }
                 else

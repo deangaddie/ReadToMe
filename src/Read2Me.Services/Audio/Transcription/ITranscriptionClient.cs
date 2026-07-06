@@ -15,5 +15,14 @@ namespace Read2Me.Services.Audio.Transcription
             Stream audio,
             string fileName,
             CancellationToken ct = default);
+
+        /// <summary>
+        /// Transcribes with per-word timestamps, returning the words in spoken order.
+        /// </summary>
+        Task<IReadOnlyList<TranscribedWord>> TranscribeWithWordTimestampsAsync(
+            TranscriptionServiceConfig config,
+            Stream audio,
+            string fileName,
+            CancellationToken ct = default);
     }
 }

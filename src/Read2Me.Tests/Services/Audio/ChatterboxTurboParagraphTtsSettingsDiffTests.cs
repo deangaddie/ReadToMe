@@ -72,6 +72,22 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public void Diff_NeverIncludesCarrierSettings_EvenIfTheyDiffer()
+        {
+            var edited = ChatterboxTurboParagraphTtsSettings.Recommended with
+            {
+                CarrierPrefixEnabled = true,
+                CarrierMaxTargetChars = 99,
+            };
+
+            var diff = ChatterboxTurboParagraphTtsSettingsDiff.Diff(RecommendedJson, edited);
+
+            var obj = JsonNode.Parse(diff)!.AsObject();
+            Assert.DoesNotContain("carrierPrefixEnabled", obj.Select(kvp => kvp.Key));
+            Assert.DoesNotContain("carrierMaxTargetChars", obj.Select(kvp => kvp.Key));
+        }
+
+        [Fact]
         public void Apply_ReconstructsFullObject_ChangedFromPatch_RestFromBase()
         {
             const string patch = """{"temperature":0.7}""";

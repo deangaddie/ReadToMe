@@ -25,6 +25,47 @@ namespace Read2Me.Services.Audio.Transcription
             string fileName,
             CancellationToken ct = default)
         {
+            var text = await PostAsrAsync(config, audio, fileName, "output=txt", ct);
+            return text.Trim();
+        }
+
+        public async Task<IReadOnlyList<TranscribedWord>> TranscribeWithWordTimestampsAsync(
+            TranscriptionServiceConfig config,
+            Stream audio,
+            string fileName,
+            CancellationToken ct = default)
+        {
+            var json = await PostAsrAsync(
+                config, audio, fileName, "output=json&word_timestamps=true", ct);
+
+            using var doc = JsonDocument.Parse(json);
+            var words = new List<TranscribedWord>();
+            if (doc.RootElement.TryGetProperty("segments", out var segments))
+            {
+                foreach (var segment in segments.EnumerateArray())
+                {
+                    if (!segment.TryGetProperty("words", out var segmentWords))
+                        continue;
+                    foreach (var word in segmentWords.EnumerateArray())
+                    {
+                        words.Add(new TranscribedWord(
+                            word.GetProperty("word").GetString() ?? string.Empty,
+                            word.GetProperty("start").GetDouble(),
+                            word.GetProperty("end").GetDouble()));
+                    }
+                }
+            }
+
+            return words;
+        }
+
+        private async Task<string> PostAsrAsync(
+            TranscriptionServiceConfig config,
+            Stream audio,
+            string fileName,
+            string outputQuery,
+            CancellationToken ct)
+        {
             var settings = JsonSerializer.Deserialize<LocalWhisperSettings>(config.SettingsJson)
                 ?? new LocalWhisperSettings();
 
@@ -39,13 +80,13 @@ namespace Read2Me.Services.Audio.Transcription
                 fileContent.Headers.ContentType = new MediaTypeHeaderValue(GetMimeType(fileName));
                 content.Add(fileContent, "audio_file", fileName);
 
-                var url = settings.BaseUrl.TrimEnd('/') + "/asr?task=transcribe&output=txt";
+                var url = settings.BaseUrl.TrimEnd('/') + "/asr?task=transcribe&" + outputQuery;
                 var response = await http.PostAsync(url, content, ct);
                 response.EnsureSuccessStatusCode();
 
-                var text = await response.Content.ReadAsStringAsync(ct);
+                var body = await response.Content.ReadAsStringAsync(ct);
                 reporter.ReportSuccess(settings.BaseUrl);
-                return text.Trim();
+                return body;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

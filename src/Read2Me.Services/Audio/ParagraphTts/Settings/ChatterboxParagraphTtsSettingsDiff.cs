@@ -23,6 +23,8 @@ namespace Read2Me.Services.Audio.ParagraphTts.Settings
             {
                 if (kvp.Key == "baseUrl") continue;
                 if (kvp.Key == "maxChunkChars") continue;
+                if (kvp.Key == "carrierPrefixEnabled") continue;
+                if (kvp.Key == "carrierMaxTargetChars") continue;
 
                 var baseVal = baseObj[kvp.Key];
                 var editedVal = kvp.Value;

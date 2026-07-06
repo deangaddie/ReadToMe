@@ -24,6 +24,14 @@
                                  Min="1" Immediate="true"
                                  HelperText="Soft cap on characters per TTS chunk. Larger = more coherent but heavier for the provider." />
 
+                <MudCheckBox T="bool" @bind-Value="_form.CarrierPrefixEnabled" Label="Carrier prefix for short text" />
+                @if (_form.CarrierPrefixEnabled)
+                {
+                    <MudNumericField @bind-Value="_form.CarrierMaxTargetChars" Label="Carrier Max Target Chars" Variant="Variant.Outlined"
+                                     Min="1" Immediate="true"
+                                     HelperText="Text at or below this length gets the voice's reference transcript prepended, then trimmed off the audio." />
+                }
+
                 <ParagraphTtsSettingsEditor @bind-Value="_form.SettingsJson"
                                             ProviderType="ParagraphTtsServiceType.VoxCpm2"
                                             Mode="TtsSettingsEditorMode.ProviderDefaults" />
@@ -38,6 +46,14 @@
                 <MudNumericField @bind-Value="_form.MaxChunkChars" Label="Max Chunk Chars" Variant="Variant.Outlined"
                                  Min="1" Immediate="true"
                                  HelperText="Soft cap on characters per TTS chunk. Larger = more coherent but heavier for the provider." />
+
+                <MudCheckBox T="bool" @bind-Value="_form.CarrierPrefixEnabled" Label="Carrier prefix for short text" />
+                @if (_form.CarrierPrefixEnabled)
+                {
+                    <MudNumericField @bind-Value="_form.CarrierMaxTargetChars" Label="Carrier Max Target Chars" Variant="Variant.Outlined"
+                                     Min="1" Immediate="true"
+                                     HelperText="Text at or below this length gets the voice's reference transcript prepended, then trimmed off the audio." />
+                }
 
                 <ParagraphTtsSettingsEditor @bind-Value="_form.SettingsJson"
                                             ProviderType="ParagraphTtsServiceType.Chatterbox"
@@ -54,6 +70,14 @@
                                  Min="1" Immediate="true"
                                  HelperText="Soft cap on characters per TTS chunk. Larger = more coherent but heavier for the provider." />
 
+                <MudCheckBox T="bool" @bind-Value="_form.CarrierPrefixEnabled" Label="Carrier prefix for short text" />
+                @if (_form.CarrierPrefixEnabled)
+                {
+                    <MudNumericField @bind-Value="_form.CarrierMaxTargetChars" Label="Carrier Max Target Chars" Variant="Variant.Outlined"
+                                     Min="1" Immediate="true"
+                                     HelperText="Text at or below this length gets the voice's reference transcript prepended, then trimmed off the audio." />
+                }
+
                 <ParagraphTtsSettingsEditor @bind-Value="_form.SettingsJson"
                                             ProviderType="ParagraphTtsServiceType.ChatterboxTurbo"
                                             Mode="TtsSettingsEditorMode.ProviderDefaults" />
@@ -68,6 +92,14 @@
                 <MudNumericField @bind-Value="_form.MaxChunkChars" Label="Max Chunk Chars" Variant="Variant.Outlined"
                                  Min="1" Immediate="true"
                                  HelperText="Soft cap on characters per TTS chunk. Larger = more coherent but heavier for the provider." />
+
+                <MudCheckBox T="bool" @bind-Value="_form.CarrierPrefixEnabled" Label="Carrier prefix for short text" />
+                @if (_form.CarrierPrefixEnabled)
+                {
+                    <MudNumericField @bind-Value="_form.CarrierMaxTargetChars" Label="Carrier Max Target Chars" Variant="Variant.Outlined"
+                                     Min="1" Immediate="true"
+                                     HelperText="Text at or below this length gets the voice's reference transcript prepended, then trimmed off the audio." />
+                }
 
                 <ParagraphTtsSettingsEditor @bind-Value="_form.SettingsJson"
                                             ProviderType="ParagraphTtsServiceType.Qwen3Base"

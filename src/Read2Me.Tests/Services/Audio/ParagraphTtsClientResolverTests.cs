@@ -3,12 +3,20 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Audio.Transcription;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
 {
     public class ParagraphTtsClientResolverTests
     {
+        private sealed class FakeTranscriptionSettings()
+            : TranscriptionSettingsService(null!, NullLogger<TranscriptionSettingsService>.Instance)
+        {
+            public override Task<TranscriptionServiceConfig?> GetActiveConfigAsync() =>
+                Task.FromResult<TranscriptionServiceConfig?>(null);
+        }
+
         private sealed class FakeAudioSettings : AudioProcessingSettingsService
         {
             public FakeAudioSettings()
@@ -30,6 +38,8 @@ namespace Read2Me.Tests.Services.Audio
             sc.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(ParagraphTtsServiceType.VoxCpm2);
             sc.AddSingleton<Read2Me.Services.Health.IAiServiceReporter, Read2Me.Tests.Fakes.FakeAiServiceReporter>();
             sc.AddSingleton<AudioProcessingSettingsService, FakeAudioSettings>();
+            sc.AddScoped<ITranscriptionClientResolver, TranscriptionClientResolver>();
+            sc.AddSingleton<TranscriptionSettingsService, FakeTranscriptionSettings>();
             sc.AddScoped<IParagraphTtsClientResolver, ParagraphTtsClientResolver>();
             extra?.Invoke(sc);
             return sc.BuildServiceProvider();

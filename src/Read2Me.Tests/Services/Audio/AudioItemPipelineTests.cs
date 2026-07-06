@@ -81,6 +81,11 @@ namespace Read2Me.Tests.Services.Audio
                 if (ThrowMessage is not null) throw new InvalidOperationException(ThrowMessage);
                 return Task.FromResult(Transcript);
             }
+
+            public Task<IReadOnlyList<TranscribedWord>> TranscribeWithWordTimestampsAsync(
+                TranscriptionServiceConfig config, Stream audio, string fileName,
+                CancellationToken ct = default) =>
+                Task.FromResult<IReadOnlyList<TranscribedWord>>([]);
         }
 
         private sealed class FakeTranscriptionResolver(ITranscriptionClient client) : ITranscriptionClientResolver
