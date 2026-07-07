@@ -397,12 +397,17 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
-        private void OnCharacterAssigned(ProjectFolderId folder, Guid paragraphId, ResolvedCharacter resolved)
+        private async void OnCharacterAssigned(ProjectFolderId folder, Guid paragraphId, ResolvedCharacter resolved)
         {
             if (_lastFolder is not { } current || current.Value != folder.Value) return;
 
             var para = Tree.AllParagraphs().FirstOrDefault(p => p.Id == paragraphId);
             if (para is null) return;
+
+            // Attribution can create a brand-new character. Refresh the roster so it
+            // shows up in the chip menu without a navigate-away/back reload.
+            if (Characters.All(c => c.Id != resolved.CharacterId))
+                Characters = await reader.GetCharactersAsync(folder);
 
             nodeStatus.OnCharacterAttributed(folder, paragraphId, remainingUnattributed: 0);
             InvalidateVoicePreview();
