@@ -16,6 +16,9 @@ namespace Read2Me.Services.Llm
         public const string ContextJson = "context_json";
         public const string ResponseFormat = "response_format";
         public const string CharacterName = "character_name";
+        public const string Instruction = "instruction";
+        public const string BookOutline = "book_outline";
+        public const string EditItemsJson = "edit_items_json";
 
         public const int DefaultContextParagraphsBefore = 6;
         public const int DefaultContextParagraphsAfter = 4;
@@ -180,6 +183,107 @@ namespace Read2Me.Services.Llm
               fences, no text outside the JSON.
             - JSON format: {{response_format}}
             """;
+
+        public const string DefaultEditPlanPrompt =
+            """
+            You are an editing assistant for the audiobook "{{book_title}}" by {{book_author}}.
+            The user wants to change the book's text or titles and has written an instruction
+            in plain language. Turn that instruction into a structured edit plan.
+
+            User instruction: {{instruction}}
+
+            Book outline:
+            {{book_outline}}
+
+            The plan has three parts:
+
+            1. "target" — what kind of value is edited:
+               - "volume_title", "part_title", "chapter_title": rename those nodes.
+               - "paragraph_text": edit the text of paragraphs.
+
+            2. Scope filters — which nodes are edited:
+               - "node_filter" narrows the nodes at the target level (for "paragraph_text"
+                 it narrows the chapters that contain the paragraphs). "ordinal_from" /
+                 "ordinal_to" are 1-based inclusive positions in reading order (e.g.
+                 chapters 3 to 7). "title_regex" is a .NET regex matched against the node's
+                 title. Use null for any filter the instruction does not mention.
+               - "paragraph_filter" (only for "paragraph_text"): "where" is a list of
+                 conditions, ANDed together; an empty list means every paragraph. Each
+                 condition has a "field", an "op", and either an integer "value" (plus
+                 "value_to" for "between") or a "regex". Fields:
+                   - "paragraph_ordinal": 1-based position of the paragraph within its
+                     chapter (1 = first). Example — the second paragraph of every chapter:
+                     { "field": "paragraph_ordinal", "op": "eq", "value": 2 }.
+                   - "paragraph_ordinal_from_end": counted backwards (1 = last paragraph).
+                   - "item_ordinal": paragraphs are split into text items (narration and
+                     dialogue); this is the item's 1-based position within its paragraph.
+                     Add { "field": "item_ordinal", "op": "eq", "value": 1 } only when the
+                     instruction targets the start of a paragraph (e.g. its opening words).
+                   - "text": the item's text; must use op "regex" with a .NET "regex".
+                 Ops: "eq", "ne", "lt", "le", "gt", "ge", "between" (value..value_to),
+                 "regex" (text field only).
+                 Never approximate a position with a text regex — use the ordinal fields.
+                 If the instruction selects paragraphs in a way these fields cannot
+                 express, set "supported" to false instead of guessing.
+
+            3. "transform" — how each matched value changes. Pick exactly one kind:
+               - "regex_replace": a mechanical find/replace. Set "pattern" (.NET regex) and
+                 "replacement" ($1-style group references allowed).
+               - "set_template": the whole value is replaced by "template". Tokens: {n} is
+                 the 1-based position of the item within the matched scope, {old} is the
+                 current value. Example: "Chapter {n}: {old}". Use this for renames with
+                 numbering, prefixes ("X{old}") or suffixes ("{old}X").
+               - "llm": the change needs understanding of the text (e.g. "restore the missing
+                 first letter", "fix the grammar"). Set "instruction" to a precise, standalone
+                 command that will be applied to each matched text on its own.
+
+            If the instruction asks for anything other than editing titles or paragraph text —
+            adding, deleting, splitting, merging or reordering content, changing audio or
+            voices — set "supported" to false and explain in "unsupported_reason".
+
+            Rules:
+            - First write one short sentence in "reasoning" explaining how you read the instruction.
+            - Use the most deterministic transform that satisfies the instruction: prefer
+              set_template or regex_replace over llm when the change is mechanical.
+            - Return ONLY valid JSON. No markdown fences, no text outside the JSON.
+            - JSON format: {{response_format}}
+            """;
+
+        public const string DefaultBatchEditPrompt =
+            """
+            You are an editing assistant for the audiobook "{{book_title}}" by {{book_author}}.
+
+            Apply the following instruction to each of the texts below, independently:
+
+            Instruction: {{instruction}}
+
+            Each entry has an "index", a "path" describing where the text sits in the book,
+            and the current "text".
+
+            Rules:
+            - For each index, first write one short sentence in "reasoning", then return the
+              complete edited text as "new_text" — the full replacement value, not a diff.
+            - Change only what the instruction requires; keep everything else exactly as is.
+            - If the instruction does not apply to an entry, return its text unchanged.
+            - Return ONLY a valid JSON array with exactly one entry per index. Every index
+              must appear. No markdown fences, no text outside the JSON.
+            - JSON format: {{response_format}}
+
+            Texts (JSON array):
+            {{edit_items_json}}
+            """;
+
+        /// <summary>Serializes edit targets for the batch edit prompt.</summary>
+        public static string BuildEditItemsJson(IEnumerable<(int Index, string Path, string Text)> items)
+        {
+            var arr = items.Select(i => new EditItemDto(i.Index, i.Path, i.Text)).ToArray();
+            return JsonSerializer.Serialize(arr, _jsonOptions);
+        }
+
+        private sealed record EditItemDto(
+            [property: JsonPropertyName("index")] int Index,
+            [property: JsonPropertyName("path")] string Path,
+            [property: JsonPropertyName("text")] string Text);
 
         /// <summary>
         /// A neutral voice-test sentence used as the sample text sent to the voice-design AI.

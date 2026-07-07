@@ -1,0 +1,317 @@
+@using Read2Me.Services.BookEdits
+@inject BookEditPlanner Planner
+@inject ScopeResolver Resolver
+@inject BookEditProposalService Proposals
+@inject IBookCommandHandler CommandHandler
+@implements IDisposable
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit with AI</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_error != null)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-3" ShowCloseIcon="true" CloseIconClicked="@(() => _error = null)">@_error</MudAlert>
+        }
+
+        @switch (_phase)
+        {
+            case Phase.Instruct:
+                <MudText Typo="Typo.body2" Class="mb-2" Color="Color.Secondary">
+                    Describe the change in plain language — e.g. "the first letter of the first paragraph
+                    of every chapter is missing, restore it" or "rename every chapter to 'Chapter {n}'".
+                    Only titles and paragraph text can be edited.
+                </MudText>
+                <MudTextField T="string" @bind-Value="_instruction" Label="Instruction" Lines="4"
+                              Variant="Variant.Outlined" AutoFocus="true" Disabled="_busy" />
+                break;
+
+            case Phase.PlanReady:
+                <MudText Typo="Typo.body1" Class="mb-2">@_planSummary</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @_targets.Count matching item(s) found.
+                    @if (_isLlmTransform)
+                    {
+                        <text> Each item is edited by the AI — this sends @BatchCountText request(s) to the LLM.</text>
+                    }
+                </MudText>
+                @if (_targets.Count > LlmTargetWarnThreshold && _isLlmTransform)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mt-2">
+                        This is a large AI job (@_targets.Count items). It may take a long time.
+                    </MudAlert>
+                }
+                break;
+
+            case Phase.Proposing:
+                <MudText Typo="Typo.body1" Class="mb-2">@_planSummary</MudText>
+                <MudProgressLinear Color="Color.Primary" Value="@_progressPercent" Class="my-3" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_progressDone of @_targets.Count computed…</MudText>
+                break;
+
+            case Phase.Review:
+                <MudText Typo="Typo.body2" Class="mb-2" Color="Color.Secondary">@_planSummary</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectAll">Select all</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectNone">Select none</MudButton>
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_selected.Count of @SelectableCount selected</MudText>
+                </MudStack>
+                <div style="max-height: 55vh; overflow-y: auto;">
+                    <MudTable T="ProposedEdit" Items="_proposals" Dense="true" Hover="true" Bordered="false" Striped="true">
+                        <HeaderContent>
+                            <MudTh Style="width:36px" />
+                            <MudTh>Where</MudTh>
+                            <MudTh>Current</MudTh>
+                            <MudTh>Proposed</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudCheckBox T="bool" Size="Size.Small" Dense="true"
+                                             Value="@_selected.Contains(context.Id)"
+                                             ValueChanged="@(v => Toggle(context.Id, v))"
+                                             Disabled="@(context.Status != ProposalStatus.Proposed)" />
+                            </MudTd>
+                            <MudTd><MudText Typo="Typo.caption">@context.DisplayPath</MudText></MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.body2"
+                                         Style="@(context.Status == ProposalStatus.Proposed ? "text-decoration: line-through; opacity: 0.7;" : null)">
+                                    @Truncate(context.OldValue)
+                                </MudText>
+                            </MudTd>
+                            <MudTd>
+                                @if (context.Status == ProposalStatus.Failed)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Error">@context.FailureReason</MudText>
+                                }
+                                else if (context.Status == ProposalStatus.NoChange)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">(no change)</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Success">@Truncate(context.NewValue)</MudText>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </div>
+                break;
+        }
+
+        @* Optional live view of the LLM's thinking + responses, to debug or refine the
+           instruction when a result isn't what was expected. Always mounted so it captures
+           every request made while the dialog is open, not just the one in flight when opened. *@
+        <div style="border-top:1px solid var(--mud-palette-divider); margin-top:12px; padding-top:4px;">
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary"
+                       StartIcon="@(_showStream ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowUp)"
+                       OnClick="@(() => _showStream = !_showStream)">
+                @(_showStream ? "Hide AI activity" : "Show AI activity")
+            </MudButton>
+            <div style="@(_showStream ? "height:32vh;" : "height:0;") overflow:hidden; transition:height 0.15s ease;">
+                <LlmStreamView />
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @switch (_phase)
+        {
+            case Phase.Instruct:
+                <MudButton OnClick="Cancel" Disabled="_busy">Cancel</MudButton>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="AnalyzeAsync"
+                           Disabled="@(_busy || string.IsNullOrWhiteSpace(_instruction))">
+                    @if (_busy)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Analyze
+                </MudButton>
+                break;
+            case Phase.PlanReady:
+                <MudButton OnClick="BackToInstruct">Back</MudButton>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="GenerateAsync">
+                    Generate proposals
+                </MudButton>
+                break;
+            case Phase.Proposing:
+                <MudButton Color="Color.Error" OnClick="CancelProposing">Cancel</MudButton>
+                break;
+            case Phase.Review:
+                <MudButton OnClick="BackToInstruct" Disabled="_busy">Start over</MudButton>
+                <MudButton OnClick="Cancel" Disabled="_busy">Close</MudButton>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ApplyAsync"
+                           Disabled="@(_busy || _selected.Count == 0)">
+                    @if (_busy)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Apply @_selected.Count selected
+                </MudButton>
+                break;
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    const int LlmTargetWarnThreshold = 300;
+    const int BatchSize = 8;
+
+    enum Phase { Instruct, PlanReady, Proposing, Review }
+
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
+
+    Phase _phase = Phase.Instruct;
+    bool _showStream;
+    string _instruction = "";
+    string? _error;
+    bool _busy;
+    string _planSummary = "";
+    EditProgram? _program;
+    IReadOnlyList<EditTarget> _targets = [];
+    IReadOnlyList<ProposedEdit> _proposals = [];
+    readonly HashSet<Guid> _selected = [];
+    int _progressDone;
+    CancellationTokenSource? _cts;
+
+    bool _isLlmTransform => _program?.Transform.Kind == TransformKind.Llm;
+    string BatchCountText => ((_targets.Count + BatchSize - 1) / BatchSize).ToString();
+    int SelectableCount => _proposals.Count(p => p.Status == ProposalStatus.Proposed);
+    double _progressPercent => _targets.Count == 0 ? 0 : 100.0 * _progressDone / _targets.Count;
+
+    static string Truncate(string? s) =>
+        s == null ? "" : s.Length <= 160 ? s : s[..160] + "…";
+
+    async Task AnalyzeAsync()
+    {
+        _error = null;
+        _busy = true;
+        _cts = new CancellationTokenSource();
+        try
+        {
+            var outcome = await Planner.PlanAsync(FolderId, _instruction, _cts.Token);
+            if (outcome.Status != EditPlanStatus.Ok)
+            {
+                _error = outcome.Status switch
+                {
+                    EditPlanStatus.NoLlmConfigured => "No LLM server is configured. Set one up under Settings → LLM.",
+                    EditPlanStatus.Unsupported => $"This instruction can't be applied: {outcome.Reason} " +
+                        "AI edits can change titles and paragraph text only.",
+                    EditPlanStatus.ServiceUnavailable => $"The LLM service is unavailable: {outcome.Reason}",
+                    _ => $"Could not understand the instruction: {outcome.Reason}",
+                };
+                return;
+            }
+
+            _program = outcome.Program!;
+            _planSummary = EditProgramDescriber.Describe(_program);
+            _targets = await Resolver.ResolveAsync(FolderId, _program, _cts.Token);
+            if (_targets.Count == 0)
+            {
+                _error = "No items in the book match this instruction's scope. Try rephrasing.";
+                return;
+            }
+            _phase = Phase.PlanReady;
+        }
+        catch (OperationCanceledException)
+        {
+            // dialog closed mid-analyze
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    async Task GenerateAsync()
+    {
+        _error = null;
+        _phase = Phase.Proposing;
+        _progressDone = 0;
+        _cts = new CancellationTokenSource();
+        var progress = new SyncProgress(this);
+        try
+        {
+            _proposals = await Proposals.ProposeAsync(FolderId, _program!, _targets, progress, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancel returns partial proposals from the service; a hard cancel here means none.
+            _proposals ??= [];
+        }
+        _selected.Clear();
+        foreach (var p in _proposals.Where(p => p.Status == ProposalStatus.Proposed))
+            _selected.Add(p.Id);
+        _phase = Phase.Review;
+    }
+
+    async Task ApplyAsync()
+    {
+        _busy = true;
+        try
+        {
+            var edits = _proposals
+                .Where(p => p.Status == ProposalStatus.Proposed && _selected.Contains(p.Id))
+                .Select(p => p.ToEditItem())
+                .ToList();
+            await CommandHandler.ExecuteAsync(new ApplyBookEditsCommand(FolderId, edits));
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _error = $"Applying edits failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    void Toggle(Guid id, bool value)
+    {
+        if (value) _selected.Add(id);
+        else _selected.Remove(id);
+    }
+
+    void SelectAll()
+    {
+        foreach (var p in _proposals.Where(p => p.Status == ProposalStatus.Proposed))
+            _selected.Add(p.Id);
+    }
+
+    void SelectNone() => _selected.Clear();
+
+    void BackToInstruct()
+    {
+        _phase = Phase.Instruct;
+        _error = null;
+        _proposals = [];
+        _selected.Clear();
+    }
+
+    void CancelProposing() => _cts?.Cancel();
+
+    void Cancel()
+    {
+        _cts?.Cancel();
+        MudDialog.Cancel();
+    }
+
+    void ReportProgress(int done)
+    {
+        _progressDone = done;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+
+    sealed class SyncProgress(BookEditDialog owner) : IProgress<(int Done, int Total)>
+    {
+        public void Report((int Done, int Total) value) => owner.ReportProgress(value.Done);
+    }
+}

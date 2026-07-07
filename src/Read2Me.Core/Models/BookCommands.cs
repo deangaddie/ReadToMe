@@ -82,6 +82,11 @@ public enum PauseKind { Pause, ParagraphPause, ChapterPause, PartPause, VolumePa
 // Clear
 public record ClearBookContentCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 
+// AI book edits
+public enum BookEditTargetKind { VolumeTitle, PartTitle, ChapterTitle, ParagraphItemText }
+public sealed record BookEditItem(BookEditTargetKind Kind, Guid Id, string NewValue);
+public record ApplyBookEditsCommand(ProjectFolderId FolderId, IReadOnlyList<BookEditItem> Edits) : BookCommand(FolderId);
+
 // Audio
 public record SetParagraphItemAudioCommand(ProjectFolderId FolderId, Guid ItemId, string AudioFileName) : BookCommand(FolderId);
 

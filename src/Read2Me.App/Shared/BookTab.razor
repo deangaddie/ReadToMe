@@ -1,10 +1,12 @@
 @using Read2Me.App.State
+@using Read2Me.App.Shared.BookEdits
 @using Read2Me.App.Shared.BookMenus
 @using Read2Me.App.Shared.BookTree
 @using Read2Me.Services.Audio
 @using Read2Me.Services.Audio.Assembly
 @using Read2Me.Services.NodeStatus
 @inject BookHierarchyPresenter Presenter
+@inject IDialogService DialogService
 @inject AudiobookAssemblyService AssemblyService
 @inject AudioQueueService AudioQueue
 @inject NodeStatusService NodeStatus
@@ -58,6 +60,15 @@ else
                         ? $"{audioRemaining} paragraphs missing audio — click to assemble partial"
                         : assemblyVm.DisabledReason ?? "Assemble audiobook";
             }
+            <MudTooltip Text="Describe a change in plain language and review the AI's proposed edits">
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                           Disabled="Presenter.IsBusy"
+                           OnClick="OpenAiEditDialogAsync">
+                    Edit with AI
+                </MudButton>
+            </MudTooltip>
             <MudTooltip Text="@assembleTooltip">
                 <MudButton Variant="Variant.Outlined"
                            Size="Size.Small"
@@ -213,6 +224,16 @@ else
         {
             AssemblyService.StartAsync(_folderId);
         }
+    }
+
+    async Task OpenAiEditDialogAsync()
+    {
+        var parameters = new DialogParameters<BookEditDialog> { { d => d.FolderId, _folderId } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<BookEditDialog>("Edit with AI", parameters, options);
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await Presenter.ResetAndLoadAsync(_folderId);
     }
 
     async Task MergeAndResetAsync((Guid survivorId, Guid deletedId) merge)

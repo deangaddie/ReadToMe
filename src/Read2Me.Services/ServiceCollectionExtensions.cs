@@ -81,6 +81,9 @@ public static class ServiceCollectionExtensions
         // Clear
         services.AddScoped<ICommandHandler<ClearBookContentCommand>, ClearBookContentHandler>();
 
+        // AI book edits
+        services.AddScoped<ICommandHandler<ApplyBookEditsCommand>, ApplyBookEditsHandler>();
+
         // Audio
         services.AddScoped<ICommandHandler<SetParagraphItemAudioCommand>, SetParagraphItemAudioHandler>();
         services.AddScoped<ICommandHandler<SetAudioReviewCommand>, SetAudioReviewHandler>();

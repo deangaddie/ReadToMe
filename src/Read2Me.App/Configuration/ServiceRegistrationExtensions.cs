@@ -163,6 +163,11 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Read2Me.App.State.VoicePromptGenerationState>();
         services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();
         services.AddSingleton<VoiceBatchRunner>();
+
+        // AI book edits
+        services.AddScoped<Read2Me.Services.BookEdits.ScopeResolver>();
+        services.AddScoped<Read2Me.Services.BookEdits.BookEditPlanner>();
+        services.AddScoped<Read2Me.Services.BookEdits.BookEditProposalService>();
         return services;
     }
 
