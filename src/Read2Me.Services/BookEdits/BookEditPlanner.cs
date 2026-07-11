@@ -21,12 +21,11 @@ namespace Read2Me.Services.BookEdits
         ILlmClient llm,
         LlmSettingsService settings,
         IProjectReader reader,
+        ChapterOutlineBuilder outlineBuilder,
         ILogger<BookEditPlanner> logger,
         EventBroadcaster<LlmStreamEvent> broadcaster,
         IAiServiceReporter reporter)
     {
-        private const int OutlineChapterLimit = 20;
-
         public virtual async Task<EditPlanOutcome> PlanAsync(
             ProjectFolderId folderId, string instruction, CancellationToken ct)
         {
@@ -39,7 +38,7 @@ namespace Read2Me.Services.BookEdits
                         "No active LLM server configured");
 
                 var project = await reader.GetProjectAsync(folderId);
-                var outline = await BuildOutlineAsync(folderId, ct);
+                var outline = await outlineBuilder.BuildAsync(folderId, ct);
 
                 var prompt = PromptTemplates.Render(PromptTemplates.DefaultEditPlanPrompt, new Dictionary<string, string>
                 {
@@ -110,38 +109,6 @@ namespace Read2Me.Services.BookEdits
                     reported ? EditPlanStatus.ServiceUnavailable : EditPlanStatus.Failed,
                     null, ex.Message);
             }
-        }
-
-        /// <summary>Compact structure summary so the model can choose sensible scope filters.</summary>
-        private async Task<string> BuildOutlineAsync(ProjectFolderId folderId, CancellationToken ct)
-        {
-            var sb = new StringBuilder();
-            var volumes = await reader.GetVolumesAsync(folderId);
-            var totalParts = await reader.GetTotalPartCountAsync(folderId);
-            var totalChapters = await reader.GetTotalChapterCountAsync(folderId);
-            sb.AppendLine($"{volumes.Count} volume(s), {totalParts} part(s), {totalChapters} chapter(s).");
-
-            var chapterN = 0;
-            foreach (var volume in volumes)
-            {
-                ct.ThrowIfCancellationRequested();
-                if (chapterN >= OutlineChapterLimit) break;
-                var parts = (await reader.GetChildrenAsync(folderId, BookNodeLevel.Volume, volume.Id)).Parts ?? [];
-                foreach (var part in parts)
-                {
-                    if (chapterN >= OutlineChapterLimit) break;
-                    var chapters = (await reader.GetChildrenAsync(folderId, BookNodeLevel.Part, part.Id)).Chapters ?? [];
-                    foreach (var chapter in chapters)
-                    {
-                        chapterN++;
-                        if (chapterN > OutlineChapterLimit) break;
-                        sb.AppendLine($"Chapter {chapterN}: {chapter.Title ?? "(untitled)"}");
-                    }
-                }
-            }
-            if (chapterN >= OutlineChapterLimit && totalChapters > OutlineChapterLimit)
-                sb.AppendLine($"... and {totalChapters - OutlineChapterLimit} more chapters.");
-            return sb.ToString();
         }
     }
 }

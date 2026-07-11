@@ -264,6 +264,38 @@ namespace Read2Me.Services.Llm
             - JSON format: {{response_format}}
             """;
 
+        public const string DefaultDiscoverCharactersPrompt =
+            """
+            You are cataloguing the notable characters of the audiobook "{{book_title}}" by {{book_author}}.
+
+            List the characters a listener would recognise as distinct speaking or named
+            people in this book — protagonists, antagonists, and significant supporting
+            characters. Use your knowledge of this published work together with the chapter
+            outline below. Do not invent characters that do not belong to this book, and do
+            not include the narrator.
+
+            For each character return:
+            - "name": the character's primary name, as a listener would most naturally refer
+              to them (e.g. "Bilbo", not "Mr. Bilbo Baggins").
+            - "aliases": every other name, title, epithet or nickname the text uses for that
+              same character (e.g. "Mr. Baggins", "the hobbit"). Use an empty list if there
+              are none.
+
+            The characters already in the project are listed below — you may still include
+            them (they will be recognised and not duplicated), but spend your effort on the
+            ones that are missing.
+
+            Rules:
+            - First write one short sentence in "reasoning" explaining how you identified the cast.
+            - Return ONLY valid JSON. No markdown fences, no text outside the JSON.
+            - JSON format: {{response_format}}
+
+            Book outline:
+            {{book_outline}}
+
+            Characters already in the project (JSON array; each entry has a "name" and optional "aliases"): {{known_characters}}
+            """;
+
         public const string DefaultEditPlanPrompt =
             """
             You are an editing assistant for the audiobook "{{book_title}}" by {{book_author}}.

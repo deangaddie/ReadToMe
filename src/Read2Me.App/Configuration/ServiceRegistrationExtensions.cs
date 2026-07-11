@@ -166,9 +166,13 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<VoiceBatchRunner>();
 
         // AI book edits
+        services.AddScoped<Read2Me.Services.Llm.ChapterOutlineBuilder>();
         services.AddScoped<Read2Me.Services.BookEdits.ScopeResolver>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditPlanner>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditProposalService>();
+
+        // Character discovery
+        services.AddScoped<Read2Me.Services.Characters.CharacterDiscoveryService>();
         return services;
     }
 

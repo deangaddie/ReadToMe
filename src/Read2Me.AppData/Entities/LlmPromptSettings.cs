@@ -25,6 +25,9 @@ namespace Read2Me.AppData.Entities
         /// <summary>Narrator voice-plan prompt template. Asks for one steady narration voice, never per-character voices. Null => use built-in default.</summary>
         public string? NarratorVoicePlanPrompt { get; set; }
 
+        /// <summary>Character-discovery prompt template (JSON list of the book's notable characters and aliases). Null => use built-in default.</summary>
+        public string? DiscoverCharactersPrompt { get; set; }
+
         /// <summary>Preceding paragraphs sent as LLM context. Null => use built-in default.</summary>
         public int? ContextParagraphsBefore { get; set; }
 

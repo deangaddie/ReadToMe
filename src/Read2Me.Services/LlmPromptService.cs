@@ -69,6 +69,35 @@ namespace Read2Me.Services
                 : row.NarratorVoicePlanPrompt;
         }
 
+        public virtual async Task<string> GetDiscoverCharactersPromptAsync()
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await db.PromptSettings.SingleOrDefaultAsync();
+            return string.IsNullOrWhiteSpace(row?.DiscoverCharactersPrompt)
+                ? PromptTemplates.DefaultDiscoverCharactersPrompt
+                : row.DiscoverCharactersPrompt;
+        }
+
+        public async Task SetDiscoverCharactersPromptAsync(string template)
+        {
+            _logger.LogInformation("Saving discover-characters prompt template");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.DiscoverCharactersPrompt = template;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task ResetDiscoverCharactersPromptAsync()
+        {
+            _logger.LogInformation("Resetting discover-characters prompt to built-in default");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.DiscoverCharactersPrompt = null;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
         public async Task SetCharacterPromptAsync(string template)
         {
             _logger.LogInformation("Saving character prompt template");

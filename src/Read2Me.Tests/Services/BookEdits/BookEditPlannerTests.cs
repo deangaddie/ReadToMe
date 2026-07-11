@@ -18,11 +18,14 @@ namespace Read2Me.Tests.Services.BookEdits
         private LlmSettingsService NewSettings() =>
             new(Factory, NullLogger<LlmSettingsService>.Instance);
 
-        private BookEditPlanner NewPlanner(FakeLlmClient llm, LlmSettingsService settings) =>
-            new(llm, settings, new EmptyReader(),
+        private BookEditPlanner NewPlanner(FakeLlmClient llm, LlmSettingsService settings)
+        {
+            var reader = new EmptyReader();
+            return new(llm, settings, reader, new ChapterOutlineBuilder(reader),
                 NullLogger<BookEditPlanner>.Instance,
                 new EventBroadcaster<LlmStreamEvent>(),
                 new FakeAiServiceReporter());
+        }
 
         private sealed class EmptyReader : ProjectReaderFakeBase;
 
