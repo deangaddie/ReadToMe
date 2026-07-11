@@ -35,6 +35,13 @@ namespace Read2Me.App.Audio
                     nc.NormalizeReason = n.Reason;
                     break;
 
+                case PostProcessed p when _byId.TryGetValue((p.Id, p.Attempt), out var pc):
+                    // A skipped step is cosmetic-only: the item still ships unfiltered audio,
+                    // so it shows as a phase ✗ (with the step id) rather than an item failure.
+                    pc.PostProcess = p.Applied ? PhaseState.Ok : PhaseState.Fail;
+                    pc.PostProcessReason = p.Applied ? null : $"{p.StepId}: {p.Reason}";
+                    break;
+
                 case Transcribed t when _byId.TryGetValue((t.Id, t.Attempt), out var tc):
                     tc.Transcript = t.Transcript;
                     tc.Transcribe = PhaseState.Ok;
@@ -68,10 +75,14 @@ namespace Read2Me.App.Audio
 
         public PhaseState AudioGen { get; set; } = PhaseState.Pending;
         public PhaseState Normalize { get; set; } = PhaseState.Pending;
+
+        /// <summary>Stays <see cref="PhaseState.Pending"/> when no post-process step is enabled.</summary>
+        public PhaseState PostProcess { get; set; } = PhaseState.Pending;
         public PhaseState Transcribe { get; set; } = PhaseState.Pending;
         public PhaseState Verify { get; set; } = PhaseState.Pending;
 
         public string? NormalizeReason { get; set; }
+        public string? PostProcessReason { get; set; }
         public string? Transcript { get; set; }
         public string? VerifyReason { get; set; }
         public double? Wer { get; set; }

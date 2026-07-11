@@ -47,6 +47,42 @@ namespace Read2Me.Tests.App.Audio
         }
 
         [Fact]
+        public void PostProcessed_Applied_SetsPhaseOk()
+        {
+            var id = Guid.NewGuid();
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
+
+            _model.Apply(new PostProcessed(id, Attempt: 1, "consonant-soften", Applied: true, Reason: null));
+
+            var card = Assert.Single(_model.Cards);
+            Assert.Equal(PhaseState.Ok, card.PostProcess);
+            Assert.Null(card.PostProcessReason);
+        }
+
+        [Fact]
+        public void PostProcessed_Skipped_SetsPhaseFail_WithReason()
+        {
+            var id = Guid.NewGuid();
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
+
+            _model.Apply(new PostProcessed(id, Attempt: 1, "consonant-soften", Applied: false, Reason: "ffmpeg missing"));
+
+            var card = Assert.Single(_model.Cards);
+            Assert.Equal(PhaseState.Fail, card.PostProcess);
+            Assert.Equal("consonant-soften: ffmpeg missing", card.PostProcessReason);
+        }
+
+        [Fact]
+        public void PostProcess_NoEvent_StaysPending()
+        {
+            var id = Guid.NewGuid();
+            _model.Apply(new ItemStarted(id, Attempt: 1, "Bilbo", "x"));
+
+            var card = Assert.Single(_model.Cards);
+            Assert.Equal(PhaseState.Pending, card.PostProcess);
+        }
+
+        [Fact]
         public void Normalized_NotOk_SetsPhaseFail_WithReason()
         {
             var id = Guid.NewGuid();

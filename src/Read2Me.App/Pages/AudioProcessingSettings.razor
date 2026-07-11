@@ -1,4 +1,6 @@
 @page "/audio-processing-settings"
+@using Read2Me.App.Shared
+@using Read2Me.Services.Audio
 @inject AudioProcessingSettingsService SettingsService
 @inject ISnackbar Snackbar
 @implements IDisposable
@@ -32,6 +34,114 @@
         {
             <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
         }
+    </MudCardActions>
+</MudCard>
+
+<MudCard Outlined="true" Class="mb-5">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Consonant soften</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Optional ffmpeg filter applied to paragraph audio after loudness normalize and before
+            verification — tames harsh sibilants and plosives. A filter failure falls back to the
+            unfiltered audio.
+        </MudText>
+        <MudSwitch T="bool" @bind-Value="_soften.Enabled" Color="Color.Primary"
+                   Label="Enable consonant soften" Class="mb-3" />
+        <MudSelect T="string" Value="_soften.Engine" ValueChanged="_soften.SetEngine"
+                   Label="Engine" Variant="Variant.Outlined" Class="mb-3">
+            <MudSelectItem Value="@ConsonantSoftenEngines.AdynEq">adynEQ (recommended)</MudSelectItem>
+            <MudSelectItem Value="@ConsonantSoftenEngines.Deesser">deesser</MudSelectItem>
+        </MudSelect>
+        <MudSelect T="string" Value="_soften.Preset" ValueChanged="_soften.SetPreset"
+                   Label="Preset" Variant="Variant.Outlined" Class="mb-1">
+            <MudSelectItem Value="@ConsonantSoftenPresets.Light">Light</MudSelectItem>
+            <MudSelectItem Value="@ConsonantSoftenPresets.Medium">Medium</MudSelectItem>
+            <MudSelectItem Value="@ConsonantSoftenPresets.Strong">Strong</MudSelectItem>
+            <MudSelectItem Value="@ConsonantSoftenPresets.Custom">Custom</MudSelectItem>
+        </MudSelect>
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            Picking a preset re-seeds the custom fields — unsaved tweaks are discarded.
+        </MudText>
+
+        @if (_soften.Engine == ConsonantSoftenEngines.Deesser)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                deesser intensity is sample-rate-sensitive: higher provider sample rates need a
+                higher intensity to engage at all.
+            </MudAlert>
+        }
+
+        @if (_soften.IsCustom)
+        {
+            <MudDivider Class="my-4" />
+            @if (_soften.Engine == ConsonantSoftenEngines.AdynEq)
+            {
+                <MudNumericField @bind-Value="_soften.AdynEq.ThresholdDb"
+                                 Label="Threshold (dB)" Variant="Variant.Outlined"
+                                 Step="1" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.Ratio"
+                                 Label="Ratio" Variant="Variant.Outlined"
+                                 Min="1" Step="0.5" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.RangeDb"
+                                 Label="Range (dB)" Variant="Variant.Outlined"
+                                 Step="1" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.DetectFrequencyHz"
+                                 Label="Detect frequency (Hz)" Variant="Variant.Outlined"
+                                 Step="100" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.DetectQ"
+                                 Label="Detect Q" Variant="Variant.Outlined"
+                                 Step="0.1" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.TargetFrequencyHz"
+                                 Label="Target frequency (Hz)" Variant="Variant.Outlined"
+                                 Step="100" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.TargetQ"
+                                 Label="Target Q" Variant="Variant.Outlined"
+                                 Step="0.1" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.AttackMs"
+                                 Label="Attack (ms)" Variant="Variant.Outlined"
+                                 Min="0" Step="1" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.ReleaseMs"
+                                 Label="Release (ms)" Variant="Variant.Outlined"
+                                 Min="0" Step="5" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.ShelfFrequencyHz"
+                                 Label="Shelf frequency (Hz)" Variant="Variant.Outlined"
+                                 Step="100" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.AdynEq.ShelfGainDb"
+                                 Label="Shelf gain (dB)" Variant="Variant.Outlined"
+                                 Step="0.5" Class="mb-3" />
+            }
+            else
+            {
+                <MudNumericField @bind-Value="_soften.Deesser.Intensity"
+                                 Label="Intensity (0–1)" Variant="Variant.Outlined"
+                                 Min="0" Max="1" Step="0.05" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.Deesser.MakeupAmount"
+                                 Label="Makeup amount (0–1)" Variant="Variant.Outlined"
+                                 Min="0" Max="1" Step="0.05" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.Deesser.Frequency"
+                                 Label="Split frequency (0–1)" Variant="Variant.Outlined"
+                                 Min="0" Max="1" Step="0.05" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.Deesser.ShelfFrequencyHz"
+                                 Label="Shelf frequency (Hz)" Variant="Variant.Outlined"
+                                 Step="100" Class="mb-3" />
+                <MudNumericField @bind-Value="_soften.Deesser.ShelfGainDb"
+                                 Label="Shelf gain (dB)" Variant="Variant.Outlined"
+                                 Step="0.5" Class="mb-3" />
+            }
+            <MudSwitch T="bool" @bind-Value="_soften.HighpassEnabled" Color="Color.Primary"
+                       Label="Highpass (removes plosive thump)" />
+            @if (_soften.HighpassEnabled)
+            {
+                <MudNumericField @bind-Value="_soften.HighpassHz"
+                                 Label="Highpass cutoff (Hz)" Variant="Variant.Outlined"
+                                 Min="40" Max="160" Step="10" Class="mt-3" />
+            }
+        }
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveConsonantSoftenAsync">Save</MudButton>
     </MudCardActions>
 </MudCard>
 
@@ -128,6 +238,8 @@
     int _audioMaxAttemptsDraft = AudioProcessingSettingsService.DefaultAudioMaxAttempts;
     bool _testing;
 
+    ConsonantSoftenForm _soften = ConsonantSoftenForm.FromConfig(null);
+
     protected override async Task OnInitializedAsync()
     {
         SettingsService.OnChanged += HandleChanged;
@@ -148,7 +260,18 @@
         _paragraphPauseMsDraft = settings.ParagraphPauseMs;
         _pauseMsDraft = settings.PauseMs;
         _audioMaxAttemptsDraft = settings.AudioMaxAttempts;
+
+        var steps = await SettingsService.GetPostProcessStepsAsync();
+        _soften = ConsonantSoftenForm.FromConfig(
+            steps.FirstOrDefault(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften));
+
         StateHasChanged();
+    }
+
+    async Task SaveConsonantSoftenAsync()
+    {
+        await SettingsService.UpsertPostProcessStepAsync(_soften.BuildConfig());
+        Snackbar.Add("Consonant soften saved.", Severity.Success);
     }
 
     async Task SaveFfmpegPathAsync()

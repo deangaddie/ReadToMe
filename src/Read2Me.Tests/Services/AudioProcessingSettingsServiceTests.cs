@@ -247,6 +247,42 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task UpsertPostProcessStep_ReplacesExistingEntryInPlace()
+        {
+            var svc = NewService();
+            var other = AudioPostProcessStepConfig.Create("other-step", enabled: true, new { });
+            await svc.SetPostProcessStepsAsync(new[]
+            {
+                other,
+                AudioPostProcessStepConfig.Create(
+                    AudioPostProcessStepIds.ConsonantSoften, enabled: false, new ConsonantSoftenSettings()),
+            });
+
+            await svc.UpsertPostProcessStepAsync(AudioPostProcessStepConfig.Create(
+                AudioPostProcessStepIds.ConsonantSoften, enabled: true,
+                new ConsonantSoftenSettings { Preset = ConsonantSoftenPresets.Light }));
+
+            var steps = await NewService().GetPostProcessStepsAsync();
+            Assert.Equal(2, steps.Count);
+            Assert.Equal("other-step", steps[0].StepId);
+            Assert.True(steps[1].Enabled);
+            Assert.Equal(ConsonantSoftenPresets.Light, steps[1].GetSettings<ConsonantSoftenSettings>()!.Preset);
+        }
+
+        [Fact]
+        public async Task UpsertPostProcessStep_UnknownStepId_IsAppended()
+        {
+            var svc = NewService();
+
+            await svc.UpsertPostProcessStepAsync(
+                AudioPostProcessStepConfig.Create("new-step", enabled: true, new { }));
+
+            var steps = await NewService().GetPostProcessStepsAsync();
+            Assert.Contains(steps, s => s.StepId == "new-step" && s.Enabled);
+            Assert.Contains(steps, s => s.StepId == AudioPostProcessStepIds.ConsonantSoften);
+        }
+
+        [Fact]
         public async Task SetPostProcessSteps_CustomParams_RoundTrip()
         {
             var svc = NewService();

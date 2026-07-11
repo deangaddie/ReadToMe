@@ -148,6 +148,19 @@ namespace Read2Me.Services
             OnChanged?.Invoke();
         }
 
+        /// <summary>
+        /// Saves one step's config, keeping the rest of the list and its order. An unknown
+        /// step id is appended.
+        /// </summary>
+        public virtual async Task UpsertPostProcessStepAsync(AudioPostProcessStepConfig step)
+        {
+            var steps = (await GetPostProcessStepsAsync())
+                .Select(s => s.StepId == step.StepId ? step : s)
+                .ToList();
+            if (!steps.Any(s => s.StepId == step.StepId)) steps.Add(step);
+            await SetPostProcessStepsAsync(steps);
+        }
+
         private static AudioPostProcessStepConfig DefaultConsonantSoften() =>
             AudioPostProcessStepConfig.Create(
                 AudioPostProcessStepIds.ConsonantSoften, enabled: false, new ConsonantSoftenSettings());
