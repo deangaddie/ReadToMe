@@ -1,0 +1,211 @@
+@using Read2Me.App.State
+@using Read2Me.Services.Characters
+@inject CharacterDiscoveryService Discovery
+@inject IProjectReader Reader
+@implements IDisposable
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Discover characters</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_error != null)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-3" ShowCloseIcon="true" CloseIconClicked="@(() => _error = null)">@_error</MudAlert>
+        }
+
+        @if (_phase == Phase.Discovering)
+        {
+            <MudProgressLinear Indeterminate="true" Class="my-3" />
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Asking the LLM for the book's characters…</MudText>
+        }
+        else if (_phase == Phase.Review)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectAll">Select all</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectNone">Select none</MudButton>
+                <MudSpacer />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@_rows.Count(r => r.Included) of @_rows.Count selected</MudText>
+            </MudStack>
+            <div style="max-height: 55vh; overflow-y: auto;">
+                @if (_rows.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">No characters found.</MudText>
+                }
+                @foreach (var row in _rows)
+                {
+                    var r = row;
+                    <MudPaper Class="pa-3 mb-2" Outlined="true">
+                        <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+                            <MudCheckBox T="bool" Value="@r.Included" ValueChanged="@(v => r.Included = v)" />
+                            <MudStack Spacing="1" Style="flex:1;">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudTextField T="string" @bind-Value="r.Name" Variant="Variant.Text" Margin="Margin.Dense" Style="max-width:260px;" />
+                                    @if (r.AlreadyExists)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Already exists</MudChip>
+                                    }
+                                </MudStack>
+                                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" AlignItems="AlignItems.Center">
+                                    @foreach (var alias in r.Aliases)
+                                    {
+                                        var a = alias;
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                                                 CloseIcon="@Icons.Material.Filled.Close" OnClose="@(() => r.Aliases.Remove(a))">
+                                            @a
+                                        </MudChip>
+                                    }
+                                    @if (_addingAliasFor == r)
+                                    {
+                                        <MudTextField T="string" @bind-Value="_newAlias" Placeholder="Alias name" Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense" Style="width:160px;" Immediate="true"
+                                                      OnKeyDown="@(e => OnAliasKeyDownAsync(e, r))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary"
+                                                       OnClick="@(() => CommitAlias(r))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelAlias" />
+                                    }
+                                    else
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
+                                                   OnClick="@(() => BeginAddAlias(r))">Add alias</MudButton>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </div>
+        }
+
+        <div style="border-top:1px solid var(--mud-palette-divider); margin-top:12px; padding-top:4px;">
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary"
+                       StartIcon="@(_showStream ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowUp)"
+                       OnClick="@(() => _showStream = !_showStream)">
+                @(_showStream ? "Hide AI activity" : "Show AI activity")
+            </MudButton>
+            <div style="@(_showStream ? "height:32vh;" : "height:0;") overflow:hidden; transition:height 0.15s ease;">
+                <LlmStreamView />
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (_phase == Phase.Discovering)
+        {
+            <MudButton Color="Color.Error" OnClick="CancelDiscovering">Cancel</MudButton>
+        }
+        else
+        {
+            <MudButton OnClick="Close">Close</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Accept"
+                       Disabled="@(_rows.Count(r => r.Included) == 0)">
+                Add @_rows.Count(r => r.Included) selected
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    enum Phase { Discovering, Review }
+
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
+
+    Phase _phase = Phase.Discovering;
+    bool _showStream;
+    string? _error;
+    List<DiscoveredCharacterRow> _rows = [];
+    DiscoveredCharacterRow? _addingAliasFor;
+    string _newAlias = "";
+    CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync() => await DiscoverAsync();
+
+    async Task DiscoverAsync()
+    {
+        _error = null;
+        _phase = Phase.Discovering;
+        _cts = new CancellationTokenSource();
+        try
+        {
+            var outcome = await Discovery.DiscoverAsync(FolderId, _cts.Token);
+            if (outcome.Status != DiscoveryStatus.Ok)
+            {
+                _error = outcome.Status switch
+                {
+                    DiscoveryStatus.NoLlmConfigured => "No LLM server is configured. Set one up under Settings → LLM.",
+                    DiscoveryStatus.ServiceUnavailable => $"The LLM service is unavailable: {outcome.Reason}",
+                    _ => $"Character discovery failed: {outcome.Reason}",
+                };
+                MudDialog.Cancel();
+                return;
+            }
+
+            var roster = await Reader.GetCharactersWithAliasesAsync(FolderId);
+            _rows = outcome.Characters.Select(c => new DiscoveredCharacterRow
+            {
+                Name = c.Name,
+                Aliases = c.Aliases.ToList(),
+                AlreadyExists = roster.Any(existing =>
+                    CharacterResolver.Matches(existing, c.Name) ||
+                    c.Aliases.Any(a => CharacterResolver.Matches(existing, a))),
+            }).ToList();
+            _phase = Phase.Review;
+        }
+        catch (OperationCanceledException)
+        {
+            MudDialog.Cancel();
+        }
+    }
+
+    void CancelDiscovering()
+    {
+        _cts?.Cancel();
+    }
+
+    void SelectAll()
+    {
+        foreach (var r in _rows) r.Included = true;
+    }
+
+    void SelectNone()
+    {
+        foreach (var r in _rows) r.Included = false;
+    }
+
+    void BeginAddAlias(DiscoveredCharacterRow row)
+    {
+        _addingAliasFor = row;
+        _newAlias = "";
+    }
+
+    void CommitAlias(DiscoveredCharacterRow row)
+    {
+        var name = _newAlias.Trim();
+        if (!string.IsNullOrEmpty(name) && !row.Aliases.Contains(name))
+            row.Aliases.Add(name);
+        CancelAlias();
+    }
+
+    void CancelAlias()
+    {
+        _addingAliasFor = null;
+        _newAlias = "";
+    }
+
+    async Task OnAliasKeyDownAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, DiscoveredCharacterRow row)
+    {
+        if (e.Key == "Enter") CommitAlias(row);
+        else if (e.Key == "Escape") CancelAlias();
+        await Task.CompletedTask;
+    }
+
+    void Accept() => MudDialog.Close(DialogResult.Ok(_rows.Where(r => r.Included).ToList()));
+
+    void Close() => MudDialog.Cancel();
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

@@ -53,6 +53,7 @@ namespace Read2Me.Tests.App.Preflight
         [Theory]
         [InlineData(AiTaskKind.CharacterAttribution)]
         [InlineData(AiTaskKind.VoicePromptGeneration)]
+        [InlineData(AiTaskKind.CharacterDiscovery)]
         public async Task LlmTasks_ReturnActiveLlmUrl(AiTaskKind kind)
         {
             SetActive(llmUrl: "http://localhost:8080");

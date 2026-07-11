@@ -384,5 +384,86 @@ namespace Read2Me.Tests.State
             Assert.Equal("patched", selectedVoice.Transcript);
             Assert.Equal("patched", otherVoice.Transcript);
         }
+
+        /// <summary>Records dispatched commands and returns a scripted id for CreateCharacterCommand.</summary>
+        private sealed class ScriptedCommandHandler : IBookCommandHandler
+        {
+            public List<BookCommand> Executed { get; } = [];
+            public Func<CreateCharacterCommand, Guid?> ResolveCreateId { get; set; } = _ => Guid.NewGuid();
+
+            public Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
+            {
+                Executed.Add(command);
+                return Task.FromResult(command is CreateCharacterCommand create ? ResolveCreateId(create) : null);
+            }
+        }
+
+        [Fact]
+        public async Task ApplyDiscoveredCharacters_IncludedRow_CreatesCharacterAndAliases()
+        {
+            var handler = new ScriptedCommandHandler();
+            var presenter = CreatePresenter(commandHandler: handler);
+            await presenter.LoadAsync(Folder);
+
+            var row = new DiscoveredCharacterRow { Name = "Gandalf", Aliases = ["Mithrandir", "Greyhame"] };
+            await presenter.ApplyDiscoveredCharactersAsync([row]);
+
+            Assert.Equal(3, handler.Executed.Count);
+            var create = Assert.IsType<CreateCharacterCommand>(handler.Executed[0]);
+            Assert.Equal("Gandalf", create.Name);
+            var alias1 = Assert.IsType<AddCharacterAliasCommand>(handler.Executed[1]);
+            Assert.Equal("Mithrandir", alias1.Name);
+            var alias2 = Assert.IsType<AddCharacterAliasCommand>(handler.Executed[2]);
+            Assert.Equal("Greyhame", alias2.Name);
+            Assert.Equal(alias1.CharacterId, alias2.CharacterId);
+        }
+
+        [Fact]
+        public async Task ApplyDiscoveredCharacters_ExcludedRow_ProducesNoCommands()
+        {
+            var handler = new ScriptedCommandHandler();
+            var presenter = CreatePresenter(commandHandler: handler);
+            await presenter.LoadAsync(Folder);
+
+            var row = new DiscoveredCharacterRow { Name = "Bombadil", Included = false };
+            await presenter.ApplyDiscoveredCharactersAsync([row]);
+
+            Assert.Empty(handler.Executed);
+        }
+
+        [Fact]
+        public async Task ApplyDiscoveredCharacters_ExistingCharacterNewAlias_StillProducesAliasCommand()
+        {
+            var existingId = Guid.NewGuid();
+            var handler = new ScriptedCommandHandler { ResolveCreateId = _ => existingId };
+            var presenter = CreatePresenter(commandHandler: handler);
+            await presenter.LoadAsync(Folder);
+
+            var row = new DiscoveredCharacterRow
+            {
+                Name = "Frodo", Aliases = ["Ringbearer"], AlreadyExists = true,
+            };
+            await presenter.ApplyDiscoveredCharactersAsync([row]);
+
+            Assert.Equal(2, handler.Executed.Count);
+            var alias = Assert.IsType<AddCharacterAliasCommand>(handler.Executed[1]);
+            Assert.Equal(existingId, alias.CharacterId);
+            Assert.Equal("Ringbearer", alias.Name);
+        }
+
+        [Fact]
+        public async Task ApplyDiscoveredCharacters_MixedRows_OnlyIncludedApplied()
+        {
+            var handler = new ScriptedCommandHandler();
+            var presenter = CreatePresenter(commandHandler: handler);
+            await presenter.LoadAsync(Folder);
+
+            var included = new DiscoveredCharacterRow { Name = "Sam" };
+            var excluded = new DiscoveredCharacterRow { Name = "Ghost of Christmas Past", Included = false };
+            await presenter.ApplyDiscoveredCharactersAsync([included, excluded]);
+
+            var create = Assert.Single(handler.Executed);
+            Assert.Equal("Sam", Assert.IsType<CreateCharacterCommand>(create).Name);
+        }
     }
 }

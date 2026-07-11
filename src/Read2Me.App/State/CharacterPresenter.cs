@@ -103,6 +103,40 @@ namespace Read2Me.App.State
         public Task RenameCharacterAsync(Guid characterId, string name) =>
             ExecuteAndReloadAsync(new RenameCharacterCommand(_folderId!.Value, characterId, name));
 
+        /// <summary>
+        /// Applies accepted rows from the character-discovery review dialog: one create-character
+        /// command per included row (idempotent — resolves to the existing id on a name/alias match)
+        /// followed by one add-alias command per alias on that row (deduped by the handler). Excluded
+        /// rows produce nothing.
+        /// </summary>
+        public async Task ApplyDiscoveredCharactersAsync(
+            IReadOnlyList<DiscoveredCharacterRow> rows, CancellationToken ct = default)
+        {
+            if (_folderId is not { } folder) return;
+            IsBusy = true;
+            Error = null;
+            NotifyStateChanged();
+            try
+            {
+                foreach (var row in rows.Where(r => r.Included))
+                {
+                    var characterId = await commandHandler.ExecuteAsync(
+                        new CreateCharacterCommand(folder, row.Name), ct);
+                    if (characterId is not { } id) continue;
+
+                    foreach (var alias in row.Aliases)
+                        await commandHandler.ExecuteAsync(
+                            new AddCharacterAliasCommand(folder, id, alias), ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                Error = ex.Message;
+            }
+            IsBusy = false;
+            await LoadAsync(folder);
+        }
+
         // ── Voice DB commands ─────────────────────────────────────────────────
 
         public Task AddVoiceAsync(Guid characterId, string name) =>

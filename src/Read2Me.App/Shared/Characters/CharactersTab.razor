@@ -17,13 +17,23 @@ else if (Presenter.Characters.Count == 0)
 {
     <MudStack Spacing="2" AlignItems="AlignItems.Center" Class="pa-8">
         <MudText Typo="Typo.body1" Color="Color.Secondary">No characters yet.</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
-                   OnClick="AddCharacterAsync">Add Character</MudButton>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+                       OnClick="AddCharacterAsync">Add Character</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.TravelExplore"
+                       Disabled="@_discovering"
+                       OnClick="DiscoverCharactersAsync">Discover characters</MudButton>
+        </MudStack>
     </MudStack>
 }
 else
 {
     <MudStack Row="true" Spacing="2" Class="pa-4 pb-0">
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.TravelExplore"
+                   Disabled="@(BatchService.IsRunning || _discovering)"
+                   OnClick="DiscoverCharactersAsync">Discover characters</MudButton>
         <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
                    StartIcon="@Icons.Material.Filled.AutoAwesome"
                    Disabled="@BatchService.IsRunning"
@@ -127,6 +137,33 @@ else
         if (result?.Canceled != false) return;
         if (result.Data is string name && !string.IsNullOrWhiteSpace(name))
             await Presenter.AddCharacterAsync(name);
+    }
+
+    bool _discovering;
+
+    async Task DiscoverCharactersAsync()
+    {
+        // Preflight lives here, not in the dialog: same reasoning as the voice-prompt batch —
+        // keep the "start the container?" prompt outside the per-circuit dialog service.
+        if (!await Preflight.EnsureReadyAsync(AiTaskKind.CharacterDiscovery)) return;
+
+        _discovering = true;
+        try
+        {
+            var parameters = new DialogParameters<DiscoverCharactersDialog>
+            {
+                { d => d.FolderId, new Core.Models.ProjectFolderId(FolderName) },
+            };
+            var dialog = await DialogService.ShowAsync<DiscoverCharactersDialog>("Discover characters", parameters);
+            var result = await dialog.Result;
+            if (result?.Canceled != false) return;
+            if (result.Data is List<DiscoveredCharacterRow> rows)
+                await Presenter.ApplyDiscoveredCharactersAsync(rows);
+        }
+        finally
+        {
+            _discovering = false;
+        }
     }
 
     async Task GenerateVoicePromptsAsync()

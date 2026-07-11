@@ -16,6 +16,9 @@ namespace Read2Me.App.Services.Preflight
         /// <summary>Voice design prompt generation via the active LLM config (single or batch).</summary>
         VoicePromptGeneration,
 
+        /// <summary>Character discovery via the active LLM config.</summary>
+        CharacterDiscovery,
+
         /// <summary>Voice audio synthesis via the active voice-design config (single or batch).</summary>
         VoiceDesignAudio,
 

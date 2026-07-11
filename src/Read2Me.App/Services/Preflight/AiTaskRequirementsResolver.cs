@@ -23,7 +23,7 @@ namespace Read2Me.App.Services.Preflight
         {
             var urls = task switch
             {
-                AiTaskKind.CharacterAttribution or AiTaskKind.VoicePromptGeneration =>
+                AiTaskKind.CharacterAttribution or AiTaskKind.VoicePromptGeneration or AiTaskKind.CharacterDiscovery =>
                     new[] { await LlmUrlAsync() },
                 AiTaskKind.AudioGeneration =>
                     new[] { await TtsUrlAsync(), await TranscriptionUrlAsync(), await SimilarityUrlAsync() },
