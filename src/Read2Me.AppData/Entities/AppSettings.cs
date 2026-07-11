@@ -50,10 +50,10 @@ namespace Read2Me.AppData.Entities
         public int AudioMaxAttempts { get; set; } = 1;
 
         /// <summary>
-        /// JSON array of LLM server config IDs forming the attribution escalation chain,
-        /// in the order tried *after* the primary (active) config. Null/blank = no escalation.
+        /// JSON array of LLM server config IDs forming the whole attribution chain,
+        /// index 0 first. Null/blank = empty chain (attribution falls back to the active config).
         /// </summary>
-        public string? EscalationConfigIdsJson { get; set; }
+        public string? AttributionChainIdsJson { get; set; }
 
         /// <summary>
         /// When true, attribution self-consistency (sample twice, escalate on disagreement)

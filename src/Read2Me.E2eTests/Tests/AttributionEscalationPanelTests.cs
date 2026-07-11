@@ -37,9 +37,10 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
             await Page.GetByLabel("Add escalation step").ClickAsync();
             await Page.GetByRole(AriaRole.Option, new() { Name = "fake-big" }).ClickAsync();
 
-            // Save-on-change persists the chain — poll the DB until it lands.
+            // Save-on-change persists the chain — poll the DB until it lands. The stored chain is now
+            // the whole chain [primary, ...escalation], so it contains (not equals) the added step.
             await PollAsync(async () =>
-                (await settings.GetEscalationConfigIdsAsync()).SequenceEqual(new[] { big.Id }));
+                (await settings.GetAttributionChainIdsAsync()).Contains(big.Id));
 
             // Toggle self-consistency on.
             await Page.GetByRole(AriaRole.Switch).ClickAsync();
@@ -48,7 +49,7 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
             // Reload — persisted chain + toggle must come back.
             await GotoAsync("/llm-settings");
 
-            Assert.Equal(new[] { big.Id }, await settings.GetEscalationConfigIdsAsync());
+            Assert.Contains(big.Id, await settings.GetAttributionChainIdsAsync());
             Assert.True(await settings.GetSelfConsistencyAsync());
 
             // The escalation row (a body paragraph, not the config card heading) is present after reload.
@@ -57,7 +58,7 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
         }
         finally
         {
-            await settings.SetEscalationConfigIdsAsync(System.Array.Empty<int>());
+            await settings.SetAttributionChainIdsAsync(System.Array.Empty<int>());
             await settings.SetSelfConsistencyAsync(false);
             await settings.DeleteConfigAsync(big.Id);
         }

@@ -40,22 +40,23 @@ namespace Read2Me.Services
         public async Task DeleteConfigAsync(int configId)
         {
             await _store.DeleteConfigAsync(configId);
-            // Eager prune: a deleted config must never linger in the escalation chain.
-            var ids = await ReadEscalationIdsAsync();
+            // Eager prune: a deleted config must never linger in the attribution chain. This
+            // includes index 0 — the chain shortens, nothing is promoted.
+            var ids = await ReadChainIdsAsync();
             if (ids.Contains(configId))
             {
-                await WriteEscalationIdsAsync(ids.Where(id => id != configId).ToList());
+                await WriteChainIdsAsync(ids.Where(id => id != configId).ToList());
                 OnChanged?.Invoke();
             }
         }
 
         /// <summary>
-        /// Escalation config IDs (the tail tried after the primary), pruned of any ID that no
-        /// longer maps to a config. Prunes lazily: if anything was dropped, the column is re-saved.
+        /// The whole attribution chain as stored config IDs, index 0 first, pruned of any ID that
+        /// no longer maps to a config. Prunes lazily: if anything was dropped, the column is re-saved.
         /// </summary>
-        public virtual async Task<IReadOnlyList<int>> GetEscalationConfigIdsAsync()
+        public virtual async Task<IReadOnlyList<int>> GetAttributionChainIdsAsync()
         {
-            var stored = await ReadEscalationIdsAsync();
+            var stored = await ReadChainIdsAsync();
             if (stored.Count == 0) return stored;
 
             await using var db = await _dbFactory.CreateDbContextAsync();
@@ -64,30 +65,36 @@ namespace Read2Me.Services
 
             var pruned = stored.Where(existingSet.Contains).ToList();
             if (pruned.Count != stored.Count)
-                await WriteEscalationIdsAsync(pruned);
+                await WriteChainIdsAsync(pruned);
             return pruned;
         }
 
-        public virtual async Task SetEscalationConfigIdsAsync(IReadOnlyList<int> ids)
+        public virtual async Task SetAttributionChainIdsAsync(IReadOnlyList<int> ids)
         {
-            await WriteEscalationIdsAsync(ids);
+            await WriteChainIdsAsync(ids);
             OnChanged?.Invoke();
         }
 
         /// <summary>
-        /// Resolved, pruned effective chain: active config first (if any), then escalation
-        /// configs in order, deduped by ID. IDs with no matching config are skipped.
+        /// Resolved attribution chain: the stored chain in order, deduped by ID, with **no** active
+        /// prepend. Fallback rule: a stored chain resolving to one or more configs is returned as-is;
+        /// an empty stored chain with an active config resolves to <c>[active]</c>; otherwise empty.
         /// </summary>
-        public virtual async Task<IReadOnlyList<LlmServerConfig>> GetEscalationChainAsync()
+        public virtual async Task<IReadOnlyList<LlmServerConfig>> GetAttributionChainAsync()
         {
-            var escalationIds = await GetEscalationConfigIdsAsync();
-            var activeId = await GetActiveConfigIdAsync();
+            var chainIds = await GetAttributionChainIdsAsync();
 
             var orderedIds = new List<int>();
             var seen = new HashSet<int>();
-            if (activeId is int aid && seen.Add(aid)) orderedIds.Add(aid);
-            foreach (var id in escalationIds)
+            foreach (var id in chainIds)
                 if (seen.Add(id)) orderedIds.Add(id);
+
+            // Empty stored chain falls back to the active config as a single step.
+            if (orderedIds.Count == 0)
+            {
+                var activeId = await GetActiveConfigIdAsync();
+                if (activeId is int aid) orderedIds.Add(aid);
+            }
 
             if (orderedIds.Count == 0) return Array.Empty<LlmServerConfig>();
 
@@ -115,16 +122,16 @@ namespace Read2Me.Services
             OnChanged?.Invoke();
         }
 
-        private async Task<List<int>> ReadEscalationIdsAsync()
+        private async Task<List<int>> ReadChainIdsAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var settings = await db.Settings.SingleOrDefaultAsync();
-            return Deserialize(settings?.EscalationConfigIdsJson);
+            return Deserialize(settings?.AttributionChainIdsJson);
         }
 
-        private async Task WriteEscalationIdsAsync(IReadOnlyList<int> ids)
+        private async Task WriteChainIdsAsync(IReadOnlyList<int> ids)
         {
-            await MutateSettingsAsync(s => s.EscalationConfigIdsJson = JsonSerializer.Serialize(ids));
+            await MutateSettingsAsync(s => s.AttributionChainIdsJson = JsonSerializer.Serialize(ids));
         }
 
         private static List<int> Deserialize(string? json)

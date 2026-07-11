@@ -52,7 +52,7 @@ namespace Read2Me.AppData.Migrations
                     b.Property<int>("ChunkPauseMs")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("EscalationConfigIdsJson")
+                    b.Property<string>("AttributionChainIdsJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("FfmpegPath")

@@ -37,7 +37,8 @@ namespace Read2Me.Tests.App.LlmSettings
 
             await p.AddAsync(cfgs[1].Id);
 
-            Assert.Equal(new[] { cfgs[1].Id }, await svc.GetEscalationConfigIdsAsync());
+            // Whole persisted chain = [primary, ...escalation]; the presenter view is the tail.
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, await svc.GetAttributionChainIdsAsync());
             Assert.Equal(new[] { cfgs[1].Id }, p.Escalation.Select(c => c.Id).ToArray());
         }
 
@@ -45,13 +46,13 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task MoveDown_SwapsWithNext_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(4);
-            await svc.SetEscalationConfigIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id, cfgs[3].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id, cfgs[3].Id });
             await p.LoadAsync();
 
             await p.MoveDownAsync(cfgs[1].Id);
 
-            Assert.Equal(new[] { cfgs[2].Id, cfgs[1].Id, cfgs[3].Id },
-                await svc.GetEscalationConfigIdsAsync());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id, cfgs[1].Id, cfgs[3].Id },
+                await svc.GetAttributionChainIdsAsync());
             Assert.Equal(new[] { cfgs[2].Id, cfgs[1].Id, cfgs[3].Id },
                 p.Escalation.Select(c => c.Id).ToArray());
         }
@@ -60,46 +61,46 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task MoveUp_SwapsWithPrevious_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(4);
-            await svc.SetEscalationConfigIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id, cfgs[3].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id, cfgs[3].Id });
             await p.LoadAsync();
 
             await p.MoveUpAsync(cfgs[3].Id);
 
             Assert.Equal(new[] { cfgs[1].Id, cfgs[3].Id, cfgs[2].Id },
-                await svc.GetEscalationConfigIdsAsync());
+                p.Escalation.Select(c => c.Id).ToArray());
         }
 
         [Fact]
         public async Task MoveUp_AtFirst_IsNoOp()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetEscalationConfigIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
             await p.MoveUpAsync(cfgs[1].Id);
 
             Assert.Equal(new[] { cfgs[1].Id, cfgs[2].Id },
-                await svc.GetEscalationConfigIdsAsync());
+                p.Escalation.Select(c => c.Id).ToArray());
         }
 
         [Fact]
         public async Task MoveDown_AtLast_IsNoOp()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetEscalationConfigIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
             await p.MoveDownAsync(cfgs[2].Id);
 
             Assert.Equal(new[] { cfgs[1].Id, cfgs[2].Id },
-                await svc.GetEscalationConfigIdsAsync());
+                p.Escalation.Select(c => c.Id).ToArray());
         }
 
         [Fact]
         public async Task CanMoveUp_FalseAtFirst_TrueOtherwise()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetEscalationConfigIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
             Assert.False(p.CanMoveUp(cfgs[1].Id));
@@ -112,12 +113,12 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task Remove_DropsConfig_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetEscalationConfigIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
             await p.RemoveAsync(cfgs[1].Id);
 
-            Assert.Equal(new[] { cfgs[2].Id }, await svc.GetEscalationConfigIdsAsync());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id }, await svc.GetAttributionChainIdsAsync());
             Assert.Equal(new[] { cfgs[2].Id }, p.Escalation.Select(c => c.Id).ToArray());
         }
 
@@ -137,7 +138,7 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task AvailableToAdd_ExcludesPrimaryAndChained()
         {
             var (svc, p, cfgs) = await SetupAsync(4); // cfg0 primary
-            await svc.SetEscalationConfigIdsAsync(new[] { cfgs[1].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id });
             await p.LoadAsync();
 
             // available = all(0,1,2,3) - primary(0) - chained(1) = {2,3}

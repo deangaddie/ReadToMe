@@ -47,7 +47,7 @@ namespace Read2Me.Tests.Services.Characters
             return await svc.CreateConfigAsync(config);
         }
 
-        /// <summary>Registers a chain: first config active, the rest as the escalation tail.</summary>
+        /// <summary>Registers a chain: first config active, and the whole chain (index 0 first) stored.</summary>
         private static async Task<List<LlmServerConfig>> RegisterChainAsync(
             LlmSettingsService svc, params (string Name, int BatchSize)[] configs)
         {
@@ -55,7 +55,7 @@ namespace Read2Me.Tests.Services.Characters
             foreach (var (name, batchSize) in configs)
                 created.Add(await AddConfigAsync(svc, name, batchSize));
             await svc.SetActiveConfigAsync(created[0].Id);
-            await svc.SetEscalationConfigIdsAsync(created.Skip(1).Select(c => c.Id).ToList());
+            await svc.SetAttributionChainIdsAsync(created.Select(c => c.Id).ToList());
             return created;
         }
 
@@ -926,7 +926,7 @@ namespace Read2Me.Tests.Services.Characters
             var b = new LlmServerConfig { Name = "B", BaseUrl = "http://localhost/B", Model = "B", AttributionBatchSize = 8 };
             var created = new List<LlmServerConfig> { await settings.CreateConfigAsync(a), await settings.CreateConfigAsync(b) };
             await settings.SetActiveConfigAsync(created[0].Id);
-            await settings.SetEscalationConfigIdsAsync([created[1].Id]);
+            await settings.SetAttributionChainIdsAsync([created[0].Id, created[1].Id]);
             await settings.SetSelfConsistencyAsync(true);
 
             var llm = new SequenceLlmClient().ForConfig("A", Resolved("Alice"), Resolved("Alice"));

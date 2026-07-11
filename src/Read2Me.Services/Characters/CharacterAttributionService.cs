@@ -89,7 +89,7 @@ namespace Read2Me.Services.Characters
     {
         public virtual async Task<AttributionOutcome> AttributeAsync(QueuedParagraph item, CancellationToken ct)
         {
-            var chain = await settings.GetEscalationChainAsync();
+            var chain = await settings.GetAttributionChainAsync();
             if (chain.Count == 0)
             {
                 logger.LogWarning("No active LLM config — skipping paragraph {ParagraphId}", item.ParagraphId);
@@ -178,7 +178,7 @@ namespace Read2Me.Services.Characters
             if (queued.Count == 0)
                 yield break;
 
-            var chain = await settings.GetEscalationChainAsync();
+            var chain = await settings.GetAttributionChainAsync();
             if (chain.Count == 0)
             {
                 logger.LogWarning("No active LLM config — skipping {Count} queued paragraph(s)", queued.Count);
@@ -557,7 +557,7 @@ namespace Read2Me.Services.Characters
                 return new BatchAttributionResult(
                     [(batch[0], await AttributeAsync(batch[0], ct))], []);
 
-            var chain = await settings.GetEscalationChainAsync();
+            var chain = await settings.GetAttributionChainAsync();
             if (chain.Count == 0)
             {
                 logger.LogWarning("No active LLM config — skipping batch of {Count} paragraphs", batch.Count);

@@ -18,7 +18,7 @@ namespace Read2Me.AppData.Migrations
                 defaultValue: false);
 
             migrationBuilder.AddColumn<string>(
-                name: "EscalationConfigIdsJson",
+                name: "AttributionChainIdsJson",
                 table: "Settings",
                 type: "TEXT",
                 nullable: true);
@@ -32,7 +32,7 @@ namespace Read2Me.AppData.Migrations
                 table: "Settings");
 
             migrationBuilder.DropColumn(
-                name: "EscalationConfigIdsJson",
+                name: "AttributionChainIdsJson",
                 table: "Settings");
         }
     }

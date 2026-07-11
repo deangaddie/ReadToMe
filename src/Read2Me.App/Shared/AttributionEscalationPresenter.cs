@@ -36,8 +36,13 @@ namespace Read2Me.App.Shared
             var activeId = await settings.GetActiveConfigIdAsync();
             Primary = activeId is int aid && byId.TryGetValue(aid, out var primary) ? primary : null;
 
-            var escalationIds = await settings.GetEscalationConfigIdsAsync();
-            Escalation = escalationIds
+            // Transitional (ticket 01): the stored chain is now the *whole* attribution chain
+            // including index 0. This presenter still renders a Primary + Escalation split, so it
+            // treats the chain's tail (everything after the active config) as the escalation list.
+            // Ticket 02 replaces this with a flat chain.
+            var chainIds = await settings.GetAttributionChainIdsAsync();
+            Escalation = chainIds
+                .Where(id => activeId is not int aid2 || id != aid2)
                 .Where(byId.ContainsKey)
                 .Select(id => byId[id])
                 .ToList();
@@ -55,8 +60,18 @@ namespace Read2Me.App.Shared
             var ids = Escalation.Select(c => c.Id).ToList();
             if (ids.Contains(configId)) return;
             ids.Add(configId);
-            await settings.SetEscalationConfigIdsAsync(ids);
+            await PersistEscalationAsync(ids);
             await LoadAsync();
+        }
+
+        // Transitional: persist the whole chain as [primary?, ...escalationTail] so attribution
+        // resolves the same effective chain it did before ticket 01. Ticket 02 makes this flat.
+        private Task PersistEscalationAsync(IReadOnlyList<int> escalationIds)
+        {
+            var chain = new List<int>();
+            if (Primary is not null) chain.Add(Primary.Id);
+            chain.AddRange(escalationIds);
+            return settings.SetAttributionChainIdsAsync(chain);
         }
 
         /// <summary>True when the config is an escalation entry that is not already first.</summary>
@@ -87,7 +102,7 @@ namespace Read2Me.App.Shared
 
             var ids = Escalation.Select(c => c.Id).ToList();
             (ids[i], ids[j]) = (ids[j], ids[i]);
-            await settings.SetEscalationConfigIdsAsync(ids);
+            await PersistEscalationAsync(ids);
             await LoadAsync();
         }
 
@@ -95,7 +110,7 @@ namespace Read2Me.App.Shared
         public async Task RemoveAsync(int configId)
         {
             var ids = Escalation.Select(c => c.Id).Where(id => id != configId).ToList();
-            await settings.SetEscalationConfigIdsAsync(ids);
+            await PersistEscalationAsync(ids);
             await LoadAsync();
         }
 
