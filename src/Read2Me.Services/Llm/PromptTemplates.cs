@@ -108,6 +108,86 @@ namespace Read2Me.Services.Llm
             {{context_json}}
             """;
 
+        public const string DefaultSimpleCharacterPrompt =
+            """
+            You are an audiobook script classifier for the book "{{book_title}}" by {{book_author}}.
+
+            For the paragraph containing dialog, return the name of the character speaking —
+            but ONLY if the text explicitly states who speaks.
+
+            The ONLY acceptable evidence is an attribution tag that names the speaker of the
+            query paragraph: "said X", "X replied", "asked X", "X went on". The tag may sit
+            before, inside, or after the quote in the query paragraph itself, or in the
+            paragraph immediately before or after it when it clearly refers to the query
+            paragraph's quote.
+
+            Do NOT infer the speaker any other way. Do not use conversation turn-taking,
+            names addressed inside the quote, descriptions of who is present, or what the
+            dialog says. If you would have to reason it out, the answer is "unknown".
+
+            Rules:
+            - A paragraph has at most one speaking character.
+            - First write one short sentence in "reasoning" quoting the attribution tag you
+              found, or stating that there is none, then give the answer.
+            - Never return pronouns (he, she, they) as the speaker. If the tag uses only a
+              pronoun and no sentence right next to it names that person, return "unknown".
+            - When the tag names a speaker, return that character's "name" from the known
+              characters list (the tag may use an alias).
+            - If there is no attribution tag naming the speaker, return "unknown". "unknown"
+              is a correct and expected answer — another system handles those paragraphs.
+            - Return ONLY valid JSON. No markdown fences, no text outside the JSON.
+            - JSON format: {{response_format}}
+
+            Known characters (JSON array; each entry has a "name" and optional "aliases" — match either when identifying the speaker): {{known_characters}}
+
+            Context paragraphs (JSON object):
+            - "preceding": paragraphs before the target, in order
+            - "query": the paragraph to attribute — determine who speaks this
+            - "following": paragraphs after the target, in order
+            - "speaker" (when present) is the already-known speaker for that paragraph
+
+            {{context_json}}
+            """;
+
+        public const string DefaultSimpleBatchCharacterPrompt =
+            """
+            You are an audiobook script classifier for the book "{{book_title}}" by {{book_author}}.
+
+            Several paragraphs containing dialog need a speaker. Each is marked with an "index".
+            For every indexed paragraph, return the name of the character speaking — but ONLY
+            if the text explicitly states who speaks that paragraph.
+
+            The ONLY acceptable evidence is an attribution tag that names the speaker of the
+            indexed paragraph: "said X", "X replied", "asked X", "X went on". The tag may sit
+            before, inside, or after the quote in the indexed paragraph itself, or in the
+            paragraph immediately before or after it when it clearly refers to that quote.
+
+            Do NOT infer a speaker any other way. Do not use conversation turn-taking, names
+            addressed inside a quote, descriptions of who is present, or what the dialog says.
+            If you would have to reason it out, the answer for that index is "unknown".
+
+            Rules:
+            - A paragraph has at most one speaking character.
+            - For each index, first write one short sentence in "reasoning" quoting the
+              attribution tag you found, or stating that there is none, then give the answer.
+            - Never return pronouns (he, she, they) as a speaker. If the tag uses only a
+              pronoun and no sentence right next to it names that person, return "unknown".
+            - When a tag names a speaker, return that character's "name" from the known
+              characters list (the tag may use an alias).
+            - If an indexed paragraph has no attribution tag naming its speaker, return
+              "unknown" for that index. "unknown" is a correct and expected answer — another
+              system handles those paragraphs.
+            - Return ONLY a valid JSON array with exactly one entry per index. Every index must appear. No markdown fences, no text outside the JSON.
+            - JSON format: {{response_format}}
+
+            Known characters (JSON array; each entry has a "name" and optional "aliases" — match either when identifying a speaker): {{known_characters}}
+
+            Paragraphs (JSON object): "paragraphs" is the passage in reading order. Entries with an
+            "index" are the ones to attribute; entries with a "speaker" are context.
+
+            {{context_json}}
+            """;
+
         public const string DefaultVoicePrompt =
             """
             You are designing a distinctive speaking voice for a character in the

@@ -13,6 +13,29 @@ namespace Read2Me.Tests.App
             BaseUrl = "http://localhost:8080",
         };
 
+        // ---- Prompt style ----
+
+        [Fact]
+        public void NewForm_DefaultsToFullPromptStyle()
+        {
+            Assert.Equal(AttributionPromptStyle.Full, Valid().PromptStyle);
+        }
+
+        [Fact]
+        public void PromptStyle_SurvivesRoundTrip()
+        {
+            var config = new LlmServerConfig
+            {
+                Name = "Small",
+                BaseUrl = "http://localhost:8080",
+                PromptStyle = AttributionPromptStyle.Simple,
+            };
+
+            var rebuilt = LlmServerConfigForm.FromConfig(config).BuildConfig();
+
+            Assert.Equal(AttributionPromptStyle.Simple, rebuilt.PromptStyle);
+        }
+
         // ---- Validate: required fields ----
 
         [Fact]

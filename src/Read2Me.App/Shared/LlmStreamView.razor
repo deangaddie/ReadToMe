@@ -147,6 +147,14 @@
                     ft.FailureReason = sf.Reason;
                 }
                 break;
+
+            case EscalationStarted es:
+                _turns.Add(new StreamTurn
+                {
+                    Preview = $"Escalation step {es.Step} → {es.ConfigName} ({es.ItemCount} item{(es.ItemCount == 1 ? "" : "s")})",
+                    IsStreaming = false,
+                });
+                break;
         }
     }
 

@@ -115,11 +115,39 @@ namespace Read2Me.Services.Characters
             return batch;
         }
 
+        /// <summary>
+        /// Returns <paramref name="first"/> plus every remaining queued paragraph, across all
+        /// chapters and folders, drained from the head of the queue. The queue is enqueued in book
+        /// order, so the result is in book order. Same single-reader contract as <see cref="DrainBatch"/>:
+        /// only the queue worker calls it, and it marks/resolves/requeues nothing.
+        /// </summary>
+        public IReadOnlyList<QueuedParagraph> DrainAll(QueuedParagraph first)
+        {
+            var all = new List<QueuedParagraph> { first };
+            while (_channel.Reader.TryRead(out var item))
+                all.Add(item);
+            return all;
+        }
+
         public void MarkProcessing(QueuedParagraph item)
         {
             var key = Key(item);
             _map.MarkProcessing(key);
             _processingPreview = item.Preview;
+            Changed?.Invoke();
+        }
+
+        /// <summary>
+        /// Returns an in-flight item to Queued *without* putting it back on the channel: the caller
+        /// (the attribution chain) still owns it and will re-drive it on a later escalation step.
+        /// Used when a chunk's LLM call finishes but leaves an item undecided — it must not sit in
+        /// Processing while it waits for the next step's model burst.
+        /// </summary>
+        public void MarkDeferred(QueuedParagraph item)
+        {
+            var key = Key(item);
+            _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
+            _processingPreview = null;
             Changed?.Invoke();
         }
 
@@ -150,10 +178,10 @@ namespace Read2Me.Services.Characters
             Changed?.Invoke();
         }
 
-        public void MarkUnknown(QueuedParagraph item, double elapsedSeconds)
+        public void MarkUnknown(QueuedParagraph item, double elapsedSeconds, string? reason = null)
         {
             var key = Key(item);
-            _map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, null));
+            _map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, reason));
             _map.Finish(key, elapsedSeconds);
             _processingPreview = null;
             Changed?.Invoke();

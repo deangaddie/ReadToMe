@@ -15,7 +15,6 @@ namespace Read2Me.App.Characters
         CharacterAttributionService attribution,
         CharacterResolver resolver,
         IBookCommandHandler commands,
-        LlmSettingsService settings,
         ILogger<CharacterQueueProcessor> logger) : ICharacterQueueProcessor
     {
         public async Task ProcessItemAsync(QueuedParagraph item, CancellationToken hostCt)
@@ -23,39 +22,43 @@ namespace Read2Me.App.Characters
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(hostCt, queue.ItemCancellationToken);
             var ct = linked.Token;
 
-            // Items drained into the batch that have not received an outcome yet — failed
-            // wholesale if processing throws, so no drained item is silently dropped.
+            // Drained items that have not received an outcome yet — failed wholesale if processing
+            // throws, so no drained item is silently dropped. Whittled down as the stream decides each.
             var pending = new List<QueuedParagraph> { item };
 
             try
             {
-                var batchSize = (await settings.GetActiveConfigAsync())?.AttributionBatchSize ?? 1;
-                IReadOnlyList<QueuedParagraph> batch = queue.DrainBatch(item, Math.Max(1, batchSize));
-                pending = new List<QueuedParagraph>(batch);
-                foreach (var b in batch)
-                    queue.MarkProcessing(b);
+                // Drain the whole queue and run the primary across all of it before any escalation
+                // (queue-wide escalation: one model burst per chain step, no per-item swap). The
+                // drained items keep their Queued status; only the in-flight LLM chunk (batch size)
+                // flips to Processing, via the ChunkStarted callback, so the tree shows the true
+                // batch being worked rather than the whole queue. An item its chunk left suspect
+                // drops back to Queued (ItemDeferred) — it is waiting on a later escalation step,
+                // not being worked, so it must not linger on the Processing chip.
+                IReadOnlyList<QueuedParagraph> queued = queue.DrainAll(item);
+                pending = new List<QueuedParagraph>(queued);
 
                 logger.LogInformation("Processing {Count} paragraph(s) starting at {ParagraphId} in {Folder}",
-                    batch.Count, item.ParagraphId, item.Folder);
+                    queued.Count, item.ParagraphId, item.Folder);
 
-                while (batch.Count > 0)
+                void MarkChunkProcessing(IReadOnlyList<QueuedParagraph> chunk)
                 {
-                    var sw = Stopwatch.StartNew();
-                    var result = await attribution.AttributeBatchAsync(batch, ct);
-                    sw.Stop();
+                    foreach (var c in chunk)
+                        queue.MarkProcessing(c);
+                }
 
-                    var perItemSeconds = result.Outcomes.Count > 0
-                        ? sw.Elapsed.TotalSeconds / result.Outcomes.Count
-                        : sw.Elapsed.TotalSeconds;
+                var callbacks = new AttributionQueueCallbacks(
+                    ChunkStarted: MarkChunkProcessing,
+                    ItemDeferred: queue.MarkDeferred);
 
-                    foreach (var (batchItem, outcome) in result.Outcomes)
-                    {
-                        await ApplyOutcomeAsync(batchItem, outcome, perItemSeconds, ct);
-                        pending.Remove(batchItem);
-                    }
-
-                    // Items trimmed off the contiguous run go around again as a fresh batch.
-                    batch = result.Deferred;
+                var sw = Stopwatch.StartNew();
+                await foreach (var (streamItem, outcome) in
+                    attribution.AttributeQueueAsync(queued, callbacks, ct))
+                {
+                    var elapsed = sw.Elapsed.TotalSeconds;
+                    sw.Restart();
+                    await ApplyOutcomeAsync(streamItem, outcome, elapsed, ct);
+                    pending.Remove(streamItem);
                 }
             }
             catch (OperationCanceledException) when (hostCt.IsCancellationRequested)
@@ -90,7 +93,7 @@ namespace Read2Me.App.Characters
 
                 case AttributionStatus.Unknown:
                     logger.LogInformation("Paragraph {ParagraphId} speaker unknown", item.ParagraphId);
-                    queue.MarkUnknown(item, elapsedSeconds);
+                    queue.MarkUnknown(item, elapsedSeconds, outcome.FailureReason);
                     break;
 
                 case AttributionStatus.NoLlmConfigured:

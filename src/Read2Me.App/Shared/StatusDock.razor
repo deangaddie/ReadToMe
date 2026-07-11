@@ -6,6 +6,7 @@
 @using Read2Me.Services.Events
 @inject BookHierarchyPresenter Presenter
 @inject CharacterQueueService CharQueue
+@inject AttributionProgressState AttrProgress
 @inject AudioQueueService AudioQueue
 @inject AudiobookAssemblyService Assembly
 @inject VoiceBatchRunner Batch
@@ -225,6 +226,14 @@
                 {
                     <span style="opacity:0.6;">Idle</span>
                 }
+                @if (AttrProgress.HasEscalation)
+                {
+                    <span style="color:var(--mud-palette-warning-text); display:flex; align-items:center; gap:4px;">
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" />
+                        Escalating @AttrProgress.ItemCount item@(AttrProgress.ItemCount == 1 ? "" : "s")
+                        → @AttrProgress.ConfigName (step @AttrProgress.Step)
+                    </span>
+                }
                 @if (charVm.ShowQueued) { <span style="opacity:0.7;">@charVm.QueuedText</span> }
                 @if (charVm.ShowAverage) { <span style="opacity:0.7;">@charVm.AverageText</span> }
                 @if (charVm.ShowEta) { <span style="opacity:0.7;">@charVm.EtaText</span> }
@@ -302,6 +311,7 @@
     {
         Presenter.StateChanged += Refresh;
         CharQueue.Changed += Refresh;
+        AttrProgress.Changed += Refresh;
         AudioQueue.Changed += Refresh;
         BatchEvents.Event += OnBatchEvent;
         VoicePromptState.Changed += Refresh;
@@ -321,6 +331,7 @@
     {
         Presenter.StateChanged -= Refresh;
         CharQueue.Changed -= Refresh;
+        AttrProgress.Changed -= Refresh;
         AudioQueue.Changed -= Refresh;
         BatchEvents.Event -= OnBatchEvent;
         VoicePromptState.Changed -= Refresh;

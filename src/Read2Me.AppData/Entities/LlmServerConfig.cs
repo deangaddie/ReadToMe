@@ -30,5 +30,11 @@ namespace Read2Me.AppData.Entities
         /// greater values batch consecutive unassigned character paragraphs into a single prompt.
         /// </summary>
         public int AttributionBatchSize { get; set; } = 1;
+
+        /// <summary>
+        /// Which attribution prompt tier this server uses. Simple = explicit-tag-only prompt,
+        /// for small models that would otherwise guess a speaker instead of escalating.
+        /// </summary>
+        public AttributionPromptStyle PromptStyle { get; set; } = AttributionPromptStyle.Full;
     }
 }

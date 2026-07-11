@@ -72,3 +72,13 @@ GGUF model files live in `Infra/models/` (bind-mounted, not committed).
 ### Data Flow
 
 User imports epub/text → LLM attributes dialog items to Characters → TTS synthesises audio per ParagraphItem → Whisper transcribes for WER/semantic accuracy check → items assembled into `.m4b` audiobook with chapter markers and cover art.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs (PRDs) live as local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.

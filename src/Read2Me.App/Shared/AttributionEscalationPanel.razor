@@ -1,0 +1,140 @@
+@using Read2Me.App.Shared
+@using Read2Me.AppData.Entities
+@inject LlmSettingsService SettingsService
+@implements IDisposable
+
+<MudPaper Class="pa-4 mt-6" Outlined="true">
+    <MudText Typo="Typo.h6" Class="mb-1">Attribution escalation chain</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Hard character attributions are retried on each escalation config in order. The primary (active)
+        config runs first; suspect answers (unknown, unlisted name, parse failure) escalate to the next.
+        Same-server multi-model chains are supported — the llama.cpp fork loads the requested preset per request.
+    </MudText>
+
+    @if (_presenter is null)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+    }
+    else
+    {
+        @if (_presenter.Primary is null)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                Select an active configuration above to set the chain's primary step.
+            </MudAlert>
+        }
+        else
+        {
+            <MudPaper Class="pa-2 mb-2" Outlined="true">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">
+                        Primary (active)
+                    </MudChip>
+                    <MudText Typo="Typo.body1">@_presenter.Primary.Name</MudText>
+                    @if (!string.IsNullOrWhiteSpace(_presenter.Primary.Model))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_presenter.Primary.Model</MudText>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+
+        @foreach (var cfg in _presenter.Escalation)
+        {
+            var c = cfg;
+            <MudPaper Class="pa-2 mb-2" Outlined="true">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small"
+                                   Disabled="@(!_presenter.CanMoveUp(c.Id))"
+                                   OnClick="@(() => MoveUpAsync(c.Id))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small"
+                                   Disabled="@(!_presenter.CanMoveDown(c.Id))"
+                                   OnClick="@(() => MoveDownAsync(c.Id))" />
+                    <MudText Typo="Typo.body1">@c.Name</MudText>
+                    @if (!string.IsNullOrWhiteSpace(c.Model))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@c.Model</MudText>
+                    }
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => RemoveAsync(c.Id))" />
+                </MudStack>
+            </MudPaper>
+        }
+
+        @if (_presenter.AvailableToAdd.Count > 0)
+        {
+            <MudSelect T="int?" Label="Add escalation step" Value="_addSelection"
+                       ValueChanged="OnAddSelectedAsync" Dense="true" Class="mt-2" Variant="Variant.Outlined">
+                @foreach (var cfg in _presenter.AvailableToAdd)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)cfg.Id)">@cfg.Name</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        <MudSwitch T="bool" Value="_presenter.SelfConsistency" ValueChanged="OnSelfConsistencyChangedAsync"
+                   Color="Color.Primary" Class="mt-4"
+                   Label="Self-consistency: sample twice on non-final steps and escalate on disagreement — doubles LLM calls for those steps" />
+    }
+</MudPaper>
+
+@code {
+    AttributionEscalationPresenter? _presenter;
+    int? _addSelection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SettingsService.OnChanged += HandleChanged;
+        _presenter = new AttributionEscalationPresenter(SettingsService);
+        await _presenter.LoadAsync();
+    }
+
+    void HandleChanged() => InvokeAsync(ReloadAsync);
+
+    async Task ReloadAsync()
+    {
+        if (_presenter is null) return;
+        await _presenter.LoadAsync();
+        StateHasChanged();
+    }
+
+    async Task MoveUpAsync(int id)
+    {
+        await _presenter!.MoveUpAsync(id);
+        StateHasChanged();
+    }
+
+    async Task MoveDownAsync(int id)
+    {
+        await _presenter!.MoveDownAsync(id);
+        StateHasChanged();
+    }
+
+    async Task RemoveAsync(int id)
+    {
+        await _presenter!.RemoveAsync(id);
+        StateHasChanged();
+    }
+
+    async Task OnAddSelectedAsync(int? id)
+    {
+        if (id is int configId)
+        {
+            await _presenter!.AddAsync(configId);
+            _addSelection = null; // reset the placeholder
+            StateHasChanged();
+        }
+    }
+
+    async Task OnSelfConsistencyChangedAsync(bool value)
+    {
+        await _presenter!.SetSelfConsistencyAsync(value);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        SettingsService.OnChanged -= HandleChanged;
+    }
+}

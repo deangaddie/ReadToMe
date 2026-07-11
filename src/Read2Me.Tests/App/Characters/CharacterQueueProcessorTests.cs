@@ -15,7 +15,6 @@ namespace Read2Me.Tests.App.Characters
         private readonly FakeAttributionService _attribution;
         private readonly FakeResolver _resolver;
         private readonly FakeCommandHandler _commands;
-        private readonly FakeLlmSettings _settings;
         private readonly CharacterQueueProcessor _sut;
         private readonly QueuedParagraph _item;
 
@@ -25,13 +24,11 @@ namespace Read2Me.Tests.App.Characters
             _attribution = new FakeAttributionService();
             _resolver = new FakeResolver();
             _commands = new FakeCommandHandler();
-            _settings = new FakeLlmSettings();
             _sut = new CharacterQueueProcessor(
                 _queue,
                 _attribution,
                 _resolver,
                 _commands,
-                _settings,
                 NullLogger<CharacterQueueProcessor>.Instance);
 
             _item = new QueuedParagraph(
@@ -80,6 +77,21 @@ namespace Read2Me.Tests.App.Characters
             var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
             Assert.NotNull(outcome);
             Assert.Equal(ParagraphOutcomeKind.Unknown, outcome.Kind);
+        }
+
+        [Fact]
+        public async Task Unknown_WithReason_FlowsReasonIntoOutcome()
+        {
+            _attribution.Outcome = new AttributionOutcome(
+                AttributionStatus.Unknown, null, null,
+                "Speaker unknown after escalating through 2 models (A → B)");
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
+            Assert.NotNull(outcome);
+            Assert.Equal(ParagraphOutcomeKind.Unknown, outcome.Kind);
+            Assert.Equal("Speaker unknown after escalating through 2 models (A → B)", outcome.Reason);
         }
 
         [Fact]
@@ -156,9 +168,8 @@ namespace Read2Me.Tests.App.Characters
             new(_item.Folder, Guid.NewGuid(), "Preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
 
         [Fact]
-        public async Task BatchSize_DrainsQueueAndAppliesOutcomePerItem()
+        public async Task DrainsWholeQueue_AppliesOutcomePerItem()
         {
-            _settings.BatchSize = 3;
             _attribution.Outcome = new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null);
             _resolver.ResolvedId = Guid.NewGuid();
 
@@ -178,44 +189,37 @@ namespace Read2Me.Tests.App.Characters
         }
 
         [Fact]
-        public async Task DeferredItems_ProcessedAsFollowUpBatch()
+        public async Task MultiChapterDrain_AppliesEachOutcome()
         {
-            _settings.BatchSize = 3;
-            var chapterId = Guid.NewGuid();
-            var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
-            _queue.Enqueue(items);
+            _resolver.ResolvedId = Guid.NewGuid();
+            var chA = Guid.NewGuid();
+            var chB = Guid.NewGuid();
+            var a1 = MakeChapterItem(chA);
+            var b1 = MakeChapterItem(chB);
+            _queue.Enqueue([a1, b1]);
             var first = await _queue.Reader.ReadAsync();
 
-            var resolved = new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null);
-            _resolver.ResolvedId = Guid.NewGuid();
-            _attribution.BatchResults.Enqueue(new BatchAttributionResult(
-                [(items[0], resolved), (items[1], resolved)], [items[2]]));
-            _attribution.BatchResults.Enqueue(new BatchAttributionResult(
-                [(items[2], resolved)], []));
+            _attribution.StreamResults.Enqueue((a1, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+            _attribution.StreamResults.Enqueue((b1, new AttributionOutcome(AttributionStatus.Unknown, null, null, null)));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
-            Assert.Empty(_attribution.BatchResults);
-            foreach (var item in items)
-                Assert.NotNull(_queue.ResolvedOf(item.Folder, item.ParagraphId));
+            Assert.NotNull(_queue.ResolvedOf(a1.Folder, a1.ParagraphId));
+            Assert.Equal(ParagraphOutcomeKind.Unknown, _queue.OutcomeOf(b1.Folder, b1.ParagraphId)!.Kind);
         }
 
         [Fact]
-        public async Task MixedBatchOutcomes_AppliedIndividually()
+        public async Task MixedStreamOutcomes_AppliedIndividually()
         {
-            _settings.BatchSize = 3;
             var chapterId = Guid.NewGuid();
             var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
             _queue.Enqueue(items);
             var first = await _queue.Reader.ReadAsync();
 
             _resolver.ResolvedId = Guid.NewGuid();
-            _attribution.BatchResults.Enqueue(new BatchAttributionResult(
-                [
-                    (items[0], new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)),
-                    (items[1], new AttributionOutcome(AttributionStatus.Unknown, null, null, null)),
-                    (items[2], new AttributionOutcome(AttributionStatus.Failed, null, null, "boom")),
-                ], []));
+            _attribution.StreamResults.Enqueue((items[0], new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+            _attribution.StreamResults.Enqueue((items[1], new AttributionOutcome(AttributionStatus.Unknown, null, null, null)));
+            _attribution.StreamResults.Enqueue((items[2], new AttributionOutcome(AttributionStatus.Failed, null, null, "boom")));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
@@ -228,9 +232,93 @@ namespace Read2Me.Tests.App.Characters
         }
 
         [Fact]
+        public async Task Step0ResolvesApplyBeforeLaterStreamItems()
+        {
+            var chapterId = Guid.NewGuid();
+            var early = MakeChapterItem(chapterId);
+            var late = MakeChapterItem(chapterId);
+            _queue.Enqueue([early, late]);
+            var first = await _queue.Reader.ReadAsync();
+
+            _resolver.ResolvedId = Guid.NewGuid();
+            // Stream yields the step-0 resolve first; by the time the second item streams, the first
+            // must already be applied (chip flipped to done).
+            _attribution.StreamResults.Enqueue((early, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+            _attribution.StreamResults.Enqueue((late, new AttributionOutcome(AttributionStatus.Resolved, "Frodo", null, null)));
+
+            await _sut.ProcessItemAsync(first, CancellationToken.None);
+
+            // Commands applied in stream order.
+            Assert.Equal(2, _commands.SentCommands.Count);
+            var cmd0 = Assert.IsType<SetParagraphCharacterCommand>(_commands.SentCommands[0]);
+            Assert.Equal(early.ParagraphId, cmd0.ParagraphId);
+        }
+
+        [Fact]
+        public async Task DrainedItems_NotMarkedProcessing_UntilTheirChunkStarts()
+        {
+            var chapterId = Guid.NewGuid();
+            var worked = MakeChapterItem(chapterId);
+            var untouched = MakeChapterItem(chapterId);
+            _queue.Enqueue([worked, untouched]);
+            var first = await _queue.Reader.ReadAsync();
+
+            _resolver.ResolvedId = Guid.NewGuid();
+            // Only 'worked' is signalled + yielded; 'untouched' is drained but never streamed. It must
+            // stay Queued — proof the whole drained queue is not flipped to Processing up front.
+            _attribution.StreamResults.Enqueue((worked, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+
+            await _sut.ProcessItemAsync(first, CancellationToken.None);
+
+            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(untouched.Folder, untouched.ParagraphId));
+            // The item that was actually worked was chunk-signalled before its outcome applied.
+            Assert.Contains(_attribution.ChunksStarted, c => c.Contains(worked));
+        }
+
+        [Fact]
+        public async Task DeferredItem_ReturnsToQueued_WhileAwaitingEscalation()
+        {
+            var chapterId = Guid.NewGuid();
+            var deferred = MakeChapterItem(chapterId);
+            var decided = MakeChapterItem(chapterId);
+            _queue.Enqueue([deferred, decided]);
+            var first = await _queue.Reader.ReadAsync();
+
+            _resolver.ResolvedId = Guid.NewGuid();
+            // 'deferred' goes in flight, is answered suspect, and is held back for a later chain step
+            // without ever being yielded. It must not be left showing Processing.
+            _attribution.DeferItems.Add(deferred);
+            _attribution.StreamResults.Enqueue((decided, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+
+            await _sut.ProcessItemAsync(first, CancellationToken.None);
+
+            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(deferred.Folder, deferred.ParagraphId));
+            Assert.Contains(_attribution.ChunksStarted, c => c.Contains(deferred));
+        }
+
+        [Fact]
+        public async Task DeferredItem_DecidedByLaterStep_CompletesNormally()
+        {
+            var chapterId = Guid.NewGuid();
+            var item = MakeChapterItem(chapterId);
+            _queue.Enqueue([item]);
+            var first = await _queue.Reader.ReadAsync();
+
+            _resolver.ResolvedId = Guid.NewGuid();
+            // Held back by step 0, then resolved by a later escalation step: the deferral is transient
+            // and must not block the terminal outcome.
+            _attribution.DeferItems.Add(item);
+            _attribution.StreamResults.Enqueue((item, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+
+            await _sut.ProcessItemAsync(first, CancellationToken.None);
+
+            Assert.Null(_queue.StatusOf(item.Folder, item.ParagraphId));
+            Assert.NotNull(_queue.ResolvedOf(item.Folder, item.ParagraphId));
+        }
+
+        [Fact]
         public async Task ProcessorThrows_MarksAllDrainedItemsFailed()
         {
-            _settings.BatchSize = 2;
             var chapterId = Guid.NewGuid();
             var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
             _queue.Enqueue(items);
@@ -248,38 +336,105 @@ namespace Read2Me.Tests.App.Characters
             }
         }
 
+        [Fact]
+        public async Task UnexpectedThrowMidStream_FailsOnlyUndecidedItems()
+        {
+            var chapterId = Guid.NewGuid();
+            var decided = MakeChapterItem(chapterId);
+            var undecided = MakeChapterItem(chapterId);
+            _queue.Enqueue([decided, undecided]);
+            var first = await _queue.Reader.ReadAsync();
+
+            _resolver.ResolvedId = Guid.NewGuid();
+            // First item decides, then the stream throws before the second — only the second fails.
+            _attribution.StreamThenThrow(
+                (decided, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)),
+                new InvalidOperationException("boom"));
+
+            await _sut.ProcessItemAsync(first, CancellationToken.None);
+
+            Assert.NotNull(_queue.ResolvedOf(decided.Folder, decided.ParagraphId));
+            var failed = _queue.OutcomeOf(undecided.Folder, undecided.ParagraphId);
+            Assert.NotNull(failed);
+            Assert.Equal(ParagraphOutcomeKind.Failed, failed.Kind);
+        }
+
         private class FakeAttributionService() : CharacterAttributionService(null!, null!, null!, null!, NullLogger<CharacterAttributionService>.Instance, null!, null!)
         {
             public AttributionOutcome? Outcome { get; set; }
             public Exception? ThrowException { get; set; }
 
-            /// <summary>Queued per-call results; when empty, falls back to Outcome for every batch item.</summary>
-            public Queue<BatchAttributionResult> BatchResults { get; } = new();
+            /// <summary>
+            /// Scripted stream, in yield order; when empty, falls back to <see cref="Outcome"/> for
+            /// every drained item in book order.
+            /// </summary>
+            public Queue<(QueuedParagraph Item, AttributionOutcome Outcome)> StreamResults { get; } = new();
 
-            public override Task<AttributionOutcome> AttributeAsync(QueuedParagraph item, CancellationToken ct)
+            private (QueuedParagraph, AttributionOutcome)[]? _thenYield;
+            private Exception? _midStreamThrow;
+
+            /// <summary>Yields the given outcome, then throws mid-stream before any remaining items.</summary>
+            public void StreamThenThrow((QueuedParagraph, AttributionOutcome) yielded, Exception ex)
             {
-                if (ThrowException != null) throw ThrowException;
-                return Task.FromResult(Outcome!);
+                _thenYield = [yielded];
+                _midStreamThrow = ex;
             }
 
-            public override Task<BatchAttributionResult> AttributeBatchAsync(
-                IReadOnlyList<QueuedParagraph> batch, CancellationToken ct)
+            /// <summary>Chunks the callback reported for each item, in order it was signalled.</summary>
+            public List<IReadOnlyList<QueuedParagraph>> ChunksStarted { get; } = new();
+
+            /// <summary>Items to signal as deferred (escalation-held) before the stream yields anything.</summary>
+            public List<QueuedParagraph> DeferItems { get; } = new();
+
+            public override async IAsyncEnumerable<(QueuedParagraph Item, AttributionOutcome Outcome)>
+                AttributeQueueAsync(IReadOnlyList<QueuedParagraph> queued,
+                    AttributionQueueCallbacks? callbacks,
+                    [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
             {
                 if (ThrowException != null) throw ThrowException;
-                if (BatchResults.Count > 0) return Task.FromResult(BatchResults.Dequeue());
-                return Task.FromResult(new BatchAttributionResult(
-                    [.. batch.Select(b => (b, Outcome!))], []));
+
+                // Chunk goes in flight, then the chain holds these back for a later step.
+                foreach (var item in DeferItems)
+                {
+                    Signal(callbacks, item);
+                    callbacks?.ItemDeferred?.Invoke(item);
+                }
+
+                if (_midStreamThrow != null)
+                {
+                    foreach (var pair in _thenYield!)
+                    {
+                        Signal(callbacks, pair.Item1);
+                        yield return pair;
+                    }
+                    throw _midStreamThrow;
+                }
+                if (StreamResults.Count > 0)
+                {
+                    while (StreamResults.Count > 0)
+                    {
+                        var pair = StreamResults.Dequeue();
+                        Signal(callbacks, pair.Item);
+                        yield return pair;
+                    }
+                }
+                else
+                {
+                    foreach (var item in queued)
+                    {
+                        Signal(callbacks, item);
+                        yield return (item, Outcome!);
+                    }
+                }
+                await Task.CompletedTask;
             }
-        }
 
-        private class FakeLlmSettings() : LlmSettingsService(null!, NullLogger<LlmSettingsService>.Instance)
-        {
-            public int? BatchSize { get; set; }
-
-            public override Task<LlmServerConfig?> GetActiveConfigAsync() =>
-                Task.FromResult(BatchSize is { } size
-                    ? new LlmServerConfig { AttributionBatchSize = size }
-                    : null);
+            private void Signal(AttributionQueueCallbacks? callbacks, QueuedParagraph item)
+            {
+                IReadOnlyList<QueuedParagraph> chunk = [item];
+                ChunksStarted.Add(chunk);
+                callbacks?.ChunkStarted?.Invoke(chunk);
+            }
         }
 
         private class FakeResolver() : CharacterResolver(null!, null!)

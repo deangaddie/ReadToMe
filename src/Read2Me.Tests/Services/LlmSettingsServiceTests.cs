@@ -130,6 +130,105 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task EscalationChainOrder_RoundTrips()
+        {
+            var svc = NewService();
+            var c1 = await svc.CreateConfigAsync(Config("A"));
+            var c2 = await svc.CreateConfigAsync(Config("B"));
+            var c3 = await svc.CreateConfigAsync(Config("C"));
+            var ordered = new[] { c3.Id, c1.Id, c2.Id };
+
+            await svc.SetEscalationConfigIdsAsync(ordered);
+
+            Assert.Equal(ordered, await svc.GetEscalationConfigIdsAsync());
+        }
+
+        [Fact]
+        public async Task GetEscalationConfigIds_PrunesStaleId_AndReSaves()
+        {
+            var svc = NewService();
+            var c = await svc.CreateConfigAsync(Config("A")); // real id
+            await svc.SetEscalationConfigIdsAsync(new[] { c.Id, 999 });
+
+            Assert.Equal(new[] { c.Id }, await svc.GetEscalationConfigIdsAsync());
+            // Re-read confirms the prune was persisted, not recomputed each call.
+            Assert.Equal(new[] { c.Id }, await NewService().GetEscalationConfigIdsAsync());
+        }
+
+        [Fact]
+        public async Task DeleteConfig_PrunesFromEscalationChain()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            var b = await svc.CreateConfigAsync(Config("B"));
+            await svc.SetEscalationConfigIdsAsync(new[] { a.Id, b.Id });
+
+            await svc.DeleteConfigAsync(b.Id);
+
+            Assert.Equal(new[] { a.Id }, await svc.GetEscalationConfigIdsAsync());
+        }
+
+        [Fact]
+        public async Task SetEscalationConfigIds_FiresOnChanged()
+        {
+            var svc = NewService();
+            int count = 0;
+            svc.OnChanged += () => count++;
+
+            await svc.SetEscalationConfigIdsAsync(new[] { 1 });
+
+            Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public async Task SetSelfConsistency_FiresOnChanged()
+        {
+            var svc = NewService();
+            int count = 0;
+            svc.OnChanged += () => count++;
+
+            await svc.SetSelfConsistencyAsync(true);
+
+            Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public async Task SelfConsistency_RoundTrips_DefaultsFalse()
+        {
+            var svc = NewService();
+            Assert.False(await svc.GetSelfConsistencyAsync());
+
+            await svc.SetSelfConsistencyAsync(true);
+            Assert.True(await svc.GetSelfConsistencyAsync());
+        }
+
+        [Fact]
+        public async Task GetEscalationChain_ResolvesAndDedupes()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            var c6 = await svc.CreateConfigAsync(Config("Six"));
+            var c7 = await svc.CreateConfigAsync(Config("Seven"));
+            await svc.SetActiveConfigAsync(a.Id);
+            await svc.SetEscalationConfigIdsAsync(new[] { c6.Id, a.Id, c7.Id });
+
+            var chain = await svc.GetEscalationChainAsync();
+
+            Assert.Equal(new[] { a.Id, c6.Id, c7.Id }, chain.Select(c => c.Id).ToArray());
+        }
+
+        [Fact]
+        public async Task EmptyEscalation_ChainIsJustActive()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+
+            Assert.Empty(await svc.GetEscalationConfigIdsAsync());
+            var chain = await svc.GetEscalationChainAsync();
+            Assert.Equal(new[] { a.Id }, chain.Select(c => c.Id).ToArray());
+        }
+
+        [Fact]
         public async Task OnChanged_FiresForMutations()
         {
             var svc = NewService();

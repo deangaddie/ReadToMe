@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Llm;
 using Read2Me.Tests.Infrastructure;
@@ -16,7 +17,7 @@ namespace Read2Me.Tests.Services
         public async Task GetCharacterPrompt_WhenUnset_ReturnsBuiltInDefault()
         {
             var svc = NewService();
-            var result = await svc.GetCharacterPromptAsync();
+            var result = await svc.GetCharacterPromptAsync(AttributionPromptStyle.Full);
             Assert.Equal(PromptTemplates.DefaultCharacterPrompt, result);
         }
 
@@ -33,7 +34,7 @@ namespace Read2Me.Tests.Services
         {
             var svc = NewService();
             await svc.SetCharacterPromptAsync("custom character prompt");
-            Assert.Equal("custom character prompt", await svc.GetCharacterPromptAsync());
+            Assert.Equal("custom character prompt", await svc.GetCharacterPromptAsync(AttributionPromptStyle.Full));
         }
 
         [Fact]
@@ -50,7 +51,7 @@ namespace Read2Me.Tests.Services
             var svc = NewService();
             await svc.SetCharacterPromptAsync("overridden");
             await svc.ResetCharacterPromptAsync();
-            Assert.Equal(PromptTemplates.DefaultCharacterPrompt, await svc.GetCharacterPromptAsync());
+            Assert.Equal(PromptTemplates.DefaultCharacterPrompt, await svc.GetCharacterPromptAsync(AttributionPromptStyle.Full));
         }
 
         [Fact]
@@ -66,7 +67,7 @@ namespace Read2Me.Tests.Services
         public async Task GetBatchCharacterPrompt_WhenUnset_ReturnsBuiltInDefault()
         {
             var svc = NewService();
-            var result = await svc.GetBatchCharacterPromptAsync();
+            var result = await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Full);
             Assert.Equal(PromptTemplates.DefaultBatchCharacterPrompt, result);
         }
 
@@ -75,7 +76,7 @@ namespace Read2Me.Tests.Services
         {
             var svc = NewService();
             await svc.SetBatchCharacterPromptAsync("custom batch prompt");
-            Assert.Equal("custom batch prompt", await svc.GetBatchCharacterPromptAsync());
+            Assert.Equal("custom batch prompt", await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Full));
         }
 
         [Fact]
@@ -84,7 +85,79 @@ namespace Read2Me.Tests.Services
             var svc = NewService();
             await svc.SetBatchCharacterPromptAsync("overridden");
             await svc.ResetBatchCharacterPromptAsync();
-            Assert.Equal(PromptTemplates.DefaultBatchCharacterPrompt, await svc.GetBatchCharacterPromptAsync());
+            Assert.Equal(PromptTemplates.DefaultBatchCharacterPrompt, await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Full));
+        }
+
+        [Fact]
+        public async Task GetSimpleCharacterPrompt_WhenUnset_ReturnsSimpleDefault()
+        {
+            var svc = NewService();
+            var result = await svc.GetCharacterPromptAsync(AttributionPromptStyle.Simple);
+            Assert.Equal(PromptTemplates.DefaultSimpleCharacterPrompt, result);
+        }
+
+        [Fact]
+        public async Task GetSimpleBatchCharacterPrompt_WhenUnset_ReturnsSimpleDefault()
+        {
+            var svc = NewService();
+            var result = await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Simple);
+            Assert.Equal(PromptTemplates.DefaultSimpleBatchCharacterPrompt, result);
+        }
+
+        [Fact]
+        public async Task SetSimpleCharacterPrompt_ThenGet_ReturnsStoredValue()
+        {
+            var svc = NewService();
+            await svc.SetSimpleCharacterPromptAsync("custom simple prompt");
+            Assert.Equal("custom simple prompt", await svc.GetCharacterPromptAsync(AttributionPromptStyle.Simple));
+        }
+
+        [Fact]
+        public async Task SetSimpleBatchCharacterPrompt_ThenGet_ReturnsStoredValue()
+        {
+            var svc = NewService();
+            await svc.SetSimpleBatchCharacterPromptAsync("custom simple batch prompt");
+            Assert.Equal("custom simple batch prompt", await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Simple));
+        }
+
+        [Fact]
+        public async Task ResetSimpleCharacterPrompt_AfterSet_ReturnsDefaultAgain()
+        {
+            var svc = NewService();
+            await svc.SetSimpleCharacterPromptAsync("overridden");
+            await svc.ResetSimpleCharacterPromptAsync();
+            Assert.Equal(PromptTemplates.DefaultSimpleCharacterPrompt, await svc.GetCharacterPromptAsync(AttributionPromptStyle.Simple));
+        }
+
+        [Fact]
+        public async Task ResetSimpleBatchCharacterPrompt_AfterSet_ReturnsDefaultAgain()
+        {
+            var svc = NewService();
+            await svc.SetSimpleBatchCharacterPromptAsync("overridden");
+            await svc.ResetSimpleBatchCharacterPromptAsync();
+            Assert.Equal(PromptTemplates.DefaultSimpleBatchCharacterPrompt, await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Simple));
+        }
+
+        [Fact]
+        public async Task SimpleOverride_DoesNotAffectFullPrompts()
+        {
+            var svc = NewService();
+            await svc.SetSimpleCharacterPromptAsync("simple single");
+            await svc.SetSimpleBatchCharacterPromptAsync("simple batch");
+
+            Assert.Equal(PromptTemplates.DefaultCharacterPrompt, await svc.GetCharacterPromptAsync(AttributionPromptStyle.Full));
+            Assert.Equal(PromptTemplates.DefaultBatchCharacterPrompt, await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Full));
+        }
+
+        [Fact]
+        public async Task FullOverride_DoesNotAffectSimplePrompts()
+        {
+            var svc = NewService();
+            await svc.SetCharacterPromptAsync("full single");
+            await svc.SetBatchCharacterPromptAsync("full batch");
+
+            Assert.Equal(PromptTemplates.DefaultSimpleCharacterPrompt, await svc.GetCharacterPromptAsync(AttributionPromptStyle.Simple));
+            Assert.Equal(PromptTemplates.DefaultSimpleBatchCharacterPrompt, await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Simple));
         }
 
         [Fact]
@@ -93,8 +166,8 @@ namespace Read2Me.Tests.Services
             var svc = NewService();
             await svc.SetCharacterPromptAsync("single");
             await svc.SetBatchCharacterPromptAsync("batch");
-            Assert.Equal("single", await svc.GetCharacterPromptAsync());
-            Assert.Equal("batch", await svc.GetBatchCharacterPromptAsync());
+            Assert.Equal("single", await svc.GetCharacterPromptAsync(AttributionPromptStyle.Full));
+            Assert.Equal("batch", await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Full));
         }
 
         [Fact]
@@ -107,7 +180,7 @@ namespace Read2Me.Tests.Services
             await using var db = await Factory.CreateDbContextAsync();
             var count = await db.PromptSettings.CountAsync();
             Assert.Equal(1, count);
-            Assert.Equal("second", await svc.GetCharacterPromptAsync());
+            Assert.Equal("second", await svc.GetCharacterPromptAsync(AttributionPromptStyle.Full));
         }
 
         [Fact]
@@ -115,7 +188,7 @@ namespace Read2Me.Tests.Services
         {
             var svc = NewService();
             await svc.SetCharacterPromptAsync("   ");
-            Assert.Equal(PromptTemplates.DefaultCharacterPrompt, await svc.GetCharacterPromptAsync());
+            Assert.Equal(PromptTemplates.DefaultCharacterPrompt, await svc.GetCharacterPromptAsync(AttributionPromptStyle.Full));
         }
 
         [Fact]

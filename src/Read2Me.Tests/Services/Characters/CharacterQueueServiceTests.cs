@@ -86,6 +86,85 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal([item], batch);
         }
 
+        // ── DrainAll ──────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task DrainAll_ReturnsFirstPlusAllRemaining_InBookOrder_AcrossChapters()
+        {
+            var svc = new CharacterQueueService();
+            var chapterA = Guid.NewGuid();
+            var chapterB = Guid.NewGuid();
+            var a1 = MakeChapterItem(chapterA);
+            var a2 = MakeChapterItem(chapterA);
+            var b1 = MakeChapterItem(chapterB);
+            svc.Enqueue([a1, a2, b1]);
+
+            var first = await svc.Reader.ReadAsync();
+            var all = svc.DrainAll(first);
+
+            Assert.Equal([a1, a2, b1], all);
+        }
+
+        [Fact]
+        public async Task DrainAll_SpansMultipleFolders_InBookOrder()
+        {
+            var svc = new CharacterQueueService();
+            var folderA = new ProjectFolderId("book-a");
+            var folderB = new ProjectFolderId("book-b");
+            var a = new QueuedParagraph(folderA, Guid.NewGuid(), "P", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            var b = new QueuedParagraph(folderB, Guid.NewGuid(), "P", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            svc.Enqueue([a, b]);
+
+            var first = await svc.Reader.ReadAsync();
+            var all = svc.DrainAll(first);
+
+            Assert.Equal([a, b], all);
+        }
+
+        [Fact]
+        public async Task DrainAll_DrainsChannel_EmptyAfterwards()
+        {
+            var svc = new CharacterQueueService();
+            var chapterId = Guid.NewGuid();
+            var items = Enumerable.Range(0, 3).Select(_ => MakeChapterItem(chapterId)).ToArray();
+            svc.Enqueue(items);
+
+            var first = await svc.Reader.ReadAsync();
+            svc.DrainAll(first);
+
+            Assert.False(svc.Reader.TryPeek(out _));
+        }
+
+        [Fact]
+        public async Task DrainAll_EmptyRemainder_ReturnsFirstOnly()
+        {
+            var svc = new CharacterQueueService();
+            var item = MakeChapterItem(Guid.NewGuid());
+            svc.Enqueue([item]);
+
+            var first = await svc.Reader.ReadAsync();
+            var all = svc.DrainAll(first);
+
+            Assert.Equal([item], all);
+        }
+
+        [Fact]
+        public async Task DrainAll_MarksNothing_StatusesUnchanged()
+        {
+            var svc = new CharacterQueueService();
+            var chapterId = Guid.NewGuid();
+            var i1 = MakeChapterItem(chapterId);
+            var i2 = MakeChapterItem(chapterId);
+            svc.Enqueue([i1, i2]);
+
+            var first = await svc.Reader.ReadAsync();
+            svc.DrainAll(first);
+
+            // Pure drain: statuses remain Queued (drain does not mark/resolve/requeue).
+            Assert.Equal(ParagraphQueueStatus.Queued, svc.StatusOf(Folder, i1.ParagraphId));
+            Assert.Equal(ParagraphQueueStatus.Queued, svc.StatusOf(Folder, i2.ParagraphId));
+        }
+
         [Fact]
         public void MarkFailed_RecordsOutcome()
         {
@@ -155,6 +234,53 @@ namespace Read2Me.Tests.Services.Characters
 
             Assert.Null(svc.OutcomeOf(Folder, paragraphId));
             Assert.Equal(ParagraphQueueStatus.Queued, svc.StatusOf(Folder, paragraphId));
+        }
+
+        [Fact]
+        public void CancelAll_KeepsResolvedOverlay_ForAlreadyCompletedParagraph()
+        {
+            var svc = new CharacterQueueService();
+            var paragraphId = Guid.NewGuid();
+            var item = MakeItem(paragraphId);
+
+            EnqueueAndProcess(svc, item);
+            svc.MarkComplete(item, 1.0, new ResolvedCharacter(Guid.NewGuid(), "Alice"));
+
+            svc.CancelAll();
+
+            // The overlay is the only in-memory record of the assigned name (the tree is never
+            // stamped), so cancelling must not make a finished paragraph render as "Unknown".
+            var resolved = svc.ResolvedOf(Folder, paragraphId);
+            Assert.NotNull(resolved);
+            Assert.Equal("Alice", resolved!.Name);
+        }
+
+        [Fact]
+        public void CancelAll_StillClearsActiveStatus()
+        {
+            var svc = new CharacterQueueService();
+            var inFlight = MakeItem();
+            EnqueueAndProcess(svc, inFlight);
+
+            svc.CancelAll();
+
+            Assert.Null(svc.StatusOf(Folder, inFlight.ParagraphId));
+        }
+
+        [Fact]
+        public void Enqueue_AfterCancelAll_DropsStaleResolvedOverlay()
+        {
+            var svc = new CharacterQueueService();
+            var paragraphId = Guid.NewGuid();
+
+            EnqueueAndProcess(svc, MakeItem(paragraphId));
+            svc.MarkComplete(MakeItem(paragraphId), 1.0, new ResolvedCharacter(Guid.NewGuid(), "Alice"));
+            svc.CancelAll();
+
+            // Re-attributing the paragraph clears its own overlay, so the surviving entry cannot go stale.
+            svc.Enqueue([MakeItem(paragraphId)]);
+
+            Assert.Null(svc.ResolvedOf(Folder, paragraphId));
         }
 
         [Fact]

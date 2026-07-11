@@ -69,6 +69,11 @@ else
     </MudGrid>
 }
 
+@if (_configs is { Count: > 0 })
+{
+    <AttributionEscalationPanel />
+}
+
 @if (_activeConfig != null)
 {
     <MudPaper Class="pa-4 mt-6" Outlined="true">

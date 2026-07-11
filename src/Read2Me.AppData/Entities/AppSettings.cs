@@ -48,5 +48,17 @@ namespace Read2Me.AppData.Entities
         /// Total audio-generation attempts per item, including the first. 1 = no retry.
         /// </summary>
         public int AudioMaxAttempts { get; set; } = 1;
+
+        /// <summary>
+        /// JSON array of LLM server config IDs forming the attribution escalation chain,
+        /// in the order tried *after* the primary (active) config. Null/blank = no escalation.
+        /// </summary>
+        public string? EscalationConfigIdsJson { get; set; }
+
+        /// <summary>
+        /// When true, attribution self-consistency (sample twice, escalate on disagreement)
+        /// is enabled on non-final chain steps. Off by default.
+        /// </summary>
+        public bool AttributionSelfConsistency { get; set; } = false;
     }
 }

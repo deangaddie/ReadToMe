@@ -10,6 +10,12 @@ namespace Read2Me.AppData.Entities
         /// <summary>Batch (multi-paragraph) character-attribution prompt template. Null => use built-in default.</summary>
         public string? BatchCharacterPrompt { get; set; }
 
+        /// <summary>Strict (explicit-tag-only) character-attribution prompt template for small models. Null => use built-in default.</summary>
+        public string? SimpleCharacterPrompt { get; set; }
+
+        /// <summary>Strict (explicit-tag-only) batch character-attribution prompt template for small models. Null => use built-in default.</summary>
+        public string? SimpleBatchCharacterPrompt { get; set; }
+
         /// <summary>Character voice-design prompt template. Null => use built-in default.</summary>
         public string? VoicePrompt { get; set; }
 

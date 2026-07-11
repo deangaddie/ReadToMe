@@ -149,6 +149,7 @@ public static class ServiceRegistrationExtensions
     {
         services.AddSingleton<NodeStatusService>();
         services.AddSingleton<CharacterQueueService>();
+        services.AddSingleton<Read2Me.App.State.AttributionProgressState>();
         services.AddSingleton<IQueueSource<QueuedParagraph>>(
             sp => sp.GetRequiredService<CharacterQueueService>());
         services.AddScoped<ICharacterQueueProcessor, CharacterQueueProcessor>();

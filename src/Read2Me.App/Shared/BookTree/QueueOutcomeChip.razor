@@ -10,6 +10,16 @@
         </MudChip>
     </MudTooltip>
 }
+else if (Outcome.Reason != null)
+{
+    <MudTooltip Text="@Outcome.Reason" Placement="Placement.Top">
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+                 Icon="@Icons.Material.Outlined.HelpOutline" Class="mt-0"
+                 Style="pointer-events:none; opacity:0.75;">
+            Unknown
+        </MudChip>
+    </MudTooltip>
+}
 else
 {
     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"

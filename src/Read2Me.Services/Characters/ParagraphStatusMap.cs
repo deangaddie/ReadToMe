@@ -62,11 +62,17 @@ namespace Read2Me.Services.Characters
             if (removed) Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Drops active (queued/processing) tracking and its ancestry roll-up. The resolved-character
+        /// overlay survives: it is the only in-memory record of a name the queue already assigned and
+        /// persisted (the book tree is deliberately never stamped — see ParagraphRow), so clearing it
+        /// on cancel would make finished paragraphs render as "Unknown" until a reload. Re-queueing a
+        /// paragraph drops its own stale entry via <see cref="TryMarkQueued"/>/<see cref="Requeue"/>.
+        /// </summary>
         public void ClearAll()
         {
             _store.ClearAll();
             _ancestry.Clear();
-            _resolved.Clear();
         }
 
         public ParagraphQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphId)

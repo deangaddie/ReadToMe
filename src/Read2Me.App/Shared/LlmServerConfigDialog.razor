@@ -52,6 +52,14 @@
             <MudTextField @bind-Value="_form.AttributionBatchSize" Label="Paragraphs per request" Variant="Variant.Outlined"
                           HelperText="Character paragraphs attributed per LLM request. 1 = one at a time; higher values batch consecutive paragraphs into a single prompt." />
 
+            <MudSelect T="AttributionPromptStyle" @bind-Value="_form.PromptStyle" Label="Attribution prompt style" Variant="Variant.Outlined"
+                       HelperText="Simple: only assigns a speaker when the text explicitly says who speaks (&quot;said X&quot;); otherwise returns unknown so escalation passes the paragraph to a larger model. Full: uses inference heuristics.">
+                @foreach (var style in Enum.GetValues<AttributionPromptStyle>())
+                {
+                    <MudSelectItem Value="@style">@style</MudSelectItem>
+                }
+            </MudSelect>
+
             <MudExpansionPanels Elevation="0">
                 <MudExpansionPanel Text="Request parameters (optional)">
                     <MudStack Spacing="3">

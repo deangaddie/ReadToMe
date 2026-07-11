@@ -20,22 +20,26 @@ namespace Read2Me.Services
             _logger = logger;
         }
 
-        public async Task<string> GetCharacterPromptAsync()
+        /// <summary>Attribution prompt for the given tier: the stored override, else the built-in default.</summary>
+        public async Task<string> GetCharacterPromptAsync(AttributionPromptStyle style)
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var row = await db.PromptSettings.SingleOrDefaultAsync();
-            return string.IsNullOrWhiteSpace(row?.CharacterPrompt)
-                ? PromptTemplates.DefaultCharacterPrompt
-                : row.CharacterPrompt;
+            var (stored, fallback) = style == AttributionPromptStyle.Simple
+                ? (row?.SimpleCharacterPrompt, PromptTemplates.DefaultSimpleCharacterPrompt)
+                : (row?.CharacterPrompt, PromptTemplates.DefaultCharacterPrompt);
+            return string.IsNullOrWhiteSpace(stored) ? fallback : stored;
         }
 
-        public async Task<string> GetBatchCharacterPromptAsync()
+        /// <summary>Batch attribution prompt for the given tier: the stored override, else the built-in default.</summary>
+        public async Task<string> GetBatchCharacterPromptAsync(AttributionPromptStyle style)
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var row = await db.PromptSettings.SingleOrDefaultAsync();
-            return string.IsNullOrWhiteSpace(row?.BatchCharacterPrompt)
-                ? PromptTemplates.DefaultBatchCharacterPrompt
-                : row.BatchCharacterPrompt;
+            var (stored, fallback) = style == AttributionPromptStyle.Simple
+                ? (row?.SimpleBatchCharacterPrompt, PromptTemplates.DefaultSimpleBatchCharacterPrompt)
+                : (row?.BatchCharacterPrompt, PromptTemplates.DefaultBatchCharacterPrompt);
+            return string.IsNullOrWhiteSpace(stored) ? fallback : stored;
         }
 
         public virtual async Task<string> GetVoicePromptAsync()
@@ -81,6 +85,46 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             var row = await EnsureRowAsync(db);
             row.BatchCharacterPrompt = template;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task SetSimpleCharacterPromptAsync(string template)
+        {
+            _logger.LogInformation("Saving simple character prompt template");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.SimpleCharacterPrompt = template;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task SetSimpleBatchCharacterPromptAsync(string template)
+        {
+            _logger.LogInformation("Saving simple batch character prompt template");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.SimpleBatchCharacterPrompt = template;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task ResetSimpleCharacterPromptAsync()
+        {
+            _logger.LogInformation("Resetting simple character prompt to built-in default");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.SimpleCharacterPrompt = null;
+            await db.SaveChangesAsync();
+            NotifyChanged();
+        }
+
+        public async Task ResetSimpleBatchCharacterPromptAsync()
+        {
+            _logger.LogInformation("Resetting simple batch character prompt to built-in default");
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await EnsureRowAsync(db);
+            row.SimpleBatchCharacterPrompt = null;
             await db.SaveChangesAsync();
             NotifyChanged();
         }
