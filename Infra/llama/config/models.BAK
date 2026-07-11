@@ -1,0 +1,137 @@
+# Model presets for llama-server
+# Switch models via API without restart: curl -X POST http://localhost:8080/v1/models -d '{"model":"gemma-26b"}'
+# See: https://github.com/ggml-org/llama.cpp/blob/master/examples/server/README.md#model-presets
+
+; Shared defaults applied to every profile (overridden per profile when set).
+[*]
+mlock = true
+jinja = true
+t = 6
+cache-type-k = q4_0
+cache-type-v = q4_0
+flash-attn = on
+c = 32000
+#ctk = q4_0
+#ctv = q4_0
+parallel = 1
+no-mmap = true
+
+# Worked 58t/s
+[gemma-4b]
+model = /models/gemma-4-E4B-it-UD-Q4_K_XL.gguf
+alias = gemma4b-it
+temp = 0.4
+top-p = 0.95
+top-k = 64
+min-p = 0.0
+presence-penalty = 0.3
+repeat-penalty = 1.3
+
+# Worked 20t/s
+[gemma-12b_QAT]
+model = /models/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
+alias = gemma12-qat-it
+temp = 1.0
+top-p = 0.95
+top-k = 64
+presence-penalty = 0.0
+repeat-penalty = 1.2
+
+# Worked 26t/s
+[gemma-26b]
+model = /models/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf
+alias = gemma26-it
+ngl = 999
+temp = 1.0
+top-p = 0.95
+top-k = 64
+min-p = 0.0
+presence-penalty = 0.0
+repeat-penalty = 1.1
+n-cpu-moe = 25
+
+# Worked - 33t/s vs 26t/s for gemma-26b
+[gemma-26b_QAT]
+model = /models/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf
+alias = gemma26-qat-it
+ngl = 999
+temp = 1.0
+top-p = 0.95
+top-k = 64
+min-p = 0.0
+presence-penalty = 0.0
+repeat-penalty = 1.1
+n-cpu-moe = 23
+
+# Worked - 68t/s
+[qwen-4b]
+model = /models/Qwen3.5-4B-UD-Q4_K_XL.gguf
+alias = qwen4b
+temp = 0.4
+top-p = 0.95
+top-k = 20
+min-p = 0.0
+presence-penalty = 0.0
+repeat-penalty = 1.1
+reasoning-budget = 1024
+cache-reuse = 256
+cache-prompt = true
+ctk = q8_0
+ctv = q8_0
+c = 4096
+b = 2048
+ub = 512
+
+# Worked - 35t/s
+[qwen-9b]
+model = /models/Qwen3.5-9B-UD-Q4_K_XL.gguf
+alias = qwen9b
+temp = 0.4
+top-p = 0.95
+top-k = 20
+min-p = 0.0
+presence-penalty = 1.2
+repeat-penalty = 1.0
+b = 2048
+ub = 512
+reasoning-budget = 1024
+cache-reuse = 256
+cache-prompt = true
+ctk = q8_0
+ctv = q8_0
+c = 4096
+
+# Worked - 24t/s
+[qwen-28b]
+model = /models/Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf
+alias = qwen28-reap
+ngl = 999
+temp = 0.4
+top-p = 0.95
+top-k = 60
+min-p = 0.0
+presence-penalty = 0.0
+repeat-penalty = 1.1
+n-cpu-moe = 28
+
+# Worked - 47t/s
+[ornith-1.0-9b-q4]
+model = /models/ornith-1.0-9b-Q4_K_M.gguf
+alias = ornith-1.0-9b-q4
+temp = 0.6
+top-p = 0.95
+top-k = 20
+min-p = 0.0
+presence-penalty = 0.0
+repeat-penalty = 1.1
+
+# Worked - 26t/s
+[ornith-1.0-9b-q5]
+model = /models/ornith-1.0-9b-Q5_K_M.gguf
+alias = ornith-1.0-9b-q5
+temp = 0.6
+top-p = 0.95
+top-k = 20
+min-p = 0.0
+presence-penalty = 0.0
+repeat-penalty = 1.1
