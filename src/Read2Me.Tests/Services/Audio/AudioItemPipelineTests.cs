@@ -58,6 +58,36 @@ namespace Read2Me.Tests.Services.Audio
                 throw new NotSupportedException();
         }
 
+        private sealed class FakePostProcessStep(string stepId = "fake-step") : IAudioPostProcessStep
+        {
+            public string StepId { get; } = stepId;
+            public bool Applied { get; set; } = true;
+            public string? Reason { get; set; }
+            public byte[] Output { get; set; } = [0xF1, 0xF2];
+            public byte[]? LastInput { get; private set; }
+            public string? LastSettingsJson { get; private set; }
+            public int CallCount { get; private set; }
+
+            public Task<PostProcessResult> ProcessAsync(
+                byte[] wav, string? ffmpegPath, string? settingsJson, CancellationToken ct)
+            {
+                CallCount++;
+                LastInput = wav;
+                LastSettingsJson = settingsJson;
+                return Task.FromResult(Applied
+                    ? new PostProcessResult(Output, true, null)
+                    : new PostProcessResult(wav, false, Reason));
+            }
+        }
+
+        private sealed class FakePostProcessCatalog : IAudioPostProcessStepCatalog
+        {
+            public List<EnabledPostProcessStep> Steps { get; } = new();
+
+            public Task<IReadOnlyList<EnabledPostProcessStep>> GetEnabledStepsAsync() =>
+                Task.FromResult<IReadOnlyList<EnabledPostProcessStep>>(Steps);
+        }
+
         private sealed class FakeWerComparer : IWerComparer
         {
             private readonly Queue<double> _queue = new();
@@ -73,11 +103,15 @@ namespace Read2Me.Tests.Services.Audio
             public string Transcript { get; set; } = "hello world";
             public string? ThrowMessage { get; set; }
             public bool WasCalled { get; private set; }
+            public byte[]? LastAudio { get; private set; }
 
             public Task<string> TranscribeAsync(TranscriptionServiceConfig config, Stream audio, string fileName,
                 CancellationToken ct = default)
             {
                 WasCalled = true;
+                var ms = new MemoryStream();
+                audio.CopyTo(ms);
+                LastAudio = ms.ToArray();
                 if (ThrowMessage is not null) throw new InvalidOperationException(ThrowMessage);
                 return Task.FromResult(Transcript);
             }
@@ -132,6 +166,7 @@ namespace Read2Me.Tests.Services.Audio
 
         private readonly FakeTtsClient _tts = new();
         private readonly FakeNormalizer _normalizer = new();
+        private readonly FakePostProcessCatalog _postProcess = new();
         private readonly FakeWerComparer _wer = new(0.0);
         private readonly FakeTranscriptionClient _transcriber = new();
         private readonly FakeTranscriptionSettings _transcriptionSettings;
@@ -149,6 +184,7 @@ namespace Read2Me.Tests.Services.Audio
             _sut = new AudioItemPipeline(
                 new FakeTtsClientResolver(_tts),
                 _normalizer,
+                _postProcess,
                 _wer,
                 new FakeTranscriptionResolver(_transcriber),
                 _transcriptionSettings,
@@ -340,6 +376,103 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(2, starts[0].Attempt);
             Assert.Equal("Alice", starts[0].Character);
             Assert.Equal(req.SourceText, starts[0].Text);
+        }
+
+        // ── post-process steps ────────────────────────────────────────────────
+
+        [Fact]
+        public async Task PostProcess_EnabledStep_RunsBetweenNormalizeAndVerify_VerifySeesFilteredBytes()
+        {
+            var step = new FakePostProcessStep();
+            _postProcess.Steps.Add(new EnabledPostProcessStep(step, """{"engine":"adyn"}"""));
+
+            var result = await _sut.RunAsync(MakeRequest(), CancellationToken.None);
+
+            Assert.Equal(1, step.CallCount);
+            Assert.Equal([0x52, 0x49, 0x46, 0x46], step.LastInput);        // normalized TTS output
+            Assert.Equal("""{"engine":"adyn"}""", step.LastSettingsJson);
+            Assert.Equal(step.Output, _transcriber.LastAudio);             // verify hears the filtered audio
+            Assert.Equal(step.Output, result.AudioBytes);
+
+            var types = _events.Select(e => e.GetType()).ToList();
+            Assert.Equal(
+                [typeof(AudioGenerated), typeof(Normalized), typeof(PostProcessed), typeof(Transcribed), typeof(Verified)],
+                types);
+            var pp = _events.OfType<PostProcessed>().Single();
+            Assert.Equal("fake-step", pp.StepId);
+            Assert.True(pp.Applied);
+            Assert.Null(pp.Reason);
+        }
+
+        [Fact]
+        public async Task PostProcess_StepSkips_FallsBackToInputAudio_AndStillVerifies()
+        {
+            var step = new FakePostProcessStep { Applied = false, Reason = "ffmpeg not found" };
+            _postProcess.Steps.Add(new EnabledPostProcessStep(step, null));
+
+            var result = await _sut.RunAsync(MakeRequest(), CancellationToken.None);
+
+            Assert.True(result.Verify.Ok);
+            Assert.Equal([0x52, 0x49, 0x46, 0x46], result.AudioBytes);
+            Assert.Equal([0x52, 0x49, 0x46, 0x46], _transcriber.LastAudio);
+
+            var pp = _events.OfType<PostProcessed>().Single();
+            Assert.False(pp.Applied);
+            Assert.Equal("ffmpeg not found", pp.Reason);
+        }
+
+        [Fact]
+        public async Task PostProcess_NoEnabledSteps_AudioUntouched_NoPostProcessedEvent()
+        {
+            var result = await _sut.RunAsync(MakeRequest(), CancellationToken.None);
+
+            Assert.Equal([0x52, 0x49, 0x46, 0x46], result.AudioBytes);
+            Assert.DoesNotContain(_events, e => e is PostProcessed);
+        }
+
+        [Fact]
+        public async Task PostProcess_NormalizeFails_StepDoesNotRun()
+        {
+            var step = new FakePostProcessStep();
+            _postProcess.Steps.Add(new EnabledPostProcessStep(step, null));
+            _normalizer.Status = NormalizeStatus.Skipped;
+            _normalizer.Reason = "ffmpeg exploded";
+
+            var result = await _sut.RunAsync(MakeRequest(), CancellationToken.None);
+
+            Assert.False(result.Normalize.Ok);
+            Assert.Equal(0, step.CallCount);
+            Assert.DoesNotContain(_events, e => e is PostProcessed);
+        }
+
+        [Fact]
+        public async Task PostProcess_MultipleSteps_RunInStoredOrder_ChainingAudio()
+        {
+            var first = new FakePostProcessStep("first") { Output = [0x01] };
+            var second = new FakePostProcessStep("second") { Output = [0x02] };
+            _postProcess.Steps.Add(new EnabledPostProcessStep(first, null));
+            _postProcess.Steps.Add(new EnabledPostProcessStep(second, null));
+
+            var result = await _sut.RunAsync(MakeRequest(), CancellationToken.None);
+
+            Assert.Equal([0x01], second.LastInput);
+            Assert.Equal([0x02], result.AudioBytes);
+            Assert.Equal(["first", "second"], _events.OfType<PostProcessed>().Select(e => e.StepId));
+        }
+
+        [Fact]
+        public async Task PostProcess_Retry_RefiltersFreshTtsOutputEachAttempt()
+        {
+            var step = new FakePostProcessStep();
+            _postProcess.Steps.Add(new EnabledPostProcessStep(step, null));
+            _wer.Enqueue(0.42, 0.05);
+
+            await _sut.RunAsync(MakeRequest(maxAttempts: 2), CancellationToken.None);
+
+            Assert.Equal(2, _tts.CallCount);
+            Assert.Equal(2, step.CallCount);
+            Assert.Equal([0x52, 0x49, 0x46, 0x46], step.LastInput);  // fresh TTS audio, not attempt 1's output
+            Assert.Equal([1, 2], _events.OfType<PostProcessed>().Select(e => e.Attempt));
         }
     }
 }

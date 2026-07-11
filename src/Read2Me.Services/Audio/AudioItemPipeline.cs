@@ -11,6 +11,7 @@ namespace Read2Me.Services.Audio
     public sealed class AudioItemPipeline(
         IParagraphTtsClientResolver ttsResolver,
         IAudioNormalizer normalizer,
+        IAudioPostProcessStepCatalog postProcessCatalog,
         IWerComparer werComparer,
         ITranscriptionClientResolver transcriptionResolver,
         TranscriptionSettingsService transcriptionSettings,
@@ -59,6 +60,8 @@ namespace Read2Me.Services.Audio
                     break;
                 }
 
+                audioBytes = await PostProcessAsync(id, attempt, audioBytes, req.FfmpegPath, ct);
+
                 verifyOutcome = await VerifyAsync(id, attempt, audioBytes, req.SourceText, req.WerThreshold, ct);
 
                 if (verifyOutcome.Ok)
@@ -79,6 +82,29 @@ namespace Read2Me.Services.Audio
             }
 
             return new PipelineResult(audioBytes, normalizeOutcome, verifyOutcome);
+        }
+
+        /// Runs the enabled post-process steps in stored order on normalized audio. Steps are
+        /// cosmetic: a step that cannot run falls back to its input and the item still proceeds.
+        private async Task<byte[]> PostProcessAsync(
+            Guid id, int attempt, byte[] audioBytes, string? ffmpegPath, CancellationToken ct)
+        {
+            var steps = await postProcessCatalog.GetEnabledStepsAsync();
+
+            foreach (var (step, settingsJson) in steps)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var result = await step.ProcessAsync(audioBytes, ffmpegPath, settingsJson, ct);
+                audioBytes = result.Audio;
+                broadcaster.Publish(new PostProcessed(id, attempt, step.StepId, result.Applied, result.Reason));
+
+                if (!result.Applied)
+                    logger.LogWarning("Item {Id} attempt {A} post-process step '{Step}' skipped: {Reason}",
+                        id, attempt, step.StepId, result.Reason);
+            }
+
+            return audioBytes;
         }
 
         private async Task<VerifyOutcome> VerifyAsync(
