@@ -4,27 +4,27 @@ using System.Text.Json.Serialization;
 
 namespace Read2Me.Services.Llm
 {
-    /// <summary>
-    /// Built-in default prompt templates and minimal {{token}} substitution.
-    /// NOT a Handlebars engine — exact "{{name}}" literals are replaced, nothing else.
-    /// </summary>
-    public static class PromptTemplates
-    {
-        public const string BookTitle = "book_title";
-        public const string BookAuthor = "book_author";
-        public const string KnownCharacters = "known_characters";
-        public const string ContextJson = "context_json";
-        public const string ResponseFormat = "response_format";
-        public const string CharacterName = "character_name";
-        public const string Instruction = "instruction";
-        public const string BookOutline = "book_outline";
-        public const string EditItemsJson = "edit_items_json";
+  /// <summary>
+  /// Built-in default prompt templates and minimal {{token}} substitution.
+  /// NOT a Handlebars engine — exact "{{name}}" literals are replaced, nothing else.
+  /// </summary>
+  public static class PromptTemplates
+  {
+    public const string BookTitle = "book_title";
+    public const string BookAuthor = "book_author";
+    public const string KnownCharacters = "known_characters";
+    public const string ContextJson = "context_json";
+    public const string ResponseFormat = "response_format";
+    public const string CharacterName = "character_name";
+    public const string Instruction = "instruction";
+    public const string BookOutline = "book_outline";
+    public const string EditItemsJson = "edit_items_json";
 
-        public const int DefaultContextParagraphsBefore = 6;
-        public const int DefaultContextParagraphsAfter = 4;
+    public const int DefaultContextParagraphsBefore = 6;
+    public const int DefaultContextParagraphsAfter = 4;
 
-        public const string DefaultCharacterPrompt =
-            """
+    public const string DefaultCharacterPrompt =
+        """
             You are an audiobook script classifier for the book "{{book_title}}" by {{book_author}}.
 
             For the paragraph containing dialog, return the name of the character speaking.
@@ -45,7 +45,7 @@ namespace Read2Me.Services.Llm
 
             Rules:
             - A paragraph has at most one speaking character.
-            - First write one short sentence in "reasoning" explaining who speaks and why,
+            - First write one very short sentence in "reasoning" explaining who speaks and why,
               then give the answer.
             - Never return pronouns (he, she, they) as the speaker — resolve them to a
               known character.
@@ -66,8 +66,8 @@ namespace Read2Me.Services.Llm
             {{context_json}}
             """;
 
-        public const string DefaultBatchCharacterPrompt =
-            """
+    public const string DefaultBatchCharacterPrompt =
+        """
             You are an audiobook script classifier for the book "{{book_title}}" by {{book_author}}.
 
             Several paragraphs containing dialog need a speaker. Each is marked with an "index".
@@ -90,7 +90,7 @@ namespace Read2Me.Services.Llm
 
             Rules:
             - A paragraph has at most one speaking character.
-            - For each index, first write one short sentence in "reasoning" explaining who
+            - For each index, first write one very short sentence in "reasoning" explaining who
               speaks and why, then give the answer.
             - Never return pronouns (he, she, they) as a speaker — resolve them to a
               known character.
@@ -108,8 +108,8 @@ namespace Read2Me.Services.Llm
             {{context_json}}
             """;
 
-        public const string DefaultSimpleCharacterPrompt =
-            """
+    public const string DefaultSimpleCharacterPrompt =
+        """
             You are an audiobook script classifier for the book "{{book_title}}" by {{book_author}}.
 
             For the paragraph containing dialog, return the name of the character speaking —
@@ -127,7 +127,7 @@ namespace Read2Me.Services.Llm
 
             Rules:
             - A paragraph has at most one speaking character.
-            - First write one short sentence in "reasoning" quoting the attribution tag you
+            - First write one very short sentence in "reasoning" quoting the attribution tag you
               found, or stating that there is none, then give the answer.
             - Never return pronouns (he, she, they) as the speaker. If the tag uses only a
               pronoun and no sentence right next to it names that person, return "unknown".
@@ -149,8 +149,8 @@ namespace Read2Me.Services.Llm
             {{context_json}}
             """;
 
-        public const string DefaultSimpleBatchCharacterPrompt =
-            """
+    public const string DefaultSimpleBatchCharacterPrompt =
+        """
             You are an audiobook script classifier for the book "{{book_title}}" by {{book_author}}.
 
             Several paragraphs containing dialog need a speaker. Each is marked with an "index".
@@ -188,8 +188,8 @@ namespace Read2Me.Services.Llm
             {{context_json}}
             """;
 
-        public const string DefaultVoicePrompt =
-            """
+    public const string DefaultVoicePrompt =
+        """
             You are designing a distinctive speaking voice for a character in the
             audiobook "{{book_title}}" by {{book_author}}.
 
@@ -207,8 +207,8 @@ namespace Read2Me.Services.Llm
             - Prefer stable qualities (pitch, timbre, accent, pace) over transient emotion.
             """;
 
-        public const string DefaultVoicePlanPrompt =
-            """
+    public const string DefaultVoicePlanPrompt =
+        """
             You are casting speaking voices for the character "{{character_name}}" in the
             audiobook "{{book_title}}" by {{book_author}}.
 
@@ -234,8 +234,8 @@ namespace Read2Me.Services.Llm
             - JSON format: {{response_format}}
             """;
 
-        public const string DefaultNarratorVoicePlanPrompt =
-            """
+    public const string DefaultNarratorVoicePlanPrompt =
+        """
             You are casting the NARRATION voice for the audiobook "{{book_title}}" by
             {{book_author}}. "{{character_name}}" is the narrator, not a character in the
             story.
@@ -264,8 +264,8 @@ namespace Read2Me.Services.Llm
             - JSON format: {{response_format}}
             """;
 
-        public const string DefaultDiscoverCharactersPrompt =
-            """
+    public const string DefaultDiscoverCharactersPrompt =
+        """
             You are cataloguing the notable characters of the audiobook "{{book_title}}" by {{book_author}}.
 
             List the characters a listener would recognise as distinct speaking or named
@@ -296,8 +296,8 @@ namespace Read2Me.Services.Llm
             Characters already in the project (JSON array; each entry has a "name" and optional "aliases"): {{known_characters}}
             """;
 
-        public const string DefaultEditPlanPrompt =
-            """
+    public const string DefaultEditPlanPrompt =
+        """
             You are an editing assistant for the audiobook "{{book_title}}" by {{book_author}}.
             The user wants to change the book's text or titles and has written an instruction
             in plain language. Turn that instruction into a structured edit plan.
@@ -361,8 +361,8 @@ namespace Read2Me.Services.Llm
             - JSON format: {{response_format}}
             """;
 
-        public const string DefaultBatchEditPrompt =
-            """
+    public const string DefaultBatchEditPrompt =
+        """
             You are an editing assistant for the audiobook "{{book_title}}" by {{book_author}}.
 
             Apply the following instruction to each of the texts below, independently:
@@ -385,82 +385,82 @@ namespace Read2Me.Services.Llm
             {{edit_items_json}}
             """;
 
-        /// <summary>Serializes edit targets for the batch edit prompt.</summary>
-        public static string BuildEditItemsJson(IEnumerable<(int Index, string Path, string Text)> items)
-        {
-            var arr = items.Select(i => new EditItemDto(i.Index, i.Path, i.Text)).ToArray();
-            return JsonSerializer.Serialize(arr, _jsonOptions);
-        }
-
-        private sealed record EditItemDto(
-            [property: JsonPropertyName("index")] int Index,
-            [property: JsonPropertyName("path")] string Path,
-            [property: JsonPropertyName("text")] string Text);
-
-        /// <summary>
-        /// A neutral voice-test sentence used as the sample text sent to the voice-design AI.
-        /// Stored as the voice transcript for generated voices.
-        /// </summary>
-        public const string VoiceDesignSampleSentence =
-            "The morning light filtered through tall oak trees as Sarah walked along the winding path. " +
-            "She had lived in this valley all her life, yet each season brought something new to discover. " +
-            "A soft breeze carried the scent of pine and rain, and somewhere in the distance a hawk cried out.";
-
-        private static readonly JsonSerializerOptions _jsonOptions = new()
-        {
-            WriteIndented = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        };
-
-        public static string BuildContextJson(ParagraphContext ctx)
-        {
-            var obj = new ContextJsonDto(
-                ctx.Preceding.Count > 0
-                    ? [.. ctx.Preceding.Select(p => new ContextEntryDto(p.Text, p.Speaker))]
-                    : [],
-                new ContextEntryDto(ctx.Query.Text, ctx.Query.Speaker),
-                ctx.Following.Count > 0
-                    ? [.. ctx.Following.Select(p => new ContextEntryDto(p.Text, p.Speaker))]
-                    : []
-            );
-            return JsonSerializer.Serialize(obj, _jsonOptions);
-        }
-
-        public static string BuildBatchContextJson(ParagraphBatchContext ctx)
-        {
-            var obj = new BatchContextJsonDto(
-                [.. ctx.Entries.Select(e => new BatchEntryDto(e.TargetIndex, e.Text, e.Speaker))]);
-            return JsonSerializer.Serialize(obj, _jsonOptions);
-        }
-
-        /// <summary>
-        /// Replaces each "{{key}}" literal with values[key]. Unknown tokens are left intact.
-        /// Case-sensitive. No nesting, no logic, no escaping.
-        /// </summary>
-        public static string Render(string template, IReadOnlyDictionary<string, string> values)
-        {
-            if (string.IsNullOrEmpty(template)) return template ?? string.Empty;
-            var sb = new StringBuilder(template);
-            foreach (var (key, value) in values)
-                sb.Replace("{{" + key + "}}", value ?? string.Empty);
-            return sb.ToString();
-        }
-
-        private sealed record ContextEntryDto(
-            [property: JsonPropertyName("paragraph")] string Paragraph,
-            [property: JsonPropertyName("speaker")] string? Speaker);
-
-        private sealed record BatchEntryDto(
-            [property: JsonPropertyName("index")] int? Index,
-            [property: JsonPropertyName("paragraph")] string Paragraph,
-            [property: JsonPropertyName("speaker")] string? Speaker);
-
-        private sealed record BatchContextJsonDto(
-            [property: JsonPropertyName("paragraphs")] BatchEntryDto[] Paragraphs);
-
-        private sealed record ContextJsonDto(
-            [property: JsonPropertyName("preceding")] ContextEntryDto[] Preceding,
-            [property: JsonPropertyName("query")] ContextEntryDto Query,
-            [property: JsonPropertyName("following")] ContextEntryDto[] Following);
+    /// <summary>Serializes edit targets for the batch edit prompt.</summary>
+    public static string BuildEditItemsJson(IEnumerable<(int Index, string Path, string Text)> items)
+    {
+      var arr = items.Select(i => new EditItemDto(i.Index, i.Path, i.Text)).ToArray();
+      return JsonSerializer.Serialize(arr, _jsonOptions);
     }
+
+    private sealed record EditItemDto(
+        [property: JsonPropertyName("index")] int Index,
+        [property: JsonPropertyName("path")] string Path,
+        [property: JsonPropertyName("text")] string Text);
+
+    /// <summary>
+    /// A neutral voice-test sentence used as the sample text sent to the voice-design AI.
+    /// Stored as the voice transcript for generated voices.
+    /// </summary>
+    public const string VoiceDesignSampleSentence =
+        "The morning light filtered through tall oak trees as Sarah walked along the winding path. " +
+        "She had lived in this valley all her life, yet each season brought something new to discover. " +
+        "A soft breeze carried the scent of pine and rain, and somewhere in the distance a hawk cried out.";
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+      WriteIndented = true,
+      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    public static string BuildContextJson(ParagraphContext ctx)
+    {
+      var obj = new ContextJsonDto(
+          ctx.Preceding.Count > 0
+              ? [.. ctx.Preceding.Select(p => new ContextEntryDto(p.Text, p.Speaker))]
+              : [],
+          new ContextEntryDto(ctx.Query.Text, ctx.Query.Speaker),
+          ctx.Following.Count > 0
+              ? [.. ctx.Following.Select(p => new ContextEntryDto(p.Text, p.Speaker))]
+              : []
+      );
+      return JsonSerializer.Serialize(obj, _jsonOptions);
+    }
+
+    public static string BuildBatchContextJson(ParagraphBatchContext ctx)
+    {
+      var obj = new BatchContextJsonDto(
+          [.. ctx.Entries.Select(e => new BatchEntryDto(e.TargetIndex, e.Text, e.Speaker))]);
+      return JsonSerializer.Serialize(obj, _jsonOptions);
+    }
+
+    /// <summary>
+    /// Replaces each "{{key}}" literal with values[key]. Unknown tokens are left intact.
+    /// Case-sensitive. No nesting, no logic, no escaping.
+    /// </summary>
+    public static string Render(string template, IReadOnlyDictionary<string, string> values)
+    {
+      if (string.IsNullOrEmpty(template)) return template ?? string.Empty;
+      var sb = new StringBuilder(template);
+      foreach (var (key, value) in values)
+        sb.Replace("{{" + key + "}}", value ?? string.Empty);
+      return sb.ToString();
+    }
+
+    private sealed record ContextEntryDto(
+        [property: JsonPropertyName("paragraph")] string Paragraph,
+        [property: JsonPropertyName("speaker")] string? Speaker);
+
+    private sealed record BatchEntryDto(
+        [property: JsonPropertyName("index")] int? Index,
+        [property: JsonPropertyName("paragraph")] string Paragraph,
+        [property: JsonPropertyName("speaker")] string? Speaker);
+
+    private sealed record BatchContextJsonDto(
+        [property: JsonPropertyName("paragraphs")] BatchEntryDto[] Paragraphs);
+
+    private sealed record ContextJsonDto(
+        [property: JsonPropertyName("preceding")] ContextEntryDto[] Preceding,
+        [property: JsonPropertyName("query")] ContextEntryDto Query,
+        [property: JsonPropertyName("following")] ContextEntryDto[] Following);
+  }
 }
