@@ -7,21 +7,25 @@ using Read2Me.Services;
 namespace Read2Me.App.Shared
 {
     /// <summary>
-    /// UI-agnostic state and behaviour behind <c>AttributionEscalationPanel</c>. Holds the resolved
-    /// primary + escalation chain and the self-consistency toggle, and drives every mutation
-    /// (add/remove/reorder/toggle) through <see cref="LlmSettingsService"/> with an immediate save
-    /// followed by a reload from persisted state. The razor component only maps this to MudBlazor
-    /// chrome and marshals <c>StateHasChanged</c>.
+    /// UI-agnostic state and behaviour behind <c>AttributionEscalationPanel</c>. Holds the flat
+    /// attribution chain (every step, index 0 first) and the self-consistency toggle, and drives every
+    /// mutation (add/remove/reorder/toggle) through <see cref="LlmSettingsService"/> with an immediate
+    /// save followed by a reload from persisted state. The chain has no special hidden first entry:
+    /// index 0 is reorderable and removable like any other step. The active config is exposed only so
+    /// the panel can name what attribution falls back to when the chain is empty.
     /// </summary>
     public sealed class AttributionEscalationPresenter(LlmSettingsService settings)
     {
-        /// <summary>The active config shown as the fixed first chain entry, or null when none is selected.</summary>
-        public LlmServerConfig? Primary { get; private set; }
+        /// <summary>The whole attribution chain in order, index 0 first.</summary>
+        public IReadOnlyList<LlmServerConfig> Chain { get; private set; } = new List<LlmServerConfig>();
 
-        /// <summary>Escalation configs in order (the tail tried after the primary).</summary>
-        public IReadOnlyList<LlmServerConfig> Escalation { get; private set; } = new List<LlmServerConfig>();
+        /// <summary>
+        /// The active/default config attribution falls back to when the chain is empty, or null when
+        /// none is selected. Not a chain member — surfaced purely so the panel can name the fallback.
+        /// </summary>
+        public LlmServerConfig? FallbackConfig { get; private set; }
 
-        /// <summary>Configs eligible to add: all configs minus the primary and existing escalation entries.</summary>
+        /// <summary>Configs eligible to add: all configs minus those already in the chain.</summary>
         public IReadOnlyList<LlmServerConfig> AvailableToAdd { get; private set; } = new List<LlmServerConfig>();
 
         /// <summary>Global self-consistency toggle.</summary>
@@ -34,58 +38,42 @@ namespace Read2Me.App.Shared
             var byId = all.ToDictionary(c => c.Id);
 
             var activeId = await settings.GetActiveConfigIdAsync();
-            Primary = activeId is int aid && byId.TryGetValue(aid, out var primary) ? primary : null;
+            FallbackConfig = activeId is int aid && byId.TryGetValue(aid, out var active) ? active : null;
 
-            // Transitional (ticket 01): the stored chain is now the *whole* attribution chain
-            // including index 0. This presenter still renders a Primary + Escalation split, so it
-            // treats the chain's tail (everything after the active config) as the escalation list.
-            // Ticket 02 replaces this with a flat chain.
             var chainIds = await settings.GetAttributionChainIdsAsync();
-            Escalation = chainIds
-                .Where(id => activeId is not int aid2 || id != aid2)
+            Chain = chainIds
                 .Where(byId.ContainsKey)
                 .Select(id => byId[id])
                 .ToList();
 
-            var inChain = new HashSet<int>(Escalation.Select(c => c.Id));
-            if (Primary is not null) inChain.Add(Primary.Id);
+            var inChain = new HashSet<int>(Chain.Select(c => c.Id));
             AvailableToAdd = all.Where(c => !inChain.Contains(c.Id)).ToList();
 
             SelfConsistency = await settings.GetSelfConsistencyAsync();
         }
 
-        /// <summary>Append a config to the escalation chain and persist.</summary>
+        /// <summary>Append a config to the chain and persist.</summary>
         public async Task AddAsync(int configId)
         {
-            var ids = Escalation.Select(c => c.Id).ToList();
+            var ids = Chain.Select(c => c.Id).ToList();
             if (ids.Contains(configId)) return;
             ids.Add(configId);
-            await PersistEscalationAsync(ids);
+            await settings.SetAttributionChainIdsAsync(ids);
             await LoadAsync();
         }
 
-        // Transitional: persist the whole chain as [primary?, ...escalationTail] so attribution
-        // resolves the same effective chain it did before ticket 01. Ticket 02 makes this flat.
-        private Task PersistEscalationAsync(IReadOnlyList<int> escalationIds)
-        {
-            var chain = new List<int>();
-            if (Primary is not null) chain.Add(Primary.Id);
-            chain.AddRange(escalationIds);
-            return settings.SetAttributionChainIdsAsync(chain);
-        }
-
-        /// <summary>True when the config is an escalation entry that is not already first.</summary>
+        /// <summary>True when the config is a chain entry that is not already first.</summary>
         public bool CanMoveUp(int configId)
         {
             int i = IndexOf(configId);
             return i > 0;
         }
 
-        /// <summary>True when the config is an escalation entry that is not already last.</summary>
+        /// <summary>True when the config is a chain entry that is not already last.</summary>
         public bool CanMoveDown(int configId)
         {
             int i = IndexOf(configId);
-            return i >= 0 && i < Escalation.Count - 1;
+            return i >= 0 && i < Chain.Count - 1;
         }
 
         /// <summary>Swap the config with its predecessor and persist. No-op at the first position.</summary>
@@ -98,19 +86,19 @@ namespace Read2Me.App.Shared
         {
             int i = IndexOf(configId);
             int j = i + delta;
-            if (i < 0 || j < 0 || j >= Escalation.Count) return;
+            if (i < 0 || j < 0 || j >= Chain.Count) return;
 
-            var ids = Escalation.Select(c => c.Id).ToList();
+            var ids = Chain.Select(c => c.Id).ToList();
             (ids[i], ids[j]) = (ids[j], ids[i]);
-            await PersistEscalationAsync(ids);
+            await settings.SetAttributionChainIdsAsync(ids);
             await LoadAsync();
         }
 
-        /// <summary>Drop a config from the escalation chain and persist.</summary>
+        /// <summary>Drop a config from the chain and persist. Index 0 is removable like any other row.</summary>
         public async Task RemoveAsync(int configId)
         {
-            var ids = Escalation.Select(c => c.Id).Where(id => id != configId).ToList();
-            await PersistEscalationAsync(ids);
+            var ids = Chain.Select(c => c.Id).Where(id => id != configId).ToList();
+            await settings.SetAttributionChainIdsAsync(ids);
             await LoadAsync();
         }
 
@@ -123,8 +111,8 @@ namespace Read2Me.App.Shared
 
         private int IndexOf(int configId)
         {
-            for (int i = 0; i < Escalation.Count; i++)
-                if (Escalation[i].Id == configId) return i;
+            for (int i = 0; i < Chain.Count; i++)
+                if (Chain[i].Id == configId) return i;
             return -1;
         }
     }

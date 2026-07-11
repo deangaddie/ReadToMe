@@ -50,12 +50,12 @@ else
                         @if (_activeConfigId == c.Id)
                         {
                             <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle"
-                                     Size="Size.Small" Variant="Variant.Filled">Active</MudChip>
+                                     Size="Size.Small" Variant="Variant.Filled">Default</MudChip>
                         }
                         else
                         {
                             <MudButton Size="Size.Small" Variant="Variant.Outlined"
-                                       OnClick="() => SelectConfigAsync(c.Id)">Apply</MudButton>
+                                       OnClick="() => SelectConfigAsync(c.Id)">Make default</MudButton>
                         }
                         <MudSpacer />
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
@@ -71,6 +71,10 @@ else
 
 @if (_configs is { Count: > 0 })
 {
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-6">
+        The <b>default</b> configuration is used for voice prompts, AI book edits and character discovery.
+        Character attribution uses the attribution chain below instead.
+    </MudText>
     <AttributionEscalationPanel />
 }
 

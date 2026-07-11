@@ -10,13 +10,14 @@ namespace Read2Me.E2eTests.Tests;
 public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     /// <summary>
-    /// Drives the panel through the real Blazor circuit: the seeded "fake" config is the primary,
-    /// a second "fake-big" config is added as an escalation step, and both the row and the
-    /// self-consistency toggle must survive a full page reload (proving save-on-change persistence).
-    /// Cleans up its own state afterwards because the app fixture is collection-shared.
+    /// Drives the flat chain panel through the real Blazor circuit: with the chain empty the fallback
+    /// hint names the seeded "fake" default config; a second "fake-big" config is then added as a chain
+    /// step, and both the row and the self-consistency toggle must survive a full page reload (proving
+    /// save-on-change persistence). Cleans up its own state afterwards because the app fixture is
+    /// collection-shared.
     /// </summary>
     [Fact]
-    public async Task Add_escalation_step_and_toggle_self_consistency_persist_across_reload()
+    public async Task Add_chain_step_and_toggle_self_consistency_persist_across_reload()
     {
         using var scope = App.Services.CreateScope();
         var settings = scope.ServiceProvider.GetRequiredService<LlmSettingsService>();
@@ -30,15 +31,14 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
         {
             await GotoAsync("/llm-settings");
 
-            // Primary row shows the active "fake" config.
-            await Expect(Page.Locator(".mud-chip", new() { HasText = "Primary (active)" })).ToBeVisibleAsync();
+            // Empty chain surfaces the default "fake" config as the named fallback, not a primary row.
+            await Expect(Page.GetByText("attribution falls back to the default config")).ToBeVisibleAsync();
 
-            // Add "fake-big" via the add-select.
-            await Page.GetByLabel("Add escalation step").ClickAsync();
+            // Add "fake-big" via the add-select — it becomes a flat chain step.
+            await Page.GetByLabel("Add chain step").ClickAsync();
             await Page.GetByRole(AriaRole.Option, new() { Name = "fake-big" }).ClickAsync();
 
-            // Save-on-change persists the chain — poll the DB until it lands. The stored chain is now
-            // the whole chain [primary, ...escalation], so it contains (not equals) the added step.
+            // Save-on-change persists the flat chain — poll the DB until it lands.
             await PollAsync(async () =>
                 (await settings.GetAttributionChainIdsAsync()).Contains(big.Id));
 
@@ -52,7 +52,7 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
             Assert.Contains(big.Id, await settings.GetAttributionChainIdsAsync());
             Assert.True(await settings.GetSelfConsistencyAsync());
 
-            // The escalation row (a body paragraph, not the config card heading) is present after reload.
+            // The chain row (a body paragraph, not the config card heading) is present after reload.
             await Expect(Page.GetByRole(AriaRole.Paragraph)
                 .Filter(new() { HasText = "fake-big" })).ToBeVisibleAsync();
         }

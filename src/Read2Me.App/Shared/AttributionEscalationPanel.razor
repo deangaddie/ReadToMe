@@ -4,11 +4,12 @@
 @implements IDisposable
 
 <MudPaper Class="pa-4 mt-6" Outlined="true">
-    <MudText Typo="Typo.h6" Class="mb-1">Attribution escalation chain</MudText>
+    <MudText Typo="Typo.h6" Class="mb-1">Attribution chain</MudText>
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-        Hard character attributions are retried on each escalation config in order. The primary (active)
-        config runs first; suspect answers (unknown, unlisted name, parse failure) escalate to the next.
-        Same-server multi-model chains are supported — the llama.cpp fork loads the requested preset per request.
+        Character attribution runs each chain config in order. The first config answers the easy lines;
+        suspect answers (unknown, unlisted name, parse failure) escalate to the next. Every step is
+        reorderable and removable. Same-server multi-model chains are supported — the llama.cpp fork
+        loads the requested preset per request.
     </MudText>
 
     @if (_presenter is null)
@@ -17,29 +18,24 @@
     }
     else
     {
-        @if (_presenter.Primary is null)
+        @if (_presenter.Chain.Count == 0)
         {
-            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-                Select an active configuration above to set the chain's primary step.
-            </MudAlert>
-        }
-        else
-        {
-            <MudPaper Class="pa-2 mb-2" Outlined="true">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">
-                        Primary (active)
-                    </MudChip>
-                    <MudText Typo="Typo.body1">@_presenter.Primary.Name</MudText>
-                    @if (!string.IsNullOrWhiteSpace(_presenter.Primary.Model))
-                    {
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_presenter.Primary.Model</MudText>
-                    }
-                </MudStack>
-            </MudPaper>
+            @if (_presenter.FallbackConfig is not null)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    The chain is empty — attribution falls back to the default config
+                    <b>@_presenter.FallbackConfig.Name</b>. Add configs below to run a multi-step chain.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                    The chain is empty and no default config is selected — attribution has no model to run.
+                </MudAlert>
+            }
         }
 
-        @foreach (var cfg in _presenter.Escalation)
+        @foreach (var cfg in _presenter.Chain)
         {
             var c = cfg;
             <MudPaper Class="pa-2 mb-2" Outlined="true">
@@ -64,7 +60,7 @@
 
         @if (_presenter.AvailableToAdd.Count > 0)
         {
-            <MudSelect T="int?" Label="Add escalation step" Value="_addSelection"
+            <MudSelect T="int?" Label="Add chain step" Value="_addSelection"
                        ValueChanged="OnAddSelectedAsync" Dense="true" Class="mt-2" Variant="Variant.Outlined">
                 @foreach (var cfg in _presenter.AvailableToAdd)
                 {

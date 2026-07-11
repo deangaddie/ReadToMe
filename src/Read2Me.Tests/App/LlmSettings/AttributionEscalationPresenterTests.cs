@@ -24,102 +24,123 @@ namespace Read2Me.Tests.App.LlmSettings
             var cfgs = new LlmServerConfig[count];
             for (int i = 0; i < count; i++)
                 cfgs[i] = await svc.CreateConfigAsync(Config($"cfg{i}"));
-            await svc.SetActiveConfigAsync(cfgs[0].Id); // cfg0 is primary
             var p = new AttributionEscalationPresenter(svc);
             await p.LoadAsync();
             return (svc, p, cfgs);
         }
 
         [Fact]
-        public async Task Add_AppendsConfig_AndPersists()
+        public async Task Add_AppendsConfig_AndPersistsFlatChain()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id });
+            await p.LoadAsync();
 
             await p.AddAsync(cfgs[1].Id);
 
-            // Whole persisted chain = [primary, ...escalation]; the presenter view is the tail.
+            // The stored chain IS the flat chain — no active prepend, no tail semantics.
             Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, await svc.GetAttributionChainIdsAsync());
-            Assert.Equal(new[] { cfgs[1].Id }, p.Escalation.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, p.Chain.Select(c => c.Id).ToArray());
         }
 
         [Fact]
         public async Task MoveDown_SwapsWithNext_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(4);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id, cfgs[3].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
-            await p.MoveDownAsync(cfgs[1].Id);
+            await p.MoveDownAsync(cfgs[0].Id);
 
-            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id, cfgs[1].Id, cfgs[3].Id },
+            Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id },
                 await svc.GetAttributionChainIdsAsync());
-            Assert.Equal(new[] { cfgs[2].Id, cfgs[1].Id, cfgs[3].Id },
-                p.Escalation.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id },
+                p.Chain.Select(c => c.Id).ToArray());
         }
 
         [Fact]
         public async Task MoveUp_SwapsWithPrevious_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(4);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id, cfgs[3].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
-            await p.MoveUpAsync(cfgs[3].Id);
+            await p.MoveUpAsync(cfgs[2].Id);
 
-            Assert.Equal(new[] { cfgs[1].Id, cfgs[3].Id, cfgs[2].Id },
-                p.Escalation.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id, cfgs[1].Id },
+                p.Chain.Select(c => c.Id).ToArray());
+        }
+
+        [Fact]
+        public async Task Index0_CanMoveDown_AndBeRemoved_LikeAnyOtherRow()
+        {
+            var (svc, p, cfgs) = await SetupAsync(3);
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
+            await p.LoadAsync();
+
+            // Index 0 is not special: it can move down.
+            Assert.True(p.CanMoveDown(cfgs[0].Id));
+            Assert.False(p.CanMoveUp(cfgs[0].Id));
+            await p.MoveDownAsync(cfgs[0].Id);
+            Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id },
+                p.Chain.Select(c => c.Id).ToArray());
+
+            // And it can be removed — nothing is promoted in its place beyond the natural shift.
+            await p.RemoveAsync(cfgs[1].Id);
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id },
+                await svc.GetAttributionChainIdsAsync());
         }
 
         [Fact]
         public async Task MoveUp_AtFirst_IsNoOp()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            await p.MoveUpAsync(cfgs[1].Id);
+            await p.MoveUpAsync(cfgs[0].Id);
 
-            Assert.Equal(new[] { cfgs[1].Id, cfgs[2].Id },
-                p.Escalation.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id },
+                p.Chain.Select(c => c.Id).ToArray());
         }
 
         [Fact]
         public async Task MoveDown_AtLast_IsNoOp()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            await p.MoveDownAsync(cfgs[2].Id);
+            await p.MoveDownAsync(cfgs[1].Id);
 
-            Assert.Equal(new[] { cfgs[1].Id, cfgs[2].Id },
-                p.Escalation.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id },
+                p.Chain.Select(c => c.Id).ToArray());
         }
 
         [Fact]
-        public async Task CanMoveUp_FalseAtFirst_TrueOtherwise()
+        public async Task CanMove_ReflectsPositionAcrossWholeChain()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            Assert.False(p.CanMoveUp(cfgs[1].Id));
-            Assert.True(p.CanMoveUp(cfgs[2].Id));
-            Assert.True(p.CanMoveDown(cfgs[1].Id));
-            Assert.False(p.CanMoveDown(cfgs[2].Id));
+            Assert.False(p.CanMoveUp(cfgs[0].Id));
+            Assert.True(p.CanMoveUp(cfgs[1].Id));
+            Assert.True(p.CanMoveDown(cfgs[0].Id));
+            Assert.False(p.CanMoveDown(cfgs[1].Id));
         }
 
         [Fact]
         public async Task Remove_DropsConfig_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id, cfgs[2].Id });
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
             await p.RemoveAsync(cfgs[1].Id);
 
-            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id }, await svc.GetAttributionChainIdsAsync());
-            Assert.Equal(new[] { cfgs[2].Id }, p.Escalation.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id }, await svc.GetAttributionChainIdsAsync());
+            Assert.Equal(new[] { cfgs[0].Id }, p.Chain.Select(c => c.Id).ToArray());
         }
 
         [Fact]
@@ -135,25 +156,51 @@ namespace Read2Me.Tests.App.LlmSettings
         }
 
         [Fact]
-        public async Task AvailableToAdd_ExcludesPrimaryAndChained()
+        public async Task AvailableToAdd_ExcludesChainedConfigs()
         {
-            var (svc, p, cfgs) = await SetupAsync(4); // cfg0 primary
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id });
+            var (svc, p, cfgs) = await SetupAsync(4);
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            // available = all(0,1,2,3) - primary(0) - chained(1) = {2,3}
+            // available = all(0,1,2,3) - chained(0,1) = {2,3}
             Assert.Equal(new[] { cfgs[2].Id, cfgs[3].Id },
                 p.AvailableToAdd.Select(c => c.Id).OrderBy(x => x).ToArray());
         }
 
         [Fact]
-        public async Task NoActiveConfig_PrimaryNull()
+        public async Task EmptyChain_SurfacesActiveAsFallback()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await svc.SetActiveConfigAsync(cfgs[1].Id);
+            await p.LoadAsync();
+
+            Assert.Empty(p.Chain);
+            Assert.NotNull(p.FallbackConfig);
+            Assert.Equal(cfgs[1].Id, p.FallbackConfig!.Id);
+        }
+
+        [Fact]
+        public async Task NoActiveConfig_FallbackNull()
         {
             var svc = NewSettings();
             var p = new AttributionEscalationPresenter(svc);
             await p.LoadAsync();
 
-            Assert.Null(p.Primary);
+            Assert.Empty(p.Chain);
+            Assert.Null(p.FallbackConfig);
+        }
+
+        [Fact]
+        public async Task ActiveConfig_IsNotAutoAddedToChain()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await svc.SetActiveConfigAsync(cfgs[0].Id);
+            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id });
+            await p.LoadAsync();
+
+            // The active config does not auto-appear in the chain (that is the whole point of ticket 01).
+            Assert.Equal(new[] { cfgs[1].Id }, p.Chain.Select(c => c.Id).ToArray());
+            Assert.Contains(cfgs[0].Id, p.AvailableToAdd.Select(c => c.Id));
         }
     }
 }
