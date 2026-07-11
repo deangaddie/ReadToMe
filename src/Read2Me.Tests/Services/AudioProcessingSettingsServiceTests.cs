@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
@@ -204,6 +205,117 @@ namespace Read2Me.Tests.Services
             svc.OnChanged += () => count++;
 
             await svc.SetAudioMaxAttemptsAsync(2);
+
+            Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public async Task GetPostProcessSteps_MissingRow_ReturnsDisabledConsonantSoftenDefault()
+        {
+            var svc = NewService();
+
+            var steps = await svc.GetPostProcessStepsAsync();
+
+            var step = Assert.Single(steps);
+            Assert.Equal(AudioPostProcessStepIds.ConsonantSoften, step.StepId);
+            Assert.False(step.Enabled);
+            var settings = step.GetSettings<ConsonantSoftenSettings>();
+            Assert.NotNull(settings);
+            Assert.Equal(ConsonantSoftenEngines.AdynEq, settings.Engine);
+            Assert.Equal(ConsonantSoftenPresets.Strong, settings.Preset);
+        }
+
+        [Fact]
+        public async Task SetPostProcessSteps_PresetRef_RoundTrips()
+        {
+            var svc = NewService();
+            var config = AudioPostProcessStepConfig.Create(
+                AudioPostProcessStepIds.ConsonantSoften, enabled: true,
+                new ConsonantSoftenSettings { Engine = ConsonantSoftenEngines.Deesser, Preset = ConsonantSoftenPresets.Light });
+
+            await svc.SetPostProcessStepsAsync(new[] { config });
+
+            var steps = await NewService().GetPostProcessStepsAsync();
+            var step = Assert.Single(steps);
+            Assert.True(step.Enabled);
+            var settings = step.GetSettings<ConsonantSoftenSettings>();
+            Assert.NotNull(settings);
+            Assert.Equal(ConsonantSoftenEngines.Deesser, settings.Engine);
+            Assert.Equal(ConsonantSoftenPresets.Light, settings.Preset);
+            Assert.Null(settings.AdynEq);
+            Assert.Null(settings.Deesser);
+        }
+
+        [Fact]
+        public async Task SetPostProcessSteps_CustomParams_RoundTrip()
+        {
+            var svc = NewService();
+            var config = AudioPostProcessStepConfig.Create(
+                AudioPostProcessStepIds.ConsonantSoften, enabled: true,
+                new ConsonantSoftenSettings
+                {
+                    Engine = ConsonantSoftenEngines.AdynEq,
+                    Preset = ConsonantSoftenPresets.Custom,
+                    AdynEq = new AdynEqParams { ThresholdDb = -28, Ratio = 3, HighpassHz = 80 },
+                });
+
+            await svc.SetPostProcessStepsAsync(new[] { config });
+
+            var settings = Assert.Single(await NewService().GetPostProcessStepsAsync())
+                .GetSettings<ConsonantSoftenSettings>();
+            Assert.NotNull(settings?.AdynEq);
+            Assert.Equal(-28, settings.AdynEq.ThresholdDb);
+            Assert.Equal(3, settings.AdynEq.Ratio);
+            Assert.Equal(80, settings.AdynEq.HighpassHz);
+        }
+
+        [Fact]
+        public async Task GetPostProcessSteps_CorruptJson_ReturnsDefaults()
+        {
+            var svc = NewService();
+            await svc.SetFfmpegPathAsync("x"); // creates the settings row
+            await using (var db = await Factory.CreateDbContextAsync())
+            {
+                var row = await db.Settings.SingleAsync();
+                row.AudioPostProcessStepsJson = "{not json";
+                await db.SaveChangesAsync();
+            }
+
+            var steps = await svc.GetPostProcessStepsAsync();
+
+            var step = Assert.Single(steps);
+            Assert.Equal(AudioPostProcessStepIds.ConsonantSoften, step.StepId);
+            Assert.False(step.Enabled);
+        }
+
+        [Fact]
+        public async Task GetPostProcessSteps_EntryMissingFromStoredList_AppendsDisabledDefault()
+        {
+            var svc = NewService();
+            await svc.SetPostProcessStepsAsync(new[]
+            {
+                AudioPostProcessStepConfig.Create("some-other-step", enabled: true, new ConsonantSoftenSettings()),
+            });
+
+            var steps = await NewService().GetPostProcessStepsAsync();
+
+            Assert.Equal(2, steps.Count);
+            var soften = steps.Single(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften);
+            Assert.False(soften.Enabled);
+            Assert.Equal(ConsonantSoftenPresets.Strong, soften.GetSettings<ConsonantSoftenSettings>()!.Preset);
+        }
+
+        [Fact]
+        public async Task SetPostProcessSteps_RaisesOnChanged()
+        {
+            var svc = NewService();
+            int count = 0;
+            svc.OnChanged += () => count++;
+
+            await svc.SetPostProcessStepsAsync(new[]
+            {
+                AudioPostProcessStepConfig.Create(AudioPostProcessStepIds.ConsonantSoften, enabled: true, new ConsonantSoftenSettings()),
+            });
 
             Assert.Equal(1, count);
         }

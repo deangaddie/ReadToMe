@@ -60,5 +60,11 @@ namespace Read2Me.AppData.Entities
         /// is enabled on non-final chain steps. Off by default.
         /// </summary>
         public bool AttributionSelfConsistency { get; set; } = false;
+
+        /// <summary>
+        /// Ordered JSON list of audio post-process step configs
+        /// (<c>[{stepId, enabled, settings}]</c>). Null = defaults (consonant-soften disabled).
+        /// </summary>
+        public string? AudioPostProcessStepsJson { get; set; }
     }
 }

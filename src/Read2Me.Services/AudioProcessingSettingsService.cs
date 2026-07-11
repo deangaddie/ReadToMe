@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData;
@@ -124,6 +125,49 @@ namespace Read2Me.Services
             });
             await db.SaveChangesAsync();
             OnChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// Reads the ordered post-process step list. A missing row, null column, or corrupt
+        /// JSON yields the default list: consonant-soften disabled (adynEQ, Strong).
+        /// </summary>
+        public virtual async Task<IReadOnlyList<AudioPostProcessStepConfig>> GetPostProcessStepsAsync()
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var settings = await db.Settings.SingleOrDefaultAsync();
+            return DeserializeSteps(settings?.AudioPostProcessStepsJson);
+        }
+
+        /// <summary>Saves the ordered post-process step list.</summary>
+        public virtual async Task SetPostProcessStepsAsync(IReadOnlyList<AudioPostProcessStepConfig> steps)
+        {
+            var json = JsonSerializer.Serialize(steps, AudioPostProcessJson.Options);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            await MutateSettingsAsync(db, s => s.AudioPostProcessStepsJson = json);
+            await db.SaveChangesAsync();
+            OnChanged?.Invoke();
+        }
+
+        private static AudioPostProcessStepConfig DefaultConsonantSoften() =>
+            AudioPostProcessStepConfig.Create(
+                AudioPostProcessStepIds.ConsonantSoften, enabled: false, new ConsonantSoftenSettings());
+
+        private IReadOnlyList<AudioPostProcessStepConfig> DeserializeSteps(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return [DefaultConsonantSoften()];
+            try
+            {
+                var steps = JsonSerializer.Deserialize<List<AudioPostProcessStepConfig>>(json, AudioPostProcessJson.Options)
+                    ?? new List<AudioPostProcessStepConfig>();
+                if (!steps.Any(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften))
+                    steps.Add(DefaultConsonantSoften());
+                return steps;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Corrupt AudioPostProcessStepsJson; falling back to defaults");
+                return [DefaultConsonantSoften()];
+            }
         }
 
         /// <summary>Probes ffmpeg using the currently saved path.</summary>
