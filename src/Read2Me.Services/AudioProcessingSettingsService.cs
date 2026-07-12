@@ -128,17 +128,19 @@ namespace Read2Me.Services
         }
 
         /// <summary>
-        /// Reads the ordered post-process step list. A missing row, null column, or corrupt
-        /// JSON yields the default list: consonant-soften disabled (adynEQ, Strong).
+        /// Reads the post-process step chain: <see cref="AudioPostProcessStepDefaults.All"/> with
+        /// each step's stored enabled/settings merged on by id. Order and membership come from
+        /// code, so a missing row, a null column, an absent id, or corrupt JSON all yield the
+        /// step's default; ids in storage with no code default are ignored.
         /// </summary>
         public virtual async Task<IReadOnlyList<AudioPostProcessStepConfig>> GetPostProcessStepsAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var settings = await db.Settings.SingleOrDefaultAsync();
-            return DeserializeSteps(settings?.AudioPostProcessStepsJson);
+            return MergeOntoDefaults(DeserializeSteps(settings?.AudioPostProcessStepsJson));
         }
 
-        /// <summary>Saves the ordered post-process step list.</summary>
+        /// <summary>Saves the post-process step list. Only enabled/settings survive a round-trip.</summary>
         public virtual async Task SetPostProcessStepsAsync(IReadOnlyList<AudioPostProcessStepConfig> steps)
         {
             var json = JsonSerializer.Serialize(steps, AudioPostProcessJson.Options);
@@ -148,38 +150,41 @@ namespace Read2Me.Services
             OnChanged?.Invoke();
         }
 
-        /// <summary>
-        /// Saves one step's config, keeping the rest of the list and its order. An unknown
-        /// step id is appended.
-        /// </summary>
+        /// <summary>Saves one step's config, keeping every other step's.</summary>
         public virtual async Task UpsertPostProcessStepAsync(AudioPostProcessStepConfig step)
         {
             var steps = (await GetPostProcessStepsAsync())
                 .Select(s => s.StepId == step.StepId ? step : s)
                 .ToList();
-            if (!steps.Any(s => s.StepId == step.StepId)) steps.Add(step);
             await SetPostProcessStepsAsync(steps);
         }
 
-        private static AudioPostProcessStepConfig DefaultConsonantSoften() =>
-            AudioPostProcessStepConfig.Create(
-                AudioPostProcessStepIds.ConsonantSoften, enabled: false, new ConsonantSoftenSettings());
+        private static IReadOnlyList<AudioPostProcessStepConfig> MergeOntoDefaults(
+            IReadOnlyList<AudioPostProcessStepConfig> stored)
+        {
+            var byId = stored
+                .GroupBy(s => s.StepId)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            return AudioPostProcessStepDefaults.All
+                .Select(d => byId.TryGetValue(d.StepId, out var s)
+                    ? d with { Enabled = s.Enabled, Settings = s.Settings ?? d.Settings }
+                    : d)
+                .ToList();
+        }
 
         private IReadOnlyList<AudioPostProcessStepConfig> DeserializeSteps(string? json)
         {
-            if (string.IsNullOrWhiteSpace(json)) return [DefaultConsonantSoften()];
+            if (string.IsNullOrWhiteSpace(json)) return [];
             try
             {
-                var steps = JsonSerializer.Deserialize<List<AudioPostProcessStepConfig>>(json, AudioPostProcessJson.Options)
-                    ?? new List<AudioPostProcessStepConfig>();
-                if (!steps.Any(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften))
-                    steps.Add(DefaultConsonantSoften());
-                return steps;
+                return JsonSerializer.Deserialize<List<AudioPostProcessStepConfig>>(json, AudioPostProcessJson.Options)
+                    ?? [];
             }
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "Corrupt AudioPostProcessStepsJson; falling back to defaults");
-                return [DefaultConsonantSoften()];
+                return [];
             }
         }
 

@@ -36,7 +36,7 @@ namespace Read2Me.Services.Audio
     public class FfmpegAudioNormalizer : IAudioNormalizer
     {
         private const string LoudnormBase = "loudnorm=I=-16:TP=-1.5:LRA=11";
-        private static readonly string[] CanonicalFormatArgs = { "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le" };
+        private static string[] CanonicalFormatArgs => CanonicalWav.FormatArgs;
 
         private readonly ILogger<FfmpegAudioNormalizer> _logger;
 

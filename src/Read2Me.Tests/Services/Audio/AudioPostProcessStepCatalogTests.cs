@@ -58,21 +58,62 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
-        public async Task EnabledSteps_ReturnedInStoredOrder_UnknownIdsSkipped()
+        public async Task EnabledSteps_ReturnedInCodePipelineOrder_RegardlessOfStoredOrder()
         {
             var settings = NewSettings();
             await settings.SetPostProcessStepsAsync(new[]
             {
-                AudioPostProcessStepConfig.Create("step-b", enabled: true, new ConsonantSoftenSettings()),
-                AudioPostProcessStepConfig.Create("no-such-step", enabled: true, new ConsonantSoftenSettings()),
-                AudioPostProcessStepConfig.Create("step-a", enabled: true, new ConsonantSoftenSettings()),
-                AudioPostProcessStepConfig.Create("step-c", enabled: false, new ConsonantSoftenSettings()),
+                AudioPostProcessStepConfig.Create(
+                    AudioPostProcessStepIds.ConsonantSoften, enabled: true, new ConsonantSoftenSettings()),
+                AudioPostProcessStepConfig.Create(
+                    AudioPostProcessStepIds.SilenceTrim, enabled: true, new SilenceTrimSettings()),
             });
-            var catalog = NewCatalog(new FakeStep("step-a"), new FakeStep("step-b"), new FakeStep("step-c"));
+            var catalog = NewCatalog(
+                new FakeStep(AudioPostProcessStepIds.ConsonantSoften),
+                new FakeStep(AudioPostProcessStepIds.SilenceTrim));
 
             var enabled = await catalog.GetEnabledStepsAsync();
 
-            Assert.Equal(new[] { "step-b", "step-a" }, enabled.Select(e => e.Step.StepId));
+            Assert.Equal(
+                new[] { AudioPostProcessStepIds.SilenceTrim, AudioPostProcessStepIds.ConsonantSoften },
+                enabled.Select(e => e.Step.StepId));
+        }
+
+        [Fact]
+        public async Task DisabledStep_IsSkipped()
+        {
+            var settings = NewSettings();
+            await settings.SetPostProcessStepsAsync(new[]
+            {
+                AudioPostProcessStepConfig.Create(
+                    AudioPostProcessStepIds.SilenceTrim, enabled: false, new SilenceTrimSettings()),
+            });
+            var catalog = NewCatalog(new FakeStep(AudioPostProcessStepIds.SilenceTrim));
+
+            var enabled = await catalog.GetEnabledStepsAsync();
+
+            Assert.Empty(enabled);
+        }
+
+        [Fact]
+        public async Task RegisteredStepWithNoCodeDefault_IsSkipped()
+        {
+            var catalog = NewCatalog(new FakeStep("not-in-the-chain"));
+
+            var enabled = await catalog.GetEnabledStepsAsync();
+
+            Assert.Empty(enabled);
+        }
+
+        [Fact]
+        public async Task SilenceTrim_IsEnabledOutOfTheBox()
+        {
+            var catalog = NewCatalog(new FakeStep(AudioPostProcessStepIds.SilenceTrim));
+
+            var enabled = await catalog.GetEnabledStepsAsync();
+
+            var entry = Assert.Single(enabled);
+            Assert.Equal(AudioPostProcessStepIds.SilenceTrim, entry.Step.StepId);
         }
     }
 }

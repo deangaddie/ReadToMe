@@ -2,7 +2,7 @@
 @using Read2Me.App.Shared
 @using Read2Me.Services.Audio
 @inject AudioProcessingSettingsService SettingsService
-@inject IConsonantSoftenPreviewRenderer PreviewRenderer
+@inject IAudioPostProcessPreviewRenderer PreviewRenderer
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @implements IDisposable
@@ -36,6 +36,35 @@
         {
             <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
         }
+    </MudCardActions>
+</MudCard>
+
+<MudCard Outlined="true" Class="mb-5">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Silence trim</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Strips leading and trailing dead air from generated paragraph audio, so the gap between
+            items is the configured pause and nothing else. Runs before consonant soften. If the trim
+            would remove nearly all of a clip it is skipped and the audio is kept as generated.
+        </MudText>
+        <MudSwitch T="bool" @bind-Value="_trim.Enabled" Color="Color.Primary"
+                   Label="Enable silence trim" Class="mb-3" />
+        <MudNumericField @bind-Value="_trim.ThresholdDb"
+                         Label="Silence threshold (dB)" Variant="Variant.Outlined"
+                         Max="0" Step="1" Class="mb-1"
+                         HelperText="Peak level below which audio counts as silence. Lower is stricter." />
+        <MudNumericField @bind-Value="_trim.PadMs"
+                         Label="Keep at each end (ms)" Variant="Variant.Outlined"
+                         Min="0" Step="10" Class="mt-3"
+                         HelperText="Silence deliberately kept at each end. 0 = hard trim." />
+
+        <AudioPostProcessPreview Model="_trimPreview" Draft="() => _trim.BuildConfig()"
+                                 ProcessedLabel="Trimmed" ShowRemovedMs="true" />
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveSilenceTrimAsync">Save</MudButton>
     </MudCardActions>
 </MudCard>
 
@@ -140,52 +169,8 @@
             }
         }
 
-        <MudDivider Class="my-4" />
-        <MudText Typo="Typo.subtitle2" Class="mb-1">A/B preview</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            Renders the settings above — including unsaved changes — over a recently generated
-            paragraph so you can compare before saving.
-        </MudText>
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
-            <MudButton Variant="Variant.Outlined"
-                       StartIcon="@Icons.Material.Filled.LibraryMusic"
-                       OnClick="PickSampleAsync">
-                @(_preview.Sample is null ? "Pick a sample" : "Change sample")
-            </MudButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Secondary"
-                       StartIcon="@Icons.Material.Filled.GraphicEq"
-                       Disabled="@(_preview.Sample is null || _preview.Rendering)"
-                       OnClick="RenderPreviewAsync">
-                @(_preview.Rendering ? "Rendering…" : "Render preview")
-            </MudButton>
-            @if (_preview.Rendering)
-            {
-                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
-            }
-        </MudStack>
-
-        @if (_preview.Sample is { } sample)
-        {
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                @(sample.CharacterName ?? "Narration")@(sample.VoiceName is null ? "" : $" · {sample.VoiceName}") · @sample.ProjectTitle
-            </MudText>
-            <MudText Typo="Typo.body2" Class="mb-3">@sample.Text</MudText>
-
-            <MudText Typo="Typo.caption">Original</MudText>
-            <audio controls src="@_preview.OriginalUrl" style="width:100%" class="mb-3"></audio>
-
-            @if (_preview.FilteredUrl is { } filteredUrl)
-            {
-                <MudText Typo="Typo.caption">Filtered</MudText>
-                <audio controls src="@filteredUrl" style="width:100%"></audio>
-            }
-            @if (_preview.Reason is { } reason)
-            {
-                <MudAlert Severity="@(_preview.Applied ? Severity.Info : Severity.Warning)" Dense="true" Class="mt-3">
-                    @reason
-                </MudAlert>
-            }
-        }
+        <AudioPostProcessPreview Model="_softenPreview" Draft="() => _soften.BuildConfig()"
+                                 ProcessedLabel="Filtered" />
     </MudCardContent>
     <MudCardActions>
         <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -287,29 +272,19 @@
     int _audioMaxAttemptsDraft = AudioProcessingSettingsService.DefaultAudioMaxAttempts;
     bool _testing;
 
+    SilenceTrimForm _trim = SilenceTrimForm.FromConfig(null);
     ConsonantSoftenForm _soften = ConsonantSoftenForm.FromConfig(null);
-    ConsonantSoftenPreviewModel _preview = default!;
+
+    // One preview per card: each auditions its own step in isolation.
+    AudioPostProcessPreviewModel _trimPreview = default!;
+    AudioPostProcessPreviewModel _softenPreview = default!;
 
     protected override async Task OnInitializedAsync()
     {
-        _preview = new ConsonantSoftenPreviewModel(PreviewRenderer);
+        _trimPreview = new AudioPostProcessPreviewModel(PreviewRenderer);
+        _softenPreview = new AudioPostProcessPreviewModel(PreviewRenderer);
         SettingsService.OnChanged += HandleChanged;
         await LoadAsync();
-    }
-
-    async Task PickSampleAsync()
-    {
-        var dialog = await DialogService.ShowAsync<RecentAudioPickerDialog>("Pick a sample");
-        var result = await dialog.Result;
-        if (result is { Canceled: false, Data: RecentAudioSample sample })
-            _preview.Select(sample);
-    }
-
-    async Task RenderPreviewAsync()
-    {
-        await _preview.RenderAsync(_soften);
-        if (!_preview.Applied && _preview.Reason is { } reason)
-            Snackbar.Add($"Preview fell back to the unfiltered audio: {reason}", Severity.Warning);
     }
 
     void HandleChanged() => InvokeAsync(LoadAsync);
@@ -328,10 +303,18 @@
         _audioMaxAttemptsDraft = settings.AudioMaxAttempts;
 
         var steps = await SettingsService.GetPostProcessStepsAsync();
+        _trim = SilenceTrimForm.FromConfig(
+            steps.FirstOrDefault(s => s.StepId == AudioPostProcessStepIds.SilenceTrim));
         _soften = ConsonantSoftenForm.FromConfig(
             steps.FirstOrDefault(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften));
 
         StateHasChanged();
+    }
+
+    async Task SaveSilenceTrimAsync()
+    {
+        await SettingsService.UpsertPostProcessStepAsync(_trim.BuildConfig());
+        Snackbar.Add("Silence trim saved.", Severity.Success);
     }
 
     async Task SaveConsonantSoftenAsync()

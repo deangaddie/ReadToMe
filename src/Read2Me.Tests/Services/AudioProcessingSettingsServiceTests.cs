@@ -210,19 +210,29 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task GetPostProcessSteps_MissingRow_ReturnsDisabledConsonantSoftenDefault()
+        public async Task GetPostProcessSteps_MissingRow_ReturnsCodeDefaults_InPipelineOrder()
         {
             var svc = NewService();
 
             var steps = await svc.GetPostProcessStepsAsync();
 
-            var step = Assert.Single(steps);
-            Assert.Equal(AudioPostProcessStepIds.ConsonantSoften, step.StepId);
-            Assert.False(step.Enabled);
-            var settings = step.GetSettings<ConsonantSoftenSettings>();
-            Assert.NotNull(settings);
-            Assert.Equal(ConsonantSoftenEngines.AdynEq, settings.Engine);
-            Assert.Equal(ConsonantSoftenPresets.Strong, settings.Preset);
+            Assert.Equal(
+                new[] { AudioPostProcessStepIds.SilenceTrim, AudioPostProcessStepIds.ConsonantSoften },
+                steps.Select(s => s.StepId));
+
+            var trim = steps[0];
+            Assert.True(trim.Enabled);
+            var trimSettings = trim.GetSettings<SilenceTrimSettings>();
+            Assert.NotNull(trimSettings);
+            Assert.Equal(-50, trimSettings.ThresholdDb);
+            Assert.Equal(50, trimSettings.PadMs);
+
+            var soften = steps[1];
+            Assert.False(soften.Enabled);
+            var softenSettings = soften.GetSettings<ConsonantSoftenSettings>();
+            Assert.NotNull(softenSettings);
+            Assert.Equal(ConsonantSoftenEngines.AdynEq, softenSettings.Engine);
+            Assert.Equal(ConsonantSoftenPresets.Strong, softenSettings.Preset);
         }
 
         [Fact]
@@ -235,8 +245,8 @@ namespace Read2Me.Tests.Services
 
             await svc.SetPostProcessStepsAsync(new[] { config });
 
-            var steps = await NewService().GetPostProcessStepsAsync();
-            var step = Assert.Single(steps);
+            var step = (await NewService().GetPostProcessStepsAsync())
+                .Single(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften);
             Assert.True(step.Enabled);
             var settings = step.GetSettings<ConsonantSoftenSettings>();
             Assert.NotNull(settings);
@@ -247,13 +257,34 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task UpsertPostProcessStep_ReplacesExistingEntryInPlace()
+        public async Task SetPostProcessSteps_SilenceTrimRawParams_RoundTrip()
         {
             var svc = NewService();
-            var other = AudioPostProcessStepConfig.Create("other-step", enabled: true, new { });
+
             await svc.SetPostProcessStepsAsync(new[]
             {
-                other,
+                AudioPostProcessStepConfig.Create(
+                    AudioPostProcessStepIds.SilenceTrim, enabled: false,
+                    new SilenceTrimSettings(ThresholdDb: -35, PadMs: 0)),
+            });
+
+            var step = (await NewService().GetPostProcessStepsAsync())
+                .Single(s => s.StepId == AudioPostProcessStepIds.SilenceTrim);
+            Assert.False(step.Enabled);
+            var settings = step.GetSettings<SilenceTrimSettings>();
+            Assert.NotNull(settings);
+            Assert.Equal(-35, settings.ThresholdDb);
+            Assert.Equal(0, settings.PadMs);
+        }
+
+        [Fact]
+        public async Task UpsertPostProcessStep_LeavesTheOtherStepsAlone()
+        {
+            var svc = NewService();
+            await svc.SetPostProcessStepsAsync(new[]
+            {
+                AudioPostProcessStepConfig.Create(
+                    AudioPostProcessStepIds.SilenceTrim, enabled: false, new SilenceTrimSettings(PadMs: 120)),
                 AudioPostProcessStepConfig.Create(
                     AudioPostProcessStepIds.ConsonantSoften, enabled: false, new ConsonantSoftenSettings()),
             });
@@ -264,22 +295,68 @@ namespace Read2Me.Tests.Services
 
             var steps = await NewService().GetPostProcessStepsAsync();
             Assert.Equal(2, steps.Count);
-            Assert.Equal("other-step", steps[0].StepId);
+            Assert.False(steps[0].Enabled);
+            Assert.Equal(120, steps[0].GetSettings<SilenceTrimSettings>()!.PadMs);
             Assert.True(steps[1].Enabled);
             Assert.Equal(ConsonantSoftenPresets.Light, steps[1].GetSettings<ConsonantSoftenSettings>()!.Preset);
         }
 
         [Fact]
-        public async Task UpsertPostProcessStep_UnknownStepId_IsAppended()
+        public async Task GetPostProcessSteps_StoredIdWithNoCodeDefault_IsIgnored()
         {
             var svc = NewService();
 
-            await svc.UpsertPostProcessStepAsync(
-                AudioPostProcessStepConfig.Create("new-step", enabled: true, new { }));
+            await svc.SetPostProcessStepsAsync(new[]
+            {
+                AudioPostProcessStepConfig.Create("retired-step", enabled: true, new { }),
+            });
 
             var steps = await NewService().GetPostProcessStepsAsync();
-            Assert.Contains(steps, s => s.StepId == "new-step" && s.Enabled);
-            Assert.Contains(steps, s => s.StepId == AudioPostProcessStepIds.ConsonantSoften);
+
+            Assert.DoesNotContain(steps, s => s.StepId == "retired-step");
+            Assert.Equal(
+                new[] { AudioPostProcessStepIds.SilenceTrim, AudioPostProcessStepIds.ConsonantSoften },
+                steps.Select(s => s.StepId));
+        }
+
+        [Fact]
+        public async Task GetPostProcessSteps_RowPredatingSilenceTrim_GainsItEnabled()
+        {
+            // The migration-free upgrade path: rows written before silence-trim existed carry a
+            // consonant-soften entry only, and must come back with silence-trim on by default.
+            var svc = NewService();
+            await svc.SetPostProcessStepsAsync(new[]
+            {
+                AudioPostProcessStepConfig.Create(
+                    AudioPostProcessStepIds.ConsonantSoften, enabled: true,
+                    new ConsonantSoftenSettings { Preset = ConsonantSoftenPresets.Medium }),
+            });
+
+            var steps = await NewService().GetPostProcessStepsAsync();
+
+            var trim = steps.Single(s => s.StepId == AudioPostProcessStepIds.SilenceTrim);
+            Assert.True(trim.Enabled);
+            Assert.Equal(50, trim.GetSettings<SilenceTrimSettings>()!.PadMs);
+
+            var soften = steps.Single(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften);
+            Assert.True(soften.Enabled);
+            Assert.Equal(ConsonantSoftenPresets.Medium, soften.GetSettings<ConsonantSoftenSettings>()!.Preset);
+        }
+
+        [Fact]
+        public async Task GetPostProcessSteps_StoredEntryWithoutSettings_KeepsEnabled_TakesDefaultSettings()
+        {
+            var svc = NewService();
+            await svc.SetPostProcessStepsAsync(new[]
+            {
+                new AudioPostProcessStepConfig(AudioPostProcessStepIds.SilenceTrim, Enabled: false, Settings: null),
+            });
+
+            var trim = (await NewService().GetPostProcessStepsAsync())
+                .Single(s => s.StepId == AudioPostProcessStepIds.SilenceTrim);
+
+            Assert.False(trim.Enabled);
+            Assert.Equal(-50, trim.GetSettings<SilenceTrimSettings>()!.ThresholdDb);
         }
 
         [Fact]
@@ -297,7 +374,8 @@ namespace Read2Me.Tests.Services
 
             await svc.SetPostProcessStepsAsync(new[] { config });
 
-            var settings = Assert.Single(await NewService().GetPostProcessStepsAsync())
+            var settings = (await NewService().GetPostProcessStepsAsync())
+                .Single(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften)
                 .GetSettings<ConsonantSoftenSettings>();
             Assert.NotNull(settings?.AdynEq);
             Assert.Equal(-28, settings.AdynEq.ThresholdDb);
@@ -319,26 +397,11 @@ namespace Read2Me.Tests.Services
 
             var steps = await svc.GetPostProcessStepsAsync();
 
-            var step = Assert.Single(steps);
-            Assert.Equal(AudioPostProcessStepIds.ConsonantSoften, step.StepId);
-            Assert.False(step.Enabled);
-        }
-
-        [Fact]
-        public async Task GetPostProcessSteps_EntryMissingFromStoredList_AppendsDisabledDefault()
-        {
-            var svc = NewService();
-            await svc.SetPostProcessStepsAsync(new[]
-            {
-                AudioPostProcessStepConfig.Create("some-other-step", enabled: true, new ConsonantSoftenSettings()),
-            });
-
-            var steps = await NewService().GetPostProcessStepsAsync();
-
-            Assert.Equal(2, steps.Count);
-            var soften = steps.Single(s => s.StepId == AudioPostProcessStepIds.ConsonantSoften);
-            Assert.False(soften.Enabled);
-            Assert.Equal(ConsonantSoftenPresets.Strong, soften.GetSettings<ConsonantSoftenSettings>()!.Preset);
+            Assert.Equal(
+                new[] { AudioPostProcessStepIds.SilenceTrim, AudioPostProcessStepIds.ConsonantSoften },
+                steps.Select(s => s.StepId));
+            Assert.True(steps[0].Enabled);
+            Assert.False(steps[1].Enabled);
         }
 
         [Fact]

@@ -116,10 +116,11 @@ public static class ServiceRegistrationExtensions
             e => e is Read2Me.Services.Audio.ItemStarted));
         services.AddScoped<IAudioNormalizer, FfmpegAudioNormalizer>();
         services.AddScoped<IAudioPostProcessStepCatalog, AudioPostProcessStepCatalog>();
+        services.AddScoped<IAudioPostProcessStep, SilenceTrimStep>();
         services.AddScoped<IAudioPostProcessStep, ConsonantSoftenStep>();
         services.AddSingleton<AudioPreviewStore>();
         services.AddScoped<IPreviewSourceCache, PreviewSourceCache>();
-        services.AddScoped<IConsonantSoftenPreviewRenderer, ConsonantSoftenPreviewRenderer>();
+        services.AddScoped<IAudioPostProcessPreviewRenderer, AudioPostProcessPreviewRenderer>();
         services.AddScoped<IRecentAudioSampleFinder, RecentAudioSampleFinder>();
         services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.Assembly.AssemblyEvent>>();
         services.AddSingleton<IAudiobookEncoder, AudiobookEncoder>();

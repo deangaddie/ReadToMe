@@ -1,0 +1,88 @@
+@using Read2Me.Services.Audio
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@* A/B preview block shared by the post-process cards: pick a recent item, render the card's
+   draft settings over its Preview Source, compare unprocessed vs processed. *@
+
+<MudDivider Class="my-4" />
+<MudText Typo="Typo.subtitle2" Class="mb-1">A/B preview</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+    Renders the settings above — including unsaved changes — over a recently generated
+    paragraph so you can compare before saving.
+</MudText>
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudButton Variant="Variant.Outlined"
+               StartIcon="@Icons.Material.Filled.LibraryMusic"
+               OnClick="PickSampleAsync">
+        @(Model.Sample is null ? "Pick a sample" : "Change sample")
+    </MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+               StartIcon="@Icons.Material.Filled.GraphicEq"
+               Disabled="@(Model.Sample is null || Model.Rendering)"
+               OnClick="RenderAsync">
+        @(Model.Rendering ? "Rendering…" : "Render preview")
+    </MudButton>
+    @if (Model.Rendering)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+    }
+</MudStack>
+
+@if (Model.Sample is { } sample)
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary">
+        @(sample.CharacterName ?? "Narration")@(sample.VoiceName is null ? "" : $" · {sample.VoiceName}") · @sample.ProjectTitle
+    </MudText>
+    <MudText Typo="Typo.body2" Class="mb-3">@sample.Text</MudText>
+
+    <MudText Typo="Typo.caption">Original</MudText>
+    <audio controls src="@Model.OriginalUrl" style="width:100%" class="mb-3"></audio>
+
+    @if (Model.ProcessedUrl is { } processedUrl)
+    {
+        <MudText Typo="Typo.caption">@ProcessedLabel</MudText>
+        <audio controls src="@processedUrl" style="width:100%"></audio>
+    }
+    @if (ShowRemovedMs && Model.RemovedMs is { } removedMs)
+    {
+        <MudText Typo="Typo.body2" Class="mt-2">
+            Removed <b>@removedMs.ToString("0")</b> ms of silence.
+        </MudText>
+    }
+    @if (Model.Reason is { } reason)
+    {
+        <MudAlert Severity="@(Model.Applied ? Severity.Info : Severity.Warning)" Dense="true" Class="mt-3">
+            @reason
+        </MudAlert>
+    }
+}
+
+@code {
+    /// <summary>Per-card preview state; the card owns the instance.</summary>
+    [Parameter, EditorRequired] public AudioPostProcessPreviewModel Model { get; set; } = default!;
+
+    /// <summary>The card's current, unsaved step config — read at render time, not at bind time.</summary>
+    [Parameter, EditorRequired] public Func<AudioPostProcessStepConfig> Draft { get; set; } = default!;
+
+    /// <summary>Caption on the right-hand player, e.g. "Filtered" or "Trimmed".</summary>
+    [Parameter] public string ProcessedLabel { get; set; } = "Processed";
+
+    /// <summary>Cards whose step removes audio report how much.</summary>
+    [Parameter] public bool ShowRemovedMs { get; set; }
+
+    async Task PickSampleAsync()
+    {
+        var dialog = await DialogService.ShowAsync<RecentAudioPickerDialog>("Pick a sample");
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: RecentAudioSample sample })
+            Model.Select(sample);
+    }
+
+    async Task RenderAsync()
+    {
+        await Model.RenderAsync(Draft());
+        if (!Model.Applied && Model.Reason is { } reason)
+            Snackbar.Add($"Preview fell back to the unprocessed audio: {reason}", Severity.Warning);
+    }
+}

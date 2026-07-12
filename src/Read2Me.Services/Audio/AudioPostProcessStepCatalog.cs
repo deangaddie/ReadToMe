@@ -4,12 +4,15 @@ namespace Read2Me.Services.Audio
     public sealed record EnabledPostProcessStep(IAudioPostProcessStep Step, string? SettingsJson);
 
     /// <summary>
-    /// Maps stored step configs to registered <see cref="IAudioPostProcessStep"/> instances.
+    /// Maps step configs to registered <see cref="IAudioPostProcessStep"/> instances.
     /// Mirrors <see cref="Text.ITextProcessingStepCatalog"/> for the audio side.
     /// </summary>
     public interface IAudioPostProcessStepCatalog
     {
-        /// <summary>Enabled steps in stored order; configs with no registered step are skipped.</summary>
+        /// <summary>
+        /// Enabled steps in the code-defined pipeline order of
+        /// <see cref="AudioPostProcessStepDefaults"/>; configs with no registered step are skipped.
+        /// </summary>
         Task<IReadOnlyList<EnabledPostProcessStep>> GetEnabledStepsAsync();
     }
 

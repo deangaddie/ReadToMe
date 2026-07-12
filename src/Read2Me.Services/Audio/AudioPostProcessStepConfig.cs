@@ -4,9 +4,10 @@ using System.Text.Json.Serialization;
 namespace Read2Me.Services.Audio
 {
     /// <summary>
-    /// One entry in the ordered post-process step list stored on the settings row.
-    /// <see cref="Settings"/> is the step's opaque settings payload (shape is owned by the
-    /// step, e.g. <see cref="ConsonantSoftenSettings"/> for consonant-soften).
+    /// One step's config on the settings row: its enabled flag plus <see cref="Settings"/>, the
+    /// step's opaque settings payload (shape owned by the step, e.g.
+    /// <see cref="ConsonantSoftenSettings"/> for consonant-soften). Order and membership come from
+    /// <see cref="AudioPostProcessStepDefaults"/>, not from the stored list.
     /// </summary>
     public sealed record AudioPostProcessStepConfig(string StepId, bool Enabled, JsonElement? Settings)
     {
