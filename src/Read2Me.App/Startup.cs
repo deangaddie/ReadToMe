@@ -8,6 +8,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
+using Read2Me.App.Api;
 using Read2Me.App.Configuration;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
@@ -36,6 +37,8 @@ namespace Read2Me.App
             services.AddAiWatchdogServices(Configuration);
             services.AddAppState();
             services.AddAppDatabase();
+
+            services.AddOpenApi();
 
             services.AddHttpClient();
             services.AddRazorPages();
@@ -85,6 +88,7 @@ namespace Read2Me.App
                 endpoints.MapBlazorHub();
                 endpoints.MapGet("/audio-preview/{token}", ServeAudioPreviewAsync);
                 endpoints.MapGet("/preview-source/{folder}/{id}", ServePreviewSourceAsync);
+                endpoints.MapAgentApi();
                 endpoints.MapFallbackToPage("/_Host");
             });
         }

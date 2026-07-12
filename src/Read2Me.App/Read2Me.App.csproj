@@ -1,6 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <!-- RouteHandlerAnalyzer NREs on the delegate-built settings endpoints
+         (Api/SettingsEndpoints.cs); AD0001 is the analyzer crashing, not a code
+         diagnostic, so keep it a warning under TreatWarningsAsErrors. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);AD0001</WarningsNotAsErrors>
+  </PropertyGroup>
+
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
