@@ -42,7 +42,7 @@ services:
       - HF_HOME=/cache
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     volumes:
-      - chatterbox_cache:/cache
+      - ./cache/chatterbox:/cache
     deploy:
       resources:
         reservations:
@@ -66,7 +66,7 @@ services:
       - HF_HOME=/cache
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     volumes:
-      - chatterbox_turbo_cache:/cache
+      - ./cache/chatterbox-turbo:/cache
     deploy:
       resources:
         reservations:
@@ -87,7 +87,7 @@ services:
     environment:
       - HF_HOME=/cache
     volumes:
-      - qwen3_cache:/cache
+      - ./cache/qwen3:/cache
     deploy:
       resources:
         reservations:
@@ -112,7 +112,7 @@ services:
       - HF_HOME=/cache
       - APP_PORT=8101
     volumes:
-      - qwen3_base_cache:/cache
+      - ./cache/qwen3-base:/cache
     deploy:
       resources:
         reservations:
@@ -138,7 +138,7 @@ services:
       - MODEL_ID=openbmb/VoxCPM2
       - OPTIMIZE=true
     volumes:
-      - voxcpm2_cache:/cache
+      - ./cache/voxcpm2:/cache
       - voxcpm2_uploads:/uploads
     deploy:
       resources:
@@ -215,12 +215,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  voxcpm2_cache:
   voxcpm2_uploads:
-  chatterbox_cache:
-  chatterbox_turbo_cache:
-  qwen3_cache:
-  qwen3_base_cache:
   whisper_cache:
   whisper_cpu_cache:
   minilm_l6_cache:

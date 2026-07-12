@@ -460,6 +460,9 @@ FodyWeavers.xsd
 *.bin
 *.safetensors
 
+# Docker container caches moved out of WSL volumes
+Infra/cache/
+
 # Per-project SQLite databases
 readtome.db
 readtome.db-shm
