@@ -163,6 +163,8 @@ namespace Read2Me.Tests.Services.Characters
                 => Task.FromResult<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>>([]);
             public Task<IReadOnlyList<AssemblyManifestEntry>> GetAssemblyManifestAsync(ProjectFolderId folder, CancellationToken ct)
                 => Task.FromResult<IReadOnlyList<AssemblyManifestEntry>>([]);
+            public Task<IReadOnlyList<AudioSampleInfo>> GetAudioSampleInfosAsync(ProjectFolderId folderId, IReadOnlyCollection<Guid> itemIds)
+                => Task.FromResult<IReadOnlyList<AudioSampleInfo>>([]);
             public Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId)
                 => Task.FromResult(new List<VoiceRuleRow>());
         }

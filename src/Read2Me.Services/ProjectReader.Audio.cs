@@ -62,6 +62,25 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<IReadOnlyList<AudioSampleInfo>> GetAudioSampleInfosAsync(
+            ProjectFolderId folderId, IReadOnlyCollection<Guid> itemIds)
+        {
+            if (itemIds.Count == 0) return [];
+
+            var ids = itemIds.ToHashSet();
+            var db = await _session.OpenAsync(folderId);
+
+            return await db.ParagraphItems
+                .AsNoTracking()
+                .Where(i => ids.Contains(i.Id) && i.AudioFileName != null)
+                .Select(i => new AudioSampleInfo(
+                    i.Id,
+                    i.Text ?? "",
+                    i.Character != null ? i.Character.Name : null,
+                    i.AudioFileName!))
+                .ToListAsync();
+        }
+
         public async Task<List<(Guid ParagraphItemId, AudioReviewInfo Info)>> GetAudioReviewsAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);

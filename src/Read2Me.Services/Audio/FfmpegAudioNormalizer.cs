@@ -28,6 +28,10 @@ namespace Read2Me.Services.Audio
     /// (less accurate but still levelled). Only a hard ffmpeg/exe failure returns
     /// <see cref="NormalizeStatus.Skipped"/> with the original rewound audio intact. Never throws
     /// (except <see cref="OperationCanceledException"/>) and never loses audio.
+    /// <para>
+    /// Both paths write the canonical WAV format (24 kHz mono 16-bit PCM). loudnorm runs at an
+    /// internal 192 kHz, so omitting the format args would store 192 kHz audio.
+    /// </para>
     /// </summary>
     public class FfmpegAudioNormalizer : IAudioNormalizer
     {
@@ -63,7 +67,9 @@ namespace Read2Me.Services.Audio
 
                 var applyFilter = BuildApplyFilter(measure);
 
-                var applyArgs = BuildApplyArgs(inputPath, applyFilter, extraFormatArgs: null, outputPath);
+                // loudnorm resamples internally to 192 kHz — without explicit format args the
+                // written WAV inherits that rate. Force canonical 24 kHz mono 16-bit PCM.
+                var applyArgs = BuildApplyArgs(inputPath, applyFilter, CanonicalFormatArgs, outputPath);
                 var applyResult = await RunApplyPassAsync(exe, applyArgs, ct);
 
                 if (applyResult.outcome == ApplyOutcome.ExeNotFound)
@@ -155,12 +161,9 @@ namespace Read2Me.Services.Audio
             try
             {
                 await Cli.Wrap(exe)
-                    .WithArguments(new[]
-                    {
-                        "-y", "-i", inputPath,
-                        "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le",
-                        outputPath
-                    })
+                    .WithArguments(new[] { "-y", "-i", inputPath }
+                        .Concat(CanonicalFormatArgs)
+                        .Append(outputPath))
                     .WithStandardErrorPipe(PipeTarget.ToStringBuilder(stderr))
                     .WithValidation(CommandResultValidation.ZeroExitCode)
                     .ExecuteAsync(ct);

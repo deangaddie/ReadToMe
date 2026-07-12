@@ -14,6 +14,7 @@ namespace Read2Me.Tests.Services;
 file sealed class FixedPathFileSystem(string fixedPath) : IFileSystem
 {
     public IReadOnlyList<string> ListProjectFolders() => [];
+    public IReadOnlyList<FileEntry> ListFiles(string directoryPath, string searchPattern) => [];
     public bool ProjectFolderExists(string name) => true;
     public string GetProjectFolderPath(string name) => fixedPath;
     public void CreateProjectFolder(string name) { }

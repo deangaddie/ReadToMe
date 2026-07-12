@@ -467,3 +467,6 @@ readtome.db-wal
 
 # Junie
 .junie/
+
+# Scratch
+*.scratch/

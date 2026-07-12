@@ -1,6 +1,7 @@
 using System.IO;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -81,8 +82,32 @@ namespace Read2Me.App
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapBlazorHub();
+                endpoints.MapGet("/audio-preview/{token}", ServeAudioPreviewAsync);
                 endpoints.MapFallbackToPage("/_Host");
             });
+        }
+
+        /// Serves the consonant-soften A/B preview WAV rendered by the circuit that owns
+        /// <c>token</c>. The file is overwritten on every render, so it must never be cached.
+        private static async Task ServeAudioPreviewAsync(HttpContext context)
+        {
+            var token = (string?)context.Request.RouteValues["token"];
+
+            // Tokens are circuit-minted GUIDs; anything else cannot name a stored preview, and
+            // refusing it up front keeps the value away from the file path.
+            if (!Guid.TryParseExact(token, "N", out _) ||
+                !context.RequestServices.GetRequiredService<AudioPreviewStore>().TryGetPath(token!, out var path))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            context.Response.ContentType = "audio/wav";
+            context.Response.Headers.CacheControl = "no-store";
+            // Without an explicit length the response is chunked, and a WAV with no Content-Length
+            // gives the <audio> element an infinite duration — no total time, no scrub bar.
+            context.Response.ContentLength = new FileInfo(path!).Length;
+            await context.Response.SendFileAsync(path!);
         }
     }
 }

@@ -7,6 +7,7 @@ namespace Read2Me.Tests.Fakes
         private readonly string _root;
         private readonly HashSet<string> _folders = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, byte[]> _files = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, DateTime> _writeTimes = new(StringComparer.OrdinalIgnoreCase);
 
         public FakeFileSystem(string root = "C:\\fake-workspace")
         {
@@ -21,8 +22,29 @@ namespace Read2Me.Tests.Fakes
 
         public void SeedFile(string path, byte[] content) => _files[path] = content;
 
+        public void SeedFile(string path, byte[] content, DateTime lastWriteTimeUtc)
+        {
+            _files[path] = content;
+            _writeTimes[path] = lastWriteTimeUtc;
+        }
+
         public IReadOnlyList<string> ListProjectFolders() =>
             _folders.OrderBy(n => n).ToList();
+
+        public IReadOnlyList<FileEntry> ListFiles(string directoryPath, string searchPattern)
+        {
+            var prefix = directoryPath.TrimEnd('/', '\\') + Path.DirectorySeparatorChar;
+            var regex = new System.Text.RegularExpressions.Regex(
+                "^" + System.Text.RegularExpressions.Regex.Escape(searchPattern).Replace("\\*", ".*").Replace("\\?", ".") + "$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            return _files.Keys
+                .Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Where(p => !p[prefix.Length..].Contains(Path.DirectorySeparatorChar))
+                .Where(p => regex.IsMatch(Path.GetFileName(p)))
+                .Select(p => new FileEntry(p, _writeTimes.TryGetValue(p, out var t) ? t : DateTime.UnixEpoch))
+                .ToList();
+        }
 
         public bool ProjectFolderExists(string name) => _folders.Contains(name);
 

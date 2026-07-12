@@ -149,9 +149,23 @@ namespace Read2Me.Services
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);
     }
 
+    /// <summary>
+    /// A generated paragraph item offered as an audio sample: its text, who speaks it, and where
+    /// its stored WAV lives (relative to the project folder).
+    /// </summary>
+    public sealed record AudioSampleInfo(
+        Guid ParagraphItemId,
+        string Text,
+        string? CharacterName,
+        string AudioRelativePath);
+
     /// <summary>Audio-generation state: item refs, review rows, status seeds, and the assembly manifest.</summary>
     public interface IAudioItemReader
     {
+        // Text + speaker + stored WAV path for the given items. Ids without stored audio are skipped.
+        Task<IReadOnlyList<AudioSampleInfo>> GetAudioSampleInfosAsync(
+            ProjectFolderId folderId, IReadOnlyCollection<Guid> itemIds);
+
         // Returns non-Pause ParagraphItems (Character + Narration) scoped to the given node, for audio selection.
         // When needsAudioOnly is true, filters to items missing a WAV and attribution-ready (Narration always; Character only when CharacterId != null, unless narratorOnlyMode is true in which case unattributed Character items are also included).
         Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false);

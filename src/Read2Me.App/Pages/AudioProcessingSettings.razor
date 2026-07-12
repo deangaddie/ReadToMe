@@ -2,6 +2,8 @@
 @using Read2Me.App.Shared
 @using Read2Me.Services.Audio
 @inject AudioProcessingSettingsService SettingsService
+@inject IConsonantSoftenPreviewRenderer PreviewRenderer
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @implements IDisposable
 
@@ -137,6 +139,53 @@
                                  Min="40" Max="160" Step="10" Class="mt-3" />
             }
         }
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.subtitle2" Class="mb-1">A/B preview</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Renders the settings above — including unsaved changes — over a recently generated
+            paragraph so you can compare before saving.
+        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudButton Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.LibraryMusic"
+                       OnClick="PickSampleAsync">
+                @(_preview.Sample is null ? "Pick a sample" : "Change sample")
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.GraphicEq"
+                       Disabled="@(_preview.Sample is null || _preview.Rendering)"
+                       OnClick="RenderPreviewAsync">
+                @(_preview.Rendering ? "Rendering…" : "Render preview")
+            </MudButton>
+            @if (_preview.Rendering)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+        </MudStack>
+
+        @if (_preview.Sample is { } sample)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @(sample.CharacterName ?? "Narration")@(sample.VoiceName is null ? "" : $" · {sample.VoiceName}") · @sample.ProjectTitle
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mb-3">@sample.Text</MudText>
+
+            <MudText Typo="Typo.caption">Original</MudText>
+            <audio controls src="@_preview.OriginalUrl" style="width:100%" class="mb-3"></audio>
+
+            @if (_preview.FilteredUrl is { } filteredUrl)
+            {
+                <MudText Typo="Typo.caption">Filtered</MudText>
+                <audio controls src="@filteredUrl" style="width:100%"></audio>
+            }
+            @if (_preview.Reason is { } reason)
+            {
+                <MudAlert Severity="@(_preview.Applied ? Severity.Info : Severity.Warning)" Dense="true" Class="mt-3">
+                    @reason
+                </MudAlert>
+            }
+        }
     </MudCardContent>
     <MudCardActions>
         <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -239,11 +288,28 @@
     bool _testing;
 
     ConsonantSoftenForm _soften = ConsonantSoftenForm.FromConfig(null);
+    ConsonantSoftenPreviewModel _preview = default!;
 
     protected override async Task OnInitializedAsync()
     {
+        _preview = new ConsonantSoftenPreviewModel(PreviewRenderer);
         SettingsService.OnChanged += HandleChanged;
         await LoadAsync();
+    }
+
+    async Task PickSampleAsync()
+    {
+        var dialog = await DialogService.ShowAsync<RecentAudioPickerDialog>("Pick a sample");
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: RecentAudioSample sample })
+            _preview.Select(sample);
+    }
+
+    async Task RenderPreviewAsync()
+    {
+        await _preview.RenderAsync(_soften);
+        if (!_preview.Applied && _preview.Reason is { } reason)
+            Snackbar.Add($"Preview fell back to the unfiltered audio: {reason}", Severity.Warning);
     }
 
     void HandleChanged() => InvokeAsync(LoadAsync);

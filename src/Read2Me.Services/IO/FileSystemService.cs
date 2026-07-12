@@ -19,6 +19,15 @@ namespace Read2Me.Services.IO
                 .ToList();
         }
 
+        public IReadOnlyList<FileEntry> ListFiles(string directoryPath, string searchPattern)
+        {
+            if (!Directory.Exists(directoryPath)) return [];
+            return new DirectoryInfo(directoryPath)
+                .GetFiles(searchPattern)
+                .Select(f => new FileEntry(f.FullName, f.LastWriteTimeUtc))
+                .ToList();
+        }
+
         public bool ProjectFolderExists(string name) => Directory.Exists(Path.Combine(_workspace, name));
 
         public string GetProjectFolderPath(string name) => Path.Combine(_workspace, name);

@@ -1,0 +1,56 @@
+@using Read2Me.Services.Audio
+@inject IRecentAudioSampleFinder Finder
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Pick a sample</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+        }
+        else if (_samples.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                No generated paragraph audio yet — generate some audio in a project first.
+            </MudText>
+        }
+        else
+        {
+            <MudList T="RecentAudioSample" Dense="true">
+                @foreach (var sample in _samples)
+                {
+                    <MudListItem T="RecentAudioSample" OnClick="@(() => MudDialog.Close(DialogResult.Ok(sample)))">
+                        <MudText Typo="Typo.body2">@Snippet(sample.Text)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @(sample.CharacterName ?? "Narration")@(sample.VoiceName is null ? "" : $" · {sample.VoiceName}") · @sample.ProjectTitle
+                        </MudText>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    const int SampleLimit = 20;
+    const int SnippetLength = 90;
+
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    IReadOnlyList<RecentAudioSample> _samples = [];
+    bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _samples = await Finder.FindAsync(SampleLimit);
+        _loading = false;
+    }
+
+    static string Snippet(string text) =>
+        text.Length <= SnippetLength ? text : text[..SnippetLength] + "…";
+}

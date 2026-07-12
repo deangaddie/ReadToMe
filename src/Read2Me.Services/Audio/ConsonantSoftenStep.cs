@@ -12,12 +12,13 @@ namespace Read2Me.Services.Audio
     /// ffmpeg consonant-soften filter chain (see <see cref="ConsonantSoftenChainBuilder"/>).
     /// Honours the never-throw / never-lose-audio contract: any ffmpeg failure (missing exe,
     /// unsupported filter, non-zero exit, timeout) returns the input unchanged with
-    /// <see cref="PostProcessResult.Applied"/> false and a reason. No <c>-ar</c>/<c>-ac</c>
-    /// args — the provider sample rate is preserved.
+    /// <see cref="PostProcessResult.Applied"/> false and a reason. Output is written in the
+    /// canonical WAV format (24 kHz mono 16-bit PCM), same as the normalizer.
     /// </summary>
     public class ConsonantSoftenStep(ILogger<ConsonantSoftenStep> logger) : IAudioPostProcessStep
     {
         private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(60);
+        private static readonly string[] CanonicalFormatArgs = { "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le" };
 
         public string StepId => AudioPostProcessStepIds.ConsonantSoften;
 
@@ -44,7 +45,9 @@ namespace Read2Me.Services.Audio
                 try
                 {
                     await Cli.Wrap(exe)
-                        .WithArguments(new[] { "-y", "-i", inputPath, "-af", filter, outputPath })
+                        .WithArguments(new[] { "-y", "-i", inputPath, "-af", filter }
+                            .Concat(CanonicalFormatArgs)
+                            .Append(outputPath))
                         .WithStandardErrorPipe(PipeTarget.ToStringBuilder(stderr))
                         .WithValidation(CommandResultValidation.ZeroExitCode)
                         .ExecuteAsync(timeoutCts.Token);
