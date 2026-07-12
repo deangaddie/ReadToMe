@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
+using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
 using Read2Me.Services.Audio.ParagraphTts;
@@ -175,16 +176,21 @@ namespace Read2Me.Tests.Services.Audio
         private readonly List<AudioGenEvent> _events = new();
         private readonly IAudioItemPipeline _sut;
         private readonly FakeFileSystem _fs = new();
+        private readonly IPreviewSourceCache _previewSources;
+
+        private static readonly ProjectFolderId Folder = new("book-a");
 
         public AudioItemPipelineTests()
         {
             _fs.SeedFile(RefAudioPath, [0x52, 0x49, 0x46, 0x46]);
+            _previewSources = new PreviewSourceCache(_fs);
             _transcriptionSettings = new FakeTranscriptionSettings(TranscriptionConfig);
             _broadcaster.Event += e => _events.Add(e);
             _sut = new AudioItemPipeline(
                 new FakeTtsClientResolver(_tts),
                 _normalizer,
                 _postProcess,
+                _previewSources,
                 _wer,
                 new FakeTranscriptionResolver(_transcriber),
                 _transcriptionSettings,
@@ -200,6 +206,7 @@ namespace Read2Me.Tests.Services.Audio
             double werThreshold = 0.15,
             string? speaker = "Bilbo",
             string? referenceTranscript = null) => new(
+            Folder: Folder,
             ParagraphItemId: Guid.NewGuid(),
             SourceText: sourceText,
             VoiceInstructions: null,
@@ -213,6 +220,48 @@ namespace Read2Me.Tests.Services.Audio
             ReferenceTranscript: referenceTranscript);
 
         // ── tests ─────────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task PreviewSource_IsTheAudioBeforeTheSteps_NotTheStoredAudio()
+        {
+            // The A/B preview filters the Preview Source. If the steps had already touched it, the
+            // preview would stack consonant-soften on top of consonant-soften.
+            var step = new FakePostProcessStep();
+            _postProcess.Steps.Add(new EnabledPostProcessStep(step, "{}"));
+            var req = MakeRequest();
+
+            var result = await _sut.RunAsync(req, CancellationToken.None);
+
+            Assert.True(_previewSources.TryGetPath(Folder.Value, req.ParagraphItemId, out var path));
+            Assert.Equal(step.LastInput, _fs.GetFileContent(path!));
+            Assert.NotEqual(result.AudioBytes, _fs.GetFileContent(path!));
+        }
+
+        [Fact]
+        public async Task NormalizeFails_NoPreviewSourceIsCached()
+        {
+            // No step ever runs, and the audio is un-normalized provider-rate — not a valid source.
+            _normalizer.Status = NormalizeStatus.Skipped;
+            var req = MakeRequest();
+
+            await _sut.RunAsync(req, CancellationToken.None);
+
+            Assert.False(_previewSources.TryGetPath(Folder.Value, req.ParagraphItemId, out _));
+        }
+
+        [Fact]
+        public async Task Retries_LeaveThePreviewSourceMatchingTheKeptAttempt()
+        {
+            _wer.Enqueue(0.9, 0.0);
+            var req = MakeRequest(maxAttempts: 2);
+
+            await _sut.RunAsync(req, CancellationToken.None);
+
+            // One entry, overwritten by the final attempt — not one file per attempt.
+            var entries = _previewSources.List();
+            Assert.Single(entries);
+            Assert.Equal(req.ParagraphItemId, entries[0].ParagraphItemId);
+        }
 
         [Fact]
         public async Task HappyPath_Attempt1_ReturnsOkResult_CorrectEventSequence()

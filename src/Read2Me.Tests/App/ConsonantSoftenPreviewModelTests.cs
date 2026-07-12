@@ -13,17 +13,17 @@ namespace Read2Me.Tests.App
             public int Calls { get; private set; }
             public string? ReceivedToken { get; private set; }
             public ProjectFolderId ReceivedFolder { get; private set; }
-            public string? ReceivedAudioPath { get; private set; }
+            public Guid ReceivedItemId { get; private set; }
             public AudioPostProcessStepConfig? ReceivedDraft { get; private set; }
 
             public Task<PreviewRenderResult> RenderAsync(
-                string token, ProjectFolderId folder, string audioRelativePath,
+                string token, ProjectFolderId folder, Guid itemId,
                 AudioPostProcessStepConfig draft, CancellationToken ct = default)
             {
                 Calls++;
                 ReceivedToken = token;
                 ReceivedFolder = folder;
-                ReceivedAudioPath = audioRelativePath;
+                ReceivedItemId = itemId;
                 ReceivedDraft = draft;
                 return Task.FromResult(result);
             }
@@ -31,8 +31,8 @@ namespace Read2Me.Tests.App
 
         private static readonly PreviewRenderResult Ok = new(Applied: true, Reason: null, HasPreview: true);
 
-        private static RecentAudioSample Sample(string folder = "book-a", string path = "audio/item.wav") =>
-            new(folder, "Book A", Guid.NewGuid(), path, "hello there", "Alice", "Warm Alto");
+        private static RecentAudioSample Sample(string folder = "book-a") =>
+            new(folder, "Book A", Guid.NewGuid(), "hello there", "Alice", "Warm Alto");
 
         [Fact]
         public async Task Render_sends_the_cards_draft_settings_to_the_renderer()
@@ -42,13 +42,14 @@ namespace Read2Me.Tests.App
             var form = ConsonantSoftenForm.FromConfig(null);
             form.SetEngine(ConsonantSoftenEngines.Deesser);
             form.SetPreset(ConsonantSoftenPresets.Light);
-            model.Select(Sample());
+            var sample = Sample();
+            model.Select(sample);
 
             await model.RenderAsync(form);
 
             Assert.Equal(1, renderer.Calls);
             Assert.Equal("book-a", renderer.ReceivedFolder.Value);
-            Assert.Equal("audio/item.wav", renderer.ReceivedAudioPath);
+            Assert.Equal(sample.ParagraphItemId, renderer.ReceivedItemId);
             Assert.Equal(model.Token, renderer.ReceivedToken);
 
             var settings = JsonSerializer.Deserialize<ConsonantSoftenSettings>(
@@ -61,9 +62,11 @@ namespace Read2Me.Tests.App
         public async Task Players_get_distinct_sources_after_a_render()
         {
             var model = new ConsonantSoftenPreviewModel(new SpyRenderer(Ok));
-            model.Select(Sample());
+            var sample = Sample();
+            model.Select(sample);
 
-            Assert.Equal("/workspace/book-a/audio/item.wav", model.OriginalUrl);
+            // The Original player must serve the Preview Source, never the post-processed {id}.wav.
+            Assert.Equal($"/preview-source/book-a/{sample.ParagraphItemId:D}", model.OriginalUrl);
             Assert.Null(model.FilteredUrl);
 
             await model.RenderAsync(ConsonantSoftenForm.FromConfig(null));
@@ -92,10 +95,11 @@ namespace Read2Me.Tests.App
             model.Select(Sample());
             await model.RenderAsync(ConsonantSoftenForm.FromConfig(null));
 
-            model.Select(Sample("book-b", "audio/other.wav"));
+            var next = Sample("book-b");
+            model.Select(next);
 
             Assert.Null(model.FilteredUrl);
-            Assert.Equal("/workspace/book-b/audio/other.wav", model.OriginalUrl);
+            Assert.Equal($"/preview-source/book-b/{next.ParagraphItemId:D}", model.OriginalUrl);
         }
 
         [Fact]

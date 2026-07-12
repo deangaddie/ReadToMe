@@ -5,6 +5,13 @@ namespace Read2Me.Core.IO
 
     public interface IFileSystem
     {
+        /// <summary>The workspace root. Scratch stores that are not projects live in dot-prefixed dirs under it.</summary>
+        string WorkspacePath { get; }
+
+        /// <summary>
+        /// Project folders under the workspace. Dot-prefixed directories are excluded — they are
+        /// scratch stores (or tooling like <c>.git</c>), never projects.
+        /// </summary>
         IReadOnlyList<string> ListProjectFolders();
 
         /// <summary>

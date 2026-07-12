@@ -76,8 +76,7 @@ namespace Read2Me.Services
                 .Select(i => new AudioSampleInfo(
                     i.Id,
                     i.Text ?? "",
-                    i.Character != null ? i.Character.Name : null,
-                    i.AudioFileName!))
+                    i.Character != null ? i.Character.Name : null))
                 .ToListAsync();
         }
 

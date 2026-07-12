@@ -1,4 +1,5 @@
 using Read2Me.AppData.Entities;
+using Read2Me.Core.Models;
 
 namespace Read2Me.Services.Audio
 {
@@ -12,6 +13,7 @@ namespace Read2Me.Services.Audio
         VerifyOutcome Verify);
 
     public record PipelineRequest(
+        ProjectFolderId Folder,
         Guid ParagraphItemId,
         string SourceText,
         string? VoiceInstructions,

@@ -82,6 +82,7 @@ namespace Read2Me.Services.Audio
                 : await voiceDesignSettings.GetSampleTextAsync();
 
             var request = new PipelineRequest(
+                Folder: folder,
                 ParagraphItemId: itemRef.ParagraphItemId,
                 SourceText: sourceText,
                 Speaker: speaker,

@@ -8,12 +8,14 @@ namespace Read2Me.Services.IO
     {
         private readonly string _workspace = options.Value.FolderPath;
 
+        public string WorkspacePath => _workspace;
+
         public IReadOnlyList<string> ListProjectFolders()
         {
             if (!Directory.Exists(_workspace)) return [];
             return Directory.GetDirectories(_workspace)
                 .Select(Path.GetFileName)
-                .Where(n => n is not null)
+                .Where(n => !string.IsNullOrEmpty(n) && !n.StartsWith('.'))
                 .Select(n => n!)
                 .OrderBy(n => n)
                 .ToList();

@@ -8,6 +8,7 @@ namespace Read2Me.Tests.Fakes
         private readonly HashSet<string> _folders = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, byte[]> _files = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, DateTime> _writeTimes = new(StringComparer.OrdinalIgnoreCase);
+        private DateTime _clock = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         public FakeFileSystem(string root = "C:\\fake-workspace")
         {
@@ -28,8 +29,10 @@ namespace Read2Me.Tests.Fakes
             _writeTimes[path] = lastWriteTimeUtc;
         }
 
+        public string WorkspacePath => _root;
+
         public IReadOnlyList<string> ListProjectFolders() =>
-            _folders.OrderBy(n => n).ToList();
+            _folders.Where(n => !n.StartsWith('.')).OrderBy(n => n).ToList();
 
         public IReadOnlyList<FileEntry> ListFiles(string directoryPath, string searchPattern)
         {
@@ -77,6 +80,9 @@ namespace Read2Me.Tests.Fakes
             using var ms = new MemoryStream();
             await source.CopyToAsync(ms);
             _files[path] = ms.ToArray();
+            // Each write is strictly newer than the last, so tests that order by recency (the preview
+            // source cache) see a stable sequence without sleeping.
+            _writeTimes[path] = _clock = _clock.AddSeconds(1);
         }
 
         public Task WriteAllLinesAsync(string path, IEnumerable<string> lines)

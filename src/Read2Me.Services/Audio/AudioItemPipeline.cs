@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
+using Read2Me.Core.Models;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
@@ -12,6 +13,7 @@ namespace Read2Me.Services.Audio
         IParagraphTtsClientResolver ttsResolver,
         IAudioNormalizer normalizer,
         IAudioPostProcessStepCatalog postProcessCatalog,
+        IPreviewSourceCache previewSources,
         IWerComparer werComparer,
         ITranscriptionClientResolver transcriptionResolver,
         TranscriptionSettingsService transcriptionSettings,
@@ -60,6 +62,8 @@ namespace Read2Me.Services.Audio
                     break;
                 }
 
+                await SavePreviewSourceAsync(req.Folder, id, audioBytes, ct);
+
                 audioBytes = await PostProcessAsync(id, attempt, audioBytes, req.FfmpegPath, ct);
 
                 verifyOutcome = await VerifyAsync(id, attempt, audioBytes, req.SourceText, req.WerThreshold, ct);
@@ -82,6 +86,27 @@ namespace Read2Me.Services.Audio
             }
 
             return new PipelineResult(audioBytes, normalizeOutcome, verifyOutcome);
+        }
+
+        /// Parks the normalized-but-not-yet-stepped audio as this item's Preview Source, so the A/B
+        /// preview has something honest to filter — the audio that ends up in {id}.wav has already
+        /// been through the steps. Retries just overwrite, so the cache always holds the bytes behind
+        /// the attempt that was kept. The preview is cosmetic and the cache is scratch, so *nothing* it
+        /// can throw is worth the item's audio — every failure is swallowed, not just the I/O ones.
+        private async Task SavePreviewSourceAsync(ProjectFolderId folder, Guid id, byte[] audioBytes, CancellationToken ct)
+        {
+            try
+            {
+                await previewSources.SaveAsync(folder, id, audioBytes, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Item {Id} preview source could not be cached", id);
+            }
         }
 
         /// Runs the enabled post-process steps in stored order on normalized audio. Steps are

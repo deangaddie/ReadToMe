@@ -25,6 +25,7 @@ namespace Read2Me.Tests.App.Audio
         private const string FolderName = "test-book";
 
         private static readonly PipelineRequest DefaultRequest = new(
+            Folder: new ProjectFolderId(FolderName),
             ParagraphItemId: Guid.NewGuid(),
             SourceText: "In a hole in the ground",
             Speaker: "Bilbo",

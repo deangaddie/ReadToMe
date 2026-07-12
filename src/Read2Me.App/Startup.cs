@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using Read2Me.App.Configuration;
 using Read2Me.Core.Configuration;
+using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
@@ -83,8 +84,29 @@ namespace Read2Me.App
             {
                 endpoints.MapBlazorHub();
                 endpoints.MapGet("/audio-preview/{token}", ServeAudioPreviewAsync);
+                endpoints.MapGet("/preview-source/{folder}/{id}", ServePreviewSourceAsync);
                 endpoints.MapFallbackToPage("/_Host");
             });
+        }
+
+        /// Serves an item's Preview Source — the unprocessed side of the A/B preview. It lives in a
+        /// dot-prefixed dir the static-file provider will not serve, so it needs a route of its own.
+        private static async Task ServePreviewSourceAsync(HttpContext context)
+        {
+            var folder = (string?)context.Request.RouteValues["folder"];
+            var id = (string?)context.Request.RouteValues["id"];
+
+            // Both route values are parsed before either can reach a file path, so a traversal
+            // attempt is a 404 rather than a read.
+            if (!ProjectFolderId.TryParse(folder, out var folderId) || !Guid.TryParse(id, out var itemId) ||
+                !context.RequestServices.GetRequiredService<IPreviewSourceCache>()
+                    .TryGetPath(folderId, itemId, out var path))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            await SendWavAsync(context, path!);
         }
 
         /// Serves the consonant-soften A/B preview WAV rendered by the circuit that owns
@@ -102,12 +124,18 @@ namespace Read2Me.App
                 return;
             }
 
+            await SendWavAsync(context, path!);
+        }
+
+        /// Preview files are overwritten in place, so they must never be cached. The explicit length
+        /// matters too: without it the response is chunked, and a WAV with no Content-Length gives the
+        /// <c>&lt;audio&gt;</c> element an infinite duration — no total time, no scrub bar.
+        private static async Task SendWavAsync(HttpContext context, string path)
+        {
             context.Response.ContentType = "audio/wav";
             context.Response.Headers.CacheControl = "no-store";
-            // Without an explicit length the response is chunked, and a WAV with no Content-Length
-            // gives the <audio> element an infinite duration — no total time, no scrub bar.
-            context.Response.ContentLength = new FileInfo(path!).Length;
-            await context.Response.SendFileAsync(path!);
+            context.Response.ContentLength = new FileInfo(path).Length;
+            await context.Response.SendFileAsync(path);
         }
     }
 }

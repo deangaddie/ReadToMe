@@ -149,20 +149,16 @@ namespace Read2Me.Services
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);
     }
 
-    /// <summary>
-    /// A generated paragraph item offered as an audio sample: its text, who speaks it, and where
-    /// its stored WAV lives (relative to the project folder).
-    /// </summary>
+    /// <summary>A generated paragraph item offered as an audio sample: its text and who speaks it.</summary>
     public sealed record AudioSampleInfo(
         Guid ParagraphItemId,
         string Text,
-        string? CharacterName,
-        string AudioRelativePath);
+        string? CharacterName);
 
     /// <summary>Audio-generation state: item refs, review rows, status seeds, and the assembly manifest.</summary>
     public interface IAudioItemReader
     {
-        // Text + speaker + stored WAV path for the given items. Ids without stored audio are skipped.
+        // Text + speaker for the given items. Ids without stored audio are skipped.
         Task<IReadOnlyList<AudioSampleInfo>> GetAudioSampleInfosAsync(
             ProjectFolderId folderId, IReadOnlyCollection<Guid> itemIds);
 

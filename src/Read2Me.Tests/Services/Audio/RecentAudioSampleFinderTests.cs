@@ -13,6 +13,7 @@ namespace Read2Me.Tests.Services.Audio
         private const string Root = "C:\\fake-workspace";
 
         private readonly FakeFileSystem _fs = new(Root);
+        private readonly IPreviewSourceCache _previewSources;
         private readonly IProjectCatalogReader _catalog = Substitute.For<IProjectCatalogReader>();
         private readonly IAudioItemReader _items = Substitute.For<IAudioItemReader>();
         private readonly IVoiceResolver _voices = Substitute.For<IVoiceResolver>();
@@ -21,6 +22,7 @@ namespace Read2Me.Tests.Services.Audio
 
         public RecentAudioSampleFinderTests()
         {
+            _previewSources = new PreviewSourceCache(_fs);
             _items.GetAudioSampleInfosAsync(Arg.Any<ProjectFolderId>(), Arg.Any<IReadOnlyCollection<Guid>>())
                 .Returns(ci =>
                 {
@@ -32,28 +34,29 @@ namespace Read2Me.Tests.Services.Audio
                 });
         }
 
-        private RecentAudioSampleFinder Finder() => new(_fs, _catalog, _items, _voices);
+        private RecentAudioSampleFinder Finder() => new(_previewSources, _catalog, _items, _voices);
 
         [Fact]
-        public async Task Orders_by_audio_write_time_across_projects_and_applies_limit()
+        public async Task Orders_by_preview_source_recency_across_projects_and_applies_limit()
         {
-            var oldest = SeedItem("book-a", "Alice", "line one", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-            var newest = SeedItem("book-b", "Bob", "line two", new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc));
-            var middle = SeedItem("book-a", "Alice", "line three", new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+            // The cache writes in call order, so the last item seeded is the newest.
+            var oldest = await SeedItemAsync("book-a", "Alice", "line one");
+            var middle = await SeedItemAsync("book-a", "Alice", "line three");
+            var newest = await SeedItemAsync("book-b", "Bob", "line two");
             SeedProjects(("book-a", "Book A"), ("book-b", "Book B"));
 
             var samples = await Finder().FindAsync(limit: 2);
 
             Assert.Equal([newest, middle], samples.Select(s => s.ParagraphItemId));
             Assert.Equal("Book B", samples[0].ProjectTitle);
-            Assert.Equal("book-b", samples[0].FolderName);
+            Assert.Equal("book-b", samples[0].Folder.Value);
             Assert.DoesNotContain(oldest, samples.Select(s => s.ParagraphItemId));
         }
 
         [Fact]
         public async Task Fills_row_details_from_reader_and_voice_resolver()
         {
-            var id = SeedItem("book-a", "Alice", "hello there", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            var id = await SeedItemAsync("book-a", "Alice", "hello there");
             SeedProjects(("book-a", "Book A"));
             _voices.ResolveNamesAsync(new ProjectFolderId("book-a"), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
                 .Returns(new Dictionary<Guid, string?> { [id] = "Warm Alto" });
@@ -63,21 +66,31 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal("hello there", sample.Text);
             Assert.Equal("Alice", sample.CharacterName);
             Assert.Equal("Warm Alto", sample.VoiceName);
-            Assert.Equal($"audio/{id}.wav", sample.AudioRelativePath);
         }
 
         [Fact]
-        public async Task Skips_wavs_with_no_matching_item_row()
+        public async Task Skips_preview_sources_with_no_matching_item_row()
         {
-            // An orphan WAV (item deleted, file left behind) must not become a picker row.
-            _fs.SeedFile(Path.Combine(Root, "book-a", "audio", $"{Guid.NewGuid()}.wav"), [1], DateTime.UnixEpoch);
+            // An orphan source (item deleted, file left behind) must not become a picker row.
+            await _previewSources.SaveAsync(new ProjectFolderId("book-a"), Guid.NewGuid(), [1]);
             SeedProjects(("book-a", "Book A"));
 
             Assert.Empty(await Finder().FindAsync(limit: 20));
         }
 
         [Fact]
-        public async Task Ignores_project_folders_with_no_audio_directory()
+        public async Task Skips_preview_sources_whose_project_is_gone()
+        {
+            // The cache outlives the project — opening its DB would throw, so it must not be tried.
+            await SeedItemAsync("deleted-book", "Alice", "line one");
+            SeedProjects(("book-a", "Book A"));
+
+            Assert.Empty(await Finder().FindAsync(limit: 20));
+            await _items.DidNotReceiveWithAnyArgs().GetAudioSampleInfosAsync(default, default!);
+        }
+
+        [Fact]
+        public async Task Empty_cache_touches_no_project_db()
         {
             SeedProjects(("book-a", "Book A"));
 
@@ -92,14 +105,14 @@ namespace Read2Me.Tests.Services.Audio
                 projects.Select(p => new ProjectSummary(p.Folder, p.Title)).ToList());
         }
 
-        private Guid SeedItem(string folder, string character, string text, DateTime writtenUtc)
+        private async Task<Guid> SeedItemAsync(string folder, string character, string text)
         {
             var id = Guid.NewGuid();
-            _fs.SeedFile(Path.Combine(Root, folder, "audio", $"{id}.wav"), [1, 2, 3], writtenUtc);
+            await _previewSources.SaveAsync(new ProjectFolderId(folder), id, [1, 2, 3]);
 
             if (!_rows.TryGetValue(folder, out var rows))
                 _rows[folder] = rows = [];
-            rows.Add(new AudioSampleInfo(id, text, character, $"audio/{id}.wav"));
+            rows.Add(new AudioSampleInfo(id, text, character));
             return id;
         }
     }

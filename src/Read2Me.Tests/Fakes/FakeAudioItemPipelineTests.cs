@@ -8,6 +8,7 @@ namespace Read2Me.Tests.Fakes
     public class FakeAudioItemPipelineTests
     {
         private static PipelineRequest MakeRequest() => new(
+            Folder: new Read2Me.Core.Models.ProjectFolderId("book-a"),
             ParagraphItemId: Guid.NewGuid(),
             SourceText: "Hello world",
             VoiceInstructions: null,

@@ -13,6 +13,7 @@ namespace Read2Me.Tests.Services;
 // Maps any folder name to a fixed real directory on disk so the service finds the DB and files.
 file sealed class FixedPathFileSystem(string fixedPath) : IFileSystem
 {
+    public string WorkspacePath => fixedPath;
     public IReadOnlyList<string> ListProjectFolders() => [];
     public IReadOnlyList<FileEntry> ListFiles(string directoryPath, string searchPattern) => [];
     public bool ProjectFolderExists(string name) => true;

@@ -4,10 +4,11 @@ namespace Read2Me.App.Shared
 {
     /// <summary>
     /// Edit-state for the consonant-soften card's A/B preview: which recent item is being
-    /// auditioned, and the two player sources (stored WAV vs the rendered draft). Renders are
-    /// on demand — the card's draft settings are only pushed through ffmpeg when the user asks,
-    /// never per keystroke. The token keys this circuit's preview file in
-    /// <see cref="AudioPreviewStore"/>.
+    /// auditioned, and the two player sources. Both sides are the item's <b>Preview Source</b> —
+    /// unfiltered on the left, run through the draft settings on the right — so the comparison is
+    /// off-vs-draft rather than saved-vs-saved-twice. Renders are on demand: the draft settings are
+    /// only pushed through ffmpeg when the user asks, never per keystroke. The token keys this
+    /// circuit's rendered file in <see cref="AudioPreviewStore"/>.
     /// </summary>
     public sealed class ConsonantSoftenPreviewModel(IConsonantSoftenPreviewRenderer renderer)
     {
@@ -22,7 +23,7 @@ namespace Read2Me.App.Shared
         public string? Reason { get; private set; }
 
         public string? OriginalUrl =>
-            Sample is null ? null : $"/workspace/{Sample.FolderName}/{Sample.AudioRelativePath}";
+            Sample is null ? null : $"/preview-source/{Uri.EscapeDataString(Sample.Folder.Value)}/{Sample.ParagraphItemId:D}";
 
         /// <summary>Cache-busted per render — the preview file is overwritten in place.</summary>
         public string? FilteredUrl =>
@@ -46,7 +47,7 @@ namespace Read2Me.App.Shared
             try
             {
                 var result = await renderer.RenderAsync(
-                    Token, Sample.FolderName, Sample.AudioRelativePath, form.BuildConfig(), ct);
+                    Token, Sample.Folder, Sample.ParagraphItemId, form.BuildConfig(), ct);
 
                 Applied = result.Applied;
                 Reason = result.Reason;

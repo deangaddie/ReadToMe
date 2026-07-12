@@ -118,6 +118,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAudioPostProcessStepCatalog, AudioPostProcessStepCatalog>();
         services.AddScoped<IAudioPostProcessStep, ConsonantSoftenStep>();
         services.AddSingleton<AudioPreviewStore>();
+        services.AddScoped<IPreviewSourceCache, PreviewSourceCache>();
         services.AddScoped<IConsonantSoftenPreviewRenderer, ConsonantSoftenPreviewRenderer>();
         services.AddScoped<IRecentAudioSampleFinder, RecentAudioSampleFinder>();
         services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.Assembly.AssemblyEvent>>();

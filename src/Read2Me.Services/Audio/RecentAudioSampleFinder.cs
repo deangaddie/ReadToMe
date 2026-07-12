@@ -1,4 +1,3 @@
-using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Voice;
 
@@ -6,10 +5,9 @@ namespace Read2Me.Services.Audio
 {
     /// <summary>One row in the recent-audio picker: a generated paragraph item and its provenance.</summary>
     public sealed record RecentAudioSample(
-        string FolderName,
+        ProjectFolderId Folder,
         string ProjectTitle,
         Guid ParagraphItemId,
-        string AudioRelativePath,
         string Text,
         string? CharacterName,
         string? VoiceName);
@@ -17,19 +15,19 @@ namespace Read2Me.Services.Audio
     public interface IRecentAudioSampleFinder
     {
         /// <summary>
-        /// The most recently generated paragraph-item audio across every project, newest first.
+        /// The most recently generated paragraph items that still hold a <b>Preview Source</b>, newest first.
         /// </summary>
         Task<IReadOnlyList<RecentAudioSample>> FindAsync(int limit, CancellationToken ct = default);
     }
 
     /// <summary>
-    /// Finds recent paragraph audio for the consonant-soften A/B preview picker.
-    /// Recency comes from the WAV's last-write time — a generated item carries no timestamp of its
-    /// own, and the file is rewritten on every regeneration, so its mtime <em>is</em> "when this
-    /// audio was made". Files are stat'd first so only the winning handful hit a project DB.
+    /// Finds samples for the consonant-soften A/B preview picker. An item is offerable only while its
+    /// Preview Source is still cached, so the cache — not the project audio folders — is the list to
+    /// walk: it is already capped, already global, and already ordered by generation time. Only the
+    /// winning handful hit a project DB.
     /// </summary>
     public class RecentAudioSampleFinder(
-        IFileSystem fs,
+        IPreviewSourceCache previewSources,
         IProjectCatalogReader catalog,
         IAudioItemReader items,
         IVoiceResolver voices) : IRecentAudioSampleFinder
@@ -38,51 +36,43 @@ namespace Read2Me.Services.Audio
         {
             if (limit <= 0) return [];
 
-            var recent = catalog.GetProjects()
-                .SelectMany(folder => fs
-                    .ListFiles(Path.Combine(fs.GetProjectFolderPath(folder), "audio"), "*.wav")
-                    .Select(f => (Folder: folder, File: f)))
-                .Where(x => Guid.TryParse(Path.GetFileNameWithoutExtension(x.File.Path), out _))
-                .OrderByDescending(x => x.File.LastWriteTimeUtc)
-                .Take(limit)
-                .ToList();
-
+            var recent = previewSources.List().Take(limit).ToList();
             if (recent.Count == 0) return [];
 
             var titles = (await catalog.GetProjectSummariesAsync())
                 .ToDictionary(s => s.FolderName, s => s.Title);
 
+            // The cache outlives the projects it caches for, so a deleted project can still have
+            // entries. Drop them before anyone tries to open a DB that is no longer there.
+            recent = recent.Where(e => titles.ContainsKey(e.Folder.Value)).ToList();
+            if (recent.Count == 0) return [];
+
             var byFolder = new Dictionary<string, (Dictionary<Guid, AudioSampleInfo> Rows, IReadOnlyDictionary<Guid, string?> Voices)>();
 
-            foreach (var group in recent.GroupBy(x => x.Folder))
+            foreach (var group in recent.GroupBy(e => e.Folder))
             {
-                var folderId = new ProjectFolderId(group.Key);
-                var ids = group
-                    .Select(x => Guid.Parse(Path.GetFileNameWithoutExtension(x.File.Path)))
-                    .ToList();
+                var ids = group.Select(e => e.ParagraphItemId).ToList();
 
-                var rows = await items.GetAudioSampleInfosAsync(folderId, ids);
-                var voiceNames = await voices.ResolveNamesAsync(folderId, ids, ct);
-                byFolder[group.Key] = (rows.ToDictionary(r => r.ParagraphItemId), voiceNames);
+                var rows = await items.GetAudioSampleInfosAsync(group.Key, ids);
+                var voiceNames = await voices.ResolveNamesAsync(group.Key, ids, ct);
+                byFolder[group.Key.Value] = (rows.ToDictionary(r => r.ParagraphItemId), voiceNames);
             }
 
             var samples = new List<RecentAudioSample>();
-            foreach (var (folder, file) in recent)
+            foreach (var entry in recent)
             {
-                var itemId = Guid.Parse(Path.GetFileNameWithoutExtension(file.Path));
-                var (rows, voiceNames) = byFolder[folder];
+                var (rows, voiceNames) = byFolder[entry.Folder.Value];
 
-                // A WAV whose item row is gone (deleted item) is an orphan file, not a sample.
-                if (!rows.TryGetValue(itemId, out var row)) continue;
+                // A Preview Source whose item row is gone (deleted item) is an orphan file, not a sample.
+                if (!rows.TryGetValue(entry.ParagraphItemId, out var row)) continue;
 
                 samples.Add(new RecentAudioSample(
-                    folder,
-                    titles.TryGetValue(folder, out var title) ? title : folder,
-                    itemId,
-                    row.AudioRelativePath,
+                    entry.Folder,
+                    titles[entry.Folder.Value],
+                    entry.ParagraphItemId,
                     row.Text,
                     row.CharacterName,
-                    voiceNames.TryGetValue(itemId, out var voice) ? voice : null));
+                    voiceNames.TryGetValue(entry.ParagraphItemId, out var voice) ? voice : null));
             }
 
             return samples;
