@@ -1,11 +1,8 @@
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Threading;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
-using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Voice;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Voice
@@ -31,6 +28,9 @@ namespace Read2Me.Tests.Services.Voice
                 return Task.FromResult(_template);
             }
 
+            public override Task<string> GetVoicePlanPromptAsync()
+                => Task.FromResult(_template);
+
             public void FireOnChanged() => NotifyChanged();
         }
 
@@ -41,83 +41,119 @@ namespace Read2Me.Tests.Services.Voice
             public override Task<LlmServerConfig?> GetActiveConfigAsync() => Task.FromResult(_config);
         }
 
-        private sealed class FakeLlmClient : ILlmClient
-        {
-            private readonly IReadOnlyList<LlmChatChunk> _chunks;
-            public FakeLlmClient(params LlmChatChunk[] chunks) => _chunks = chunks;
+        private static LlmServerConfig Config() => new() { Name = "t", BaseUrl = "http://x", Model = "m" };
 
-            public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
-                LlmServerConfig config, string prompt, string? jsonSchema = null,
-                [EnumeratorCancellation] CancellationToken ct = default)
-            {
-                foreach (var c in _chunks)
-                    yield return c;
-                await Task.CompletedTask;
-            }
+        private static VoiceDesignPromptService Create(
+            FakeLlmCompletionRunner runner,
+            LlmServerConfig? config = null,
+            string template = "template")
+            => new(
+                runner,
+                new FakeLlmSettings(config),
+                new FakeLlmPromptService(template),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<VoiceDesignPromptService>.Instance);
 
-            public Task<IReadOnlyList<string>> GetModelsAsync(LlmServerConfig config, CancellationToken ct = default)
-                => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
+        // ---- Voice prompt path (free text) ----
 
         [Fact]
-        public async Task GenerateWithPrompt_PublishesStreamEvents()
+        public async Task GenerateWithPrompt_Success_ReturnsTrimmedText_AndSendsFreeTextRequest()
         {
-            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
-            var events = new List<LlmStreamEvent>();
-            broadcaster.Event += events.Add;
-
-            var sut = new VoiceDesignPromptService(
-                llm: new FakeLlmClient(
-                    new LlmChatChunk("pondering", null, false),
-                    new LlmChatChunk(null, "rich voice", false),
-                    new LlmChatChunk(null, " description", false),
-                    new LlmChatChunk(null, null, Done: true)),
-                settings: new FakeLlmSettings(new LlmServerConfig { Name = "t", BaseUrl = "http://x", Model = "m" }),
-                prompts: new FakeLlmPromptService("template"),
-                logger: null!,
-                broadcaster: broadcaster);
+            var runner = new FakeLlmCompletionRunner().Completes("  rich voice description \n");
+            var sut = Create(runner, Config());
 
             var result = await sut.GenerateWithPromptAsync("rendered prompt");
 
             Assert.Equal(VoiceDesignPromptService.GenerateStatus.Success, result.Status);
             Assert.Equal("rich voice description", result.Prompt);
 
-            Assert.Collection(events,
-                e => Assert.Equal("rendered prompt", Assert.IsType<RequestStarted>(e).Prompt),
-                e => Assert.Equal("pondering", Assert.IsType<ThinkingDelta>(e).Text),
-                e => Assert.Equal("rich voice", Assert.IsType<ContentDelta>(e).Text),
-                e => Assert.Equal(" description", Assert.IsType<ContentDelta>(e).Text),
-                e => Assert.IsType<StreamCompleted>(e));
+            var request = Assert.Single(runner.Requests);
+            Assert.Equal("rendered prompt", request.Prompt);
+            Assert.Equal("Voice prompt", request.Label);
+            Assert.Equal(CompletionShape.None, request.Shape);
+            Assert.Null(request.JsonSchema);
+            Assert.Equal("http://x", request.Config.BaseUrl);
         }
 
         [Fact]
-        public async Task GenerateWithPrompt_NoLlmConfigured_PublishesNothing()
+        public async Task GenerateWithPrompt_NoLlmConfigured_DoesNotRun()
         {
-            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
-            var events = new List<LlmStreamEvent>();
-            broadcaster.Event += events.Add;
-
-            var sut = new VoiceDesignPromptService(
-                llm: new FakeLlmClient(),
-                settings: new FakeLlmSettings(null),
-                prompts: new FakeLlmPromptService("template"),
-                logger: Microsoft.Extensions.Logging.Abstractions.NullLogger<VoiceDesignPromptService>.Instance,
-                broadcaster: broadcaster);
+            var runner = new FakeLlmCompletionRunner();
+            var sut = Create(runner, config: null);
 
             var result = await sut.GenerateWithPromptAsync("rendered prompt");
 
             Assert.Equal(VoiceDesignPromptService.GenerateStatus.NoLlmConfigured, result.Status);
-            Assert.Empty(events);
+            Assert.Empty(runner.Requests);
         }
+
+        [Fact]
+        public async Task GenerateWithPrompt_RunnerFailure_MapsToFailedWithReason()
+        {
+            var runner = new FakeLlmCompletionRunner()
+                .Fails(LlmRunOutcome.ServiceUnavailable, "llama is down");
+            var sut = Create(runner, Config());
+
+            var result = await sut.GenerateWithPromptAsync("rendered prompt");
+
+            Assert.Equal(VoiceDesignPromptService.GenerateStatus.Failed, result.Status);
+            Assert.Equal("llama is down", result.FailureReason);
+        }
+
+        // ---- Voice plan path (JSON object) ----
+
+        private const string PlanJson =
+            """[{"name":"Default","description":"calm","design_prompt":"A calm voice"}]""";
+
+        [Fact]
+        public async Task GeneratePlan_Success_ReturnsVoices_AndSendsSchemaConstrainedRequest()
+        {
+            var runner = new FakeLlmCompletionRunner().Completes(PlanJson);
+            var sut = Create(runner, Config());
+
+            var result = await sut.GeneratePlanAsync("Dune", "Herbert", "Paul");
+
+            Assert.Equal(VoiceDesignPromptService.GenerateStatus.Success, result.Status);
+            Assert.NotNull(result.Voices);
+            Assert.Equal("Default", Assert.Single(result.Voices).Name);
+
+            var request = Assert.Single(runner.Requests);
+            Assert.Equal("Voice plan: Paul", request.Label);
+            Assert.Equal(CompletionShape.Array, request.Shape);
+            Assert.Equal(VoicePlanSchema.JsonSchema, request.JsonSchema);
+        }
+
+        [Fact]
+        public async Task GeneratePlan_UnparsableResponse_MapsToFailed()
+        {
+            var runner = new FakeLlmCompletionRunner().Completes("not json");
+            var sut = Create(runner, Config());
+
+            var result = await sut.GeneratePlanAsync("Dune", "Herbert", "Paul");
+
+            Assert.Equal(VoiceDesignPromptService.GenerateStatus.Failed, result.Status);
+            Assert.Null(result.Voices);
+            Assert.NotNull(result.FailureReason);
+        }
+
+        [Fact]
+        public async Task GeneratePlan_NoLlmConfigured_DoesNotRun()
+        {
+            var runner = new FakeLlmCompletionRunner();
+            var sut = Create(runner, config: null);
+
+            var result = await sut.GeneratePlanAsync("Dune", "Herbert", "Paul");
+
+            Assert.Equal(VoiceDesignPromptService.GenerateStatus.NoLlmConfigured, result.Status);
+            Assert.Empty(runner.Requests);
+        }
+
+        // ---- Prompt rendering ----
 
         [Fact]
         public async Task BuildRenderedPrompt_SubstitutesAllTokens()
         {
-            var sut = new VoiceDesignPromptService(
-                llm: null!,
-                settings: null!,
-                prompts: new FakeLlmPromptService("{{book_title}} by {{book_author}} — {{character_name}}"),
-                logger: null!);
+            var sut = Create(new FakeLlmCompletionRunner(),
+                template: "{{book_title}} by {{book_author}} — {{character_name}}");
 
             var result = await sut.BuildRenderedPromptAsync("Dune", "Herbert", "Paul");
 

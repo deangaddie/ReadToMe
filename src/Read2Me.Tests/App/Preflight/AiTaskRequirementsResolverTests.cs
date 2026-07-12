@@ -50,8 +50,11 @@ namespace Read2Me.Tests.App.Preflight
                 });
         }
 
+        private void SetChain(params string[] urls) =>
+            _llm.GetAttributionChainAsync().Returns(
+                urls.Select(u => new LlmServerConfig { BaseUrl = u }).ToList());
+
         [Theory]
-        [InlineData(AiTaskKind.CharacterAttribution)]
         [InlineData(AiTaskKind.VoicePromptGeneration)]
         [InlineData(AiTaskKind.CharacterDiscovery)]
         public async Task LlmTasks_ReturnActiveLlmUrl(AiTaskKind kind)
@@ -61,6 +64,42 @@ namespace Read2Me.Tests.App.Preflight
             var urls = await CreateResolver().GetRequiredBaseUrlsAsync(kind, CancellationToken.None);
 
             Assert.Equal(["http://localhost:8080"], urls);
+        }
+
+        [Fact]
+        public async Task CharacterAttribution_ReturnsEveryChainUrl_NotTheActiveConfig()
+        {
+            // The chain is what attribution actually calls. A remote active config (unmanaged) must
+            // not hide a local chain entry that needs starting.
+            SetActive(llmUrl: "https://integrate.api.nvidia.com/");
+            SetChain("http://localhost:8080", "http://localhost:8081");
+
+            var urls = await CreateResolver().GetRequiredBaseUrlsAsync(
+                AiTaskKind.CharacterAttribution, CancellationToken.None);
+
+            Assert.Equal(["http://localhost:8080", "http://localhost:8081"], urls);
+        }
+
+        [Fact]
+        public async Task CharacterAttribution_ChainSharingOneEndpoint_Deduplicates()
+        {
+            SetChain("http://localhost:8080", "http://localhost:8080");
+
+            var urls = await CreateResolver().GetRequiredBaseUrlsAsync(
+                AiTaskKind.CharacterAttribution, CancellationToken.None);
+
+            Assert.Equal(["http://localhost:8080"], urls);
+        }
+
+        [Fact]
+        public async Task CharacterAttribution_EmptyChain_ReturnsEmpty()
+        {
+            SetChain();
+
+            var urls = await CreateResolver().GetRequiredBaseUrlsAsync(
+                AiTaskKind.CharacterAttribution, CancellationToken.None);
+
+            Assert.Empty(urls);
         }
 
         [Fact]
@@ -111,7 +150,7 @@ namespace Read2Me.Tests.App.Preflight
         {
             SetActive();
 
-            var urls = await CreateResolver().GetRequiredBaseUrlsAsync(AiTaskKind.CharacterAttribution, CancellationToken.None);
+            var urls = await CreateResolver().GetRequiredBaseUrlsAsync(AiTaskKind.CharacterDiscovery, CancellationToken.None);
 
             Assert.Empty(urls);
         }

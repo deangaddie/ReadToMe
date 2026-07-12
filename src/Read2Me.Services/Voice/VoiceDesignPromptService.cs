@@ -1,7 +1,4 @@
-using System.Diagnostics;
-using System.Text;
 using Microsoft.Extensions.Logging;
-using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Voice
@@ -12,24 +9,21 @@ namespace Read2Me.Services.Voice
     /// </summary>
     public class VoiceDesignPromptService
     {
-        private readonly ILlmClient llm;
+        private readonly ILlmCompletionRunner runner;
         private readonly LlmSettingsService settings;
         private readonly LlmPromptService prompts;
         private readonly ILogger<VoiceDesignPromptService> logger;
-        private readonly EventBroadcaster<LlmStreamEvent>? broadcaster;
 
         public VoiceDesignPromptService(
-            ILlmClient llm,
+            ILlmCompletionRunner runner,
             LlmSettingsService settings,
             LlmPromptService prompts,
-            ILogger<VoiceDesignPromptService> logger,
-            EventBroadcaster<LlmStreamEvent>? broadcaster = null)
+            ILogger<VoiceDesignPromptService> logger)
         {
-            this.llm = llm;
+            this.runner = runner;
             this.settings = settings;
             this.prompts = prompts;
             this.logger = logger;
-            this.broadcaster = broadcaster;
             if (prompts != null)
                 prompts.OnChanged += () =>
                 {
@@ -101,44 +95,30 @@ namespace Read2Me.Services.Voice
                 return new PlanResult(GenerateStatus.NoLlmConfigured, null, "No active LLM server configured");
             }
 
-            try
+            var rendered = await BuildRenderedPlanPromptAsync(bookTitle, author, characterName, isNarrator);
+
+            var result = await runner.RunAsync<IReadOnlyList<VoicePlanVoice>>(
+                new LlmRunRequest(config, rendered, $"Voice plan: {characterName}",
+                    VoicePlanSchema.JsonSchema, CompletionShape.Array),
+                TryParseVoicePlan, ct);
+
+            return result.Outcome == LlmRunOutcome.Completed
+                ? new PlanResult(GenerateStatus.Success, result.Value, null)
+                : new PlanResult(GenerateStatus.Failed, null, result.Error);
+        }
+
+        private static bool TryParseVoicePlan(
+            string raw, out IReadOnlyList<VoicePlanVoice>? voices, out string? error)
+        {
+            if (VoicePlanParser.TryParse(raw, out var parsed))
             {
-                var rendered = await BuildRenderedPlanPromptAsync(bookTitle, author, characterName, isNarrator);
-
-                broadcaster?.Publish(new RequestStarted($"Voice plan: {characterName}", rendered));
-                var metrics = new StreamMetrics(rendered);
-                var sw = Stopwatch.StartNew();
-                var sb = new StringBuilder();
-                await foreach (var chunk in llm.StreamChatAsync(config, rendered, VoicePlanSchema.JsonSchema, ct))
-                {
-                    if (chunk.Thinking is { } t)
-                        broadcaster?.Publish(new ThinkingDelta(t));
-                    if (chunk.Content is { } delta)
-                    {
-                        sb.Append(delta);
-                        metrics.AddOutput(delta);
-                        broadcaster?.Publish(new ContentDelta(delta));
-                    }
-                }
-                sw.Stop();
-                broadcaster?.Publish(new StreamCompleted(metrics.TokensIn, metrics.TokensOut,
-                    sw.Elapsed.TotalSeconds, metrics.TokensPerSecond(sw.Elapsed.TotalSeconds)));
-
-                if (!VoicePlanParser.TryParse(sb.ToString(), out var voices))
-                {
-                    const string reason = "LLM response was not a valid voice-plan JSON array";
-                    broadcaster?.Publish(new StreamFailed(reason));
-                    return new PlanResult(GenerateStatus.Failed, null, reason);
-                }
-
-                return new PlanResult(GenerateStatus.Success, voices, null);
+                voices = parsed;
+                error = null;
+                return true;
             }
-            catch (System.Exception ex)
-            {
-                logger.LogError(ex, "Failed to generate voice plan for {Character}", characterName);
-                broadcaster?.Publish(new StreamFailed(ex.Message));
-                return new PlanResult(GenerateStatus.Failed, null, ex.Message);
-            }
+            voices = null;
+            error = "LLM response was not a valid voice-plan JSON array.";
+            return false;
         }
 
         public async Task<GenerateResult> GenerateAsync(
@@ -161,37 +141,12 @@ namespace Read2Me.Services.Voice
                 return new GenerateResult(GenerateStatus.NoLlmConfigured, null, "No active LLM server configured");
             }
 
-            try
-            {
-                var rendered = renderedPrompt;
+            var result = await runner.RunAsync(
+                new LlmRunRequest(config, renderedPrompt, "Voice prompt", Shape: CompletionShape.None), ct);
 
-                broadcaster?.Publish(new RequestStarted("Voice prompt", rendered));
-                var metrics = new StreamMetrics(rendered);
-                var sw = Stopwatch.StartNew();
-                var sb = new StringBuilder();
-                await foreach (var chunk in llm.StreamChatAsync(config, rendered, ct: ct))
-                {
-                    if (chunk.Thinking is { } t)
-                        broadcaster?.Publish(new ThinkingDelta(t));
-                    if (chunk.Content is { } delta)
-                    {
-                        sb.Append(delta);
-                        metrics.AddOutput(delta);
-                        broadcaster?.Publish(new ContentDelta(delta));
-                    }
-                }
-                sw.Stop();
-                broadcaster?.Publish(new StreamCompleted(metrics.TokensIn, metrics.TokensOut,
-                    sw.Elapsed.TotalSeconds, metrics.TokensPerSecond(sw.Elapsed.TotalSeconds)));
-
-                return new GenerateResult(GenerateStatus.Success, sb.ToString().Trim(), null);
-            }
-            catch (System.Exception ex)
-            {
-                logger.LogError(ex, "Failed to generate voice design prompt");
-                broadcaster?.Publish(new StreamFailed(ex.Message));
-                return new GenerateResult(GenerateStatus.Failed, null, ex.Message);
-            }
+            return result.Outcome == LlmRunOutcome.Completed
+                ? new GenerateResult(GenerateStatus.Success, result.Value!.Trim(), null)
+                : new GenerateResult(GenerateStatus.Failed, null, result.Error);
         }
     }
 }

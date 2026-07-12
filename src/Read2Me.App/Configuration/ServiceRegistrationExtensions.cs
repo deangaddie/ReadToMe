@@ -77,6 +77,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<LlmSettingsService>();
         services.AddScoped<LlmPromptService>();
         services.AddScoped<ILlmClient, OpenAiLlmClient>();
+        services.AddScoped<ILlmCompletionRunner, LlmCompletionRunner>();
         services.AddSingleton<EventBroadcaster<LlmStreamEvent>>();
         services.AddSingleton(sp => new EventJournal<LlmStreamEvent>(
             sp.GetRequiredService<EventBroadcaster<LlmStreamEvent>>(),

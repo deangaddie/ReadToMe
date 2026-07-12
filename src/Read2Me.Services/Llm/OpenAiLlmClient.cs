@@ -49,6 +49,13 @@ namespace Read2Me.Services.Llm
             {
                 response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // The caller cancelled (queue cancel / circuit teardown). Wrapping it as a provider
+                // failure would make it look like the server died: the reporter would count it toward
+                // watchdog recovery and the attribution chain would escalate to the next config.
+                throw;
+            }
             catch (Exception ex)
             {
                 throw new LlmProviderException($"Failed to connect to LLM provider at {config.BaseUrl}", ex);
@@ -120,6 +127,10 @@ namespace Read2Me.Services.Llm
             try
             {
                 response = await http.GetAsync(OpenAiStreamParser.Combine(config.BaseUrl, "v1/models"), ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {

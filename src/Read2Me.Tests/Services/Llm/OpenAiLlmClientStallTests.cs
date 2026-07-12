@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -65,11 +66,41 @@ namespace Read2Me.Tests.Services.Llm
             Assert.Equal("abc", content.ToString());
         }
 
+        [Fact]
+        public async Task CallerCancelsTheSend_ThrowsCancellation_NotProviderFailure()
+        {
+            // The send is cancelled by the caller (queue cancel). It must surface as cancellation:
+            // an LlmProviderException here would be reported as a service failure, tripping watchdog
+            // recovery and escalating the attribution chain to the next config.
+            var factory = new SingleClientFactory(new HttpClient(new BlockingHandler()));
+            var options = Options.Create(new AiWatchdogOptions { StreamInactivitySeconds = 60 });
+            var client = new OpenAiLlmClient(factory, NullLogger<OpenAiLlmClient>.Instance, options);
+            using var cts = new CancellationTokenSource();
+
+            var pump = Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            {
+                await foreach (var _ in client.StreamChatAsync(Config, "prompt", ct: cts.Token)) { }
+            });
+
+            await cts.CancelAsync();
+            await pump;
+        }
+
         // ---- Fakes ----------------------------------------------------------
 
         private sealed class SingleClientFactory(HttpClient client) : IHttpClientFactory
         {
             public HttpClient CreateClient(string name) => client;
+        }
+
+        /// <summary>Never responds — the send only ends when the caller's token is cancelled.</summary>
+        private sealed class BlockingHandler : HttpMessageHandler
+        {
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+                throw new UnreachableException();
+            }
         }
 
         private sealed class StreamingHandler(Stream body) : HttpMessageHandler

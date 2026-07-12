@@ -359,7 +359,7 @@ namespace Read2Me.Tests.App.Characters
             Assert.Equal(ParagraphOutcomeKind.Failed, failed.Kind);
         }
 
-        private class FakeAttributionService() : CharacterAttributionService(null!, null!, null!, null!, NullLogger<CharacterAttributionService>.Instance, null!, null!)
+        private class FakeAttributionService() : CharacterAttributionService(null!, null!, null!, null!, NullLogger<CharacterAttributionService>.Instance, null!)
         {
             public AttributionOutcome? Outcome { get; set; }
             public Exception? ThrowException { get; set; }

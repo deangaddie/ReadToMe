@@ -23,7 +23,12 @@ namespace Read2Me.App.Services.Preflight
         {
             var urls = task switch
             {
-                AiTaskKind.CharacterAttribution or AiTaskKind.VoicePromptGeneration or AiTaskKind.CharacterDiscovery =>
+                // Attribution runs the escalation chain, not the active config — the chain is what
+                // actually gets called, so the chain is what must be up. (The active config is only
+                // the chain's fallback when no chain is stored.)
+                AiTaskKind.CharacterAttribution =>
+                    await AttributionChainUrlsAsync(),
+                AiTaskKind.VoicePromptGeneration or AiTaskKind.CharacterDiscovery =>
                     new[] { await LlmUrlAsync() },
                 AiTaskKind.AudioGeneration =>
                     new[] { await TtsUrlAsync(), await TranscriptionUrlAsync(), await SimilarityUrlAsync() },
@@ -35,6 +40,12 @@ namespace Read2Me.App.Services.Preflight
             };
 
             return urls.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private async Task<string?[]> AttributionChainUrlsAsync()
+        {
+            var chain = await llmSettings.GetAttributionChainAsync();
+            return [.. chain.Select(ServiceConfigBaseUrls.For)];
         }
 
         private async Task<string?> LlmUrlAsync()

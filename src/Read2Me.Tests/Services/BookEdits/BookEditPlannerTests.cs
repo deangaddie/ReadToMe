@@ -18,13 +18,11 @@ namespace Read2Me.Tests.Services.BookEdits
         private LlmSettingsService NewSettings() =>
             new(Factory, NullLogger<LlmSettingsService>.Instance);
 
-        private BookEditPlanner NewPlanner(FakeLlmClient llm, LlmSettingsService settings)
+        private BookEditPlanner NewPlanner(FakeLlmCompletionRunner runner, LlmSettingsService settings)
         {
             var reader = new EmptyReader();
-            return new(llm, settings, reader, new ChapterOutlineBuilder(reader),
-                NullLogger<BookEditPlanner>.Instance,
-                new EventBroadcaster<LlmStreamEvent>(),
-                new FakeAiServiceReporter());
+            return new(runner, settings, reader, new ChapterOutlineBuilder(reader),
+                NullLogger<BookEditPlanner>.Instance);
         }
 
         private sealed class EmptyReader : ProjectReaderFakeBase;
@@ -47,7 +45,7 @@ namespace Read2Me.Tests.Services.BookEdits
         [Fact]
         public async Task Plan_NoConfig_ReturnsNoLlmConfigured()
         {
-            var planner = NewPlanner(new FakeLlmClient(ValidPlanJson), NewSettings());
+            var planner = NewPlanner(new FakeLlmCompletionRunner().Completes(ValidPlanJson), NewSettings());
             var outcome = await planner.PlanAsync(Folder, "rename chapters", CancellationToken.None);
             Assert.Equal(EditPlanStatus.NoLlmConfigured, outcome.Status);
         }
@@ -57,14 +55,19 @@ namespace Read2Me.Tests.Services.BookEdits
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
-            var llm = new FakeLlmClient(ValidPlanJson);
+            var runner = new FakeLlmCompletionRunner().Completes(ValidPlanJson);
 
-            var outcome = await NewPlanner(llm, settings).PlanAsync(Folder, "rename every chapter to 'Chapter {n}'", CancellationToken.None);
+            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "rename every chapter to 'Chapter {n}'", CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.Ok, outcome.Status);
             Assert.Equal(EditTargetSelector.ChapterTitle, outcome.Program!.Target);
             Assert.Equal(TransformKind.SetTemplate, outcome.Program.Transform.Kind);
-            Assert.Contains("rename every chapter", llm.Prompts[0]);
+
+            var request = Assert.Single(runner.Requests);
+            Assert.Contains("rename every chapter", request.Prompt);
+            Assert.Equal("rename every chapter to 'Chapter {n}'", request.Label);
+            Assert.Equal(CompletionShape.Object, request.Shape);
+            Assert.Equal(EditProgramSchema.JsonSchema, request.JsonSchema);
         }
 
         [Fact]
@@ -80,7 +83,7 @@ namespace Read2Me.Tests.Services.BookEdits
                   "transform": { "kind": "llm", "pattern": null, "replacement": null, "template": null, "instruction": null } }
                 """;
 
-            var outcome = await NewPlanner(new FakeLlmClient(raw), settings).PlanAsync(Folder, "split chapter 4", CancellationToken.None);
+            var outcome = await NewPlanner(new FakeLlmCompletionRunner().Completes(raw), settings).PlanAsync(Folder, "split chapter 4", CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.Unsupported, outcome.Status);
             Assert.Equal("Cannot split chapters.", outcome.Reason);
@@ -92,23 +95,35 @@ namespace Read2Me.Tests.Services.BookEdits
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
-            var outcome = await NewPlanner(new FakeLlmClient("not json at all"), settings).PlanAsync(Folder, "x", CancellationToken.None);
+            var outcome = await NewPlanner(new FakeLlmCompletionRunner().Completes("not json at all"), settings).PlanAsync(Folder, "x", CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.Failed, outcome.Status);
             Assert.NotNull(outcome.Reason);
         }
 
         [Fact]
-        public async Task Plan_LlmThrows_ReturnsFailed()
+        public async Task Plan_RunFailed_ReturnsFailed()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
-            var llm = new FakeLlmClient(ValidPlanJson) { Throws = new HttpRequestException("boom") };
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.Failed, "boom");
 
-            var outcome = await NewPlanner(llm, settings).PlanAsync(Folder, "x", CancellationToken.None);
+            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "x", CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.Failed, outcome.Status);
             Assert.Equal("boom", outcome.Reason);
+        }
+
+        [Fact]
+        public async Task Plan_ServiceUnavailable_ReturnsServiceUnavailable()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.ServiceUnavailable, "down");
+
+            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "x", CancellationToken.None);
+
+            Assert.Equal(EditPlanStatus.ServiceUnavailable, outcome.Status);
         }
     }
 }

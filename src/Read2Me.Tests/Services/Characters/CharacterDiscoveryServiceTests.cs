@@ -23,13 +23,11 @@ namespace Read2Me.Tests.Services.Characters
             new(Factory, NullLogger<LlmPromptService>.Instance);
 
         private CharacterDiscoveryService NewService(
-            FakeLlmClient llm, LlmSettingsService settings, FakeAiServiceReporter? reporter = null)
+            FakeLlmCompletionRunner runner, LlmSettingsService settings)
         {
             var reader = new DiscoveryReader();
-            return new(llm, settings, reader, new ChapterOutlineBuilder(reader), NewPrompts(),
-                NullLogger<CharacterDiscoveryService>.Instance,
-                new EventBroadcaster<LlmStreamEvent>(),
-                reporter ?? new FakeAiServiceReporter());
+            return new(runner, settings, reader, new ChapterOutlineBuilder(reader), NewPrompts(),
+                NullLogger<CharacterDiscoveryService>.Instance);
         }
 
         /// <summary>Reader that returns a known book: title, author, one chapter, one known character.</summary>
@@ -75,11 +73,13 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Discover_NoConfig_ReturnsNoLlmConfigured()
         {
-            var outcome = await NewService(new FakeLlmClient(ValidJson), NewSettings())
+            var runner = new FakeLlmCompletionRunner().Completes(ValidJson);
+            var outcome = await NewService(runner, NewSettings())
                 .DiscoverAsync(Folder, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.NoLlmConfigured, outcome.Status);
             Assert.Empty(outcome.Characters);
+            Assert.Empty(runner.Requests);
         }
 
         [Fact]
@@ -88,7 +88,7 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
-            var outcome = await NewService(new FakeLlmClient(ValidJson), settings)
+            var outcome = await NewService(new FakeLlmCompletionRunner().Completes(ValidJson), settings)
                 .DiscoverAsync(Folder, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.Ok, outcome.Status);
@@ -98,15 +98,20 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Discover_Prompt_ContainsTitleAuthorOutlineAndKnownCharacters()
+        public async Task Discover_Request_CarriesPromptSchemaAndObjectShape()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
-            var llm = new FakeLlmClient(ValidJson);
+            var runner = new FakeLlmCompletionRunner().Completes(ValidJson);
 
-            await NewService(llm, settings).DiscoverAsync(Folder, CancellationToken.None);
+            await NewService(runner, settings).DiscoverAsync(Folder, CancellationToken.None);
 
-            var prompt = llm.Prompts[0];
+            var request = Assert.Single(runner.Requests);
+            Assert.Equal("Discover characters", request.Label);
+            Assert.Equal(CompletionShape.Object, request.Shape);
+            Assert.Equal(CharacterDiscoverySchema.JsonSchema, request.JsonSchema);
+
+            var prompt = request.Prompt;
             Assert.Contains("The Hobbit", prompt);
             Assert.Contains("J.R.R. Tolkien", prompt);
             Assert.Contains("An Unexpected Party", prompt);   // chapter outline
@@ -120,7 +125,7 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
-            var outcome = await NewService(new FakeLlmClient("not json at all"), settings)
+            var outcome = await NewService(new FakeLlmCompletionRunner().Completes("not json at all"), settings)
                 .DiscoverAsync(Folder, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.Failed, outcome.Status);
@@ -128,13 +133,13 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Discover_LlmThrows_Unmanaged_ReturnsFailed()
+        public async Task Discover_RunFailed_ReturnsFailed()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
-            var llm = new FakeLlmClient(ValidJson) { Throws = new HttpRequestException("boom") };
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.Failed, "boom");
 
-            var outcome = await NewService(llm, settings, new FakeAiServiceReporter { Managed = false })
+            var outcome = await NewService(runner, settings)
                 .DiscoverAsync(Folder, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.Failed, outcome.Status);
@@ -142,13 +147,13 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Discover_LlmThrows_Managed_ReturnsServiceUnavailable()
+        public async Task Discover_ServiceUnavailable_ReturnsServiceUnavailable()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
-            var llm = new FakeLlmClient(ValidJson) { Throws = new HttpRequestException("down") };
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.ServiceUnavailable, "down");
 
-            var outcome = await NewService(llm, settings, new FakeAiServiceReporter { Managed = true })
+            var outcome = await NewService(runner, settings)
                 .DiscoverAsync(Folder, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.ServiceUnavailable, outcome.Status);
@@ -161,10 +166,10 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
             using var cts = new CancellationTokenSource();
             cts.Cancel();
-            var llm = new FakeLlmClient(ValidJson) { Throws = new OperationCanceledException() };
+            var runner = new FakeLlmCompletionRunner().Throws(new OperationCanceledException());
 
             await Assert.ThrowsAsync<OperationCanceledException>(
-                () => NewService(llm, settings).DiscoverAsync(Folder, cts.Token));
+                () => NewService(runner, settings).DiscoverAsync(Folder, cts.Token));
         }
     }
 }

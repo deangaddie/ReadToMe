@@ -1,11 +1,8 @@
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Events;
-using Read2Me.Services.Health;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
@@ -79,13 +76,12 @@ namespace Read2Me.Services.Characters
         IReadOnlyList<QueuedParagraph> Deferred);
 
     public class CharacterAttributionService(
-        ILlmClient llm,
+        ILlmCompletionRunner runner,
         LlmSettingsService settings,
         LlmPromptService prompts,
         IProjectReader reader,
         ILogger<CharacterAttributionService> logger,
-        EventBroadcaster<LlmStreamEvent> broadcaster,
-        IAiServiceReporter reporter)
+        EventBroadcaster<LlmStreamEvent> broadcaster)
     {
         public virtual async Task<AttributionOutcome> AttributeAsync(QueuedParagraph item, CancellationToken ct)
         {
@@ -430,117 +426,93 @@ namespace Read2Me.Services.Characters
         private async Task<StepOutcome> AttributeSampleCoreAsync(
             QueuedParagraph item, LlmServerConfig config, CancellationToken ct)
         {
-            try
+            var (before, after) = await prompts.GetContextWindowAsync();
+
+            var ctx = await reader.GetParagraphContextAsync(
+                item.Folder, item.ChapterId, item.ParagraphId, before, after);
+
+            if (ctx == null || string.IsNullOrWhiteSpace(ctx.Query.Text))
             {
-                var (before, after) = await prompts.GetContextWindowAsync();
+                logger.LogInformation("Paragraph {ParagraphId} has no text — marking unknown", item.ParagraphId);
+                return new StepOutcome(
+                    new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
+                    EscalationTrigger.Unknown);
+            }
 
-                var ctx = await reader.GetParagraphContextAsync(
-                    item.Folder, item.ChapterId, item.ParagraphId, before, after);
+            var project = await reader.GetProjectAsync(item.Folder);
+            var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
+            var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
 
-                if (ctx == null || string.IsNullOrWhiteSpace(ctx.Query.Text))
-                {
-                    logger.LogInformation("Paragraph {ParagraphId} has no text — marking unknown", item.ParagraphId);
+            var template = await prompts.GetCharacterPromptAsync(config.PromptStyle);
+            var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
+            {
+                [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,
+                [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
+                [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
+                [PromptTemplates.ContextJson]     = PromptTemplates.BuildContextJson(ctx),
+                [PromptTemplates.ResponseFormat]  = CharacterAttributionSchema.JsonExample,
+            });
+
+            logger.LogDebug("Sending character attribution prompt for paragraph {ParagraphId}", item.ParagraphId);
+
+            var run = await runner.RunAsync<CharacterAttributionResult>(
+                new LlmRunRequest(config, prompt, item.Preview,
+                    CharacterAttributionSchema.JsonSchema, CompletionShape.Object),
+                TryParseAttribution, ct);
+
+            switch (run.Outcome)
+            {
+                case LlmRunOutcome.ParseFailed:
+                    logger.LogWarning("Failed to parse LLM response for {ParagraphId}: {Raw}", item.ParagraphId, run.Raw);
                     return new StepOutcome(
-                        new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
-                        EscalationTrigger.Unknown);
-                }
-
-                var project = await reader.GetProjectAsync(item.Folder);
-                var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
-                var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
-
-                var template = await prompts.GetCharacterPromptAsync(config.PromptStyle);
-                var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
-                {
-                    [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,
-                    [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
-                    [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
-                    [PromptTemplates.ContextJson]     = PromptTemplates.BuildContextJson(ctx),
-                    [PromptTemplates.ResponseFormat]  = CharacterAttributionSchema.JsonExample,
-                });
-
-                logger.LogDebug("Sending character attribution prompt for paragraph {ParagraphId}", item.ParagraphId);
-
-                broadcaster.Publish(new RequestStarted(item.Preview, prompt));
-                var metrics = new StreamMetrics(prompt);
-                var sw = Stopwatch.StartNew();
-                var sb = new StringBuilder();
-                var scanner = JsonCompletionScanner.ForObject();
-                await foreach (var chunk in llm.StreamChatAsync(config, prompt, CharacterAttributionSchema.JsonSchema, ct))
-                {
-                    if (chunk.Thinking is { } t)
-                        broadcaster.Publish(new ThinkingDelta(t));
-                    if (chunk.Content is { } c)
-                    {
-                        sb.Append(c);
-                        metrics.AddOutput(c);
-                        broadcaster.Publish(new ContentDelta(c));
-                        // Answer object is closed — stop reading. Breaking disposes the stream,
-                        // which cancels the request if the model keeps generating past the JSON.
-                        if (scanner.Append(c))
-                            break;
-                    }
-                }
-                sw.Stop();
-                broadcaster.Publish(new StreamCompleted(metrics.TokensIn, metrics.TokensOut,
-                    sw.Elapsed.TotalSeconds, metrics.TokensPerSecond(sw.Elapsed.TotalSeconds)));
-
-                // Stream completed against a managed service — clear its failure streak.
-                reporter.ReportSuccess(config.BaseUrl);
-
-                var raw = sb.ToString();
-
-                if (!CharacterAttributionParser.TryParse(raw, out var parsed))
-                {
-                    var reason = $"Could not parse LLM response: {raw[..Math.Min(200, raw.Length)]}";
-                    logger.LogWarning("Failed to parse LLM response for {ParagraphId}: {Raw}", item.ParagraphId, raw);
-                    broadcaster.Publish(new StreamFailed(reason));
-                    return new StepOutcome(
-                        new AttributionOutcome(AttributionStatus.Failed, null, null, reason),
+                        new AttributionOutcome(AttributionStatus.Failed, null, null, run.Error),
                         EscalationTrigger.ParseFailure);
-                }
-
-                if (string.IsNullOrWhiteSpace(parsed.Character) ||
-                    parsed.Character.Equals("unknown", StringComparison.OrdinalIgnoreCase))
-                {
-                    logger.LogInformation("LLM returned unknown for paragraph {ParagraphId}", item.ParagraphId);
+                case LlmRunOutcome.Failed:
+                case LlmRunOutcome.ServiceUnavailable:
+                    // Infra failure is orthogonal to quality — it carries no EscalationTrigger.
+                    logger.LogError("Error attributing paragraph {ParagraphId}: {Reason}", item.ParagraphId, run.Error);
                     return new StepOutcome(
-                        new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
-                        EscalationTrigger.Unknown);
-                }
+                        new AttributionOutcome(
+                            run.Outcome == LlmRunOutcome.ServiceUnavailable
+                                ? AttributionStatus.ServiceUnavailable
+                                : AttributionStatus.Failed,
+                            null, null, run.Error),
+                        EscalationTrigger.None);
+            }
 
-                logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
-                    item.ParagraphId, parsed.Character);
-                var trigger = IsKnownName(parsed.Character, characters)
-                    ? EscalationTrigger.None
-                    : EscalationTrigger.UnlistedName;
+            var parsed = run.Value!;
+            if (string.IsNullOrWhiteSpace(parsed.Character) ||
+                parsed.Character.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogInformation("LLM returned unknown for paragraph {ParagraphId}", item.ParagraphId);
                 return new StepOutcome(
-                    new AttributionOutcome(AttributionStatus.Resolved,
-                        parsed.Character, parsed.VoiceInstructions, null),
-                    trigger);
+                    new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
+                    EscalationTrigger.Unknown);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                // Genuine cancel (CancelAll / host shutdown) — surface as today.
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // Everything else — including a client timeout (TaskCanceledException with ct not
-                // cancelled) and an AiServiceStalledException — is a request failure. If it was
-                // against a managed docker service, report it and surface ServiceUnavailable so the
-                // processor requeues instead of failing; a remote endpoint behaves exactly as before.
-                // Infra failure is orthogonal to quality — it carries no EscalationTrigger.
-                logger.LogError(ex, "Error attributing paragraph {ParagraphId}", item.ParagraphId);
-                broadcaster.Publish(new StreamFailed(ex.Message));
 
-                var reported = reporter.ReportFailure(config.BaseUrl, ex);
-                return new StepOutcome(
-                    new AttributionOutcome(
-                        reported ? AttributionStatus.ServiceUnavailable : AttributionStatus.Failed,
-                        null, null, ex.Message),
-                    EscalationTrigger.None);
+            logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
+                item.ParagraphId, parsed.Character);
+            var trigger = IsKnownName(parsed.Character, characters)
+                ? EscalationTrigger.None
+                : EscalationTrigger.UnlistedName;
+            return new StepOutcome(
+                new AttributionOutcome(AttributionStatus.Resolved,
+                    parsed.Character, parsed.VoiceInstructions, null),
+                trigger);
+        }
+
+        private static bool TryParseAttribution(
+            string raw, out CharacterAttributionResult? parsed, out string? error)
+        {
+            if (CharacterAttributionParser.TryParse(raw, out var p))
+            {
+                parsed = p;
+                error = null;
+                return true;
             }
+            parsed = null;
+            error = "Could not parse LLM response.";
+            return false;
         }
 
         /// <summary>
@@ -773,178 +745,150 @@ namespace Read2Me.Services.Characters
 
             var config = opts.Config;
             var outcomes = new List<(QueuedParagraph Item, StepOutcome Step)>();
-            var remaining = new List<QueuedParagraph>(batch);
-            var deferred = new List<QueuedParagraph>();
-            try
+
+            var (before, after) = await prompts.GetContextWindowAsync();
+            var first = batch[0];
+
+            var ctx = await reader.GetParagraphBatchContextAsync(
+                first.Folder, first.ChapterId, [.. batch.Select(b => b.ParagraphId)], before, after);
+
+            if (ctx == null)
             {
-                var (before, after) = await prompts.GetContextWindowAsync();
-                var first = batch[0];
+                // First paragraph not found — let the single path give each item its usual outcome.
+                foreach (var item in batch)
+                    outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
+                return new BatchCoreResult(outcomes, []);
+            }
 
-                var ctx = await reader.GetParagraphBatchContextAsync(
-                    first.Folder, first.ChapterId, [.. batch.Select(b => b.ParagraphId)], before, after);
+            var byId = batch.ToDictionary(b => b.ParagraphId);
+            var included = ctx.IncludedIds.Select(id => byId[id]).ToList();
+            var deferred = new List<QueuedParagraph>([.. ctx.DeferredIds.Select(id => byId[id])]);
 
-                if (ctx == null)
-                {
-                    // First paragraph not found — let the single path give each item its usual outcome.
-                    foreach (var item in batch)
-                        outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
-                    return new BatchCoreResult(outcomes, []);
-                }
-
-                var byId = batch.ToDictionary(b => b.ParagraphId);
-                var included = ctx.IncludedIds.Select(id => byId[id]).ToList();
-                deferred = [.. ctx.DeferredIds.Select(id => byId[id])];
-                remaining = new List<QueuedParagraph>(included);
-
-                if (included.Count == 1)
-                {
-                    outcomes.Add((included[0], await AttributeCoreAsync(included[0], opts, ct)));
-                    return new BatchCoreResult(outcomes, deferred);
-                }
-
-                var project = await reader.GetProjectAsync(first.Folder);
-                var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
-                var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
-
-                var template = await prompts.GetBatchCharacterPromptAsync(config.PromptStyle);
-                var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
-                {
-                    [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,
-                    [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
-                    [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
-                    [PromptTemplates.ContextJson]     = PromptTemplates.BuildBatchContextJson(ctx),
-                    [PromptTemplates.ResponseFormat]  = CharacterBatchAttributionSchema.JsonExample,
-                });
-
-                logger.LogDebug("Sending batch character attribution prompt for {Count} paragraphs", included.Count);
-
-                broadcaster.Publish(new RequestStarted($"{included.Count} paragraphs: {first.Preview}", prompt));
-                var metrics = new StreamMetrics(prompt);
-                var sw = Stopwatch.StartNew();
-                var sb = new StringBuilder();
-                var scanner = JsonCompletionScanner.ForArray();
-                await foreach (var chunk in llm.StreamChatAsync(config, prompt, CharacterBatchAttributionSchema.JsonSchema, ct))
-                {
-                    if (chunk.Thinking is { } t)
-                        broadcaster.Publish(new ThinkingDelta(t));
-                    if (chunk.Content is { } c)
-                    {
-                        sb.Append(c);
-                        metrics.AddOutput(c);
-                        broadcaster.Publish(new ContentDelta(c));
-                        // Answer array is closed — stop reading. Breaking disposes the stream,
-                        // which cancels the request if the model keeps generating past the JSON.
-                        if (scanner.Append(c))
-                            break;
-                    }
-                }
-                sw.Stop();
-                broadcaster.Publish(new StreamCompleted(metrics.TokensIn, metrics.TokensOut,
-                    sw.Elapsed.TotalSeconds, metrics.TokensPerSecond(sw.Elapsed.TotalSeconds)));
-
-                // Stream completed against a managed service — clear its failure streak.
-                reporter.ReportSuccess(config.BaseUrl);
-
-                var raw = sb.ToString();
-
-                if (!CharacterBatchAttributionParser.TryParse(raw, out var parsed))
-                {
-                    var reason = $"Could not parse batch LLM response: {raw[..Math.Min(200, raw.Length)]}";
-                    broadcaster.Publish(new StreamFailed(reason));
-
-                    if (opts.IsFinal)
-                    {
-                        // Final step: today's behaviour — fall back to single-item attribution.
-                        logger.LogWarning("Failed to parse batch LLM response — falling back to single attribution: {Raw}", raw);
-                        foreach (var item in included)
-                        {
-                            outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
-                            remaining.Remove(item);
-                        }
-                    }
-                    else
-                    {
-                        // Non-final: the whole chunk hands off to the next step as ParseFailure
-                        // suspects rather than falling back to single.
-                        logger.LogWarning("Failed to parse batch LLM response — escalating chunk: {Raw}", raw);
-                        foreach (var item in included)
-                        {
-                            outcomes.Add((item, new StepOutcome(
-                                new AttributionOutcome(AttributionStatus.Failed, null, null, reason),
-                                EscalationTrigger.ParseFailure)));
-                            remaining.Remove(item);
-                        }
-                    }
-                    return new BatchCoreResult(outcomes, deferred);
-                }
-
-                for (var i = 0; i < included.Count; i++)
-                {
-                    var item = included[i];
-                    if (!parsed.TryGetValue(i, out var entry))
-                    {
-                        if (opts.IsFinal)
-                        {
-                            logger.LogWarning("Batch response missing index {Index} — falling back to single attribution for {ParagraphId}",
-                                i, item.ParagraphId);
-                            outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
-                        }
-                        else
-                        {
-                            // Non-final: a missing index is a parse-format failure for that item —
-                            // escalate it rather than falling back to single.
-                            logger.LogWarning("Batch response missing index {Index} — escalating {ParagraphId}",
-                                i, item.ParagraphId);
-                            outcomes.Add((item, new StepOutcome(
-                                new AttributionOutcome(AttributionStatus.Failed, null, null, "Batch response missing index"),
-                                EscalationTrigger.ParseFailure)));
-                        }
-                    }
-                    else if (entry.Character.Equals("unknown", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logger.LogInformation("LLM returned unknown for paragraph {ParagraphId}", item.ParagraphId);
-                        outcomes.Add((item, new StepOutcome(
-                            new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
-                            EscalationTrigger.Unknown)));
-                    }
-                    else
-                    {
-                        logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
-                            item.ParagraphId, entry.Character);
-                        var trigger = IsKnownName(entry.Character, characters)
-                            ? EscalationTrigger.None
-                            : EscalationTrigger.UnlistedName;
-                        outcomes.Add((item, new StepOutcome(
-                            new AttributionOutcome(AttributionStatus.Resolved,
-                                entry.Character, entry.VoiceInstructions, null),
-                            trigger)));
-                    }
-                    remaining.Remove(item);
-                }
-
+            if (included.Count == 1)
+            {
+                outcomes.Add((included[0], await AttributeCoreAsync(included[0], opts, ct)));
                 return new BatchCoreResult(outcomes, deferred);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // Same failure semantics as the single path, applied to every item that has no
-                // outcome yet. Deferred items are returned untouched; the caller retries them and
-                // they hit the same failure (and its requeue handling) individually. Infra failure
-                // is orthogonal to quality — it carries no EscalationTrigger.
-                logger.LogError(ex, "Error attributing batch of {Count} paragraphs", batch.Count);
-                broadcaster.Publish(new StreamFailed(ex.Message));
 
-                var reported = reporter.ReportFailure(config.BaseUrl, ex);
+            var project = await reader.GetProjectAsync(first.Folder);
+            var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
+            var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
+
+            var template = await prompts.GetBatchCharacterPromptAsync(config.PromptStyle);
+            var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
+            {
+                [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,
+                [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
+                [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
+                [PromptTemplates.ContextJson]     = PromptTemplates.BuildBatchContextJson(ctx),
+                [PromptTemplates.ResponseFormat]  = CharacterBatchAttributionSchema.JsonExample,
+            });
+
+            logger.LogDebug("Sending batch character attribution prompt for {Count} paragraphs", included.Count);
+
+            var run = await runner.RunAsync<IReadOnlyDictionary<int, CharacterAttributionResult>>(
+                new LlmRunRequest(config, prompt, $"{included.Count} paragraphs: {first.Preview}",
+                    CharacterBatchAttributionSchema.JsonSchema, CompletionShape.Array),
+                TryParseBatchAttribution, ct);
+
+            if (run.Outcome is LlmRunOutcome.Failed or LlmRunOutcome.ServiceUnavailable)
+            {
+                // Same failure semantics as the single path, applied to every included item.
+                // Deferred items are returned untouched; the caller retries them and they hit the
+                // same failure (and its requeue handling) individually. Infra failure is orthogonal
+                // to quality — it carries no EscalationTrigger.
+                logger.LogError("Error attributing batch of {Count} paragraphs: {Reason}", batch.Count, run.Error);
                 var outcome = new AttributionOutcome(
-                    reported ? AttributionStatus.ServiceUnavailable : AttributionStatus.Failed,
-                    null, null, ex.Message);
-                foreach (var item in remaining)
+                    run.Outcome == LlmRunOutcome.ServiceUnavailable
+                        ? AttributionStatus.ServiceUnavailable
+                        : AttributionStatus.Failed,
+                    null, null, run.Error);
+                foreach (var item in included)
                     outcomes.Add((item, new StepOutcome(outcome, EscalationTrigger.None)));
                 return new BatchCoreResult(outcomes, deferred);
             }
+
+            if (run.Outcome == LlmRunOutcome.ParseFailed)
+            {
+                if (opts.IsFinal)
+                {
+                    // Final step: today's behaviour — fall back to single-item attribution.
+                    logger.LogWarning("Failed to parse batch LLM response — falling back to single attribution: {Raw}", run.Raw);
+                    foreach (var item in included)
+                        outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
+                }
+                else
+                {
+                    // Non-final: the whole chunk hands off to the next step as ParseFailure
+                    // suspects rather than falling back to single.
+                    logger.LogWarning("Failed to parse batch LLM response — escalating chunk: {Raw}", run.Raw);
+                    foreach (var item in included)
+                        outcomes.Add((item, new StepOutcome(
+                            new AttributionOutcome(AttributionStatus.Failed, null, null, run.Error),
+                            EscalationTrigger.ParseFailure)));
+                }
+                return new BatchCoreResult(outcomes, deferred);
+            }
+
+            var parsed = run.Value!;
+            for (var i = 0; i < included.Count; i++)
+            {
+                var item = included[i];
+                if (!parsed.TryGetValue(i, out var entry))
+                {
+                    if (opts.IsFinal)
+                    {
+                        logger.LogWarning("Batch response missing index {Index} — falling back to single attribution for {ParagraphId}",
+                            i, item.ParagraphId);
+                        outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
+                    }
+                    else
+                    {
+                        // Non-final: a missing index is a parse-format failure for that item —
+                        // escalate it rather than falling back to single.
+                        logger.LogWarning("Batch response missing index {Index} — escalating {ParagraphId}",
+                            i, item.ParagraphId);
+                        outcomes.Add((item, new StepOutcome(
+                            new AttributionOutcome(AttributionStatus.Failed, null, null, "Batch response missing index"),
+                            EscalationTrigger.ParseFailure)));
+                    }
+                }
+                else if (entry.Character.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogInformation("LLM returned unknown for paragraph {ParagraphId}", item.ParagraphId);
+                    outcomes.Add((item, new StepOutcome(
+                        new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
+                        EscalationTrigger.Unknown)));
+                }
+                else
+                {
+                    logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
+                        item.ParagraphId, entry.Character);
+                    var trigger = IsKnownName(entry.Character, characters)
+                        ? EscalationTrigger.None
+                        : EscalationTrigger.UnlistedName;
+                    outcomes.Add((item, new StepOutcome(
+                        new AttributionOutcome(AttributionStatus.Resolved,
+                            entry.Character, entry.VoiceInstructions, null),
+                        trigger)));
+                }
+            }
+
+            return new BatchCoreResult(outcomes, deferred);
+        }
+
+        private static bool TryParseBatchAttribution(
+            string raw, out IReadOnlyDictionary<int, CharacterAttributionResult>? parsed, out string? error)
+        {
+            if (CharacterBatchAttributionParser.TryParse(raw, out var p))
+            {
+                parsed = p;
+                error = null;
+                return true;
+            }
+            parsed = null;
+            error = "Could not parse batch LLM response.";
+            return false;
         }
 
         /// <summary>

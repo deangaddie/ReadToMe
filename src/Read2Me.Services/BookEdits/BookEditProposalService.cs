@@ -1,11 +1,7 @@
-using System.Diagnostics;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
-using Read2Me.Services.Events;
-using Read2Me.Services.Health;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.BookEdits
@@ -30,12 +26,10 @@ namespace Read2Me.Services.BookEdits
     /// grammar-constrained LLM calls. Cancellation returns the proposals computed so far.
     /// </summary>
     public class BookEditProposalService(
-        ILlmClient llm,
+        ILlmCompletionRunner runner,
         LlmSettingsService settings,
         IProjectCatalogReader catalog,
-        ILogger<BookEditProposalService> logger,
-        EventBroadcaster<LlmStreamEvent> broadcaster,
-        IAiServiceReporter reporter)
+        ILogger<BookEditProposalService> logger)
     {
         private const int BatchSize = 8;
 
@@ -105,31 +99,33 @@ namespace Read2Me.Services.BookEdits
                     return proposals; // partial set stays reviewable
 
                 var batch = targets.Skip(offset).Take(BatchSize).ToList();
+                LlmRunResult<IReadOnlyDictionary<int, string>> run;
                 try
                 {
-                    var results = await RunBatchAsync(config, project, instruction, batch, ct);
-                    for (var i = 0; i < batch.Count; i++)
-                    {
-                        proposals.Add(results != null && results.TryGetValue(i, out var newText)
-                            ? Build(batch[i], newText, null)
-                            : Build(batch[i], null, "The AI response did not include this item."));
-                    }
+                    run = await RunBatchAsync(config, project, instruction, batch, ct);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
-                    return proposals;
+                    return proposals; // partial set stays reviewable
                 }
-                catch (Exception ex)
+
+                if (run.Outcome is LlmRunOutcome.Failed or LlmRunOutcome.ServiceUnavailable)
                 {
-                    logger.LogError(ex, "Batch edit request failed at offset {Offset}", offset);
-                    broadcaster.Publish(new StreamFailed(ex.Message));
-                    reporter.ReportFailure(config.BaseUrl, ex);
+                    logger.LogError("Batch edit request failed at offset {Offset}: {Reason}", offset, run.Error);
 
                     // Service likely down — fail every remaining target instead of retrying batch after batch.
                     foreach (var target in targets.Skip(offset))
-                        proposals.Add(Build(target, null, ex.Message));
+                        proposals.Add(Build(target, null, run.Error));
                     progress?.Report((targets.Count, targets.Count));
                     return proposals;
+                }
+
+                var results = run.Outcome == LlmRunOutcome.Completed ? run.Value : null;
+                for (var i = 0; i < batch.Count; i++)
+                {
+                    proposals.Add(results != null && results.TryGetValue(i, out var newText)
+                        ? Build(batch[i], newText, null)
+                        : Build(batch[i], null, "The AI response did not include this item."));
                 }
 
                 progress?.Report((proposals.Count, targets.Count));
@@ -138,7 +134,7 @@ namespace Read2Me.Services.BookEdits
             return proposals;
         }
 
-        private async Task<IReadOnlyDictionary<int, string>?> RunBatchAsync(
+        private Task<LlmRunResult<IReadOnlyDictionary<int, string>>> RunBatchAsync(
             LlmServerConfig config, Read2Me.Data.Entities.Project? project,
             string instruction, IReadOnlyList<EditTarget> batch, CancellationToken ct)
         {
@@ -154,38 +150,24 @@ namespace Read2Me.Services.BookEdits
                 [PromptTemplates.ResponseFormat] = BookEditBatchSchema.JsonExample,
             });
 
-            broadcaster.Publish(new RequestStarted($"{batch.Count} edit(s): {batch[0].DisplayPath}", prompt));
-            var metrics = new StreamMetrics(prompt);
-            var sw = Stopwatch.StartNew();
-            var sb = new StringBuilder();
-            var scanner = JsonCompletionScanner.ForArray();
-            await foreach (var chunk in llm.StreamChatAsync(config, prompt, BookEditBatchSchema.JsonSchema, ct))
+            return runner.RunAsync<IReadOnlyDictionary<int, string>>(
+                new LlmRunRequest(config, prompt, $"{batch.Count} edit(s): {batch[0].DisplayPath}",
+                    BookEditBatchSchema.JsonSchema, CompletionShape.Array),
+                TryParseBatch, ct);
+        }
+
+        private static bool TryParseBatch(
+            string raw, out IReadOnlyDictionary<int, string>? results, out string? error)
+        {
+            if (BookEditBatchParser.TryParse(raw, out var parsed))
             {
-                if (chunk.Thinking is { } t)
-                    broadcaster.Publish(new ThinkingDelta(t));
-                if (chunk.Content is { } c)
-                {
-                    sb.Append(c);
-                    metrics.AddOutput(c);
-                    broadcaster.Publish(new ContentDelta(c));
-                    if (scanner.Append(c))
-                        break;
-                }
+                results = parsed;
+                error = null;
+                return true;
             }
-            sw.Stop();
-            broadcaster.Publish(new StreamCompleted(metrics.TokensIn, metrics.TokensOut,
-                sw.Elapsed.TotalSeconds, metrics.TokensPerSecond(sw.Elapsed.TotalSeconds)));
-
-            reporter.ReportSuccess(config.BaseUrl);
-
-            var raw = sb.ToString();
-            if (BookEditBatchParser.TryParse(raw, out var results))
-                return results;
-
-            logger.LogWarning("Failed to parse batch edit response: {Raw}",
-                raw[..Math.Min(200, raw.Length)]);
-            broadcaster.Publish(new StreamFailed("Could not parse batch edit response."));
-            return null;
+            results = null;
+            error = "Could not parse batch edit response.";
+            return false;
         }
 
         private static ProposedEdit Build(EditTarget target, string? newValue, string? failure)

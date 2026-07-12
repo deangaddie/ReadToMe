@@ -27,12 +27,11 @@ namespace Read2Me.Tests.Services.Characters
         private LlmPromptService NewPrompts() => new(Factory, NullLogger<LlmPromptService>.Instance);
 
         private CharacterAttributionService NewService(
-            ILlmClient llm, IProjectReader reader, LlmSettingsService settings,
-            EventBroadcaster<LlmStreamEvent>? broadcaster = null, IAiServiceReporter? reporter = null) =>
-            new(llm, settings, NewPrompts(), reader,
+            ILlmCompletionRunner runner, IProjectReader reader, LlmSettingsService settings,
+            EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
+            new(runner, settings, NewPrompts(), reader,
                 NullLogger<CharacterAttributionService>.Instance,
-                broadcaster ?? new EventBroadcaster<LlmStreamEvent>(),
-                reporter ?? new FakeAiServiceReporter());
+                broadcaster ?? new EventBroadcaster<LlmStreamEvent>());
 
         private static async Task<LlmServerConfig> AddConfigAsync(
             LlmSettingsService svc, string name, int batchSize = 8)
@@ -143,7 +142,7 @@ namespace Read2Me.Tests.Services.Characters
             await settings.UpdateConfigAsync(config);
             await settings.SetActiveConfigAsync(config.Id);
 
-            var llm = new SequenceLlmClient().ForConfig("Small", Resolved("Alice"));
+            var llm = new SequenceCompletionRunner().ForConfig("Small", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             await svc.AttributeAsync(MakeItem(), CancellationToken.None);
@@ -161,7 +160,7 @@ namespace Read2Me.Tests.Services.Characters
             chain[0].PromptStyle = AttributionPromptStyle.Simple;
             await settings.UpdateConfigAsync(chain[0]);
 
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("Small", Unknown)
                 .ForConfig("Big", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -188,7 +187,7 @@ namespace Read2Me.Tests.Services.Characters
             await settings.SetActiveConfigAsync(config.Id);
 
             var (batch, _) = MakeBatch(2);
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("Small", """[{ "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
@@ -214,7 +213,7 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
 
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown)
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -233,7 +232,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
 
             // Both name an unlisted character; A escalates, B is final so its unlisted name stands.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Zorg"))
                 .ForConfig("B", Resolved("Mordecai"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -246,24 +245,21 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task MidChainInfraFailure_SkipsAhead_CallsReporter()
+        public async Task MidChainInfraFailure_SkipsAhead()
         {
             var settings = NewSettings();
-            var chain = await RegisterChainAsync(settings, ("A", 8), ("B", 8), ("C", 8));
+            await RegisterChainAsync(settings, ("A", 8), ("B", 8), ("C", 8));
 
-            var reporter = new FakeAiServiceReporter { Managed = true };
-            var llm = new SequenceLlmClient()
-                .ForConfig("A", Unknown)                                   // escalates
-                .ThrowFor("B", new InvalidOperationException("B down"))    // infra → skip
-                .ForConfig("C", Resolved("Alice"));                        // final answer
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings, reporter: reporter);
+            var llm = new SequenceCompletionRunner()
+                .ForConfig("A", Unknown)                                              // escalates
+                .FailFor("B", LlmRunOutcome.ServiceUnavailable, "B down")             // infra → skip
+                .ForConfig("C", Resolved("Alice"));                                   // final answer
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal("Alice", result.Character);
-            var (baseUrl, _) = Assert.Single(reporter.Failures);
-            Assert.Equal(chain[1].BaseUrl, baseUrl);
             Assert.Equal(["A", "B", "C"], llm.Configs.Select(c => c.Name));
         }
 
@@ -273,19 +269,19 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
 
-            // Item with a prior unlisted answer from A, then B (final) throws → keep A's answer.
-            var llmGood = new SequenceLlmClient()
+            // Item with a prior unlisted answer from A, then B (final) infra-fails → keep A's answer.
+            var llmGood = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Zorg"))
-                .ThrowFor("B", new InvalidOperationException("B down"));
+                .FailFor("B", LlmRunOutcome.Failed, "B down");
             var withPrior = NewService(llmGood, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
             var priorResult = await withPrior.AttributeAsync(MakeItem(), CancellationToken.None);
             Assert.Equal(AttributionStatus.Resolved, priorResult.Status);
             Assert.Equal("Zorg", priorResult.Character);
 
             // Item with no usable prior answer (A also infra-fails) → Failed.
-            var llmNone = new SequenceLlmClient()
-                .ThrowFor("A", new InvalidOperationException("A down"))
-                .ThrowFor("B", new InvalidOperationException("B down"));
+            var llmNone = new SequenceCompletionRunner()
+                .FailFor("A", LlmRunOutcome.Failed, "A down")
+                .FailFor("B", LlmRunOutcome.Failed, "B down");
             var noPrior = NewService(llmNone, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
             var noneResult = await noPrior.AttributeAsync(MakeItem(), CancellationToken.None);
             Assert.Equal(AttributionStatus.Failed, noneResult.Status);
@@ -297,7 +293,7 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
 
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown)
                 .ForConfig("B", Unknown);
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -318,7 +314,7 @@ namespace Read2Me.Tests.Services.Characters
             var events = new List<LlmStreamEvent>();
             broadcaster.Event += e => events.Add(e);
 
-            var llm = new SequenceLlmClient().ForConfig("A", Unknown);
+            var llm = new SequenceCompletionRunner().ForConfig("A", Unknown);
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings, broadcaster);
 
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
@@ -349,7 +345,7 @@ namespace Read2Me.Tests.Services.Characters
                 MakeChapterItem(chB), MakeChapterItem(chB),
             };
             // Primary (A) returns unknown for every paragraph → all four escalate to B.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown)
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -382,7 +378,7 @@ namespace Read2Me.Tests.Services.Characters
                 MakeChapterItem(chB), MakeChapterItem(chB),
             };
             // Every A answer unknown → all four escalate to B in one burst, grouped per chapter.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """[ { "index": 0, "character": "unknown" }, { "index": 1, "character": "unknown" } ]""")
                 .ForConfig("B", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -405,7 +401,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var ch = Guid.NewGuid();
             var queued = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(ch)).ToList();
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """
                     [ { "index": 0, "character": "unknown" }, { "index": 1, "character": "unknown" },
                       { "index": 2, "character": "unknown" }, { "index": 3, "character": "unknown" } ]
@@ -430,7 +426,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var ch = Guid.NewGuid();
             var queued = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(ch)).ToList();
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
@@ -463,7 +459,7 @@ namespace Read2Me.Tests.Services.Characters
             var chA = Guid.NewGuid();
             var chB = Guid.NewGuid();
             var queued = new List<QueuedParagraph> { MakeChapterItem(chA), MakeChapterItem(chB) };
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown)
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings, broadcaster);
@@ -486,7 +482,7 @@ namespace Read2Me.Tests.Services.Characters
             // Item 0 resolves at A (known); item 1 unknown → escalates. Item 0 must stream before B runs.
             var i0 = MakeChapterItem(ch);
             var i1 = MakeChapterItem(ch);
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Alice"), Unknown)
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -510,7 +506,7 @@ namespace Read2Me.Tests.Services.Characters
             broadcaster.Event += e => events.Add(e);
 
             var (batch, ctx) = MakeBatch(2);
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "unknown" } ]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
 
@@ -530,7 +526,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var settings = NewSettings();   // no configs registered
             var queued = new List<QueuedParagraph> { MakeItem(), MakeItem() };
-            var llm = new SequenceLlmClient();
+            var llm = new SequenceCompletionRunner();
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var results = await DrainStreamAsync(svc, queued);
@@ -545,7 +541,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 1), ("B", 1));
-            var llm = new SequenceLlmClient().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
+            var llm = new SequenceCompletionRunner().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var ch = Guid.NewGuid();
@@ -573,7 +569,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            var llm = new SequenceLlmClient().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
+            var llm = new SequenceCompletionRunner().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
             var item = MakeItem();
 
@@ -595,7 +591,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            var llm = new SequenceLlmClient().ForConfig("A", Resolved("Alice"));
+            var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var deferred = new List<QueuedParagraph>();
@@ -614,7 +610,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            var llm = new SequenceLlmClient().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
+            var llm = new SequenceCompletionRunner().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var results = await DrainStreamAsync(svc, [MakeItem()]);
@@ -630,7 +626,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            var llm = new SequenceLlmClient().ForConfig("A", Resolved("Zorg")).ForConfig("B", Resolved("Mordecai"));
+            var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Zorg")).ForConfig("B", Resolved("Mordecai"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
@@ -643,20 +639,17 @@ namespace Read2Me.Tests.Services.Characters
         public async Task Queue_MidChainInfraFailure_SkipsAhead_LastEntryUsesBestPrior()
         {
             var settings = NewSettings();
-            var chain = await RegisterChainAsync(settings, ("A", 8), ("B", 8), ("C", 8));
-            var reporter = new FakeAiServiceReporter { Managed = true };
-            var llm = new SequenceLlmClient()
+            await RegisterChainAsync(settings, ("A", 8), ("B", 8), ("C", 8));
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown)
-                .ThrowFor("B", new InvalidOperationException("B down"))
+                .FailFor("B", LlmRunOutcome.ServiceUnavailable, "B down")
                 .ForConfig("C", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings, reporter: reporter);
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
             Assert.Equal("Alice", outcome.Character);
-            var (baseUrl, _) = Assert.Single(reporter.Failures);
-            Assert.Equal(chain[1].BaseUrl, baseUrl);
         }
 
         [Fact]
@@ -665,7 +658,7 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 1), ("B", 1));
             // A returns garbage (ParseFailure → escalate); B resolves.
-            var llm = new SequenceLlmClient().ForConfig("A", "not json").ForConfig("B", Resolved("Alice"));
+            var llm = new SequenceCompletionRunner().ForConfig("A", "not json").ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
@@ -681,7 +674,7 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
             var (batch, ctx) = MakeBatch(2);
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "unknown" } ]""")
                 .ForConfig("B", """[ { "index": 0, "character": "Alice" } ]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
@@ -700,7 +693,7 @@ namespace Read2Me.Tests.Services.Characters
             await settings.SetSelfConsistencyAsync(true);
 
             var (batch, ctx) = MakeBatch(3);
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A",
                     """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }, { "index": 2, "character": "Alice" } ]""",
                     """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }, { "index": 2, "character": "Zorg" } ]""")
@@ -728,7 +721,7 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, ctx) = MakeBatch(2);
             // A returns garbage (non-final ParseFailure → whole chunk escalates), B (final) also
             // returns garbage in batch → final falls back to single-item; single also garbage → Failed.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", "not json")
                 .ForConfig("B", "still not json");
             var reader = new ChainReader(DefaultContext(), ctx, KnownAlice());
@@ -756,7 +749,7 @@ namespace Read2Me.Tests.Services.Characters
                 [new BatchContextEntry("Text 0", null, 0), new BatchContextEntry("Text 1", null, 1)],
                 [batch[0].ParagraphId, batch[1].ParagraphId],
                 [batch[2].ParagraphId]);
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
@@ -777,7 +770,7 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, _) = MakeBatch(4);
             // All four are unknown from A → all four escalate to B. Dynamic reader (null fixed ctx)
             // builds a context matching each chunk, so re-grouping into 2s is exercised faithfully.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """
                     [ { "index": 0, "character": "unknown" }, { "index": 1, "character": "unknown" },
                       { "index": 2, "character": "unknown" }, { "index": 3, "character": "unknown" } ]
@@ -807,7 +800,7 @@ namespace Read2Me.Tests.Services.Characters
             broadcaster.Event += e => events.Add(e);
 
             var (batch, ctx) = MakeBatch(2);
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """[ { "index": 0, "character": "unknown" }, { "index": 1, "character": "unknown" } ]""")
                 .ForConfig("B", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
@@ -831,7 +824,7 @@ namespace Read2Me.Tests.Services.Characters
             broadcaster.Event += e => events.Add(e);
 
             var (batch, ctx) = MakeBatch(2);
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "unknown" } ]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
 
@@ -852,7 +845,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var (batch, ctx) = MakeBatch(2);
             // Item 0 resolves to a known character (accepted at step 0); item 1 is unknown (escalates).
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "unknown" } ]""")
                 .ForConfig("B", """[ { "index": 0, "character": "Alice" } ]""");
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
@@ -878,7 +871,7 @@ namespace Read2Me.Tests.Services.Characters
             await settings.SetSelfConsistencyAsync(true);
 
             // Step 0 (non-final) self-samples twice; both agree → accepted at A, B never called.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Alice"), Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
@@ -898,7 +891,7 @@ namespace Read2Me.Tests.Services.Characters
             await settings.SetSelfConsistencyAsync(true);
 
             // A disagrees with itself → Inconsistent → escalates to B (final), whose answer stands.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Alice"), Resolved("Zorg"))
                 .ForConfig("B", Resolved("Mordecai"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -929,7 +922,7 @@ namespace Read2Me.Tests.Services.Characters
             await settings.SetAttributionChainIdsAsync([created[0].Id, created[1].Id]);
             await settings.SetSelfConsistencyAsync(true);
 
-            var llm = new SequenceLlmClient().ForConfig("A", Resolved("Alice"), Resolved("Alice"));
+            var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Alice"), Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             await svc.AttributeAsync(MakeItem(), CancellationToken.None);
@@ -948,7 +941,7 @@ namespace Read2Me.Tests.Services.Characters
 
             // Sample 1 = known character (None trigger, accept); sample 2 = garbage (swallowed) → no
             // Inconsistent, accepted at A with sample 1, B never reached.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Alice"), "not json");
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
@@ -966,7 +959,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
             // toggle left off (default) — behaviour identical to slice 003.
 
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown)
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -986,7 +979,7 @@ namespace Read2Me.Tests.Services.Characters
 
             // A escalates (unknown, self-sampled twice). B is final — one call, no self-sampling even
             // if its two answers would differ.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown, Unknown)
                 .ForConfig("B", Resolved("Alice"), Resolved("Zorg"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
@@ -1012,7 +1005,7 @@ namespace Read2Me.Tests.Services.Characters
             };
             // Sample 1 = alias "Liz", sample 2 = owner "Elizabeth" → canonicalize to the same name →
             // agreement → accepted at A, no escalation.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Liz"), Resolved("Elizabeth"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, chars), settings);
 
@@ -1033,7 +1026,7 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, ctx) = MakeBatch(3);
             // Step 0 (A, non-final) self-samples the batch twice. Index 2 disagrees between samples;
             // indices 0 and 1 agree. Only index 2 becomes an Inconsistent suspect → escalates to B.
-            var llm = new SequenceLlmClient()
+            var llm = new SequenceCompletionRunner()
                 .ForConfig("A",
                     """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }, { "index": 2, "character": "Alice" } ]""",
                     """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }, { "index": 2, "character": "Zorg" } ]""")

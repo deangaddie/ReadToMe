@@ -18,11 +18,9 @@ namespace Read2Me.Tests.Services.BookEdits
         private LlmSettingsService NewSettings() =>
             new(Factory, NullLogger<LlmSettingsService>.Instance);
 
-        private BookEditProposalService NewService(FakeLlmClient llm, LlmSettingsService settings) =>
-            new(llm, settings, new EmptyReader(),
-                NullLogger<BookEditProposalService>.Instance,
-                new EventBroadcaster<LlmStreamEvent>(),
-                new FakeAiServiceReporter());
+        private BookEditProposalService NewService(FakeLlmCompletionRunner runner, LlmSettingsService settings) =>
+            new(runner, settings, new EmptyReader(),
+                NullLogger<BookEditProposalService>.Instance);
 
         private sealed class EmptyReader : ProjectReaderFakeBase;
 
@@ -45,7 +43,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var program = Program(new EditTransform(TransformKind.SetTemplate, Template: "Chapter {n}: {old}"));
             var targets = new[] { Target(1, "Intro"), Target(2, "Storm") };
 
-            var proposals = await NewService(new FakeLlmClient(), NewSettings())
+            var proposals = await NewService(new FakeLlmCompletionRunner(), NewSettings())
                 .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
 
             Assert.Equal("Chapter 1: Intro", proposals[0].NewValue);
@@ -59,7 +57,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var program = Program(new EditTransform(TransformKind.RegexReplace, Pattern: "^\\d+\\. ", Replacement: ""));
             var targets = new[] { Target(1, "1. Intro"), Target(2, "No prefix") };
 
-            var proposals = await NewService(new FakeLlmClient(), NewSettings())
+            var proposals = await NewService(new FakeLlmCompletionRunner(), NewSettings())
                 .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.Proposed, proposals[0].Status);
@@ -72,14 +70,14 @@ namespace Read2Me.Tests.Services.BookEdits
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
-            var llm = new FakeLlmClient("""
+            var runner = new FakeLlmCompletionRunner().Completes("""
                 [ { "index": 0, "reasoning": "r", "new_text": "It is a truth." },
                   { "index": 2, "reasoning": "r", "new_text": "Third fixed." } ]
                 """);
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "restore first letter"));
             var targets = new[] { Target(1, "t is a truth."), Target(2, "second"), Target(3, "hird") };
 
-            var proposals = await NewService(llm, settings)
+            var proposals = await NewService(runner, settings)
                 .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
 
             Assert.Equal("It is a truth.", proposals[0].NewValue);
@@ -95,16 +93,16 @@ namespace Read2Me.Tests.Services.BookEdits
             // 10 targets → 2 batches; response covers indexes 0-7 (batch1) and 0-1 (batch2)
             var batch1 = string.Join(",", Enumerable.Range(0, 8).Select(i => $"{{ \"index\": {i}, \"reasoning\": \"r\", \"new_text\": \"v{i}\" }}"));
             var batch2 = string.Join(",", Enumerable.Range(0, 2).Select(i => $"{{ \"index\": {i}, \"reasoning\": \"r\", \"new_text\": \"w{i}\" }}"));
-            var llm = new FakeLlmClient($"[{batch1}]", $"[{batch2}]");
+            var runner = new FakeLlmCompletionRunner().Completes($"[{batch1}]").Completes($"[{batch2}]");
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
             var targets = Enumerable.Range(1, 10).Select(n => Target(n, $"old{n}")).ToList();
             var reports = new List<(int Done, int Total)>();
             var progress = new SyncProgress(reports);
 
-            var proposals = await NewService(llm, settings)
+            var proposals = await NewService(runner, settings)
                 .ProposeAsync(Folder, program, targets, progress, CancellationToken.None);
 
-            Assert.Equal(2, llm.CallCount);
+            Assert.Equal(2, runner.Requests.Count);
             Assert.Equal(10, proposals.Count);
             Assert.Equal("v0", proposals[0].NewValue);
             Assert.Equal("w1", proposals[9].NewValue);
@@ -116,7 +114,7 @@ namespace Read2Me.Tests.Services.BookEdits
         public async Task Propose_Llm_NoConfig_AllFailed()
         {
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
-            var proposals = await NewService(new FakeLlmClient(), NewSettings())
+            var proposals = await NewService(new FakeLlmCompletionRunner(), NewSettings())
                 .ProposeAsync(Folder, program, [Target(1, "x")], null, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.Failed, proposals[0].Status);
@@ -124,20 +122,82 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Fact]
-        public async Task Propose_Llm_ServiceThrows_RemainingTargetsFailed()
+        public async Task Propose_Llm_RunFails_RemainingTargetsFailed()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
-            var llm = new FakeLlmClient { Throws = new HttpRequestException("down") };
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.ServiceUnavailable, "down");
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
             var targets = Enumerable.Range(1, 10).Select(n => Target(n, $"old{n}")).ToList();
 
-            var proposals = await NewService(llm, settings)
+            var proposals = await NewService(runner, settings)
                 .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
 
             Assert.Equal(10, proposals.Count);
             Assert.All(proposals, p => Assert.Equal(ProposalStatus.Failed, p.Status));
-            Assert.Equal(1, llm.CallCount); // no retry per batch once the service is down
+            Assert.Equal("down", proposals[9].FailureReason);
+            Assert.Single(runner.Requests); // no retry per batch once the service is down
+        }
+
+        [Fact]
+        public async Task Propose_Llm_UnparsableBatch_FailsBatchItemsButContinues()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var batch2 = string.Join(",", Enumerable.Range(0, 2).Select(i => $"{{ \"index\": {i}, \"reasoning\": \"r\", \"new_text\": \"w{i}\" }}"));
+            var runner = new FakeLlmCompletionRunner().Completes("garbage").Completes($"[{batch2}]");
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
+            var targets = Enumerable.Range(1, 10).Select(n => Target(n, $"old{n}")).ToList();
+
+            var proposals = await NewService(runner, settings)
+                .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
+
+            Assert.Equal(10, proposals.Count);
+            Assert.All(proposals.Take(8), p => Assert.Equal(ProposalStatus.Failed, p.Status));
+            Assert.Equal("w0", proposals[8].NewValue);
+            Assert.Equal("w1", proposals[9].NewValue);
+            Assert.Equal(2, runner.Requests.Count); // parse failure does not stop the loop
+        }
+
+        [Fact]
+        public async Task Propose_Llm_CancelMidLoop_ReturnsPartialProposals()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var batch1 = string.Join(",", Enumerable.Range(0, 8).Select(i => $"{{ \"index\": {i}, \"reasoning\": \"r\", \"new_text\": \"v{i}\" }}"));
+            using var cts = new CancellationTokenSource();
+            var runner = new CancelAfterFirstRunner($"[{batch1}]", cts);
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
+            var targets = Enumerable.Range(1, 10).Select(n => Target(n, $"old{n}")).ToList();
+
+            var proposals = await NewService2(runner, settings)
+                .ProposeAsync(Folder, program, targets, null, cts.Token);
+
+            Assert.Equal(8, proposals.Count); // first batch kept, second never completed
+        }
+
+        private BookEditProposalService NewService2(ILlmCompletionRunner runner, LlmSettingsService settings) =>
+            new(runner, settings, new EmptyReader(),
+                NullLogger<BookEditProposalService>.Instance);
+
+        /// <summary>First run completes with the given raw; second cancels the source and throws.</summary>
+        private sealed class CancelAfterFirstRunner(string firstRaw, CancellationTokenSource cts) : ILlmCompletionRunner
+        {
+            private int _calls;
+
+            public Task<LlmRunResult<T>> RunAsync<T>(LlmRunRequest request, TryParse<T> parser, CancellationToken ct)
+            {
+                if (_calls++ > 0)
+                {
+                    cts.Cancel();
+                    throw new OperationCanceledException(ct);
+                }
+                parser(firstRaw, out var value, out _);
+                return Task.FromResult(new LlmRunResult<T>(LlmRunOutcome.Completed, value, firstRaw, null));
+            }
+
+            public Task<LlmRunResult<string>> RunAsync(LlmRunRequest request, CancellationToken ct)
+                => throw new NotSupportedException();
         }
 
         /// <summary>IProgress that records synchronously (Progress&lt;T&gt; posts to a sync context).</summary>
