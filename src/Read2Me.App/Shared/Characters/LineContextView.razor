@@ -1,4 +1,5 @@
 @using Read2Me.App.State
+@using Read2Me.Services.Llm
 @inject CharacterPresenter Presenter
 
 <MudStack Spacing="1" Class="pa-1">
@@ -17,7 +18,7 @@
             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
                 <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
                          Style="min-width:90px; justify-content:center; flex-shrink:0;">
-                    @(p.Speaker ?? "—")
+                    @SpeakerLabel(p)
                 </MudChip>
                 <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">@p.Text</MudText>
             </MudStack>
@@ -26,7 +27,7 @@
                   Style="background:rgba(var(--mud-palette-primary-rgb),0.08); border-radius:4px; padding:2px 4px;">
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
                      Style="min-width:90px; justify-content:center; flex-shrink:0;">
-                @(_context.Query.Speaker ?? "?")
+                @SpeakerLabel(_context.Query)
             </MudChip>
             <MudText Typo="Typo.body2">@_context.Query.Text</MudText>
         </MudStack>
@@ -35,7 +36,7 @@
             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
                 <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
                          Style="min-width:90px; justify-content:center; flex-shrink:0;">
-                    @(p.Speaker ?? "—")
+                    @SpeakerLabel(p)
                 </MudChip>
                 <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">@p.Text</MudText>
             </MudStack>
@@ -55,6 +56,18 @@
 
 @code {
     [Parameter, EditorRequired] public CharacterLine Line { get; set; }
+
+    // A paragraph can hold several dialog segments with different speakers; narration is not a
+    // speaker. "?" marks a dialog segment whose character is not yet attributed.
+    static string SpeakerLabel(ContextParagraph p)
+    {
+        var speakers = p.Segments
+            .Where(s => s.Type == SegmentWire.Dialog)
+            .Select(s => s.Speaker == SegmentWire.Unknown ? "?" : s.Speaker)
+            .Distinct()
+            .ToList();
+        return speakers.Count == 0 ? "—" : string.Join(" / ", speakers);
+    }
 
     ParagraphContext? _context;
     bool _loading;

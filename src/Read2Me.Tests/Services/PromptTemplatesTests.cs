@@ -70,21 +70,44 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void DefaultCharacterPrompt_ContainsReasoningAndHeuristics()
+        public void DefaultCharacterPrompt_ContainsSegmentContractInstructions()
         {
             var prompt = PromptTemplates.DefaultCharacterPrompt;
             Assert.Contains("\"reasoning\"", prompt);
-            Assert.Contains("How to identify the speaker", prompt);
+            Assert.Contains("How to identify each dialog segment's speaker", prompt);
             Assert.Contains("Vocatives", prompt);
+            // Fidelity and the narration-speaker convention are what the parser/aligner rely on.
+            Assert.Contains("reproduce the query paragraph EXACTLY", prompt);
+            Assert.Contains("Narration segments always have speaker \"narrator\"", prompt);
         }
 
         [Fact]
-        public void DefaultBatchCharacterPrompt_ContainsReasoningAndHeuristics()
+        public void DefaultBatchCharacterPrompt_ContainsSegmentContractInstructions()
         {
             var prompt = PromptTemplates.DefaultBatchCharacterPrompt;
             Assert.Contains("\"reasoning\"", prompt);
-            Assert.Contains("How to identify each speaker", prompt);
+            Assert.Contains("How to identify each dialog segment's speaker", prompt);
             Assert.Contains("Vocatives", prompt);
+            Assert.Contains("paragraph EXACTLY", prompt);
+            Assert.Contains("Narration segments always have speaker \"narrator\"", prompt);
+            // Both trial models answered for context paragraphs unless told not to.
+            Assert.Contains("Output entries ONLY for the paragraphs that have an \"index\"", prompt);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void SimpleCharacterPrompts_RestrictEvidenceToAttributionTags(bool batch)
+        {
+            var prompt = batch
+                ? PromptTemplates.DefaultSimpleBatchCharacterPrompt
+                : PromptTemplates.DefaultSimpleCharacterPrompt;
+
+            Assert.Contains("The ONLY acceptable evidence is an attribution tag", prompt);
+            Assert.Contains("Do NOT infer a speaker any other way", prompt);
+            // Simple shares the segment contract with standard — only the evidence policy differs.
+            Assert.Contains("Narration segments always have speaker \"narrator\"", prompt);
+            Assert.Contains("{{" + PromptTemplates.ContextJson + "}}", prompt);
         }
 
         [Fact]
@@ -95,52 +118,63 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void BuildContextJson_KnownSpeaker_EmitsSpeakerField()
+        public void BuildContextJson_ContextParagraphs_EmitSegmentsWithSpeakers()
         {
             var ctx = new ParagraphContext(
-                new ContextParagraph("Who said this?", null),
-                [new ContextParagraph("Hello.", "Bob")],
+                new ContextParagraph("Who said this?", []),
+                [new ContextParagraph("\"Hello.\" she said.",
+                [
+                    new ContextSegment("\"Hello.\"", "dialog", "Bob"),
+                    new ContextSegment("she said.", "narration", "narrator"),
+                ])],
                 []);
 
             var json = PromptTemplates.BuildContextJson(ctx);
             var doc = JsonDocument.Parse(json);
 
-            var preceding = doc.RootElement.GetProperty("preceding")[0];
-            Assert.Equal("Hello.", preceding.GetProperty("paragraph").GetString());
-            Assert.Equal("Bob", preceding.GetProperty("speaker").GetString());
+            var segments = doc.RootElement.GetProperty("preceding")[0].GetProperty("segments");
+            Assert.Equal(2, segments.GetArrayLength());
+            Assert.Equal("\"Hello.\"", segments[0].GetProperty("text").GetString());
+            Assert.Equal("dialog", segments[0].GetProperty("type").GetString());
+            Assert.Equal("Bob", segments[0].GetProperty("speaker").GetString());
+            Assert.Equal("narrator", segments[1].GetProperty("speaker").GetString());
         }
 
         [Fact]
-        public void BuildContextJson_UnknownSpeaker_OmitsSpeakerField()
+        public void BuildContextJson_UnattributedContextSegment_KeepsUnknownSentinel()
         {
             var ctx = new ParagraphContext(
-                new ContextParagraph("Who said this?", null),
-                [new ContextParagraph("\"Something\"", null)],
+                new ContextParagraph("Who said this?", []),
+                [new ContextParagraph("\"Something\"",
+                    [new ContextSegment("\"Something\"", "dialog", "unknown")])],
                 []);
 
             var json = PromptTemplates.BuildContextJson(ctx);
             var doc = JsonDocument.Parse(json);
 
-            var preceding = doc.RootElement.GetProperty("preceding")[0];
-            Assert.False(preceding.TryGetProperty("speaker", out _));
+            var segments = doc.RootElement.GetProperty("preceding")[0].GetProperty("segments");
+            Assert.Equal("unknown", segments[0].GetProperty("speaker").GetString());
         }
 
         [Fact]
-        public void BuildContextJson_QueryIsObject_NotArray()
+        public void BuildContextJson_QueryIsRawTextOnly_NoSegments()
         {
             var ctx = new ParagraphContext(
-                new ContextParagraph("Target.", null),
+                // The query's current split is never fed back — it may be exactly what is wrong.
+                new ContextParagraph("Target.", [new ContextSegment("Target.", "dialog", "unknown")]),
                 [],
-                [new ContextParagraph("After.", "Narrator")]);
+                [new ContextParagraph("After.", [new ContextSegment("After.", "narration", "narrator")])]);
 
             var json = PromptTemplates.BuildContextJson(ctx);
             var doc = JsonDocument.Parse(json);
 
-            Assert.Equal(JsonValueKind.Object, doc.RootElement.GetProperty("query").ValueKind);
-            Assert.Equal("Target.", doc.RootElement.GetProperty("query").GetProperty("paragraph").GetString());
+            var query = doc.RootElement.GetProperty("query");
+            Assert.Equal(JsonValueKind.Object, query.ValueKind);
+            Assert.Equal("Target.", query.GetProperty("text").GetString());
+            Assert.False(query.TryGetProperty("segments", out _));
 
             var following = doc.RootElement.GetProperty("following")[0];
-            Assert.Equal("Narrator", following.GetProperty("speaker").GetString());
+            Assert.Equal("narrator", following.GetProperty("segments")[0].GetProperty("speaker").GetString());
         }
 
         [Fact]
@@ -155,14 +189,17 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void BuildBatchContextJson_TargetsGetIndex_ContextGetsSpeaker()
+        public void BuildBatchContextJson_TargetsGetIndexAndRawText_ContextGetsSegments()
         {
             var ctx = new ParagraphBatchContext(
                 [
-                    new BatchContextEntry("Before.", "Narrator", null),
-                    new BatchContextEntry("\"First target.\"", null, 0),
-                    new BatchContextEntry("\"Known line.\"", "Alice", null),
-                    new BatchContextEntry("\"Second target.\"", null, 1),
+                    new BatchContextEntry("Before.",
+                        [new ContextSegment("Before.", "narration", "narrator")], null),
+                    new BatchContextEntry("\"First target.\"",
+                        [new ContextSegment("\"First target.\"", "dialog", "unknown")], 0),
+                    new BatchContextEntry("\"Known line.\"",
+                        [new ContextSegment("\"Known line.\"", "dialog", "Alice")], null),
+                    new BatchContextEntry("\"Second target.\"", [], 1),
                 ],
                 [Guid.NewGuid(), Guid.NewGuid()],
                 []);
@@ -173,20 +210,22 @@ namespace Read2Me.Tests.Services
             var paragraphs = doc.RootElement.GetProperty("paragraphs");
             Assert.Equal(4, paragraphs.GetArrayLength());
 
-            Assert.Equal("Narrator", paragraphs[0].GetProperty("speaker").GetString());
+            Assert.Equal("narrator", paragraphs[0].GetProperty("segments")[0].GetProperty("speaker").GetString());
             Assert.False(paragraphs[0].TryGetProperty("index", out _));
+            Assert.False(paragraphs[0].TryGetProperty("text", out _));
 
             Assert.Equal(0, paragraphs[1].GetProperty("index").GetInt32());
-            Assert.False(paragraphs[1].TryGetProperty("speaker", out _));
+            Assert.Equal("\"First target.\"", paragraphs[1].GetProperty("text").GetString());
+            Assert.False(paragraphs[1].TryGetProperty("segments", out _));
 
-            Assert.Equal("Alice", paragraphs[2].GetProperty("speaker").GetString());
+            Assert.Equal("Alice", paragraphs[2].GetProperty("segments")[0].GetProperty("speaker").GetString());
             Assert.Equal(1, paragraphs[3].GetProperty("index").GetInt32());
         }
 
         [Fact]
         public void BuildContextJson_EmptyContext_ProducesEmptyArrays()
         {
-            var ctx = new ParagraphContext(new ContextParagraph("Lone paragraph.", null), [], []);
+            var ctx = new ParagraphContext(new ContextParagraph("Lone paragraph.", []), [], []);
             var json = PromptTemplates.BuildContextJson(ctx);
             var doc = JsonDocument.Parse(json);
 

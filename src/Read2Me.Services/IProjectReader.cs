@@ -18,7 +18,19 @@ namespace Read2Me.Services
         HashSet<Guid> SelectableNodeIds,
         IReadOnlyDictionary<Guid, int> NodeCharacterParagraphCounts);
 
-    public sealed record ContextParagraph(string Text, string? Speaker);
+    /// <summary>
+    /// One existing item of a context paragraph, in the wire shape the LLM answers in:
+    /// <see cref="Type"/> is "narration" or "dialog"; <see cref="Speaker"/> is the attributed
+    /// character name, "narrator" for narration, or "unknown" for an unattributed dialog item.
+    /// </summary>
+    public sealed record ContextSegment(string Text, string Type, string Speaker);
+
+    /// <summary>
+    /// A paragraph in an attribution context: its raw full text plus its current item split as
+    /// segments. A query paragraph is fed to the LLM as raw text only (its current split may be
+    /// wrong and must not bias re-segmentation); context paragraphs are fed as segments.
+    /// </summary>
+    public sealed record ContextParagraph(string Text, IReadOnlyList<ContextSegment> Segments);
 
     /// <summary>Text of a target paragraph plus its nearest neighbours within the same chapter.</summary>
     public sealed record ParagraphContext(
@@ -28,9 +40,9 @@ namespace Read2Me.Services
 
     /// <summary>
     /// One paragraph in a batch attribution context. <see cref="TargetIndex"/> is set only on
-    /// the paragraphs to attribute (0-based, in order); context paragraphs carry a speaker instead.
+    /// the paragraphs to attribute (0-based, in order); context paragraphs carry segments instead.
     /// </summary>
-    public sealed record BatchContextEntry(string Text, string? Speaker, int? TargetIndex);
+    public sealed record BatchContextEntry(string Text, IReadOnlyList<ContextSegment> Segments, int? TargetIndex);
 
     /// <summary>
     /// Context for a multi-paragraph attribution request: a flat ordered span of paragraphs

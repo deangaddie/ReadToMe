@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Services.Llm;
 
 namespace Read2Me.Services
 {
@@ -165,21 +166,18 @@ namespace Read2Me.Services
             int precedingStart = Math.Max(0, contentIdx - before);
             var preceding = contentParagraphs
                 .GetRange(precedingStart, contentIdx - precedingStart)
-                .Select(p => new ContextParagraph(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem)))
+                .Select(ToContextParagraph)
                 .ToList();
 
             int followingStart = contentIdx + 1;
             int followingCount = Math.Min(after, contentParagraphs.Count - followingStart);
             var following = followingCount > 0
                 ? contentParagraphs.GetRange(followingStart, followingCount)
-                    .Select(p => new ContextParagraph(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem)))
+                    .Select(ToContextParagraph)
                     .ToList()
                 : new List<ContextParagraph>();
 
-            var q = paragraphs[idx];
-            return new ParagraphContext(
-                new ContextParagraph(q.Text, ResolveSpeaker(q.CharacterName, q.HasCharacterItem)),
-                preceding, following);
+            return new ParagraphContext(ToContextParagraph(paragraphs[idx]), preceding, following);
         }
 
         public async Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
@@ -196,9 +194,11 @@ namespace Read2Me.Services
                 return null;
 
             // Walk forward from the first target collecting the leading contiguous run of the
-            // requested ids. Narration and already-attributed character paragraphs are context and
-            // never break the run; an unassigned character paragraph that is not the next requested
-            // id ends it — everything requested beyond that point is deferred.
+            // requested ids. Narration and fully-attributed character paragraphs are context and
+            // never break the run; a paragraph with any unstamped character item that is not the
+            // next requested id ends it — everything requested beyond that point is deferred.
+            // "Fully attributed" means every character item stamped: a partly-attributed paragraph
+            // still carries unknown segments, so it is not settled enough to sit inside a run.
             var included = new List<Guid> { paragraphIds[0] };
             var lastIncludedIdx = firstIdx;
             var nextRequested = 1;
@@ -211,7 +211,7 @@ namespace Read2Me.Services
                     lastIncludedIdx = i;
                     nextRequested++;
                 }
-                else if (p.HasCharacterItem && p.CharacterName == null)
+                else if (p.HasUnattributedItem)
                 {
                     break;
                 }
@@ -221,37 +221,49 @@ namespace Read2Me.Services
             var entries = new List<BatchContextEntry>();
             int precedingStart = Math.Max(0, firstIdx - before);
             for (int i = precedingStart; i < firstIdx; i++)
-            {
-                var p = contentParagraphs[i];
-                entries.Add(new BatchContextEntry(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem), null));
-            }
+                entries.Add(ToContextEntry(contentParagraphs[i], null));
 
             var targetIndex = 0;
             for (int i = firstIdx; i <= lastIncludedIdx; i++)
             {
                 var p = contentParagraphs[i];
                 if (targetIndex < included.Count && p.Id == included[targetIndex])
-                    entries.Add(new BatchContextEntry(p.Text, null, targetIndex++));
+                    entries.Add(ToContextEntry(p, targetIndex++));
                 else
-                    entries.Add(new BatchContextEntry(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem), null));
+                    entries.Add(ToContextEntry(p, null));
             }
 
             int followingEnd = Math.Min(contentParagraphs.Count, lastIncludedIdx + 1 + after);
             for (int i = lastIncludedIdx + 1; i < followingEnd; i++)
-            {
-                var p = contentParagraphs[i];
-                entries.Add(new BatchContextEntry(p.Text, ResolveSpeaker(p.CharacterName, p.HasCharacterItem), null));
-            }
+                entries.Add(ToContextEntry(contentParagraphs[i], null));
 
             return new ParagraphBatchContext(entries, included, deferred);
         }
 
-        // CharacterId set -> known speaker name. No CharacterId + has Character item -> dialog unattributed -> null. No Character items -> narration.
-        private static string? ResolveSpeaker(string? characterName, bool hasCharacterItem)
-            => characterName ?? (hasCharacterItem ? null : "Narrator");
+        private static ContextParagraph ToContextParagraph(ChapterContextRow row) =>
+            new(row.Text, ToSegments(row));
 
-        private sealed record ChapterContextRow(
-            Guid Id, bool HasCharacterItem, bool HasContentItem, string? CharacterName, string Text);
+        private static BatchContextEntry ToContextEntry(ChapterContextRow row, int? targetIndex) =>
+            new(row.Text, ToSegments(row), targetIndex);
+
+        // Existing items in the wire shape the LLM answers in. A character item with no stamped
+        // character is the "unknown" sentinel, not a missing speaker.
+        private static IReadOnlyList<ContextSegment> ToSegments(ChapterContextRow row) =>
+            [.. row.Items.Select(i => i.IsCharacter
+                ? new ContextSegment(i.Text, SegmentWire.Dialog, i.CharacterName ?? SegmentWire.Unknown)
+                : new ContextSegment(i.Text, SegmentWire.Narration, SegmentWire.Narrator))];
+
+        private sealed record ChapterContextItemRow(bool IsCharacter, string? CharacterName, string Text);
+
+        private sealed record ChapterContextRow(Guid Id, IReadOnlyList<ChapterContextItemRow> Items)
+        {
+            public bool HasContentItem => Items.Count > 0;
+
+            /// <summary>Any dialog item still without a character — the paragraph is not fully attributed.</summary>
+            public bool HasUnattributedItem => Items.Any(i => i.IsCharacter && i.CharacterName == null);
+
+            public string Text => string.Join(" ", Items.Select(i => i.Text));
+        }
 
         private async Task<List<ChapterContextRow>> LoadChapterContextRowsAsync(ProjectFolderId folderId, Guid chapterId)
         {
@@ -262,16 +274,14 @@ namespace Read2Me.Services
                 .OrderBy(p => p.Order)
                 .Select(p => new ChapterContextRow(
                     p.Id,
-                    p.Items.Any(i => i.ItemType == ParagraphItemType.Character),
-                    p.Items.Any(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration),
                     p.Items
-                        .Where(i => i.ItemType == ParagraphItemType.Character && i.Character != null)
-                        .Select(i => i.Character!.Name)
-                        .FirstOrDefault(),
-                    string.Join(" ", p.Items
                         .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
                         .OrderBy(i => i.Order)
-                        .Select(i => i.Text ?? ""))))
+                        .Select(i => new ChapterContextItemRow(
+                            i.ItemType == ParagraphItemType.Character,
+                            i.Character != null ? i.Character.Name : null,
+                            i.Text ?? ""))
+                        .ToList()))
                 .ToListAsync();
         }
     }

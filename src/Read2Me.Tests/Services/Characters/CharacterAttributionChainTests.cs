@@ -77,13 +77,13 @@ namespace Read2Me.Tests.Services.Characters
             var batch = Enumerable.Range(0, count)
                 .Select(i => new QueuedParagraph(Folder, Guid.NewGuid(), $"P{i}", chapterId, Guid.NewGuid(), Guid.NewGuid()))
                 .ToList();
-            var entries = batch.Select((_, i) => new BatchContextEntry($"Text {i}", null, i)).ToList();
+            var entries = batch.Select((_, i) => new BatchContextEntry($"Text {i}", [], i)).ToList();
             var ctx = new ParagraphBatchContext(entries, [.. batch.Select(b => b.ParagraphId)], []);
             return (batch, ctx);
         }
 
         private static ParagraphContext DefaultContext() =>
-            new(new ContextParagraph("Hello world", null), [], []);
+            new(new ContextParagraph("Hello world", []), [], []);
 
         private static Project DefaultProject() =>
             new() { Id = Guid.NewGuid(), Title = "Book", BookTitle = "The Book", Author = "Author", Filename = "b.epub" };
@@ -111,7 +111,7 @@ namespace Read2Me.Tests.Services.Characters
                 ProjectFolderId f, Guid c, IReadOnlyList<Guid> ids, int b, int a)
             {
                 if (batchCtx != null) return Task.FromResult<ParagraphBatchContext?>(batchCtx);
-                var entries = ids.Select((_, i) => new BatchContextEntry($"Text {i}", null, i)).ToList();
+                var entries = ids.Select((_, i) => new BatchContextEntry($"Text {i}", [], i)).ToList();
                 return Task.FromResult<ParagraphBatchContext?>(new ParagraphBatchContext(entries, [.. ids], []));
             }
 
@@ -194,7 +194,7 @@ namespace Read2Me.Tests.Services.Characters
             await DrainStreamAsync(svc, batch);
 
             var prompt = Assert.Single(llm.Calls).Prompt;
-            Assert.Contains("For every indexed paragraph", prompt);   // batch template, not the single one
+            Assert.Contains("Return one entry per index", prompt);   // batch template, not the single one
             Assert.Contains(SimpleMarker, prompt);
             Assert.DoesNotContain(FullMarker, prompt);
         }
@@ -746,7 +746,7 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, _) = MakeBatch(3);
             // Step-0 context trims the third item as deferred.
             var ctx = new ParagraphBatchContext(
-                [new BatchContextEntry("Text 0", null, 0), new BatchContextEntry("Text 1", null, 1)],
+                [new BatchContextEntry("Text 0", [], 0), new BatchContextEntry("Text 1", [], 1)],
                 [batch[0].ParagraphId, batch[1].ParagraphId],
                 [batch[2].ParagraphId]);
             var llm = new SequenceCompletionRunner()

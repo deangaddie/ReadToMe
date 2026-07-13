@@ -31,7 +31,14 @@ namespace Read2Me.Services.Characters
     internal static class LlmServerConfigExtensions
     {
         /// <summary>Shallow copy of the config with <see cref="LlmServerConfig.Temperature"/> replaced.</summary>
-        public static LlmServerConfig WithTemperature(this LlmServerConfig config, double temperature) => new()
+        public static LlmServerConfig WithTemperature(this LlmServerConfig config, double temperature) =>
+            Copy(config, config.MaxTokens, temperature);
+
+        /// <summary>Shallow copy of the config with <see cref="LlmServerConfig.MaxTokens"/> replaced.</summary>
+        public static LlmServerConfig WithMaxTokens(this LlmServerConfig config, int? maxTokens) =>
+            Copy(config, maxTokens, config.Temperature);
+
+        private static LlmServerConfig Copy(LlmServerConfig config, int? maxTokens, double? temperature) => new()
         {
             Id = config.Id,
             Name = config.Name,
@@ -41,7 +48,7 @@ namespace Read2Me.Services.Characters
             Model = config.Model,
             Temperature = temperature,
             TopP = config.TopP,
-            MaxTokens = config.MaxTokens,
+            MaxTokens = maxTokens,
             FrequencyPenalty = config.FrequencyPenalty,
             PresencePenalty = config.PresencePenalty,
             AttributionBatchSize = config.AttributionBatchSize,
@@ -772,8 +779,15 @@ namespace Read2Me.Services.Characters
 
             logger.LogDebug("Sending batch character attribution prompt for {Count} paragraphs", included.Count);
 
+            // The answer copies every indexed paragraph back as segments, so the output budget has to
+            // grow with the passage — a fixed config max_tokens truncates (and so fails to parse) a
+            // batch of long paragraphs.
+            var runConfig = config.WithMaxTokens(AttributionTokenBudget.ForPassage(
+                config.MaxTokens,
+                ctx.Entries.Where(e => e.TargetIndex is not null).Select(e => e.Text)));
+
             var run = await runner.RunAsync<IReadOnlyDictionary<int, CharacterAttributionResult>>(
-                new LlmRunRequest(config, prompt, $"{included.Count} paragraphs: {first.Preview}",
+                new LlmRunRequest(runConfig, prompt, $"{included.Count} paragraphs: {first.Preview}",
                     CharacterBatchAttributionSchema.JsonSchema, CompletionShape.Array),
                 TryParseBatchAttribution, ct);
 

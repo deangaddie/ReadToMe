@@ -138,7 +138,7 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         private static ParagraphContext DefaultContext() =>
-            new(new ContextParagraph("Hello world", null), [], []);
+            new(new ContextParagraph("Hello world", []), [], []);
 
         private static Project DefaultProject() =>
             new() { Id = Guid.NewGuid(), Title = "Book", BookTitle = "The Book", Author = "Author", Filename = "b.epub" };
@@ -281,7 +281,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var runner = new FakeLlmCompletionRunner();
-            var ctx = new ParagraphContext(new ContextParagraph("   ", null), [], []);
+            var ctx = new ParagraphContext(new ContextParagraph("   ", []), [], []);
             var svc = NewService(runner, new FakeProjectReader(ctx, DefaultProject()), settings);
 
             var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
@@ -353,7 +353,7 @@ namespace Read2Me.Tests.Services.Characters
                 .Select(i => new QueuedParagraph(Folder, Guid.NewGuid(), $"P{i}", chapterId, Guid.NewGuid(), Guid.NewGuid()))
                 .ToList();
             var entries = batch
-                .Select((_, i) => new BatchContextEntry($"Text {i}", null, i))
+                .Select((_, i) => new BatchContextEntry($"Text {i}", [], i))
                 .ToList();
             var ctx = new ParagraphBatchContext(
                 entries, [.. batch.Select(b => b.ParagraphId)], []);
@@ -489,7 +489,7 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, _) = MakeBatch(3);
             // Context only includes the first two; the third was trimmed off the run.
             var ctx = new ParagraphBatchContext(
-                [new BatchContextEntry("Text 0", null, 0), new BatchContextEntry("Text 1", null, 1)],
+                [new BatchContextEntry("Text 0", [], 0), new BatchContextEntry("Text 1", [], 1)],
                 [batch[0].ParagraphId, batch[1].ParagraphId],
                 [batch[2].ParagraphId]);
             var runner = new FakeLlmCompletionRunner()
@@ -512,7 +512,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var (batch, _) = MakeBatch(2);
             var ctx = new ParagraphBatchContext(
-                [new BatchContextEntry("Text 0", null, 0)],
+                [new BatchContextEntry("Text 0", [], 0)],
                 [batch[0].ParagraphId],
                 [batch[1].ParagraphId]);
             var runner = new FakeLlmCompletionRunner()

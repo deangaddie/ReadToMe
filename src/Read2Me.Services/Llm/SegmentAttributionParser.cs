@@ -126,8 +126,8 @@ namespace Read2Me.Services.Llm
                     return false;
                 var type = dto.Type?.Trim().ToLowerInvariant() switch
                 {
-                    "narration" => AttributionSegmentType.Narration,
-                    "dialog" => AttributionSegmentType.Dialog,
+                    SegmentWire.Narration => AttributionSegmentType.Narration,
+                    SegmentWire.Dialog => AttributionSegmentType.Dialog,
                     _ => (AttributionSegmentType?)null,
                 };
                 if (type == null)
@@ -143,7 +143,7 @@ namespace Read2Me.Services.Llm
                 mapped.Add(new AttributionSegment(
                     UnescapeLiteralUnicode(dto.Text),
                     type.Value,
-                    isNarration ? "narrator" : speaker!,
+                    isNarration ? SegmentWire.Narrator : speaker!,
                     isNarration ? string.Empty : dto.VoiceInstructions ?? string.Empty));
             }
 

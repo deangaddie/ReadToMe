@@ -183,7 +183,8 @@ namespace Read2Me.Tests.Services
             Assert.Empty(ctx.DeferredIds);
             Assert.Equal(["Q1", "Known line", "Q2"], ctx.Entries.Select(e => e.Text).ToArray());
             Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
-            Assert.Equal("Alice", ctx.Entries[1].Speaker);
+            var seg = Assert.Single(ctx.Entries[1].Segments);
+            Assert.Equal(new ContextSegment("Known line", "dialog", "Alice"), seg);
         }
 
         [Fact]
@@ -202,7 +203,61 @@ namespace Read2Me.Tests.Services
             Assert.NotNull(ctx);
             Assert.Equal([b.ParagraphId("p0"), b.ParagraphId("p2")], ctx.IncludedIds);
             Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
-            Assert.Equal("Narrator", ctx.Entries[1].Speaker);
+            var seg = Assert.Single(ctx.Entries[1].Segments);
+            Assert.Equal(new ContextSegment("Narration", "narration", "narrator"), seg);
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_PartlyAttributedParagraph_BreaksRun()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            // p1 is a multi-speaker paragraph with one stamped and one unstamped dialog item — its
+            // unknown segment would poison context, so it is not eligible as context and ends the run.
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Character, "Q1"))
+                .AddParagraph("p1", p => p
+                    .AddCharacterLine("i1a", "Known line", speaker: "alice")
+                    .AddRawItem("i1b", ParagraphItemType.Character, "Unstamped line"))
+                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Character, "Q2"))))
+                .BuildAsync();
+
+            var ctx = await _reader.GetParagraphBatchContextAsync(
+                _folder, b.ChapterId("ch"), [b.ParagraphId("p0"), b.ParagraphId("p2")], 0, 0);
+
+            Assert.NotNull(ctx);
+            Assert.Equal([b.ParagraphId("p0")], ctx.IncludedIds);
+            Assert.Equal([b.ParagraphId("p2")], ctx.DeferredIds);
+        }
+
+        [Fact]
+        public async Task GetParagraphContext_MultiItemParagraph_ReturnsRawTextAndSegments()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p
+                    .AddCharacterLine("i0a", "\"Hello,\"", speaker: "alice")
+                    .AddNarration("i0b", "she said,")
+                    .AddRawItem("i0c", ParagraphItemType.Character, "\"and goodbye.\""))
+                .AddParagraph("p1", p => p.AddRawItem("i1", ParagraphItemType.Character, "Q"))))
+                .BuildAsync();
+
+            var ctx = await _reader.GetParagraphContextAsync(
+                _folder, b.ChapterId("ch"), b.ParagraphId("p1"), 4, 0);
+
+            Assert.NotNull(ctx);
+            var preceding = Assert.Single(ctx.Preceding);
+            Assert.Equal("\"Hello,\" she said, \"and goodbye.\"", preceding.Text);
+            Assert.Equal(
+                [
+                    new ContextSegment("\"Hello,\"", "dialog", "Alice"),
+                    new ContextSegment("she said,", "narration", "narrator"),
+                    new ContextSegment("\"and goodbye.\"", "dialog", "unknown"),
+                ],
+                preceding.Segments);
         }
 
         [Fact]
