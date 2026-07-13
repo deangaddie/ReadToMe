@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Commands;
@@ -46,6 +47,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<SetItemCharacterCommand>, SetItemCharacterHandler>();
         services.AddScoped<ICommandHandler<CreateCharacterCommand>, CreateCharacterHandler>();
         services.AddScoped<ICommandHandler<SetParagraphCharacterCommand>, SetParagraphCharacterHandler>();
+        services.AddScoped<ICommandHandler<ApplySegmentationCommand>, ApplySegmentationHandler>();
+        services.TryAddSingleton<Events.EventBroadcaster<Events.ParagraphItemsChanged>>();
         services.AddScoped<ICommandHandler<AddCharacterAliasCommand>, AddCharacterAliasHandler>();
         services.AddScoped<ICommandHandler<RemoveCharacterAliasCommand>, RemoveCharacterAliasHandler>();
         services.AddScoped<ICommandHandler<MergeCharactersCommand>, MergeCharactersHandler>();

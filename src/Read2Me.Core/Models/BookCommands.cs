@@ -34,6 +34,16 @@ public record MergeParagraphItemCommand(ProjectFolderId FolderId, Guid ItemId, M
 public record SetItemCharacterCommand(ProjectFolderId FolderId, Guid ItemId, Guid? CharacterId) : BookCommand(FolderId);
 public record CreateCharacterCommand(ProjectFolderId FolderId, string Name) : BookCommand(FolderId);
 public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid ParagraphId, Guid? CharacterId, string? VoiceInstructions = null) : BookCommand(FolderId);
+public enum SegmentItemType { Narration, Character }
+
+/// One segment of a re-segmented paragraph, ready to apply: text is a slice of the original
+/// paragraph, and the speaker is already resolved to an id (null = unknown).
+public sealed record SegmentSpec(string Text, SegmentItemType Type, Guid? CharacterId, string? VoiceInstructions);
+
+/// Reconciles a paragraph's items against the segment list the LLM answered with: matching items
+/// (same normalized text + type) keep their id and audio, the rest are replaced.
+public record ApplySegmentationCommand(ProjectFolderId FolderId, Guid ParagraphId, IReadOnlyList<SegmentSpec> Segments) : BookCommand(FolderId);
+
 public record AddCharacterAliasCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
 public record RemoveCharacterAliasCommand(ProjectFolderId FolderId, Guid AliasId) : BookCommand(FolderId);
 public record MergeCharactersCommand(ProjectFolderId FolderId, Guid SurvivorId, Guid MergedId, bool AddNameAsAlias) : BookCommand(FolderId);
