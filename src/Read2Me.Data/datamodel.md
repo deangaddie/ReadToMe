@@ -49,12 +49,14 @@ Every book has at least one Volume, Part, and Chapter. Singular nodes are hidden
 
 ### Paragraph
 
+A paragraph has no speaker of its own — the speaker(s) are derived from its Items, which may
+each carry a different Character.
+
 | Column        | Type   | Nullable | Notes                                                             |
 | ------------- | ------ | -------- | ----------------------------------------------------------------- |
 | `Id`          | Guid   | no       | PK                                                                |
 | `ChapterId`   | Guid   | no       | FK → Chapter                                                      |
 | `Order`       | string | no       | fractional key                                                    |
-| `CharacterId` | Guid   | yes      | FK → Character — set when paragraph is a single-character item    |
 
 ### ParagraphItem
 

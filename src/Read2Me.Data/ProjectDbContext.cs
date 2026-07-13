@@ -68,7 +68,6 @@ namespace Read2Me.Data
                 e.HasKey(p => p.Id);
                 e.Property(p => p.Order).HasMaxLength(250).IsRequired().UseCollation("BINARY");
                 e.HasOne(p => p.Chapter).WithMany(c => c.Paragraphs).HasForeignKey(p => p.ChapterId);
-                e.HasOne(p => p.Character).WithMany().HasForeignKey(p => p.CharacterId);
             });
 
             modelBuilder.Entity<ParagraphItem>(e =>

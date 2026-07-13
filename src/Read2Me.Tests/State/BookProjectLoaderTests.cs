@@ -40,12 +40,6 @@ namespace Read2Me.Tests.State
                 .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "Hello world", character.Id))))
                 .BuildAsync();
 
-            // para.CharacterId needs post-build update
-            await using var db = await OpenDbAsync();
-            var para = await db.Paragraphs.FindAsync(b.ParagraphId("para"));
-            para!.CharacterId = character.Id;
-            await db.SaveChangesAsync();
-
             return (b.VolumeId("vol"), character.Id);
         }
 

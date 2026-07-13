@@ -107,10 +107,6 @@ public sealed class MergeCharactersHandler(ProjectDbSession session) : ICommandH
             .Where(i => i.CharacterId == c.MergedId)
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.CharacterId, c.SurvivorId), ct);
 
-        await db.Paragraphs
-            .Where(p => p.CharacterId == c.MergedId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.CharacterId, c.SurvivorId), ct);
-
         await db.CharacterAliases
             .Where(a => a.CharacterId == c.MergedId)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.CharacterId, c.SurvivorId), ct);
@@ -179,10 +175,6 @@ public sealed class DeleteCharacterHandler(ProjectDbSession session) : ICommandH
         await db.ParagraphItems
             .Where(i => i.CharacterId == c.CharacterId)
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.CharacterId, (Guid?)null), ct);
-
-        await db.Paragraphs
-            .Where(p => p.CharacterId == c.CharacterId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.CharacterId, (Guid?)null), ct);
 
         await db.CharacterAliases
             .Where(a => a.CharacterId == c.CharacterId)

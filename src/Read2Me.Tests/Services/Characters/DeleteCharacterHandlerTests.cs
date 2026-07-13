@@ -36,10 +36,8 @@ namespace Read2Me.Tests.Services.Characters
                 .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "\"Hello.\"", character.Id))))
                 .BuildAsync();
 
-            // Paragraph.CharacterId and CharacterAlias need post-build seeding
+            // CharacterAlias needs post-build seeding
             await using var db = await OpenDbAsync();
-            var para = await db.Paragraphs.FindAsync(b.ParagraphId("para"));
-            para!.CharacterId = character.Id;
             db.CharacterAliases.Add(new CharacterAlias { Id = Guid.NewGuid(), CharacterId = character.Id, Name = "Al" });
             await db.SaveChangesAsync();
 
@@ -59,18 +57,15 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task DeleteCharacter_NullsParagraphItemAndParagraphCharacterIds_AndDeletesAliases()
+        public async Task DeleteCharacter_NullsParagraphItemCharacterIds_AndDeletesAliases()
         {
-            var (charId, paraId, itemId) = await SeedCharacterWithParagraphAsync();
+            var (charId, _, itemId) = await SeedCharacterWithParagraphAsync();
 
             await _handler.HandleAsync(new DeleteCharacterCommand(_folder, charId), CancellationToken.None);
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Characters.AnyAsync(c => c.Id == charId));
             Assert.False(await verify.CharacterAliases.AnyAsync(a => a.CharacterId == charId));
-
-            var para = await verify.Paragraphs.FindAsync(paraId);
-            Assert.Null(para!.CharacterId);
 
             var item = await verify.ParagraphItems.FindAsync(itemId);
             Assert.Null(item!.CharacterId);

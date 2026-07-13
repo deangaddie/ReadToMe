@@ -72,10 +72,8 @@ namespace Read2Me.Tests.Services.Audio
                     text, hasCharacter ? charId : null))))
                 .BuildAsync();
 
-            // Paragraph.CharacterId and item VoiceInstructions need post-build update
+            // Item VoiceInstructions needs post-build update
             await using var db = await OpenDbAsync();
-            var para = await db.Paragraphs.FindAsync(b.ParagraphId("para"));
-            para!.CharacterId = charId;
             var item = await db.ParagraphItems.FindAsync(b.ItemId("item"));
             item!.VoiceInstructions = "whispered";
 

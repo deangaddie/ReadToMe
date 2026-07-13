@@ -41,11 +41,6 @@ namespace Read2Me.Tests.Services.Characters
                 .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "\"Hello.\"", characterId))))
                 .AddHierarchyAsync();
 
-            await using var db = await OpenDbAsync();
-            var para = await db.Paragraphs.FindAsync(b.ParagraphId("para"));
-            para!.CharacterId = characterId;
-            await db.SaveChangesAsync();
-
             return b.ItemId("item");
         }
 

@@ -10,7 +10,7 @@ namespace Read2Me.App.Api
 {
     public sealed record NodeDto(Guid Id, string? Title);
     public sealed record ParagraphItemDto(Guid Id, string ItemType, string? Text, Guid? CharacterId, string? AudioFileName);
-    public sealed record ParagraphDto(Guid Id, Guid? CharacterId, IReadOnlyList<ParagraphItemDto> Items);
+    public sealed record ParagraphDto(Guid Id, IReadOnlyList<ParagraphItemDto> Items);
     public sealed record NodeChildrenDto(
         IReadOnlyList<NodeDto>? Parts,
         IReadOnlyList<NodeDto>? Chapters,
@@ -79,7 +79,7 @@ namespace Read2Me.App.Api
             c.Id, c.Name, c.Aliases.Select(a => new CharacterAliasDto(a.Id, a.Name)).ToList());
 
         private static ParagraphDto ToParagraphDto(Paragraph p) => new(
-            p.Id, p.CharacterId,
+            p.Id,
             p.Items.Select(i => new ParagraphItemDto(
                 i.Id, i.ItemType.ToString(), i.Text, i.CharacterId, i.AudioFileName)).ToList());
     }
