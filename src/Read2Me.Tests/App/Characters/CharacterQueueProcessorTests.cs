@@ -1,11 +1,14 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Characters;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
+using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Llm;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
+using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Tests.App.Characters
 {
@@ -14,6 +17,7 @@ namespace Read2Me.Tests.App.Characters
         private readonly CharacterQueueService _queue;
         private readonly FakeAttributionService _attribution;
         private readonly FakeResolver _resolver;
+        private readonly FakeCharacterReader _reader;
         private readonly FakeCommandHandler _commands;
         private readonly CharacterQueueProcessor _sut;
         private readonly QueuedParagraph _item;
@@ -23,11 +27,13 @@ namespace Read2Me.Tests.App.Characters
             _queue = new CharacterQueueService();
             _attribution = new FakeAttributionService();
             _resolver = new FakeResolver();
+            _reader = new FakeCharacterReader();
             _commands = new FakeCommandHandler();
             _sut = new CharacterQueueProcessor(
                 _queue,
                 _attribution,
                 _resolver,
+                _reader,
                 _commands,
                 NullLogger<CharacterQueueProcessor>.Instance);
 
@@ -40,50 +46,128 @@ namespace Read2Me.Tests.App.Characters
                 Guid.NewGuid());
         }
 
+        // ── Outcome builders ──────────────────────────────────────────────────
+
+        private static AttributionSegment Dialog(string speaker, string text = "\"Hello.\"", string voice = "") =>
+            new(text, AttributionSegmentType.Dialog, speaker, voice);
+
+        private static AttributionSegment Narration(string text = "she said.") =>
+            new(text, AttributionSegmentType.Narration, "narrator", string.Empty);
+
+        /// <summary>A fully attributed answer: one dialog segment for the named speaker.</summary>
+        private static AttributionOutcome Resolved(string speaker = "Bilbo", string voice = "") =>
+            new(AttributionStatus.Resolved, [Dialog(speaker, voice: voice)], null);
+
+        private static AttributionOutcome Segments(
+            AttributionStatus status, string? reason, params AttributionSegment[] segments) =>
+            new(status, segments, reason);
+
+        // ── Apply ─────────────────────────────────────────────────────────────
+
         [Fact]
-        public async Task Resolved_AssignsCharacterAndMarksComplete()
+        public async Task Resolved_ResolvesSpeakers_AppliesSegmentation_MarksComplete()
         {
             var charId = Guid.NewGuid();
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", "Whisper", null);
+            _attribution.Outcome = Segments(AttributionStatus.Resolved, null,
+                Dialog("Bilbo", "\"Hello.\"", "Whisper"), Narration());
             _resolver.ResolvedId = charId;
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            Assert.Equal(charId, _resolver.LastResolvedId);
-            Assert.Equal("Bilbo", _resolver.LastName);
-            
-            var cmd = Assert.Single(_commands.SentCommands);
-            var setCmd = Assert.IsType<SetParagraphCharacterCommand>(cmd);
-            Assert.Equal(_item.ParagraphId, setCmd.ParagraphId);
-            Assert.Equal(charId, setCmd.CharacterId);
-            Assert.Equal("Whisper", setCmd.VoiceInstructions);
+            Assert.Equal("Bilbo", _resolver.Names.Single());
 
-            var outcome = _queue.ResolvedOf(_item.Folder, _item.ParagraphId);
-            Assert.NotNull(outcome);
-            Assert.Equal(charId, outcome.CharacterId);
-            Assert.Equal("Bilbo", outcome.Name);
-            
+            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
+            Assert.Equal(_item.ParagraphId, cmd.ParagraphId);
+            Assert.Collection(cmd.Segments,
+                s =>
+                {
+                    Assert.Equal("\"Hello.\"", s.Text);
+                    Assert.Equal(SegmentItemType.Character, s.Type);
+                    Assert.Equal(charId, s.CharacterId);
+                    Assert.Equal("Whisper", s.VoiceInstructions);
+                },
+                s =>
+                {
+                    Assert.Equal(SegmentItemType.Narration, s.Type);
+                    // Narration is stamped with the narrator by the handler, not resolved by name.
+                    Assert.Null(s.CharacterId);
+                    Assert.Null(s.VoiceInstructions);
+                });
+
+            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
             Assert.Null(_queue.StatusOf(_item.Folder, _item.ParagraphId));
         }
 
         [Fact]
-        public async Task Unknown_MarksUnknown_NoAssignment()
+        public async Task UnknownSpeaker_AppliesWithNullStamp_AndMarksUnknown_WhenItemsStayUnattributed()
         {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.Unknown, null, null, null);
+            _attribution.Outcome = Segments(AttributionStatus.Unknown, "still unknown",
+                Dialog("unknown"), Narration());
+            _reader.Unattributed = 1;
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            // The answer still applies — an unknown speaker resolves to no character, never a new one.
+            Assert.Empty(_resolver.Names);
+            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
+            Assert.Null(cmd.Segments[0].CharacterId);
+
+            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
+            Assert.NotNull(outcome);
+            Assert.Equal(ParagraphOutcomeKind.Unknown, outcome.Kind);
+            Assert.Equal("still unknown", outcome.Reason);
+        }
+
+        [Fact]
+        public async Task PartialAnswer_StampsKnownSegments_AndStaysUnknown()
+        {
+            var charId = Guid.NewGuid();
+            _resolver.ResolvedId = charId;
+            _attribution.Outcome = Segments(AttributionStatus.Unknown, null,
+                Dialog("Bilbo", "\"Hello.\""), Dialog("unknown", "\"Who's there?\""));
+            _reader.Unattributed = 1;
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
+            Assert.Equal(charId, cmd.Segments[0].CharacterId);
+            Assert.Null(cmd.Segments[1].CharacterId);
+
+            Assert.Equal(ParagraphOutcomeKind.Unknown,
+                _queue.OutcomeOf(_item.Folder, _item.ParagraphId)!.Kind);
+        }
+
+        [Fact]
+        public async Task UnknownAnswer_ButEveryItemStamped_CompletesWithoutOutcome()
+        {
+            // An unknown segment that matched an already-stamped item leaves nothing unattributed —
+            // the paragraph is done, whatever the LLM's own confidence was.
+            _attribution.Outcome = Segments(AttributionStatus.Unknown, null, Dialog("unknown"));
+            _reader.Unattributed = 0;
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
+            Assert.Null(_queue.StatusOf(_item.Folder, _item.ParagraphId));
+        }
+
+        [Fact]
+        public async Task EmptyParagraph_NoSegments_MarksUnknown_WithoutApplying()
+        {
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.Unknown, null, null);
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
             Assert.Empty(_commands.SentCommands);
-            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
-            Assert.NotNull(outcome);
-            Assert.Equal(ParagraphOutcomeKind.Unknown, outcome.Kind);
+            Assert.Equal(ParagraphOutcomeKind.Unknown,
+                _queue.OutcomeOf(_item.Folder, _item.ParagraphId)!.Kind);
         }
 
         [Fact]
         public async Task Unknown_WithReason_FlowsReasonIntoOutcome()
         {
             _attribution.Outcome = new AttributionOutcome(
-                AttributionStatus.Unknown, null, null,
+                AttributionStatus.Unknown, null,
                 "Speaker unknown after escalating through 2 models (A → B)");
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
@@ -97,7 +181,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task NoLlmConfigured_MarksFailed_WithReason()
         {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null, null, "No config");
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null, "No config");
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
@@ -110,7 +194,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task Failed_MarksFailed_WithReason()
         {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.Failed, null, null, "LLM Error");
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.Failed, null, "LLM Error");
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
@@ -123,7 +207,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task ServiceUnavailable_FirstTime_RequeuesInsteadOfFailing()
         {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, null, "stalled");
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, "stalled");
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
@@ -135,7 +219,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task ServiceUnavailable_SecondTimeForRequeuedItem_MarksFailed()
         {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, null, "stalled");
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, "stalled");
             var requeued = _item with { Requeued = true };
 
             await _sut.ProcessItemAsync(requeued, CancellationToken.None);
@@ -154,9 +238,6 @@ namespace Read2Me.Tests.App.Characters
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            // Item was marked processing at start
-            // After OCE, it should be removed or left as is depending on CancelAll behavior.
-            // CharacterQueueService.CancelAll removes all entries.
             // In Processor, OCE is caught and logged, but MarkFailed is NOT called for OCE.
             var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
             Assert.Null(outcome);
@@ -167,10 +248,16 @@ namespace Read2Me.Tests.App.Characters
         private QueuedParagraph MakeChapterItem(Guid chapterId) =>
             new(_item.Folder, Guid.NewGuid(), "Preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
 
+        private void AssertCompleted(QueuedParagraph item)
+        {
+            Assert.Null(_queue.StatusOf(item.Folder, item.ParagraphId));
+            Assert.Null(_queue.OutcomeOf(item.Folder, item.ParagraphId));
+        }
+
         [Fact]
         public async Task DrainsWholeQueue_AppliesOutcomePerItem()
         {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null);
+            _attribution.Outcome = Resolved();
             _resolver.ResolvedId = Guid.NewGuid();
 
             var chapterId = Guid.NewGuid();
@@ -181,10 +268,7 @@ namespace Read2Me.Tests.App.Characters
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
             foreach (var item in items)
-            {
-                Assert.NotNull(_queue.ResolvedOf(item.Folder, item.ParagraphId));
-                Assert.Null(_queue.StatusOf(item.Folder, item.ParagraphId));
-            }
+                AssertCompleted(item);
             Assert.Equal(3, _commands.SentCommands.Count);
         }
 
@@ -199,12 +283,12 @@ namespace Read2Me.Tests.App.Characters
             _queue.Enqueue([a1, b1]);
             var first = await _queue.Reader.ReadAsync();
 
-            _attribution.StreamResults.Enqueue((a1, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
-            _attribution.StreamResults.Enqueue((b1, new AttributionOutcome(AttributionStatus.Unknown, null, null, null)));
+            _attribution.StreamResults.Enqueue((a1, Resolved()));
+            _attribution.StreamResults.Enqueue((b1, new AttributionOutcome(AttributionStatus.Unknown, null, null)));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
-            Assert.NotNull(_queue.ResolvedOf(a1.Folder, a1.ParagraphId));
+            AssertCompleted(a1);
             Assert.Equal(ParagraphOutcomeKind.Unknown, _queue.OutcomeOf(b1.Folder, b1.ParagraphId)!.Kind);
         }
 
@@ -217,13 +301,13 @@ namespace Read2Me.Tests.App.Characters
             var first = await _queue.Reader.ReadAsync();
 
             _resolver.ResolvedId = Guid.NewGuid();
-            _attribution.StreamResults.Enqueue((items[0], new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
-            _attribution.StreamResults.Enqueue((items[1], new AttributionOutcome(AttributionStatus.Unknown, null, null, null)));
-            _attribution.StreamResults.Enqueue((items[2], new AttributionOutcome(AttributionStatus.Failed, null, null, "boom")));
+            _attribution.StreamResults.Enqueue((items[0], Resolved()));
+            _attribution.StreamResults.Enqueue((items[1], new AttributionOutcome(AttributionStatus.Unknown, null, null)));
+            _attribution.StreamResults.Enqueue((items[2], new AttributionOutcome(AttributionStatus.Failed, null, "boom")));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
-            Assert.NotNull(_queue.ResolvedOf(items[0].Folder, items[0].ParagraphId));
+            AssertCompleted(items[0]);
             Assert.Equal(ParagraphOutcomeKind.Unknown, _queue.OutcomeOf(items[1].Folder, items[1].ParagraphId)!.Kind);
             var failed = _queue.OutcomeOf(items[2].Folder, items[2].ParagraphId);
             Assert.NotNull(failed);
@@ -243,14 +327,14 @@ namespace Read2Me.Tests.App.Characters
             _resolver.ResolvedId = Guid.NewGuid();
             // Stream yields the step-0 resolve first; by the time the second item streams, the first
             // must already be applied (chip flipped to done).
-            _attribution.StreamResults.Enqueue((early, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
-            _attribution.StreamResults.Enqueue((late, new AttributionOutcome(AttributionStatus.Resolved, "Frodo", null, null)));
+            _attribution.StreamResults.Enqueue((early, Resolved("Bilbo")));
+            _attribution.StreamResults.Enqueue((late, Resolved("Frodo")));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
             // Commands applied in stream order.
             Assert.Equal(2, _commands.SentCommands.Count);
-            var cmd0 = Assert.IsType<SetParagraphCharacterCommand>(_commands.SentCommands[0]);
+            var cmd0 = Assert.IsType<ApplySegmentationCommand>(_commands.SentCommands[0]);
             Assert.Equal(early.ParagraphId, cmd0.ParagraphId);
         }
 
@@ -266,7 +350,7 @@ namespace Read2Me.Tests.App.Characters
             _resolver.ResolvedId = Guid.NewGuid();
             // Only 'worked' is signalled + yielded; 'untouched' is drained but never streamed. It must
             // stay Queued — proof the whole drained queue is not flipped to Processing up front.
-            _attribution.StreamResults.Enqueue((worked, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+            _attribution.StreamResults.Enqueue((worked, Resolved()));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
@@ -288,7 +372,7 @@ namespace Read2Me.Tests.App.Characters
             // 'deferred' goes in flight, is answered suspect, and is held back for a later chain step
             // without ever being yielded. It must not be left showing Processing.
             _attribution.DeferItems.Add(deferred);
-            _attribution.StreamResults.Enqueue((decided, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+            _attribution.StreamResults.Enqueue((decided, Resolved()));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
@@ -308,12 +392,11 @@ namespace Read2Me.Tests.App.Characters
             // Held back by step 0, then resolved by a later escalation step: the deferral is transient
             // and must not block the terminal outcome.
             _attribution.DeferItems.Add(item);
-            _attribution.StreamResults.Enqueue((item, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)));
+            _attribution.StreamResults.Enqueue((item, Resolved()));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
-            Assert.Null(_queue.StatusOf(item.Folder, item.ParagraphId));
-            Assert.NotNull(_queue.ResolvedOf(item.Folder, item.ParagraphId));
+            AssertCompleted(item);
         }
 
         [Fact]
@@ -347,13 +430,11 @@ namespace Read2Me.Tests.App.Characters
 
             _resolver.ResolvedId = Guid.NewGuid();
             // First item decides, then the stream throws before the second — only the second fails.
-            _attribution.StreamThenThrow(
-                (decided, new AttributionOutcome(AttributionStatus.Resolved, "Bilbo", null, null)),
-                new InvalidOperationException("boom"));
+            _attribution.StreamThenThrow((decided, Resolved()), new InvalidOperationException("boom"));
 
             await _sut.ProcessItemAsync(first, CancellationToken.None);
 
-            Assert.NotNull(_queue.ResolvedOf(decided.Folder, decided.ParagraphId));
+            AssertCompleted(decided);
             var failed = _queue.OutcomeOf(undecided.Folder, undecided.ParagraphId);
             Assert.NotNull(failed);
             Assert.Equal(ParagraphOutcomeKind.Failed, failed.Kind);
@@ -440,20 +521,38 @@ namespace Read2Me.Tests.App.Characters
         private class FakeResolver() : CharacterResolver(null!, null!)
         {
             public Guid ResolvedId { get; set; }
-            public Guid? LastResolvedId { get; set; }
-            public string? LastName { get; set; }
+            public List<string> Names { get; } = [];
 
             public override Task<Guid> ResolveOrCreateAsync(ProjectFolderId folder, string name, CancellationToken ct)
             {
-                LastResolvedId = ResolvedId;
-                LastName = name;
+                Names.Add(name);
                 return Task.FromResult(ResolvedId);
             }
         }
 
+        /// <summary>Stands in for the post-apply "is this paragraph fully stamped?" read.</summary>
+        private sealed class FakeCharacterReader : ICharacterReader
+        {
+            public int Unattributed { get; set; }
+
+            public Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId)
+                => Task.FromResult(Unattributed);
+
+            public Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId) => Task.FromResult(new List<Character>());
+            public Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) => Task.FromResult(new List<Character>());
+            public Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<VoiceEntity>());
+            public Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult<Guid?>(null);
+            public Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<VoiceRuleRow>());
+            public Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<CharacterLine>());
+            public Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
+                ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
+                => Task.FromResult(new List<CharacterParagraphRef>());
+            public Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
+        }
+
         private class FakeCommandHandler : IBookCommandHandler
         {
-            public System.Collections.Generic.List<BookCommand> SentCommands { get; } = [];
+            public List<BookCommand> SentCommands { get; } = [];
             public Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
             {
                 SentCommands.Add(command);

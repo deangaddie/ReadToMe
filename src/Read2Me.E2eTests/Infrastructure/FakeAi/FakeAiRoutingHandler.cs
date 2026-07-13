@@ -13,7 +13,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
 {
     /// <summary>Per-test hook: given the LLM prompt, return the assistant reply content.</summary>
     public Func<string, string> LlmReply { get; set; } =
-        _ => FakeAiResponses.AttributionReply("Narrator");
+        p => FakeAiResponses.AttributionReply(p, "Narrator");
 
     /// <summary>Text of the last /api/stream TTS request; echoed back by fake-whisper.</summary>
     private volatile string _lastTtsText = "";
@@ -27,7 +27,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     /// </summary>
     public void Reset()
     {
-        LlmReply = _ => FakeAiResponses.AttributionReply("Narrator");
+        LlmReply = p => FakeAiResponses.AttributionReply(p, "Narrator");
         _lastTtsText = "";
         lock (LlmPromptsSeen) LlmPromptsSeen.Clear();
     }

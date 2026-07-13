@@ -8,6 +8,7 @@ using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Events;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.UseCases;
 using Read2Me.Services.Voice;
@@ -28,7 +29,8 @@ namespace Read2Me.App.State
         AudioReviewService audioReviews,
         NodeStatusService nodeStatus,
         IVoiceResolver voiceResolver,
-        ISelectionCoordinator selectionCoordinator) : IDisposable
+        ISelectionCoordinator selectionCoordinator,
+        EventBroadcaster<ParagraphItemsChanged> paragraphItemsChanged) : IDisposable
     {
         public bool IsLoading { get; private set; }
         public bool HasContent { get; private set; }
@@ -108,7 +110,7 @@ namespace Read2Me.App.State
 
         private ProjectFolderId? _lastFolder;
         private bool _audioQueueSubscribed;
-        private bool _characterAssignedSubscribed;
+        private bool _itemsChangedSubscribed;
 
         public event Action? StateChanged;
 
@@ -122,10 +124,10 @@ namespace Read2Me.App.State
                 _audioQueueSubscribed = true;
             }
 
-            if (!_characterAssignedSubscribed)
+            if (!_itemsChangedSubscribed)
             {
-                characterQueue.CharacterAssigned += OnCharacterAssigned;
-                _characterAssignedSubscribed = true;
+                paragraphItemsChanged.Event += OnParagraphItemsChanged;
+                _itemsChangedSubscribed = true;
             }
 
             if (_lastFolder.HasValue && _lastFolder.Value.Value != folderId.Value)
@@ -397,19 +399,33 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
-        private async void OnCharacterAssigned(ProjectFolderId folder, Guid paragraphId, ResolvedCharacter resolved)
+        /// <summary>
+        /// A paragraph's items were rewritten (attribution applied a segment list, or an item was
+        /// stamped by hand). Segmentation can add and remove items, so the whole item list is
+        /// reloaded rather than a single stamp patched.
+        /// </summary>
+        private async void OnParagraphItemsChanged(ParagraphItemsChanged e)
         {
-            if (_lastFolder is not { } current || current.Value != folder.Value) return;
+            if (_lastFolder is not { } current || current.Value != e.FolderId.Value) return;
 
-            var para = Tree.AllParagraphs().FirstOrDefault(p => p.Id == paragraphId);
+            var para = Tree.AllParagraphs().FirstOrDefault(p => p.Id == e.ParagraphId);
             if (para is null) return;
 
-            // Attribution can create a brand-new character. Refresh the roster so it
-            // shows up in the chip menu without a navigate-away/back reload.
-            if (Characters.All(c => c.Id != resolved.CharacterId))
-                Characters = await reader.GetCharactersAsync(folder);
+            var children = await reader.GetChildrenAsync(e.FolderId, BookNodeLevel.Chapter, para.ChapterId);
+            var reloaded = children?.Paragraphs?.FirstOrDefault(p => p.Id == e.ParagraphId);
+            if (reloaded is null) return;
 
-            nodeStatus.OnCharacterAttributed(folder, paragraphId, remainingUnattributed: 0);
+            para.Items = reloaded.Items;
+
+            // Attribution can create brand-new characters. Refresh the roster so they show up in
+            // the chip menu without a navigate-away/back reload.
+            var stamped = para.Items.Select(i => i.CharacterId).OfType<Guid>().ToList();
+            if (stamped.Any(id => Characters.All(c => c.Id != id)))
+                Characters = await reader.GetCharactersAsync(e.FolderId);
+
+            var remaining = para.Items.Count(i =>
+                i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null);
+            nodeStatus.OnCharacterAttributed(e.FolderId, e.ParagraphId, remaining);
             InvalidateVoicePreview();
             NotifyStateChanged();
         }
@@ -434,10 +450,10 @@ namespace Read2Me.App.State
                 _audioQueueSubscribed = false;
             }
 
-            if (_characterAssignedSubscribed)
+            if (_itemsChangedSubscribed)
             {
-                characterQueue.CharacterAssigned -= OnCharacterAssigned;
-                _characterAssignedSubscribed = false;
+                paragraphItemsChanged.Event -= OnParagraphItemsChanged;
+                _itemsChangedSubscribed = false;
             }
         }
     }

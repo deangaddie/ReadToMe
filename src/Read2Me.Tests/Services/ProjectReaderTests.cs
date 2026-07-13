@@ -52,6 +52,37 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task CountUnattributedCharacterItems_CountsOnlyUnstampedCharacterItems()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
+            var builder = b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("p", p =>
+            {
+                p.AddRawItem("stamped", ParagraphItemType.Character, "\"Hi,\"", alice.Id);
+                p.AddRawItem("unstamped", ParagraphItemType.Character, "\"Who's there?\"", null);
+                // Narration is stamped with the narrator and never counts as unattributed.
+                p.AddRawItem("narration", ParagraphItemType.Narration, "she said.");
+            })));
+            await builder.BuildAsync();
+
+            var count = await _reader.CountUnattributedCharacterItemsAsync(_folder, b.ParagraphId("p"));
+
+            Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public async Task CountUnattributedCharacterItems_FullyStampedParagraph_IsZero()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
+            var builder = b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("p", p =>
+                p.AddRawItem("stamped", ParagraphItemType.Character, "\"Hi,\"", alice.Id))));
+            await builder.BuildAsync();
+
+            Assert.Equal(0, await _reader.CountUnattributedCharacterItemsAsync(_folder, b.ParagraphId("p")));
+        }
+
+        [Fact]
         public async Task GetParagraphContext_ReturnsQueryText()
         {
             var (chId, ids) = await SeedChapterAsync("A", "B", "C");

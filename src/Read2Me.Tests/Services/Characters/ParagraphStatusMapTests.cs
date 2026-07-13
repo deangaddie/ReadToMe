@@ -53,14 +53,13 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public void ClearOutcome_RemovesOutcomeAndResolved_FiresChanged()
+        public void ClearOutcome_RemovesOutcome_FiresChanged()
         {
             var map = new ParagraphStatusMap();
             var paraId = Guid.NewGuid();
             var key = MakeKey(paraId);
             map.TryMarkQueued(key, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
             map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Failed, "err"));
-            map.SetResolved(key, new ResolvedCharacter(Guid.NewGuid(), "Alice"));
 
             int changed = 0;
             map.Changed += () => changed++;
@@ -68,7 +67,6 @@ namespace Read2Me.Tests.Services.Characters
             map.ClearOutcome(Folder, paraId);
 
             Assert.Null(map.OutcomeOf(Folder, paraId));
-            Assert.Null(map.ResolvedOf(Folder, paraId));
             Assert.Equal(1, changed);
         }
 

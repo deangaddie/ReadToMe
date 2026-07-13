@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Read2Me.E2eTests.Infrastructure.FakeAi;
 
@@ -9,7 +10,7 @@ namespace Read2Me.E2eTests.Infrastructure.FakeAi;
 /// clients parse: OpenAI SSE chunks (OpenAiStreamParser), VoxCPM2 binary frames
 /// (VoxCpm2ParagraphTtsClient), whisper plain-text, similarity JSON.
 /// </summary>
-public static class FakeAiResponses
+public static partial class FakeAiResponses
 {
     /// <summary>SSE body streaming <paramref name="content"/> as a single delta chunk, then [DONE].</summary>
     public static string OpenAiSse(string content)
@@ -24,8 +25,33 @@ public static class FakeAiResponses
     public static string OpenAiModels() =>
         JsonSerializer.Serialize(new { data = new[] { new { id = "fake-model" } } });
 
-    public static string AttributionReply(string character, string voiceInstructions = "calm") =>
-        JsonSerializer.Serialize(new { character, voice_instructions = voiceInstructions });
+    /// <summary>
+    /// Segment-list attribution answer for the paragraph(s) the given prompt asks about: one dialog
+    /// segment per paragraph, speaking its whole text. The text has to be echoed back verbatim — the
+    /// service validates that the segments reconstruct the original paragraph — so it is lifted
+    /// straight out of the prompt's context JSON ("query" for single, "paragraphs" for batch).
+    /// </summary>
+    public static string AttributionReply(string prompt, string character, string voiceInstructions = "calm")
+    {
+        var batch = BatchTargets().Matches(prompt);
+        if (batch.Count > 0)
+            return "[" + string.Join(",", batch.Select(m =>
+                $$"""{ "index": {{m.Groups[1].Value}}, "reasoning": "fake", "segments": [ {{Segment(m.Groups[2].Value, character, voiceInstructions)}} ] }""")) + "]";
+
+        var query = QueryText().Match(prompt);
+        var text = query.Success ? query.Groups[1].Value : "\"\"";
+        return $$"""{ "reasoning": "fake", "segments": [ {{Segment(text, character, voiceInstructions)}} ] }""";
+    }
+
+    /// <param name="jsonText">A JSON string literal (quoted, already escaped) lifted from the prompt.</param>
+    private static string Segment(string jsonText, string speaker, string voiceInstructions) =>
+        $$"""{ "text": {{jsonText}}, "type": "dialog", "speaker": "{{speaker}}", "voice_instructions": "{{voiceInstructions}}" }""";
+
+    [GeneratedRegex(@"""index""\s*:\s*(\d+)\s*,\s*""text""\s*:\s*(""(?:[^""\\]|\\.)*"")")]
+    private static partial Regex BatchTargets();
+
+    [GeneratedRegex(@"""query""\s*:\s*\{\s*""text""\s*:\s*(""(?:[^""\\]|\\.)*"")")]
+    private static partial Regex QueryText();
 
     /// <summary>
     /// VoxCPM2 /api/stream response: meta frame, one float32 PCM frame (100ms of silence),

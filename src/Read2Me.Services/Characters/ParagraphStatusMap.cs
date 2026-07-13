@@ -5,21 +5,18 @@ using Read2Me.Services.Queueing;
 namespace Read2Me.Services.Characters
 {
     /// <summary>
-    /// Character-side view over the shared <see cref="QueueStateStore{TKey,TOutcome}"/>,
-    /// adding the two concerns that do not generalize: node ancestry (for
-    /// <see cref="SummaryForNode"/> roll-up) and the resolved-character overlay.
+    /// Character-side view over the shared <see cref="QueueStateStore{TKey,TOutcome}"/>, adding the
+    /// one concern that does not generalize: node ancestry (for <see cref="SummaryForNode"/> roll-up).
     /// </summary>
     internal sealed class ParagraphStatusMap
     {
         private readonly QueueStateStore<ParagraphKey, ParagraphOutcome> _store = new();
         private readonly ConcurrentDictionary<ParagraphKey, (Guid Chapter, Guid Part, Guid Volume)> _ancestry = new();
-        private readonly ConcurrentDictionary<ParagraphKey, ResolvedCharacter> _resolved = new();
 
         public event Action? Changed;
 
         public bool TryMarkQueued(ParagraphKey key, Guid chapter, Guid part, Guid volume)
         {
-            _resolved.TryRemove(key, out _);
             if (_store.TryMarkQueued(key))
             {
                 _ancestry[key] = (chapter, part, volume);
@@ -33,14 +30,11 @@ namespace Read2Me.Services.Characters
         /// <summary>Returns the key to Queued (retaining ancestry) so an interrupted item can be re-driven.</summary>
         public void Requeue(ParagraphKey key, Guid chapter, Guid part, Guid volume)
         {
-            _resolved.TryRemove(key, out _);
             _ancestry[key] = (chapter, part, volume);
             _store.Requeue(key);
         }
 
         public void RemoveOutcome(ParagraphKey key) => _store.RemoveOutcome(key);
-
-        public void SetResolved(ParagraphKey key, ResolvedCharacter resolved) => _resolved[key] = resolved;
 
         public void SetOutcome(ParagraphKey key, ParagraphOutcome outcome) => _store.SetOutcome(key, outcome);
 
@@ -57,18 +51,10 @@ namespace Read2Me.Services.Characters
         public void ClearOutcome(ProjectFolderId folder, Guid paragraphId)
         {
             var key = new ParagraphKey(folder, paragraphId);
-            var removed = _store.ClearOutcome(key);
-            removed |= _resolved.TryRemove(key, out _);
-            if (removed) Changed?.Invoke();
+            if (_store.ClearOutcome(key)) Changed?.Invoke();
         }
 
-        /// <summary>
-        /// Drops active (queued/processing) tracking and its ancestry roll-up. The resolved-character
-        /// overlay survives: it is the only in-memory record of a name the queue already assigned and
-        /// persisted (the book tree is deliberately never stamped — see ParagraphRow), so clearing it
-        /// on cancel would make finished paragraphs render as "Unknown" until a reload. Re-queueing a
-        /// paragraph drops its own stale entry via <see cref="TryMarkQueued"/>/<see cref="Requeue"/>.
-        /// </summary>
+        /// <summary>Drops active (queued/processing) tracking and its ancestry roll-up.</summary>
         public void ClearAll()
         {
             _store.ClearAll();
@@ -80,9 +66,6 @@ namespace Read2Me.Services.Characters
 
         public ParagraphOutcome? OutcomeOf(ProjectFolderId folder, Guid paragraphId)
             => _store.OutcomeOf(new ParagraphKey(folder, paragraphId));
-
-        public ResolvedCharacter? ResolvedOf(ProjectFolderId folder, Guid paragraphId)
-            => _resolved.TryGetValue(new ParagraphKey(folder, paragraphId), out var r) ? r : null;
 
         public NodeQueueSummary SummaryForNode(ProjectFolderId folder, Guid nodeId)
         {

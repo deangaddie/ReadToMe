@@ -23,8 +23,9 @@ namespace Read2Me.Tests.Services.Characters
         private static AttributionSegment Narration(string text = "she said.") =>
             new(text, AttributionSegmentType.Narration, "narrator", "");
 
-        private static SegmentAttributionResult Answer(params AttributionSegment[] segments) =>
-            new("reasoning", segments);
+        /// <summary>An answer is compared as its segment list — reasoning plays no part.</summary>
+        private static IReadOnlyList<AttributionSegment> Answer(params AttributionSegment[] segments) =>
+            segments;
 
         // --- DeriveTrigger ---
 
@@ -109,10 +110,10 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public void ReasoningAndVoiceInstructions_Ignored()
+        public void VoiceInstructions_Ignored()
         {
-            var a = new SegmentAttributionResult("one", [Dialog("Alice", voice: "warm")]);
-            var b = new SegmentAttributionResult("two", [Dialog("Alice", voice: "cold")]);
+            var a = Answer(Dialog("Alice", voice: "warm"));
+            var b = Answer(Dialog("Alice", voice: "cold"));
             Assert.True(SegmentEscalation.AnswersAgree(a, b, Characters));
         }
 

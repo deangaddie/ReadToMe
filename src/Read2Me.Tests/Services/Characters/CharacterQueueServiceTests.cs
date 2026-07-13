@@ -237,25 +237,6 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public void CancelAll_KeepsResolvedOverlay_ForAlreadyCompletedParagraph()
-        {
-            var svc = new CharacterQueueService();
-            var paragraphId = Guid.NewGuid();
-            var item = MakeItem(paragraphId);
-
-            EnqueueAndProcess(svc, item);
-            svc.MarkComplete(item, 1.0, new ResolvedCharacter(Guid.NewGuid(), "Alice"));
-
-            svc.CancelAll();
-
-            // The overlay is the only in-memory record of the assigned name (the tree is never
-            // stamped), so cancelling must not make a finished paragraph render as "Unknown".
-            var resolved = svc.ResolvedOf(Folder, paragraphId);
-            Assert.NotNull(resolved);
-            Assert.Equal("Alice", resolved!.Name);
-        }
-
-        [Fact]
         public void CancelAll_StillClearsActiveStatus()
         {
             var svc = new CharacterQueueService();
@@ -265,22 +246,6 @@ namespace Read2Me.Tests.Services.Characters
             svc.CancelAll();
 
             Assert.Null(svc.StatusOf(Folder, inFlight.ParagraphId));
-        }
-
-        [Fact]
-        public void Enqueue_AfterCancelAll_DropsStaleResolvedOverlay()
-        {
-            var svc = new CharacterQueueService();
-            var paragraphId = Guid.NewGuid();
-
-            EnqueueAndProcess(svc, MakeItem(paragraphId));
-            svc.MarkComplete(MakeItem(paragraphId), 1.0, new ResolvedCharacter(Guid.NewGuid(), "Alice"));
-            svc.CancelAll();
-
-            // Re-attributing the paragraph clears its own overlay, so the surviving entry cannot go stale.
-            svc.Enqueue([MakeItem(paragraphId)]);
-
-            Assert.Null(svc.ResolvedOf(Folder, paragraphId));
         }
 
         [Fact]

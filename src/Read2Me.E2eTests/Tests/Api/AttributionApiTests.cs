@@ -20,7 +20,7 @@ public class AttributionApiTests(E2eAppFixture app)
     {
         var folder = $"api-attr-{Guid.NewGuid():N}";
         var builder = await app.SeedProjectAsync(folder, "Attr Api Book", "Author", characterName: "Alice");
-        app.FakeAi.LlmReply = _ => FakeAiResponses.AttributionReply("Alice");
+        app.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
         var chapterId = builder.ChapterId("ch1");
         var paragraphId = builder.ParagraphId("p2");
 
@@ -44,10 +44,22 @@ public class AttributionApiTests(E2eAppFixture app)
             await Task.Delay(200);
         }
 
+        // Queue state is done and carries no outcome; the attribution itself is on the items.
         var status = JsonDocument.Parse(await Http.GetStringAsync(
             $"{app.BaseUrl}/api/projects/{folder}/attribution/paragraphs/{paragraphId}"));
-        Assert.Equal("Alice", status.RootElement.GetProperty("resolved").GetProperty("name").GetString());
         Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("status").ValueKind);
+        Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("outcome").ValueKind);
+
+        var children = JsonDocument.Parse(await Http.GetStringAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/nodes/chapter/{chapterId}/children"));
+        var paragraph = children.RootElement.GetProperty("paragraphs").EnumerateArray()
+            .Single(p => p.GetProperty("id").GetGuid() == paragraphId);
+        var characterItems = paragraph.GetProperty("items").EnumerateArray()
+            .Where(i => i.GetProperty("itemType").GetString() == "Character")
+            .ToList();
+        Assert.NotEmpty(characterItems);
+        Assert.All(characterItems, i =>
+            Assert.NotEqual(JsonValueKind.Null, i.GetProperty("characterId").ValueKind));
     }
 
     [Fact]

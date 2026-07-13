@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Llm;
 
 namespace Read2Me.App.Characters
 {
@@ -14,6 +15,7 @@ namespace Read2Me.App.Characters
         CharacterQueueService queue,
         CharacterAttributionService attribution,
         CharacterResolver resolver,
+        ICharacterReader reader,
         IBookCommandHandler commands,
         ILogger<CharacterQueueProcessor> logger) : ICharacterQueueProcessor
     {
@@ -83,15 +85,29 @@ namespace Read2Me.App.Characters
         {
             switch (outcome.Status)
             {
+                // An answer applies whether or not every speaker in it was identified: the segments
+                // it *did* attribute are real work, and the paragraph stays queue-eligible while any
+                // Character item is left unstamped.
                 case AttributionStatus.Resolved:
-                    var charId = await AssignCharacterAsync(item, outcome.Character!, outcome.VoiceInstructions, ct);
-                    queue.MarkComplete(item, elapsedSeconds,
-                        new ResolvedCharacter(charId, outcome.Character!));
-                    logger.LogInformation("Completed paragraph {ParagraphId} in {Elapsed:F1}s",
-                        item.ParagraphId, elapsedSeconds);
+                case AttributionStatus.Unknown when outcome.Segments is not null:
+                    await ApplySegmentsAsync(item, outcome.Segments!, ct);
+                    var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
+                    if (unattributed > 0)
+                    {
+                        logger.LogInformation("Paragraph {ParagraphId} has {Count} unattributed item(s) after apply",
+                            item.ParagraphId, unattributed);
+                        queue.MarkUnknown(item, elapsedSeconds, outcome.FailureReason);
+                    }
+                    else
+                    {
+                        queue.MarkComplete(item, elapsedSeconds);
+                        logger.LogInformation("Completed paragraph {ParagraphId} in {Elapsed:F1}s",
+                            item.ParagraphId, elapsedSeconds);
+                    }
                     break;
 
                 case AttributionStatus.Unknown:
+                    // No segments to apply (an empty paragraph) — nothing was attributed.
                     logger.LogInformation("Paragraph {ParagraphId} speaker unknown", item.ParagraphId);
                     queue.MarkUnknown(item, elapsedSeconds, outcome.FailureReason);
                     break;
@@ -126,16 +142,33 @@ namespace Read2Me.App.Characters
             }
         }
 
-        private async Task<Guid> AssignCharacterAsync(
-            QueuedParagraph item,
-            string name,
-            string? voiceInstructions,
-            CancellationToken ct)
+        /// <summary>
+        /// Resolves each segment's speaker to a character id, then applies the whole list in one
+        /// command. Resolution happens here, not in the handler: an unlisted name that survived the
+        /// escalation chain is the chain's final answer, so it earns a new Character.
+        /// </summary>
+        private async Task ApplySegmentsAsync(
+            QueuedParagraph item, IReadOnlyList<AttributionSegment> segments, CancellationToken ct)
         {
-            var charId = await resolver.ResolveOrCreateAsync(item.Folder, name, ct);
+            var specs = new List<SegmentSpec>(segments.Count);
+            foreach (var segment in segments)
+            {
+                var isNarration = segment.Type == AttributionSegmentType.Narration;
+                specs.Add(new SegmentSpec(
+                    segment.Text,
+                    isNarration ? SegmentItemType.Narration : SegmentItemType.Character,
+                    isNarration ? null : await ResolveSpeakerAsync(item.Folder, segment.Speaker, ct),
+                    string.IsNullOrWhiteSpace(segment.VoiceInstructions) ? null : segment.VoiceInstructions));
+            }
+
             await commands.ExecuteAsync(
-                new SetParagraphCharacterCommand(item.Folder, item.ParagraphId, charId, voiceInstructions), ct);
-            return charId;
+                new ApplySegmentationCommand(item.Folder, item.ParagraphId, specs), ct);
         }
+
+        /// <summary>Unknown speaker → null (nobody to stamp); any other name resolves or is created.</summary>
+        private async Task<Guid?> ResolveSpeakerAsync(ProjectFolderId folder, string speaker, CancellationToken ct) =>
+            SegmentWire.IsUnknownSpeaker(speaker)
+                ? null
+                : await resolver.ResolveOrCreateAsync(folder, speaker.Trim(), ct);
     }
 }

@@ -85,37 +85,13 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
-        public void ResolvedOverlay_WhenAllItemsUnassigned_ChipSingleWithOverlayName()
+        public void AllItemsUnassigned_ChipUnknown()
         {
-            var overlay = new ResolvedCharacter(Guid.NewGuid(), "Carol");
-            var vm = ParagraphRowViewModel.For(Para(Char(null)), false, null, false, overlay);
-            Assert.Equal(ParaCharacterChip.Single, vm.Chip);
-            Assert.Equal("Carol", vm.SingleCharacterName);
-        }
-
-        [Fact]
-        public void ResolvedOverlay_WhenAllItemsUnassigned_SplitView_HasUnknownFalse()
-        {
-            var overlay = new ResolvedCharacter(Guid.NewGuid(), "Carol");
-            var vm = ParagraphRowViewModel.For(Para(Char(null)), splitView: true, null, false, overlay);
-            Assert.False(vm.HasUnknownInSplit);
-        }
-
-        [Fact]
-        public void ResolvedOverlay_WhenItemHasRealCharacter_ChipUsesRealCharacter()
-        {
-            var overlay = new ResolvedCharacter(Guid.NewGuid(), "Carol");
-            var vm = ParagraphRowViewModel.For(Para(Char(Alice)), false, null, false, overlay);
-            Assert.Equal(ParaCharacterChip.Single, vm.Chip);
-            Assert.Equal("Alice", vm.SingleCharacterName);
-        }
-
-        [Fact]
-        public void ResolvedOverlay_ExposedOnViewModel()
-        {
-            var overlay = new ResolvedCharacter(Guid.NewGuid(), "Carol");
-            var vm = ParagraphRowViewModel.For(Para(Char(null)), false, null, false, overlay);
-            Assert.Equal(overlay, vm.ResolvedOverlay);
+            // Attribution now stamps items as it applies, so an unstamped item is genuinely unknown —
+            // there is no pre-stamp queue overlay to fall back on.
+            var vm = ParagraphRowViewModel.For(Para(Char(null)), false, null, false);
+            Assert.Equal(ParaCharacterChip.Unknown, vm.Chip);
+            Assert.Null(vm.SingleCharacterName);
         }
     }
 }

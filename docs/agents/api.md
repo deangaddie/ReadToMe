@@ -78,8 +78,10 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/discover/
 curl -s -X POST http://localhost:5000/api/projects/{folder}/attribution/enqueue \
   -H 'content-type: application/json' \
   -d '{ "level": "chapter", "nodeId": "<chapterId>", "unprocessedOnly": true }'
-# poll /api/attribution/queue; per-paragraph result:
+# poll /api/attribution/queue; per-paragraph queue state (status + failure/unknown outcome):
 curl -s http://localhost:5000/api/projects/{folder}/attribution/paragraphs/{paragraphId}
+# the attribution itself is per item — read it off the paragraph's items:
+curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/children
 ```
 
 Manual fixes go through the generic commands endpoint (section 5), e.g.

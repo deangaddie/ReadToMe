@@ -232,6 +232,15 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.ParagraphItems.CountAsync(i =>
+                i.ParagraphId == paragraphId &&
+                i.ItemType == ParagraphItemType.Character &&
+                i.CharacterId == null);
+        }
+
         public async Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);

@@ -15,5 +15,13 @@ namespace Read2Me.Services.Llm
 
         /// <summary>Sentinel for a dialog segment whose speaker is not (yet) known.</summary>
         public const string Unknown = "unknown";
+
+        /// <summary>True when a speaker name is the unknown sentinel rather than a real name.</summary>
+        public static bool IsUnknownSpeaker(string speaker) =>
+            speaker.Trim().Equals(Unknown, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>True when a speaker name is the reserved narrator, not a character.</summary>
+        public static bool IsNarrator(string speaker) =>
+            speaker.Trim().Equals(Narrator, StringComparison.OrdinalIgnoreCase);
     }
 }

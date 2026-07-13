@@ -7,6 +7,7 @@ using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Events;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.UseCases;
 using Read2Me.Services.Voice;
@@ -105,7 +106,7 @@ namespace Read2Me.Tests.State
             var voiceResolver = new FakeVoiceResolver();
             var audioQueue = new AudioQueueService();
             var coordinator = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, voiceResolver, coordinator);
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, voiceResolver, coordinator, new EventBroadcaster<ParagraphItemsChanged>());
             return new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver);
         }
 
@@ -690,7 +691,7 @@ namespace Read2Me.Tests.State
             var audioQueueLocal = new AudioQueueService();
             var coordinatorLocal = new BookSelectionCoordinator(reader, queue, audioQueueLocal, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
             var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, audioSelectionState, dialogService, queue, audioQueueLocal, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinatorLocal);
+                treeState, selectionState, audioSelectionState, dialogService, queue, audioQueueLocal, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinatorLocal, new EventBroadcaster<ParagraphItemsChanged>());
             await presenter.LoadAsync(Folder);
 
             var paragraphId = Guid.NewGuid();
@@ -788,7 +789,7 @@ namespace Read2Me.Tests.State
             var audioReviews = new AudioReviewService();
             var nodeStatus = new NodeStatusService();
             var coordinator788 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator788);
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator788, new EventBroadcaster<ParagraphItemsChanged>());
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraph is loaded into cache (item→paragraph mapping).
@@ -846,16 +847,18 @@ namespace Read2Me.Tests.State
         }
 
         // ---------------------------------------------------------------
-        // OnQueueChanged — presenter stamps resolved character onto tree
+        // ParagraphItemsChanged — presenter reloads that paragraph's items
         // ---------------------------------------------------------------
 
-        private static async Task<(Context ctx, CharacterQueueService queue, Paragraph para, QueuedParagraph queued)>
+        private static async Task<(Context ctx, CharacterQueueService queue, Paragraph para,
+            QueuedParagraph queued, EventBroadcaster<ParagraphItemsChanged> events, IProjectReader reader)>
             CreateWithLoadedParagraph()
         {
             var chapterId = Guid.NewGuid();
             var para = new Paragraph
             {
                 Id = Guid.NewGuid(),
+                ChapterId = chapterId,
                 Items =
                 [
                     new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a" },
@@ -891,7 +894,8 @@ namespace Read2Me.Tests.State
             paragraphTtsSettings2.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
             var audioQueue889 = new AudioQueueService();
             var coordinator889 = new BookSelectionCoordinator(reader, queue, audioQueue889, paragraphTtsSettings2, snackbar2, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, queue, audioQueue889, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinator889);
+            var events889 = new EventBroadcaster<ParagraphItemsChanged>();
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, queue, audioQueue889, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinator889, events889);
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraphs are loaded into the cache.
@@ -899,55 +903,42 @@ namespace Read2Me.Tests.State
 
             var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver());
             var queuedPara = new QueuedParagraph(Folder, para.Id, "preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
-            return (ctx, queue, para, queuedPara);
+            return (ctx, queue, para, queuedPara, events889, reader);
         }
 
         [Fact]
-        public async Task OnQueueChanged_DoesNotMutateParagraphItems_WhenResolved()
+        public async Task ParagraphItemsChanged_ReloadsThatParagraphsItems()
         {
-            // Items stay unstamped; ParagraphRow reads Queue.ResolvedOf at render time instead.
-            var (ctx, queue, para, queued) = await CreateWithLoadedParagraph();
+            // Attribution re-segments: the paragraph's item list is replaced wholesale, not patched.
+            var (_, _, para, queued, events, reader) = await CreateWithLoadedParagraph();
 
             var charId = Guid.NewGuid();
-            var resolved = new ResolvedCharacter(charId, "Alice");
+            var reloaded = new Paragraph
+            {
+                Id = para.Id,
+                ChapterId = queued.ChapterId,
+                Items =
+                [
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a", CharacterId = charId },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b" },
+                ]
+            };
+            reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, queued.ChapterId)
+                .Returns(new HierarchyChildren(null, null, [reloaded]));
 
-            queue.Enqueue([queued]);
-            queue.MarkProcessing(queued);
-            queue.MarkComplete(queued, elapsedSeconds: 1.0, resolved);
+            events.Publish(new ParagraphItemsChanged(Folder, para.Id));
 
-            var item = para.Items.First();
-            Assert.Null(item.CharacterId);
-            Assert.Null(item.Character);
+            Assert.Equal(2, para.Items.Count);
+            Assert.Equal(charId, para.Items.First().CharacterId);
         }
 
         [Fact]
-        public async Task OnQueueChanged_ResolvedOf_ReturnsResolvedCharacter()
+        public async Task ParagraphItemsChanged_ParagraphNotInTree_DoesNotThrow()
         {
-            var (ctx, queue, para, queued) = await CreateWithLoadedParagraph();
+            var (_, _, _, _, events, _) = await CreateWithLoadedParagraph();
 
-            var charId = Guid.NewGuid();
-            var resolved = new ResolvedCharacter(charId, "Alice");
-
-            queue.Enqueue([queued]);
-            queue.MarkProcessing(queued);
-            queue.MarkComplete(queued, elapsedSeconds: 1.0, resolved);
-
-            var result = queue.ResolvedOf(Folder, para.Id);
-            Assert.NotNull(result);
-            Assert.Equal(charId, result!.CharacterId);
-            Assert.Equal("Alice", result.Name);
-        }
-
-        [Fact]
-        public async Task OnQueueChanged_ParagraphNotInTree_DoesNotThrow()
-        {
-            var (ctx, queue, _, _) = await CreateWithLoadedParagraph();
-
-            // Resolve a paragraph not present in the tree.
-            var foreignPara = new QueuedParagraph(Folder, Guid.NewGuid(), "x", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-            queue.Enqueue([foreignPara]);
-            queue.MarkProcessing(foreignPara);
-            var ex = Record.Exception(() => queue.MarkComplete(foreignPara, 1.0, new ResolvedCharacter(Guid.NewGuid(), "Bob")));
+            var ex = Record.Exception(() =>
+                events.Publish(new ParagraphItemsChanged(Folder, Guid.NewGuid())));
 
             Assert.Null(ex);
         }
@@ -1176,7 +1167,7 @@ namespace Read2Me.Tests.State
             var audioReviews = new AudioReviewService();
             var nodeStatus = new NodeStatusService();
             var coordinator1173 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator1173);
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator1173, new EventBroadcaster<ParagraphItemsChanged>());
 
             await presenter.LoadAsync(Folder);
             await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);

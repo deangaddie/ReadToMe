@@ -77,7 +77,7 @@ namespace Read2Me.Tests.Services.Characters
             var batch = Enumerable.Range(0, count)
                 .Select(i => new QueuedParagraph(Folder, Guid.NewGuid(), $"P{i}", chapterId, Guid.NewGuid(), Guid.NewGuid()))
                 .ToList();
-            var entries = batch.Select((_, i) => new BatchContextEntry($"Text {i}", [], i)).ToList();
+            var entries = batch.Select((_, i) => new BatchContextEntry(QueryText, [], i)).ToList();
             var ctx = new ParagraphBatchContext(entries, [.. batch.Select(b => b.ParagraphId)], []);
             return (batch, ctx);
         }
@@ -88,8 +88,29 @@ namespace Read2Me.Tests.Services.Characters
         private static Project DefaultProject() =>
             new() { Id = Guid.NewGuid(), Title = "Book", BookTitle = "The Book", Author = "Author", Filename = "b.epub" };
 
-        private static string Resolved(string name) => $$"""{ "character": "{{name}}" }""";
-        private const string Unknown = """{ "character": "unknown" }""";
+        /// <summary>
+        /// Every paragraph in these tests reads "Hello world" (single and batch alike), so an answer
+        /// is one dialog segment covering it — segment texts have to reconstruct the paragraph they
+        /// answer or the aligner rejects them, which is a different test's job.
+        /// </summary>
+        private const string QueryText = "Hello world";
+
+        private static string Segment(string speaker) =>
+            $$"""{ "text": "{{QueryText}}", "type": "dialog", "speaker": "{{speaker}}", "voice_instructions": "" }""";
+
+        private static string Resolved(string name) =>
+            $$"""{ "reasoning": "r", "segments": [ {{Segment(name)}} ] }""";
+
+        private static readonly string Unknown = Resolved("unknown");
+
+        /// <summary>Batch answer: one segment per requested index, each with the given speaker.</summary>
+        private static string BatchJson(params (int Index, string Speaker)[] entries) =>
+            "[" + string.Join(",", entries.Select(e =>
+                $$"""{ "index": {{e.Index}}, "reasoning": "r", "segments": [ {{Segment(e.Speaker)}} ] }""")) + "]";
+
+        /// <summary>The speaker of a single-segment answer.</summary>
+        private static string? Speaker(AttributionOutcome outcome) =>
+            outcome.Segments is { Count: > 0 } s ? s[0].Speaker : null;
 
         // Known-character list: only "Alice" is listed, so any other resolved name is UnlistedName.
         private static List<Character> KnownAlice() =>
@@ -111,7 +132,7 @@ namespace Read2Me.Tests.Services.Characters
                 ProjectFolderId f, Guid c, IReadOnlyList<Guid> ids, int b, int a)
             {
                 if (batchCtx != null) return Task.FromResult<ParagraphBatchContext?>(batchCtx);
-                var entries = ids.Select((_, i) => new BatchContextEntry($"Text {i}", [], i)).ToList();
+                var entries = ids.Select((_, i) => new BatchContextEntry(QueryText, [], i)).ToList();
                 return Task.FromResult<ParagraphBatchContext?>(new ParagraphBatchContext(entries, [.. ids], []));
             }
 
@@ -168,7 +189,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", result.Character);
+            Assert.Equal("Alice", Speaker(result));
 
             var small = llm.Calls.Single(c => c.Config.Name == "Small").Prompt;
             var big = llm.Calls.Single(c => c.Config.Name == "Big").Prompt;
@@ -188,7 +209,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var (batch, _) = MakeBatch(2);
             var llm = new SequenceCompletionRunner()
-                .ForConfig("Small", """[{ "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }]""");
+                .ForConfig("Small", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             await DrainStreamAsync(svc, batch);
@@ -221,7 +242,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", result.Character);
+            Assert.Equal("Alice", Speaker(result));
             Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
         }
 
@@ -240,7 +261,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Mordecai", result.Character);
+            Assert.Equal("Mordecai", Speaker(result));
             Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
         }
 
@@ -259,7 +280,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", result.Character);
+            Assert.Equal("Alice", Speaker(result));
             Assert.Equal(["A", "B", "C"], llm.Configs.Select(c => c.Name));
         }
 
@@ -276,7 +297,7 @@ namespace Read2Me.Tests.Services.Characters
             var withPrior = NewService(llmGood, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
             var priorResult = await withPrior.AttributeAsync(MakeItem(), CancellationToken.None);
             Assert.Equal(AttributionStatus.Resolved, priorResult.Status);
-            Assert.Equal("Zorg", priorResult.Character);
+            Assert.Equal("Zorg", Speaker(priorResult));
 
             // Item with no usable prior answer (A also infra-fails) → Failed.
             var llmNone = new SequenceCompletionRunner()
@@ -379,8 +400,8 @@ namespace Read2Me.Tests.Services.Characters
             };
             // Every A answer unknown → all four escalate to B in one burst, grouped per chapter.
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """[ { "index": 0, "character": "unknown" }, { "index": 1, "character": "unknown" } ]""")
-                .ForConfig("B", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
+                .ForConfig("A", BatchJson((0, "unknown"), (1, "unknown")))
+                .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var results = await DrainStreamAsync(svc, queued);
@@ -402,11 +423,8 @@ namespace Read2Me.Tests.Services.Characters
             var ch = Guid.NewGuid();
             var queued = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(ch)).ToList();
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """
-                    [ { "index": 0, "character": "unknown" }, { "index": 1, "character": "unknown" },
-                      { "index": 2, "character": "unknown" }, { "index": 3, "character": "unknown" } ]
-                    """)
-                .ForConfig("B", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
+                .ForConfig("A", BatchJson((0, "unknown"), (1, "unknown"), (2, "unknown"), (3, "unknown")))
+                .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var results = await DrainStreamAsync(svc, queued);
@@ -427,7 +445,7 @@ namespace Read2Me.Tests.Services.Characters
             var ch = Guid.NewGuid();
             var queued = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(ch)).ToList();
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
+                .ForConfig("A", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var chunks = new List<IReadOnlyList<QueuedParagraph>>();
@@ -507,7 +525,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var (batch, ctx) = MakeBatch(2);
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "unknown" } ]""");
+                .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
 
             var results = await DrainStreamAsync(svc, batch);
@@ -617,7 +635,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var outcome = Assert.Single(results).Outcome;
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Alice", outcome.Character);
+            Assert.Equal("Alice", Speaker(outcome));
             Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
         }
 
@@ -632,7 +650,7 @@ namespace Read2Me.Tests.Services.Characters
             var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Mordecai", outcome.Character);
+            Assert.Equal("Mordecai", Speaker(outcome));
         }
 
         [Fact]
@@ -649,7 +667,7 @@ namespace Read2Me.Tests.Services.Characters
             var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Alice", outcome.Character);
+            Assert.Equal("Alice", Speaker(outcome));
         }
 
         [Fact]
@@ -664,7 +682,7 @@ namespace Read2Me.Tests.Services.Characters
             var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Alice", outcome.Character);
+            Assert.Equal("Alice", Speaker(outcome));
             Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
         }
 
@@ -675,8 +693,8 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
             var (batch, ctx) = MakeBatch(2);
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "unknown" } ]""")
-                .ForConfig("B", """[ { "index": 0, "character": "Alice" } ]""");
+                .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")))
+                .ForConfig("B", BatchJson((0, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
             var results = await DrainStreamAsync(svc, batch);
@@ -695,9 +713,9 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, ctx) = MakeBatch(3);
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A",
-                    """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }, { "index": 2, "character": "Alice" } ]""",
-                    """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }, { "index": 2, "character": "Zorg" } ]""")
-                .ForConfig("B", """[ { "index": 0, "character": "Alice" } ]""");
+                    BatchJson((0, "Alice"), (1, "Alice"), (2, "Alice")),
+                    BatchJson((0, "Alice"), (1, "Alice"), (2, "Zorg")))
+                .ForConfig("B", BatchJson((0, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
             var results = await DrainStreamAsync(svc, batch);
@@ -746,11 +764,11 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, _) = MakeBatch(3);
             // Step-0 context trims the third item as deferred.
             var ctx = new ParagraphBatchContext(
-                [new BatchContextEntry("Text 0", [], 0), new BatchContextEntry("Text 1", [], 1)],
+                [new BatchContextEntry(QueryText, [], 0), new BatchContextEntry(QueryText, [], 1)],
                 [batch[0].ParagraphId, batch[1].ParagraphId],
                 [batch[2].ParagraphId]);
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
+                .ForConfig("A", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
             var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
@@ -771,13 +789,8 @@ namespace Read2Me.Tests.Services.Characters
             // All four are unknown from A → all four escalate to B. Dynamic reader (null fixed ctx)
             // builds a context matching each chunk, so re-grouping into 2s is exercised faithfully.
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """
-                    [ { "index": 0, "character": "unknown" }, { "index": 1, "character": "unknown" },
-                      { "index": 2, "character": "unknown" }, { "index": 3, "character": "unknown" } ]
-                    """)
-                .ForConfig("B", """
-                    [ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]
-                    """);
+                .ForConfig("A", BatchJson((0, "unknown"), (1, "unknown"), (2, "unknown"), (3, "unknown")))
+                .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
@@ -801,8 +814,8 @@ namespace Read2Me.Tests.Services.Characters
 
             var (batch, ctx) = MakeBatch(2);
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """[ { "index": 0, "character": "unknown" }, { "index": 1, "character": "unknown" } ]""")
-                .ForConfig("B", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" } ]""");
+                .ForConfig("A", BatchJson((0, "unknown"), (1, "unknown")))
+                .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
 
             await svc.AttributeBatchAsync(batch, CancellationToken.None);
@@ -825,7 +838,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var (batch, ctx) = MakeBatch(2);
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "unknown" } ]""");
+                .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
 
             var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
@@ -846,8 +859,8 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, ctx) = MakeBatch(2);
             // Item 0 resolves to a known character (accepted at step 0); item 1 is unknown (escalates).
             var llm = new SequenceCompletionRunner()
-                .ForConfig("A", """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "unknown" } ]""")
-                .ForConfig("B", """[ { "index": 0, "character": "Alice" } ]""");
+                .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")))
+                .ForConfig("B", BatchJson((0, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
             var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
@@ -878,7 +891,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", result.Character);
+            Assert.Equal("Alice", Speaker(result));
             Assert.Equal(2, llm.Configs.Count(c => c.Name == "A"));
             Assert.DoesNotContain(llm.Configs, c => c.Name == "B");
         }
@@ -899,7 +912,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Mordecai", result.Character);       // B's final answer, not sample 1
+            Assert.Equal("Mordecai", Speaker(result));       // B's final answer, not sample 1
             Assert.Equal(2, llm.Configs.Count(c => c.Name == "A")); // two samples at A
             Assert.Contains(llm.Configs, c => c.Name == "B");       // escalated
         }
@@ -948,7 +961,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", result.Character);
+            Assert.Equal("Alice", Speaker(result));
             Assert.DoesNotContain(llm.Configs, c => c.Name == "B");
         }
 
@@ -987,7 +1000,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", result.Character);            // B's single (first) answer stands
+            Assert.Equal("Alice", Speaker(result));            // B's single (first) answer stands
             Assert.Equal(1, llm.Configs.Count(c => c.Name == "B"));
         }
 
@@ -1012,7 +1025,7 @@ namespace Read2Me.Tests.Services.Characters
             var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Liz", result.Character);          // sample 1 carried verbatim
+            Assert.Equal("Liz", Speaker(result));          // sample 1 carried verbatim
             Assert.DoesNotContain(llm.Configs, c => c.Name == "B");
         }
 
@@ -1028,9 +1041,9 @@ namespace Read2Me.Tests.Services.Characters
             // indices 0 and 1 agree. Only index 2 becomes an Inconsistent suspect → escalates to B.
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A",
-                    """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }, { "index": 2, "character": "Alice" } ]""",
-                    """[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Alice" }, { "index": 2, "character": "Zorg" } ]""")
-                .ForConfig("B", """[ { "index": 0, "character": "Alice" } ]""");
+                    BatchJson((0, "Alice"), (1, "Alice"), (2, "Alice")),
+                    BatchJson((0, "Alice"), (1, "Alice"), (2, "Zorg")))
+                .ForConfig("B", BatchJson((0, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
             var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);

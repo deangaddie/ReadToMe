@@ -56,10 +56,18 @@ namespace Read2Me.Services.Characters
         };
     }
 
+    /// <summary>
+    /// A paragraph's attribution answer: the full segment list the LLM re-segmented it into, with
+    /// every segment's text already sliced from the original paragraph (never LLM text). Segments
+    /// are non-null for <see cref="AttributionStatus.Resolved"/> and for an
+    /// <see cref="AttributionStatus.Unknown"/> that carries an answer with unknown dialog speakers;
+    /// they are null when there is nothing to apply (empty paragraph, infra/parse failure).
+    /// <see cref="AttributionStatus.Unknown"/> means the answer left ≥1 dialog segment unattributed;
+    /// whether the paragraph ends up unattributed is decided on apply, per item.
+    /// </summary>
     public sealed record AttributionOutcome(
         AttributionStatus Status,
-        string? Character,
-        string? VoiceInstructions,
+        IReadOnlyList<AttributionSegment>? Segments,
         string? FailureReason);
 
     /// <summary>
@@ -96,7 +104,7 @@ namespace Read2Me.Services.Characters
             if (chain.Count == 0)
             {
                 logger.LogWarning("No active LLM config — skipping paragraph {ParagraphId}", item.ParagraphId);
-                return new AttributionOutcome(AttributionStatus.NoLlmConfigured, null, null,
+                return new AttributionOutcome(AttributionStatus.NoLlmConfigured, null,
                     "No active LLM server configured");
             }
 
@@ -185,7 +193,7 @@ namespace Read2Me.Services.Characters
             if (chain.Count == 0)
             {
                 logger.LogWarning("No active LLM config — skipping {Count} queued paragraph(s)", queued.Count);
-                var outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null, null,
+                var outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null,
                     "No active LLM server configured");
                 foreach (var item in queued)
                     yield return (item, outcome);
@@ -378,8 +386,8 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// Compares two samples for a self-consistency step. A sample-2 parse/infra failure is swallowed
         /// (keep sample 1, no escalation from this check — the check must never worsen results).
-        /// Agreement → sample 1 unchanged. Disagreement → sample 1 carried with an <c>Inconsistent</c>
-        /// trigger so it escalates.
+        /// Agreement (segment-by-segment, per <see cref="SegmentEscalation.AnswersAgree"/>) → sample 1
+        /// unchanged. Disagreement → sample 1 carried with an <c>Inconsistent</c> trigger so it escalates.
         /// </summary>
         private static StepOutcome Reconcile(
             StepOutcome sample1, StepOutcome sample2, IReadOnlyList<Data.Entities.Character> characters)
@@ -387,24 +395,13 @@ namespace Read2Me.Services.Characters
             if (sample2.Trigger == EscalationTrigger.ParseFailure || IsInfraFailure(sample2.Outcome.Status))
                 return sample1;
 
-            return AnswersAgree(sample1.Outcome, sample2.Outcome, characters)
+            // An answer with no segments (empty paragraph) has nothing to compare.
+            if (sample1.Outcome.Segments is not { } a || sample2.Outcome.Segments is not { } b)
+                return sample1;
+
+            return SegmentEscalation.AnswersAgree(a, b, characters)
                 ? sample1
                 : sample1 with { Trigger = EscalationTrigger.Inconsistent };
-        }
-
-        /// <summary>
-        /// Two answers agree when their canonicalized character names match (alias → owner name,
-        /// then trimmed OrdinalIgnoreCase). Two <c>Unknown</c> answers (null character) agree; an
-        /// Unknown and a named answer disagree. Two unlisted names compare raw (canonicalization is a
-        /// no-op for names not in the list).
-        /// </summary>
-        private static bool AnswersAgree(
-            AttributionOutcome a, AttributionOutcome b, IReadOnlyList<Data.Entities.Character> characters)
-        {
-            var na = CharacterNames.Canonicalize(a.Character, characters);
-            var nb = CharacterNames.Canonicalize(b.Character, characters);
-            if (na is null || nb is null) return na is null && nb is null;
-            return string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>Config temperature when &gt; 0, else 0.7 (a null/0 temp would make sample 1 greedy).</summary>
@@ -428,7 +425,7 @@ namespace Read2Me.Services.Characters
             {
                 logger.LogInformation("Paragraph {ParagraphId} has no text — marking unknown", item.ParagraphId);
                 return new StepOutcome(
-                    new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
+                    new AttributionOutcome(AttributionStatus.Unknown, null, null),
                     EscalationTrigger.Unknown);
             }
 
@@ -443,23 +440,21 @@ namespace Read2Me.Services.Characters
                 [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
                 [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
                 [PromptTemplates.ContextJson]     = PromptTemplates.BuildContextJson(ctx),
-                [PromptTemplates.ResponseFormat]  = CharacterAttributionSchema.JsonExample,
+                [PromptTemplates.ResponseFormat]  = SegmentAttributionSchema.JsonExample,
             });
 
             logger.LogDebug("Sending character attribution prompt for paragraph {ParagraphId}", item.ParagraphId);
 
-            var run = await runner.RunAsync<CharacterAttributionResult>(
+            var run = await runner.RunAsync<SegmentAttributionResult>(
                 new LlmRunRequest(config, prompt, item.Preview,
-                    CharacterAttributionSchema.JsonSchema, CompletionShape.Object),
-                TryParseAttribution, ct);
+                    SegmentAttributionSchema.JsonSchema, CompletionShape.Object),
+                TryParseSegments, ct);
 
             switch (run.Outcome)
             {
                 case LlmRunOutcome.ParseFailed:
                     logger.LogWarning("Failed to parse LLM response for {ParagraphId}: {Raw}", item.ParagraphId, run.Raw);
-                    return new StepOutcome(
-                        new AttributionOutcome(AttributionStatus.Failed, null, null, run.Error),
-                        EscalationTrigger.ParseFailure);
+                    return ParseFailure(run.Error);
                 case LlmRunOutcome.Failed:
                 case LlmRunOutcome.ServiceUnavailable:
                     // Infra failure is orthogonal to quality — it carries no EscalationTrigger.
@@ -469,35 +464,53 @@ namespace Read2Me.Services.Characters
                             run.Outcome == LlmRunOutcome.ServiceUnavailable
                                 ? AttributionStatus.ServiceUnavailable
                                 : AttributionStatus.Failed,
-                            null, null, run.Error),
+                            null, run.Error),
                         EscalationTrigger.None);
             }
 
-            var parsed = run.Value!;
-            if (string.IsNullOrWhiteSpace(parsed.Character) ||
-                parsed.Character.Equals("unknown", StringComparison.OrdinalIgnoreCase))
-            {
-                logger.LogInformation("LLM returned unknown for paragraph {ParagraphId}", item.ParagraphId);
-                return new StepOutcome(
-                    new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
-                    EscalationTrigger.Unknown);
-            }
-
-            logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
-                item.ParagraphId, parsed.Character);
-            var trigger = CharacterNames.IsKnown(parsed.Character, characters)
-                ? EscalationTrigger.None
-                : EscalationTrigger.UnlistedName;
-            return new StepOutcome(
-                new AttributionOutcome(AttributionStatus.Resolved,
-                    parsed.Character, parsed.VoiceInstructions, null),
-                trigger);
+            // The query the LLM answered is ctx.Query.Text — align against that exact string, so the
+            // stored segment texts are slices of the paragraph the prompt showed it.
+            return Classify(item.ParagraphId, ctx.Query.Text, run.Value!.Segments, characters);
         }
 
-        private static bool TryParseAttribution(
-            string raw, out CharacterAttributionResult? parsed, out string? error)
+        /// <summary>
+        /// Validates one paragraph's answer against the text it was asked about and classifies it:
+        /// fidelity/alignment failure → <see cref="EscalationTrigger.ParseFailure"/>; otherwise the
+        /// segments are re-sliced from the original text and the answer carries the trigger derived
+        /// from its speakers. Status is <see cref="AttributionStatus.Unknown"/> when a dialog segment
+        /// is unattributed (the answer still applies — its known segments stamp), else Resolved.
+        /// </summary>
+        private StepOutcome Classify(
+            Guid paragraphId, string originalText, IReadOnlyList<AttributionSegment> segments,
+            IReadOnlyList<Data.Entities.Character> characters)
         {
-            if (CharacterAttributionParser.TryParse(raw, out var p))
+            if (!SegmentAligner.TryAlign(originalText, segments, out var aligned))
+            {
+                logger.LogWarning(
+                    "Segment texts do not reconstruct paragraph {ParagraphId} — treating as a parse failure",
+                    paragraphId);
+                return ParseFailure("Segment texts did not match the paragraph text.");
+            }
+
+            var trigger = SegmentEscalation.DeriveTrigger(aligned, characters);
+            var status = SegmentEscalation.HasUnknownSpeaker(aligned)
+                ? AttributionStatus.Unknown
+                : AttributionStatus.Resolved;
+
+            logger.LogInformation(
+                "LLM segmented paragraph {ParagraphId} into {Count} segment(s), status {Status}, trigger {Trigger}",
+                paragraphId, aligned.Count, status, trigger);
+
+            return new StepOutcome(new AttributionOutcome(status, aligned, null), trigger);
+        }
+
+        private static StepOutcome ParseFailure(string? error) =>
+            new(new AttributionOutcome(AttributionStatus.Failed, null, error), EscalationTrigger.ParseFailure);
+
+        private static bool TryParseSegments(
+            string raw, out SegmentAttributionResult? parsed, out string? error)
+        {
+            if (SegmentAttributionParser.TryParse(raw, out var p))
             {
                 parsed = p;
                 error = null;
@@ -526,7 +539,7 @@ namespace Read2Me.Services.Characters
             if (chain.Count == 0)
             {
                 logger.LogWarning("No active LLM config — skipping batch of {Count} paragraphs", batch.Count);
-                var outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null, null,
+                var outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null,
                     "No active LLM server configured");
                 return new BatchAttributionResult([.. batch.Select(b => (b, outcome))], []);
             }
@@ -774,7 +787,7 @@ namespace Read2Me.Services.Characters
                 [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
                 [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
                 [PromptTemplates.ContextJson]     = PromptTemplates.BuildBatchContextJson(ctx),
-                [PromptTemplates.ResponseFormat]  = CharacterBatchAttributionSchema.JsonExample,
+                [PromptTemplates.ResponseFormat]  = SegmentBatchAttributionSchema.JsonExample,
             });
 
             logger.LogDebug("Sending batch character attribution prompt for {Count} paragraphs", included.Count);
@@ -786,10 +799,28 @@ namespace Read2Me.Services.Characters
                 config.MaxTokens,
                 ctx.Entries.Where(e => e.TargetIndex is not null).Select(e => e.Text)));
 
-            var run = await runner.RunAsync<IReadOnlyDictionary<int, CharacterAttributionResult>>(
+            // The answer must cover every requested index; a missing one is a parse failure for the
+            // whole chunk (escalation's unit is the paragraph, and a half-answered batch is not one).
+            var requested = Enumerable.Range(0, included.Count).ToList();
+
+            bool TryParseBatchSegments(
+                string raw, out IReadOnlyDictionary<int, SegmentAttributionResult>? parsed, out string? error)
+            {
+                if (SegmentAttributionParser.TryParseBatch(raw, requested, out var p))
+                {
+                    parsed = p;
+                    error = null;
+                    return true;
+                }
+                parsed = null;
+                error = "Could not parse batch LLM response.";
+                return false;
+            }
+
+            var run = await runner.RunAsync<IReadOnlyDictionary<int, SegmentAttributionResult>>(
                 new LlmRunRequest(runConfig, prompt, $"{included.Count} paragraphs: {first.Preview}",
-                    CharacterBatchAttributionSchema.JsonSchema, CompletionShape.Array),
-                TryParseBatchAttribution, ct);
+                    SegmentBatchAttributionSchema.JsonSchema, CompletionShape.Array),
+                TryParseBatchSegments, ct);
 
             if (run.Outcome is LlmRunOutcome.Failed or LlmRunOutcome.ServiceUnavailable)
             {
@@ -802,7 +833,7 @@ namespace Read2Me.Services.Characters
                     run.Outcome == LlmRunOutcome.ServiceUnavailable
                         ? AttributionStatus.ServiceUnavailable
                         : AttributionStatus.Failed,
-                    null, null, run.Error);
+                    null, run.Error);
                 foreach (var item in included)
                     outcomes.Add((item, new StepOutcome(outcome, EscalationTrigger.None)));
                 return new BatchCoreResult(outcomes, deferred);
@@ -810,86 +841,36 @@ namespace Read2Me.Services.Characters
 
             if (run.Outcome == LlmRunOutcome.ParseFailed)
             {
+                // An unparseable response, or one missing a requested index (the parser rejects the
+                // whole answer), fails the chunk. Final step: today's behaviour — fall back to
+                // single-item attribution. Non-final: the chunk hands off to the next step as
+                // ParseFailure suspects.
                 if (opts.IsFinal)
                 {
-                    // Final step: today's behaviour — fall back to single-item attribution.
                     logger.LogWarning("Failed to parse batch LLM response — falling back to single attribution: {Raw}", run.Raw);
                     foreach (var item in included)
                         outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
                 }
                 else
                 {
-                    // Non-final: the whole chunk hands off to the next step as ParseFailure
-                    // suspects rather than falling back to single.
                     logger.LogWarning("Failed to parse batch LLM response — escalating chunk: {Raw}", run.Raw);
                     foreach (var item in included)
-                        outcomes.Add((item, new StepOutcome(
-                            new AttributionOutcome(AttributionStatus.Failed, null, null, run.Error),
-                            EscalationTrigger.ParseFailure)));
+                        outcomes.Add((item, ParseFailure(run.Error)));
                 }
                 return new BatchCoreResult(outcomes, deferred);
             }
 
             var parsed = run.Value!;
+            // Each target's own query text — the same string the prompt showed for that index.
+            var queryTexts = ctx.Entries
+                .Where(e => e.TargetIndex is not null)
+                .ToDictionary(e => e.TargetIndex!.Value, e => e.Text);
+
             for (var i = 0; i < included.Count; i++)
-            {
-                var item = included[i];
-                if (!parsed.TryGetValue(i, out var entry))
-                {
-                    if (opts.IsFinal)
-                    {
-                        logger.LogWarning("Batch response missing index {Index} — falling back to single attribution for {ParagraphId}",
-                            i, item.ParagraphId);
-                        outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
-                    }
-                    else
-                    {
-                        // Non-final: a missing index is a parse-format failure for that item —
-                        // escalate it rather than falling back to single.
-                        logger.LogWarning("Batch response missing index {Index} — escalating {ParagraphId}",
-                            i, item.ParagraphId);
-                        outcomes.Add((item, new StepOutcome(
-                            new AttributionOutcome(AttributionStatus.Failed, null, null, "Batch response missing index"),
-                            EscalationTrigger.ParseFailure)));
-                    }
-                }
-                else if (entry.Character.Equals("unknown", StringComparison.OrdinalIgnoreCase))
-                {
-                    logger.LogInformation("LLM returned unknown for paragraph {ParagraphId}", item.ParagraphId);
-                    outcomes.Add((item, new StepOutcome(
-                        new AttributionOutcome(AttributionStatus.Unknown, null, null, null),
-                        EscalationTrigger.Unknown)));
-                }
-                else
-                {
-                    logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
-                        item.ParagraphId, entry.Character);
-                    var trigger = CharacterNames.IsKnown(entry.Character, characters)
-                        ? EscalationTrigger.None
-                        : EscalationTrigger.UnlistedName;
-                    outcomes.Add((item, new StepOutcome(
-                        new AttributionOutcome(AttributionStatus.Resolved,
-                            entry.Character, entry.VoiceInstructions, null),
-                        trigger)));
-                }
-            }
+                outcomes.Add((included[i],
+                    Classify(included[i].ParagraphId, queryTexts[i], parsed[i].Segments, characters)));
 
             return new BatchCoreResult(outcomes, deferred);
         }
-
-        private static bool TryParseBatchAttribution(
-            string raw, out IReadOnlyDictionary<int, CharacterAttributionResult>? parsed, out string? error)
-        {
-            if (CharacterBatchAttributionParser.TryParse(raw, out var p))
-            {
-                parsed = p;
-                error = null;
-                return true;
-            }
-            parsed = null;
-            error = "Could not parse batch LLM response.";
-            return false;
-        }
-
     }
 }

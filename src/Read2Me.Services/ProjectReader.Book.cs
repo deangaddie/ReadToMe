@@ -94,6 +94,11 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// Reads are untracked: the session's context is long-lived, so a tracked entity would be
+        /// served from the identity map on re-read and hide a write made through another scope —
+        /// exactly what re-reading a paragraph after attribution rewrote its items is for.
+        /// </summary>
         public async Task<HierarchyChildren> GetChildrenAsync(
             ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId)
         {
@@ -101,15 +106,16 @@ namespace Read2Me.Services
             return parentLevel switch
             {
                 BookNodeLevel.Volume => new HierarchyChildren(
-                    await db.Parts.Where(p => p.VolumeId == parentId).OrderBy(p => p.Order).ToListAsync(),
+                    await db.Parts.AsNoTracking().Where(p => p.VolumeId == parentId).OrderBy(p => p.Order).ToListAsync(),
                     null, null),
                 BookNodeLevel.Part => new HierarchyChildren(
                     null,
-                    await db.Chapters.Where(c => c.PartId == parentId).OrderBy(c => c.Order).ToListAsync(),
+                    await db.Chapters.AsNoTracking().Where(c => c.PartId == parentId).OrderBy(c => c.Order).ToListAsync(),
                     null),
                 _ => new HierarchyChildren(
                     null, null,
                     await db.Paragraphs
+                        .AsNoTracking()
                         .Where(p => p.ChapterId == parentId)
                         .OrderBy(p => p.Order)
                         .Include(p => p.Items.OrderBy(i => i.Order))

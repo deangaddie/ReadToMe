@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
@@ -114,6 +115,7 @@ namespace Read2Me.Tests.Services.Characters
                 ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
                 => Task.FromResult(new List<CharacterParagraphRef>());
             public Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
+            public Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId) => Task.FromResult(0);
             public Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) => Task.FromResult(new List<(Guid, string)>());
             public Task<List<Read2Me.Data.Entities.Voice>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<Read2Me.Data.Entities.Voice>());
             public Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult<Guid?>(null);
@@ -143,6 +145,27 @@ namespace Read2Me.Tests.Services.Characters
         private static Project DefaultProject() =>
             new() { Id = Guid.NewGuid(), Title = "Book", BookTitle = "The Book", Author = "Author", Filename = "b.epub" };
 
+        private static Character Character(string name) =>
+            new() { Id = Guid.NewGuid(), Name = name, Aliases = [] };
+
+        // ---------------------------------------------------------------
+        // Segment answers. Segment texts must reconstruct the paragraph they answer
+        // ("Hello world" for the single path, "Text N" for batch index N) — an answer that
+        // does not is a fidelity failure, which is what ParseFailure means here.
+        // ---------------------------------------------------------------
+
+        private static string Segment(string text, string speaker, string type = "dialog", string voice = "") =>
+            $$"""{ "text": {{JsonSerializer.Serialize(text)}}, "type": "{{type}}", "speaker": "{{speaker}}", "voice_instructions": "{{voice}}" }""";
+
+        /// <summary>Single-paragraph answer covering the whole of "Hello world".</summary>
+        private static string Answer(string speaker, string voice = "", string text = "Hello world") =>
+            $$"""{ "reasoning": "r", "segments": [ {{Segment(text, speaker, voice: voice)}} ] }""";
+
+        /// <summary>Batch answer: index i speaks the whole of its own paragraph text.</summary>
+        private static string BatchAnswer(params (int Index, string Speaker)[] entries) =>
+            "[" + string.Join(",", entries.Select(e =>
+                $$"""{ "index": {{e.Index}}, "reasoning": "r", "segments": [ {{Segment($"Text {e.Index}", e.Speaker)}} ] }""")) + "]";
+
         // ---------------------------------------------------------------
         // Tests
         // ---------------------------------------------------------------
@@ -160,58 +183,86 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task ValidJsonResponse_ReturnsResolved_WithCharacterAndVoice()
+        public async Task ValidSegmentResponse_ReturnsResolved_WithSegments()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
-            var runner = new FakeLlmCompletionRunner()
-                .Completes("""{ "character": "Alice", "voice_instructions": "calm" }""");
+            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice", "calm"));
             var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
 
             var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", result.Character);
-            Assert.Equal("calm", result.VoiceInstructions);
+            var segment = Assert.Single(result.Segments!);
+            Assert.Equal("Hello world", segment.Text);
+            Assert.Equal(AttributionSegmentType.Dialog, segment.Type);
+            Assert.Equal("Alice", segment.Speaker);
+            Assert.Equal("calm", segment.VoiceInstructions);
 
             // Single path runs a schema-constrained object completion labelled with the preview.
             var request = Assert.Single(runner.Requests);
             Assert.Equal("Preview", request.Label);
             Assert.Equal(CompletionShape.Object, request.Shape);
-            Assert.Equal(CharacterAttributionSchema.JsonSchema, request.JsonSchema);
+            Assert.Equal(SegmentAttributionSchema.JsonSchema, request.JsonSchema);
         }
 
         [Fact]
-        public async Task ResponseWithReasoningField_ParsesAndResolves()
+        public async Task MultiSpeakerAnswer_ReturnsEverySegment_SlicedFromTheOriginal()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
-            var runner = new FakeLlmCompletionRunner().Completes(
-                """{ "reasoning": "the tag 'said Alice' follows the quote", "character": "Alice", "voice_instructions": "calm" }""");
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+            var ctx = new ParagraphContext(
+                new ContextParagraph("\"Hello,\" she said. \"Goodbye.\"", []), [], []);
+            var runner = new FakeLlmCompletionRunner().Completes($$"""
+                { "reasoning": "r", "segments": [
+                    {{Segment("\"Hello,\"", "Alice")}},
+                    {{Segment("she said.", "narrator", type: "narration")}},
+                    {{Segment("\"Goodbye.\"", "Bob")}} ] }
+                """);
+            var svc = NewService(runner, new FakeProjectReader(ctx, DefaultProject(),
+                [Character("Alice"), Character("Bob")]), settings);
 
             var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", result.Character);
-            Assert.Equal("calm", result.VoiceInstructions);
+            Assert.Equal(3, result.Segments!.Count);
+            // The slices concatenate back to the original text, verbatim.
+            Assert.Equal(ctx.Query.Text, string.Concat(result.Segments.Select(s => s.Text)));
+            Assert.Equal(AttributionSegmentType.Narration, result.Segments[1].Type);
         }
 
         [Fact]
-        public async Task LlmReturnsUnknown_ReturnsUnknownStatus()
+        public async Task LlmReturnsUnknownSpeaker_ReturnsUnknownStatus_StillCarryingSegments()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
-            var runner = new FakeLlmCompletionRunner()
-                .Completes("""{ "character": "unknown", "voice_instructions": "" }""");
+            var runner = new FakeLlmCompletionRunner().Completes(Answer("unknown"));
             var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
 
             var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
+            // The answer still applies: the segmentation is real even when the speaker is not known.
+            Assert.Single(result.Segments!);
+        }
+
+        [Fact]
+        public async Task SegmentsDoNotReconstructParagraph_ReturnsFailed()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+
+            // The model dropped a word — a fidelity failure, which escalates like a parse failure.
+            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice", text: "Hello"));
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+
+            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+
+            Assert.Equal(AttributionStatus.Failed, result.Status);
+            Assert.Null(result.Segments);
         }
 
         [Fact]
@@ -312,7 +363,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var runner = new FakeLlmCompletionRunner()
-                .Completes("""{ "character": "Alice", "voice_instructions": "" }""");
+                .Completes(Answer("Alice"));
             var fakeReader = new FakeProjectReader(DefaultContext(), DefaultProject());
             var svc = NewService(runner, fakeReader, settings);
 
@@ -332,7 +383,7 @@ namespace Read2Me.Tests.Services.Characters
             await prompts.SetContextWindowAsync(7, 3);
 
             var runner = new FakeLlmCompletionRunner()
-                .Completes("""{ "character": "Alice", "voice_instructions": "" }""");
+                .Completes(Answer("Alice"));
             var fakeReader = new FakeProjectReader(DefaultContext(), DefaultProject());
             var svc = NewService(runner, fakeReader, settings, prompts);
 
@@ -367,11 +418,8 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var (batch, ctx) = MakeBatch(3);
-            var runner = new FakeLlmCompletionRunner().Completes("""
-                [ { "index": 0, "character": "Alice", "voice_instructions": "calm" },
-                  { "index": 1, "character": "unknown" },
-                  { "index": 2, "character": "Bob" } ]
-                """);
+            var runner = new FakeLlmCompletionRunner()
+                .Completes(BatchAnswer((0, "Alice"), (1, "unknown"), (2, "Bob")));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
             var svc = NewService(runner, reader, settings);
 
@@ -381,40 +429,38 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(3, result.Outcomes.Count);
             Assert.Equal(batch[0], result.Outcomes[0].Item);
             Assert.Equal(AttributionStatus.Resolved, result.Outcomes[0].Outcome.Status);
-            Assert.Equal("Alice", result.Outcomes[0].Outcome.Character);
-            Assert.Equal("calm", result.Outcomes[0].Outcome.VoiceInstructions);
+            // Each index's segments are sliced from that index's own paragraph text.
+            Assert.Equal("Text 0", Assert.Single(result.Outcomes[0].Outcome.Segments!).Text);
+            Assert.Equal("Alice", result.Outcomes[0].Outcome.Segments![0].Speaker);
             Assert.Equal(AttributionStatus.Unknown, result.Outcomes[1].Outcome.Status);
             Assert.Equal(AttributionStatus.Resolved, result.Outcomes[2].Outcome.Status);
-            Assert.Equal("Bob", result.Outcomes[2].Outcome.Character);
+            Assert.Equal("Text 2", Assert.Single(result.Outcomes[2].Outcome.Segments!).Text);
 
             // One array-shaped, schema-constrained run for the whole batch.
             var request = Assert.Single(runner.Requests);
             Assert.Equal("3 paragraphs: P0", request.Label);
             Assert.Equal(CompletionShape.Array, request.Shape);
-            Assert.Equal(CharacterBatchAttributionSchema.JsonSchema, request.JsonSchema);
+            Assert.Equal(SegmentBatchAttributionSchema.JsonSchema, request.JsonSchema);
         }
 
         [Fact]
-        public async Task Batch_ResponseWithReasoningField_ParsesAndResolves()
+        public async Task Batch_ExtraUnrequestedIndex_IsIgnored()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
             var (batch, ctx) = MakeBatch(2);
-            var runner = new FakeLlmCompletionRunner().Completes("""
-                [ { "index": 0, "reasoning": "attribution tag after the quote", "character": "Alice", "voice_instructions": "calm" },
-                  { "index": 1, "reasoning": "two-person alternation", "character": "Bob", "voice_instructions": "gruff" } ]
-                """);
+            // Models also answer for context paragraphs; indexes nobody asked for are dropped.
+            var runner = new FakeLlmCompletionRunner()
+                .Completes(BatchAnswer((0, "Alice"), (1, "Bob"), (7, "Nobody")));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
             var svc = NewService(runner, reader, settings);
 
             var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
 
             Assert.Single(runner.Requests);
-            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[0].Outcome.Status);
-            Assert.Equal("Alice", result.Outcomes[0].Outcome.Character);
-            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[1].Outcome.Status);
-            Assert.Equal("Bob", result.Outcomes[1].Outcome.Character);
+            Assert.Equal(2, result.Outcomes.Count);
+            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
         }
 
         [Fact]
@@ -424,7 +470,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var runner = new FakeLlmCompletionRunner()
-                .Completes("""{ "character": "Alice", "voice_instructions": "calm" }""");
+                .Completes(Answer("Alice", "calm"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject());
             var svc = NewService(runner, reader, settings);
 
@@ -433,7 +479,7 @@ namespace Read2Me.Tests.Services.Characters
             var (item, outcome) = Assert.Single(result.Outcomes);
             Assert.Equal(TestItem, item);
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Alice", outcome.Character);
+            Assert.Equal("Alice", Assert.Single(outcome.Segments!).Speaker);
             // Single path — the single-paragraph reader method was used, not the batch one.
             Assert.Null(reader.ReceivedBatchIds);
         }
@@ -447,7 +493,7 @@ namespace Read2Me.Tests.Services.Characters
             var (batch, ctx) = MakeBatch(2);
             var runner = new FakeLlmCompletionRunner()
                 .Completes("not json at all")
-                .Completes("""{ "character": "Alice", "voice_instructions": "" }""");
+                .Completes(Answer("Alice"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
             var svc = NewService(runner, reader, settings);
 
@@ -460,24 +506,26 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Batch_MissingIndex_FallsBackToSingleForThatItemOnly()
+        public async Task Batch_MissingIndex_FallsBackToSingleForTheWholeChunk()
         {
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
+            // Escalation's unit is the paragraph, so a batch answer that skips a requested index is
+            // rejected whole — the chunk falls back to the single path, not just the missing item.
             var (batch, ctx) = MakeBatch(3);
             var runner = new FakeLlmCompletionRunner()
-                .Completes("""[ { "index": 0, "character": "Alice" }, { "index": 2, "character": "Bob" } ]""")
-                .Completes("""{ "character": "Fallback", "voice_instructions": "" }""");
+                .Completes(BatchAnswer((0, "Alice"), (2, "Bob")))
+                .Completes(Answer("Fallback"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
             var svc = NewService(runner, reader, settings);
 
             var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
 
-            Assert.Equal(2, runner.Requests.Count);
-            Assert.Equal("Alice", result.Outcomes[0].Outcome.Character);
-            Assert.Equal("Fallback", result.Outcomes[1].Outcome.Character);
-            Assert.Equal("Bob", result.Outcomes[2].Outcome.Character);
+            // 1 batch run + 3 single fallbacks.
+            Assert.Equal(4, runner.Requests.Count);
+            Assert.All(result.Outcomes, o =>
+                Assert.Equal("Fallback", Assert.Single(o.Outcome.Segments!).Speaker));
         }
 
         [Fact]
@@ -493,7 +541,7 @@ namespace Read2Me.Tests.Services.Characters
                 [batch[0].ParagraphId, batch[1].ParagraphId],
                 [batch[2].ParagraphId]);
             var runner = new FakeLlmCompletionRunner()
-                .Completes("""[ { "index": 0, "character": "Alice" }, { "index": 1, "character": "Bob" } ]""");
+                .Completes(BatchAnswer((0, "Alice"), (1, "Bob")));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
             var svc = NewService(runner, reader, settings);
 
@@ -516,7 +564,7 @@ namespace Read2Me.Tests.Services.Characters
                 [batch[0].ParagraphId],
                 [batch[1].ParagraphId]);
             var runner = new FakeLlmCompletionRunner()
-                .Completes("""{ "character": "Alice", "voice_instructions": "" }""");
+                .Completes(Answer("Alice"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
             var svc = NewService(runner, reader, settings);
 
@@ -550,7 +598,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var (batch, _) = MakeBatch(2);
             var runner = new FakeLlmCompletionRunner()
-                .Completes("""{ "character": "Alice", "voice_instructions": "" }""");
+                .Completes(Answer("Alice"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = null };
             var svc = NewService(runner, reader, settings);
 

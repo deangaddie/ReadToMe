@@ -32,7 +32,7 @@ else
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
-            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@CharacterAttributionSchema.JsonExample</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@SegmentAttributionSchema.JsonExample</MudText>
         </MudPaper>
 
         <MudExpansionPanels Elevation="0" Class="mb-3">
@@ -76,7 +76,7 @@ else
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
-            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@CharacterBatchAttributionSchema.JsonExample</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@SegmentBatchAttributionSchema.JsonExample</MudText>
         </MudPaper>
 
         <MudExpansionPanels Elevation="0" Class="mb-3">
@@ -121,7 +121,7 @@ else
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
-            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@CharacterAttributionSchema.JsonExample</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@SegmentAttributionSchema.JsonExample</MudText>
         </MudPaper>
 
         <MudExpansionPanels Elevation="0" Class="mb-3">
@@ -165,7 +165,7 @@ else
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
-            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@CharacterBatchAttributionSchema.JsonExample</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@SegmentBatchAttributionSchema.JsonExample</MudText>
         </MudPaper>
 
         <MudExpansionPanels Elevation="0" Class="mb-3">
@@ -423,7 +423,7 @@ else
                 }
                 """,
             [PromptTemplates.CharacterName]   = "Gandalf",
-            [PromptTemplates.ResponseFormat]  = CharacterAttributionSchema.JsonExample,
+            [PromptTemplates.ResponseFormat]  = SegmentAttributionSchema.JsonExample,
         };
 
     static readonly IReadOnlyDictionary<string, string> _batchSampleValues =
@@ -440,7 +440,7 @@ else
                   ]
                 }
                 """,
-            [PromptTemplates.ResponseFormat]  = CharacterBatchAttributionSchema.JsonExample,
+            [PromptTemplates.ResponseFormat]  = SegmentBatchAttributionSchema.JsonExample,
         };
 
     protected override async Task OnInitializedAsync()

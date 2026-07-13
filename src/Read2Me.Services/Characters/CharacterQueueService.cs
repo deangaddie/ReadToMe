@@ -20,8 +20,6 @@ namespace Read2Me.Services.Characters
 
     public sealed record ParagraphOutcome(ParagraphOutcomeKind Kind, string? Reason);
 
-    public sealed record ResolvedCharacter(Guid CharacterId, string Name);
-
     public sealed record QueueSnapshot(
         int QueuedCount,
         int ProcessingCount,
@@ -51,12 +49,6 @@ namespace Read2Me.Services.Characters
         private CancellationTokenSource _itemCts = new();
 
         public event Action? Changed;
-
-        /// <summary>
-        /// Fires when a paragraph is successfully assigned a character by the queue processor.
-        /// Subscribers (e.g. BookHierarchyPresenter) should stamp in-memory items and update node status.
-        /// </summary>
-        public event Action<ProjectFolderId, Guid, ResolvedCharacter>? CharacterAssigned;
 
         public CharacterQueueService()
         {
@@ -165,16 +157,17 @@ namespace Read2Me.Services.Characters
             Changed?.Invoke();
         }
 
-        public void MarkComplete(QueuedParagraph item, double elapsedSeconds, ResolvedCharacter? resolved = null)
+        /// <summary>
+        /// The paragraph is fully attributed: every Character item carries a character. The stamps
+        /// themselves reach the UI through <c>ParagraphItemsChanged</c>, published by the apply
+        /// command — the queue only carries queue state.
+        /// </summary>
+        public void MarkComplete(QueuedParagraph item, double elapsedSeconds)
         {
             var key = Key(item);
             _map.RemoveOutcome(key);
-            if (resolved is not null)
-                _map.SetResolved(key, resolved);
             _map.Finish(key, elapsedSeconds);
             _processingPreview = null;
-            if (resolved is not null)
-                CharacterAssigned?.Invoke(item.Folder, item.ParagraphId, resolved);
             Changed?.Invoke();
         }
 
@@ -201,9 +194,6 @@ namespace Read2Me.Services.Characters
 
         public ParagraphOutcome? OutcomeOf(ProjectFolderId folder, Guid paragraphId)
             => _map.OutcomeOf(folder, paragraphId);
-
-        public ResolvedCharacter? ResolvedOf(ProjectFolderId folder, Guid paragraphId)
-            => _map.ResolvedOf(folder, paragraphId);
 
         public void ClearOutcome(ProjectFolderId folder, Guid paragraphId)
             => _map.ClearOutcome(folder, paragraphId);

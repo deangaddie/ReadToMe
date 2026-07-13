@@ -34,6 +34,7 @@ namespace Read2Me.Tests.Fakes
         public virtual Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false) =>
             Task.FromResult(new List<CharacterParagraphRef>());
         public virtual Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
+        public virtual Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId) => Task.FromResult(0);
         public virtual Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) =>
             Task.FromResult(new List<(Guid, string)>());
         public virtual Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false) =>

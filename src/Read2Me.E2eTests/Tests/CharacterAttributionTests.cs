@@ -11,7 +11,7 @@ public class CharacterAttributionTests(E2eAppFixture app, PlaywrightFixture pw) 
     public async Task Selecting_paragraph_and_queueing_attributes_it_via_llm()
     {
         await App.SeedProjectAsync("attr-book", "Attribution Book", "A. Author", characterName: "Alice");
-        App.FakeAi.LlmReply = _ => FakeAiResponses.AttributionReply("Alice");
+        App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
 
         await GotoAsync("/project/attr-book");
 

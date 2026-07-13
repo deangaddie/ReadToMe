@@ -10,9 +10,11 @@ namespace Read2Me.App.Api
 {
     public sealed record NodeEnqueueRequest(string Level, Guid NodeId, bool UnprocessedOnly = true);
     public sealed record EnqueueResponse(int Enqueued);
-    public sealed record ResolvedCharacterDto(Guid CharacterId, string Name);
-    public sealed record ParagraphAttributionStatusDto(
-        string? Status, ParagraphOutcome? Outcome, ResolvedCharacterDto? Resolved);
+    /// <summary>
+    /// Queue state only. Attribution results are per item now — read them from the book endpoint's
+    /// paragraph items, which carry the stamped character.
+    /// </summary>
+    public sealed record ParagraphAttributionStatusDto(string? Status, ParagraphOutcome? Outcome);
 
     public static class AttributionEndpoints
     {
@@ -21,7 +23,7 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/projects/{folder}/attribution/enqueue", EnqueueAsync)
                 .WithSummary("Queue LLM character attribution for the paragraphs under a node (level: volume|part|chapter). Poll /api/attribution/queue.");
             endpoints.MapGet("/api/projects/{folder}/attribution/paragraphs/{paragraphId:guid}", GetParagraphStatus)
-                .WithSummary("Per-paragraph attribution state: queued/processing status, failure outcome, or the resolved character.");
+                .WithSummary("Per-paragraph attribution queue state: queued/processing status and any failure/unknown outcome. Results are on the paragraph's items.");
             endpoints.MapPost("/api/attribution/cancel",
                     (CharacterQueueService queue) => { queue.CancelAll(); return Results.Ok(); })
                 .WithSummary("Cancel all queued attribution work.");
@@ -46,11 +48,9 @@ namespace Read2Me.App.Api
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
-            var resolved = queue.ResolvedOf(folderId, paragraphId);
             return Results.Ok(new ParagraphAttributionStatusDto(
                 queue.StatusOf(folderId, paragraphId)?.ToString(),
-                queue.OutcomeOf(folderId, paragraphId),
-                resolved is null ? null : new ResolvedCharacterDto(resolved.CharacterId, resolved.Name)));
+                queue.OutcomeOf(folderId, paragraphId)));
         }
     }
 }

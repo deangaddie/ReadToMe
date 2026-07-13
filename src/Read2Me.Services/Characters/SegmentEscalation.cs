@@ -9,9 +9,6 @@ namespace Read2Me.Services.Characters
     /// </summary>
     internal static class SegmentEscalation
     {
-        private const string UnknownSentinel = "unknown";
-        private const string NarratorSentinel = "narrator";
-
         /// <summary>
         /// Quality trigger for a parsed segment list: any dialog speaker outside the known list
         /// (and neither sentinel) → <see cref="EscalationTrigger.UnlistedName"/>; else any dialog
@@ -31,10 +28,9 @@ namespace Read2Me.Services.Characters
                     continue;
 
                 var speaker = segment.Speaker.Trim();
-                if (speaker.Equals(UnknownSentinel, StringComparison.OrdinalIgnoreCase))
+                if (SegmentWire.IsUnknownSpeaker(speaker))
                     anyUnknown = true;
-                else if (!speaker.Equals(NarratorSentinel, StringComparison.OrdinalIgnoreCase) &&
-                         !CharacterNames.IsKnown(speaker, characters))
+                else if (!SegmentWire.IsNarrator(speaker) && !CharacterNames.IsKnown(speaker, characters))
                     return EscalationTrigger.UnlistedName;
             }
 
@@ -42,21 +38,29 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
+        /// True when ≥1 dialog segment is the wire sentinel <c>"unknown"</c> — the answer leaves part
+        /// of the paragraph unattributed even if the rest of it stamps.
+        /// </summary>
+        public static bool HasUnknownSpeaker(IReadOnlyList<AttributionSegment> segments) =>
+            segments.Any(s => s.Type == AttributionSegmentType.Dialog &&
+                              SegmentWire.IsUnknownSpeaker(s.Speaker));
+
+        /// <summary>
         /// Self-consistency agreement: identical segment count, and per segment normalized text,
         /// type and canonicalized speaker (alias → owner name, OrdinalIgnoreCase) all match. Any
         /// difference is a disagreement; reasoning and voice instructions are ignored.
         /// </summary>
         public static bool AnswersAgree(
-            SegmentAttributionResult a, SegmentAttributionResult b,
+            IReadOnlyList<AttributionSegment> a, IReadOnlyList<AttributionSegment> b,
             IReadOnlyList<Data.Entities.Character> characters)
         {
-            if (a.Segments.Count != b.Segments.Count)
+            if (a.Count != b.Count)
                 return false;
 
-            for (var i = 0; i < a.Segments.Count; i++)
+            for (var i = 0; i < a.Count; i++)
             {
-                var sa = a.Segments[i];
-                var sb = b.Segments[i];
+                var sa = a[i];
+                var sb = b[i];
                 if (sa.Type != sb.Type)
                     return false;
                 if (SegmentTextNormalizer.Normalize(sa.Text) != SegmentTextNormalizer.Normalize(sb.Text))
