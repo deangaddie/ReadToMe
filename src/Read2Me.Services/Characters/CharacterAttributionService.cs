@@ -394,24 +394,10 @@ namespace Read2Me.Services.Characters
         private static bool AnswersAgree(
             AttributionOutcome a, AttributionOutcome b, IReadOnlyList<Data.Entities.Character> characters)
         {
-            var na = Canonicalize(a.Character, characters);
-            var nb = Canonicalize(b.Character, characters);
+            var na = CharacterNames.Canonicalize(a.Character, characters);
+            var nb = CharacterNames.Canonicalize(b.Character, characters);
             if (na is null || nb is null) return na is null && nb is null;
             return string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>Maps an alias to its owner character's name; returns other names trimmed; null → null.</summary>
-        private static string? Canonicalize(string? name, IReadOnlyList<Data.Entities.Character> characters)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return null;
-            var trimmed = name.Trim();
-            foreach (var c in characters)
-            {
-                if (c.Name.Trim().Equals(trimmed, StringComparison.OrdinalIgnoreCase)) return c.Name.Trim();
-                foreach (var alias in c.Aliases)
-                    if (alias.Name.Trim().Equals(trimmed, StringComparison.OrdinalIgnoreCase)) return c.Name.Trim();
-            }
-            return trimmed;
         }
 
         /// <summary>Config temperature when &gt; 0, else 0.7 (a null/0 temp would make sample 1 greedy).</summary>
@@ -492,7 +478,7 @@ namespace Read2Me.Services.Characters
 
             logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
                 item.ParagraphId, parsed.Character);
-            var trigger = IsKnownName(parsed.Character, characters)
+            var trigger = CharacterNames.IsKnown(parsed.Character, characters)
                 ? EscalationTrigger.None
                 : EscalationTrigger.UnlistedName;
             return new StepOutcome(
@@ -864,7 +850,7 @@ namespace Read2Me.Services.Characters
                 {
                     logger.LogInformation("LLM attributed paragraph {ParagraphId} to '{Character}'",
                         item.ParagraphId, entry.Character);
-                    var trigger = IsKnownName(entry.Character, characters)
+                    var trigger = CharacterNames.IsKnown(entry.Character, characters)
                         ? EscalationTrigger.None
                         : EscalationTrigger.UnlistedName;
                     outcomes.Add((item, new StepOutcome(
@@ -891,20 +877,5 @@ namespace Read2Me.Services.Characters
             return false;
         }
 
-        /// <summary>
-        /// True when <paramref name="name"/> matches a known character name or any alias
-        /// (case-insensitive, trimmed). A resolved answer outside this set is an unlisted name.
-        /// </summary>
-        private static bool IsKnownName(string name, IReadOnlyList<Data.Entities.Character> characters)
-        {
-            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var c in characters)
-            {
-                known.Add(c.Name);
-                foreach (var a in c.Aliases)
-                    known.Add(a.Name);
-            }
-            return known.Contains(name.Trim());
-        }
     }
 }
