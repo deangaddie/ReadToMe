@@ -1042,6 +1042,38 @@ namespace Read2Me.Tests.State
             Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, vol).AttributionRemaining);
         }
 
+        [Fact]
+        public async Task SetParagraphCharacterAsync_Clearing_ReportsEveryItemUnattributed()
+        {
+            var ctx = Create();
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 0)]));
+
+            await ctx.Presenter.LoadAsync(Folder);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+
+            var stamped = Guid.NewGuid();
+            var para = new Paragraph
+            {
+                Id = paraId,
+                Items =
+                [
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a", CharacterId = stamped },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "c", CharacterId = stamped },
+                ]
+            };
+
+            await ctx.Presenter.SetParagraphCharacterAsync(Folder, para, null);
+
+            // Clearing un-attributes both character items — the badge must rise, not report 0.
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, part).AttributionRemaining);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, vol).AttributionRemaining);
+        }
+
         // ---------------------------------------------------------------
         // SetAudioNodeAsync needsAudioOnly (issue 0001)
         // ---------------------------------------------------------------

@@ -258,6 +258,7 @@ else
                 {
                     ParaCharacterChip.Mixed   => (Color.Default, "Mixed"),
                     ParaCharacterChip.Unknown => (Color.Warning, "Unknown"),
+                    ParaCharacterChip.Partial => (Color.Warning, $"{vm.SingleCharacterName ?? "Mixed"} +?"),
                     ParaCharacterChip.Single  => (Color.Primary, vm.SingleCharacterName!),
                     _                         => (Color.Default, "")
                 };

@@ -85,6 +85,22 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
+        public void SomeStampedSomeNull_ChipPartial_WithStampedName()
+        {
+            var vm = ParagraphRowViewModel.For(Para(Char(Alice), Char(null)), false, null, false);
+            Assert.Equal(ParaCharacterChip.Partial, vm.Chip);
+            Assert.Equal("Alice", vm.SingleCharacterName);
+        }
+
+        [Fact]
+        public void SeveralStampedPlusNull_ChipPartial_NoSingleName()
+        {
+            var vm = ParagraphRowViewModel.For(Para(Char(Alice), Char(Bob), Char(null)), false, null, false);
+            Assert.Equal(ParaCharacterChip.Partial, vm.Chip);
+            Assert.Null(vm.SingleCharacterName);
+        }
+
+        [Fact]
         public void AllItemsUnassigned_ChipUnknown()
         {
             // Attribution now stamps items as it applies, so an unstamped item is genuinely unknown —

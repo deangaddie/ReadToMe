@@ -234,10 +234,8 @@ namespace Read2Me.App.State
             item.CharacterId = characterId;
             item.Character = character;
 
-            // Recompute remaining unattributed Character items now that the item is stamped.
-            var remainingUnattributed = item.Paragraph?.Items
-                .Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null) ?? 0;
-            nodeStatus.OnCharacterAttributed(folderId, item.ParagraphId, remainingUnattributed);
+            nodeStatus.OnCharacterAttributed(folderId, item.ParagraphId,
+                CountUnattributed(item.Paragraph?.Items));
 
             InvalidateVoicePreview();
             NotifyStateChanged();
@@ -252,7 +250,8 @@ namespace Read2Me.App.State
             await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
             ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character);
 
-            nodeStatus.OnCharacterAttributed(folderId, paragraph.Id, remainingUnattributed: 0);
+            // Clearing the stamp leaves every character item unattributed — count, never assume 0.
+            nodeStatus.OnCharacterAttributed(folderId, paragraph.Id, CountUnattributed(paragraph.Items));
 
             InvalidateVoicePreview();
             NotifyStateChanged();
@@ -399,6 +398,10 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
+        /// <summary>The node-status counter unit: character items still without a stamp.</summary>
+        private static int CountUnattributed(IEnumerable<ParagraphItem>? items) =>
+            items?.Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null) ?? 0;
+
         /// <summary>
         /// A paragraph's items were rewritten (attribution applied a segment list, or an item was
         /// stamped by hand). Segmentation can add and remove items, so the whole item list is
@@ -423,9 +426,7 @@ namespace Read2Me.App.State
             if (stamped.Any(id => Characters.All(c => c.Id != id)))
                 Characters = await reader.GetCharactersAsync(e.FolderId);
 
-            var remaining = para.Items.Count(i =>
-                i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null);
-            nodeStatus.OnCharacterAttributed(e.FolderId, e.ParagraphId, remaining);
+            nodeStatus.OnCharacterAttributed(e.FolderId, e.ParagraphId, CountUnattributed(para.Items));
             InvalidateVoicePreview();
             NotifyStateChanged();
         }
