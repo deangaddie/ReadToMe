@@ -27,7 +27,13 @@ namespace Read2Me.Services.Audio.SemanticSimilarity
                       ?? new SemanticSimilaritySettings();
 
                 var client = clientResolver.Resolve(config.Type);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 var score = await client.ComputeAsync(config, source, transcript, ct);
+                sw.Stop();
+
+                logger.LogDebug(
+                    "Semantic similarity ({Provider}): score {Score:0.000} vs threshold {Threshold:0.000} in {Ms} ms",
+                    config.Type, score, settings.PassThreshold, sw.ElapsedMilliseconds);
 
                 return (score >= settings.PassThreshold, score, settings.PassThreshold);
             }

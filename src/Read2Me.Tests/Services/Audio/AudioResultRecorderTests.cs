@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Tests.Fakes;
@@ -30,7 +31,7 @@ namespace Read2Me.Tests.Services.Audio
             _fs.SeedFolder(FolderName);
             _commands = new FakeBookCommandHandler();
             _reviews = new AudioReviewService();
-            _sut = new AudioResultRecorder(_fs, _commands, _reviews);
+            _sut = new AudioResultRecorder(_fs, _commands, _reviews, NullLogger<AudioResultRecorder>.Instance);
         }
 
         [Fact]

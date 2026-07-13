@@ -206,6 +206,11 @@ namespace Read2Me.Services.Audio
                 var measure = ParseLoudnormJson(measureStderr.ToString());
                 if (measure is null)
                     _logger.LogDebug("loudnorm measure pass: JSON not parsed — falling back to single-pass");
+                else
+                    _logger.LogDebug(
+                        "loudnorm measured: I={I} LUFS, TP={Tp} dBTP, LRA={Lra} LU, thresh={Thresh}, offset={Offset} " +
+                        "(target I=-16 TP=-1.5 LRA=11)",
+                        measure.InputI, measure.InputTp, measure.InputLra, measure.InputThresh, measure.TargetOffset);
 
                 return (MeasureOutcome.Ok, measure);
             }

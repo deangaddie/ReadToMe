@@ -47,7 +47,9 @@ namespace Read2Me.Tests.Services.Audio
             _processingSettings = new FakeAudioProcessingSettings(ffmpegPath: "ffmpeg", werThreshold: 0.15);
             _voiceDesignSettings = new FakeVoiceDesignSettingsService("the sample text");
 
-            _sut = new AudioItemResolver(_fs, _dbProvider, _voiceResolver, _ttsSettings, _processingSettings, _voiceDesignSettings);
+            _sut = new AudioItemResolver(
+                _fs, _dbProvider, _voiceResolver, _ttsSettings, _processingSettings, _voiceDesignSettings,
+                NullLogger<AudioItemResolver>.Instance);
         }
 
         private static string Key(string? prev = null, string? next = null) =>
@@ -249,7 +251,8 @@ namespace Read2Me.Tests.Services.Audio
                 _fs, _dbProvider, _voiceResolver,
                 new FakeTtsSettingsService(null!),
                 _processingSettings,
-                _voiceDesignSettings);
+                _voiceDesignSettings,
+                NullLogger<AudioItemResolver>.Instance);
 
             var result = await noConfigResolver.ResolveAsync(queued, CancellationToken.None);
 

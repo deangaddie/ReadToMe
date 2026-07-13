@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data;
@@ -15,11 +16,13 @@ namespace Read2Me.Services.Audio
         IVoiceResolver voiceResolver,
         ParagraphTtsSettingsService ttsSettings,
         AudioProcessingSettingsService audioProcessingSettings,
-        VoiceDesignSettingsService voiceDesignSettings) : IAudioItemResolver
+        VoiceDesignSettingsService voiceDesignSettings,
+        ILogger<AudioItemResolver> logger) : IAudioItemResolver
     {
         public async Task<ResolutionResult> ResolveAsync(QueuedAudioItem queued, CancellationToken ct)
         {
             var (folder, itemRef) = (queued.Folder, queued.Item);
+            logger.LogDebug("Item {Id} resolve start (folder {Folder})", itemRef.ParagraphItemId, folder.Value);
             var folderPath = fs.GetProjectFolderPath(folder.Value);
             await using var db = await dbFactory.CreateAsync(folderPath);
 
@@ -77,9 +80,19 @@ namespace Read2Me.Services.Audio
             var processingSettings = await audioProcessingSettings.GetAsync();
             // Prefer the voice's own transcript — it matches the reference audio; the global
             // sample text only applies when the voice predates per-voice transcripts.
-            var referenceTranscript = !string.IsNullOrWhiteSpace(voice.Transcript)
+            var usingVoiceTranscript = !string.IsNullOrWhiteSpace(voice.Transcript);
+            var referenceTranscript = usingVoiceTranscript
                 ? voice.Transcript
                 : await voiceDesignSettings.GetSampleTextAsync();
+
+            logger.LogDebug(
+                "Item {Id} resolved: speaker '{Speaker}', voice {VoiceId} ('{VoiceName}'), refAudio '{RefAudio}', " +
+                "ttsConfig '{Config}' ({Type}), refTranscript from {TranscriptSource}, " +
+                "maxAttempts {Max}, werThreshold {Wer}, overrides {HasOverrides}",
+                itemRef.ParagraphItemId, speaker, voice.Id, voice.Character?.Name ?? "-", refAudioPath,
+                config.Name, config.Type, usingVoiceTranscript ? "voice" : "global sample text",
+                Math.Max(1, processingSettings.AudioMaxAttempts), processingSettings.WerThreshold,
+                !string.IsNullOrWhiteSpace(voice.TtsSettingsOverrideJson));
 
             var request = new PipelineRequest(
                 Folder: folder,

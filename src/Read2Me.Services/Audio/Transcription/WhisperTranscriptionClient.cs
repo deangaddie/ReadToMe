@@ -69,9 +69,10 @@ namespace Read2Me.Services.Audio.Transcription
             var settings = JsonSerializer.Deserialize<LocalWhisperSettings>(config.SettingsJson)
                 ?? new LocalWhisperSettings();
 
-            logger.LogDebug("Sending {File} to Whisper at {Url}", fileName, settings.BaseUrl);
+            logger.LogDebug("Sending {File} to Whisper at {Url} ({Query})", fileName, settings.BaseUrl, outputQuery);
 
             var http = httpClientFactory.CreateClient();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
 
             try
             {
@@ -85,6 +86,9 @@ namespace Read2Me.Services.Audio.Transcription
                 response.EnsureSuccessStatusCode();
 
                 var body = await response.Content.ReadAsStringAsync(ct);
+                sw.Stop();
+                logger.LogDebug("Whisper responded for {File} in {Ms} ms ({Chars} chars)",
+                    fileName, sw.ElapsedMilliseconds, body.Length);
                 reporter.ReportSuccess(settings.BaseUrl);
                 return body;
             }

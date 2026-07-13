@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
@@ -28,25 +29,52 @@ namespace Read2Me.Services.Audio
             var ttsText = ReplaceTrailingComma(req.SourceText);
             var client = ttsResolver.Resolve(req.TtsConfig.Type);
 
+            var pipelineSw = Stopwatch.StartNew();
+            logger.LogDebug(
+                "Item {Id} pipeline start: speaker '{Speaker}', provider {Provider}, {Chars} chars, " +
+                "maxAttempts {Max}, werThreshold {WerThreshold}, refAudio '{RefAudio}'",
+                id, req.Speaker, req.TtsConfig.Type, req.SourceText.Length, req.MaxAttempts,
+                req.WerThreshold, req.RefAudioPath);
+            logger.LogTrace("Item {Id} source text: {Text}", id, req.SourceText);
+
+            if (!string.Equals(ttsText, req.SourceText, StringComparison.Ordinal))
+                logger.LogDebug("Item {Id} trailing comma replaced with semicolon for TTS", id);
+
             byte[] audioBytes = [];
             NormalizeOutcome normalizeOutcome = new(false, null);
             VerifyOutcome verifyOutcome = new(false, null, null, null, false);
+            var attemptsUsed = 0;
 
             for (var attempt = 1; attempt <= req.MaxAttempts; attempt++)
             {
                 ct.ThrowIfCancellationRequested();
+                attemptsUsed = attempt;
 
                 if (attempt > 1)
                     broadcaster.Publish(new ItemStarted(id, attempt, req.Speaker, req.SourceText));
 
+                var attemptSw = Stopwatch.StartNew();
+                logger.LogDebug("Item {Id} attempt {A}/{Max} start", id, attempt, req.MaxAttempts);
+
                 // TTS — propagate hard exceptions to caller
+                logger.LogDebug("Item {Id} attempt {A}: TTS start ({Chars} chars via {Provider})",
+                    id, attempt, ttsText.Length, req.TtsConfig.Type);
+                var ttsSw = Stopwatch.StartNew();
                 using var refAudio = fs.OpenRead(req.RefAudioPath);
                 var wavStream = await client.GenerateAsync(
                     ttsText, req.VoiceInstructions, refAudio, req.TtsConfig, req.TtsSettingsOverrideJson,
                     req.ReferenceTranscript, ct);
+                ttsSw.Stop();
+                // Raw TTS output is not canonical WAV yet (providers emit their own sample rate),
+                // so bytes only — duration is meaningful from the normalize step onward.
+                logger.LogDebug("Item {Id} attempt {A}: TTS complete — {Bytes} bytes in {Ms} ms",
+                    id, attempt, StreamLength(wavStream), ttsSw.ElapsedMilliseconds);
                 broadcaster.Publish(new AudioGenerated(id, attempt));
 
+                logger.LogDebug("Item {Id} attempt {A}: normalize start (loudnorm)", id, attempt);
+                var normalizeSw = Stopwatch.StartNew();
                 var normalizeResult = await normalizer.NormalizeAsync(wavStream, req.FfmpegPath, ct);
+                normalizeSw.Stop();
                 var normalizeOk = normalizeResult.Status == NormalizeStatus.Normalized;
                 normalizeOutcome = new NormalizeOutcome(normalizeOk, normalizeResult.Reason);
                 broadcaster.Publish(new Normalized(id, attempt, normalizeOk, normalizeResult.Reason));
@@ -55,9 +83,17 @@ namespace Read2Me.Services.Audio
                     ? ms.ToArray()
                     : await ReadAllBytesAsync(normalizeResult.Audio, ct);
 
+                logger.LogDebug(
+                    "Item {Id} attempt {A}: normalize complete — {Status} ({Bytes} bytes, {Dur:0}ms audio) " +
+                    "in {Ms} ms{Reason}",
+                    id, attempt, normalizeResult.Status, audioBytes.Length,
+                    CanonicalWav.DurationMs(audioBytes.Length), normalizeSw.ElapsedMilliseconds,
+                    normalizeResult.Reason is null ? "" : $" — {normalizeResult.Reason}");
+
                 if (!normalizeOk)
                 {
                     // Normalize fail — do not retry, return immediately
+                    logger.LogDebug("Item {Id} attempt {A}: normalize failed — no retry, no verify", id, attempt);
                     verifyOutcome = new VerifyOutcome(false, null, "normalize failed", null, false);
                     break;
                 }
@@ -67,6 +103,10 @@ namespace Read2Me.Services.Audio
                 audioBytes = await PostProcessAsync(id, attempt, audioBytes, req.FfmpegPath, ct);
 
                 verifyOutcome = await VerifyAsync(id, attempt, audioBytes, req.SourceText, req.WerThreshold, ct);
+
+                attemptSw.Stop();
+                logger.LogDebug("Item {Id} attempt {A} complete in {Ms} ms — verifyOk {Ok}",
+                    id, attempt, attemptSw.ElapsedMilliseconds, verifyOutcome.Ok);
 
                 if (verifyOutcome.Ok)
                     break;
@@ -82,8 +122,19 @@ namespace Read2Me.Services.Audio
                     continue;
                 }
 
+                if (!isRealVerifyFail)
+                    logger.LogDebug("Item {Id} attempt {A}: not a real verify fail ({Reason}) — no retry",
+                        id, attempt, verifyOutcome.Reason);
+
                 break;
             }
+
+            pipelineSw.Stop();
+            logger.LogDebug(
+                "Item {Id} pipeline complete in {Ms} ms — {Attempts} attempt(s), normalizeOk {NormOk}, " +
+                "verifyOk {VerifyOk}, wer {Wer}, {Bytes} bytes ({Dur:0}ms audio)",
+                id, pipelineSw.ElapsedMilliseconds, attemptsUsed, normalizeOutcome.Ok, verifyOutcome.Ok,
+                verifyOutcome.Wer, audioBytes.Length, CanonicalWav.DurationMs(audioBytes.Length));
 
             return new PipelineResult(audioBytes, normalizeOutcome, verifyOutcome);
         }
@@ -116,18 +167,37 @@ namespace Read2Me.Services.Audio
         {
             var steps = await postProcessCatalog.GetEnabledStepsAsync();
 
+            logger.LogDebug("Item {Id} attempt {A}: post-process start — {Count} enabled step(s) [{Steps}]",
+                id, attempt, steps.Count, string.Join(", ", steps.Select(s => s.Step.StepId)));
+
             foreach (var (step, settingsJson) in steps)
             {
                 ct.ThrowIfCancellationRequested();
 
+                var beforeBytes = audioBytes.Length;
+                var sw = Stopwatch.StartNew();
                 var result = await step.ProcessAsync(audioBytes, ffmpegPath, settingsJson, ct);
+                sw.Stop();
                 audioBytes = result.Audio;
                 broadcaster.Publish(new PostProcessed(id, attempt, step.StepId, result.Applied, result.Reason));
 
                 if (!result.Applied)
+                {
                     logger.LogWarning("Item {Id} attempt {A} post-process step '{Step}' skipped: {Reason}",
                         id, attempt, step.StepId, result.Reason);
+                }
+                else
+                {
+                    logger.LogDebug(
+                        "Item {Id} attempt {A}: step '{Step}' applied in {Ms} ms — {Before} -> {After} bytes " +
+                        "({RemovedMs:0}ms removed)",
+                        id, attempt, step.StepId, sw.ElapsedMilliseconds, beforeBytes, audioBytes.Length,
+                        CanonicalWav.RemovedMs(beforeBytes, audioBytes.Length));
+                }
             }
+
+            logger.LogDebug("Item {Id} attempt {A}: post-process complete — {Bytes} bytes ({Dur:0}ms audio)",
+                id, attempt, audioBytes.Length, CanonicalWav.DurationMs(audioBytes.Length));
 
             return audioBytes;
         }
@@ -138,12 +208,17 @@ namespace Read2Me.Services.Audio
             var config = await transcriptionSettings.GetActiveConfigAsync();
             if (config is null)
             {
+                logger.LogDebug("Item {Id} attempt {A}: verify skipped — no active transcription config", id, attempt);
                 var outcome = new VerifyOutcome(false, null, "no transcription config", null, false);
                 broadcaster.Publish(new Verified(id, attempt, false, null, "no transcription config", false));
                 return outcome;
             }
 
+            logger.LogDebug("Item {Id} attempt {A}: transcribe start ({Provider}, {Dur:0}ms audio)",
+                id, attempt, config.Type, CanonicalWav.DurationMs(audioBytes.Length));
+
             string transcript;
+            var transcribeSw = Stopwatch.StartNew();
             try
             {
                 var transcriptionClient = transcriptionResolver.Resolve(config.Type);
@@ -163,17 +238,30 @@ namespace Read2Me.Services.Audio
             catch (Exception ex)
             {
                 var reason = $"could not verify: {ex.Message}";
+                logger.LogWarning(ex, "Item {Id} attempt {A}: transcribe failed — {Reason}", id, attempt, reason);
                 broadcaster.Publish(new Verified(id, attempt, false, null, reason, false));
                 return new VerifyOutcome(false, null, reason, null, false);
             }
+            transcribeSw.Stop();
+
+            logger.LogDebug("Item {Id} attempt {A}: transcribe complete in {Ms} ms — transcript: {Transcript}",
+                id, attempt, transcribeSw.ElapsedMilliseconds, transcript);
+            logger.LogDebug("Item {Id} attempt {A}: source text for WER: {Source}", id, attempt, sourceText);
 
             broadcaster.Publish(new Transcribed(id, attempt, transcript));
 
             var wer = werComparer.Compute(sourceText, transcript);
+            logger.LogDebug("Item {Id} attempt {A}: WER {Wer:0.000} (threshold {Threshold:0.000}) — {Verdict}",
+                id, attempt, wer, werThreshold, wer > werThreshold ? "over" : "pass");
+
             if (wer > werThreshold)
             {
+                logger.LogDebug("Item {Id} attempt {A}: semantic rescue check start", id, attempt);
                 var (semanticPass, semanticScore, semanticThreshold) =
                     await semanticVerifier.PassesAsync(sourceText, transcript, ct);
+                logger.LogDebug(
+                    "Item {Id} attempt {A}: semantic rescue {Verdict} — score {Score}, threshold {Threshold}",
+                    id, attempt, semanticPass ? "passed" : "failed", semanticScore, semanticThreshold);
                 if (semanticPass)
                 {
                     var rescueReason =
@@ -202,6 +290,8 @@ namespace Read2Me.Services.Audio
                 return text;
             return string.Concat(trimmed.AsSpan(0, trimmed.Length - 1), ";");
         }
+
+        private static long StreamLength(Stream s) => s.CanSeek ? s.Length : 0;
 
         private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)
         {

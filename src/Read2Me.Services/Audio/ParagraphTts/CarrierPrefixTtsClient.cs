@@ -38,15 +38,22 @@ namespace Read2Me.Services.Audio.ParagraphTts
                 ?? new VoxCpm2ParagraphTtsSettings();
 
             var target = text.Trim();
-            if (!providerSettings.CarrierPrefixEnabled
-                || target.Length == 0
-                || target.Length > providerSettings.CarrierMaxTargetChars
-                || string.IsNullOrWhiteSpace(referenceTranscript))
+            var skipReason =
+                !providerSettings.CarrierPrefixEnabled ? "disabled in settings"
+                : target.Length == 0 ? "empty target text"
+                : target.Length > providerSettings.CarrierMaxTargetChars
+                    ? $"target {target.Length} chars > max {providerSettings.CarrierMaxTargetChars}"
+                : string.IsNullOrWhiteSpace(referenceTranscript) ? "no reference transcript"
+                : null;
+
+            if (skipReason is not null)
             {
+                logger.LogDebug("Carrier prefix not used: {Reason}", skipReason);
                 return await inner.GenerateAsync(text, voiceInstructions, referenceAudioStream, config, settingsOverrideJson, referenceTranscript, ct);
             }
 
-            var carrier = referenceTranscript.Trim();
+            // skipReason null ⇒ referenceTranscript is non-blank.
+            var carrier = referenceTranscript!.Trim();
             if (!EndsWithTerminalPunctuation(carrier))
                 carrier += ".";
             var combined = carrier + " " + target;
@@ -54,6 +61,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
             logger.LogDebug(
                 "Carrier prefix: target {TargetChars} chars <= {Max}, synthesising {CombinedChars} chars with carrier",
                 target.Length, providerSettings.CarrierMaxTargetChars, combined.Length);
+            logger.LogTrace("Carrier text: {Carrier} | target: {Target}", carrier, target);
 
             byte[] wavBytes;
             using (var combinedWav = await inner.GenerateAsync(combined, voiceInstructions, referenceAudioStream, config, settingsOverrideJson, referenceTranscript, ct))
@@ -61,10 +69,22 @@ namespace Read2Me.Services.Audio.ParagraphTts
                 wavBytes = await ReadAllAsync(combinedWav, ct);
             }
 
+            logger.LogDebug("Carrier prefix: combined audio {Bytes} bytes — trimming carrier off the front",
+                wavBytes.Length);
+
             try
             {
-                return await TrimCarrierAsync(wavBytes, carrier, ct)
-                    ?? new MemoryStream(wavBytes, writable: false);
+                var trimmed = await TrimCarrierAsync(wavBytes, carrier, ct);
+                if (trimmed is null)
+                {
+                    logger.LogWarning("Carrier not trimmed — returning untrimmed audio ({Bytes} bytes)",
+                        wavBytes.Length);
+                    return new MemoryStream(wavBytes, writable: false);
+                }
+
+                logger.LogDebug("Carrier trim complete: {Before} -> {After} bytes",
+                    wavBytes.Length, trimmed.Length);
+                return trimmed;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -94,6 +114,8 @@ namespace Read2Me.Services.Audio.ParagraphTts
                 words = await transcriptionClient.TranscribeWithWordTimestampsAsync(
                     transcriptionConfig, audio, "carrier-trim.wav", ct);
             }
+
+            logger.LogDebug("Carrier trim: transcribed {WordCount} words for boundary alignment", words.Count);
 
             var boundary = CarrierAligner.FindBoundary(carrier, words);
             if (boundary is null)
