@@ -1,0 +1,12 @@
+# Infra/.dockerignore — allowlist: deny everything, re-admit only build inputs.
+# Fails closed — models/ (76 GB) and cache/ (20 GB) can never be tarred to the daemon.
+*
+!chatterbox
+!qwen3
+!voxcpm2
+!minilm-l6
+!mpnet-base-v2
+!llama
+llama/*
+!llama/entrypoint.sh
+**/__pycache__
