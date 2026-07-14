@@ -150,6 +150,9 @@ namespace Read2Me.Services
         Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId);
         Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId);
         Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId);
+
+        /// <summary>One voice by id, or null. The voice audio editor is routed by voice id alone.</summary>
+        Task<VoiceEntity?> GetVoiceAsync(ProjectFolderId folderId, Guid voiceId);
         Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId);
         Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId);
         Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId);

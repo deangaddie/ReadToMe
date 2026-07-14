@@ -4,6 +4,7 @@ using Read2Me.Core.Models;
 using Read2Me.Core.Utils;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Services.Audio;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Services.Commands.Handlers;
@@ -179,7 +180,9 @@ public sealed class SetVoiceGeneratedHandler(ProjectDbSession session) : IComman
     }
 }
 
-public sealed class SetVoiceSourceHandler(ProjectDbSession session, IFileSystem fs) : ICommandHandler<SetVoiceSourceCommand>
+public sealed class SetVoiceSourceHandler(
+    ProjectDbSession session, IFileSystem fs, IVoiceOriginalStore originals)
+    : ICommandHandler<SetVoiceSourceCommand>
 {
     public async Task<Guid?> HandleAsync(SetVoiceSourceCommand c, CancellationToken ct)
     {
@@ -198,6 +201,9 @@ public sealed class SetVoiceSourceHandler(ProjectDbSession session, IFileSystem 
             var audioPath = Path.Combine(projectFolder, voice.AudioFileName.Replace('/', Path.DirectorySeparatorChar));
             if (fs.FileExists(audioPath))
                 fs.DeleteFile(audioPath);
+            // The live WAV is going; an original that outlived it would claim an edit on audio that
+            // no longer exists.
+            originals.Delete(c.FolderId, voice.CharacterId, voice.Id);
             voice.AudioFileName = null;
         }
 
@@ -300,7 +306,9 @@ public sealed class MoveVoiceRuleHandler(ProjectDbSession session) : ICommandHan
     }
 }
 
-public sealed class DeleteVoiceHandler(ProjectDbSession session, IFileSystem fs) : ICommandHandler<DeleteVoiceCommand>
+public sealed class DeleteVoiceHandler(
+    ProjectDbSession session, IFileSystem fs, IVoiceOriginalStore originals)
+    : ICommandHandler<DeleteVoiceCommand>
 {
     public async Task<Guid?> HandleAsync(DeleteVoiceCommand c, CancellationToken ct)
     {
@@ -318,6 +326,8 @@ public sealed class DeleteVoiceHandler(ProjectDbSession session, IFileSystem fs)
             if (fs.FileExists(audioPath))
                 fs.DeleteFile(audioPath);
         }
+
+        originals.Delete(c.FolderId, characterId, c.VoiceId);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 

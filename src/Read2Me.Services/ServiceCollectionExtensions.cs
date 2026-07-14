@@ -14,6 +14,8 @@ public static class ServiceCollectionExtensions
     {
         services.AddLogging();
         services.AddSingleton<IFileSystem, FileSystemService>();
+        // The voice handlers delete a stale original when they drop a voice's audio.
+        services.TryAddScoped<Read2Me.Services.Audio.IVoiceOriginalStore, Read2Me.Services.Audio.VoiceOriginalStore>();
         // Delete
         services.AddScoped<ICommandHandler<DeleteVolumeCommand>, DeleteVolumeHandler>();
         services.AddScoped<ICommandHandler<DeletePartCommand>, DeletePartHandler>();

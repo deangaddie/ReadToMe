@@ -55,8 +55,24 @@ public class AudioPreviewEndpointTests(E2eAppFixture app)
         Assert.Equal<byte[]>([2, 2], await response.Content.ReadAsByteArrayAsync());
     }
 
+    /// The voice editor mints one token per step as "{pageId}-{stepId}", not a bare GUID — a
+    /// GUID-only guard here 404s every per-step player on the page.
     [Fact]
-    public async Task Non_guid_token_is_404()
+    public async Task Voice_editor_step_token_serves_the_preview_wav()
+    {
+        var token = $"{Guid.NewGuid():N}-{AudioPostProcessStepIds.DePlosive}";
+        byte[] wav = [5, 6, 7];
+        await Store.SaveAsync(token, wav);
+
+        using var http = new HttpClient();
+        var response = await http.GetAsync($"{app.BaseUrl}/audio-preview/{token}");
+
+        Assert.True(response.IsSuccessStatusCode, $"{response.StatusCode}");
+        Assert.Equal(wav, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task Traversal_token_is_404()
     {
         using var http = new HttpClient();
 

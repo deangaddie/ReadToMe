@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace Read2Me.Services.Audio
@@ -16,24 +15,10 @@ namespace Read2Me.Services.Audio
         public async Task<PostProcessResult> ProcessAsync(
             byte[] wav, string? ffmpegPath, string? settingsJson, CancellationToken ct)
         {
-            var settings = ParseSettings(settingsJson);
+            var settings = StepSettingsJson.Parse<ConsonantSoftenSettings>(settingsJson, StepId, logger);
             var filter = ConsonantSoftenChainBuilder.Build(settings);
 
             return await FfmpegFilterRunner.RunAsync(StepId, wav, ffmpegPath, filter, logger, ct);
-        }
-
-        private ConsonantSoftenSettings? ParseSettings(string? settingsJson)
-        {
-            if (string.IsNullOrWhiteSpace(settingsJson)) return null;
-            try
-            {
-                return JsonSerializer.Deserialize<ConsonantSoftenSettings>(settingsJson, AudioPostProcessJson.Options);
-            }
-            catch (JsonException ex)
-            {
-                logger.LogWarning(ex, "consonant-soften settings JSON malformed; using defaults");
-                return null;
-            }
         }
     }
 }

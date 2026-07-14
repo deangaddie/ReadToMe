@@ -120,9 +120,18 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAudioPostProcessStepCatalog, AudioPostProcessStepCatalog>();
         services.AddScoped<IAudioPostProcessStep, SilenceTrimStep>();
         services.AddScoped<IAudioPostProcessStep, ConsonantSoftenStep>();
+        // Voice-scope only — the paragraph catalog never sees them (AudioPostProcessStepDefaults).
+        services.AddScoped<IAudioPostProcessStep, DePlosiveStep>();
+        services.AddScoped<IAudioPostProcessStep, DenoiseStep>();
+        services.AddScoped<IAudioPostProcessStep, HissReduceStep>();
+        services.AddScoped<IAudioPostProcessChain, AudioPostProcessChain>();
         services.AddSingleton<AudioPreviewStore>();
         services.AddScoped<IPreviewSourceCache, PreviewSourceCache>();
+        services.AddScoped<IPreviewChainRenderer, PreviewChainRenderer>();
         services.AddScoped<IAudioPostProcessPreviewRenderer, AudioPostProcessPreviewRenderer>();
+        services.AddScoped<IVoicePreviewRenderer, VoicePreviewRenderer>();
+        services.AddScoped<IVoiceOriginalStore, VoiceOriginalStore>();
+        services.AddScoped<IVoiceAudioEditor, VoiceAudioEditor>();
         services.AddScoped<IRecentAudioSampleFinder, RecentAudioSampleFinder>();
         services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.Assembly.AssemblyEvent>>();
         services.AddSingleton<IAudiobookEncoder, AudiobookEncoder>();

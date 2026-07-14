@@ -131,6 +131,22 @@
                                          Variant="Variant.Outlined">
                                     @(v.Source == VoiceSource.Uploaded ? "Reference" : "Prompt")
                                 </MudChip>
+                                @if (IsEdited(v))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                             data-testid="@($"voice-edited-chip-{v.Id}")">Edited</MudChip>
+                                }
+                                @* No audio, nothing to edit — the icon is absent, not disabled. *@
+                                @if (v.AudioFileName != null)
+                                {
+                                    <span @onclick:stopPropagation="true">
+                                        <MudTooltip Text="Edit audio">
+                                            <MudIconButton Icon="@Icons.Material.Filled.GraphicEq" Size="Size.Small"
+                                                           Href="@($"/project/{FolderName}/voice/{v.Id}/audio")"
+                                                           data-testid="@($"voice-edit-audio-{v.Id}")" />
+                                        </MudTooltip>
+                                    </span>
+                                }
                                 <span @onclick:stopPropagation="true">
                                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                    OnClick="@(() => ConfirmDeleteVoiceAsync(v))" />

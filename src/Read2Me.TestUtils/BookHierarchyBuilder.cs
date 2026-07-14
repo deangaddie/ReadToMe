@@ -87,6 +87,9 @@ public sealed class BookHierarchyBuilder
     public Guid ParagraphId(string name) => _ids[name];
     public Guid ItemId(string name)      => _ids[name];
 
+    /// <summary>The id of a character registered with <see cref="WithCharacter"/>.</summary>
+    public Guid CharacterId(string name) => _characters[name].Id;
+
     // ── fluent tree construction ──────────────────────────────────────────────
 
     public BookHierarchyBuilder AddVolume(

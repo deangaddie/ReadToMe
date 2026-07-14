@@ -173,7 +173,8 @@ namespace Read2Me.Tests.Services
             services.AddSingleton(_session);
             services.AddSingleton(_fs);
             services.AddSingleton<ICommandHandler<CreateVoiceCommand>>(new CreateVoiceHandler(_session));
-            services.AddSingleton<ICommandHandler<DeleteVoiceCommand>>(new DeleteVoiceHandler(_session, _fs));
+            services.AddSingleton<ICommandHandler<DeleteVoiceCommand>>(
+                new DeleteVoiceHandler(_session, _fs, new Read2Me.Services.Audio.VoiceOriginalStore(_fs)));
             var sp = services.BuildServiceProvider();
             return new BookCommandHandler(sp, _session);
         }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.AppData.Entities;
+using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
@@ -87,6 +88,82 @@ public static class WorkspaceSeeder
                         .AddNarration("n2", "The rain kept falling."))));
         await builder.BuildAsync();
         return builder;
+    }
+
+    /// <summary>
+    /// Gives a character an uploaded voice whose reference audio is a real, editable Canonical WAV —
+    /// dead air, a tone, dead air — so the voice audio editor has something a filter can visibly change.
+    /// Returns the voice's id.
+    /// </summary>
+    public static async Task<Guid> SeedEditableVoiceAsync(
+        IServiceProvider services, string workspaceDir, string folderName, Guid characterId,
+        string voiceName = "Alice Voice")
+    {
+        var folderPath = Path.Combine(workspaceDir, folderName);
+        var voiceId = Guid.NewGuid();
+        var relativePath = $"voices/{characterId}/{voiceId}-{NameSanitizer.Sanitize(voiceName)}.wav";
+
+        var fullPath = Path.Combine(folderPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        await File.WriteAllBytesAsync(fullPath, EditableWav());
+
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        await using var db = await factory.CreateAsync(folderPath);
+
+        db.Voices.Add(new Data.Entities.Voice
+        {
+            Id = voiceId,
+            CharacterId = characterId,
+            Name = voiceName,
+            Source = VoiceSource.Uploaded,
+            AudioFileName = relativePath,
+            CreatedUtc = DateTime.UtcNow,
+        });
+        db.VoiceRules.Add(new VoiceRule
+        {
+            Id = Guid.NewGuid(),
+            CharacterId = characterId,
+            VoiceId = voiceId,
+            IsDefault = true,
+            Rank = "a0",
+        });
+        await db.SaveChangesAsync();
+
+        return voiceId;
+    }
+
+    /// 24 kHz mono 16-bit: 1 s of silence, 2 s of tone, 1 s of silence. Long enough that a
+    /// -35 dB trim clears the 1000 ms voice-scope guard rather than being skipped by it.
+    private static byte[] EditableWav()
+    {
+        const int rate = 24000;
+        var samples = new List<short>();
+        samples.AddRange(new short[rate]);
+        for (var i = 0; i < rate * 2; i++)
+            samples.Add((short)(short.MaxValue * 0.5 * Math.Sin(2 * Math.PI * 440 * i / rate)));
+        samples.AddRange(new short[rate]);
+
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms);
+        var dataLen = samples.Count * 2;
+
+        w.Write("RIFF"u8.ToArray());
+        w.Write(36 + dataLen);
+        w.Write("WAVE"u8.ToArray());
+        w.Write("fmt "u8.ToArray());
+        w.Write(16);
+        w.Write((short)1);
+        w.Write((short)1);
+        w.Write(rate);
+        w.Write(rate * 2);
+        w.Write((short)2);
+        w.Write((short)16);
+        w.Write("data"u8.ToArray());
+        w.Write(dataLen);
+        foreach (var s in samples) w.Write(s);
+
+        w.Flush();
+        return ms.ToArray();
     }
 
     /// <summary>

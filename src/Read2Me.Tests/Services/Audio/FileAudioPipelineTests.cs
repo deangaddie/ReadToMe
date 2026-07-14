@@ -13,6 +13,7 @@ namespace Read2Me.Tests.Services.Audio
         private readonly FakeFileSystem _fs;
         private readonly FakeNormalizerForPipeline _normalizer;
         private readonly FakeAudioProcessingSettingsForPipeline _settings;
+        private readonly IVoiceOriginalStore _originals;
         private readonly FileAudioPipeline _pipeline;
         private readonly ProjectFolderId _folder;
 
@@ -21,7 +22,8 @@ namespace Read2Me.Tests.Services.Audio
             _fs = new FakeFileSystem();
             _normalizer = new FakeNormalizerForPipeline();
             _settings = new FakeAudioProcessingSettingsForPipeline("ffmpeg");
-            _pipeline = new FileAudioPipeline(_fs, _normalizer, _settings);
+            _originals = new VoiceOriginalStore(_fs);
+            _pipeline = new FileAudioPipeline(_fs, _normalizer, _settings, _originals);
             _folder = new ProjectFolderId("TestProject");
         }
 
@@ -100,6 +102,32 @@ namespace Read2Me.Tests.Services.Audio
             // Should not throw — any exception means the test fails
             var result = await _pipeline.StoreAsync(req);
             Assert.False(string.IsNullOrEmpty(result));
+        }
+
+        // ── The stale-original chokepoint ─────────────────────────────────────────
+
+        [Fact]
+        public async Task StoreAsync_DropsTheVoicesStoredOriginal()
+        {
+            // Fresh audio makes a stored original stale, and a stale original would leave the Edited
+            // chip lying. StoreAsync is the sole writer of fresh voice audio, so the delete lives here.
+            var charId = Guid.NewGuid();
+            var voiceId = Guid.NewGuid();
+            var originalPath = System.IO.Path.Combine(
+                "C:\\fake-workspace", "TestProject", "voices", charId.ToString(), $"{voiceId}.orig.wav");
+            _fs.SeedFile(originalPath, [1, 2, 3]);
+
+            await _pipeline.StoreAsync(MakeRequest(".wav", charId: charId, voiceId: voiceId));
+
+            Assert.False(_fs.FileExists(originalPath));
+            Assert.False(_originals.Exists(_folder, charId, voiceId));
+        }
+
+        [Fact]
+        public async Task StoreAsync_WithNoStoredOriginal_IsNotAFailure()
+        {
+            var result = await _pipeline.StoreAsync(MakeRequest(".wav"));
+            Assert.EndsWith(".wav", result);
         }
 
         // ── StoreParagraphAudioAsync unchanged ────────────────────────────────────

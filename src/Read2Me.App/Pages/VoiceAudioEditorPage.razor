@@ -1,0 +1,127 @@
+@page "/project/{FolderName}/voice/{VoiceId:guid}/audio"
+@using Read2Me.App.Shared.Voices
+@using Read2Me.Services.Audio
+
+<PageTitle>Voice audio — @(_voice?.Name ?? "")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    @if (_loadError is not null)
+    {
+        <MudAlert Severity="Severity.Error" data-testid="editor-load-error">@_loadError</MudAlert>
+        <MudButton Class="mt-3" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+                   OnClick="Back">Back to project</MudButton>
+    }
+    else if (_voice is null || _model is null)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="Back" />
+                <MudText Typo="Typo.h5">@_voice.Name — audio</MudText>
+                @if (_model.Edited)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                             data-testid="edited-chip">Edited</MudChip>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.Restore" Disabled="@_model.Applying"
+                               OnClick="RestoreAsync" data-testid="restore-original">
+                        Restore original
+                    </MudButton>
+                }
+            </MudStack>
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Nothing is saved until you press Apply. Editing always starts from the voice's original audio.
+            </MudAlert>
+
+            @if (_model.Error is not null)
+            {
+                <MudAlert Severity="Severity.Error" data-testid="editor-error">@_model.Error</MudAlert>
+            }
+
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="5">
+                    <MudPaper Class="pa-3" Outlined="true">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Steps</MudText>
+                        <MudStack Spacing="0">
+                            @foreach (var row in _model.Rows)
+                            {
+                                var r = row;
+                                <div class="@(ReferenceEquals(_model.Selected, r) ? "pa-2 mud-background-gray" : "pa-2")"
+                                     style="cursor:pointer;border-radius:4px"
+                                     @onclick="@(() => _model.Select(r))"
+                                     data-testid="@($"step-row-{r.StepId}")">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <span @onclick:stopPropagation="true" data-testid="@($"step-tick-{r.StepId}")">
+                                            <MudCheckBox T="bool" Value="@r.Ticked" Dense="true"
+                                                         ValueChanged="@((bool t) => _model.SetTicked(r, t))" />
+                                        </span>
+                                        <MudStack Spacing="0" Style="flex:1">
+                                            <MudText Typo="Typo.body2">@r.Label</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@r.Blurb</MudText>
+                                            @if (r.SkipReason is not null)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                                         Variant="Variant.Outlined"
+                                                         data-testid="@($"step-skipped-{r.StepId}")">
+                                                    Skipped — @r.SkipReason
+                                                </MudChip>
+                                            }
+                                            @if (r.StepId == AudioPostProcessStepIds.HissReduce && _model.ShowHissRedundantHint)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Warning"
+                                                         data-testid="hiss-redundant-hint">
+                                                    Denoise already removes hiss broadband — this will barely change the
+                                                    audio. Use it instead of denoise if denoise dulls the voice.
+                                                </MudText>
+                                            }
+                                        </MudStack>
+                                    </MudStack>
+                                </div>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" md="7">
+                    <MudPaper Class="pa-3" Outlined="true">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">@_model.Selected.Label</MudText>
+                        <VoiceStepDials Model="_model" Row="_model.Selected" />
+                    </MudPaper>
+
+                    <MudStack Row="true" Spacing="2" Class="mt-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                                   Disabled="@(!_model.AnyTicked || _model.Rendering)"
+                                   OnClick="PreviewAsync" data-testid="preview-button">
+                            @(_model.Rendering ? "Rendering…" : "Preview")
+                        </MudButton>
+                        <MudTooltip Text="@_model.ApplyBlockedReason" Disabled="@_model.CanApply">
+                            <MudButton Variant="Variant.Filled" Color="Color.Success"
+                                       StartIcon="@Icons.Material.Filled.Save" Disabled="@(!_model.CanApply)"
+                                       OnClick="ApplyAsync" data-testid="apply-button">Apply</MudButton>
+                        </MudTooltip>
+                        <MudButton Variant="Variant.Text" OnClick="Back" data-testid="cancel-button">Cancel</MudButton>
+                    </MudStack>
+
+                    <MudStack Spacing="2" Class="mt-4">
+                        <MudText Typo="Typo.subtitle2">Original</MudText>
+                        <audio controls style="width:100%" src="@OriginalUrl" data-testid="player-original"></audio>
+
+                        @foreach (var row in _model.Ticked)
+                        {
+                            var url = _model.PreviewUrl(row);
+                            if (url is null) continue;
+                            <MudText Typo="Typo.subtitle2">After @row.Label</MudText>
+                            <audio controls style="width:100%" src="@url"
+                                   data-testid="@($"player-{row.StepId}")"></audio>
+                        }
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudStack>
+    }
+</MudContainer>

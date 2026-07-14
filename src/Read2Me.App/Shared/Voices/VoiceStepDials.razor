@@ -1,0 +1,65 @@
+@using Read2Me.Services.Audio
+@* The selected step's dials. Every edit goes through Model.EditDial so no dial can forget to
+   stale the render — an Apply must never write bytes the user has not heard. *@
+
+@switch (Row.StepId)
+{
+    case AudioPostProcessStepIds.DePlosive:
+        <MudSlider T="double" Value="@Row.CutoffHz"
+                   ValueChanged="@((double v) => Model.EditDial(() => Row.CutoffHz = v))"
+                   Min="@DePlosiveSettings.MinCutoffHz" Max="@DePlosiveSettings.MaxCutoffHz" Step="5"
+                   ValueLabel="true" data-testid="dial-cutoff">
+            Cutoff: @Row.CutoffHz.ToString("0") Hz
+        </MudSlider>
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            Above ~100 Hz this starts eating a deep voice's fundamental.
+        </MudText>
+        break;
+
+    case AudioPostProcessStepIds.Denoise:
+        <MudSlider T="double" Value="@Row.Strength"
+                   ValueChanged="@((double v) => Model.EditDial(() => Row.Strength = v))"
+                   Min="@DenoiseSettings.MinStrength" Max="@DenoiseSettings.MaxStrength" Step="1"
+                   ValueLabel="true" data-testid="dial-strength">
+            Strength: @Row.Strength.ToString("0")
+        </MudSlider>
+        break;
+
+    case AudioPostProcessStepIds.HissReduce:
+        <MudSelect T="string" Value="@Row.Preset" Label="Strength" Dense="true"
+                   ValueChanged="@((string p) => Model.EditDial(() => Row.Preset = p))"
+                   data-testid="dial-hiss-preset">
+            <MudSelectItem Value="@HissReducePresets.Light">Light</MudSelectItem>
+            <MudSelectItem Value="@HissReducePresets.Strong">Strong</MudSelectItem>
+        </MudSelect>
+        break;
+
+    case AudioPostProcessStepIds.ConsonantSoften:
+        <MudSelect T="string" Value="@Row.Preset" Label="Preset" Dense="true"
+                   ValueChanged="@((string p) => Model.EditDial(() => Row.Preset = p))"
+                   data-testid="dial-soften-preset">
+            <MudSelectItem Value="@ConsonantSoftenPresets.Light">Light</MudSelectItem>
+            <MudSelectItem Value="@ConsonantSoftenPresets.Medium">Medium</MudSelectItem>
+            <MudSelectItem Value="@ConsonantSoftenPresets.Strong">Strong</MudSelectItem>
+        </MudSelect>
+        break;
+
+    case AudioPostProcessStepIds.SilenceTrim:
+        @* -30 dB is the line where speech starts going, so the voice-side dial stops at -35. *@
+        <MudSlider T="double" Value="@Row.ThresholdDb"
+                   ValueChanged="@((double v) => Model.EditDial(() => Row.ThresholdDb = v))"
+                   Min="-60" Max="-35" Step="1" ValueLabel="true" data-testid="dial-threshold">
+            Threshold: @Row.ThresholdDb.ToString("0") dB
+        </MudSlider>
+        <MudSlider T="int" Value="@Row.PadMs"
+                   ValueChanged="@((int v) => Model.EditDial(() => Row.PadMs = v))"
+                   Min="0" Max="500" Step="10" ValueLabel="true" data-testid="dial-pad">
+            Pad: @Row.PadMs ms
+        </MudSlider>
+        break;
+}
+
+@code {
+    [Parameter, EditorRequired] public VoiceAudioEditorModel Model { get; set; } = null!;
+    [Parameter, EditorRequired] public VoiceStepRow Row { get; set; } = null!;
+}

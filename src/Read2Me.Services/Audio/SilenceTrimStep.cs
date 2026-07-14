@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace Read2Me.Services.Audio
@@ -12,27 +11,20 @@ namespace Read2Me.Services.Audio
     /// </summary>
     public class SilenceTrimStep(ILogger<SilenceTrimStep> logger) : IAudioPostProcessStep
     {
-        /// <summary>
-        /// Output shorter than this is treated as a failed trim. An absolute floor, not a
-        /// percentage: a legitimate trim can remove 80%+ of a short item (a one-word "Yes."
-        /// after two seconds of dead air), so a percentage rule would falsely skip exactly the
-        /// case this step exists for.
-        /// </summary>
-        public const double MinOutputMs = 200;
-
         public string StepId => AudioPostProcessStepIds.SilenceTrim;
 
         public async Task<PostProcessResult> ProcessAsync(
             byte[] wav, string? ffmpegPath, string? settingsJson, CancellationToken ct)
         {
-            var settings = ParseSettings(settingsJson);
+            var settings = StepSettingsJson.Parse<SilenceTrimSettings>(settingsJson, StepId, logger)
+                           ?? new SilenceTrimSettings();
             var filter = SilenceTrimChainBuilder.Build(settings);
 
             var result = await FfmpegFilterRunner.RunAsync(StepId, wav, ffmpegPath, filter, logger, ct);
             if (!result.Applied) return result;
 
             var trimmedMs = CanonicalWav.DurationMs(result.Audio.Length);
-            if (trimmedMs < MinOutputMs)
+            if (trimmedMs < settings.MinOutputMs)
             {
                 // The TTS produced junk, or the threshold is set absurdly high. Either way the
                 // reason belongs in the queue stream.
@@ -44,20 +36,6 @@ namespace Read2Me.Services.Audio
             logger.LogInformation(
                 "silence-trim removed {RemovedMs:0}ms", CanonicalWav.RemovedMs(wav.Length, result.Audio.Length));
             return result;
-        }
-
-        private SilenceTrimSettings? ParseSettings(string? settingsJson)
-        {
-            if (string.IsNullOrWhiteSpace(settingsJson)) return null;
-            try
-            {
-                return JsonSerializer.Deserialize<SilenceTrimSettings>(settingsJson, AudioPostProcessJson.Options);
-            }
-            catch (JsonException ex)
-            {
-                logger.LogWarning(ex, "silence-trim settings JSON malformed; using defaults");
-                return null;
-            }
         }
     }
 }

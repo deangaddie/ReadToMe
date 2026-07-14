@@ -113,15 +113,16 @@ namespace Read2Me.App
             await SendWavAsync(context, path!);
         }
 
-        /// Serves the consonant-soften A/B preview WAV rendered by the circuit that owns
-        /// <c>token</c>. The file is overwritten on every render, so it must never be cached.
+        /// Serves an A/B preview WAV rendered by the circuit that owns <c>token</c>. The file is
+        /// overwritten on every render, so it must never be cached.
         private static async Task ServeAudioPreviewAsync(HttpContext context)
         {
             var token = (string?)context.Request.RouteValues["token"];
 
-            // Tokens are circuit-minted GUIDs; anything else cannot name a stored preview, and
-            // refusing it up front keeps the value away from the file path.
-            if (!Guid.TryParseExact(token, "N", out _) ||
+            // Tokens are circuit-minted: a bare GUID from a paragraph card, or "{pageId}-{stepId}"
+            // from the voice editor's per-step players. Both are alphanumerics and hyphens, and
+            // rejecting anything else keeps a separator or a dot away from the file path.
+            if (!IsPreviewToken(token) ||
                 !context.RequestServices.GetRequiredService<AudioPreviewStore>().TryGetPath(token!, out var path))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -130,6 +131,10 @@ namespace Read2Me.App
 
             await SendWavAsync(context, path!);
         }
+
+        private static bool IsPreviewToken(string? token) =>
+            !string.IsNullOrEmpty(token) && token.Length <= 96 &&
+            token.All(c => char.IsAsciiLetterOrDigit(c) || c == '-');
 
         /// Preview files are overwritten in place, so they must never be cached. The explicit length
         /// matters too: without it the response is chunked, and a WAV with no Content-Length gives the

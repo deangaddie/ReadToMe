@@ -1,0 +1,20 @@
+@* A yes/no confirm for actions that are not deletes: restoring a voice's original, regenerating over an edit.
+   The title is MudBlazor's own — it comes from the ShowAsync call, so this component carries no Title of
+   its own to fall out of step with it. Raise it through DialogServiceExtensions.ConfirmAsync. *@
+<MudDialog>
+    <DialogContent>
+        <MudText data-testid="confirm-message">@Message</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())" data-testid="confirm-cancel">Cancel</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" data-testid="confirm-ok"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(true)))">@ConfirmText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+}

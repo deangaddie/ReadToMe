@@ -36,6 +36,12 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<VoiceEntity?> GetVoiceAsync(ProjectFolderId folderId, Guid voiceId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.Voices.FirstOrDefaultAsync(v => v.Id == voiceId);
+        }
+
         public async Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId)
         {
             var db = await _session.OpenAsync(folderId);

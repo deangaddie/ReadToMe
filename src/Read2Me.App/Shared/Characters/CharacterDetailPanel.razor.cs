@@ -14,6 +14,7 @@ using Read2Me.Data.Entities;
 using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.VoiceDesign.Settings;
 
 namespace Read2Me.App.Shared.Characters
@@ -32,6 +33,7 @@ namespace Read2Me.App.Shared.Characters
         [Inject] ParagraphTtsSettingsService ParagraphTtsSettingsService { get; set; } = null!;
         [Inject] IAiPreflight Preflight { get; set; } = null!;
         [Inject] internal VoicePromptGenerationState VoicePromptState { get; set; } = null!;
+        [Inject] IVoiceOriginalStore Originals { get; set; } = null!;
 
         VoiceDesignServiceConfig? _activeVoiceDesignConfig;
         ParagraphTtsServiceConfig? _activeParagraphTtsConfig;
@@ -196,8 +198,32 @@ namespace Read2Me.App.Shared.Characters
 
         // ── Reference audio upload ────────────────────────────────────────────────
 
+        /// <summary>
+        /// The invariant, read straight off the disk: <c>{voiceId}.orig.wav</c> exists ⟺ this voice's
+        /// audio has been edited. No flag, no column — and nothing to keep in sync, because every writer
+        /// of fresh voice audio drops the original at the chokepoint.
+        /// </summary>
+        internal bool IsEdited(Voice v) =>
+            Originals.Exists(new ProjectFolderId(FolderName), Character.Id, v.Id);
+
+        /// <summary>
+        /// Fresh audio discards an edit — correct (a stale original is worse than none), but it must not
+        /// be silent. A voice with no edit raises no dialog.
+        /// </summary>
+        async Task<bool> ConfirmOverwriteEditAsync(Voice voice)
+        {
+            if (!IsEdited(voice)) return true;
+
+            return await DialogService.ConfirmAsync(
+                "Replace edited audio",
+                "This voice's audio has been edited. Regenerating replaces it.",
+                "Regenerate");
+        }
+
         async Task OnReplaceAudioAsync(InputFileChangeEventArgs e, Voice voice)
         {
+            if (!await ConfirmOverwriteEditAsync(voice)) return;
+
             var ext = Path.GetExtension(e.File.Name).ToLowerInvariant();
             await using var stream = e.File.OpenReadStream(maxAllowedSize: 200 * 1024 * 1024);
             await Presenter.ReplaceVoiceAudioAsync(Character.Id, voice.Id, voice.Name, stream, ext);
@@ -289,6 +315,7 @@ namespace Read2Me.App.Shared.Characters
         {
             var prompt = _drafts.Current(voice.Id, VoiceDraftField.Prompt, voice.DesignPrompt);
             if (string.IsNullOrWhiteSpace(prompt)) return;
+            if (!await ConfirmOverwriteEditAsync(voice)) return;
             if (!await Preflight.EnsureReadyAsync(AiTaskKind.VoiceDesignAudio)) return;
             _generatingAudio = voice.Id;
             StateHasChanged();

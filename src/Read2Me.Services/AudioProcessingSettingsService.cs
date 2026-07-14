@@ -128,10 +128,12 @@ namespace Read2Me.Services
         }
 
         /// <summary>
-        /// Reads the post-process step chain: <see cref="AudioPostProcessStepDefaults.All"/> with
-        /// each step's stored enabled/settings merged on by id. Order and membership come from
-        /// code, so a missing row, a null column, an absent id, or corrupt JSON all yield the
-        /// step's default; ids in storage with no code default are ignored.
+        /// Reads the <b>paragraph</b> post-process step chain:
+        /// <see cref="AudioPostProcessStepDefaults.For"/> with each step's stored enabled/settings
+        /// merged on by id. Order and membership come from code, so a missing row, a null column, an
+        /// absent id, or corrupt JSON all yield the step's default; ids in storage with no code
+        /// default are ignored — which is also what keeps the Voice-only steps off the Audio
+        /// Processing settings page and out of the paragraph pipeline.
         /// </summary>
         public virtual async Task<IReadOnlyList<AudioPostProcessStepConfig>> GetPostProcessStepsAsync()
         {
@@ -166,7 +168,7 @@ namespace Read2Me.Services
                 .GroupBy(s => s.StepId)
                 .ToDictionary(g => g.Key, g => g.First());
 
-            return AudioPostProcessStepDefaults.All
+            return AudioPostProcessStepDefaults.For(StepScope.Paragraph)
                 .Select(d => byId.TryGetValue(d.StepId, out var s)
                     ? d with { Enabled = s.Enabled, Settings = s.Settings ?? d.Settings }
                     : d)

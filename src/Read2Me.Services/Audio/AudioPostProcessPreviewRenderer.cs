@@ -23,8 +23,8 @@ namespace Read2Me.Services.Audio
         /// <para>
         /// One step, never the enabled chain: a card tunes <i>its</i> step, and the shipped steps do
         /// not interact audibly (silence-trim removes near-silent samples from the ends, soften EQs
-        /// speech). A step that <i>does</i> interact — a compressor, a de-reverb — would turn this
-        /// parameter into a chain.
+        /// speech). The voice editor, whose steps <i>do</i> interact, renders a chain — both go
+        /// through <see cref="IPreviewChainRenderer"/>.
         /// </para>
         /// </summary>
         Task<PreviewRenderResult> RenderAsync(
@@ -32,21 +32,17 @@ namespace Read2Me.Services.Audio
             AudioPostProcessStepConfig draft, CancellationToken ct = default);
     }
 
+    /// <summary>The paragraph-item adapter over <see cref="IPreviewChainRenderer"/>: a one-step chain.</summary>
     public class AudioPostProcessPreviewRenderer(
-        IEnumerable<IAudioPostProcessStep> steps,
+        IPreviewChainRenderer core,
         IPreviewSourceCache previewSources,
         AudioProcessingSettingsService settingsService,
-        AudioPreviewStore store,
         ILogger<AudioPostProcessPreviewRenderer> logger) : IAudioPostProcessPreviewRenderer
     {
         public async Task<PreviewRenderResult> RenderAsync(
             string token, ProjectFolderId folder, Guid itemId,
             AudioPostProcessStepConfig draft, CancellationToken ct = default)
         {
-            var step = steps.FirstOrDefault(s => s.StepId == draft.StepId);
-            if (step is null)
-                return new PreviewRenderResult(false, $"{draft.StepId} step is not registered", HasPreview: false);
-
             byte[]? original;
             try
             {
@@ -64,13 +60,17 @@ namespace Read2Me.Services.Audio
                 return new PreviewRenderResult(false, "this sample's preview source has been evicted", HasPreview: false);
 
             var settings = await settingsService.GetAsync();
-            var result = await step.ProcessAsync(original, settings.FfmpegPath, draft.SettingsJson, ct);
+            var result = await core.RenderAsync(original, [draft], [token], settings.FfmpegPath, ct);
 
-            await store.SaveAsync(token, result.Audio, ct);
+            // The chain drops an unregistered id, so an empty outcome list *is* "no such step" —
+            // and nothing was parked under the token.
+            if (result.Steps.Count == 0)
+                return new PreviewRenderResult(false, $"{draft.StepId} step is not registered", HasPreview: false);
 
+            var outcome = result.Steps[0];
             return new PreviewRenderResult(
-                result.Applied, result.Reason, HasPreview: true,
-                OriginalBytes: original.Length, OutputBytes: result.Audio.Length);
+                outcome.Applied, outcome.Reason, HasPreview: true,
+                OriginalBytes: original.Length, OutputBytes: outcome.Audio.Length);
         }
     }
 }

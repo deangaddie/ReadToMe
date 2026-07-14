@@ -160,8 +160,10 @@ namespace Read2Me.Services.Audio
             }
         }
 
-        /// Runs the enabled post-process steps in stored order on normalized audio. Steps are
-        /// cosmetic: a step that cannot run falls back to its input and the item still proceeds.
+        /// Runs the enabled post-process steps in the catalog's (code-defined) order on normalized
+        /// audio, over the shared fold in <see cref="AudioPostProcessChain"/>. Steps are cosmetic: a
+        /// step that cannot run falls back to its input and the item still proceeds. The catalog
+        /// supplies *which* steps (paragraph scope); the fold only folds.
         private async Task<byte[]> PostProcessAsync(
             Guid id, int attempt, byte[] audioBytes, string? ffmpegPath, CancellationToken ct)
         {
@@ -170,36 +172,16 @@ namespace Read2Me.Services.Audio
             logger.LogDebug("Item {Id} attempt {A}: post-process start — {Count} enabled step(s) [{Steps}]",
                 id, attempt, steps.Count, string.Join(", ", steps.Select(s => s.Step.StepId)));
 
-            foreach (var (step, settingsJson) in steps)
-            {
-                ct.ThrowIfCancellationRequested();
+            var chain = steps.Select(s => new ResolvedStep(s.Step, s.SettingsJson)).ToList();
+            var result = await AudioPostProcessChain.FoldAsync(audioBytes, chain, ffmpegPath, logger, ct);
 
-                var beforeBytes = audioBytes.Length;
-                var sw = Stopwatch.StartNew();
-                var result = await step.ProcessAsync(audioBytes, ffmpegPath, settingsJson, ct);
-                sw.Stop();
-                audioBytes = result.Audio;
-                broadcaster.Publish(new PostProcessed(id, attempt, step.StepId, result.Applied, result.Reason));
-
-                if (!result.Applied)
-                {
-                    logger.LogWarning("Item {Id} attempt {A} post-process step '{Step}' skipped: {Reason}",
-                        id, attempt, step.StepId, result.Reason);
-                }
-                else
-                {
-                    logger.LogDebug(
-                        "Item {Id} attempt {A}: step '{Step}' applied in {Ms} ms — {Before} -> {After} bytes " +
-                        "({RemovedMs:0}ms removed)",
-                        id, attempt, step.StepId, sw.ElapsedMilliseconds, beforeBytes, audioBytes.Length,
-                        CanonicalWav.RemovedMs(beforeBytes, audioBytes.Length));
-                }
-            }
+            foreach (var outcome in result.Steps)
+                broadcaster.Publish(new PostProcessed(id, attempt, outcome.StepId, outcome.Applied, outcome.Reason));
 
             logger.LogDebug("Item {Id} attempt {A}: post-process complete — {Bytes} bytes ({Dur:0}ms audio)",
-                id, attempt, audioBytes.Length, CanonicalWav.DurationMs(audioBytes.Length));
+                id, attempt, result.Audio.Length, CanonicalWav.DurationMs(result.Audio.Length));
 
-            return audioBytes;
+            return result.Audio;
         }
 
         private async Task<VerifyOutcome> VerifyAsync(

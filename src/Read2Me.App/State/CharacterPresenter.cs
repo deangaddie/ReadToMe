@@ -38,7 +38,12 @@ namespace Read2Me.App.State
 
         public int AudioToken(Guid voiceId) => _audioTokens.GetValueOrDefault(voiceId);
 
-        private void BumpAudioToken(Guid voiceId) =>
+        /// <summary>
+        /// Public because the voice audio editor writes a voice's WAV without going through this
+        /// presenter (Apply overwrites the file in place, under the same name), so it has to bump the
+        /// token itself or the characters tab keeps playing the pre-edit audio.
+        /// </summary>
+        public void BumpAudioToken(Guid voiceId) =>
             _audioTokens[voiceId] = _audioTokens.GetValueOrDefault(voiceId) + 1;
 
         public event Action? StateChanged;

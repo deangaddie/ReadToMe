@@ -4,10 +4,23 @@ using Read2Me.Core.Models;
 
 namespace Read2Me.Services.Audio
 {
-    public class FileAudioPipeline(IFileSystem fs, IAudioNormalizer normalizer, AudioProcessingSettingsService settingsService) : IAudioPipeline
+    public class FileAudioPipeline(
+        IFileSystem fs,
+        IAudioNormalizer normalizer,
+        AudioProcessingSettingsService settingsService,
+        IVoiceOriginalStore originals) : IAudioPipeline
     {
+        /// <summary>
+        /// The sole writer of fresh voice audio — upload, replace, regenerate and batch all funnel
+        /// through here. That is why the stale-original delete lives at this chokepoint rather than at
+        /// each call site: fresh audio makes a stored original stale, and a stale original is worse
+        /// than none (it would leave the <c>Edited</c> chip lying and Restore pointing at audio the
+        /// voice no longer has). A call site added later cannot forget.
+        /// </summary>
         public async Task<string> StoreAsync(AudioStoreRequest request, CancellationToken ct = default)
         {
+            originals.Delete(request.FolderId, request.CharacterId, request.VoiceId);
+
             var settings = await settingsService.GetAsync();
             var normalizedAudio = await normalizer.NormalizeToWavAsync(request.Source, settings.FfmpegPath, ct);
 

@@ -236,16 +236,69 @@ namespace Read2Me.Tests.Services.Characters
             var charId = await SeedCharacterAsync(db);
             var id = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V"));
 
-            var charFolder = System.IO.Path.Combine(FolderPath, "voices", charId.ToString());
-            System.IO.Directory.CreateDirectory(charFolder);
-            var audioPath = System.IO.Path.Combine(charFolder, $"{id}-v.wav");
-            await System.IO.File.WriteAllBytesAsync(audioPath, [0x52, 0x49, 0x46, 0x46]);
-            var relPath = $"voices/{charId}/{id}-v.wav";
-            await _svc.ExecuteAsync(new SetVoiceAudioCommand(_folder, id!.Value, relPath));
+            var audioPath = await SeedVoiceAudioAsync(charId, id!.Value);
 
             await _svc.ExecuteAsync(new DeleteVoiceCommand(_folder, id!.Value));
 
             Assert.False(System.IO.File.Exists(audioPath));
+        }
+
+        // ── The stored original ───────────────────────────────────────────────
+        //
+        // {voiceId}.orig.wav exists ⟺ the voice's audio has been edited. Both commands below drop the
+        // live WAV, so an original that outlived it would claim an edit on audio that is gone — and
+        // the Edited chip, Restore, and the regenerate confirm all read that one file.
+
+        [Fact]
+        public async Task DeleteVoice_DropsTheStoredOriginal()
+        {
+            await using var db = await OpenDbAsync();
+            var charId = await SeedCharacterAsync(db);
+            var id = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V"));
+            await SeedVoiceAudioAsync(charId, id!.Value);
+            var originalPath = SeedStoredOriginal(charId, id!.Value);
+
+            await _svc.ExecuteAsync(new DeleteVoiceCommand(_folder, id!.Value));
+
+            Assert.False(System.IO.File.Exists(originalPath));
+        }
+
+        [Fact]
+        public async Task SetVoiceSource_ToGenerated_DropsTheStoredOriginal()
+        {
+            await using var db = await OpenDbAsync();
+            var charId = await SeedCharacterAsync(db);
+            var id = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, charId, "V"));
+            var audioPath = await SeedVoiceAudioAsync(charId, id!.Value);
+            var originalPath = SeedStoredOriginal(charId, id!.Value);
+
+            await _svc.ExecuteAsync(new SetVoiceSourceCommand(_folder, id!.Value, IsGenerated: true));
+
+            Assert.False(System.IO.File.Exists(audioPath));
+            Assert.False(System.IO.File.Exists(originalPath));
+        }
+
+        /// <summary>Writes a live WAV for the voice and points the row at it. Returns its full path.</summary>
+        private async Task<string> SeedVoiceAudioAsync(Guid charId, Guid voiceId)
+        {
+            var charFolder = System.IO.Path.Combine(FolderPath, "voices", charId.ToString());
+            System.IO.Directory.CreateDirectory(charFolder);
+            var audioPath = System.IO.Path.Combine(charFolder, $"{voiceId}-v.wav");
+            await System.IO.File.WriteAllBytesAsync(audioPath, [0x52, 0x49, 0x46, 0x46]);
+
+            await _svc.ExecuteAsync(
+                new SetVoiceAudioCommand(_folder, voiceId, $"voices/{charId}/{voiceId}-v.wav"));
+
+            return audioPath;
+        }
+
+        /// <summary>Writes the {voiceId}.orig.wav the editor leaves behind. Returns its full path.</summary>
+        private string SeedStoredOriginal(Guid charId, Guid voiceId)
+        {
+            var path = System.IO.Path.Combine(
+                FolderPath, "voices", charId.ToString(), $"{voiceId}.orig.wav");
+            System.IO.File.WriteAllBytes(path, [0x52, 0x49, 0x46, 0x46]);
+            return path;
         }
     }
 }

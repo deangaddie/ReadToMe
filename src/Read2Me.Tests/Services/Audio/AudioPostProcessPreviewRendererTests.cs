@@ -49,7 +49,9 @@ namespace Read2Me.Tests.Services.Audio
             new(Factory, new StubProber(), NullLogger<AudioProcessingSettingsService>.Instance);
 
         private AudioPostProcessPreviewRenderer NewRenderer(params IAudioPostProcessStep[] steps) =>
-            new(steps, _previewSources, NewSettings(), _store,
+            new(new PreviewChainRenderer(
+                    new AudioPostProcessChain(steps, NullLogger<AudioPostProcessChain>.Instance), _store),
+                _previewSources, NewSettings(),
                 NullLogger<AudioPostProcessPreviewRenderer>.Instance);
 
         private static SpyStep SoftenStep(PostProcessResult? result = null) =>

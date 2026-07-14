@@ -118,6 +118,7 @@ namespace Read2Me.Tests.Services.Characters
             public Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId) => Task.FromResult(0);
             public Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) => Task.FromResult(new List<(Guid, string)>());
             public Task<List<Read2Me.Data.Entities.Voice>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<Read2Me.Data.Entities.Voice>());
+            public Task<Read2Me.Data.Entities.Voice?> GetVoiceAsync(ProjectFolderId folderId, Guid voiceId) => Task.FromResult<Read2Me.Data.Entities.Voice?>(null);
             public Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult<Guid?>(null);
             public Task<HierarchyChildren> GetChildrenAsync(ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId)
                 => Task.FromResult(new HierarchyChildren(null, null, null));
