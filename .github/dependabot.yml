@@ -1,0 +1,14 @@
+# Base-image DIGEST bumps only. A tag move is a compatibility decision (spec §6.1) and
+# stays human-driven via Infra/scripts/refresh-pins.ps1 — so ignore every semver-major and
+# semver-minor update; Dependabot then only proposes new digests within the pinned tag.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /Infra
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor

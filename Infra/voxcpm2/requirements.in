@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+voxcpm==2.0.3
+soundfile
+numpy==2.4.3  # base image ships this; letting it float to 2.5.x backtracks numba to 0.53.1
+# torch/torchaudio: exact base-image build by direct hashed URL; PyPI stays the only index.
+torch @ https://download.pytorch.org/whl/cu130/torch-2.11.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl
+torchaudio @ https://download.pytorch.org/whl/cu130/torchaudio-2.11.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl
+numba==0.66.0  # else uv backtracks to numba 0.53.1 -> llvmlite 0.36.0, which has no py3.12 wheel
