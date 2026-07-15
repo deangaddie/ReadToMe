@@ -8,7 +8,7 @@ namespace Read2Me.E2eTests.Infrastructure.FakeAi;
 /// <summary>
 /// Wire-format builders for the fake AI endpoints. Shapes mirror what the real
 /// clients parse: OpenAI SSE chunks (OpenAiStreamParser), VoxCPM2 binary frames
-/// (VoxCpm2ParagraphTtsClient), whisper plain-text, similarity JSON.
+/// (VoxCpm2ParagraphTtsClient), Whisper.CPP verbose JSON, similarity JSON.
 /// </summary>
 public static partial class FakeAiResponses
 {
@@ -24,6 +24,9 @@ public static partial class FakeAiResponses
 
     public static string OpenAiModels() =>
         JsonSerializer.Serialize(new { data = new[] { new { id = "fake-model" } } });
+
+    /// <summary>Whisper.CPP <c>response_format=verbose_json</c> response for transcript verification.</summary>
+    public static string WhisperVerboseJson(string text) => JsonSerializer.Serialize(new { text });
 
     /// <summary>
     /// Segment-list attribution answer for the paragraph(s) the given prompt asks about: one dialog

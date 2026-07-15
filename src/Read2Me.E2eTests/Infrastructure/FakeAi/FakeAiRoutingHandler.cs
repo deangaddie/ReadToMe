@@ -41,7 +41,8 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         return host switch
         {
             "fake-llm" => await HandleLlmAsync(request, path, ct),
-            "fake-whisper" => Text(_lastTtsText.Length > 0 ? _lastTtsText : "transcript"),
+            "fake-whisper" => Json(FakeAiResponses.WhisperVerboseJson(
+                _lastTtsText.Length > 0 ? _lastTtsText : "transcript")),
             "fake-similarity" => Json("""{"similarity": 1.0}"""),
             "fake-tts" => await HandleTtsAsync(request, path, ct),
             "fake-voicedesign" => await HandleTtsAsync(request, path, ct),
