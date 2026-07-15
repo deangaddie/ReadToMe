@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile.llama
       target: runtime
+      args:
+        CUDA_DOCKER_ARCH: "86"
     image: read2me-llama
     container_name: read2me-llama
     restart: unless-stopped
@@ -150,7 +152,7 @@ services:
     restart: unless-stopped
 
   whisper:
-    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    image: onerahmet/openai-whisper-asr-webservice:v1.9.1-gpu
     container_name: read2me-whisper
     ports:
       - "9000:9000"
@@ -171,7 +173,7 @@ services:
     restart: unless-stopped
 
   whisper-cpu:
-    image: onerahmet/openai-whisper-asr-webservice:latest
+    image: onerahmet/openai-whisper-asr-webservice:v1.9.1
     container_name: read2me-whisper-cpu
     ports:
       - "9001:9000"
