@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+qwen-tts
+soundfile
+# torch/torchaudio: exact base-image build, fetched by direct URL so PyPI stays the
+# ONLY index — no --extra-index-url, no dependency-confusion surface.
+torch @ https://download.pytorch.org/whl/cu130/torch-2.11.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl
+torchaudio @ https://download.pytorch.org/whl/cu130/torchaudio-2.11.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl
