@@ -1,5 +1,28 @@
+x-hardened: &hardened
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: [/tmp]
+  pids_limit: 512
+  dns: 127.0.0.1
+
+x-offline: &offline
+  HF_HUB_OFFLINE: "1"
+  HF_HUB_DISABLE_TELEMETRY: "1"
+  DO_NOT_TRACK: "1"
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
 services:
   llama:
+    <<: [*hardened, *gpu]
     build:
       context: .
       dockerfile: Dockerfile.llama
@@ -9,23 +32,17 @@ services:
     image: read2me-llama
     container_name: read2me-llama
     restart: unless-stopped
+    networks: [llama]
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./models:/models:ro
       - ./llama/config:/config:ro
       - ./logs:/logs
-    cap_add:
-      - IPC_LOCK
+    # Exception: models.ini enables mlock so model pages stay resident.
+    cap_add: [IPC_LOCK]
     ulimits:
       memlock: -1
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     environment:
       LLAMA_HOST: 0.0.0.0
       LLAMA_PORT: 8080
@@ -33,28 +50,27 @@ services:
       LLAMA_DEFAULT_MODEL: gemma-26b
 
   chatterbox:
+    <<: [*hardened, *gpu]
     build:
       context: .
       dockerfile: Dockerfile.chatterbox
     image: read2me-chatterbox
     container_name: read2me-chatterbox
-    ports:
-      - "8000:8000"
-    environment:
-      - HF_HOME=/cache
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-    volumes:
-      - ./cache/chatterbox:/cache
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     restart: unless-stopped
+    networks: [chatterbox]
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      <<: *offline
+      HF_HOME: /cache
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
+      NUMBA_CACHE_DIR: /tmp/numba
+    volumes:
+      - ./cache/chatterbox:/cache:ro
 
   chatterbox-turbo:
+    <<: [*hardened, *gpu]
     build:
       context: .
       dockerfile: Dockerfile.chatterbox
@@ -62,44 +78,40 @@ services:
         APP_MODULE: app_turbo
     image: read2me-chatterbox-turbo
     container_name: read2me-chatterbox-turbo
-    ports:
-      - "8001:8000"
-    environment:
-      - HF_HOME=/cache
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-    volumes:
-      - ./cache/chatterbox-turbo:/cache
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     restart: unless-stopped
+    networks: [chatterbox-turbo]
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      <<: *offline
+      HF_HOME: /cache
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
+      NUMBA_CACHE_DIR: /tmp/numba
+    volumes:
+      - ./cache/chatterbox-turbo:/cache:ro
 
   qwen3-tts:
+    <<: [*hardened, *gpu]
     build:
       context: .
       dockerfile: Dockerfile.qwen3
     image: read2me-qwen3-tts
     container_name: read2me-qwen3-tts
-    ports:
-      - "8100:8100"
-    environment:
-      - HF_HOME=/cache
-    volumes:
-      - ./cache/qwen3:/cache
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     restart: unless-stopped
+    networks: [qwen3-tts]
+    ports:
+      - "127.0.0.1:8100:8100"
+    environment:
+      <<: *offline
+      HF_HOME: /cache
+      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
+      NUMBA_CACHE_DIR: /tmp/numba
+    volumes:
+      - ./cache/qwen3:/cache:ro
 
   qwen3-tts-base:
+    <<: [*hardened, *gpu]
     build:
       context: .
       dockerfile: Dockerfile.qwen3
@@ -108,49 +120,50 @@ services:
         APP_PORT: "8101"
     image: read2me-qwen3-tts-base
     container_name: read2me-qwen3-tts-base
-    ports:
-      - "8101:8101"
-    environment:
-      - HF_HOME=/cache
-      - APP_PORT=8101
-    volumes:
-      - ./cache/qwen3-base:/cache
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     restart: unless-stopped
+    networks: [qwen3-tts-base]
+    ports:
+      - "127.0.0.1:8101:8101"
+    environment:
+      <<: *offline
+      HF_HOME: /cache
+      APP_PORT: "8101"
+      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
+      NUMBA_CACHE_DIR: /tmp/numba
+    volumes:
+      - ./cache/qwen3-base:/cache:ro
 
   voxcpm2:
+    <<: [*hardened, *gpu]
     build:
       context: .
       dockerfile: Dockerfile.voxcpm2
       target: app
     image: read2me-voxcpm2
     container_name: read2me-voxcpm2
-    ports:
-      - "8003:8003"
-    environment:
-      - HF_HOME=/cache
-      - UPLOAD_DIR=/uploads
-      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-      - MODEL_ID=openbmb/VoxCPM2
-      - OPTIMIZE=true
-    volumes:
-      - ./cache/voxcpm2:/cache
-      - voxcpm2_uploads:/uploads
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     restart: unless-stopped
+    networks: [voxcpm2]
+    ports:
+      - "127.0.0.1:8003:8003"
+    environment:
+      <<: *offline
+      HF_HOME: /cache
+      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
+      NUMBA_CACHE_DIR: /tmp/numba
+      # Keep incidental compiler caches on tmpfs; runtime compilation stays disabled.
+      TRITON_CACHE_DIR: /tmp/triton
+      TORCHINDUCTOR_CACHE_DIR: /tmp/inductor
+      XDG_CACHE_HOME: /tmp/xdg
+      UPLOAD_DIR: /uploads
+      PYTORCH_CUDA_ALLOC_CONF: max_split_size_mb:512
+      MODEL_ID: /cache/hub/models--openbmb--VoxCPM2/snapshots/bffb3df5a29440629464e5e839f4d214c8714c3d
+      # torch.compile needs a compiler under read_only; measured benefit does not justify it.
+      OPTIMIZE: "false"
+    volumes:
+      - ./cache/voxcpm2:/cache:ro
+      - voxcpm2_uploads:/uploads
 
+  # Whisper remains deliberately outside the hardened scope until its replacement map.
   whisper:
     image: onerahmet/openai-whisper-asr-webservice:v1.9.1-gpu
     container_name: read2me-whisper
@@ -187,38 +200,51 @@ services:
     restart: unless-stopped
 
   minilm-l6:
+    <<: *hardened
     build:
       context: .
       dockerfile: Dockerfile.minilm-l6
       target: runtime
     image: read2me-minilm-l6
     container_name: read2me-minilm-l6
-    ports:
-      - "8200:8200"
-    environment:
-      - SENTENCE_TRANSFORMERS_HOME=/cache/sentence-transformers
-    volumes:
-      - minilm_l6_cache:/cache
     restart: unless-stopped
+    networks: [minilm-l6]
+    ports:
+      - "127.0.0.1:8200:8200"
+    environment:
+      SENTENCE_TRANSFORMERS_HOME: /cache/sentence-transformers
+    volumes:
+      - ./cache/minilm-l6:/cache:ro
 
   mpnet-base-v2:
+    <<: *hardened
     build:
       context: .
       dockerfile: Dockerfile.mpnet-base-v2
       target: runtime
     image: read2me-mpnet-base-v2
     container_name: read2me-mpnet-base-v2
-    ports:
-      - "8201:8201"
-    environment:
-      - SENTENCE_TRANSFORMERS_HOME=/cache/sentence-transformers
-    volumes:
-      - mpnet_base_v2_cache:/cache
     restart: unless-stopped
+    networks: [mpnet-base-v2]
+    ports:
+      - "127.0.0.1:8201:8201"
+    environment:
+      SENTENCE_TRANSFORMERS_HOME: /cache/sentence-transformers
+    volumes:
+      - ./cache/mpnet-base-v2:/cache:ro
 
 volumes:
   voxcpm2_uploads:
   whisper_cache:
   whisper_cpu_cache:
-  minilm_l6_cache:
-  mpnet_base_v2_cache:
+
+# One single-member bridge per hardened service prevents container-to-container reach.
+networks:
+  llama:
+  chatterbox:
+  chatterbox-turbo:
+  qwen3-tts:
+  qwen3-tts-base:
+  voxcpm2:
+  minilm-l6:
+  mpnet-base-v2:
