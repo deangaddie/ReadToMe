@@ -1,5 +1,7 @@
 # Stage 1: deps — only rebuilds when requirements.txt changes
-FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime AS deps
+# chatterbox-tts 0.1.7 hard-pins torch==2.6.0 (for python < 3.14), so the base
+# image is the newest CUDA build that ships exactly that torch.
+FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime@sha256:f894dae26e1ee8557c544f9cfdb9dc011b1552bf3c1e656b422f2e221d380e40 AS deps
 
 WORKDIR /app
 
@@ -10,9 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY chatterbox/requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir "transformers>=4.40.0,<5.0.0" && \
-    pip uninstall -y torchvision || true
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+RUN pip uninstall -y torchvision || true
 
 # Stage 2: app — rebuilds on app file changes, deps layer reused
 FROM deps AS app

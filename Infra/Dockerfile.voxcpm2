@@ -1,7 +1,11 @@
 # Stage 1: deps — only rebuilds when requirements.txt changes
-FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime AS deps
+FROM pytorch/pytorch:2.11.0-cuda13.0-cudnn9-runtime@sha256:bfbb4a2b4fdba0fefdb428ea737e626d61bb3daf74a16e1ff935bdb03aa7c3f0 AS deps
 
 WORKDIR /app
+
+# The base image is a plain Ubuntu system python, which marks itself PEP 668
+# externally-managed; there is no virtualenv to fall back on inside the image.
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
@@ -12,23 +16,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY voxcpm2/requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip uninstall -y torchvision || true
+# torch and torchaudio (matching cu130 build) enter the lock as direct hashed
+# wheel URLs, so this single hashed install covers the whole closure.
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+RUN pip uninstall -y torchvision || true
 
 # Stage 2: app — rebuilds on server.py changes, deps layer reused
 FROM deps AS app
 
-RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app/logs /uploads /cache && \
-    chown -R appuser:appuser /app /uploads /cache
+# uid 1000 already exists in the base image as "ubuntu" — reuse it rather than
+# adding a second unprivileged user.
+RUN mkdir -p /app/logs /uploads /cache && \
+    chown -R ubuntu:ubuntu /app /uploads /cache
 
-COPY --chown=appuser:appuser voxcpm2/server.py ./
+COPY --chown=ubuntu:ubuntu voxcpm2/server.py ./
 
 ENV HF_HOME=/cache
 ENV UPLOAD_DIR=/uploads
 ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 
-USER appuser
+USER ubuntu
 
 EXPOSE 8003
 
