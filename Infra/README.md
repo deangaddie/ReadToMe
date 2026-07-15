@@ -99,7 +99,9 @@ DNS policy must be absent while a model is being downloaded.
 
 ## llama.cpp
 
-Custom image built from `Dockerfile.llama` using a fork with TurboQuant KV cache support (`feature/turboquant-kv-cache`). Serves an OpenAI-compatible API (`/v1/chat/completions`, `/v1/models`).
+Custom image built from `Dockerfile.llama` using the TurboQuant KV-cache fork pinned at commit `4503343ffc05c09f6b50c309c8ecbabb49c66ea2`. Serves an OpenAI-compatible API (`/v1/chat/completions`, `/v1/models`).
+
+The fork is frozen until a failure forces a change: there is no update cadence or Dependabot entry. Before any bump, diff the candidate SHA against its upstream `ggml-org/llama.cpp` merge-base and review the fork-specific delta. Any change to networking, file I/O outside the model path, or build scripts blocks the bump.
 
 Model presets are defined in `llama/config/models.ini`. Multiple models can be configured; only one is loaded at a time (`--models-max 1`). Switch without restart:
 

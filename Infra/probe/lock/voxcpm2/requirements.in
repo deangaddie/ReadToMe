@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-python-multipart
-voxcpm
-soundfile
-numpy
-# torch/torchaudio pinned to the exact build the base image ships
-torch==2.11.0+cu130
-torchaudio==2.11.0+cu130

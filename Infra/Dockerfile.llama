@@ -6,6 +6,7 @@ ARG BASE_CUDA_RUN_CONTAINER=nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_V
 FROM ${BASE_CUDA_DEV_CONTAINER} AS builder
 
 ARG CUDA_DOCKER_ARCH=default
+ARG LLAMA_FORK_SHA=4503343ffc05c09f6b50c309c8ecbabb49c66ea2
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc-14 g++-14 build-essential cmake python3 python3-pip git libssl-dev libgomp1 \
@@ -15,8 +16,10 @@ ENV CC=gcc-14 CXX=g++-14 CUDAHOSTCXX=g++-14
 
 WORKDIR /build
 
-RUN git clone --depth=1 --branch feature/turboquant-kv-cache \
-    https://github.com/TheTom/llama-cpp-turboquant.git .
+RUN git init . && \
+    git remote add origin https://github.com/TheTom/llama-cpp-turboquant.git && \
+    git fetch --depth=1 origin ${LLAMA_FORK_SHA} && \
+    git checkout --detach FETCH_HEAD
 
 # The embedded Web UI is skipped: the shallow clone has no build number, so the
 # prebuilt-asset fetch resolves to a nonexistent version and fails the build.

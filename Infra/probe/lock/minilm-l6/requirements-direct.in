@@ -1,4 +1,0 @@
-fastapi
-uvicorn[standard]
-sentence-transformers
-torch @ https://download.pytorch.org/whl/cpu/torch-2.13.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl
