@@ -9,7 +9,7 @@ public class DockerAiServiceRegistryTests
     private static readonly DockerAiServiceRegistry Registry = new();
 
     [Fact]
-    public void ContainsAllTenComposeServices()
+    public void ContainsAllNineComposeServices()
     {
         var expected = new[]
         {
@@ -20,7 +20,6 @@ public class DockerAiServiceRegistryTests
             ("qwen3-tts-base",   "read2me-qwen3-tts-base", 8101),
             ("voxcpm2",          "read2me-voxcpm2",        8003),
             ("whisper",          "read2me-whisper",        9000),
-            ("whisper-cpu",      "read2me-whisper-cpu",    9001),
             ("minilm-l6",        "read2me-minilm-l6",      8200),
             ("mpnet-base-v2",    "read2me-mpnet-base-v2",  8201),
         };
@@ -53,8 +52,8 @@ public class DockerAiServiceRegistryTests
     [Fact]
     public void UsesGpu_MatchesComposeNvidiaReservations()
     {
-        var gpu = new[] { "llama", "chatterbox", "chatterbox-turbo", "qwen3-tts", "qwen3-tts-base", "voxcpm2", "whisper" };
-        var cpu = new[] { "whisper-cpu", "minilm-l6", "mpnet-base-v2" };
+        var gpu = new[] { "llama", "chatterbox", "chatterbox-turbo", "qwen3-tts", "qwen3-tts-base", "voxcpm2" };
+        var cpu = new[] { "whisper", "minilm-l6", "mpnet-base-v2" };
 
         foreach (var name in gpu)
             Assert.True(Registry.GetByName(name).UsesGpu, $"{name} should be GPU");

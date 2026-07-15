@@ -31,7 +31,7 @@ Infra/
 | Qwen3 TTS            | `read2me-qwen3-tts`         | 8100 | TTS — voice design from text description, no reference audio     |
 | Qwen3 TTS Base       | `read2me-qwen3-tts-base`    | 8101 | TTS — voice cloning from reference audio + transcript            |
 | VoxCPM2              | `read2me-voxcpm2`           | 8003 | TTS — VoxCPM2 voice cloning                                      |
-| Whisper.CPP          | `read2me-whisper`           | 9000 | CPU-only audio transcription for accuracy scoring                |
+| Whisper.CPP          | `read2me-whisper`           | 9000 | CPU-only transcription for WER and word-level alignment          |
 | MiniLM-L6            | `read2me-minilm-l6`         | 8200 | Semantic similarity — MiniLM-L6-v2                               |
 | MPNet-Base-v2        | `read2me-mpnet-base-v2`     | 8201 | Semantic similarity — all-mpnet-base-v2                          |
 
@@ -47,7 +47,7 @@ Configured for RTX 3070 (8 GB VRAM). GPU-resident services cannot generally run 
 | `read2me-qwen3-tts`         | TTS with voice design from text description      |
 | `read2me-qwen3-tts-base`    | TTS with voice cloning from reference audio      |
 | `read2me-voxcpm2`           | TTS with VoxCPM2 voice cloning                   |
-| `read2me-whisper`           | CPU audio transcription / accuracy scoring       |
+| `read2me-whisper`           | CPU transcription for WER and word-level alignment |
 | `read2me-minilm-l6`         | Semantic similarity (no GPU — CPU only)          |
 | `read2me-mpnet-base-v2`     | Semantic similarity (no GPU — CPU only)          |
 
@@ -290,7 +290,8 @@ mounts that one file read-only, runs as uid/gid 10001, has a read-only root
 filesystem with writable `/tmp`, and deliberately has no model cache, runtime
 download path, GPU reservation, or outbound DNS route. It becomes healthy only
 after the model loads; use its upstream `POST /inference` endpoint with the
-Read2Me Canonical WAV protocol.
+Read2Me Canonical WAV protocol. Its verbose-JSON response includes the
+word-level timings used wherever precise text-to-audio alignment is required.
 
 ## Semantic Similarity — MiniLM-L6 and MPNet-Base-v2
 

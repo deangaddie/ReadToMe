@@ -35,7 +35,8 @@ public class DiscoveryDocsApiTests(E2eAppFixture app)
         var names = doc.RootElement.EnumerateArray()
             .Select(s => s.GetProperty("name").GetString()).ToList();
         Assert.Contains("llama", names);
-        Assert.Contains("whisper-cpu", names);
+        Assert.Contains("whisper", names);
+        Assert.DoesNotContain("whisper-cpu", names);
     }
 
     [Fact]

@@ -84,7 +84,7 @@ Set the **ffmpeg path** on the Audio Processing page — audio normalisation and
 | **Qwen3 TTS**        | `read2me-qwen3-tts`        | TTS where you describe the voice in text ("a gruff old man"). No reference audio needed — good for generating a first voice sample. |
 | **Qwen3 TTS Base**   | `read2me-qwen3-tts-base`   | TTS voice cloning from a reference audio clip and its transcript.                                                                   |
 | **VoxCPM2**          | `read2me-voxcpm2`          | TTS voice cloning via VoxCPM2. Alternative to Chatterbox for cloning.                                                               |
-| **Whisper.CPP**      | `read2me-whisper`          | CPU-only transcription of generated audio for accuracy scoring (WER). Run alongside the active TTS container.                     |
+| **Whisper.CPP**      | `read2me-whisper`          | CPU-only transcription of generated audio for accuracy scoring (WER) and word-level alignment. Run alongside the active TTS container. |
 | **MiniLM-L6**        | `read2me-minilm-l6`        | Semantic similarity check — rescues clips that fail WER but are semantically correct. CPU-only.                                     |
 | **MPNet-Base-v2**    | `read2me-mpnet-base-v2`    | Same as MiniLM-L6 but a larger model with a different score scale. CPU-only.                                                        |
 

@@ -1,6 +1,6 @@
 # AGENTS for ReadToMe
 
-This repository is a Blazor Server app plus GPU-backed AI inference infrastructure for audiobook production.
+This repository is a Blazor Server app plus AI inference infrastructure for audiobook production, with GPU-backed generation services and CPU-only transcription/semantic services.
 
 ## Use when
 
@@ -14,7 +14,7 @@ This repository is a Blazor Server app plus GPU-backed AI inference infrastructu
 - App: `src/Read2Me.App` is an ASP.NET Core 10 Blazor Server app using the `Program.cs` + `Startup.cs` pattern.
 - UI: Razor pages and Blazor components under `Pages/` and `Shared/`.
 - Solution: `src/Read2Me.slnx`.
-- Infra: `Infra/` contains GPU-backed AI service containers for LLM, TTS, Whisper, and semantic similarity.
+- Infra: `Infra/` contains GPU-backed LLM/TTS containers plus CPU-only Whisper and semantic similarity containers.
 - Models: `Infra/models/` holds GGUF model files; these are not committed and must be provided separately.
 
 ## Build and run

@@ -117,9 +117,9 @@ namespace Read2Me.Tests.App.Preflight
         }
 
         [Fact]
-        public async Task BuildPlan_StoppedRequired_ListsRunningGpuServicesAsConflicts()
+        public async Task BuildPlan_StoppedCpuWhisper_DoesNotListRunningGpuServicesAsConflicts()
         {
-            // whisper required + stopped; llama (GPU) running, minilm-l6 (CPU) running.
+            // Whisper is CPU-only, so it can start while llama (GPU) is running.
             var control = ControlFor("whisper");
             control.StatusResult = AiServiceStatus.Stopped;
             control.StatusByName["llama"] = AiServiceStatus.Ready;
@@ -130,7 +130,7 @@ namespace Read2Me.Tests.App.Preflight
 
             Assert.Equal(["whisper"], plan.ToStart.Select(i => i.Service.Name));
             Assert.Equal(AiServiceStatus.Stopped, plan.ToStart[0].Status);
-            Assert.Equal(["llama"], plan.Conflicts.Select(s => s.Name));
+            Assert.Empty(plan.Conflicts);
         }
 
         [Fact]
