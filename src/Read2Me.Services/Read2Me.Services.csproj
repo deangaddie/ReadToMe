@@ -7,11 +7,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CliWrap" Version="3.6.7" />
+    <PackageReference Include="CliWrap" Version="3.10.2" />
     <PackageReference Include="FractionalIndexing" Version="1.0.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageReference Include="MudBlazor" Version="9.5.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <PackageReference Include="MudBlazor" Version="9.7.0" />
     <PackageReference Include="VersOne.Epub" Version="3.3.6" />
   </ItemGroup>
 
