@@ -9,6 +9,7 @@ from typing import Optional
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
+from huggingface_hub import snapshot_download
 import soundfile as sf
 from qwen_tts import Qwen3TTSModel
 
@@ -20,11 +21,15 @@ app = FastAPI(title="Qwen3 TTS Base")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 device_map = "cuda:0" if device == "cuda" else "cpu"
 MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+MODEL_REVISION = "fd4b254389122332181a7c3db7f27e918eec64e3"
+MODEL_PATH = snapshot_download(
+    MODEL_NAME, revision=MODEL_REVISION, local_files_only=True
+)
 
 logger.info("Loading Qwen3 TTS Base model %s on %s", MODEL_NAME, device)
 try:
     tts = Qwen3TTSModel.from_pretrained(
-        MODEL_NAME,
+        MODEL_PATH,
         device_map=device_map,
         dtype=torch.bfloat16,
     )

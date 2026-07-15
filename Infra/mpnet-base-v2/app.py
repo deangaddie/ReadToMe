@@ -6,7 +6,12 @@ import os
 app = FastAPI()
 
 cache_dir = os.environ.get("SENTENCE_TRANSFORMERS_HOME", "/cache/sentence-transformers")
-model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2", cache_folder=cache_dir)
+model = SentenceTransformer(
+    "sentence-transformers/all-mpnet-base-v2",
+    revision="e8c3b32edf5434bc2275fc9bab85f82640a19130",
+    local_files_only=True,
+    cache_folder=cache_dir,
+)
 
 class TextPair(BaseModel):
     text1: str

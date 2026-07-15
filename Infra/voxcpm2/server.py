@@ -43,7 +43,9 @@ async def _lifespan(app: FastAPI):
     from voxcpm import VoxCPM
     model_id = os.environ.get("MODEL_ID", "openbmb/VoxCPM2")
     optimize = os.environ.get("OPTIMIZE", "false").lower() == "true"
-    _model = VoxCPM.from_pretrained(model_id, optimize=optimize)
+    _model = VoxCPM.from_pretrained(
+        model_id, optimize=optimize, load_denoiser=False
+    )
     logger.info("VoxCPM2 model loaded.")
     _cleanup_task = asyncio.create_task(_upload_cleanup_loop())
     yield
