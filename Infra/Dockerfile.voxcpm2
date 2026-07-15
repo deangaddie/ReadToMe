@@ -7,11 +7,11 @@ WORKDIR /app
 # externally-managed; there is no virtualenv to fall back on inside the image.
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
+# No gcc/g++: the hashed lock builds every sdist ahead of the image, so no
+# compiler ever enters it — and an absent compiler is one less RCE primitive.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
-    gcc \
-    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 COPY voxcpm2/requirements.txt .
@@ -24,22 +24,33 @@ RUN pip uninstall -y torchvision || true
 # Stage 2: app — rebuilds on server.py changes, deps layer reused
 FROM deps AS app
 
-# uid 1000 already exists in the base image as "ubuntu" — reuse it rather than
-# adding a second unprivileged user.
-RUN mkdir -p /app/logs /uploads /cache && \
-    chown -R ubuntu:ubuntu /app /uploads /cache
+# The 2.11.0 pytorch base ships a full gcc-13 toolchain in /usr/bin. We install
+# no compiler, the hashed lock builds every sdist ahead of the image, and
+# OPTIMIZE=false keeps triton from JIT-compiling at runtime — so purge the base's
+# gcc chain to keep the image free of an RCE primitive (§11.7). torch is a
+# prebuilt wheel and still imports after removal. `gcc`/`g++` alone are no-ops
+# (metapackages apt refuses to drop); the versioned packages are what carry the
+# binary, and cpp cascades out with them.
+RUN apt-get purge -y gcc gcc-13 gcc-13-x86-64-linux-gnu cpp-13 cpp-13-x86-64-linux-gnu && \
+    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
-COPY --chown=ubuntu:ubuntu voxcpm2/server.py ./
+# A dedicated high uid (10001) — not the base image's "ubuntu" (1000), which
+# collides with the pre-existing CUDA-base user and the typical host user.
+RUN groupadd -g 10001 app && useradd -u 10001 -g 10001 -m -d /home/app -s /usr/sbin/nologin app && \
+    mkdir -p /app/logs /uploads /cache && \
+    chown -R app:app /app /uploads /cache /home/app
+
+COPY --chown=app:app voxcpm2/server.py ./
 
 ENV HF_HOME=/cache
 ENV UPLOAD_DIR=/uploads
 ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 
-USER ubuntu
+USER app
 
 EXPOSE 8003
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD python -c "import requests; requests.get('http://localhost:8003/health', timeout=5).raise_for_status()" || exit 1
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8003/health', timeout=5).status==200 else 1)" || exit 1
 
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8003"]

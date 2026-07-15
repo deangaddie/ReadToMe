@@ -8,7 +8,7 @@ FROM ${BASE_CUDA_DEV_CONTAINER} AS builder
 ARG CUDA_DOCKER_ARCH=default
 
 RUN apt-get update && \
-    apt-get install -y gcc-14 g++-14 build-essential cmake python3 python3-pip git libssl-dev libgomp1 \
+    apt-get install -y --no-install-recommends gcc-14 g++-14 build-essential cmake python3 python3-pip git libssl-dev libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV CC=gcc-14 CXX=g++-14 CUDAHOSTCXX=g++-14
@@ -42,9 +42,12 @@ FROM ${BASE_CUDA_RUN_CONTAINER} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# python3 dropped from the runtime — nothing calls it (llama-server is a binary,
+# the entrypoint is bash); an unused interpreter only widens the RCE surface.
+# curl stays: the HEALTHCHECK uses it and the AI watchdog shells it.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    libgomp1 python3 ca-certificates curl \
+    libgomp1 ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/build/bin/llama-server /usr/local/bin/llama-server
@@ -53,10 +56,15 @@ COPY --from=builder /build/lib/ /usr/local/lib/
 COPY llama/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && ldconfig
 
+RUN groupadd -g 10001 app && useradd -u 10001 -g 10001 -m -d /home/app -s /usr/sbin/nologin app && \
+    mkdir -p /app /logs && chown -R app:app /app /logs /home/app
+
 WORKDIR /app
 VOLUME ["/models", "/config", "/logs"]
 EXPOSE 8080
 
 HEALTHCHECK CMD [ "curl", "-f", "http://localhost:8080/health" ]
+
+USER app
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

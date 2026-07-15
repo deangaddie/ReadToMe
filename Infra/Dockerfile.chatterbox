@@ -21,17 +21,17 @@ FROM deps AS app
 ARG APP_MODULE=app
 ENV APP_MODULE=${APP_MODULE}
 
-RUN useradd -m -u 1000 appuser && \
+RUN groupadd -g 10001 app && useradd -u 10001 -g 10001 -m -d /home/app -s /usr/sbin/nologin app && \
     mkdir -p /app/logs /cache && \
-    chown -R appuser:appuser /app /cache
+    chown -R app:app /app /cache /home/app
 
-COPY --chown=appuser:appuser chatterbox/app.py chatterbox/app_turbo.py ./
+COPY --chown=app:app chatterbox/app.py chatterbox/app_turbo.py ./
 
-USER appuser
+USER app
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=5).raise_for_status()" || exit 1
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=5).status==200 else 1)" || exit 1
 
 CMD uvicorn ${APP_MODULE}:app --host 0.0.0.0 --port 8000

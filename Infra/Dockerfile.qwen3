@@ -22,24 +22,33 @@ RUN pip uninstall -y torchvision || true
 # Stage 2: app — rebuilds on every app.py change, deps layer reused
 FROM deps AS app
 
-# uid 1000 already exists in the base image as "ubuntu" — reuse it rather than
-# adding a second unprivileged user.
-RUN mkdir -p /app/logs /cache && \
-    chown -R ubuntu:ubuntu /app /cache
+# The 2.11.0 pytorch base ships a full gcc-13 toolchain in /usr/bin. We install
+# no compiler and nothing at runtime compiles, so purge the base's gcc chain to
+# keep the image free of an RCE primitive (§11.7). torch is a prebuilt wheel and
+# still imports after removal. `gcc`/`g++` alone are no-ops (metapackages apt
+# refuses to drop); the versioned packages carry the binary, cpp cascades out.
+RUN apt-get purge -y gcc gcc-13 gcc-13-x86-64-linux-gnu cpp-13 cpp-13-x86-64-linux-gnu && \
+    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
+# A dedicated high uid (10001) — not the base image's "ubuntu" (1000), which
+# collides with the pre-existing CUDA-base user and the typical host user.
+RUN groupadd -g 10001 app && useradd -u 10001 -g 10001 -m -d /home/app -s /usr/sbin/nologin app && \
+    mkdir -p /app/logs /cache && \
+    chown -R app:app /app /cache /home/app
 
 ARG APP_MODULE=app
 ARG APP_PORT=8100
 
-COPY --chown=ubuntu:ubuntu qwen3/app.py qwen3/app_base.py ./
+COPY --chown=app:app qwen3/app.py qwen3/app_base.py ./
 
 ENV APP_MODULE=${APP_MODULE}
 ENV APP_PORT=${APP_PORT}
 
-USER ubuntu
+USER app
 
 EXPOSE ${APP_PORT}
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:'+'${APP_PORT}'+'/health', timeout=5).raise_for_status()" || exit 1
+    CMD python -c "import os,urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:'+os.environ['APP_PORT']+'/health', timeout=5).status==200 else 1)" || exit 1
 
 CMD ["sh", "-c", "uvicorn ${APP_MODULE}:app --host 0.0.0.0 --port ${APP_PORT}"]

@@ -2,18 +2,23 @@ FROM python:3.13-slim@sha256:bffeb7bd6a85767587059c6ba23e1e9122078e3aa3fa8360991
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
+# No apt layer: git was the sole install and no VCS dep remains.
 COPY mpnet-base-v2/requirements.txt .
 # CPU-only service — torch enters the lock as a direct hashed cpu-wheel URL.
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 FROM deps AS runtime
 
-COPY mpnet-base-v2/app.py .
+RUN groupadd -g 10001 app && useradd -u 10001 -g 10001 -m -d /home/app -s /usr/sbin/nologin app && \
+    mkdir -p /app /cache && chown -R app:app /app /cache /home/app
+
+COPY --chown=app:app mpnet-base-v2/app.py .
+
+USER app
 
 EXPOSE 8201
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8201/docs', timeout=5).status==200 else 1)" || exit 1
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8201"]
