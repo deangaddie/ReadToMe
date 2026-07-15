@@ -1,6 +1,6 @@
 # models/
 
-Local model storage for the llama.cpp container. Files here are bind-mounted into the container at `/models`.
+Local model storage for the llama.cpp and Whisper.CPP containers. Files here are bind-mounted into the containers at `/models`.
 
 Model files (`.gguf`, `.bin`, etc.) are excluded from git — this folder exists only to hold them on disk.
 
@@ -21,6 +21,20 @@ Or restart the service:
 ```bash
 docker compose up -d llama
 ```
+
+### Whisper.CPP
+
+The hardened `whisper` service mounts only
+`ggml-base.en.bin` at `/models/ggml-base.en.bin` (read-only). Provision it with
+the committed verifier rather than downloading it from a container:
+
+```powershell
+.\Infra\scripts\provision-whisper-model.ps1
+```
+
+The companion `whisper-models.sha256` manifest pins the artifact's immutable
+source revision, SHA-256 and byte length. Do not manually replace this file;
+update and review the manifest first, then rerun the provisioner.
 
 ## Required files
 

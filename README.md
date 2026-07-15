@@ -30,8 +30,7 @@ docker compose up -d chatterbox-turbo  # TTS — paralinguistic tags + voice clo
 docker compose up -d qwen3-tts         # TTS — voice design from text description
 docker compose up -d qwen3-tts-base    # TTS — voice cloning from reference audio
 docker compose up -d voxcpm2           # TTS — VoxCPM2 voice cloning
-docker compose up -d whisper           # GPU transcription (accuracy scoring)
-docker compose up -d whisper-cpu       # CPU transcription fallback
+docker compose up -d whisper           # CPU Whisper.CPP transcription (accuracy scoring)
 docker compose up -d minilm-l6         # Semantic similarity (MiniLM-L6)
 docker compose up -d mpnet-base-v2     # Semantic similarity (MPNet-Base-v2)
 docker compose stop <service>
@@ -39,7 +38,7 @@ docker compose up -d --build           # After Dockerfile/entrypoint changes
 docker logs -f <container>
 ```
 
-Only one GPU-resident container at a time (8 GB VRAM limit). The semantic similarity and whisper-cpu containers are CPU-only and can run alongside any GPU container.
+Only one GPU-resident container at a time (8 GB VRAM limit). Whisper.CPP and the semantic similarity containers are CPU-only and can run alongside any GPU container.
 
 See [Infra/README.md](Infra/README.md) for full service details, ports, and API reference.
 
@@ -59,7 +58,7 @@ After `dotnet run`, open <https://localhost:5001>. Configure the AI services fro
 | -------- | --------- | --------------- |
 | **LLM Settings** | LLM server URL + model preset for character attribution | `read2me-llama` |
 | **LLM Prompts** | Prompt templates for extraction / attribution | — |
-| **Transcription Settings** | Whisper endpoint for accuracy scoring | `read2me-whisper` (or `-cpu`) |
+| **Transcription Settings** | Whisper endpoint for accuracy scoring | `read2me-whisper` |
 | **Semantic Similarity** | Embedding endpoint + pass threshold for Semantic Rescue | `read2me-minilm-l6` / `read2me-mpnet-base-v2` |
 | **Voice Design Settings** | Service for generating voices from a text description | `read2me-qwen3-tts` |
 | **Paragraph TTS Settings** | TTS service(s) used to synthesise paragraph audio | a TTS container (Chatterbox / VoxCPM2 / Qwen3 Base) |
@@ -85,8 +84,7 @@ Set the **ffmpeg path** on the Audio Processing page — audio normalisation and
 | **Qwen3 TTS**        | `read2me-qwen3-tts`        | TTS where you describe the voice in text ("a gruff old man"). No reference audio needed — good for generating a first voice sample. |
 | **Qwen3 TTS Base**   | `read2me-qwen3-tts-base`   | TTS voice cloning from a reference audio clip and its transcript.                                                                   |
 | **VoxCPM2**          | `read2me-voxcpm2`          | TTS voice cloning via VoxCPM2. Alternative to Chatterbox for cloning.                                                               |
-| **Whisper**          | `read2me-whisper`          | Transcribes generated audio to score accuracy (WER). Run alongside the active TTS container.                                        |
-| **Whisper CPU**      | `read2me-whisper-cpu`      | Same as Whisper but CPU-only. Use when VRAM is fully occupied.                                                                      |
+| **Whisper.CPP**      | `read2me-whisper`          | CPU-only transcription of generated audio for accuracy scoring (WER). Run alongside the active TTS container.                     |
 | **MiniLM-L6**        | `read2me-minilm-l6`        | Semantic similarity check — rescues clips that fail WER but are semantically correct. CPU-only.                                     |
 | **MPNet-Base-v2**    | `read2me-mpnet-base-v2`    | Same as MiniLM-L6 but a larger model with a different score scale. CPU-only.                                                        |
 

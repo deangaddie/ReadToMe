@@ -31,14 +31,13 @@ Infra/
 | Qwen3 TTS            | `read2me-qwen3-tts`         | 8100 | TTS — voice design from text description, no reference audio     |
 | Qwen3 TTS Base       | `read2me-qwen3-tts-base`    | 8101 | TTS — voice cloning from reference audio + transcript            |
 | VoxCPM2              | `read2me-voxcpm2`           | 8003 | TTS — VoxCPM2 voice cloning                                      |
-| Whisper (GPU)        | `read2me-whisper`           | 9000 | GPU audio transcription for accuracy scoring                     |
-| Whisper (CPU)        | `read2me-whisper-cpu`       | 9001 | CPU-only transcription fallback                                  |
+| Whisper.CPP          | `read2me-whisper`           | 9000 | CPU-only audio transcription for accuracy scoring                |
 | MiniLM-L6            | `read2me-minilm-l6`         | 8200 | Semantic similarity — MiniLM-L6-v2                               |
 | MPNet-Base-v2        | `read2me-mpnet-base-v2`     | 8201 | Semantic similarity — all-mpnet-base-v2                          |
 
 ## GPU / VRAM note
 
-Configured for RTX 3070 (8 GB VRAM). All containers are GPU-resident — running more than one at a time is not possible at this VRAM budget. Start and stop containers manually depending on what stage of the app you are working in.
+Configured for RTX 3070 (8 GB VRAM). GPU-resident services cannot generally run together at this VRAM budget. CPU-only Whisper and the semantic-similarity services can run alongside a GPU service.
 
 | Container                   | When to run                                      |
 | --------------------------- | ------------------------------------------------ |
@@ -48,12 +47,11 @@ Configured for RTX 3070 (8 GB VRAM). All containers are GPU-resident — running
 | `read2me-qwen3-tts`         | TTS with voice design from text description      |
 | `read2me-qwen3-tts-base`    | TTS with voice cloning from reference audio      |
 | `read2me-voxcpm2`           | TTS with VoxCPM2 voice cloning                   |
-| `read2me-whisper`           | GPU audio transcription / accuracy scoring       |
-| `read2me-whisper-cpu`       | CPU transcription when GPU is occupied           |
+| `read2me-whisper`           | CPU audio transcription / accuracy scoring       |
 | `read2me-minilm-l6`         | Semantic similarity (no GPU — CPU only)          |
 | `read2me-mpnet-base-v2`     | Semantic similarity (no GPU — CPU only)          |
 
-> **Note:** Whisper (`base.en`) is small enough to run alongside a Chatterbox container. During audio generation, start both `read2me-whisper` and the relevant Chatterbox container together. The semantic similarity containers (`minilm-l6`, `mpnet-base-v2`) are CPU-only and can run at any time.
+> **Note:** Whisper.CPP and the semantic similarity containers are CPU-only and can run alongside a Chatterbox container.
 
 ## Usage
 
@@ -276,28 +274,23 @@ JSON body. Response is `application/octet-stream`, a sequence of framed binary m
 
 Stream sequence: one `meta` frame (`{"type": "meta", "sample_rate": ...}`) → N audio frames (raw float32 PCM) → one `done` frame (`{"type": "done", "chunks": N}`), or an `error` frame if generation fails.
 
-## Whisper (GPU)
+## Whisper.CPP (CPU)
 
-Uses `onerahmet/openai-whisper-asr-webservice:latest-gpu` (GPU-enabled). Downloads the configured model on first API request.
+`read2me-whisper` is a CPU-only, hardened Whisper.CPP `v1.8.5` server on port
+9000. Before its first start, provision the exact pinned `base.en` artifact:
 
-Model and cache persist in `whisper_cache` volume — restarts skip the download.
+```powershell
+.\scripts\provision-whisper-model.ps1
+docker compose up -d whisper
+```
 
-Key environment variables (set in `docker-compose.yml`):
-
-| Variable         | Default                | Notes                                                              |
-| ---------------- | ---------------------- | ------------------------------------------------------------------ |
-| `ASR_ENGINE`     | `openai_whisper`       | Also supports `faster-whisper`, `whisperx`                         |
-| `ASR_MODEL`      | `base.en`              | English-only model. Use `base`, `small`, `medium` for multilingual |
-| `ASR_MODEL_PATH` | `/root/.cache/whisper` | Persisted via `whisper_cache` volume                               |
-| `ASR_DEVICE`     | `cuda`                 | GPU inference                                                      |
-
-Swagger UI available at `http://localhost:9000` when running.
-
-## Whisper (CPU)
-
-Same image as GPU Whisper (`onerahmet/openai-whisper-asr-webservice:latest`, no `-gpu` tag). CPU inference. Use when GPU is occupied by a TTS container.
-
-Port `9001`. Same API and environment variables; `ASR_DEVICE=cpu`.
+The provisioner verifies the model's immutable source revision, SHA-256 and
+byte length before atomically placing `models/ggml-base.en.bin`. The service
+mounts that one file read-only, runs as uid/gid 10001, has a read-only root
+filesystem with writable `/tmp`, and deliberately has no model cache, runtime
+download path, GPU reservation, or outbound DNS route. It becomes healthy only
+after the model loads; use its upstream `POST /inference` endpoint with the
+Read2Me Canonical WAV protocol.
 
 ## Semantic Similarity — MiniLM-L6 and MPNet-Base-v2
 

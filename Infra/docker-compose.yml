@@ -163,41 +163,31 @@ services:
       - ./cache/voxcpm2:/cache:ro
       - voxcpm2_uploads:/uploads
 
-  # Whisper remains deliberately outside the hardened scope until its replacement map.
   whisper:
-    image: onerahmet/openai-whisper-asr-webservice:v1.9.1-gpu
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: Dockerfile.whisper
+      target: runtime
+    image: read2me-whisper
     container_name: read2me-whisper
-    ports:
-      - "9000:9000"
-    environment:
-      - ASR_ENGINE=openai_whisper
-      - ASR_MODEL=base.en
-      - ASR_MODEL_PATH=/root/.cache/whisper
-      - ASR_DEVICE=cuda
-    volumes:
-      - whisper_cache:/root/.cache/whisper
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    user: "10001:10001"
     restart: unless-stopped
-
-  whisper-cpu:
-    image: onerahmet/openai-whisper-asr-webservice:v1.9.1
-    container_name: read2me-whisper-cpu
+    networks: [whisper]
     ports:
-      - "9001:9000"
-    environment:
-      - ASR_ENGINE=openai_whisper
-      - ASR_MODEL=base.en
-      - ASR_MODEL_PATH=/root/.cache/whisper
-      - ASR_DEVICE=cpu
+      - "127.0.0.1:9000:8080"
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --no-gpu
+      - --threads
+      - "4"
+      - --model
+      - /models/ggml-base.en.bin
     volumes:
-      - whisper_cpu_cache:/root/.cache/whisper
-    restart: unless-stopped
+      - ./models/ggml-base.en.bin:/models/ggml-base.en.bin:ro
 
   minilm-l6:
     <<: *hardened
@@ -235,8 +225,6 @@ services:
 
 volumes:
   voxcpm2_uploads:
-  whisper_cache:
-  whisper_cpu_cache:
 
 # One single-member bridge per hardened service prevents container-to-container reach.
 networks:
@@ -246,5 +234,6 @@ networks:
   qwen3-tts:
   qwen3-tts-base:
   voxcpm2:
+  whisper:
   minilm-l6:
   mpnet-base-v2:

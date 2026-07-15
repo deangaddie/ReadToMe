@@ -23,8 +23,7 @@ docker compose up -d chatterbox-turbo  # TTS — paralinguistic tags
 docker compose up -d qwen3-tts         # TTS — voice design from description
 docker compose up -d qwen3-tts-base    # TTS — voice cloning from reference audio
 docker compose up -d voxcpm2           # TTS — VoxCPM2 voice cloning
-docker compose up -d whisper           # GPU transcription
-docker compose up -d whisper-cpu       # CPU transcription fallback
+docker compose up -d whisper           # CPU Whisper.CPP transcription
 docker compose up -d minilm-l6         # Semantic similarity
 docker compose up -d mpnet-base-v2     # Semantic similarity
 docker compose stop <service>
@@ -54,8 +53,7 @@ Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB
 | `read2me-qwen3-tts` | 8100 | TTS — voice design from text description, no reference audio (`POST /tts`) |
 | `read2me-qwen3-tts-base` | 8101 | TTS — voice cloning from reference audio + transcript (`POST /tts`) |
 | `read2me-voxcpm2` | 8003 | TTS — VoxCPM2 voice cloning (`POST /tts`) |
-| `read2me-whisper` | 9000 | GPU audio transcription for accuracy scoring |
-| `read2me-whisper-cpu` | 9001 | CPU-only transcription fallback |
+| `read2me-whisper` | 9000 | CPU-only Whisper.CPP transcription for accuracy scoring |
 | `read2me-minilm-l6` | 8200 | Semantic similarity — MiniLM-L6 (`POST /similarity`) |
 | `read2me-mpnet-base-v2` | 8201 | Semantic similarity — MPNet-Base-v2 (`POST /similarity`) |
 

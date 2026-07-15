@@ -35,7 +35,6 @@ docker compose up -d qwen3-tts
 docker compose up -d qwen3-tts-base
 docker compose up -d voxcpm2
 docker compose up -d whisper
-docker compose up -d whisper-cpu
 docker compose up -d minilm-l6
 docker compose up -d mpnet-base-v2
 docker compose up -d --build   # after Dockerfile or entrypoint changes
@@ -46,7 +45,7 @@ docker logs -f <container>     # follow logs
 ## Important constraints
 
 - GPU setup is VRAM-limited (RTX 3070, 8 GB). Only one GPU-resident container should run at a time in normal use.
-- `read2me-whisper` can usually run alongside a Chatterbox container; other GPU containers are typically exclusive.
+- `read2me-whisper` is CPU-only and can run alongside a Chatterbox container.
 - `read2me-minilm-l6` and `read2me-mpnet-base-v2` are CPU-only and can run alongside any GPU container.
 - `read2me-chatterbox` and `read2me-qwen3-tts-base` require `reference_audio` for voice cloning; there are no built-in voices.
 - `read2me-voxcpm2` also requires `reference_audio`.

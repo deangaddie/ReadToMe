@@ -1,0 +1,58 @@
+ARG BASE_BUILD_IMAGE=ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+ARG BASE_RUNTIME_IMAGE=ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+
+FROM ${BASE_BUILD_IMAGE} AS builder
+
+ARG WHISPER_CPP_SHA=f24588a272ae8e23280d9c220536437164e6ed28
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates cmake g++ git make pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Fetch the immutable commit, rather than trusting a mutable release tag.
+RUN git init . && \
+    git remote add origin https://github.com/ggml-org/whisper.cpp.git && \
+    git fetch --depth=1 origin ${WHISPER_CPP_SHA} && \
+    git checkout --detach FETCH_HEAD && \
+    test "$(git rev-parse HEAD)" = "${WHISPER_CPP_SHA}"
+
+RUN cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=ON \
+        -DGGML_CUDA=OFF \
+        -DGGML_BLAS=OFF \
+        -DGGML_NATIVE=OFF \
+        -DWHISPER_FFMPEG=OFF \
+        -DWHISPER_BUILD_TESTS=OFF \
+        -DWHISPER_BUILD_EXAMPLES=ON \
+        -DWHISPER_BUILD_SERVER=ON && \
+    cmake --build build --config Release --target whisper-server -j"$(nproc)" && \
+    mkdir -p /out/lib && \
+    cp build/bin/whisper-server /out/whisper-server && \
+    ldd build/bin/whisper-server | awk '/=> \/src\/build\// { print $3 }' | sort -u | xargs -r -I{} cp -L {} /out/lib/
+
+FROM ${BASE_RUNTIME_IMAGE} AS runtime
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates curl libgomp1 && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -g 10001 app && \
+    useradd -u 10001 -g 10001 -m -d /home/app -s /usr/sbin/nologin app && \
+    mkdir /app && chown app:app /app /home/app
+
+COPY --from=builder /out/whisper-server /usr/local/bin/whisper-server
+COPY --from=builder /out/lib/ /usr/local/lib/
+RUN ldconfig
+
+WORKDIR /app
+USER 10001:10001
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health"]
+
+ENTRYPOINT ["/usr/local/bin/whisper-server"]
