@@ -1,0 +1,102 @@
+# Deliberately standalone: do not merge with docker-compose.yml. The hardened
+# compose blackholes DNS, which prevents these one-shot cache population jobs.
+services:
+  chatterbox:
+    image: read2me-chatterbox
+    environment:
+      HF_HOME: /cache
+    volumes:
+      - ./cache/chatterbox:/cache
+    command:
+      - hf
+      - download
+      - ResembleAI/chatterbox
+      - --revision
+      - 5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18
+      - --cache-dir
+      - /cache
+
+  chatterbox-turbo:
+    image: read2me-chatterbox-turbo
+    environment:
+      HF_HOME: /cache
+    volumes:
+      - ./cache/chatterbox-turbo:/cache
+    command:
+      - hf
+      - download
+      - ResembleAI/chatterbox-turbo
+      - --revision
+      - 749d1c1a46eb10492095d68fbcf55691ccf137cd
+      - --cache-dir
+      - /cache
+
+  qwen3-tts:
+    image: read2me-qwen3-tts
+    environment:
+      HF_HOME: /cache
+    volumes:
+      - ./cache/qwen3:/cache
+    command:
+      - python
+      - -c
+      - |
+        from huggingface_hub import snapshot_download
+        snapshot_download("Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign", revision="5ecdb67327fd37bb2e042aab12ff7391903235d3", cache_dir="/cache")
+
+  qwen3-tts-base:
+    image: read2me-qwen3-tts-base
+    environment:
+      HF_HOME: /cache
+    volumes:
+      - ./cache/qwen3-base:/cache
+    command:
+      - python
+      - -c
+      - |
+        from huggingface_hub import snapshot_download
+        snapshot_download("Qwen/Qwen3-TTS-12Hz-1.7B-Base", revision="fd4b254389122332181a7c3db7f27e918eec64e3", cache_dir="/cache")
+
+  voxcpm2:
+    image: read2me-voxcpm2
+    environment:
+      HF_HOME: /cache
+      MODEL_ID: /cache/hub/models--openbmb--VoxCPM2/snapshots/bffb3df5a29440629464e5e839f4d214c8714c3d
+    volumes:
+      - ./cache/voxcpm2:/cache
+    command:
+      - python
+      - -c
+      - |
+        from pathlib import Path
+        from huggingface_hub import snapshot_download
+        path = Path(snapshot_download("openbmb/VoxCPM2", revision="bffb3df5a29440629464e5e839f4d214c8714c3d", cache_dir="/cache"))
+        expected = Path("/cache/hub/models--openbmb--VoxCPM2/snapshots/bffb3df5a29440629464e5e839f4d214c8714c3d")
+        if path != expected:
+            raise RuntimeError(f"expected {expected}, got {path}")
+
+  minilm-l6:
+    image: read2me-minilm-l6
+    environment:
+      SENTENCE_TRANSFORMERS_HOME: /cache/sentence-transformers
+    volumes:
+      - ./cache/minilm-l6:/cache
+    command:
+      - python
+      - -c
+      - |
+        from sentence_transformers import SentenceTransformer
+        SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", revision="1110a243fdf4706b3f48f1d95db1a4f5529b4d41", cache_folder="/cache/sentence-transformers")
+
+  mpnet-base-v2:
+    image: read2me-mpnet-base-v2
+    environment:
+      SENTENCE_TRANSFORMERS_HOME: /cache/sentence-transformers
+    volumes:
+      - ./cache/mpnet-base-v2:/cache
+    command:
+      - python
+      - -c
+      - |
+        from sentence_transformers import SentenceTransformer
+        SentenceTransformer("sentence-transformers/all-mpnet-base-v2", revision="e8c3b32edf5434bc2275fc9bab85f82640a19130", cache_folder="/cache/sentence-transformers")

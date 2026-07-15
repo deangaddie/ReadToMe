@@ -80,6 +80,23 @@ docker compose logs -f
 docker logs -f read2me-llama
 ```
 
+## Model cache warm-up
+
+A cold `Infra/cache/` is an unbootable stack by design. Populate or refresh a
+model cache with the standalone warm-up compose file before starting its
+hardened service:
+
+```bash
+docker compose -f docker-compose.warmup.yml run --rm <service>
+```
+
+For example, `docker compose -f docker-compose.warmup.yml run --rm minilm-l6`
+downloads the pinned MiniLM snapshot into `cache/minilm-l6`. The warm-up file
+is the executable model-pin table: changing a model revision is deliberately a
+two-step operation — update its warm-up service, run it, then start the normal
+service. Do not merge this file with `docker-compose.yml`; the hardened stack's
+DNS policy must be absent while a model is being downloaded.
+
 ## llama.cpp
 
 Custom image built from `Dockerfile.llama` using a fork with TurboQuant KV cache support (`feature/turboquant-kv-cache`). Serves an OpenAI-compatible API (`/v1/chat/completions`, `/v1/models`).
