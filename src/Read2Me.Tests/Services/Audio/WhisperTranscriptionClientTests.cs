@@ -45,11 +45,11 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
-        public async Task Transcribe_PostsAudio_ReturnsTranscriptText()
+        public async Task Transcribe_PostsWhisperCppContract_ReturnsTrimmedJsonTranscript()
         {
             _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("  Transcribed text  ")
+                Content = new StringContent("""{ "text": "  Transcribed text  " }""")
             };
 
             var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
@@ -59,16 +59,15 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal("Transcribed text", result);
             Assert.NotNull(_httpFactory.LastRequest);
             Assert.Equal(HttpMethod.Post, _httpFactory.LastRequest.Method);
-            Assert.Contains("/asr?task=transcribe&output=txt", _httpFactory.LastRequest.RequestUri?.ToString() ?? "");
+            Assert.EndsWith("/inference", _httpFactory.LastRequest.RequestUri?.ToString() ?? "");
             
             Assert.IsType<MultipartFormDataContent>(_httpFactory.LastRequest.Content);
             var strContent = _httpFactory.LastRequestContent ?? "";
-            Assert.Contains("audio_file", strContent);
-            Assert.Contains("test.wav", strContent);
+            AssertWhisperCppControls(strContent, "test.wav");
         }
 
         [Fact]
-        public async Task TranscribeWithWordTimestamps_RequestsJsonOutput_FlattensSegmentWords()
+        public async Task TranscribeWithWordTimestamps_PostsWhisperCppContract_NormalizesWords()
         {
             _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -78,6 +77,7 @@ namespace Read2Me.Tests.Services.Audio
                       "segments": [
                         { "words": [
                             { "word": " hello", "start": 0.0, "end": 0.4 },
+                            { "word": " ,", "start": 0.41, "end": 0.45 },
                             { "word": " world", "start": 0.5, "end": 0.9 }
                         ] },
                         { "words": [
@@ -91,24 +91,23 @@ namespace Read2Me.Tests.Services.Audio
             var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
             var words = await _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "test.wav");
 
-            Assert.Contains("/asr?task=transcribe&output=json&word_timestamps=true",
-                _httpFactory.LastRequest?.RequestUri?.ToString() ?? "");
+            Assert.EndsWith("/inference", _httpFactory.LastRequest?.RequestUri?.ToString() ?? "");
             Assert.IsType<MultipartFormDataContent>(_httpFactory.LastRequest?.Content);
-            Assert.Contains("audio_file", _httpFactory.LastRequestContent ?? "");
+            AssertWhisperCppControls(_httpFactory.LastRequestContent ?? "", "test.wav");
 
             Assert.Equal(3, words.Count);
-            Assert.Equal(new TranscribedWord(" hello", 0.0, 0.4), words[0]);
-            Assert.Equal(new TranscribedWord(" world", 0.5, 0.9), words[1]);
-            Assert.Equal(new TranscribedWord(" again", 1.2, 1.6), words[2]);
+            Assert.Equal(new TranscribedWord("hello,", 0.0, 0.45), words[0]);
+            Assert.Equal(new TranscribedWord("world", 0.5, 0.9), words[1]);
+            Assert.Equal(new TranscribedWord("again", 1.2, 1.6), words[2]);
         }
 
         [Fact]
-        public async Task TranscribeWithWordTimestamps_SegmentWithoutWords_IsSkipped()
+        public async Task TranscribeWithWordTimestamps_EmptyTranscriptWithoutWords_ReturnsEmpty()
         {
             _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""
-                    { "segments": [ { "text": "no words here" }, { "words": [] } ] }
+                    { "text": "", "segments": [ { "text": "no words here" }, { "words": [] } ] }
                     """)
             };
 
@@ -119,7 +118,7 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
-        public async Task TranscribeWithWordTimestamps_MissingSegments_ReturnsEmpty()
+        public async Task TranscribeWithWordTimestamps_NonEmptyTranscriptWithoutWords_Throws()
         {
             _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -127,9 +126,48 @@ namespace Read2Me.Tests.Services.Audio
             };
 
             var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "test.wav"));
+        }
+
+        [Theory]
+        [InlineData("{ \"text\": \"hello\", \"segments\": [{ \"words\": [{ \"word\": \"hello\", \"start\": 1.0, \"end\": 0.5 }] }] }")]
+        [InlineData("{ \"text\": \"hello world\", \"segments\": [{ \"words\": [{ \"word\": \"hello\", \"start\": 1.0, \"end\": 1.5 }, { \"word\": \"world\", \"start\": 0.9, \"end\": 1.2 }] }] }")]
+        [InlineData("{ \"text\": \"hello\", \"segments\": [{ \"words\": [{ \"word\": \"hello\", \"start\": 0.0 }] }] }")]
+        public async Task TranscribeWithWordTimestamps_InvalidOrDescendingTiming_Throws(string responseBody)
+        {
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(responseBody) };
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
+
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "test.wav"));
+        }
+
+        [Fact]
+        public async Task TranscribeWithWordTimestamps_LeadingPunctuation_Throws()
+        {
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{ "text": "hello", "segments": [{ "words": [{ "word": "!", "start": 0, "end": 0.1 }] }] }""")
+            };
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
+
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "test.wav"));
+        }
+
+        [Fact]
+        public async Task TranscribeWithWordTimestamps_WhitespaceOnlyTokenWithoutTiming_IsOmitted()
+        {
+            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{ "text": "hello", "segments": [{ "words": [{ "word": "   " }, { "word": " hello", "start": 0, "end": 0.4 }] }] }""")
+            };
+            var config = new TranscriptionServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
+
             var words = await _sut.TranscribeWithWordTimestampsAsync(config, new MemoryStream([1]), "test.wav");
 
-            Assert.Empty(words);
+            Assert.Equal([new TranscribedWord("hello", 0, 0.4)], words);
         }
 
         [Fact]
@@ -162,6 +200,21 @@ namespace Read2Me.Tests.Services.Audio
                     return factory.Response!;
                 }
             }
+        }
+
+        private static void AssertWhisperCppControls(string content, string fileName)
+        {
+            Assert.Contains("name=file", content);
+            Assert.Contains(fileName, content);
+            Assert.Contains("name=response_format", content);
+            Assert.Contains("verbose_json", content);
+            Assert.Contains("name=language", content);
+            Assert.Contains("en", content);
+            Assert.Contains("name=token_timestamps", content);
+            Assert.Contains("true", content);
+            Assert.Contains("name=max_len", content);
+            Assert.Contains("1", content);
+            Assert.Contains("name=split_on_word", content);
         }
     }
 }

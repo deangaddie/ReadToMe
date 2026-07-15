@@ -9,10 +9,9 @@ namespace Read2Me.Services.Audio.Transcription
 {
     /// <summary>
     /// Transcription client for <see cref="TranscriptionServiceType.LocalWhisper"/>,
-    /// targeting the ahmetoner/whisper-asr-webservice API. POSTs audio to
-    /// /asr as multipart form data (field <c>audio_file</c>) with
-    /// <c>output=txt</c>, returning the plain-text transcript body. Reads its
-    /// base URL from the config's <see cref="LocalWhisperSettings"/> blob.
+    /// targeting the pinned Whisper.CPP server. POSTs audio to
+    /// <c>/inference</c> using the Whisper.CPP verbose-JSON multipart contract.
+    /// Reads its base URL from the config's <see cref="LocalWhisperSettings"/> blob.
     /// </summary>
     public sealed class WhisperTranscriptionClient(
         IHttpClientFactory httpClientFactory,
@@ -25,8 +24,8 @@ namespace Read2Me.Services.Audio.Transcription
             string fileName,
             CancellationToken ct = default)
         {
-            var text = await PostAsrAsync(config, audio, fileName, "output=txt", ct);
-            return text.Trim();
+            using var doc = await PostInferenceAsync(config, audio, fileName, ct);
+            return GetTranscript(doc.RootElement).Trim();
         }
 
         public async Task<IReadOnlyList<TranscribedWord>> TranscribeWithWordTimestampsAsync(
@@ -35,10 +34,8 @@ namespace Read2Me.Services.Audio.Transcription
             string fileName,
             CancellationToken ct = default)
         {
-            var json = await PostAsrAsync(
-                config, audio, fileName, "output=json&word_timestamps=true", ct);
-
-            using var doc = JsonDocument.Parse(json);
+            using var doc = await PostInferenceAsync(config, audio, fileName, ct);
+            var transcript = GetTranscript(doc.RootElement);
             var words = new List<TranscribedWord>();
             if (doc.RootElement.TryGetProperty("segments", out var segments))
             {
@@ -48,28 +45,27 @@ namespace Read2Me.Services.Audio.Transcription
                         continue;
                     foreach (var word in segmentWords.EnumerateArray())
                     {
-                        words.Add(new TranscribedWord(
-                            word.GetProperty("word").GetString() ?? string.Empty,
-                            word.GetProperty("start").GetDouble(),
-                            word.GetProperty("end").GetDouble()));
+                        AddWord(words, word);
                     }
                 }
             }
 
+            if (!string.IsNullOrWhiteSpace(transcript) && words.Count == 0)
+                throw new InvalidDataException("Whisper returned a transcript without usable word timing.");
+
             return words;
         }
 
-        private async Task<string> PostAsrAsync(
+        private async Task<JsonDocument> PostInferenceAsync(
             TranscriptionServiceConfig config,
             Stream audio,
             string fileName,
-            string outputQuery,
             CancellationToken ct)
         {
             var settings = JsonSerializer.Deserialize<LocalWhisperSettings>(config.SettingsJson)
                 ?? new LocalWhisperSettings();
 
-            logger.LogDebug("Sending {File} to Whisper at {Url} ({Query})", fileName, settings.BaseUrl, outputQuery);
+            logger.LogDebug("Sending {File} to Whisper at {Url}", fileName, settings.BaseUrl);
 
             var http = httpClientFactory.CreateClient();
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -79,9 +75,14 @@ namespace Read2Me.Services.Audio.Transcription
                 using var content = new MultipartFormDataContent();
                 var fileContent = new StreamContent(audio);
                 fileContent.Headers.ContentType = new MediaTypeHeaderValue(GetMimeType(fileName));
-                content.Add(fileContent, "audio_file", fileName);
+                content.Add(fileContent, "file", fileName);
+                content.Add(new StringContent("verbose_json"), "response_format");
+                content.Add(new StringContent("en"), "language");
+                content.Add(new StringContent("true"), "token_timestamps");
+                content.Add(new StringContent("1"), "max_len");
+                content.Add(new StringContent("true"), "split_on_word");
 
-                var url = settings.BaseUrl.TrimEnd('/') + "/asr?task=transcribe&" + outputQuery;
+                var url = settings.BaseUrl.TrimEnd('/') + "/inference";
                 var response = await http.PostAsync(url, content, ct);
                 response.EnsureSuccessStatusCode();
 
@@ -90,7 +91,7 @@ namespace Read2Me.Services.Audio.Transcription
                 logger.LogDebug("Whisper responded for {File} in {Ms} ms ({Chars} chars)",
                     fileName, sw.ElapsedMilliseconds, body.Length);
                 reporter.ReportSuccess(settings.BaseUrl);
-                return body;
+                return JsonDocument.Parse(body);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -103,6 +104,59 @@ namespace Read2Me.Services.Audio.Transcription
                 throw;
             }
         }
+
+        private static string GetTranscript(JsonElement root) =>
+            root.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String
+                ? text.GetString() ?? string.Empty
+                : string.Empty;
+
+        private static void AddWord(List<TranscribedWord> words, JsonElement wordRecord)
+        {
+            if (!wordRecord.TryGetProperty("word", out var wordProperty) ||
+                wordProperty.ValueKind != JsonValueKind.String)
+            {
+                throw new InvalidDataException("Whisper returned a malformed word timing record.");
+            }
+
+            var word = wordProperty.GetString()?.Trim() ?? string.Empty;
+            if (word.Length == 0)
+                return;
+
+            if (!wordRecord.TryGetProperty("start", out var startProperty) ||
+                !startProperty.TryGetDouble(out var start) ||
+                !wordRecord.TryGetProperty("end", out var endProperty) ||
+                !endProperty.TryGetDouble(out var end))
+            {
+                throw new InvalidDataException("Whisper returned a malformed word timing record.");
+            }
+
+            if (!double.IsFinite(start) || !double.IsFinite(end) || start > end)
+                throw new InvalidDataException("Whisper returned invalid word timing.");
+
+            if (IsStandalonePunctuation(word))
+            {
+                if (words.Count == 0)
+                    throw new InvalidDataException("Whisper returned punctuation without a preceding word.");
+
+                var previous = words[^1];
+                if (end < previous.End)
+                    throw new InvalidDataException("Whisper returned descending word timing.");
+
+                words[^1] = previous with { Word = previous.Word + word, End = end };
+                return;
+            }
+
+            if (words.Count > 0)
+            {
+                var previous = words[^1];
+                if (start < previous.Start || end < previous.End)
+                    throw new InvalidDataException("Whisper returned descending word timing.");
+            }
+
+            words.Add(new TranscribedWord(word, start, end));
+        }
+
+        private static bool IsStandalonePunctuation(string value) => value.All(char.IsPunctuation);
 
         private static string GetMimeType(string fileName) =>
             System.IO.Path.GetExtension(fileName).ToLowerInvariant() switch
