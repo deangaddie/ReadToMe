@@ -26,6 +26,7 @@ const pendingReadiness = new Map();
 let readinessBatchStarts = new Set();
 let releasingRemainder = false;
 let heldReadinessService;
+const readinessOverrides = new Map();
 
 function readinessPayload(service) {
   if (service === "llama" || service === "whisper") return { status: "ok" };
@@ -45,8 +46,9 @@ function releaseOneReadiness() {
   const response = pendingReadiness.get(service);
   pendingReadiness.delete(service);
   readinessCompletions.push(service);
-  response.writeHead(200, { "content-type": "application/json" });
-  response.end(JSON.stringify(readinessPayload(service)));
+  const override = readinessOverrides.get(service);
+  response.writeHead(override === "error" ? 500 : 200, { "content-type": "application/json" });
+  response.end(JSON.stringify(override === "error" ? { detail: "fixture readiness error" } : readinessPayload(service)));
 }
 
 function releaseReadinessRemainder() {
@@ -121,10 +123,28 @@ async function handle(service, request, response, server) {
     response.end(JSON.stringify({ service: requested, listening: entry?.server.listening ?? false }));
     return;
   }
+  if (url.pathname === "/shutdown-service") {
+    const requested = url.searchParams.get("service");
+    const entry = serviceServers.get(requested);
+    const wasListening = entry?.server.listening ?? false;
+    if (entry?.server.listening) await new Promise((resolve) => entry.server.close(resolve));
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ service: requested, stopped: wasListening }));
+    return;
+  }
   if (url.pathname === "/readiness-hold") {
     heldReadinessService = url.searchParams.get("service") ?? undefined;
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ held: heldReadinessService }));
+    return;
+  }
+  if (url.pathname === "/readiness-state") {
+    const requested = url.searchParams.get("service");
+    const state = url.searchParams.get("state");
+    if (state === "ready") readinessOverrides.delete(requested);
+    else readinessOverrides.set(requested, state);
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ service: requested, state }));
     return;
   }
   if (url.pathname === "/readiness-release") {
@@ -140,6 +160,42 @@ async function handle(service, request, response, server) {
     pendingReadiness.set(service, response);
     if (readinessBatchStarts.size === services.length) releaseReadinessRemainder();
     else if (pendingReadiness.size >= 6) releaseOneReadiness();
+    return;
+  }
+  if (url.pathname === "/similarity" && (service === "minilm-l6" || service === "mpnet-base-v2")) {
+    const body = await readBody(request);
+    let payload;
+    try { payload = JSON.parse(body.toString("utf8")); } catch { payload = undefined; }
+    if (!payload || Object.keys(payload).sort().join(",") !== "text1,text2" || typeof payload.text1 !== "string" || typeof payload.text2 !== "string") {
+      response.writeHead(400, { "content-type": "application/json" });
+      response.end(JSON.stringify({ detail: "request body did not match the similarity contract" }));
+      return;
+    }
+    if (payload.text1 === "http-error") {
+      response.writeHead(422, { "content-type": "application/json" });
+      response.end(JSON.stringify({ detail: "fixture rejected input" }));
+      return;
+    }
+    if (payload.text1 === "malformed") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end('{"similarity":"not-a-number"}');
+      return;
+    }
+    if (payload.text1 === "slow") {
+      request.on("aborted", observeAbort);
+      response.on("close", () => { if (!response.writableEnded) observeAbort(); });
+      const timer = setTimeout(() => {
+        if (!response.destroyed) {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ similarity: 0.5 }));
+        }
+      }, 10_000);
+      response.on("close", () => clearTimeout(timer));
+      return;
+    }
+    const similarity = payload.text1 === "negative" ? -0.25 : payload.text1 === "outside" ? 1.25 : 0.987654321;
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ similarity }));
     return;
   }
   if (url.pathname === "/echo") {

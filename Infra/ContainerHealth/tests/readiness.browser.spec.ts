@@ -86,7 +86,7 @@ test("theme preferences persist and valid or invalid detail links keep a safe se
 
   await page.goto("/detail.html?service=llama");
   await expect(page.getByRole("heading", { name: "Llama router" })).toBeVisible();
-  await expect(page.getByText("Functional tests arrive in the next implementation slice.")).toBeVisible();
+  await expect(page.getByText("This service adapter arrives in a later implementation slice.")).toBeVisible();
   await expect(page.locator("[data-service-link]")).toHaveCount(9);
 
   await page.goto("/detail.html?service=not-a-service");
