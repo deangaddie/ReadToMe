@@ -156,3 +156,18 @@ test("package scripts keep the deterministic check order", async () => {
   expect(setup).toContain("playwright.cmd install chromium");
   expect(setup).toContain("call npm run check");
 });
+
+test("the strict reporter makes a skipped test fail the gate", async () => {
+  const directory = await mkdtemp(join(root, "tests", ".strict-reporter-"));
+  try {
+    const reporterPath = join(root, "tests", "strict-reporter.mjs");
+    await writeFile(join(directory, "playwright.config.mjs"), `export default { testDir: ${JSON.stringify(directory)}, reporter: [[${JSON.stringify(reporterPath)}]] };\n`);
+    await writeFile(join(directory, "skipped.spec.mjs"), "import { test } from '@playwright/test'; test.skip('disabled coverage', () => {});\n");
+    const result = await run(process.execPath, [join(root, "node_modules", "@playwright", "test", "cli.js"), "test", `--config=${join(directory, "playwright.config.mjs")}`]);
+    expect(result.code).not.toBe(0);
+    expect(result.output).toContain("Unexpected skipped/fixme tests");
+    expect(result.output).toContain("disabled coverage");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: true,
   workers: 1,
-  reporter: [["list"]],
+  reporter: [["list"], ["./tests/strict-reporter.mjs"]],
   use: {
     baseURL,
     trace: "retain-on-failure"
