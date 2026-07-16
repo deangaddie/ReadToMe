@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.AppData.Entities;
@@ -127,24 +128,32 @@ namespace Read2Me.App.Api
         {
             var group = endpoints.MapGroup($"/api/settings/{area}");
 
-            // (Delegate) casts keep these as route handlers (IResult written to the
-            // response) rather than raw RequestDelegates that would discard it.
-            group.MapGet("/", (Delegate)((HttpContext ctx) => h.List(ctx)))
+            group.MapGet("/", ToRequestDelegate(h.List))
                 .WithSummary($"List {area} configs.");
-            group.MapPost("/", (Delegate)((HttpContext ctx) => h.Create(ctx)))
-                .Accepts(configType, "application/json")
+            group.MapPost("/", ToRequestDelegate(h.Create))
+                .WithMetadata(new AcceptsMetadata(["application/json"], configType, isOptional: false))
                 .WithSummary($"Create a {area} config. The first config auto-activates.");
-            group.MapPut("/{id:int}", (Delegate)((HttpContext ctx, int id) => h.Update(ctx, id)))
-                .Accepts(configType, "application/json")
+            group.MapPut("/{id:int}", ToRequestDelegate(h.Update))
+                .WithMetadata(new AcceptsMetadata(["application/json"], configType, isOptional: false))
                 .WithSummary($"Update a {area} config by id.");
-            group.MapDelete("/{id:int}", (Delegate)((HttpContext ctx, int id) => h.Delete(ctx, id)))
+            group.MapDelete("/{id:int}", ToRequestDelegate(h.Delete))
                 .WithSummary($"Delete a {area} config. Active selection reassigns or clears.");
-            group.MapGet("/active", (Delegate)((HttpContext ctx) => h.GetActive(ctx)))
+            group.MapGet("/active", ToRequestDelegate(h.GetActive))
                 .WithSummary($"The active {area} config, 404 when none.");
-            group.MapPut("/active", (Delegate)((HttpContext ctx) => h.SetActive(ctx)))
-                .Accepts(typeof(SetActiveRequest), "application/json")
+            group.MapPut("/active", ToRequestDelegate(h.SetActive))
+                .WithMetadata(new AcceptsMetadata(["application/json"], typeof(SetActiveRequest), isOptional: false))
                 .WithSummary($"Select the active {area} config.");
         }
+
+        private static RequestDelegate ToRequestDelegate(Func<HttpContext, Task<IResult>> handler) =>
+            async context => await (await handler(context)).ExecuteAsync(context);
+
+        private static RequestDelegate ToRequestDelegate(Func<HttpContext, int, Task<IResult>> handler) =>
+            async context =>
+            {
+                var id = int.Parse((string)context.Request.RouteValues["id"]!);
+                await (await handler(context, id)).ExecuteAsync(context);
+            };
 
         // ── prompts ──────────────────────────────────────────────────────────
 
