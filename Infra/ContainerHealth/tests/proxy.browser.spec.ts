@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 test("the shell is served from IPv4 loopback", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL("http://127.0.0.1:5173/");
-  await expect(page.getByRole("heading", { name: "Service dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Service readiness" })).toBeVisible();
 });
 
 test("all nine fixed prefixes rewrite to the target root without cross-matching", async ({ request }) => {

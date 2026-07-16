@@ -1,12 +1,42 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-for (const path of ["/", "/detail.html?service=llama"] as const) {
-  test(`${path} has no WCAG 2.2 A/AA violations`, async ({ page }) => {
+for (const scenario of [
+  { name: "overview light desktop", path: "/", theme: "light", width: 1440, mixed: false },
+  { name: "overview dark narrow", path: "/", theme: "dark", width: 390, mixed: false },
+  { name: "overview attention and neutral states", path: "/", theme: "light", width: 1440, mixed: true },
+  { name: "valid detail", path: "/detail.html?service=llama", theme: "light", width: 1440, mixed: false },
+  { name: "invalid detail", path: "/detail.html?service=invalid", theme: "dark", width: 390, mixed: false }
+] as const) {
+  test(`${scenario.name} has no WCAG 2.2 A/AA violations`, async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => { if (message.type() === "error") browserErrors.push(message.text()); });
-    await page.goto(path);
+    await page.setViewportSize({ width: scenario.width, height: 900 });
+    await page.addInitScript((theme) => localStorage.setItem("chd.theme", theme), scenario.theme);
+    await page.goto(scenario.path);
+    if (scenario.path === "/") {
+      await expect(page.locator('[data-service-card] [data-state="Ready"]')).toHaveCount(9);
+      if (scenario.mixed) {
+        await page.evaluate(() => {
+          const assignments = [
+            ["llama", "Error", "attention", "!"],
+            ["chatterbox", "Unknown", "attention", "?"],
+            ["voxcpm2", "Loading", "inactive", "↻"],
+            ["whisper", "Unavailable", "inactive", "○"]
+          ] as const;
+          for (const [id, state, group, icon] of assignments) {
+            const card = document.querySelector<HTMLElement>(`[data-service-card="${id}"]`)!;
+            const badge = card.querySelector<HTMLElement>("[data-state]")!;
+            badge.dataset.state = state;
+            badge.firstElementChild!.textContent = icon;
+            card.querySelector<HTMLElement>("[data-state-text]")!.textContent = state;
+            document.querySelector<HTMLElement>(`[data-group="${group}"]`)!.append(card);
+          }
+          document.querySelector<HTMLElement>('[data-service-card="voxcpm2"] [data-checking]')!.hidden = false;
+        });
+      }
+    }
     const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
     expect(browserErrors).toEqual([]);
     expect(results.violations).toEqual([]);
