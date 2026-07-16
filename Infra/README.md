@@ -2,6 +2,11 @@
 
 Docker infrastructure for ReadToMe AI services.
 
+The standalone local service console is documented in
+[ContainerHealth/README.md](ContainerHealth/README.md). It links the locked setup/start,
+target override, deterministic verification, and live acceptance workflows without
+duplicating the service contracts below.
+
 ## Structure
 
 ```text

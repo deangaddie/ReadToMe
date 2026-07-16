@@ -1,0 +1,1 @@
+This recording is a non-sensitive test fixture for Read to Me. Clear speech verifies transcription and voice cloning on local services.
