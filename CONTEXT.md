@@ -11,3 +11,4 @@ Domain vocabulary for ReadToMe. Use these terms exactly in code, tests, and disc
 | Audio pipeline | [context/audio-pipeline.md](context/audio-pipeline.md) | Normalisation, Canonical WAV, Audio Queue, Audio Gen Stream, Audio Retry, pipeline/resolver/recorder seams, outcomes, Sentence Chunking |
 | Semantic verification | [context/semantic-verification.md](context/semantic-verification.md) | Semantic Similarity Check, Semantic Rescue, `ISemanticVerifier` |
 | Audiobook assembly & live-event infra | [context/assembly.md](context/assembly.md) | Audiobook Assembly, manifest, pauses, concat/chapters/cover, `EventBroadcaster<T>`, `VoiceBatchRunner`, Sweep Phase |
+| Container health dashboard | [context/container-health-dashboard.md](context/container-health-dashboard.md) | Service Adapter, shared operator-console boundary |

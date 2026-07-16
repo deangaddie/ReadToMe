@@ -128,8 +128,8 @@ function fieldMarkup(field: FieldDefinition): string {
 function workbenchMarkup(adapter: FunctionalAdapter): string {
   const common = adapter.fields.filter(({ group }) => group === "common").map(fieldMarkup).join("");
   const advanced = adapter.fields.filter(({ group }) => group === "advanced").map(fieldMarkup).join("");
-  const llamaPreparation = adapter.prepareForm === undefined ? "" : `<section class="model-preparation" aria-labelledby="model-preparation-heading"><h3 id="model-preparation-heading">Model presets</h3><p data-model-preparation-status aria-live="polite">Preparing model presets…</p><button class="secondary-button" type="button" data-model-preparation-retry hidden>Retry model preparation</button><details><summary>Model preparation diagnostic</summary><pre data-model-preparation-diagnostic>No diagnostic yet.</pre></details></section>`;
-  const liveOutput = adapter.resultKind === "llm" ? `<section class="live-output" data-live-output hidden aria-labelledby="live-output-heading"><h3 id="live-output-heading">Live completion</h3><h4>Thinking</h4><pre data-testid="live-thinking"></pre><h4>Answer</h4><pre data-testid="live-answer"></pre></section>` : "";
+  const llamaPreparation = adapter.prepareForm === undefined ? "" : `<section class="model-preparation" aria-labelledby="model-preparation-heading"><h3 id="model-preparation-heading">Model presets</h3><p data-model-preparation-status aria-live="polite">Preparing model presets…</p><button class="secondary-button" type="button" data-model-preparation-retry hidden>Retry model preparation</button><details><summary>Model preparation diagnostic</summary><pre tabindex="0" data-model-preparation-diagnostic>No diagnostic yet.</pre></details></section>`;
+  const liveOutput = adapter.resultKind === "llm" ? `<section class="live-output" data-live-output hidden aria-labelledby="live-output-heading"><h3 id="live-output-heading">Live completion</h3><h4>Thinking</h4><pre tabindex="0" data-testid="live-thinking"></pre><h4>Answer</h4><pre tabindex="0" data-testid="live-answer"></pre></section>` : "";
   return `<section class="functional-workbench" aria-labelledby="tests-heading"><div class="section-heading"><h2 id="tests-heading">Functional test</h2><p>Inputs and results remain in this page only.</p></div>${llamaPreparation}
     <form data-run-form novalidate><fieldset><legend>Common fields</legend>${common}</fieldset>
       <details class="advanced-fields"><summary>Advanced</summary>${advanced || "<p>No advanced fields for this service.</p>"}</details>
@@ -144,7 +144,7 @@ function detailMarkup(adapter: ReadinessAdapter | undefined, functional: Functio
     ? `<header class="page-heading"><p class="eyebrow">Readiness detail</p><h1>Service not found</h1><p>The requested service is missing or invalid. Choose a service from the inventory.</p><a class="primary-link" href="/">Return to readiness overview</a></header>`
     : `<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Service readiness</a><span aria-hidden="true">/</span><span>${escapeHtml(adapter.name)}</span></nav>
       <header class="page-heading"><p class="eyebrow">${adapter.compute} service · port ${adapter.port}</p><h1>${escapeHtml(adapter.name)}</h1><p>${escapeHtml(adapter.purpose)}</p></header>
-      <section class="detail-readiness" aria-labelledby="detail-readiness-heading"><div><p class="eyebrow">Latest observation</p><h2 id="detail-readiness-heading">Readiness</h2></div><span class="state-badge" data-detail-state="Unknown"><span aria-hidden="true">?</span> <span data-detail-state-text>Unknown</span></span><span class="checking" data-detail-checking hidden>Checking…</span><p data-detail-message>No observation yet.</p><dl><div><dt>Endpoint</dt><dd><code>${escapeHtml(adapter.endpoint)}</code></dd></div><div><dt>Latency</dt><dd data-detail-latency>—</dd></div><div><dt>Last check</dt><dd data-detail-checked>Not checked</dd></div></dl><details><summary>Latest raw diagnostic</summary><pre data-detail-diagnostic>No diagnostic yet.</pre></details></section>
+      <section class="detail-readiness" aria-labelledby="detail-readiness-heading"><div><p class="eyebrow">Latest observation</p><h2 id="detail-readiness-heading">Readiness</h2></div><span class="state-badge" data-detail-state="Unknown"><span aria-hidden="true">?</span> <span data-detail-state-text>Unknown</span></span><span class="checking" data-detail-checking hidden>Checking…</span><p data-detail-message>No observation yet.</p><dl><div><dt>Endpoint</dt><dd><code>${escapeHtml(adapter.endpoint)}</code></dd></div><div><dt>Latency</dt><dd data-detail-latency>—</dd></div><div><dt>Last check</dt><dd data-detail-checked>Not checked</dd></div></dl><details><summary>Latest raw diagnostic</summary><pre tabindex="0" data-detail-diagnostic>No diagnostic yet.</pre></details></section>
       ${functional === undefined ? `<section class="coming-next" aria-labelledby="tests-heading"><h2 id="tests-heading">Functional test</h2><p>This service adapter arrives in a later implementation slice.</p></section>` : workbenchMarkup(functional)}`;
   return `<div class="dashboard-shell detail-shell">${railMarkup(adapter?.id)}<main class="workbench" id="main-content">${controlsMarkup()}${content}</main><p class="sr-only" aria-live="polite" aria-atomic="true" data-announcement></p></div>`;
 }
@@ -251,13 +251,13 @@ function resultMarkup(result: ServiceResult | undefined, resultUrl?: string): st
   if (result === undefined) return "";
   switch (result.kind) {
     case "similarity": return `<div class="similarity-result"><span>Raw cosine similarity</span><strong data-testid="similarity-score">${formatScore(result.score)}</strong></div>`;
-    case "llm": return `<section class="llm-result"><h4>Thinking</h4><pre>${escapeHtml(result.thinking)}</pre><h4>Answer</h4><p>${escapeHtml(result.answer)}</p>${result.finishReason === undefined ? "" : `<p>Finish reason: ${escapeHtml(result.finishReason)}</p>`}${result.usage === undefined && result.timing === undefined ? "" : `<details><summary>Usage and timing</summary><pre>${escapeHtml(JSON.stringify({ usage: result.usage, timing: result.timing }, null, 2))}</pre></details>`}</section>`;
+    case "llm": return `<section class="llm-result"><h4>Thinking</h4><pre tabindex="0">${escapeHtml(result.thinking)}</pre><h4>Answer</h4><p>${escapeHtml(result.answer)}</p>${result.finishReason === undefined ? "" : `<p>Finish reason: ${escapeHtml(result.finishReason)}</p>`}${result.usage === undefined && result.timing === undefined ? "" : `<details><summary>Usage and timing</summary><pre tabindex="0">${escapeHtml(JSON.stringify({ usage: result.usage, timing: result.timing }, null, 2))}</pre></details>`}</section>`;
     case "audio": return `<div class="audio-result">
       <audio controls data-audio-player src="${escapeHtml(resultUrl ?? "")}"></audio>
       <p class="audio-meta">${escapeHtml(result.filename)} · ${result.blob.size} bytes${result.sampleRate === undefined ? "" : ` · ${result.sampleRate} Hz`}</p>
       <a class="download-link" data-audio-download href="${escapeHtml(resultUrl ?? "")}" download="${escapeHtml(result.filename)}">Download ${escapeHtml(result.filename)}</a>
     </div>`;
-    case "transcription": return `<pre>${escapeHtml(result.text)}</pre>`;
+    case "transcription": return `<pre tabindex="0">${escapeHtml(result.text)}</pre>`;
   }
 }
 
@@ -267,7 +267,7 @@ function historyMarkup(entry: RunEntry): string {
   return `<article class="run-entry" data-run-entry data-outcome="${entry.outcome}"><div class="run-entry-heading"><div><p class="eyebrow">${escapeHtml(entry.outcome)}</p><h4>${escapeHtml(entry.title)}</h4></div><span>${(entry.elapsedMs / 1_000).toFixed(1)} s</span></div>
     <p>${escapeHtml(entry.message)}</p>${resultMarkup(entry.result, entry.resultUrl)}${warnings ? `<ul class="run-warnings">${warnings}</ul>` : ""}
     <details><summary>Input summary</summary><dl class="input-summary">${input}</dl></details>
-    <details><summary>Raw diagnostic</summary><pre>${escapeHtml(entry.diagnostic || "No response body.")}</pre></details></article>`;
+    <details><summary>Raw diagnostic</summary><pre tabindex="0">${escapeHtml(entry.diagnostic || "No response body.")}</pre></details></article>`;
 }
 
 let runController: DetailRunController | undefined;

@@ -1,6 +1,7 @@
 import { SERVICE_ADAPTERS, type ServiceAdapter as ReadinessAdapter } from "./readiness";
 import { LlamaPreparationError, parseLlamaSse, type LlamaModelOption, type LlamaModelState, type LlamaModelPreparer } from "./llama";
 import { audioFilename, describeWav, isAudioMediaType, isDocumentedAudioFile, parseWav } from "./tts";
+import { buildPcm16Wav, isSupportedVoxUpload, parseVoxStream, VOX_UPLOAD_EXTENSIONS, VOX_UPLOAD_LIMIT_BYTES, VOX_UPLOAD_LIMIT_MIB } from "./vox";
 
 export const INPUT_TEXT_LIMIT = 4 * 1_024;
 export const WIRE_DIAGNOSTIC_LIMIT = 64 * 1_024;
@@ -381,7 +382,7 @@ const prepareLlamaModels: LlamaModelPreparer = async (signal, fetcher = fetch) =
   return Object.freeze({ models, diagnostic });
 };
 
-function requireReadinessMetadata(id: "llama" | "minilm-l6" | "mpnet-base-v2" | TtsServiceId) {
+function requireReadinessMetadata(id: "llama" | "minilm-l6" | "mpnet-base-v2" | "voxcpm2" | TtsServiceId) {
   const value = SERVICE_ADAPTERS.find((adapter) => adapter.id === id);
   if (value === undefined) throw new Error(`Missing readiness metadata for ${id}.`);
   return value;
@@ -545,6 +546,25 @@ function isIntegerField(field: FieldDefinition): boolean {
   return field.control === "number" && field.step === "1";
 }
 
+/**
+ * Validates one non-file field. Numeric controls block only known-invalid shapes because these
+ * services enforce no ranges of their own, and a cleared optional value is omitted rather than sent.
+ */
+function fieldValueError(field: FieldDefinition, value: FormValue): string | undefined {
+  const text = typeof value === "string" ? value : "";
+  if (field.control === "textarea" || field.control === "text") {
+    return field.required && text.trim() === "" ? `Enter ${field.label.toLowerCase()}.` : undefined;
+  }
+  if (field.control === "select") {
+    return (field.options ?? []).some((option) => option.value === text) ? undefined : "Choose a supported option.";
+  }
+  if (field.control !== "number") return undefined;
+  if (text.trim() === "") return field.required ? "Enter a finite number." : undefined;
+  return isIntegerField(field)
+    ? (/^-?\d+$/u.test(text.trim()) ? undefined : "Enter a whole number.")
+    : finiteNumberError(text);
+}
+
 function validateTts(fields: readonly FieldDefinition[], values: FormValues): ValidationResult {
   const errors: Record<string, string | undefined> = {};
   const warnings: Record<string, string | undefined> = {};
@@ -556,24 +576,9 @@ function validateTts(fields: readonly FieldDefinition[], values: FormValues): Va
       continue;
     }
     const text = typeof value === "string" ? value : "";
-    if (field.control === "textarea" || field.control === "text") {
-      errors[field.key] = field.required && text.trim() === "" ? `Enter ${field.label.toLowerCase()}.` : undefined;
-      continue;
-    }
-    if (field.control === "select") {
-      errors[field.key] = (field.options ?? []).some((option) => option.value === text) ? undefined : "Choose a supported option.";
-      continue;
-    }
-    if (field.control !== "number") continue;
-    if (text.trim() === "") {
-      errors[field.key] = field.required ? "Enter a finite number." : undefined;
-      continue;
-    }
-    // Only known-invalid shapes block; the services enforce no numeric bounds, so none are invented.
-    errors[field.key] = isIntegerField(field)
-      ? (/^-?\d+$/u.test(text.trim()) ? undefined : "Enter a whole number.")
-      : finiteNumberError(text);
-    if (errors[field.key] === undefined && ZERO_TO_ONE_GUIDED_FIELDS.includes(field.key) && (Number(text) < 0 || Number(text) > 1)) {
+    errors[field.key] = fieldValueError(field, value);
+    if (field.control === "number" && text.trim() !== "" && errors[field.key] === undefined
+      && ZERO_TO_ONE_GUIDED_FIELDS.includes(field.key) && (Number(text) < 0 || Number(text) > 1)) {
       warnings[field.key] = "The documented range is 0 to 1; the service does not enforce it, so this value is still sent.";
     }
   }
@@ -658,12 +663,176 @@ export function createTtsAdapter(id: TtsServiceId): ServiceAdapter {
   return Object.freeze(adapter);
 }
 
+const VOX_ACCEPT = VOX_UPLOAD_EXTENSIONS.join(",");
+const VOX_UPLOAD_ROUTE = "/proxy/voxcpm2/upload-audio";
+const VOX_STREAM_ROUTE = "/proxy/voxcpm2/api/stream";
+
+const voxFields = Object.freeze([
+  speechTextField("Text to speak in the uploaded reference voice.", SPEECH_EXAMPLE),
+  Object.freeze({
+    key: "reference_audio", wireKey: "file", label: "Reference audio", control: "file", group: "common",
+    required: true, initialValue: null, accept: VOX_ACCEPT,
+    help: `Required voice-cloning clip, uploaded fresh for every run. ${VOX_UPLOAD_EXTENSIONS.join(", ")} only, up to ${VOX_UPLOAD_LIMIT_MIB} MiB.`
+  }),
+  Object.freeze({
+    key: "control", wireKey: "control", label: "Control", control: "text", group: "common", required: false, initialValue: "",
+    help: "Optional. Prepended to the text as (control) to steer delivery.", example: "whispering"
+  }),
+  advancedNumber("cfg_value", "CFG value", "2.0", "0.1", "Guidance strength."),
+  advancedNumber("inference_timesteps", "Inference timesteps", "10", "1", "Diffusion steps per chunk."),
+  advancedNumber("min_len", "Minimum length", "2", "1", "Must not exceed the maximum length."),
+  advancedNumber("max_len", "Maximum length", "4096", "1", "Must not be below the minimum length."),
+  Object.freeze({ key: "normalize", wireKey: "normalize", label: "Normalize text", control: "checkbox", group: "advanced", required: false, initialValue: false, help: "Sent explicitly on every request." }),
+  Object.freeze({ key: "denoise", wireKey: "denoise", label: "Denoise reference", control: "checkbox", group: "advanced", required: false, initialValue: false, help: "Sent explicitly on every request." }),
+  Object.freeze({ key: "retry_badcase", wireKey: "retry_badcase", label: "Retry bad cases", control: "checkbox", group: "advanced", required: false, initialValue: true, help: "Sent explicitly on every request." }),
+  advancedNumber("retry_badcase_max_times", "Retry maximum", "3", "1", "Maximum bad-case retries."),
+  advancedNumber("retry_badcase_ratio_threshold", "Retry ratio threshold", "6.0", "0.1", "Bad-case detection ratio.")
+] satisfies readonly FieldDefinition[]);
+
+function validateVox(values: FormValues): ValidationResult {
+  const errors: Record<string, string | undefined> = {};
+  const warnings: Record<string, string | undefined> = {};
+  for (const field of voxFields) {
+    const value = values[field.key] ?? null;
+    if (field.control === "checkbox") continue;
+    if (field.control === "file") {
+      // Unlike the permissive Chatterbox/Qwen decoders, this route rejects by extension and size itself.
+      if (!(value instanceof File) || value.size === 0) errors[field.key] = "Choose a reference audio file.";
+      else if (!isSupportedVoxUpload(value)) errors[field.key] = `Choose a ${VOX_UPLOAD_EXTENSIONS.join(", ")} file.`;
+      else if (value.size > VOX_UPLOAD_LIMIT_BYTES) errors[field.key] = `Choose a reference audio file of ${VOX_UPLOAD_LIMIT_MIB} MiB or less.`;
+      continue;
+    }
+    errors[field.key] = fieldValueError(field, value);
+  }
+  const min = stringValue(values, "min_len") ?? "";
+  const max = stringValue(values, "max_len") ?? "";
+  if (errors.min_len === undefined && errors.max_len === undefined && min.trim() !== "" && max.trim() !== "" && Number(min) > Number(max)) {
+    errors.min_len = "The minimum length cannot exceed the maximum length.";
+  }
+  return { errors: Object.freeze(errors), warnings: Object.freeze(warnings) };
+}
+
+function buildVoxRequest(values: FormValues, fileId: string): Record<string, unknown> {
+  const request: Record<string, unknown> = {};
+  for (const field of voxFields) {
+    const value = values[field.key] ?? null;
+    if (field.control === "file") continue;
+    if (field.control === "checkbox") { request[field.wireKey] = value === true; continue; }
+    if (typeof value !== "string") continue;
+    if (value.trim() === "") { if (field.required) request[field.wireKey] = value; continue; }
+    request[field.wireKey] = field.control === "number" ? Number(value) : value;
+  }
+  request.reference_wav_path = fileId;
+  return request;
+}
+
+/** Uploads the reference clip for this run only; the returned identifier is used immediately and never cached. */
+async function uploadVoxReference(file: File, serviceName: string, signal: AbortSignal, fetcher: typeof fetch, progress: ProgressEmitter): Promise<{ readonly fileId: string; readonly diagnostic: string }> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const requestDiagnostic = `Upload:\nPOST ${VOX_UPLOAD_ROUTE}\nfile: ${file.name} · ${file.size} bytes · ${file.type || "unknown MIME type"}`;
+  progress({ kind: "phase", phase: "upload", status: "started", message: "Uploading the reference audio." });
+  let response: Response;
+  try {
+    response = await fetcher(VOX_UPLOAD_ROUTE, { method: "POST", headers: { accept: "application/json" }, body: form, signal });
+  } catch (error) {
+    if (signal.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
+    throw unreachableFailure(serviceName, error, requestDiagnostic);
+  }
+  const body = await boundedResponseText(response);
+  let payload: unknown;
+  if (isJson(response) && !body.endsWith(TRUNCATED)) {
+    try { payload = JSON.parse(body); } catch { payload = undefined; }
+  }
+  const diagnostic = boundedWireDiagnostic(`${requestDiagnostic}\nResponse: HTTP ${response.status}\n${body}`);
+  if (!response.ok) throw reachedFailure({ response, payload, serviceName, diagnostic });
+  const fileId = isRecord(payload) ? payload.file_id : undefined;
+  if (typeof fileId !== "string" || fileId.trim() === "") {
+    throw new ServiceFailure({ category: "protocol", message: "The upload response did not contain a file identifier.", diagnostic });
+  }
+  progress({ kind: "phase", phase: "upload", status: "completed", message: "Reference audio uploaded." });
+  return { fileId, diagnostic };
+}
+
+export function createVoxAdapter(): ServiceAdapter {
+  const service = requireReadinessMetadata("voxcpm2");
+  const adapter: ServiceAdapter = {
+    ...service,
+    resultKind: "audio",
+    runLabel: "Generate speech",
+    fields: voxFields,
+    initialValues: () => initialValues(voxFields),
+    validate: validateVox,
+    summarizeInput: (values) => summarize(voxFields, values),
+    async execute(values, signal, progress, fetcher = fetch): Promise<AdapterExecution> {
+      const file = values.reference_audio;
+      if (!(file instanceof File)) throw new Error("VoxCPM2 execution received invalid values.");
+      const upload = await uploadVoxReference(file, service.name, signal, fetcher, progress);
+      const request = buildVoxRequest(values, upload.fileId);
+      const requestDiagnostic = boundedWireDiagnostic(`${upload.diagnostic}\nRequest:\nPOST ${VOX_STREAM_ROUTE}\n${JSON.stringify(request, null, 2)}`);
+      let response: Response;
+      try {
+        response = await fetcher(VOX_STREAM_ROUTE, {
+          method: "POST", headers: { accept: "application/octet-stream", "content-type": "application/json" },
+          body: JSON.stringify(request), signal
+        });
+      } catch (error) {
+        if (signal.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
+        throw unreachableFailure(service.name, error, requestDiagnostic);
+      }
+      const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "missing";
+      const responseHeading = `${requestDiagnostic}\nResponse:\nHTTP ${response.status}\nContent-Type: ${mediaType}`;
+      if (!response.ok) {
+        const body = await boundedResponseText(response);
+        let payload: unknown;
+        if (isJson(response) && !body.endsWith(TRUNCATED)) {
+          try { payload = JSON.parse(body); } catch { payload = undefined; }
+        }
+        throw reachedFailure({ response, payload, serviceName: service.name, diagnostic: boundedWireDiagnostic(`${responseHeading}\n${body}`) });
+      }
+      if (mediaType !== "application/octet-stream" || response.body === null) {
+        const body = response.body === null ? "" : await boundedResponseText(response);
+        throw new ServiceFailure({ category: "protocol", message: "The service returned a success response that is not a framed audio stream.", diagnostic: boundedWireDiagnostic(`${responseHeading}\n${body}`) });
+      }
+      let parsed;
+      progress({ kind: "phase", phase: "generate", status: "started", message: "Receiving the generated audio stream." });
+      try {
+        parsed = await parseVoxStream(response.body, signal);
+      } catch (error) {
+        if (error instanceof ServiceFailure) throw new ServiceFailure({
+          category: error.category, message: error.message, status: error.status, serviceMessage: error.serviceMessage,
+          diagnostic: boundedWireDiagnostic(`${responseHeading}\nStream:\n${error.diagnostic}`), partialResult: error.partialResult
+        });
+        throw error;
+      }
+      if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+      progress({ kind: "phase", phase: "generate", status: "completed", message: "Generated audio stream received." });
+      // The Blob is created only after conversion and validation both succeed, so no partial audio escapes.
+      progress({ kind: "phase", phase: "convert", status: "started", message: "Converting samples to WAV audio." });
+      const bytes = buildPcm16Wav(parsed.samples, parsed.sampleRate);
+      const wav = parseWav(bytes);
+      if (!wav.ok) throw new ServiceFailure({ category: "protocol", message: `The converted audio is not valid WAV audio. ${wav.reason}`, diagnostic: boundedWireDiagnostic(`${responseHeading}\nStream:\n${parsed.diagnostic}\n${wav.reason}`) });
+      progress({ kind: "phase", phase: "convert", status: "completed", message: "WAV audio ready." });
+      return {
+        result: {
+          kind: "audio", blob: new Blob([bytes], { type: "audio/wav" }), mediaType: "audio/wav",
+          filename: audioFilename("voxcpm2"), sampleRate: parsed.sampleRate
+        },
+        diagnostic: boundedWireDiagnostic(`${responseHeading}\nStream:\n${parsed.diagnostic}\nBytes: ${bytes.byteLength}\n${describeWav(wav.format)}`),
+        warnings: Object.freeze([])
+      };
+    }
+  };
+  return Object.freeze(adapter);
+}
+
 export const FUNCTIONAL_ADAPTERS: readonly ServiceAdapter[] = Object.freeze([
   createLlamaAdapter(),
   createTtsAdapter("chatterbox"),
   createTtsAdapter("chatterbox-turbo"),
   createTtsAdapter("qwen3-tts"),
   createTtsAdapter("qwen3-tts-base"),
+  createVoxAdapter(),
   createSimilarityAdapter("minilm-l6"),
   createSimilarityAdapter("mpnet-base-v2")
 ]);

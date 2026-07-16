@@ -35,6 +35,31 @@ Infra/
 | MiniLM-L6            | `read2me-minilm-l6`         | 8200 | Semantic similarity — MiniLM-L6-v2                               |
 | MPNet-Base-v2        | `read2me-mpnet-base-v2`     | 8201 | Semantic similarity — all-mpnet-base-v2                          |
 
+### Health checks
+
+Every service defines its Docker health check in its image. Docker runs the
+container URL from inside the container; use the host URL for a manual check
+from the machine running Compose. All published ports are bound to
+`127.0.0.1`, and each probe succeeds on an HTTP `200` response.
+
+| Service | Docker probe inside container | Manual probe from host |
+| --- | --- | --- |
+| llama.cpp | `GET http://localhost:8080/health` | `http://127.0.0.1:8080/health` |
+| Chatterbox TTS | `GET http://localhost:8000/health` | `http://127.0.0.1:8000/health` |
+| Chatterbox Turbo | `GET http://localhost:8000/health` | `http://127.0.0.1:8001/health` |
+| Qwen3 TTS | `GET http://localhost:8100/health` | `http://127.0.0.1:8100/health` |
+| Qwen3 TTS Base | `GET http://localhost:8101/health` | `http://127.0.0.1:8101/health` |
+| VoxCPM2 | `GET http://localhost:8003/health` | `http://127.0.0.1:8003/health` |
+| Whisper.CPP | `GET http://127.0.0.1:8080/health` | `http://127.0.0.1:9000/health` |
+| MiniLM-L6 | `GET http://localhost:8200/docs` | `http://127.0.0.1:8200/docs` |
+| MPNet-Base-v2 | `GET http://localhost:8201/docs` | `http://127.0.0.1:8201/docs` |
+
+The semantic services use FastAPI's generated Swagger UI at `/docs` as their
+Docker liveness probe; they do not expose a separate `/health` route. Because
+their models load before the server starts accepting requests, a successful
+probe also confirms model initialization. Check Docker's current view with
+`docker compose ps`.
+
 ## GPU / VRAM note
 
 Configured for RTX 3070 (8 GB VRAM). GPU-resident services cannot generally run together at this VRAM budget. CPU-only Whisper and the semantic-similarity services can run alongside a GPU service.

@@ -160,6 +160,103 @@ async function handleTts(service, request, response) {
   response.end(speechWavFixture());
 }
 
+const voxUploads = [];
+const voxRequests = [];
+let voxUploadCount = 0;
+
+function voxFrame(type, payload) {
+  const header = Buffer.alloc(5);
+  header.writeUInt8(type, 0);
+  header.writeUInt32LE(payload.length, 1);
+  return Buffer.concat([header, payload]);
+}
+
+function voxControlFrame(value) {
+  return voxFrame(0, Buffer.from(JSON.stringify(value), "utf8"));
+}
+
+function voxPcmFrame(count, offset) {
+  const payload = Buffer.alloc(count * 4);
+  for (let index = 0; index < count; index += 1) {
+    payload.writeFloatLE(Math.sin(((index + offset) / 24_000) * 2 * Math.PI * 440) * 0.5, index * 4);
+  }
+  return voxFrame(1, payload);
+}
+
+/** Writes bytes in deliberately awkward pieces that never align with frame boundaries. */
+function writeDelayed(response, bytes, boundaries) {
+  const offsets = [...new Set([0, ...boundaries, bytes.length])].sort((a, b) => a - b);
+  let index = 0;
+  const writeNext = () => {
+    if (response.destroyed) return;
+    if (index >= offsets.length - 1) { response.end(); return; }
+    response.write(bytes.subarray(offsets[index], offsets[index + 1]));
+    index += 1;
+    setImmediate(writeNext);
+  };
+  setImmediate(writeNext);
+}
+
+async function handleVoxUpload(request, response) {
+  const body = await readBody(request);
+  const contentType = request.headers["content-type"] ?? "";
+  const text = body.toString("latin1");
+  voxUploads.push({ contentType, bytes: body.length, body: body.toString("base64") });
+  if (text.includes("fixture-upload-error")) {
+    response.writeHead(400, { "content-type": "application/json" });
+    response.end(JSON.stringify({ detail: "unsupported audio format" }));
+    return;
+  }
+  voxUploadCount += 1;
+  response.writeHead(200, { "content-type": "application/json" });
+  response.end(JSON.stringify({ file_id: `vox-file-${voxUploadCount}` }));
+}
+
+async function handleVoxStream(request, response) {
+  const body = await readBody(request);
+  let payload;
+  try { payload = JSON.parse(body.toString("utf8")); } catch { payload = undefined; }
+  voxRequests.push(payload);
+  const text = typeof payload?.text === "string" ? payload.text : "";
+  if (text.includes("fixture-http-error")) {
+    response.writeHead(422, { "content-type": "application/json" });
+    response.end(JSON.stringify({ detail: "invalid request: text is required" }));
+    return;
+  }
+  if (text.includes("fixture-wrong-media")) {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ audio: "not framed" }));
+    return;
+  }
+  response.writeHead(200, { "content-type": "application/octet-stream" });
+  if (text.includes("fixture-framed-error")) {
+    response.end(voxControlFrame({ type: "error", message: "model not loaded" }));
+    return;
+  }
+  if (text.includes("fixture-protocol")) {
+    // Meta and audio, but the stream ends without the required done frame.
+    response.end(Buffer.concat([voxControlFrame({ type: "meta", sample_rate: 24_000 }), voxPcmFrame(16, 0)]));
+    return;
+  }
+  if (text.includes("fixture-slow")) {
+    request.on("aborted", observeAbort);
+    response.on("close", () => { if (!response.writableEnded) observeAbort(); });
+    response.write(voxControlFrame({ type: "meta", sample_rate: 24_000 }));
+    const timer = setTimeout(() => {
+      if (!response.destroyed) response.end(Buffer.concat([voxPcmFrame(16, 0), voxControlFrame({ type: "done", chunks: 1 })]));
+    }, 10_000);
+    response.on("close", () => clearTimeout(timer));
+    return;
+  }
+  const bytes = Buffer.concat([
+    voxControlFrame({ type: "meta", sample_rate: 24_000 }),
+    voxPcmFrame(1_200, 0), voxPcmFrame(1_200, 1_200), voxPcmFrame(1_200, 2_400),
+    voxControlFrame({ type: "done", chunks: 3 })
+  ]);
+  // Split mid-header and mid-payload so the client must buffer across arbitrary boundaries.
+  writeDelayed(response, bytes, [3, 7, 40, 41, 1_000, bytes.length - 9, bytes.length - 2]);
+}
+
 function wavFixture() {
   const buffer = Buffer.alloc(48);
   buffer.write("RIFF", 0);
@@ -197,6 +294,12 @@ async function handle(service, request, response, server) {
     if (url.searchParams.get("reset") === "1") ttsRequests.splice(0);
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ requests: ttsRequests }));
+    return;
+  }
+  if (url.pathname === "/vox-events") {
+    if (url.searchParams.get("reset") === "1") { voxUploads.splice(0); voxRequests.splice(0); voxUploadCount = 0; abortObserved = false; }
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ uploads: voxUploads, requests: voxRequests }));
     return;
   }
   if (url.pathname === "/readiness-events") {
@@ -256,6 +359,14 @@ async function handle(service, request, response, server) {
   }
   if (ttsRoute(service, url.pathname)) {
     await handleTts(service, request, response);
+    return;
+  }
+  if (service === "voxcpm2" && url.pathname === "/upload-audio") {
+    await handleVoxUpload(request, response);
+    return;
+  }
+  if (service === "voxcpm2" && url.pathname === "/api/stream") {
+    await handleVoxStream(request, response);
     return;
   }
   if (service === "llama" && url.pathname === "/v1/models") {

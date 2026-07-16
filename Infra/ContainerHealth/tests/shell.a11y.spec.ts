@@ -22,6 +22,13 @@ for (const scenario of [
   { name: "Qwen Voice Design audio result and diagnostic", path: "/detail.html?service=qwen3-tts", theme: "light", width: 1440, mixed: false, tts: "success" },
   { name: "Qwen Base audio history narrow", path: "/detail.html?service=qwen3-tts-base", theme: "dark", width: 390, mixed: false, tts: "success" },
   { name: "Chatterbox protocol failure detail", path: "/detail.html?service=chatterbox", theme: "dark", width: 1440, mixed: false, tts: "failure" },
+  { name: "VoxCPM2 upload form and Advanced groups idle", path: "/detail.html?service=voxcpm2", theme: "light", width: 1440, mixed: false, vox: "idle" },
+  { name: "VoxCPM2 validation states narrow", path: "/detail.html?service=voxcpm2", theme: "dark", width: 390, mixed: false, vox: "invalid" },
+  { name: "VoxCPM2 streaming run in progress", path: "/detail.html?service=voxcpm2", theme: "dark", width: 1440, mixed: false, vox: "running" },
+  { name: "VoxCPM2 assembled audio result and diagnostic", path: "/detail.html?service=voxcpm2", theme: "light", width: 1440, mixed: false, vox: "success" },
+  { name: "VoxCPM2 audio result narrow", path: "/detail.html?service=voxcpm2", theme: "dark", width: 390, mixed: false, vox: "success" },
+  { name: "VoxCPM2 framed error failure detail", path: "/detail.html?service=voxcpm2", theme: "dark", width: 1440, mixed: false, vox: "failure" },
+  { name: "VoxCPM2 cancelled run detail", path: "/detail.html?service=voxcpm2", theme: "light", width: 1440, mixed: false, vox: "cancelled" },
   { name: "invalid detail", path: "/detail.html?service=invalid", theme: "dark", width: 390, mixed: false }
 ] as const) {
   test(`${scenario.name} has no WCAG 2.2 A/AA violations`, async ({ page, request }) => {
@@ -82,6 +89,33 @@ for (const scenario of [
         await expect(page.locator(`[data-run-entry][data-outcome="${scenario.tts === "failure" ? "failed" : "succeeded"}"]`)).toBeVisible();
         await page.locator("[data-run-entry] details").evaluateAll((nodes) => { for (const node of nodes) (node as HTMLDetailsElement).open = true; });
         await expect(page.locator("[data-run-entry] pre").first()).toBeVisible();
+      }
+    }
+    if ("vox" in scenario) {
+      await page.getByText("Advanced", { exact: true }).click();
+      if (scenario.vox === "invalid") {
+        await page.getByRole("button", { name: "Generate speech" }).click();
+        await expect(page.getByText("Enter text to speak.")).toBeVisible();
+        await page.getByLabel("Text to speak").fill("blocked");
+        await page.setInputFiles("#field-reference_audio", { name: "reference.aac", mimeType: "audio/aac", buffer: REFERENCE_BYTES });
+        await page.getByLabel("Minimum length").fill("5000");
+        await page.getByRole("button", { name: "Generate speech" }).click();
+        await expect(page.getByText("Choose a .wav, .mp3, .flac, .ogg, .m4a file.")).toBeVisible();
+        await expect(page.getByText("The minimum length cannot exceed the maximum length.")).toBeVisible();
+      } else if (scenario.vox !== "idle") {
+        const marker = scenario.vox === "failure" ? "fixture-framed-error"
+          : scenario.vox === "running" || scenario.vox === "cancelled" ? "fixture-slow" : "Accessible streamed speech";
+        await page.getByLabel("Text to speak").fill(marker);
+        await page.setInputFiles("#field-reference_audio", { name: "reference.wav", mimeType: "audio/wav", buffer: REFERENCE_BYTES });
+        await page.getByRole("button", { name: "Generate speech" }).click();
+        if (scenario.vox === "running") {
+          await expect(page.getByRole("button", { name: "Cancel run" })).toBeVisible();
+        } else {
+          if (scenario.vox === "cancelled") await page.getByRole("button", { name: "Cancel run" }).click();
+          await expect(page.locator(`[data-run-entry][data-outcome="${scenario.vox === "success" ? "succeeded" : scenario.vox === "cancelled" ? "cancelled" : "failed"}"]`)).toBeVisible();
+          await page.locator("[data-run-entry] details").evaluateAll((nodes) => { for (const node of nodes) (node as HTMLDetailsElement).open = true; });
+          await expect(page.locator("[data-run-entry] pre").first()).toBeVisible();
+        }
       }
     }
     if ("llamaRun" in scenario) {
