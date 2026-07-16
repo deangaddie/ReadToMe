@@ -1,11 +1,11 @@
 # Container Health acceptance record
 
-Date: 2026-07-16 (Australia/Perth)  
-Tested source commit: `561973e2e91c9b11a8ebac4e48ff22d9b4727dc5` plus the uncommitted
-acceptance fixture, test, and documentation in this change  
-Host: Windows, NVIDIA GeForce RTX 3070 (8,192 MiB), driver 610.74  
-Installed runtime: Node 24.13.0, npm 11.6.2 (**unsupported by this dashboard**)  
-Installed browsers: Edge 150.0.4078.65; Firefox 152.0.6
+- Date: 2026-07-16 (Australia/Perth)
+- Tested dashboard source: `561973e2e91c9b11a8ebac4e48ff22d9b4727dc5`
+- Acceptance fixture, test, and initial record commit: `6f34b96`
+- Host: Windows, NVIDIA GeForce RTX 3070 (8,192 MiB), driver 610.74
+- Installed runtime: Node 24.13.0, npm 11.6.2 (**unsupported by this dashboard**)
+- Installed browsers: Edge 150.0.4078.65; Firefox 152.0.6
 
 Overall status: **incomplete**. Development checks and live wire-level checks passed, but
 the supported-runtime preflight failed: the installed Node and npm are below the required
