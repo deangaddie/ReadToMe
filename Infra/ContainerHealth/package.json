@@ -1,0 +1,27 @@
+{
+  "name": "read2me-container-health",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.16.0",
+  "engines": {
+    "node": ">=24.18.0 <25",
+    "npm": ">=11.16.0 <12"
+  },
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "test:unit": "playwright test --project=unit",
+    "test:browser": "playwright test --project=chromium",
+    "test:a11y": "playwright test --project=accessibility",
+    "check": "npm run typecheck && npm run test:unit && npm run build && npm run test:browser && npm run test:a11y"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "1.61.1",
+    "typescript": "7.0.2",
+    "vite": "8.1.4"
+  }
+}

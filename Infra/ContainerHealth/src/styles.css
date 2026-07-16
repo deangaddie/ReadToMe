@@ -1,0 +1,49 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #172033;
+  background: #f4f7fb;
+}
+
+body {
+  margin: 0;
+  min-width: 20rem;
+}
+
+main {
+  width: min(48rem, calc(100% - 3rem));
+  margin: 12vh auto;
+  padding: 2rem;
+  border: 1px solid #c9d3e2;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 1rem 3rem rgb(24 40 72 / 10%);
+}
+
+.eyebrow {
+  color: #3459a6;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+a:focus-visible {
+  outline: 0.2rem solid #255cc7;
+  outline-offset: 0.2rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #edf2fb;
+    background: #111827;
+  }
+
+  main {
+    border-color: #39465d;
+    background: #1b2433;
+  }
+
+  .eyebrow {
+    color: #9ebcff;
+  }
+}

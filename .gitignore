@@ -332,6 +332,10 @@ FakesAssemblies/
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat
 node_modules/
+Infra/ContainerHealth/.env.local
+Infra/ContainerHealth/test-results/
+Infra/ContainerHealth/playwright-report/
+Infra/ContainerHealth/dist/
 
 # Visual Studio 6 build log
 *.plg
