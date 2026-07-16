@@ -96,7 +96,7 @@ function overviewMarkup(): string {
 }
 
 function fieldMarkup(field: FieldDefinition): string {
-  const describedBy = `help-${field.key} error-${field.key}`;
+  const describedBy = `help-${field.key} warning-${field.key} error-${field.key}`;
   const required = field.required ? " required" : "";
   const value = typeof field.initialValue === "string" ? field.initialValue : "";
   const constraints = `${field.min === undefined ? "" : ` min="${escapeHtml(field.min)}"`}${field.max === undefined ? "" : ` max="${escapeHtml(field.max)}"`}${field.step === undefined ? "" : ` step="${escapeHtml(field.step)}"`}`;
@@ -121,6 +121,7 @@ function fieldMarkup(field: FieldDefinition): string {
   }
   return `<div class="form-field" data-field="${field.key}"><label for="field-${field.key}">${escapeHtml(field.label)}${field.required ? ' <span aria-hidden="true">*</span>' : ""}</label>${control}
     <p class="field-help" id="help-${field.key}">${escapeHtml(field.help ?? (field.required ? "Required." : "Optional."))}</p>
+    <p class="field-warning" id="warning-${field.key}" data-field-warning="${field.key}"></p>
     <p class="field-error" id="error-${field.key}" data-field-error="${field.key}"></p></div>`;
 }
 
@@ -251,7 +252,11 @@ function resultMarkup(result: ServiceResult | undefined, resultUrl?: string): st
   switch (result.kind) {
     case "similarity": return `<div class="similarity-result"><span>Raw cosine similarity</span><strong data-testid="similarity-score">${formatScore(result.score)}</strong></div>`;
     case "llm": return `<section class="llm-result"><h4>Thinking</h4><pre>${escapeHtml(result.thinking)}</pre><h4>Answer</h4><p>${escapeHtml(result.answer)}</p>${result.finishReason === undefined ? "" : `<p>Finish reason: ${escapeHtml(result.finishReason)}</p>`}${result.usage === undefined && result.timing === undefined ? "" : `<details><summary>Usage and timing</summary><pre>${escapeHtml(JSON.stringify({ usage: result.usage, timing: result.timing }, null, 2))}</pre></details>`}</section>`;
-    case "audio": return `<audio controls src="${escapeHtml(resultUrl ?? "")}"></audio><a href="${escapeHtml(resultUrl ?? "")}" download="${escapeHtml(result.filename)}">Download WAV</a>`;
+    case "audio": return `<div class="audio-result">
+      <audio controls data-audio-player src="${escapeHtml(resultUrl ?? "")}"></audio>
+      <p class="audio-meta">${escapeHtml(result.filename)} · ${result.blob.size} bytes${result.sampleRate === undefined ? "" : ` · ${result.sampleRate} Hz`}</p>
+      <a class="download-link" data-audio-download href="${escapeHtml(resultUrl ?? "")}" download="${escapeHtml(result.filename)}">Download ${escapeHtml(result.filename)}</a>
+    </div>`;
     case "transcription": return `<pre>${escapeHtml(result.text)}</pre>`;
   }
 }
@@ -268,6 +273,82 @@ function historyMarkup(entry: RunEntry): string {
 let runController: DetailRunController | undefined;
 let elapsedTimer: ReturnType<typeof setInterval> | undefined;
 let runReadinessState: ReadinessState | undefined;
+let playingRunId: number | undefined;
+const historyNodes = new Map<number, HTMLElement>();
+
+/** Only one dashboard result may play; starting one pauses the previous player. */
+function ownPlayback(audio: HTMLAudioElement, runId: number): void {
+  audio.addEventListener("play", () => {
+    for (const [id, node] of historyNodes) {
+      if (id === runId) continue;
+      const other = node.querySelector<HTMLAudioElement>("[data-audio-player]");
+      if (other !== null && !other.paused) other.pause();
+    }
+    playingRunId = runId;
+    runController?.setPlaying(runId);
+  });
+  const release = (): void => {
+    if (playingRunId !== runId) return;
+    playingRunId = undefined;
+    runController?.setPlaying(undefined);
+  };
+  audio.addEventListener("pause", release);
+  audio.addEventListener("ended", release);
+}
+
+/**
+ * Inserts and evicts entries without rebuilding existing nodes, so an active player
+ * survives later runs and each evicted entry is disposed exactly once.
+ */
+function renderHistory(entries: readonly RunEntry[]): void {
+  const container = element<HTMLElement>("[data-run-history]");
+  if (entries.length === 0) {
+    historyNodes.clear();
+    container.innerHTML = '<p class="empty-history">No runs yet.</p>';
+    return;
+  }
+  const retained = new Set(entries.map(({ id }) => id));
+  for (const [id, node] of historyNodes) {
+    if (retained.has(id)) continue;
+    node.querySelector<HTMLAudioElement>("[data-audio-player]")?.pause();
+    node.remove();
+    historyNodes.delete(id);
+  }
+  container.querySelector(".empty-history")?.remove();
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]!;
+    if (historyNodes.has(entry.id)) continue;
+    const template = document.createElement("div");
+    template.innerHTML = historyMarkup(entry);
+    const node = template.firstElementChild as HTMLElement;
+    historyNodes.set(entry.id, node);
+    const older = entries[index + 1];
+    container.insertBefore(node, older === undefined ? null : historyNodes.get(older.id) ?? null);
+    const audio = node.querySelector<HTMLAudioElement>("[data-audio-player]");
+    if (audio !== null) ownPlayback(audio, entry.id);
+  }
+}
+
+function collectValues(adapter: FunctionalAdapter): FormValues {
+  const values: Record<string, string | boolean | File | null> = {};
+  for (const field of adapter.fields) {
+    const control = element<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`#field-${field.key}`);
+    values[field.key] = control instanceof HTMLInputElement && control.type === "checkbox" ? control.checked
+      : control instanceof HTMLInputElement && control.type === "file" ? control.files?.[0] ?? null
+      : control.value;
+  }
+  return Object.freeze(values) as FormValues;
+}
+
+/** Warnings never block submission, so they track the live form rather than the last run. */
+function renderWarnings(): void {
+  if (functionalAdapter === undefined) return;
+  const warnings = functionalAdapter.validate(collectValues(functionalAdapter)).warnings;
+  for (const field of functionalAdapter.fields) {
+    element<HTMLElement>(`[data-field-warning="${field.key}"]`).textContent = warnings[field.key] ?? "";
+  }
+}
+
 const modelPreparer = functionalAdapter?.prepareForm;
 const llamaPreparation = modelPreparer === undefined ? undefined : new LlamaPreparationController(modelPreparer);
 
@@ -332,8 +413,8 @@ function renderRun(snapshot: RunSnapshot): void {
     if (elapsedTimer !== undefined) { clearInterval(elapsedTimer); elapsedTimer = undefined; }
     status.textContent = snapshot.status === "idle" ? "Ready to run." : `${snapshot.status[0]?.toUpperCase()}${snapshot.status.slice(1)}.`;
   }
-  const history = element<HTMLElement>("[data-run-history]");
-  history.innerHTML = snapshot.history.length === 0 ? '<p class="empty-history">No runs yet.</p>' : snapshot.history.map(historyMarkup).join("");
+  renderHistory(snapshot.history);
+  renderWarnings();
   element<HTMLElement>("[data-announcement]").textContent = snapshot.status === "running" ? "Run started." : snapshot.history[0]?.message ?? "";
 }
 
@@ -351,18 +432,13 @@ if (functionalAdapter !== undefined) {
   renderRun(runController.snapshot);
   const form = element<HTMLFormElement>("[data-run-form]");
   const action = element<HTMLButtonElement>("[data-run-action]");
+  form.addEventListener("change", renderWarnings);
+  form.addEventListener("input", renderWarnings);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (runController?.snapshot.status === "running") return;
-    const values: Record<string, string | boolean | File | null> = {};
-    for (const field of functionalAdapter.fields) {
-      const control = element<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`#field-${field.key}`);
-      values[field.key] = control instanceof HTMLInputElement && control.type === "checkbox" ? control.checked
-        : control instanceof HTMLInputElement && control.type === "file" ? control.files?.[0] ?? null
-        : control.value;
-    }
     runReadinessState = controller.snapshot(functionalAdapter.id).observation?.state;
-    void runController?.submit(Object.freeze(values) as FormValues).then((outcome) => {
+    void runController?.submit(collectValues(functionalAdapter)).then((outcome) => {
       if (outcome === "started" && functionalAdapter.prepareForm !== undefined) void refreshLlamaPreparation();
     });
     queueMicrotask(() => {

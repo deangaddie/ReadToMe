@@ -89,6 +89,77 @@ function readBody(request) {
   });
 }
 
+function speechWavFixture(sampleRate = 24_000, seconds = 0.5) {
+  const samples = Math.round(sampleRate * seconds);
+  const dataBytes = samples * 2;
+  const buffer = Buffer.alloc(44 + dataBytes);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataBytes, 4);
+  buffer.write("WAVEfmt ", 8);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataBytes, 40);
+  for (let index = 0; index < samples; index += 1) {
+    buffer.writeInt16LE(Math.round(Math.sin((index / sampleRate) * 2 * Math.PI * 440) * 8_000), 44 + index * 2);
+  }
+  return buffer;
+}
+
+const ttsRequests = [];
+
+function ttsRoute(service, pathname) {
+  if (service === "chatterbox-turbo") return pathname === "/tts/turbo";
+  return pathname === "/tts" && (service === "chatterbox" || service === "qwen3-tts" || service === "qwen3-tts-base");
+}
+
+async function handleTts(service, request, response) {
+  const body = await readBody(request);
+  const contentType = request.headers["content-type"] ?? "";
+  ttsRequests.push({ service, contentType, body: body.toString("base64") });
+  const text = body.toString("latin1");
+  if (text.includes("fixture-http-error")) {
+    response.writeHead(422, { "content-type": "application/json" });
+    response.end(JSON.stringify({ detail: "fixture rejected the speech request" }));
+    return;
+  }
+  if (text.includes("fixture-wrong-media")) {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ audio: "not really" }));
+    return;
+  }
+  if (text.includes("fixture-malformed-wav")) {
+    response.writeHead(200, { "content-type": "audio/wav" });
+    // A RIFF header declaring a zero size, with no fmt or data chunk.
+    response.end(Buffer.concat([Buffer.from("RIFF", "latin1"), Buffer.alloc(4), Buffer.from("WAVEnope", "latin1")]));
+    return;
+  }
+  if (text.includes("fixture-truncated-wav")) {
+    response.writeHead(200, { "content-type": "audio/wav" });
+    response.end(speechWavFixture().subarray(0, 200));
+    return;
+  }
+  if (text.includes("fixture-slow")) {
+    request.on("aborted", observeAbort);
+    response.on("close", () => { if (!response.writableEnded) observeAbort(); });
+    const timer = setTimeout(() => {
+      if (!response.destroyed) {
+        response.writeHead(200, { "content-type": "audio/wav" });
+        response.end(speechWavFixture());
+      }
+    }, 10_000);
+    response.on("close", () => clearTimeout(timer));
+    return;
+  }
+  response.writeHead(200, { "content-type": "audio/wav" });
+  response.end(speechWavFixture());
+}
+
 function wavFixture() {
   const buffer = Buffer.alloc(48);
   buffer.write("RIFF", 0);
@@ -120,6 +191,12 @@ async function handle(service, request, response, server) {
   if (url.pathname === "/llama-events") {
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ modelCalls: llamaModelCalls, requests: llamaRequests }));
+    return;
+  }
+  if (url.pathname === "/tts-events") {
+    if (url.searchParams.get("reset") === "1") ttsRequests.splice(0);
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ requests: ttsRequests }));
     return;
   }
   if (url.pathname === "/readiness-events") {
@@ -175,6 +252,10 @@ async function handle(service, request, response, server) {
     pendingReadiness.set(service, response);
     if (readinessBatchStarts.size === services.length) releaseReadinessRemainder();
     else if (pendingReadiness.size >= 6) releaseOneReadiness();
+    return;
+  }
+  if (ttsRoute(service, url.pathname)) {
+    await handleTts(service, request, response);
     return;
   }
   if (service === "llama" && url.pathname === "/v1/models") {

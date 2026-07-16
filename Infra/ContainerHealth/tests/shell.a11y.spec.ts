@@ -1,5 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { buildWav } from "./fixtures/wav-fixture";
+
+const REFERENCE_BYTES = Buffer.from(buildWav({ samples: 32 }));
 
 for (const scenario of [
   { name: "overview light desktop", path: "/", theme: "light", width: 1440, mixed: false },
@@ -14,6 +17,11 @@ for (const scenario of [
   { name: "similarity success history and diagnostic", path: "/detail.html?service=minilm-l6", theme: "light", width: 390, mixed: false, run: "success" },
   { name: "similarity failure history and diagnostic", path: "/detail.html?service=minilm-l6", theme: "dark", width: 1440, mixed: false, run: "failure" },
   { name: "similarity cancelled history and diagnostic", path: "/detail.html?service=minilm-l6", theme: "light", width: 390, mixed: false, run: "cancelled" },
+  { name: "Chatterbox speech form idle", path: "/detail.html?service=chatterbox", theme: "light", width: 1440, mixed: false, tts: "idle" },
+  { name: "Turbo validation and warning states", path: "/detail.html?service=chatterbox-turbo", theme: "dark", width: 390, mixed: false, tts: "invalid" },
+  { name: "Qwen Voice Design audio result and diagnostic", path: "/detail.html?service=qwen3-tts", theme: "light", width: 1440, mixed: false, tts: "success" },
+  { name: "Qwen Base audio history narrow", path: "/detail.html?service=qwen3-tts-base", theme: "dark", width: 390, mixed: false, tts: "success" },
+  { name: "Chatterbox protocol failure detail", path: "/detail.html?service=chatterbox", theme: "dark", width: 1440, mixed: false, tts: "failure" },
   { name: "invalid detail", path: "/detail.html?service=invalid", theme: "dark", width: 390, mixed: false }
 ] as const) {
   test(`${scenario.name} has no WCAG 2.2 A/AA violations`, async ({ page, request }) => {
@@ -56,6 +64,24 @@ for (const scenario of [
       if (scenario.run === "cancelled") {
         await page.getByRole("button", { name: "Cancel run" }).click();
         await expect(page.locator('[data-run-entry][data-outcome="cancelled"]')).toBeVisible();
+      }
+    }
+    if ("tts" in scenario && scenario.tts !== "idle") {
+      const clone = scenario.path.includes("chatterbox") || scenario.path.includes("qwen3-tts-base");
+      if (scenario.tts === "invalid") {
+        await page.getByRole("button", { name: "Generate speech" }).click();
+        await expect(page.getByText("Enter text to speak.")).toBeVisible();
+        await page.setInputFiles("#field-reference_audio", { name: "reference.flac", mimeType: "audio/flac", buffer: REFERENCE_BYTES });
+        await expect(page.getByText(/WAV and MP3 are the documented inputs/u)).toBeVisible();
+      } else {
+        await page.getByLabel("Text to speak").fill(scenario.tts === "failure" ? "fixture-malformed-wav" : "Accessible generated speech");
+        if (clone) await page.setInputFiles("#field-reference_audio", { name: "reference.wav", mimeType: "audio/wav", buffer: REFERENCE_BYTES });
+        if (scenario.path.includes("service=qwen3-tts&") || scenario.path.endsWith("service=qwen3-tts")) await page.getByLabel("Voice description").fill("A calm narrator");
+        if (scenario.path.includes("qwen3-tts-base")) await page.getByLabel("Reference transcript").fill("the exact spoken words");
+        await page.getByRole("button", { name: "Generate speech" }).click();
+        await expect(page.locator(`[data-run-entry][data-outcome="${scenario.tts === "failure" ? "failed" : "succeeded"}"]`)).toBeVisible();
+        await page.locator("[data-run-entry] details").evaluateAll((nodes) => { for (const node of nodes) (node as HTMLDetailsElement).open = true; });
+        await expect(page.locator("[data-run-entry] pre").first()).toBeVisible();
       }
     }
     if ("llamaRun" in scenario) {
