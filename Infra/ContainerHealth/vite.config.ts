@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadEnv, type ProxyOptions, type UserConfig } from "vite";
+import { type ProxyOptions, type UserConfig } from "vite";
 
 interface ServiceProxy {
   readonly id: string;
@@ -66,28 +66,24 @@ function proxyFor(service: ServiceProxy, target: string): ProxyOptions {
 
 function loadTargetOverrides(): Readonly<Record<string, string>> {
   const envPath = resolve(process.cwd(), ".env.local");
-  const localKeys = new Set<string>();
-  if (existsSync(envPath)) {
-    for (const line of readFileSync(envPath, "utf8").split(/\r?\n/u)) {
-      const match = /^(?:\s*export\s+)?\s*(CHD_TARGET_[A-Z0-9_]+)\s*=/u.exec(line);
-      if (match?.[1]) localKeys.add(match[1]);
-    }
+  const loaded: Record<string, string> = {};
+  for (const line of existsSync(envPath) ? readFileSync(envPath, "utf8").split(/\r?\n/u) : []) {
+    const match = /^(?:\s*export\s+)?\s*(CHD_TARGET_[A-Z0-9_]+)\s*=\s*(.*?)\s*$/u.exec(line);
+    if (!match?.[1] || match[2] === undefined) continue;
+    const quoted = /^(?:"([^"]*)"|'([^']*)')$/u.exec(match[2]);
+    loaded[match[1]] = quoted ? (quoted[1] ?? quoted[2] ?? "") : match[2].replace(/\s+#.*$/u, "").trim();
   }
 
-  // A synthetic mode makes Vite parse only its generic files. Filtering by keys actually
-  // declared in .env.local prevents .env from becoming another proxy configuration source.
-  const loaded = loadEnv("__chd_local_only__", process.cwd(), "CHD_TARGET_");
   return Object.fromEntries(serviceProxies.flatMap((service) => {
     const processValue = process.env[service.envKey];
     if (processValue !== undefined) return [[service.envKey, processValue]];
-    return localKeys.has(service.envKey) && loaded[service.envKey] !== undefined
+    return loaded[service.envKey] !== undefined
       ? [[service.envKey, loaded[service.envKey]]]
       : [];
   }));
 }
 
-export default ({ mode }: { mode: string }): UserConfig => {
-  void mode;
+export default (): UserConfig => {
   const env = loadTargetOverrides();
   const proxy = Object.fromEntries(serviceProxies.map((service) => {
     const target = validateTarget(service, env[service.envKey] ?? service.defaultTarget);

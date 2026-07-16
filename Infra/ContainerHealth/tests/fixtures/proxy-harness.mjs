@@ -18,6 +18,14 @@ const services = [
 const servers = [];
 const env = { ...process.env, CHD_NO_OPEN: "1" };
 let abortObserved = false;
+const abortWaiters = [];
+
+function observeAbort() {
+  abortObserved = true;
+  for (const response of abortWaiters.splice(0)) {
+    response.end(JSON.stringify({ abortObserved: true }));
+  }
+}
 
 function readBody(request) {
   return new Promise((resolve, reject) => {
@@ -92,12 +100,13 @@ async function handle(service, request, response, server) {
   }
   if (url.pathname === "/abort-status") {
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ abortObserved }));
+    if (abortObserved) response.end(JSON.stringify({ abortObserved: true }));
+    else abortWaiters.push(response);
     return;
   }
   if (url.pathname === "/abort") {
-    request.on("aborted", () => { abortObserved = true; });
-    response.on("close", () => { if (!response.writableEnded) abortObserved = true; });
+    request.on("aborted", observeAbort);
+    response.on("close", () => { if (!response.writableEnded) observeAbort(); });
     response.writeHead(200, { "content-type": "application/octet-stream" });
     const timer = setInterval(() => response.write(Buffer.alloc(64 * 1024)), 5);
     response.on("close", () => clearInterval(timer));

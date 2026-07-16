@@ -36,15 +36,15 @@ test("all nine fixed prefixes rewrite to the target root without cross-matching"
 test("multipart uploads cross the proxy byte-for-byte", async ({ page }) => {
   await page.goto("/");
   const expected = Buffer.from("--read2me-boundary\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nhello proxy\r\n--read2me-boundary\r\nContent-Disposition: form-data; name=\"reference_audio\"; filename=\"voice.wav\"\r\nContent-Type: audio/wav\r\n\r\n\x00\x01\x02\x7f\x80\xff\r\n--read2me-boundary--\r\n", "binary");
-  const result = await page.evaluate(async () => {
-    const body = new Uint8Array([45,45,114,101,97,100,50,109,101,45,98,111,117,110,100,97,114,121,13,10,67,111,110,116,101,110,116,45,68,105,115,112,111,115,105,116,105,111,110,58,32,102,111,114,109,45,100,97,116,97,59,32,110,97,109,101,61,34,116,101,120,116,34,13,10,13,10,104,101,108,108,111,32,112,114,111,120,121,13,10,45,45,114,101,97,100,50,109,101,45,98,111,117,110,100,97,114,121,13,10,67,111,110,116,101,110,116,45,68,105,115,112,111,115,105,116,105,111,110,58,32,102,111,114,109,45,100,97,116,97,59,32,110,97,109,101,61,34,114,101,102,101,114,101,110,99,101,95,97,117,100,105,111,34,59,32,102,105,108,101,110,97,109,101,61,34,118,111,105,99,101,46,119,97,118,34,13,10,67,111,110,116,101,110,116,45,84,121,112,101,58,32,97,117,100,105,111,47,119,97,118,13,10,13,10,0,1,2,127,128,255,13,10,45,45,114,101,97,100,50,109,101,45,98,111,117,110,100,97,114,121,45,45,13,10]);
+  const result = await page.evaluate(async (base64Body) => {
+    const body = Uint8Array.from(atob(base64Body), (character) => character.charCodeAt(0));
     const response = await fetch("/proxy/chatterbox/echo", {
       method: "POST",
       headers: { "content-type": "multipart/form-data; boundary=read2me-boundary" },
       body
     });
     return await response.json() as { body: string; contentType: string };
-  });
+  }, expected.toString("base64"));
   const captured = Buffer.from(result.body, "base64");
   expect(result.contentType).toBe("multipart/form-data; boundary=read2me-boundary");
   expect(captured).toEqual(expected);
@@ -82,7 +82,6 @@ test("slow chunked responses complete through streaming backpressure", async ({ 
       if (next.done) break;
       bytes += next.value.byteLength;
       chunks += 1;
-      await new Promise<void>((resolve) => setTimeout(resolve, 1));
     }
     return { bytes, chunks };
   });
@@ -94,19 +93,14 @@ test("browser abort closes the proxied upstream response", async ({ page }) => {
   await page.goto("/");
   const observed = await page.evaluate(async () => {
     const controller = new AbortController();
+    const observedPromise = fetch("/proxy/qwen3-tts-base/abort-status").then((item) => item.json()) as Promise<{ abortObserved: boolean }>;
     const pending = fetch("/proxy/qwen3-tts-base/abort", { signal: controller.signal });
     const response = await pending;
     const reader = response.body?.getReader();
     await reader?.read();
     controller.abort();
     try { await reader?.read(); } catch { /* expected abort */ }
-
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const status = await fetch("/proxy/qwen3-tts-base/abort-status").then((item) => item.json()) as { abortObserved: boolean };
-      if (status.abortObserved) return true;
-      await new Promise<void>((resolve) => setTimeout(resolve, 10));
-    }
-    return false;
+    return (await observedPromise).abortObserved;
   });
   expect(observed).toBeTruthy();
 });
