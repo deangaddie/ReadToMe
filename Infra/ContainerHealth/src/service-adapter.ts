@@ -2,7 +2,7 @@ import { SERVICE_ADAPTERS, type ServiceAdapter as ReadinessAdapter } from "./rea
 import { LlamaPreparationError, parseLlamaSse, type LlamaModelOption, type LlamaModelState, type LlamaModelPreparer } from "./llama";
 import { audioFilename, describeWav, isAudioMediaType, isDocumentedAudioFile, parseWav } from "./tts";
 import { buildPcm16Wav, isSupportedVoxUpload, parseVoxStream, VOX_UPLOAD_EXTENSIONS, VOX_UPLOAD_LIMIT_BYTES, VOX_UPLOAD_LIMIT_MIB } from "./vox";
-import { inspectUpload, parseTranscription, TRANSCRIPTION_FORMATS, type TranscriptionFormat } from "./whisper";
+import { describeUploadWarning, parseTranscription, TRANSCRIPTION_FORMATS, type TranscriptionFormat } from "./whisper";
 
 export const INPUT_TEXT_LIMIT = 4 * 1_024;
 export const WIRE_DIAGNOSTIC_LIMIT = 64 * 1_024;
@@ -906,7 +906,9 @@ const whisperFields = Object.freeze([
   whisperNumber("Voice activity detection", "vad_threshold", "VAD threshold", "0.5", "0.1", "Speech probability threshold."),
   whisperNumber("Voice activity detection", "vad_min_speech_duration_ms", "VAD minimum speech (ms)", "250", "1", "Shortest accepted speech run."),
   whisperNumber("Voice activity detection", "vad_min_silence_duration_ms", "VAD minimum silence (ms)", "100", "1", "Shortest silence that splits speech."),
-  whisperNumber("Voice activity detection", "vad_max_speech_duration_s", "VAD maximum speech (s)", "3.402823466e38", "0.1", "Longest accepted speech run."),
+  // FLT_MAX sits on no 0.1 lattice and the service constrains no step, so any step risks a browser
+  // reporting this service default as natively invalid. Chromium does not, but Firefox is only checked by hand.
+  whisperNumber("Voice activity detection", "vad_max_speech_duration_s", "VAD maximum speech (s)", "3.402823466e38", "any", "Longest accepted speech run."),
   whisperNumber("Voice activity detection", "vad_speech_pad_ms", "VAD speech pad (ms)", "30", "1", "Padding added around detected speech."),
   whisperNumber("Voice activity detection", "vad_samples_overlap", "VAD samples overlap", "0.1", "0.1", "Overlap between analysed windows.")
 ] satisfies readonly FieldDefinition[]);
@@ -998,7 +1000,7 @@ export function createWhisperAdapter(): ServiceAdapter {
         throw new Error("Whisper execution received an unsupported response format.");
       }
       progress({ kind: "phase", phase: "upload", status: "started", message: "Reading and checking the audio file." });
-      const uploadWarning = await inspectUpload(file);
+      const uploadWarning = await describeUploadWarning(file);
       if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
       progress({ kind: "phase", phase: "upload", status: "completed", message: "The audio file is ready to send." });
 

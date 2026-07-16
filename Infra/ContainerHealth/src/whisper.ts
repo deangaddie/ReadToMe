@@ -28,7 +28,7 @@ export function describeCanonicalDifference(format: WavFormat): string | undefin
  * Inspects the chosen upload's real header. The file is always sent as chosen: a header that is
  * unrecognizable or merely different from Canonical WAV is reported as a warning, never a block or a repair.
  */
-export async function inspectUpload(file: File): Promise<string | undefined> {
+export async function describeUploadWarning(file: File): Promise<string | undefined> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const parsed = parseWav(bytes);
   if (!parsed.ok) return `This file is not recognizable WAV audio (${parsed.reason}) and is sent exactly as chosen. The service accepts WAV only.`;
@@ -50,16 +50,11 @@ function timingNumber(value: unknown, diagnostic: string): number {
   return value;
 }
 
-function optionalProbability(value: unknown, diagnostic: string): number | undefined {
-  if (value === undefined) return undefined;
-  return timingNumber(value, diagnostic);
-}
-
 function readTiming(value: Record<string, unknown>, textKey: "text" | "word", diagnostic: string): TimingItem {
   const start = timingNumber(value.start, diagnostic);
   const end = timingNumber(value.end, diagnostic);
   if (end < start) protocolFailure("The service returned a reversed timing range.", diagnostic);
-  const probability = optionalProbability(value.probability, diagnostic);
+  const probability = value.probability === undefined ? undefined : timingNumber(value.probability, diagnostic);
   return Object.freeze({
     text: typeof value[textKey] === "string" ? value[textKey] : "",
     start,

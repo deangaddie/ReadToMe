@@ -59,6 +59,12 @@ test("Whisper exposes every labelled group and transcribes with the word-alignme
   await expect(page.getByLabel("VAD maximum speech (s)")).toHaveValue("3.402823466e38");
   await expect(page.getByLabel("Enable VAD")).not.toBeChecked();
 
+  // Every prefilled default is the service's own, so no native constraint may reject one.
+  const nativelyInvalid = await page.locator("form input[type=number]").evaluateAll(
+    (nodes) => nodes.filter((node) => !(node as HTMLInputElement).checkValidity()).map((node) => (node as HTMLInputElement).name)
+  );
+  expect(nativelyInvalid).toEqual([]);
+
   await transcribe(page);
   const entry = page.locator('[data-run-entry][data-outcome="succeeded"]');
   await expect(entry).toBeVisible();
