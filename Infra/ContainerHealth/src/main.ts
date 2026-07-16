@@ -125,14 +125,30 @@ function fieldMarkup(field: FieldDefinition): string {
     <p class="field-error" id="error-${field.key}" data-field-error="${field.key}"></p></div>`;
 }
 
+/**
+ * Renders the Advanced surface as one disclosure, or as its own labelled disclosure per group when the
+ * adapter divides a large field surface. Every group stays a native <details> the keyboard can reach.
+ */
+function advancedMarkup(fields: readonly FieldDefinition[]): string {
+  if (fields.length === 0) return '<details class="advanced-fields"><summary>Advanced</summary><p>No advanced fields for this service.</p></details>';
+  const groups = [...new Set(fields.map(({ advancedGroup }) => advancedGroup))];
+  if (groups.length === 1 && groups[0] === undefined) {
+    return `<details class="advanced-fields"><summary>Advanced</summary>${fields.map(fieldMarkup).join("")}</details>`;
+  }
+  return `<div class="advanced-groups" role="group" aria-label="Advanced fields">${groups.map((group) => {
+    const label = group ?? "Advanced";
+    return `<details class="advanced-fields" data-advanced-group="${escapeHtml(label)}"><summary>${escapeHtml(label)}</summary>${fields.filter((field) => (field.advancedGroup ?? "Advanced") === label).map(fieldMarkup).join("")}</details>`;
+  }).join("")}</div>`;
+}
+
 function workbenchMarkup(adapter: FunctionalAdapter): string {
   const common = adapter.fields.filter(({ group }) => group === "common").map(fieldMarkup).join("");
-  const advanced = adapter.fields.filter(({ group }) => group === "advanced").map(fieldMarkup).join("");
+  const advanced = advancedMarkup(adapter.fields.filter(({ group }) => group === "advanced"));
   const llamaPreparation = adapter.prepareForm === undefined ? "" : `<section class="model-preparation" aria-labelledby="model-preparation-heading"><h3 id="model-preparation-heading">Model presets</h3><p data-model-preparation-status aria-live="polite">Preparing model presets…</p><button class="secondary-button" type="button" data-model-preparation-retry hidden>Retry model preparation</button><details><summary>Model preparation diagnostic</summary><pre tabindex="0" data-model-preparation-diagnostic>No diagnostic yet.</pre></details></section>`;
   const liveOutput = adapter.resultKind === "llm" ? `<section class="live-output" data-live-output hidden aria-labelledby="live-output-heading"><h3 id="live-output-heading">Live completion</h3><h4>Thinking</h4><pre tabindex="0" data-testid="live-thinking"></pre><h4>Answer</h4><pre tabindex="0" data-testid="live-answer"></pre></section>` : "";
   return `<section class="functional-workbench" aria-labelledby="tests-heading"><div class="section-heading"><h2 id="tests-heading">Functional test</h2><p>Inputs and results remain in this page only.</p></div>${llamaPreparation}
     <form data-run-form novalidate><fieldset><legend>Common fields</legend>${common}</fieldset>
-      <details class="advanced-fields"><summary>Advanced</summary>${advanced || "<p>No advanced fields for this service.</p>"}</details>
+      ${advanced}
       <div class="run-actions"><button class="primary-button" type="submit" data-run-action${adapter.prepareForm === undefined ? "" : " disabled"}>${escapeHtml(adapter.runLabel)}</button><p data-run-progress aria-live="polite">Ready to run.</p></div>
     </form>${liveOutput}
     <section class="run-history" aria-labelledby="history-heading"><div class="section-heading"><h3 id="history-heading">Run history</h3><p>Newest first · up to five entries</p></div><div data-run-history><p class="empty-history">No runs yet.</p></div></section>
@@ -247,6 +263,38 @@ function formatScore(score: number): string {
   return score.toFixed(6).replace(/\.0+$/u, "").replace(/(\.\d*?)0+$/u, "$1");
 }
 
+function timingSeconds(value: number): string {
+  return `${value.toFixed(2)} s`;
+}
+
+/**
+ * Presents exactly what the service returned. The transcript keeps its own whitespace, words and
+ * segments keep service order, and nothing is synthesized, reordered, or repaired for display.
+ */
+function transcriptionMarkup(result: Extract<ServiceResult, { kind: "transcription" }>): string {
+  const metadata = [
+    `Format ${result.format}`,
+    ...(result.language === undefined ? [] : [`Language ${result.language}`]),
+    ...(result.duration === undefined ? [] : [`Duration ${timingSeconds(result.duration)}`])
+  ].join(" · ");
+  const words = result.words === undefined ? "" : `<h4 id="words-heading">Words</h4>
+    <ol class="word-timings" data-testid="word-timings" aria-labelledby="words-heading">${result.words.map((word) => `<li>
+      <span class="word-text">${escapeHtml(word.text)}</span>
+      <span class="word-timing">${timingSeconds(word.start)} – ${timingSeconds(word.end)}${word.probability === undefined ? "" : ` · p ${word.probability.toFixed(2)}`}</span>
+    </li>`).join("")}</ol>`;
+  const segments = result.segments === undefined ? "" : `<details data-testid="segment-metadata"><summary>Segment metadata</summary>
+    <ol class="segment-timings">${result.segments.map((segment) => `<li>
+      <span class="segment-timing">${timingSeconds(segment.start)} – ${timingSeconds(segment.end)}</span>
+      <span class="segment-text">${escapeHtml(segment.text)}</span>
+    </li>`).join("")}</ol></details>`;
+  return `<section class="transcription-result">
+    <p class="transcription-meta" data-testid="transcription-meta">${escapeHtml(metadata)}</p>
+    <h4 id="transcript-heading">Transcript</h4>
+    <pre tabindex="0" data-testid="transcript" aria-labelledby="transcript-heading">${escapeHtml(result.text)}</pre>
+    ${words}${segments}
+  </section>`;
+}
+
 function resultMarkup(result: ServiceResult | undefined, resultUrl?: string): string {
   if (result === undefined) return "";
   switch (result.kind) {
@@ -257,7 +305,7 @@ function resultMarkup(result: ServiceResult | undefined, resultUrl?: string): st
       <p class="audio-meta">${escapeHtml(result.filename)} · ${result.blob.size} bytes${result.sampleRate === undefined ? "" : ` · ${result.sampleRate} Hz`}</p>
       <a class="download-link" data-audio-download href="${escapeHtml(resultUrl ?? "")}" download="${escapeHtml(result.filename)}">Download ${escapeHtml(result.filename)}</a>
     </div>`;
-    case "transcription": return `<pre tabindex="0">${escapeHtml(result.text)}</pre>`;
+    case "transcription": return transcriptionMarkup(result);
   }
 }
 
@@ -324,6 +372,9 @@ function renderHistory(entries: readonly RunEntry[]): void {
     historyNodes.set(entry.id, node);
     const older = entries[index + 1];
     container.insertBefore(node, older === undefined ? null : historyNodes.get(older.id) ?? null);
+    // Parsing markup normalizes CRLF to LF, so the transcript text is applied as data to stay byte-exact.
+    const transcript = node.querySelector<HTMLElement>('[data-testid="transcript"]');
+    if (transcript !== null && entry.result?.kind === "transcription") transcript.textContent = entry.result.text;
     const audio = node.querySelector<HTMLAudioElement>("[data-audio-player]");
     if (audio !== null) ownPlayback(audio, entry.id);
   }

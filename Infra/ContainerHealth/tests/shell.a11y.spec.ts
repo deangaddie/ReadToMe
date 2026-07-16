@@ -29,6 +29,14 @@ for (const scenario of [
   { name: "VoxCPM2 audio result narrow", path: "/detail.html?service=voxcpm2", theme: "dark", width: 390, mixed: false, vox: "success" },
   { name: "VoxCPM2 framed error failure detail", path: "/detail.html?service=voxcpm2", theme: "dark", width: 1440, mixed: false, vox: "failure" },
   { name: "VoxCPM2 cancelled run detail", path: "/detail.html?service=voxcpm2", theme: "light", width: 1440, mixed: false, vox: "cancelled" },
+  { name: "Whisper transcription form and Advanced groups idle", path: "/detail.html?service=whisper", theme: "light", width: 1440, mixed: false, whisper: "idle" },
+  { name: "Whisper validation and warning states narrow", path: "/detail.html?service=whisper", theme: "dark", width: 390, mixed: false, whisper: "invalid" },
+  { name: "Whisper transcription in progress", path: "/detail.html?service=whisper", theme: "dark", width: 1440, mixed: false, whisper: "running" },
+  { name: "Whisper transcript, words, and segment metadata", path: "/detail.html?service=whisper", theme: "light", width: 1440, mixed: false, whisper: "success" },
+  { name: "Whisper transcript result narrow", path: "/detail.html?service=whisper", theme: "dark", width: 390, mixed: false, whisper: "success" },
+  { name: "Whisper verbatim subtitle result", path: "/detail.html?service=whisper", theme: "light", width: 1440, mixed: false, whisper: "srt" },
+  { name: "Whisper protocol failure detail", path: "/detail.html?service=whisper", theme: "dark", width: 1440, mixed: false, whisper: "failure" },
+  { name: "Whisper cancelled run detail", path: "/detail.html?service=whisper", theme: "light", width: 1440, mixed: false, whisper: "cancelled" },
   { name: "invalid detail", path: "/detail.html?service=invalid", theme: "dark", width: 390, mixed: false }
 ] as const) {
   test(`${scenario.name} has no WCAG 2.2 A/AA violations`, async ({ page, request }) => {
@@ -113,6 +121,33 @@ for (const scenario of [
         } else {
           if (scenario.vox === "cancelled") await page.getByRole("button", { name: "Cancel run" }).click();
           await expect(page.locator(`[data-run-entry][data-outcome="${scenario.vox === "success" ? "succeeded" : scenario.vox === "cancelled" ? "cancelled" : "failed"}"]`)).toBeVisible();
+          await page.locator("[data-run-entry] details").evaluateAll((nodes) => { for (const node of nodes) (node as HTMLDetailsElement).open = true; });
+          await expect(page.locator("[data-run-entry] pre").first()).toBeVisible();
+        }
+      }
+    }
+    if ("whisper" in scenario) {
+      await page.locator("[data-advanced-group]").evaluateAll((nodes) => { for (const node of nodes) (node as HTMLDetailsElement).open = true; });
+      if (scenario.whisper === "invalid") {
+        await page.getByRole("button", { name: "Transcribe audio" }).click();
+        await expect(page.getByText("Choose a WAV audio file.")).toBeVisible();
+        await page.setInputFiles("#field-file", { name: "speech.mp3", mimeType: "audio/mpeg", buffer: REFERENCE_BYTES });
+        await page.getByLabel("Enable VAD").check();
+        await page.getByLabel("Best of").fill("2.5");
+        await page.getByRole("button", { name: "Transcribe audio" }).click();
+        await expect(page.locator('[data-field-warning="vad"]')).toContainText("no VAD model");
+        await expect(page.getByText("Enter a whole number.")).toBeVisible();
+      } else if (scenario.whisper !== "idle") {
+        const name = scenario.whisper === "failure" ? "fixture-malformed.wav"
+          : scenario.whisper === "running" || scenario.whisper === "cancelled" ? "fixture-slow.wav" : "speech.wav";
+        if (scenario.whisper === "srt") await page.getByLabel("Response format").selectOption("srt");
+        await page.setInputFiles("#field-file", { name, mimeType: "audio/wav", buffer: REFERENCE_BYTES });
+        await page.getByRole("button", { name: "Transcribe audio" }).click();
+        if (scenario.whisper === "running") {
+          await expect(page.getByRole("button", { name: "Cancel run" })).toBeVisible();
+        } else {
+          if (scenario.whisper === "cancelled") await page.getByRole("button", { name: "Cancel run" }).click();
+          await expect(page.locator(`[data-run-entry][data-outcome="${scenario.whisper === "failure" ? "failed" : scenario.whisper === "cancelled" ? "cancelled" : "succeeded"}"]`)).toBeVisible();
           await page.locator("[data-run-entry] details").evaluateAll((nodes) => { for (const node of nodes) (node as HTMLDetailsElement).open = true; });
           await expect(page.locator("[data-run-entry] pre").first()).toBeVisible();
         }

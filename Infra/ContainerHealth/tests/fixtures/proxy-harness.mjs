@@ -160,6 +160,111 @@ async function handleTts(service, request, response) {
   response.end(speechWavFixture());
 }
 
+const whisperRequests = [];
+
+/**
+ * Reads one multipart field value, or a file part's filename, without pulling in a parser dependency.
+ * Only real `Header: value` lines may precede the blank line, so the match cannot run past this part.
+ */
+function multipartField(text, name) {
+  const match = new RegExp(`name="${name}"([^\\r\\n]*)\\r\\n(?:[A-Za-z][A-Za-z-]*:[^\\r\\n]*\\r\\n)*\\r\\n([\\s\\S]*?)\\r\\n--`, "u").exec(text);
+  if (match === null) return undefined;
+  const filename = /filename="([^"]*)"/u.exec(match[1] ?? "");
+  return filename === null ? match[2] : filename[1];
+}
+
+const WHISPER_TRANSCRIPT = " It was a bright cold day in April.";
+const WHISPER_VERBOSE = {
+  task: "transcribe",
+  language: "en",
+  duration: 2.4,
+  text: WHISPER_TRANSCRIPT,
+  segments: [
+    {
+      id: 0, start: 0, end: 1.1, text: " It was a bright",
+      words: [
+        { word: " It", start: 0, end: 0.2, probability: 0.98 },
+        { word: " was", start: 0.2, end: 0.5, probability: 0.94 },
+        { word: " a", start: 0.5, end: 0.7, probability: 0.87 },
+        { word: " bright", start: 0.7, end: 1.1, probability: 0.96 }
+      ]
+    },
+    {
+      id: 1, start: 1.1, end: 2.4, text: " cold day in April.",
+      words: [
+        { word: " cold", start: 1.1, end: 1.5, probability: 0.93 },
+        { word: " day", start: 1.5, end: 1.8, probability: 0.97 },
+        { word: " in", start: 1.8, end: 2.0, probability: 0.9 },
+        { word: " April.", start: 2.0, end: 2.4, probability: 0.99 }
+      ]
+    }
+  ]
+};
+const WHISPER_SRT = "1\r\n00:00:00,000 --> 00:00:01,100\r\n It was a bright\r\n\r\n2\r\n00:00:01,100 --> 00:00:02,400\r\n cold day in April.\r\n\r\n";
+const WHISPER_VTT = "WEBVTT\r\n\r\n00:00:00.000 --> 00:00:01.100\r\n It was a bright\r\n\r\n00:00:01.100 --> 00:00:02.400\r\n cold day in April.\r\n\r\n";
+
+async function handleWhisper(request, response) {
+  const body = await readBody(request);
+  const text = body.toString("latin1");
+  const contentType = request.headers["content-type"] ?? "";
+  const fields = {};
+  for (const name of [
+    "file", "response_format", "language", "token_timestamps", "max_len", "split_on_word", "no_timestamps",
+    "prompt", "vad", "translate", "detect_language", "best_of", "temperature", "beam_size", "offset_t", "duration"
+  ]) {
+    const value = multipartField(text, name);
+    if (value !== undefined) fields[name] = value;
+  }
+  whisperRequests.push({ contentType, fields, hasPrompt: text.includes('name="prompt"'), bytes: body.length });
+  const filename = fields.file ?? "";
+  const format = fields.response_format ?? "json";
+
+  if (filename.includes("fixture-http-error")) {
+    response.writeHead(400, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "failed to read the audio file" }));
+    return;
+  }
+  if (filename.includes("fixture-malformed")) {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end('{"text": "unterminated');
+    return;
+  }
+  if (filename.includes("fixture-wrong-media")) {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end(JSON.stringify(WHISPER_VERBOSE));
+    return;
+  }
+  if (filename.includes("fixture-reversed")) {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ text: "reversed", segments: [{ start: 2, end: 1, text: "reversed", words: [] }] }));
+    return;
+  }
+  if (filename.includes("fixture-no-words")) {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ...WHISPER_VERBOSE, segments: WHISPER_VERBOSE.segments.map(({ words, ...rest }) => rest) }));
+    return;
+  }
+  if (filename.includes("fixture-slow")) {
+    request.on("aborted", observeAbort);
+    response.on("close", () => { if (!response.writableEnded) observeAbort(); });
+    const timer = setTimeout(() => {
+      if (!response.destroyed) {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(WHISPER_VERBOSE));
+      }
+    }, 10_000);
+    response.on("close", () => clearTimeout(timer));
+    return;
+  }
+  if (format === "text" || format === "srt" || format === "vtt") {
+    response.writeHead(200, { "content-type": "text/plain" });
+    response.end(format === "text" ? `${WHISPER_TRANSCRIPT}\n` : format === "srt" ? WHISPER_SRT : WHISPER_VTT);
+    return;
+  }
+  response.writeHead(200, { "content-type": "application/json" });
+  response.end(JSON.stringify(format === "verbose_json" ? WHISPER_VERBOSE : { text: WHISPER_TRANSCRIPT }));
+}
+
 const voxUploads = [];
 const voxRequests = [];
 let voxUploadCount = 0;
@@ -296,6 +401,12 @@ async function handle(service, request, response, server) {
     response.end(JSON.stringify({ requests: ttsRequests }));
     return;
   }
+  if (url.pathname === "/whisper-events") {
+    if (url.searchParams.get("reset") === "1") { whisperRequests.splice(0); abortObserved = false; }
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ requests: whisperRequests }));
+    return;
+  }
   if (url.pathname === "/vox-events") {
     if (url.searchParams.get("reset") === "1") { voxUploads.splice(0); voxRequests.splice(0); voxUploadCount = 0; abortObserved = false; }
     response.setHeader("content-type", "application/json");
@@ -359,6 +470,10 @@ async function handle(service, request, response, server) {
   }
   if (ttsRoute(service, url.pathname)) {
     await handleTts(service, request, response);
+    return;
+  }
+  if (service === "whisper" && url.pathname === "/inference") {
+    await handleWhisper(request, response);
     return;
   }
   if (service === "voxcpm2" && url.pathname === "/upload-audio") {

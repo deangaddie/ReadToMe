@@ -2,6 +2,7 @@ import { SERVICE_ADAPTERS, type ServiceAdapter as ReadinessAdapter } from "./rea
 import { LlamaPreparationError, parseLlamaSse, type LlamaModelOption, type LlamaModelState, type LlamaModelPreparer } from "./llama";
 import { audioFilename, describeWav, isAudioMediaType, isDocumentedAudioFile, parseWav } from "./tts";
 import { buildPcm16Wav, isSupportedVoxUpload, parseVoxStream, VOX_UPLOAD_EXTENSIONS, VOX_UPLOAD_LIMIT_BYTES, VOX_UPLOAD_LIMIT_MIB } from "./vox";
+import { inspectUpload, parseTranscription, TRANSCRIPTION_FORMATS, type TranscriptionFormat } from "./whisper";
 
 export const INPUT_TEXT_LIMIT = 4 * 1_024;
 export const WIRE_DIAGNOSTIC_LIMIT = 64 * 1_024;
@@ -19,6 +20,8 @@ export interface FieldDefinition {
   readonly label: string;
   readonly control: FieldControl;
   readonly group: FieldGroup;
+  /** Optional label splitting a large Advanced surface into its own native disclosure group. */
+  readonly advancedGroup?: string;
   readonly required: boolean;
   readonly initialValue: FormValue;
   readonly help?: string;
@@ -382,7 +385,7 @@ const prepareLlamaModels: LlamaModelPreparer = async (signal, fetcher = fetch) =
   return Object.freeze({ models, diagnostic });
 };
 
-function requireReadinessMetadata(id: "llama" | "minilm-l6" | "mpnet-base-v2" | "voxcpm2" | TtsServiceId) {
+function requireReadinessMetadata(id: "llama" | "minilm-l6" | "mpnet-base-v2" | "voxcpm2" | "whisper" | TtsServiceId) {
   const value = SERVICE_ADAPTERS.find((adapter) => adapter.id === id);
   if (value === undefined) throw new Error(`Missing readiness metadata for ${id}.`);
   return value;
@@ -826,6 +829,223 @@ export function createVoxAdapter(): ServiceAdapter {
   return Object.freeze(adapter);
 }
 
+const WHISPER_ROUTE = "/proxy/whisper/inference";
+const WHISPER_ENGLISH_ONLY = "The mounted base.en model is English-only, so this is still sent but the transcript may be wrong.";
+
+function whisperNumber(advancedGroup: string, key: string, label: string, initialValue: string, step: string, help: string): FieldDefinition {
+  return Object.freeze({ key, wireKey: key, label, control: "number", group: "advanced", advancedGroup, required: false, initialValue, step, help });
+}
+
+function whisperCheckbox(advancedGroup: string, key: string, label: string, initialValue: boolean, help: string): FieldDefinition {
+  return Object.freeze({ key, wireKey: key, label, control: "checkbox", group: "advanced", advancedGroup, required: false, initialValue, help });
+}
+
+const SENT_EXPLICITLY = "Sent explicitly on every request.";
+
+const whisperFields = Object.freeze([
+  Object.freeze({
+    key: "file", wireKey: "file", label: "Audio file", control: "file", group: "common", required: true, initialValue: null,
+    // WHISPER_FFMPEG=OFF in the image: the service decodes WAV itself and converts nothing.
+    accept: ".wav,audio/wav", help: "Required. WAV is the only supported input. A file that is not Canonical WAV is still sent, with a warning."
+  }),
+  Object.freeze({
+    key: "response_format", wireKey: "response_format", label: "Response format", control: "select", group: "common", required: true,
+    initialValue: "verbose_json", help: "Verbose JSON is the confirmation default and the only format carrying word timings.",
+    options: Object.freeze([
+      Object.freeze({ value: "json", label: "json — transcript only" }),
+      Object.freeze({ value: "verbose_json", label: "verbose_json — transcript, segments, and words" }),
+      Object.freeze({ value: "text", label: "text — plain transcript" }),
+      Object.freeze({ value: "srt", label: "srt — subtitles" }),
+      Object.freeze({ value: "vtt", label: "vtt — subtitles" })
+    ])
+  }),
+  Object.freeze({
+    key: "language", wireKey: "language", label: "Language", control: "text", group: "common", required: true, initialValue: "en",
+    help: "The mounted model is base.en, so en is the only accurate choice.", example: "en"
+  }),
+  Object.freeze({
+    key: "token_timestamps", wireKey: "token_timestamps", label: "Word timestamps", control: "checkbox", group: "common",
+    required: false, initialValue: true, help: `${SENT_EXPLICITLY} Required for word-level alignment in verbose JSON.`
+  }),
+
+  whisperNumber("Slicing and context", "offset_t", "Time offset (ms)", "0", "1", "Start offset in milliseconds."),
+  whisperNumber("Slicing and context", "offset_n", "Chunk offset", "0", "1", "Start offset in chunks."),
+  whisperNumber("Slicing and context", "duration", "Duration (ms)", "0", "1", "Audio duration to process; 0 processes everything."),
+  whisperNumber("Slicing and context", "max_context", "Maximum context", "-1", "1", "Maximum text context kept between segments; -1 keeps the service default."),
+  whisperNumber("Slicing and context", "max_len", "Maximum segment length", "1", "1", "Maximum segment length in characters; 1 with Split on word yields one word per segment."),
+  whisperNumber("Slicing and context", "audio_ctx", "Audio context size", "0", "1", "Audio context size; 0 keeps the service default."),
+
+  whisperNumber("Decoding", "best_of", "Best of", "2", "1", "Candidates sampled per decode."),
+  whisperNumber("Decoding", "beam_size", "Beam size", "-1", "1", "Beam search width; -1 disables beam search."),
+  whisperNumber("Decoding", "temperature", "Temperature", "0", "0.1", "Sampling randomness."),
+  whisperNumber("Decoding", "temperature_inc", "Temperature increment", "0.2", "0.1", "Temperature step used on decoder fallback."),
+  whisperNumber("Decoding", "entropy_thold", "Entropy threshold", "2.4", "0.1", "Entropy threshold for decoder fallback."),
+  whisperNumber("Decoding", "logprob_thold", "Log probability threshold", "-1", "0.1", "Log probability threshold for decoder fallback."),
+  whisperNumber("Decoding", "no_speech_thold", "No-speech threshold", "0.6", "0.1", "Probability above which a segment is treated as silence."),
+  whisperNumber("Decoding", "word_thold", "Word threshold", "0.01", "0.01", "Word timestamp probability threshold."),
+
+  whisperCheckbox("Language and task", "translate", "Translate to English", false, `${SENT_EXPLICITLY} ${WHISPER_ENGLISH_ONLY}`),
+  whisperCheckbox("Language and task", "detect_language", "Detect language", false, `${SENT_EXPLICITLY} ${WHISPER_ENGLISH_ONLY}`),
+  Object.freeze({
+    key: "prompt", wireKey: "prompt", label: "Initial prompt", control: "text", group: "advanced", advancedGroup: "Language and task",
+    required: false, initialValue: "", help: OMITTED_HELP, example: "Read2Me, Winston, Oceania"
+  }),
+  whisperCheckbox("Language and task", "carry_initial_prompt", "Carry initial prompt", false, `${SENT_EXPLICITLY} Re-sends the initial prompt with every segment.`),
+
+  whisperCheckbox("Timing and output", "no_timestamps", "No timestamps", false, `${SENT_EXPLICITLY} Suppresses all timing output.`),
+  whisperCheckbox("Timing and output", "split_on_word", "Split on word", true, `${SENT_EXPLICITLY} Splits segments on word rather than token boundaries.`),
+  whisperCheckbox("Timing and output", "no_language_probabilities", "No language probabilities", false, `${SENT_EXPLICITLY} Omits per-language probabilities.`),
+
+  whisperCheckbox("Speech and speakers", "diarize", "Diarize", false, `${SENT_EXPLICITLY} Stereo speaker diarization.`),
+  whisperCheckbox("Speech and speakers", "tinydiarize", "Tinydiarize", false, `${SENT_EXPLICITLY} Requires a tdrz-enabled model.`),
+  whisperCheckbox("Speech and speakers", "suppress_non_speech", "Suppress non-speech segments", false, `${SENT_EXPLICITLY} Suppresses non-speech segments.`),
+  whisperCheckbox("Speech and speakers", "suppress_nst", "Suppress non-speech tokens", false, `${SENT_EXPLICITLY} Suppresses non-speech tokens.`),
+  whisperCheckbox("Speech and speakers", "debug_mode", "Debug mode", false, `${SENT_EXPLICITLY} Enables verbose service-side logging.`),
+
+  whisperCheckbox("Voice activity detection", "vad", "Enable VAD", false, `${SENT_EXPLICITLY} Compose supplies no VAD model.`),
+  whisperNumber("Voice activity detection", "vad_threshold", "VAD threshold", "0.5", "0.1", "Speech probability threshold."),
+  whisperNumber("Voice activity detection", "vad_min_speech_duration_ms", "VAD minimum speech (ms)", "250", "1", "Shortest accepted speech run."),
+  whisperNumber("Voice activity detection", "vad_min_silence_duration_ms", "VAD minimum silence (ms)", "100", "1", "Shortest silence that splits speech."),
+  whisperNumber("Voice activity detection", "vad_max_speech_duration_s", "VAD maximum speech (s)", "3.402823466e38", "0.1", "Longest accepted speech run."),
+  whisperNumber("Voice activity detection", "vad_speech_pad_ms", "VAD speech pad (ms)", "30", "1", "Padding added around detected speech."),
+  whisperNumber("Voice activity detection", "vad_samples_overlap", "VAD samples overlap", "0.1", "0.1", "Overlap between analysed windows.")
+] satisfies readonly FieldDefinition[]);
+
+function booleanValue(values: FormValues, key: string): boolean {
+  return values[key] === true;
+}
+
+/**
+ * Blocks only what the service itself cannot accept. Every combination the request parser accepts but
+ * this Compose deployment cannot honour is a warning, so an independently edited value is never rewritten.
+ */
+function validateWhisper(values: FormValues): ValidationResult {
+  const errors: Record<string, string | undefined> = {};
+  const warnings: Record<string, string | undefined> = {};
+  for (const field of whisperFields) {
+    if (field.control === "checkbox") continue;
+    const value = values[field.key] ?? null;
+    if (field.control === "file") {
+      if (!(value instanceof File) || value.size === 0) errors[field.key] = "Choose a WAV audio file.";
+      else if (!/\.wav$/iu.test(value.name) && value.type.toLowerCase() !== "audio/wav") {
+        warnings[field.key] = "WAV is the only supported input and this service converts nothing, so this file is likely to be rejected.";
+      }
+      continue;
+    }
+    errors[field.key] = fieldValueError(field, value);
+  }
+
+  const maxLen = stringValue(values, "max_len") ?? "";
+  const requestsTimings = booleanValue(values, "token_timestamps") || booleanValue(values, "split_on_word")
+    || (maxLen.trim() !== "" && Number(maxLen) !== 0);
+  if (booleanValue(values, "no_timestamps") && requestsTimings) {
+    warnings.no_timestamps = "No timestamps produces no timings at all, which conflicts with the word-timing controls that are still enabled.";
+  }
+  if (booleanValue(values, "split_on_word") && !booleanValue(values, "token_timestamps")) {
+    warnings.split_on_word = "Word timestamps are off, so splitting on word has no word-level timing to split.";
+  }
+  const language = stringValue(values, "language") ?? "";
+  if (errors.language === undefined && language.trim() !== "" && language.trim().toLowerCase() !== "en") {
+    warnings.language = WHISPER_ENGLISH_ONLY;
+  }
+  if (booleanValue(values, "detect_language")) warnings.detect_language = WHISPER_ENGLISH_ONLY;
+  if (booleanValue(values, "translate")) warnings.translate = WHISPER_ENGLISH_ONLY;
+  if (booleanValue(values, "vad")) {
+    warnings.vad = "This Compose deployment supplies no VAD model, so enabling VAD is expected to fail.";
+  }
+  return { errors: Object.freeze(errors), warnings: Object.freeze(warnings) };
+}
+
+function buildWhisperRequest(values: FormValues): { readonly form: FormData; readonly summary: string } {
+  const form = new FormData();
+  const lines: string[] = [];
+  for (const field of whisperFields) {
+    const value = values[field.key] ?? null;
+    if (value instanceof File) {
+      form.append(field.wireKey, value, value.name);
+      lines.push(`${field.wireKey}: ${value.name} · ${value.size} bytes · ${value.type || "unknown MIME type"}`);
+      continue;
+    }
+    // Checkboxes are sent explicitly so the request never depends on a service-side default.
+    if (field.control === "checkbox") {
+      form.append(field.wireKey, String(value === true));
+      lines.push(`${field.wireKey}: ${String(value === true)}`);
+      continue;
+    }
+    if (typeof value !== "string") continue;
+    if (!field.required && value.trim() === "") continue;
+    form.append(field.wireKey, value);
+    lines.push(`${field.wireKey}: ${boundText(value, INPUT_TEXT_LIMIT)}`);
+  }
+  return { form, summary: lines.join("\n") };
+}
+
+export function createWhisperAdapter(): ServiceAdapter {
+  const service = requireReadinessMetadata("whisper");
+  const adapter: ServiceAdapter = {
+    ...service,
+    resultKind: "transcription",
+    runLabel: "Transcribe audio",
+    fields: whisperFields,
+    initialValues: () => initialValues(whisperFields),
+    validate: validateWhisper,
+    summarizeInput: (values) => summarize(whisperFields, values),
+    async execute(values, signal, progress, fetcher = fetch): Promise<AdapterExecution> {
+      const file = values.file;
+      if (!(file instanceof File)) throw new Error("Whisper execution received invalid values.");
+      const format = stringValue(values, "response_format");
+      if (format === undefined || !TRANSCRIPTION_FORMATS.includes(format as TranscriptionFormat)) {
+        throw new Error("Whisper execution received an unsupported response format.");
+      }
+      progress({ kind: "phase", phase: "upload", status: "started", message: "Reading and checking the audio file." });
+      const uploadWarning = await inspectUpload(file);
+      if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+      progress({ kind: "phase", phase: "upload", status: "completed", message: "The audio file is ready to send." });
+
+      const { form, summary } = buildWhisperRequest(values);
+      const requestDiagnostic = boundedWireDiagnostic(`Request:\nPOST ${WHISPER_ROUTE}\nContent-Type: multipart/form-data\n${summary}`);
+      progress({ kind: "phase", phase: "request", status: "started", message: "Sending the transcription request." });
+      let response: Response;
+      try {
+        response = await fetcher(WHISPER_ROUTE, { method: "POST", headers: { accept: "application/json, text/plain" }, body: form, signal });
+      } catch (error) {
+        if (signal.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
+        throw unreachableFailure(service.name, error, requestDiagnostic);
+      }
+      const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "missing";
+      const responseHeading = `${requestDiagnostic}\nResponse:\nHTTP ${response.status}\nContent-Type: ${mediaType}`;
+      if (!response.ok) {
+        const body = await boundedResponseText(response);
+        let payload: unknown;
+        if (isJson(response) && !body.endsWith(TRUNCATED)) {
+          try { payload = JSON.parse(body); } catch { payload = undefined; }
+        }
+        throw reachedFailure({
+          response, payload, serviceName: service.name, diagnostic: boundedWireDiagnostic(`${responseHeading}\n${body}`),
+          // Whisper reports request errors as a JSON object with an error string.
+          extractMessage: (value) => isRecord(value) && typeof value.error === "string" && value.error.trim() !== ""
+            ? boundText(value.error, 1_024) : safeServiceMessage(value)
+        });
+      }
+      // The transcript itself is never truncated; only the diagnostic copy is bounded.
+      const body = await response.text();
+      if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+      const diagnostic = boundedWireDiagnostic(`${responseHeading}\n${body}`);
+      const parsed = parseTranscription({
+        format: format as TranscriptionFormat, body, isJsonMediaType: isJson(response),
+        wordTimestampsRequested: booleanValue(values, "token_timestamps"), diagnostic
+      });
+      progress({ kind: "phase", phase: "request", status: "completed", message: "Transcript received." });
+      return {
+        result: parsed.result,
+        diagnostic,
+        warnings: Object.freeze([...(uploadWarning === undefined ? [] : [uploadWarning]), ...parsed.warnings])
+      };
+    }
+  };
+  return Object.freeze(adapter);
+}
+
 export const FUNCTIONAL_ADAPTERS: readonly ServiceAdapter[] = Object.freeze([
   createLlamaAdapter(),
   createTtsAdapter("chatterbox"),
@@ -833,6 +1053,7 @@ export const FUNCTIONAL_ADAPTERS: readonly ServiceAdapter[] = Object.freeze([
   createTtsAdapter("qwen3-tts"),
   createTtsAdapter("qwen3-tts-base"),
   createVoxAdapter(),
+  createWhisperAdapter(),
   createSimilarityAdapter("minilm-l6"),
   createSimilarityAdapter("mpnet-base-v2")
 ]);
