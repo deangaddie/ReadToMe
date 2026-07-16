@@ -89,8 +89,11 @@ docker compose -f docker-compose.warmup.yml run --rm <service>
 ```
 
 For example, `docker compose -f docker-compose.warmup.yml run --rm minilm-l6`
-downloads the pinned MiniLM snapshot into `cache/minilm-l6`. The warm-up file
-is the executable model-pin table: changing a model revision is deliberately a
+downloads the pinned MiniLM snapshot into `cache/minilm-l6`. Likewise,
+`docker compose -f docker-compose.warmup.yml run --rm whisper` provisions the
+pinned Whisper artifact in `models/`, verifying its source revision, SHA-256,
+and byte length before an atomic replacement. The warm-up file is the
+executable model-pin table: changing a model revision is deliberately a
 two-step operation — update its warm-up service, run it, then start the normal
 service. Do not merge this file with `docker-compose.yml`; the hardened stack's
 DNS policy must be absent while a model is being downloaded.
@@ -277,21 +280,22 @@ Stream sequence: one `meta` frame (`{"type": "meta", "sample_rate": ...}`) → N
 ## Whisper.CPP (CPU)
 
 `read2me-whisper` is a CPU-only, hardened Whisper.CPP `v1.8.5` server on port
-9000. Before its first start, provision the exact pinned `base.en` artifact:
+9000. Before its first start, provision the exact pinned `base.en` artifact
+through the shared model warm-up flow:
 
 ```powershell
-.\scripts\provision-whisper-model.ps1
+docker compose -f docker-compose.warmup.yml run --rm whisper
 docker compose up -d whisper
 ```
 
-The provisioner verifies the model's immutable source revision, SHA-256 and
-byte length before atomically placing `models/ggml-base.en.bin`. The service
-mounts that one file read-only, runs as uid/gid 10001, has a read-only root
-filesystem with writable `/tmp`, and deliberately has no model cache, runtime
-download path, GPU reservation, or outbound DNS route. It becomes healthy only
-after the model loads; use its upstream `POST /inference` endpoint with the
-Read2Me Canonical WAV protocol. Its verbose-JSON response includes the
-word-level timings used wherever precise text-to-audio alignment is required.
+The warm-up verifies the model's immutable source revision, SHA-256 and byte
+length before atomically placing `models/ggml-base.en.bin`. The service mounts
+that one file read-only, runs as uid/gid 10001, has a read-only root filesystem
+with writable `/tmp`, and deliberately has no model cache, runtime download
+path, GPU reservation, or outbound DNS route. It becomes healthy only after the
+model loads; use its upstream `POST /inference` endpoint with the Read2Me
+Canonical WAV protocol. Its verbose-JSON response includes the word-level
+timings used wherever precise text-to-audio alignment is required.
 
 ## Semantic Similarity — MiniLM-L6 and MPNet-Base-v2
 

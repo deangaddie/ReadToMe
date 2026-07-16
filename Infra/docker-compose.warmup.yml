@@ -1,6 +1,58 @@
 # Deliberately standalone: do not merge with docker-compose.yml. The hardened
 # compose blackholes DNS, which prevents these one-shot cache population jobs.
 services:
+  whisper:
+    image: read2me-whisper
+    user: "0:0"
+    volumes:
+      - ./models:/models
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        manifest=/models/whisper-models.sha256
+        test -f "$$manifest"
+
+        value() {
+          sed -n "s/^$$1=//p" "$$manifest" | head -n 1
+        }
+
+        filename=$$(value Filename)
+        revision=$$(value SourceRevision)
+        source_url=$$(value SourceUrl)
+        expected_sha256=$$(value SHA256)
+        expected_length=$$(value ByteLength)
+
+        test "$$filename" = ggml-base.en.bin
+        test -n "$$revision"
+        test "$$source_url" != "$${source_url#*"$$revision"*}"
+        test "$${#expected_sha256}" -eq 64
+        expected_sha256=$$(printf %s "$$expected_sha256" | tr '[:upper:]' '[:lower:]')
+        case "$$expected_sha256" in *[!0123456789abcdef]*) exit 1 ;; esac
+        case "$$expected_length" in ''|*[!0-9]*) exit 1 ;; esac
+
+        destination=/models/$$filename
+        is_valid() {
+          test -f "$$1" &&
+            test "$$(wc -c < "$$1" | tr -d ' ')" = "$$expected_length" &&
+            test "$$(sha256sum "$$1" | awk '{print $$1}')" = "$$expected_sha256"
+        }
+
+        if is_valid "$$destination"; then
+          echo "Verified existing Whisper model: $$destination"
+          exit 0
+        fi
+
+        temporary=$$(mktemp /models/."$$filename".XXXXXX.tmp)
+        trap 'rm -f "$$temporary"' EXIT
+        echo "Downloading Whisper model revision $$revision..."
+        curl --fail --location --proto '=https' --tlsv1.2 --output "$$temporary" "$$source_url"
+        is_valid "$$temporary"
+        mv -f "$$temporary" "$$destination"
+        trap - EXIT
+        echo "Provisioned verified Whisper model: $$destination"
+
   chatterbox:
     image: read2me-chatterbox
     environment:
