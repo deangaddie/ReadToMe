@@ -27,6 +27,9 @@ let readinessBatchStarts = new Set();
 let releasingRemainder = false;
 let heldReadinessService;
 const readinessOverrides = new Map();
+let llamaMode = "success";
+let llamaModelCalls = 0;
+const llamaRequests = [];
 
 function readinessPayload(service) {
   if (service === "llama" || service === "whisper") return { status: "ok" };
@@ -107,6 +110,18 @@ function wavFixture() {
 
 async function handle(service, request, response, server) {
   const url = new URL(request.url ?? "/", "http://fixture");
+  if (url.pathname === "/llama-mode") {
+    llamaMode = url.searchParams.get("mode") ?? "success";
+    if (llamaMode === "success") { llamaModelCalls = 0; llamaRequests.splice(0); abortObserved = false; }
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ mode: llamaMode }));
+    return;
+  }
+  if (url.pathname === "/llama-events") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ modelCalls: llamaModelCalls, requests: llamaRequests }));
+    return;
+  }
   if (url.pathname === "/readiness-events") {
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ starts: readinessStarts, completions: readinessCompletions, count: readinessStarts.filter((item) => item === "llama").length }));
@@ -160,6 +175,64 @@ async function handle(service, request, response, server) {
     pendingReadiness.set(service, response);
     if (readinessBatchStarts.size === services.length) releaseReadinessRemainder();
     else if (pendingReadiness.size >= 6) releaseOneReadiness();
+    return;
+  }
+  if (service === "llama" && url.pathname === "/v1/models") {
+    llamaModelCalls += 1;
+    if (llamaMode === "models-failure") {
+      response.writeHead(503, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { message: "model router unavailable" } }));
+      return;
+    }
+    if (llamaMode === "models-slow") {
+      setTimeout(() => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ object: "list", data: [
+          { id: "gemma-sleeping", status: { value: "sleeping", preset: true } },
+          { id: "gemma-loaded", status: { value: "loaded", preset: true } }
+        ] }));
+      }, 250);
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    if (llamaMode === "fallback") {
+      response.end(JSON.stringify({ object: "list", data: [{ id: "gemma-fallback", status: { value: "unloaded", preset: true } }] }));
+      return;
+    }
+    response.end(JSON.stringify({ object: "list", data: [
+      { id: "gemma-sleeping", status: { value: "sleeping", preset: true } },
+      { id: "gemma-loaded", status: { value: "loaded", preset: true } },
+      { id: "gemma-failed", status: { value: "unloaded", preset: true, failed: true, last_error: "fixture failure" } }
+    ] }));
+    return;
+  }
+  if (service === "llama" && url.pathname === "/v1/chat/completions") {
+    const body = await readBody(request);
+    let payload;
+    try { payload = JSON.parse(body.toString("utf8")); } catch { payload = undefined; }
+    llamaRequests.push(payload);
+    if (llamaMode === "disconnect") {
+      response.destroy();
+      return;
+    }
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    if (llamaMode === "incomplete") {
+      response.end('data: {"choices":[{"delta":{"content":"partial answer"}}]}\n\n');
+      return;
+    }
+    if (llamaMode === "slow") {
+      request.on("aborted", observeAbort);
+      response.on("close", () => { if (!response.writableEnded) observeAbort(); });
+      response.write('data: {"choices":[{"delta":{"reasoning_content":"partial thought"}}]}\n\n');
+      const timer = setTimeout(() => response.end('data: {"choices":[{"delta":{"content":"late answer"}}]}\n\ndata: [DONE]\n\n'), 10_000);
+      response.on("close", () => clearTimeout(timer));
+      return;
+    }
+    const streamed = Buffer.from('data: {"choices":[{"delta":{"reasoning_content":"think 💡"}}]}\r\n\r\n' +
+      'data: {"choices":[{"delta":{"content":"streamed answer"},"finish_reason":"stop"}],"usage":{"completion_tokens":2},"timings":{"predicted_ms":8}}\n\n' +
+      'data: [DONE]\n\n', "utf8");
+    response.write(streamed.subarray(0, 17));
+    setImmediate(() => { response.write(streamed.subarray(17, 63)); setImmediate(() => response.end(streamed.subarray(63))); });
     return;
   }
   if (url.pathname === "/similarity" && (service === "minilm-l6" || service === "mpnet-base-v2")) {

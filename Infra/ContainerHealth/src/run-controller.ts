@@ -38,6 +38,7 @@ export interface RunSnapshot {
   readonly activeRunId: number | undefined;
   readonly startedAtMs: number | undefined;
   readonly progress: ProgressEvent | undefined;
+  readonly liveLlm: Readonly<{ thinking: string; answer: string }>;
   readonly validationErrors: Readonly<Record<string, string | undefined>>;
   readonly validationWarnings: Readonly<Record<string, string | undefined>>;
   readonly history: readonly RunEntry[];
@@ -61,6 +62,7 @@ export class DetailRunController {
   private errors: Readonly<Record<string, string | undefined>> = Object.freeze({});
   private warnings: Readonly<Record<string, string | undefined>> = Object.freeze({});
   private progress: ProgressEvent | undefined;
+  private liveLlm = { thinking: "", answer: "" };
   private disposed = false;
   private playingId: number | undefined;
   private revoked = new Set<string>();
@@ -78,6 +80,7 @@ export class DetailRunController {
       activeRunId: this.active?.id,
       startedAtMs: this.active?.startedAt.getTime(),
       progress: this.progress,
+      liveLlm: Object.freeze({ ...this.liveLlm }),
       validationErrors: this.errors,
       validationWarnings: this.warnings,
       history: Object.freeze([...this.history])
@@ -99,10 +102,16 @@ export class DetailRunController {
     this.active = active;
     this.status = "running";
     this.progress = undefined;
+    this.liveLlm = { thinking: "", answer: "" };
     this.publish();
     try {
       const execution = await this.adapter.execute(values, active.controller.signal, (event) => {
-        if (this.isActive(active.id)) { this.progress = event; this.publish(); }
+        if (this.isActive(active.id)) {
+          this.progress = event;
+          if (event.kind === "thinking-delta") this.liveLlm.thinking += event.text;
+          if (event.kind === "answer-delta") this.liveLlm.answer += event.text;
+          this.publish();
+        }
       });
       if (this.claim(active.id, "succeeded")) {
         const resultUrl = execution.result.kind === "audio" ? this.resources.create((execution.result as AudioResult).blob) : undefined;

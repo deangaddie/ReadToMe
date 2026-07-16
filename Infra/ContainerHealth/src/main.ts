@@ -3,6 +3,7 @@ import { ReadinessController, ReadinessPolling, type ControllerSnapshot, type Re
 import { SERVICE_ADAPTERS, type ReadinessObservation, type ReadinessState, type ServiceAdapter as ReadinessAdapter, type ServiceId } from "./readiness";
 import { FUNCTIONAL_ADAPTERS, type FieldDefinition, type FormValues, type ServiceAdapter as FunctionalAdapter, type ServiceResult } from "./service-adapter";
 import { DetailRunController, type RunEntry, type RunSnapshot } from "./run-controller";
+import { LlamaPreparationController, type LlamaPreparationSnapshot } from "./llama";
 import { ThemeController } from "./theme-controller";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -126,11 +127,13 @@ function fieldMarkup(field: FieldDefinition): string {
 function workbenchMarkup(adapter: FunctionalAdapter): string {
   const common = adapter.fields.filter(({ group }) => group === "common").map(fieldMarkup).join("");
   const advanced = adapter.fields.filter(({ group }) => group === "advanced").map(fieldMarkup).join("");
-  return `<section class="functional-workbench" aria-labelledby="tests-heading"><div class="section-heading"><h2 id="tests-heading">Functional test</h2><p>Inputs and results remain in this page only.</p></div>
+  const llamaPreparation = adapter.prepareForm === undefined ? "" : `<section class="model-preparation" aria-labelledby="model-preparation-heading"><h3 id="model-preparation-heading">Model presets</h3><p data-model-preparation-status aria-live="polite">Preparing model presets…</p><button class="secondary-button" type="button" data-model-preparation-retry hidden>Retry model preparation</button><details><summary>Model preparation diagnostic</summary><pre data-model-preparation-diagnostic>No diagnostic yet.</pre></details></section>`;
+  const liveOutput = adapter.resultKind === "llm" ? `<section class="live-output" data-live-output hidden aria-labelledby="live-output-heading"><h3 id="live-output-heading">Live completion</h3><h4>Thinking</h4><pre data-testid="live-thinking"></pre><h4>Answer</h4><pre data-testid="live-answer"></pre></section>` : "";
+  return `<section class="functional-workbench" aria-labelledby="tests-heading"><div class="section-heading"><h2 id="tests-heading">Functional test</h2><p>Inputs and results remain in this page only.</p></div>${llamaPreparation}
     <form data-run-form novalidate><fieldset><legend>Common fields</legend>${common}</fieldset>
       <details class="advanced-fields"><summary>Advanced</summary>${advanced || "<p>No advanced fields for this service.</p>"}</details>
-      <div class="run-actions"><button class="primary-button" type="submit" data-run-action>Run similarity test</button><p data-run-progress aria-live="polite">Ready to run.</p></div>
-    </form>
+      <div class="run-actions"><button class="primary-button" type="submit" data-run-action${adapter.prepareForm === undefined ? "" : " disabled"}>${escapeHtml(adapter.runLabel)}</button><p data-run-progress aria-live="polite">Ready to run.</p></div>
+    </form>${liveOutput}
     <section class="run-history" aria-labelledby="history-heading"><div class="section-heading"><h3 id="history-heading">Run history</h3><p>Newest first · up to five entries</p></div><div data-run-history><p class="empty-history">No runs yet.</p></div></section>
   </section>`;
 }
@@ -247,7 +250,7 @@ function resultMarkup(result: ServiceResult | undefined, resultUrl?: string): st
   if (result === undefined) return "";
   switch (result.kind) {
     case "similarity": return `<div class="similarity-result"><span>Raw cosine similarity</span><strong data-testid="similarity-score">${formatScore(result.score)}</strong></div>`;
-    case "llm": return `<section><h4>Thinking</h4><pre>${escapeHtml(result.thinking)}</pre><h4>Answer</h4><p>${escapeHtml(result.answer)}</p></section>`;
+    case "llm": return `<section class="llm-result"><h4>Thinking</h4><pre>${escapeHtml(result.thinking)}</pre><h4>Answer</h4><p>${escapeHtml(result.answer)}</p>${result.finishReason === undefined ? "" : `<p>Finish reason: ${escapeHtml(result.finishReason)}</p>`}${result.usage === undefined && result.timing === undefined ? "" : `<details><summary>Usage and timing</summary><pre>${escapeHtml(JSON.stringify({ usage: result.usage, timing: result.timing }, null, 2))}</pre></details>`}</section>`;
     case "audio": return `<audio controls src="${escapeHtml(resultUrl ?? "")}"></audio><a href="${escapeHtml(resultUrl ?? "")}" download="${escapeHtml(result.filename)}">Download WAV</a>`;
     case "transcription": return `<pre>${escapeHtml(result.text)}</pre>`;
   }
@@ -265,6 +268,30 @@ function historyMarkup(entry: RunEntry): string {
 let runController: DetailRunController | undefined;
 let elapsedTimer: ReturnType<typeof setInterval> | undefined;
 let runReadinessState: ReadinessState | undefined;
+const modelPreparer = functionalAdapter?.prepareForm;
+const llamaPreparation = modelPreparer === undefined ? undefined : new LlamaPreparationController(modelPreparer);
+
+function renderLlamaPreparation(snapshot: LlamaPreparationSnapshot): void {
+  if (llamaPreparation === undefined) return;
+  const select = element<HTMLSelectElement>("#field-model");
+  select.disabled = snapshot.status !== "prepared";
+  select.innerHTML = snapshot.models.map((model) => `<option value="${escapeHtml(model.id)}"${model.runnable ? "" : " disabled"}>${escapeHtml(model.label)}</option>`).join("");
+  if (snapshot.selectedModel !== undefined) select.value = snapshot.selectedModel;
+  const status = element<HTMLElement>("[data-model-preparation-status]");
+  status.textContent = snapshot.status === "preparing" ? "Preparing model presets…"
+    : snapshot.status === "prepared" ? `${snapshot.models.length} model presets prepared.`
+    : snapshot.status === "failed" ? "Model preparation failed." : "Model presets are not prepared.";
+  element<HTMLButtonElement>("[data-model-preparation-retry]").hidden = snapshot.status !== "failed";
+  element<HTMLElement>("[data-model-preparation-diagnostic]").textContent = snapshot.diagnostic || "No diagnostic yet.";
+  if (runController !== undefined) renderRun(runController.snapshot);
+}
+
+async function refreshLlamaPreparation(): Promise<void> {
+  if (llamaPreparation === undefined) return;
+  const pending = llamaPreparation.refresh();
+  renderLlamaPreparation(llamaPreparation.snapshot);
+  renderLlamaPreparation(await pending);
+}
 
 function renderRun(snapshot: RunSnapshot): void {
   if (functionalAdapter === undefined) return;
@@ -277,7 +304,14 @@ function renderRun(snapshot: RunSnapshot): void {
   }
   const action = element<HTMLButtonElement>("[data-run-action]");
   const status = element<HTMLElement>("[data-run-progress]");
+  if (functionalAdapter.resultKind === "llm") {
+    const output = element<HTMLElement>("[data-live-output]");
+    output.hidden = snapshot.status !== "running";
+    element<HTMLElement>("[data-testid=\"live-thinking\"]").textContent = snapshot.liveLlm.thinking;
+    element<HTMLElement>("[data-testid=\"live-answer\"]").textContent = snapshot.liveLlm.answer;
+  }
   if (snapshot.status === "running") {
+    action.disabled = false;
     action.type = "button";
     action.textContent = "Cancel run";
     const latestReadiness = functionalAdapter === undefined ? undefined : controller.snapshot(functionalAdapter.id).observation?.state;
@@ -292,7 +326,9 @@ function renderRun(snapshot: RunSnapshot): void {
     if (elapsedTimer === undefined) elapsedTimer = setInterval(() => renderRun(runController!.snapshot), 250);
   } else {
     action.type = "submit";
-    action.textContent = "Run similarity test";
+    action.textContent = functionalAdapter.runLabel;
+    action.disabled = functionalAdapter.prepareForm !== undefined
+      && (llamaPreparation?.snapshot.status !== "prepared" || llamaPreparation.snapshot.selectedModel === undefined);
     if (elapsedTimer !== undefined) { clearInterval(elapsedTimer); elapsedTimer = undefined; }
     status.textContent = snapshot.status === "idle" ? "Ready to run." : `${snapshot.status[0]?.toUpperCase()}${snapshot.status.slice(1)}.`;
   }
@@ -326,7 +362,9 @@ if (functionalAdapter !== undefined) {
         : control.value;
     }
     runReadinessState = controller.snapshot(functionalAdapter.id).observation?.state;
-    void runController?.submit(Object.freeze(values) as FormValues);
+    void runController?.submit(Object.freeze(values) as FormValues).then((outcome) => {
+      if (outcome === "started" && functionalAdapter.prepareForm !== undefined) void refreshLlamaPreparation();
+    });
     queueMicrotask(() => {
       if (runController?.snapshot.status === "running") element<HTMLButtonElement>("[data-run-action]").focus();
     });
@@ -337,9 +375,14 @@ if (functionalAdapter !== undefined) {
     runController.cancel();
     element<HTMLButtonElement>("[data-run-action]").focus();
   });
+  if (llamaPreparation !== undefined) {
+    element<HTMLSelectElement>("#field-model").addEventListener("change", (event) => llamaPreparation.select((event.currentTarget as HTMLSelectElement).value));
+    element<HTMLButtonElement>("[data-model-preparation-retry]").addEventListener("click", () => { void refreshLlamaPreparation(); });
+    void refreshLlamaPreparation();
+  }
 }
 
-element<HTMLButtonElement>("[data-refresh]").addEventListener("click", () => polling.refreshNow());
+element<HTMLButtonElement>("[data-refresh]").addEventListener("click", () => { polling.refreshNow(); void refreshLlamaPreparation(); });
 refreshSelect.addEventListener("change", () => {
   const value = Number(refreshSelect.value) as RefreshSeconds;
   if (![2, 10, 30].includes(value)) return;
@@ -357,6 +400,7 @@ document.addEventListener("visibilitychange", onVisibility);
 addEventListener("pagehide", () => {
   if (elapsedTimer !== undefined) clearInterval(elapsedTimer);
   runController?.dispose();
+  llamaPreparation?.invalidate();
   polling.stop();
   controller.invalidate();
   document.removeEventListener("visibilitychange", onVisibility);

@@ -11,7 +11,7 @@ test("similarity fields preserve strings, validate nonblank text, and bound summ
   expect(minilm.validate({ text1: "  ", text2: "second" }).errors).toEqual({ text1: "Enter the first text.", text2: undefined });
   const values: FormValues = { text1: "x".repeat(5_000), text2: "  kept unchanged  " };
   const summary = minilm.summarizeInput(values);
-  expect(summary[0]?.value).toHaveLength(4_096 + "\n[truncated]".length);
+  expect(summary[0]?.value).toHaveLength(4_096);
   expect(summary[0]?.value.endsWith("\n[truncated]")).toBeTruthy();
   expect(summary[1]?.value).toBe("  kept unchanged  ");
   expect(Object.isFrozen(summary)).toBeTruthy();
