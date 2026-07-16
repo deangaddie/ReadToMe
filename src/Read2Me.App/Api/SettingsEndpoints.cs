@@ -128,32 +128,22 @@ namespace Read2Me.App.Api
         {
             var group = endpoints.MapGroup($"/api/settings/{area}");
 
-            group.MapGet("/", ToRequestDelegate(h.List))
+            group.MapGet("", h.List)
                 .WithSummary($"List {area} configs.");
-            group.MapPost("/", ToRequestDelegate(h.Create))
+            group.MapPost("", h.Create)
                 .WithMetadata(new AcceptsMetadata(["application/json"], configType, isOptional: false))
                 .WithSummary($"Create a {area} config. The first config auto-activates.");
-            group.MapPut("/{id:int}", ToRequestDelegate(h.Update))
+            group.MapPut("/{id:int}", h.Update)
                 .WithMetadata(new AcceptsMetadata(["application/json"], configType, isOptional: false))
                 .WithSummary($"Update a {area} config by id.");
-            group.MapDelete("/{id:int}", ToRequestDelegate(h.Delete))
+            group.MapDelete("/{id:int}", h.Delete)
                 .WithSummary($"Delete a {area} config. Active selection reassigns or clears.");
-            group.MapGet("/active", ToRequestDelegate(h.GetActive))
+            group.MapGet("/active", h.GetActive)
                 .WithSummary($"The active {area} config, 404 when none.");
-            group.MapPut("/active", ToRequestDelegate(h.SetActive))
+            group.MapPut("/active", h.SetActive)
                 .WithMetadata(new AcceptsMetadata(["application/json"], typeof(SetActiveRequest), isOptional: false))
                 .WithSummary($"Select the active {area} config.");
         }
-
-        private static RequestDelegate ToRequestDelegate(Func<HttpContext, Task<IResult>> handler) =>
-            async context => await (await handler(context)).ExecuteAsync(context);
-
-        private static RequestDelegate ToRequestDelegate(Func<HttpContext, int, Task<IResult>> handler) =>
-            async context =>
-            {
-                var id = int.Parse((string)context.Request.RouteValues["id"]!);
-                await (await handler(context, id)).ExecuteAsync(context);
-            };
 
         // ── prompts ──────────────────────────────────────────────────────────
 

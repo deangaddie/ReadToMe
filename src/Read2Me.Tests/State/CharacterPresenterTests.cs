@@ -263,7 +263,7 @@ namespace Read2Me.Tests.State
             await presenter.SetVoiceTtsSettingsOverrideAsync(voiceId, "{\"cfg_value\":3.5}");
 
             await cmd.Received(1).ExecuteAsync(
-                Arg.Is<SetVoiceTtsSettingsOverrideCommand>(c => c.VoiceId == voiceId && c.Json == "{\"cfg_value\":3.5}"),
+                Arg.Is<SetVoiceTtsSettingsOverrideCommand>(c => c != null && c.VoiceId == voiceId && c.Json == "{\"cfg_value\":3.5}"),
                 Arg.Any<CancellationToken>());
         }
 

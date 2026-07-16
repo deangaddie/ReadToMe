@@ -26,8 +26,8 @@ namespace Read2Me.Tests.Services.Audio
             _items.GetAudioSampleInfosAsync(Arg.Any<ProjectFolderId>(), Arg.Any<IReadOnlyCollection<Guid>>())
                 .Returns(ci =>
                 {
-                    var folder = ((ProjectFolderId)ci[0]).Value;
-                    var ids = (IReadOnlyCollection<Guid>)ci[1];
+                    var folder = ci.ArgAt<ProjectFolderId>(0).Value;
+                    var ids = ci.ArgAt<IReadOnlyCollection<Guid>>(1);
                     var rows = _rows.TryGetValue(folder, out var r) ? r : [];
                     return Task.FromResult<IReadOnlyList<AudioSampleInfo>>(
                         rows.Where(x => ids.Contains(x.ParagraphItemId)).ToList());

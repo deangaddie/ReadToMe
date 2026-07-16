@@ -154,7 +154,7 @@ namespace Read2Me.Tests.App.Characters
             await presenter.CreateVoiceRuleAsync(characterId, voiceId, null, null, null, null);
 
             await handler.Received(1).ExecuteAsync(
-                Arg.Is<CreateVoiceRuleCommand>(c => c.CharacterId == characterId && c.VoiceId == voiceId),
+                Arg.Is<CreateVoiceRuleCommand>(c => c != null && c.CharacterId == characterId && c.VoiceId == voiceId),
                 Arg.Any<CancellationToken>());
         }
 

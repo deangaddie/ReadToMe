@@ -726,7 +726,7 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.DismissAudioReviewAsync(Folder, itemId);
 
             await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<DismissAudioReviewCommand>(c => c.ParagraphItemId == itemId && c.FolderId.Value == Folder.Value));
+                Arg.Is<DismissAudioReviewCommand>(c => c != null && c.ParagraphItemId == itemId && c.FolderId.Value == Folder.Value));
             Assert.Equal(Read2Me.Core.Models.AudioReviewState.Dismissed, ctx.AudioReviews.ReviewOf(Folder, itemId)!.State);
         }
 
@@ -842,7 +842,7 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.SetParagraphCharacterAsync(Folder, paragraph, null);
 
             await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphCharacterCommand>(c => c.ParagraphId == paragraph.Id && c.CharacterId == null));
+                Arg.Is<SetParagraphCharacterCommand>(c => c != null && c.ParagraphId == paragraph.Id && c.CharacterId == null));
             await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetItemCharacterCommand>());
         }
 
