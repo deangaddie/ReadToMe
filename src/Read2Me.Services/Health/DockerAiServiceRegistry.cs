@@ -31,7 +31,7 @@ public sealed class DockerAiServiceRegistry
             new DockerAiService("qwen3-tts",        "read2me-qwen3-tts",      "http://localhost:8100", "/docs", UsesGpu: true),
             new DockerAiService("qwen3-tts-base",   "read2me-qwen3-tts-base", "http://localhost:8101", "/docs", UsesGpu: true),
             new DockerAiService("voxcpm2",          "read2me-voxcpm2",        "http://localhost:8003", "/docs", UsesGpu: true),
-            new DockerAiService("whisper",          "read2me-whisper",        "http://localhost:9000", "/docs"),
+            new DockerAiService("whisper",          "read2me-whisper",        "http://localhost:9000", "/health"),
             new DockerAiService("minilm-l6",        "read2me-minilm-l6",      "http://localhost:8200", "/docs", SimilarityWarmup("http://localhost:8200")),
             new DockerAiService("mpnet-base-v2",    "read2me-mpnet-base-v2",  "http://localhost:8201", "/docs", SimilarityWarmup("http://localhost:8201")),
         };

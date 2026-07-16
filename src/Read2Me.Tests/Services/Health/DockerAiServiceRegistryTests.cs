@@ -76,10 +76,10 @@ public class DockerAiServiceRegistryTests
     }
 
     [Fact]
-    public void LlamaUsesHealthEndpoint_FastApiServicesUseDocs()
+    public void NativeHealthEndpoints_AreRegistered()
     {
         Assert.Equal("/health", Registry.GetByName("llama").HealthPath);
-        Assert.Equal("/docs", Registry.GetByName("whisper").HealthPath);
+        Assert.Equal("/health", Registry.GetByName("whisper").HealthPath);
         Assert.Equal("/docs", Registry.GetByName("minilm-l6").HealthPath);
     }
 }

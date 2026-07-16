@@ -12,7 +12,7 @@ namespace Read2Me.Services.Health;
 /// <param name="ContainerName">Docker container name, e.g. "read2me-llama".</param>
 /// <param name="BaseUrl">Root URL the app reaches the service on, e.g. http://localhost:8080.</param>
 /// <param name="HealthPath">
-/// Cheap GET that answers once the HTTP server is up (llama: /health; FastAPI / whisper: /docs).
+/// Cheap GET that answers once the HTTP server is up (typically /health; some FastAPI services use /docs).
 /// </param>
 /// <param name="Warmup">
 /// Optional minimal real request that forces the model to load. Receives a DI scope's
