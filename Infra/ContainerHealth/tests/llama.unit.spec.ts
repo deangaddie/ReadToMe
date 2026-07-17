@@ -69,7 +69,9 @@ function chunks(parts: readonly Uint8Array[]): ReadableStream<Uint8Array> {
 
 test("Llama SSE parses arbitrary UTF-8 splits, CRLF comments, reasoning fallback, content, and terminal metadata", async () => {
   const source = ": keepalive\r\n\r\ndata: {\"choices\":[{\"delta\":{\"reasoning\":\"think 💡\"}}]}\r\n\r\n"
-    + "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\" more\",\"content\":\"answer\"},\"finish_reason\":\"stop\"}],\"usage\":{\"completion_tokens\":3},\"timings\":{\"predicted_ms\":12}}\n\n"
+    + "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\" more\",\"content\":\"answer\"}}]}\n\n"
+    + "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"timings\":{\"predicted_ms\":12}}\n\n"
+    + "data: {\"choices\":[],\"usage\":{\"completion_tokens\":3}}\n\n"
     + "data: [DONE]\n\n";
   const bytes = new TextEncoder().encode(source);
   const deltas: string[] = [];
@@ -137,9 +139,9 @@ test("Llama adapter sends one user message with forced streaming, merges allowed
       temperature: 0.8, top_p: 0.95, max_tokens: 256, frequency_penalty: 0, presence_penalty: 0,
       reasoning_format: "auto", seed: 7, model: "gemma", messages: [{ role: "user", content: " Explain this " }], stream: true
     });
-    return new Response('data: {"choices":[{"delta":{"reasoning_content":"think"}}]}\n\ndata: {"choices":[{"delta":{"content":"answer"},"finish_reason":"stop"}],"usage":{"completion_tokens":1}}\n\ndata: [DONE]\n\n', { headers: { "content-type": "text/event-stream" } });
+    return new Response('data: {"choices":[{"delta":{"reasoning_content":"think"}}]}\n\ndata: {"choices":[{"delta":{"content":"answer"}}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"timings":{"predicted_ms":9}}\n\ndata: [DONE]\n\n', { headers: { "content-type": "text/event-stream" } });
   });
-  expect(execution.result).toEqual({ kind: "llm", model: "gemma", thinking: "think", answer: "answer", finishReason: "stop", usage: { completion_tokens: 1 } });
+  expect(execution.result).toEqual({ kind: "llm", model: "gemma", thinking: "think", answer: "answer", finishReason: "stop", timing: { predicted_ms: 9 } });
   expect(progress).toEqual(["request:started", "thinking-delta:think", "answer-delta:answer", "request:completed"]);
   expect(execution.diagnostic).toContain('"stream": true');
   expect(execution.diagnostic).toContain("[DONE]");

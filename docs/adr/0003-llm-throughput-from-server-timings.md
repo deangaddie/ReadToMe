@@ -44,7 +44,7 @@ Consequently:
 - Per-chunk timings are **cumulative**. An accumulator that sums them double-counts every token. `Add` replaces the latest reading; it never accrues.
 - `prompt_ms` is re-assigned at first token, so it **includes the first token's decode** — it is time-to-first-token from prompt start, not the bare prompt pass.
 - `prompt_ms + predicted_ms` ≠ request latency. Queue/scheduling wait before `t_start_process_prompt` is unmeasured.
-- The repo's own test fixtures (`Infra/ContainerHealth/tests/fixtures/proxy-harness.mjs`, `tests/llama.unit.spec.ts`) encode a chunk shape llama.cpp **never emits** — `usage`+`timings` alongside both a populated delta and `finish_reason`. A parser test written against that fixture passes while the parser drops the real chunk. Use the delta-less shape.
+- The metrics chunk is **delta-less**: `timings`/`usage` ride the `finish_reason` chunk, whose `delta` is an empty object. A fixture that hangs them on a chunk with a *populated* delta encodes a shape llama.cpp **never emits**, and a parser test written against it passes while the parser drops the real chunk. The repo's own fixtures (`Infra/ContainerHealth/tests/fixtures/proxy-harness.mjs`, `tests/llama.unit.spec.ts`) carried exactly that error until it was corrected; do not reintroduce it.
 
 ## Alternatives rejected
 

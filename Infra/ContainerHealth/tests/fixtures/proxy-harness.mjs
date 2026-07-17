@@ -536,7 +536,8 @@ async function handle(service, request, response, server) {
       return;
     }
     const streamed = Buffer.from('data: {"choices":[{"delta":{"reasoning_content":"think 💡"}}]}\r\n\r\n' +
-      'data: {"choices":[{"delta":{"content":"streamed answer"},"finish_reason":"stop"}],"usage":{"completion_tokens":2},"timings":{"predicted_ms":8}}\n\n' +
+      'data: {"choices":[{"delta":{"content":"streamed answer"}}]}\n\n' +
+      'data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"timings":{"predicted_ms":8}}\n\n' +
       'data: [DONE]\n\n', "utf8");
     response.write(streamed.subarray(0, 17));
     setImmediate(() => { response.write(streamed.subarray(17, 63)); setImmediate(() => response.end(streamed.subarray(63))); });
