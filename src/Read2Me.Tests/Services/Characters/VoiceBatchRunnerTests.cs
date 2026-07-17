@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Characters;
 using Read2Me.Core.Models;
 using Read2Me.Services.Events;
+using Read2Me.Services.Llm;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Characters;
@@ -20,11 +21,23 @@ public class VoiceBatchRunnerTests
 
     private static (VoiceBatchRunner Runner, List<VoiceBatchEvent> Events) BuildRunner()
     {
+        var (runner, events, _) = BuildRunnerWithLlmEvents();
+        return (runner, events);
+    }
+
+    private static (VoiceBatchRunner Runner, List<VoiceBatchEvent> Events, List<LlmStreamEvent> LlmEvents)
+        BuildRunnerWithLlmEvents()
+    {
         var broadcaster = new EventBroadcaster<VoiceBatchEvent>();
         var events = new List<VoiceBatchEvent>();
         broadcaster.Event += e => { lock (events) events.Add(e); };
-        var runner = new VoiceBatchRunner(NullLogger<VoiceBatchRunner>.Instance, broadcaster);
-        return (runner, events);
+
+        var llmBroadcaster = new EventBroadcaster<LlmStreamEvent>();
+        var llmEvents = new List<LlmStreamEvent>();
+        llmBroadcaster.Event += e => { lock (llmEvents) llmEvents.Add(e); };
+
+        var runner = new VoiceBatchRunner(NullLogger<VoiceBatchRunner>.Instance, broadcaster, llmBroadcaster);
+        return (runner, events, llmEvents);
     }
 
     private static PhaseDeps DummyDeps() => new(null!, null!, null!);
@@ -189,5 +202,83 @@ public class VoiceBatchRunnerTests
         Assert.IsType<VoiceUpdated>(events[4]);
         Assert.IsType<BatchCompleted>(events[5]);
         Assert.Equal(6, events.Count);
+    }
+
+    // ── Throughput Run boundary ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RunPhaseAsync_BatchOfN_PublishesExactlyOneRunStartedAndOneRunEnded()
+    {
+        var (runner, _, llmEvents) = BuildRunnerWithLlmEvents();
+        var phase = new FakeSweepPhase(new[] { "a", "b", "c" });
+
+        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
+
+        // A batch of N is ONE Throughput Run — the total answers "how fast was the batch",
+        // not "how fast was the last item".
+        Assert.Collection(llmEvents,
+            e => Assert.IsType<RunStarted>(e),
+            e => Assert.IsType<RunEnded>(e));
+    }
+
+    [Fact]
+    public async Task RunPhaseAsync_CancelMidSweep_StillEndsTheRun()
+    {
+        var (runner, _, llmEvents) = BuildRunnerWithLlmEvents();
+        using var cts = new CancellationTokenSource();
+
+        var phase = new FakeSweepPhase(
+            items: new[] { "a", "b", "c" },
+            step: _ =>
+            {
+                cts.Cancel();
+                return new PhaseStepOutcome(Ok: true, Update: null, FailReason: null);
+            });
+
+        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, cts.Token);
+
+        Assert.Collection(llmEvents,
+            e => Assert.IsType<RunStarted>(e),
+            e => Assert.IsType<RunEnded>(e));
+    }
+
+    [Fact]
+    public async Task RunPhaseAsync_StepThrows_StillEndsTheRun()
+    {
+        var (runner, _, llmEvents) = BuildRunnerWithLlmEvents();
+        var phase = new FakeSweepPhase(
+            items: new[] { "a" },
+            step: _ => throw new InvalidOperationException("boom"));
+
+        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
+
+        // An unclosed run would strand the next run's total, so a failure must close it too.
+        Assert.Collection(llmEvents,
+            e => Assert.IsType<RunStarted>(e),
+            e => Assert.IsType<RunEnded>(e));
+    }
+
+    [Fact]
+    public async Task RunPhaseAsync_PlanningThrows_PublishesNoRunEventsAtAll()
+    {
+        var (runner, _, llmEvents) = BuildRunnerWithLlmEvents();
+
+        await runner.RunPhaseAsync(new ThrowingPlanPhase(), DummyDeps(), Folder, CancellationToken.None);
+
+        // Nothing was ever sent to an LLM, so there is no run to open — and therefore no
+        // stray RunEnded for an aggregator to close a run it never opened.
+        Assert.Empty(llmEvents);
+    }
+
+    private sealed class ThrowingPlanPhase : ISweepPhase<string>
+    {
+        public string Operation => "Throwing plan";
+        public string DisplayName(string item) => item;
+
+        public Task<IReadOnlyList<string>> PlanAsync(PhaseDeps deps, ProjectFolderId folder, CancellationToken ct)
+            => throw new InvalidOperationException("planning failed");
+
+        public Task<PhaseStepOutcome> RunStepAsync(string item, PhaseDeps deps, CancellationToken ct)
+            => throw new NotSupportedException();
     }
 }

@@ -79,7 +79,8 @@ namespace Read2Me.Tests.Services.Characters
             var sut = new VoiceBatchRunner(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 NullLogger<VoiceBatchRunner>.Instance,
-                broadcaster);
+                broadcaster,
+                new EventBroadcaster<LlmStreamEvent>());
 
             return new Harness(sut, fakeCommandHandler, events);
         }
@@ -234,7 +235,8 @@ namespace Read2Me.Tests.Services.Characters
             var sut = new VoiceBatchRunner(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 NullLogger<VoiceBatchRunner>.Instance,
-                broadcaster);
+                broadcaster,
+                new EventBroadcaster<LlmStreamEvent>());
 
             sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(sut);
@@ -429,7 +431,7 @@ namespace Read2Me.Tests.Services.Characters
             var sp = services.BuildServiceProvider();
             var broadcaster1 = new EventBroadcaster<VoiceBatchEvent>();
             broadcaster1.Event += e => { lock (events) events.Add(e); };
-            var sut = new VoiceBatchRunner(sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<VoiceBatchRunner>.Instance, broadcaster1);
+            var sut = new VoiceBatchRunner(sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<VoiceBatchRunner>.Instance, broadcaster1, new EventBroadcaster<LlmStreamEvent>());
 
             sut.StartGenerateAudio(Folder);
             await WaitForIdleAsync(sut);
@@ -467,7 +469,7 @@ namespace Read2Me.Tests.Services.Characters
             var sp = services.BuildServiceProvider();
             var broadcaster2 = new EventBroadcaster<VoiceBatchEvent>();
             broadcaster2.Event += e => { lock (events) events.Add(e); };
-            var sut = new VoiceBatchRunner(sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<VoiceBatchRunner>.Instance, broadcaster2);
+            var sut = new VoiceBatchRunner(sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<VoiceBatchRunner>.Instance, broadcaster2, new EventBroadcaster<LlmStreamEvent>());
 
             sut.StartGenerateAudio(Folder);
             await WaitForIdleAsync(sut);

@@ -15,11 +15,20 @@ namespace Read2Me.App.State
     ///
     /// The latch clears when the character queue goes idle (nothing queued or processing), so a
     /// finished run doesn't leave a stale escalation label pinned in the dock.
+    ///
+    /// It is also the attribution queue's Throughput Run producer: watching the same queue
+    /// transitions, it brackets a queue's work with <see cref="RunStarted"/>/<see cref="RunEnded"/>
+    /// on the LLM bus so the throughput aggregator never learns about the queue service. The two
+    /// jobs share a subscription but not a rule — the escalation latch only clears once an
+    /// escalation has been latched, whereas a run brackets every queue, escalated or not.
     /// </summary>
     public sealed class AttributionProgressState : IDisposable
     {
         private readonly EventBroadcaster<LlmStreamEvent> _stream;
         private readonly CharacterQueueService _queue;
+
+        /// <summary>True between this producer's RunStarted and its matching RunEnded.</summary>
+        private bool _runActive;
 
         /// <summary>1-based step index of the latest escalation, or null when none is active.</summary>
         public int? Step { get; private set; }
@@ -53,19 +62,28 @@ namespace Read2Me.App.State
             Changed?.Invoke();
         }
 
-        // Clear the latch once the character queue is empty — the run that produced the
-        // escalation has finished (or been cancelled), so the label is no longer current.
         private void OnQueueChanged()
         {
-            if (Step is null) return;
             var snap = _queue.Snapshot();
-            if (snap.QueuedCount == 0 && snap.ProcessingCount == 0)
+            var busy = snap.QueuedCount > 0 || snap.ProcessingCount > 0;
+
+            // Throughput Run boundary: work appearing on an idle queue opens the run, and the
+            // queue draining closes it — whether it drained by finishing, failing or being
+            // cancelled. Cancellation empties the queue, so it arrives here as an ordinary
+            // transition to idle and the run still ends.
+            if (busy != _runActive)
             {
-                Step = null;
-                ConfigName = null;
-                ItemCount = 0;
-                Changed?.Invoke();
+                _runActive = busy;
+                _stream.Publish(busy ? new RunStarted() : new RunEnded());
             }
+
+            // Clear the latch once the character queue is empty — the run that produced the
+            // escalation has finished (or been cancelled), so the label is no longer current.
+            if (Step is null || busy) return;
+            Step = null;
+            ConfigName = null;
+            ItemCount = 0;
+            Changed?.Invoke();
         }
 
         public void Dispose()

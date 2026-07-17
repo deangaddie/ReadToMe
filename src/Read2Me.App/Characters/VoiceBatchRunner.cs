@@ -8,6 +8,7 @@ using Read2Me.App.Services;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Events;
+using Read2Me.Services.Llm;
 
 namespace Read2Me.App.Characters;
 
@@ -16,6 +17,7 @@ public sealed class VoiceBatchRunner
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<VoiceBatchRunner> _logger;
     private readonly EventBroadcaster<VoiceBatchEvent> _batchEvents;
+    private readonly EventBroadcaster<LlmStreamEvent> _llmEvents;
 
     private readonly object _lock = new();
     private CancellationTokenSource? _cts;
@@ -30,17 +32,20 @@ public sealed class VoiceBatchRunner
 
     public VoiceBatchRunner(
         ILogger<VoiceBatchRunner> logger,
-        EventBroadcaster<VoiceBatchEvent> batchEvents)
-        : this(scopeFactory: null!, logger, batchEvents) { }
+        EventBroadcaster<VoiceBatchEvent> batchEvents,
+        EventBroadcaster<LlmStreamEvent> llmEvents)
+        : this(scopeFactory: null!, logger, batchEvents, llmEvents) { }
 
     public VoiceBatchRunner(
         IServiceScopeFactory scopeFactory,
         ILogger<VoiceBatchRunner> logger,
-        EventBroadcaster<VoiceBatchEvent> batchEvents)
+        EventBroadcaster<VoiceBatchEvent> batchEvents,
+        EventBroadcaster<LlmStreamEvent> llmEvents)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _batchEvents = batchEvents;
+        _llmEvents = llmEvents;
     }
 
     public bool StartGeneratePrompts(ProjectFolderId folder, bool regenerateAll = false)
@@ -102,6 +107,11 @@ public sealed class VoiceBatchRunner
         ProjectFolderId folder,
         CancellationToken ct)
     {
+        // A batch of N is ONE Throughput Run, bracketing the whole foreach at exactly the
+        // BatchStarted/BatchCompleted points. The flag keeps the finally honest: if planning
+        // throws there is no run to end, and every other exit — completion, cancellation,
+        // failure — must close the run or the next run's total is stranded.
+        var runStarted = false;
         try
         {
             lock (_lock) { CurrentOperation = phase.Operation; }
@@ -110,6 +120,8 @@ public sealed class VoiceBatchRunner
 
             lock (_lock) { Total = workList.Count; }
             _batchEvents.Publish(new BatchStarted(phase.Operation, workList.Count));
+            _llmEvents.Publish(new RunStarted());
+            runStarted = true;
 
             foreach (var item in workList)
             {
@@ -176,6 +188,11 @@ public sealed class VoiceBatchRunner
                 LastError = ex.Message;
             }
             _batchEvents.Publish(new BatchCompleted(Processed - Failed, Failed));
+        }
+        finally
+        {
+            if (runStarted)
+                _llmEvents.Publish(new RunEnded());
         }
     }
 }

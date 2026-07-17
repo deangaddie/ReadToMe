@@ -34,6 +34,16 @@ namespace Read2Me.Tests.Fakes
             return this;
         }
 
+        /// <summary>
+        /// Scripts a delta-less metrics chunk, as llama.cpp emits with <c>timings_per_token</c>
+        /// and <c>include_usage</c> on: no text, just root-level server measurements.
+        /// </summary>
+        public ChunkedLlmClient Metrics(LlmTimings? timings = null, LlmUsage? usage = null)
+        {
+            _script.Add(new Step(new LlmChatChunk(null, null, false, timings, usage), null));
+            return this;
+        }
+
         public ChunkedLlmClient Throws(Exception ex)
         {
             _script.Add(new Step(null, ex));

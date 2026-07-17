@@ -23,6 +23,20 @@ namespace Read2Me.Services.Llm
 
                 writer.WriteBoolean("stream", stream);
 
+                // Ask llama.cpp to measure for us. These have different gates: `timings` rides the
+                // final chunk ungated, but `timings_per_token` is the only source of a mid-stream
+                // rate and the only way an aborted request retains a measurement. `usage` is opt-in
+                // via `stream_options` and is what makes TokensIn a real prompt_tokens.
+                writer.WriteBoolean("timings_per_token", true);
+
+                if (stream)
+                {
+                    writer.WritePropertyName("stream_options");
+                    writer.WriteStartObject();
+                    writer.WriteBoolean("include_usage", true);
+                    writer.WriteEndObject();
+                }
+
                 writer.WriteStartArray("messages");
                 writer.WriteStartObject();
                 writer.WriteString("role", "user");

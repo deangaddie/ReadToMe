@@ -9,6 +9,8 @@ using Read2Me.AppData.Entities;
 using Read2Me.Core.Audio;
 using Read2Me.Services;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Services.Events;
+using Read2Me.Services.Llm;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
 using Xunit;
@@ -108,7 +110,8 @@ namespace Read2Me.Tests.App.Characters
                     Substitute.For<IVoiceAudioGenerator>(),
                     new FakeTranscriptionSettings(),
                     new FakeVoiceDesignPromptService(),
-                    Substitute.For<IFileSystem>()));
+                    Substitute.For<IFileSystem>()),
+                new EventBroadcaster<LlmStreamEvent>());
 
             // LoadAsync sets _folderId; then SelectCharacterAsync uses it.
             await presenter.LoadAsync(Folder);
@@ -146,7 +149,8 @@ namespace Read2Me.Tests.App.Characters
                     Substitute.For<IVoiceAudioGenerator>(),
                     new FakeTranscriptionSettings(),
                     new FakeVoiceDesignPromptService(),
-                    Substitute.For<IFileSystem>()));
+                    Substitute.For<IFileSystem>()),
+                new EventBroadcaster<LlmStreamEvent>());
 
             // Simulate folderId being set.
             await presenter.LoadAsync(Folder);

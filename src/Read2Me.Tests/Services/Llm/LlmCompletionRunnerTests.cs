@@ -11,18 +11,22 @@ namespace Read2Me.Tests.Services.Llm
     {
         private static LlmServerConfig Config() => new()
         {
+            Id = 7,
             Name = "Local",
             BaseUrl = "http://localhost:8080",
         };
 
         private readonly FakeAiServiceReporter _reporter = new();
         private readonly EventBroadcaster<LlmStreamEvent> _broadcaster = new();
+        private readonly EventBroadcaster<LlmTimingsSample> _samples = new();
         private readonly List<LlmStreamEvent> _events = [];
+        private readonly List<LlmTimingsSample> _sampled = [];
 
         private LlmCompletionRunner Runner(ChunkedLlmClient llm)
         {
             _broadcaster.Event += _events.Add;
-            return new LlmCompletionRunner(llm, _reporter, _broadcaster,
+            _samples.Event += _sampled.Add;
+            return new LlmCompletionRunner(llm, _reporter, _broadcaster, _samples,
                 NullLogger<LlmCompletionRunner>.Instance);
         }
 
@@ -49,7 +53,14 @@ namespace Read2Me.Tests.Services.Llm
         [Fact]
         public async Task CompletedRun_BroadcastsStartDeltasCompleted_AndReportsSuccess()
         {
-            var llm = new ChunkedLlmClient().Thinking("hmm").Content("{\"a\":", "1}");
+            // With timings_per_token on, metrics arrive interleaved mid-stream — so a run the
+            // completion scanner stops early still has the server's last reading to report.
+            var llm = new ChunkedLlmClient().Thinking("hmm").Content("{\"a\":")
+                .Metrics(
+                    new LlmTimings(CacheN: null, PromptN: null, PromptMs: null,
+                        PredictedN: 24, PredictedMs: 400),
+                    new LlmUsage(PromptTokens: 17, CompletionTokens: 24, TotalTokens: 41, CachedTokens: null))
+                .Content("1}");
             var runner = Runner(llm);
 
             await runner.RunAsync(
@@ -62,20 +73,113 @@ namespace Read2Me.Tests.Services.Llm
                     var started = Assert.IsType<RequestStarted>(e);
                     Assert.Equal("My label", started.ParagraphPreview);
                     Assert.Equal("the prompt", started.Prompt);
+                    // Config rides request start, keyed by id — the aggregator latches it here
+                    // and attributes the StreamCompleted that follows to that config.
+                    Assert.Equal(7, started.ConfigId);
+                    Assert.Equal("Local", started.ConfigName);
                 },
                 e => Assert.Equal("hmm", Assert.IsType<ThinkingDelta>(e).Text),
                 e => Assert.Equal("{\"a\":", Assert.IsType<ContentDelta>(e).Text),
                 e => Assert.Equal("1}", Assert.IsType<ContentDelta>(e).Text),
                 e =>
                 {
+                    // Every figure is the server's own: prompt tokens from usage, generation from
+                    // timings, and the rate recomputed as predicted_n ÷ predicted_ms.
                     var completed = Assert.IsType<StreamCompleted>(e);
-                    // "the prompt" = 10 chars -> 3 tokens; output estimated per chunk: 5 + 2 chars -> 2 + 1
-                    Assert.Equal(3, completed.TokensIn);
-                    Assert.Equal(3, completed.TokensOut);
+                    Assert.Equal(17, completed.TokensIn);
+                    Assert.Equal(24, completed.TokensOut);
+                    Assert.Equal(400, completed.GenerationMs);
+                    Assert.Equal(60.0, completed.TokensPerSecond!.Value, 6);
                 });
 
             Assert.Equal(["http://localhost:8080"], _reporter.Successes);
             Assert.Empty(_reporter.Failures);
+        }
+
+        // ---- The live reading feed ----
+
+        [Fact]
+        public async Task EveryTimingsCarryingChunk_IsPublishedAsASample_ForTheLiveFigures()
+        {
+            var llm = new ChunkedLlmClient()
+                .Metrics(new LlmTimings(null, null, null, PredictedN: 10, PredictedMs: 100))
+                .Content("{")
+                .Metrics(new LlmTimings(null, null, null, PredictedN: 20, PredictedMs: 200))
+                .Content("}");
+            var runner = Runner(llm);
+
+            await runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), CancellationToken.None);
+
+            Assert.Collection(_sampled,
+                s => Assert.Equal(10, s.Timings.PredictedN),
+                s => Assert.Equal(20, s.Timings.PredictedN));
+        }
+
+        [Fact]
+        public async Task SampleArrivalStamps_AreMonotonic_AndComeFromTheProducer()
+        {
+            // The consumers of a reading are clock-free by design, so the stamp is this class's
+            // job. It must not go backwards, or a ring bucketed on it would chart the past.
+            var llm = new ChunkedLlmClient()
+                .Metrics(new LlmTimings(null, null, null, 10, 100))
+                .Metrics(new LlmTimings(null, null, null, 20, 200));
+            var runner = Runner(llm);
+
+            await runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), CancellationToken.None);
+
+            Assert.Equal(2, _sampled.Count);
+            Assert.True(_sampled[1].Arrival >= _sampled[0].Arrival);
+            Assert.True(_sampled[0].Arrival > TimeSpan.Zero);
+        }
+
+        [Fact]
+        public async Task SamplesStayOffTheStreamEventBus_WhereEverySubscriberRepaints()
+        {
+            // One of these rides every token. On the LlmStreamEvent family it would cost a SignalR
+            // repaint per token per circuit and be journalled for replay.
+            var llm = new ChunkedLlmClient()
+                .Metrics(new LlmTimings(null, null, null, 10, 100))
+                .Content("{}");
+            var runner = Runner(llm);
+
+            await runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), CancellationToken.None);
+
+            // A sample is not an LlmStreamEvent at all — the separation is a type, not a filter a
+            // subscriber has to remember. So the stream bus can only carry the turn's own events.
+            Assert.Single(_sampled);
+            Assert.Collection(_events,
+                e => Assert.IsType<RequestStarted>(e),
+                e => Assert.IsType<ContentDelta>(e),
+                e => Assert.IsType<StreamCompleted>(e));
+        }
+
+        [Fact]
+        public async Task AChunkWithNoTimings_PublishesNoSample()
+        {
+            // Absence is not a reading of zero — a backend that measures nothing feeds nothing.
+            var llm = new ChunkedLlmClient().Content("{", "}");
+            var runner = Runner(llm);
+
+            await runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), CancellationToken.None);
+
+            Assert.Empty(_sampled);
+        }
+
+        [Fact]
+        public async Task BackendSendsNoTimings_StreamCompletedCarriesNullsNotZeros()
+        {
+            // Nothing is estimated any more, so a backend that measures nothing reports nothing.
+            // A "0 tok/s" here would claim the model generated nothing.
+            var llm = new ChunkedLlmClient().Content("{}");
+            var runner = Runner(llm);
+
+            await runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), CancellationToken.None);
+
+            var completed = Assert.IsType<StreamCompleted>(_events.Last());
+            Assert.Null(completed.TokensIn);
+            Assert.Null(completed.TokensOut);
+            Assert.Null(completed.GenerationMs);
+            Assert.Null(completed.TokensPerSecond);
         }
 
         // ---- Completion scanner stop ----
@@ -109,6 +213,121 @@ namespace Read2Me.Tests.Services.Llm
 
             Assert.Equal("[1, 2]", result.Raw);
             Assert.Equal(2, llm.ChunksPulled);
+        }
+
+        // ---- Aborts: the last reading must survive the death of the request ----
+
+        /// <summary>
+        /// Scripts a request that generated 24 tokens in 400ms and then died on the next pull.
+        /// The reading arrives mid-stream via <c>timings_per_token</c> — an aborted stream sends no
+        /// final chunk, so that interleaved reading is the only record there will ever be.
+        /// </summary>
+        private static ChunkedLlmClient DiesAfterGenerating(Exception ex) =>
+            new ChunkedLlmClient()
+                .Metrics(new LlmTimings(CacheN: null, PromptN: null, PromptMs: null,
+                    PredictedN: 24, PredictedMs: 400))
+                .Content("{\"par")
+                .Throws(ex);
+
+        [Fact]
+        public async Task CancelledMidStream_PublishesItsLastReading_SoTheWorkStillCountsTowardTheRunTotal()
+        {
+            // The user stopped an in-flight send. It really generated 24 tokens; without this the
+            // run total under-counts in the direction that looks plausible.
+            var llm = DiesAfterGenerating(new OperationCanceledException("stopped"));
+            var runner = Runner(llm);
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), cts.Token));
+
+            var aborted = Assert.IsType<StreamAborted>(_events[^1]);
+            Assert.Equal(24, aborted.TokensOut);
+            Assert.Equal(400, aborted.GenerationMs);
+            Assert.Equal(60.0, aborted.TokensPerSecond!.Value, 6);
+        }
+
+        [Fact]
+        public async Task CancelWrappedInAnotherExceptionType_StillPublishesItsLastReading()
+        {
+            // The other cancel path: a client that surfaced the cancel as its own exception type.
+            // It is still a cancel, and the tokens it generated are still real.
+            var llm = DiesAfterGenerating(new InvalidOperationException("wrapped cancel"));
+            _reporter.Managed = true;
+            var runner = Runner(llm);
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            await Assert.ThrowsAsync<OperationCanceledException>(() =>
+                runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), cts.Token));
+
+            Assert.Equal(24, Assert.IsType<StreamAborted>(_events[^1]).TokensOut);
+        }
+
+        [Fact]
+        public async Task ACancelPublishesNoStreamFailed_AndSurfacesNoErrorToTheUser()
+        {
+            // A cancel is not a service failure. StreamFailed is what LlmStreamView renders in the
+            // error colour, so the measurement had to arrive on an event of its own rather than by
+            // widening StreamFailed to carry it.
+            var llm = DiesAfterGenerating(new OperationCanceledException("stopped"));
+            _reporter.Managed = true;
+            var runner = Runner(llm);
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), cts.Token));
+
+            Assert.DoesNotContain(_events, e => e is StreamFailed);
+            Assert.Empty(_reporter.Failures);
+        }
+
+        [Fact]
+        public async Task FailedMidStream_PublishesItsLastReading_AndStillSurfacesTheError()
+        {
+            // The watchdog killed a wedged container. Both things are true and neither is the
+            // other's business: 24 tokens were really generated, and the user still needs the error.
+            var llm = DiesAfterGenerating(new HttpRequestException("connection reset"));
+            var runner = Runner(llm);
+
+            await runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), CancellationToken.None);
+
+            var aborted = Assert.IsType<StreamAborted>(_events[^2]);
+            Assert.Equal(24, aborted.TokensOut);
+            Assert.Equal(400, aborted.GenerationMs);
+            Assert.Equal("connection reset", Assert.IsType<StreamFailed>(_events[^1]).Reason);
+        }
+
+        [Fact]
+        public async Task AnAbortedRequestNeverPublishesStreamCompleted()
+        {
+            // The stream did not complete. Reusing StreamCompleted would have needed no aggregator
+            // change at all, and would have lied to every future subscriber that reads it as
+            // "this request succeeded".
+            var llm = DiesAfterGenerating(new HttpRequestException("down"));
+            var runner = Runner(llm);
+
+            await runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), CancellationToken.None);
+
+            Assert.DoesNotContain(_events, e => e is StreamCompleted);
+        }
+
+        [Fact]
+        public async Task DiedBeforeAnyReadingArrived_ReportsAbsence_NeverZero()
+        {
+            // A request killed during model load or prompt eval measured nothing. "0 tok/s" would
+            // claim it generated nothing; null says we do not know, and cannot zero a total.
+            var llm = new ChunkedLlmClient().Throws(new HttpRequestException("died on connect"));
+            var runner = Runner(llm);
+
+            await runner.RunAsync(new LlmRunRequest(Config(), "p", "L"), CancellationToken.None);
+
+            var aborted = Assert.IsType<StreamAborted>(_events[^2]);
+            Assert.Null(aborted.TokensOut);
+            Assert.Null(aborted.GenerationMs);
+            Assert.Null(aborted.TokensPerSecond);
         }
 
         // ---- Cancellation ----

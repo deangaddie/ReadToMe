@@ -1,0 +1,70 @@
+@*
+    The live Generation Rate, deliberately demoted: a sparkline plus a `now NN.N tok/s` subscript
+    that sits under whatever surface is showing the Run Throughput headline. The live number is the
+    exciting one, but it cannot be acted on — it says *steady vs stuttering* and nothing else
+    (decision 04).
+
+    Pull, not push: this reads a snapshot handed to it by whoever is already painting. It subscribes
+    to nothing and starts no timer, which is what makes per-token render amplification structurally
+    impossible rather than merely throttled (decision 06).
+*@
+<span style="display:inline-flex; align-items:center; gap:6px;">
+    @* The chart's box is reserved at full width from the first render and the bars fill it
+       right-to-left. A chart that grew its own width would reflow the text beside it on every
+       tick — unacceptable inside StatusDock's already-dense row. *@
+    <span style="display:inline-flex; align-items:flex-end; gap:@(TickGapPx)px; flex:none;
+                 width:@(BoxWidthPx)px; height:@(BoxHeightPx)px;">
+        @{
+            // Scaled to this window's own max, never an absolute ceiling: a 4b at 90 tok/s and a
+            // 26b at 12 tok/s both fill the height, so the chart reads as steady-vs-stuttering
+            // rather than fast-vs-slow. The per-config table carries fast-vs-slow (decision 04).
+            var peak = Peak(Snapshot.GenerationRateHistory);
+        }
+        @foreach (var (rate, slot) in Snapshot.GenerationRateHistory.Select((r, i) => (r, i)))
+        {
+            @* An absent bucket keeps its slot but draws no bar: a gap in the chart means "nothing
+               was generating", which is the stutter this exists to show. A measured 0 draws its
+               floor tick instead — it is a stall the server actually measured. *@
+            <span @key="slot"
+                  style="width:@(TickWidthPx)px; flex:none; background:currentColor;
+                         opacity:@(rate is null ? "0" : "0.45");
+                         height:@(BarHeightPx(rate, peak))px;"></span>
+        }
+    </span>
+    <span style="@ThroughputText.StyleFor(Snapshot.GenerationRate)">now @ThroughputText.Rate(Snapshot.GenerationRate)</span>
+</span>
+
+@code {
+    /// <summary>
+    /// The run's figures, pulled once by the surface that is painting so the headline beside this
+    /// subscript can never come from a different moment than the subscript itself.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ThroughputSnapshot Snapshot { get; set; } = ThroughputSnapshot.Empty;
+
+    // Locked by the prototype (decision 04): a fixed 60px box, 20 ticks of 2px with a 1px gap,
+    // 14px tall. The tick count is the ring's bucket count, not a UI choice — the aggregator owns
+    // the span so every tab charts the same run identically.
+    private const int TickWidthPx = 2;
+    private const int TickGapPx = 1;
+    private const int BoxHeightPx = 14;
+    private const int BoxWidthPx = ThroughputSnapshot.HistoryBuckets * (TickWidthPx + TickGapPx);
+
+    /// <summary>The tallest bucket in the window, or null when the window measured nothing.</summary>
+    private static double? Peak(IReadOnlyList<double?> history)
+    {
+        double? peak = null;
+        foreach (var rate in history)
+        {
+            if (rate is { } r && (peak is null || r > peak))
+                peak = r;
+        }
+
+        return peak;
+    }
+
+    private static int BarHeightPx(double? rate, double? peak) =>
+        rate is { } r && peak is { } p && p > 0
+            ? Math.Max(1, (int)Math.Round(r / p * BoxHeightPx))
+            : rate is null ? 0 : 1;
+}

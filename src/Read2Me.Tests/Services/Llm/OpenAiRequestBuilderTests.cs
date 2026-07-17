@@ -68,6 +68,37 @@ namespace Read2Me.Tests.Services.Llm
         }
 
         [Fact]
+        public void BuildChatBody_AsksForPerTokenTimings()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true);
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.True(doc.RootElement.GetProperty("timings_per_token").GetBoolean());
+        }
+
+        [Fact]
+        public void BuildChatBody_AsksForUsageOnStream()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true);
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var options = doc.RootElement.GetProperty("stream_options");
+            Assert.True(options.GetProperty("include_usage").GetBoolean());
+        }
+
+        // stream_options is meaningless on a non-streamed request and the OpenAI spec rejects it
+        // there; the usage totals come back in the response body anyway.
+        [Fact]
+        public void BuildChatBody_OmitsStreamOptionsWhenNotStreaming()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: false);
+            Assert.DoesNotContain("stream_options", json);
+        }
+
+        [Fact]
         public void BuildChatBody_SingleUserMessageWithPrompt()
         {
             var cfg = new LlmServerConfig { BaseUrl = "http://x" };

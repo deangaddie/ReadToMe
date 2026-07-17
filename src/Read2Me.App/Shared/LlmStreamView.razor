@@ -79,8 +79,8 @@
                         {
                             <div style="padding:4px 16px 8px; opacity:0.5;">
                                 <MudText Typo="Typo.caption">
-                                    @turn.Stats.TokensIn in · @turn.Stats.TokensOut out · @turn.Stats.ElapsedSeconds.ToString("F1")s
-                                    · @turn.Stats.TokensPerSecond.ToString("F1") tok/s
+                                    @Count(turn.Stats.TokensIn) in · @Count(turn.Stats.TokensOut) out
+                                    · @Seconds(turn.Stats.GenerationMs) gen · @Rate(turn.Stats.TokensPerSecond) tok/s
                                 </MudText>
                             </div>
                         }
@@ -159,6 +159,20 @@
     }
 
     private StreamTurn? CurrentTurn => _turns.LastOrDefault();
+
+    // Absence renders as absence. A backend that sends no timings, or a fully cache-hit prompt
+    // llama.cpp could not measure, leaves the slot showing "—" rather than a "0" that would read
+    // as "it generated nothing" (ADR 0003). Nothing here is estimated.
+    private const string Absent = "—";
+
+    private static string Count(int? value) => value?.ToString() ?? Absent;
+
+    /// <summary>Server-measured generation time, shown in seconds. Excludes load and queue wait.</summary>
+    private static string Seconds(double? milliseconds) =>
+        milliseconds is { } ms ? $"{(ms / 1000.0).ToString("F1")}s" : Absent;
+
+    private static string Rate(double? tokensPerSecond) =>
+        tokensPerSecond?.ToString("F1") ?? Absent;
 
     public void Dispose() => Journal.Unsubscribe(OnEvent);
 

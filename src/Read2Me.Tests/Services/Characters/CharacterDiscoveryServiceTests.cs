@@ -23,10 +23,15 @@ namespace Read2Me.Tests.Services.Characters
             new(Factory, NullLogger<LlmPromptService>.Instance);
 
         private CharacterDiscoveryService NewService(
-            FakeLlmCompletionRunner runner, LlmSettingsService settings)
+            FakeLlmCompletionRunner runner, LlmSettingsService settings) =>
+            NewService(runner, settings, new EventBroadcaster<LlmStreamEvent>());
+
+        private CharacterDiscoveryService NewService(
+            FakeLlmCompletionRunner runner, LlmSettingsService settings,
+            EventBroadcaster<LlmStreamEvent> stream)
         {
             var reader = new DiscoveryReader();
-            return new(runner, settings, reader, new ChapterOutlineBuilder(reader), NewPrompts(),
+            return new(runner, settings, reader, new ChapterOutlineBuilder(reader), NewPrompts(), stream,
                 NullLogger<CharacterDiscoveryService>.Instance);
         }
 
@@ -95,6 +100,63 @@ namespace Read2Me.Tests.Services.Characters
             var c = Assert.Single(outcome.Characters);
             Assert.Equal("Bilbo", c.Name);
             Assert.Equal(["Mr. Baggins"], c.Aliases);
+        }
+
+        // ── Throughput Run boundary ────────────────────────────────────────────
+
+        private static List<LlmStreamEvent> Runs(EventBroadcaster<LlmStreamEvent> stream)
+        {
+            var events = new List<LlmStreamEvent>();
+            stream.Event += e => { if (e is RunStarted or RunEnded) events.Add(e); };
+            return events;
+        }
+
+        [Fact]
+        public async Task Discover_BracketsItselfAsAThroughputRunOfOne()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var stream = new EventBroadcaster<LlmStreamEvent>();
+            var runs = Runs(stream);
+
+            await NewService(new FakeLlmCompletionRunner().Completes(ValidJson), settings, stream)
+                .DiscoverAsync(Folder, CancellationToken.None);
+
+            // A single request is a genuine run of one — that is what makes a "total" mean
+            // the same thing on every surface.
+            Assert.Collection(runs,
+                e => Assert.IsType<RunStarted>(e),
+                e => Assert.IsType<RunEnded>(e));
+        }
+
+        [Fact]
+        public async Task Discover_RunThrows_StillEndsTheRun()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var stream = new EventBroadcaster<LlmStreamEvent>();
+            var runs = Runs(stream);
+            var runner = new FakeLlmCompletionRunner().Throws(new InvalidOperationException("boom"));
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                NewService(runner, settings, stream).DiscoverAsync(Folder, CancellationToken.None));
+
+            Assert.Collection(runs,
+                e => Assert.IsType<RunStarted>(e),
+                e => Assert.IsType<RunEnded>(e));
+        }
+
+        [Fact]
+        public async Task Discover_NoConfig_PublishesNoRunEvents()
+        {
+            var stream = new EventBroadcaster<LlmStreamEvent>();
+            var runs = Runs(stream);
+
+            await NewService(new FakeLlmCompletionRunner().Completes(ValidJson), NewSettings(), stream)
+                .DiscoverAsync(Folder, CancellationToken.None);
+
+            // Nothing reached an LLM, so there was no run to bracket.
+            Assert.Empty(runs);
         }
 
         [Fact]

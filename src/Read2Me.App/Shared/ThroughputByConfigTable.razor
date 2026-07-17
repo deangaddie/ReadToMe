@@ -1,0 +1,44 @@
+@*
+    The run's per-config breakdown, so an escalation from a 4b to a 26b is visible instead of
+    averaged away.
+
+    Revealed at run end, and only there (decision 04): mid-run the breakdown is incomplete and
+    moving, so it is noise; at run end it is the actual comparison the per-config decision exists to
+    serve. A run that never escalated renders a one-row table — honest and cheap. Deliberately not
+    always-visible chips and not a <details> expander, both of which were prototyped and rejected.
+
+    Pull, not push: it reads a snapshot handed to it by whoever is already painting, subscribes to
+    nothing and starts no timer (decision 06).
+*@
+@if (Snapshot is { HasRun: true, IsRunActive: false, PerConfig.Count: > 0 })
+{
+    <MudSimpleTable Dense="true" Hover="false" Elevation="0" Class="mt-2">
+        <thead>
+            <tr>
+                <th>Config</th>
+                <th>tok/s</th>
+                <th>req</th>
+                <th>tokens</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in Snapshot.PerConfig)
+            {
+                @* Keyed by config id, never by name: a config renamed mid-run stays one row, and
+                   the name is only ever a label resolved at render. *@
+                <tr @key="row.ConfigId">
+                    <td>@row.ConfigName</td>
+                    <td style="@ThroughputText.StyleFor(row.TokensPerSecond)">@ThroughputText.BareRate(row.TokensPerSecond)</td>
+                    <td>@row.Requests</td>
+                    <td>@ThroughputText.Count(row.TokensOut)</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    /// <summary>The run's figures, pulled by the surface that is painting.</summary>
+    [Parameter, EditorRequired]
+    public ThroughputSnapshot Snapshot { get; set; } = ThroughputSnapshot.Empty;
+}

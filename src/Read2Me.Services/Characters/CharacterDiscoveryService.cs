@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
+using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
@@ -24,6 +25,7 @@ namespace Read2Me.Services.Characters
         IProjectReader reader,
         ChapterOutlineBuilder outlineBuilder,
         LlmPromptService prompts,
+        EventBroadcaster<LlmStreamEvent> stream,
         ILogger<CharacterDiscoveryService> logger)
     {
         public virtual async Task<DiscoveryOutcome> DiscoverAsync(
@@ -52,10 +54,22 @@ namespace Read2Me.Services.Characters
 
             logger.LogDebug("Sending character-discovery prompt for {Folder}", folderId.Value);
 
-            var result = await runner.RunAsync<IReadOnlyList<DiscoveredCharacter>>(
-                new LlmRunRequest(config, prompt, "Discover characters",
-                    CharacterDiscoverySchema.JsonSchema, CompletionShape.Object),
-                CharacterDiscoveryParser.TryParse, ct);
+            // Discovery is one request, and one request is a genuine Throughput Run of one.
+            // The bracket starts here rather than at the top of the method: the early returns
+            // above never reach the LLM, so there is no run to open or close.
+            LlmRunResult<IReadOnlyList<DiscoveredCharacter>> result;
+            stream.Publish(new RunStarted());
+            try
+            {
+                result = await runner.RunAsync<IReadOnlyList<DiscoveredCharacter>>(
+                    new LlmRunRequest(config, prompt, "Discover characters",
+                        CharacterDiscoverySchema.JsonSchema, CompletionShape.Object),
+                    CharacterDiscoveryParser.TryParse, ct);
+            }
+            finally
+            {
+                stream.Publish(new RunEnded());
+            }
 
             switch (result.Outcome)
             {

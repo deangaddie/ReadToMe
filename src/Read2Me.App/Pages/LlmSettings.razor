@@ -1,8 +1,9 @@
 @page "/llm-settings"
-@using System.Text
 @using System.Threading
 @inject LlmSettingsService SettingsService
-@inject ILlmClient LlmClient
+@inject ILlmCompletionRunner CompletionRunner
+@inject Read2Me.Services.Events.EventBroadcaster<LlmStreamEvent> LlmEvents
+@inject ThroughputAggregator Throughput
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @implements IDisposable
@@ -97,37 +98,29 @@ else
                            StartIcon="@Icons.Material.Filled.Stop" OnClick="Stop">
                     Stop
                 </MudButton>
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @($"{_currentTps:F1} tok/s")
-                </MudText>
-            }
-            else if (_stats != null)
-            {
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @($"avg {_stats.AvgTps:F1} tok/s · ↑ {_stats.TokensIn} · ↓ {_stats.TokensOut} · {_stats.Elapsed.TotalSeconds:F1}s")
-                </MudText>
             }
         </MudStack>
 
-        @if (_thinking.Length > 0)
-        {
-            <MudExpansionPanels Elevation="0" Class="mb-2">
-                <MudExpansionPanel Text="Thinking" Expanded="true">
-                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap;opacity:0.7;">@_thinking.ToString()</MudText>
-                </MudExpansionPanel>
-            </MudExpansionPanels>
+        @* One pull per paint, shared by the headline, the subscript and the table, so the three
+           can never report different moments of the same run. *@
+        @{
+            var throughput = Throughput.Snapshot;
         }
+        @* Run Throughput is the headline here exactly as everywhere else. A test send is a
+           Throughput Run of one, so it restates the request's own rate — that redundancy is kept
+           deliberately: special-casing it would make this page the one surface displaying a
+           different figure from the rest of the app (decision 04). *@
+        <MudText Typo="Typo.h5" Style="@ThroughputText.StyleFor(throughput.RunThroughput)">
+            @ThroughputText.Rate(throughput.RunThroughput)
+        </MudText>
+        <MudText Typo="Typo.caption" Style="opacity:0.6;">
+            <GenerationRateSubscript Snapshot="throughput" />
+        </MudText>
+        <ThroughputByConfigTable Snapshot="throughput" />
 
-        @if (_response.Length > 0)
-        {
-            <MudText Typo="Typo.subtitle2" Class="mb-1">Response</MudText>
-            <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_response.ToString()</MudText>
-        }
-
-        @if (_streaming && _thinking.Length == 0 && _response.Length == 0)
-        {
-            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-        }
+        <div style="height:40vh;" class="mt-3">
+            <LlmStreamView />
+        </div>
     </MudPaper>
 }
 
@@ -137,23 +130,22 @@ else
     LlmServerConfig? _activeConfig;
 
     string _prompt = "";
-    readonly StringBuilder _thinking = new();
-    readonly StringBuilder _response = new();
     bool _streaming;
     CancellationTokenSource? _cts;
-
-    double _currentTps;
-    StreamStats? _stats;
-
-    sealed record StreamStats(double AvgTps, int TokensIn, int TokensOut, TimeSpan Elapsed);
 
     protected override async Task OnInitializedAsync()
     {
         SettingsService.OnChanged += HandleChanged;
+        // This page's paint cadence for the throughput figures, and the one it had before it moved
+        // onto the completion runner. The aggregator raises no event and is never subscribed to —
+        // the figures are pulled from the snapshot during a repaint the stream already drives.
+        LlmEvents.Event += HandleStreamEvent;
         await LoadAsync();
     }
 
     void HandleChanged() => InvokeAsync(LoadAsync);
+
+    void HandleStreamEvent(LlmStreamEvent e) => InvokeAsync(StateHasChanged);
 
     async Task LoadAsync()
     {
@@ -210,60 +202,33 @@ else
     {
         if (_activeConfig == null) return;
 
-        _thinking.Clear();
-        _response.Clear();
         _streaming = true;
-        _stats = null;
-        _currentTps = 0;
         _cts = new CancellationTokenSource();
-
-        var metrics = new Read2Me.Services.Llm.StreamMetrics(_prompt);
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-
         StateHasChanged();
 
+        // A test send is a Throughput Run of one — deliberately, so this page shows the same
+        // headline as every other surface rather than a figure of its own.
+        LlmEvents.Publish(new RunStarted());
         try
         {
-            await foreach (var chunk in LlmClient.StreamChatAsync(_activeConfig, _prompt, ct: _cts.Token))
-            {
-                bool changed = false;
-                if (chunk.Thinking != null)
-                {
-                    _thinking.Append(chunk.Thinking);
-                    metrics.AddOutput(chunk.Thinking);
-                    changed = true;
-                }
-                if (chunk.Content != null)
-                {
-                    _response.Append(chunk.Content);
-                    metrics.AddOutput(chunk.Content);
-                    changed = true;
-                }
-                if (changed)
-                {
-                    _currentTps = metrics.TokensPerSecond(sw.Elapsed.TotalSeconds);
-                    await InvokeAsync(StateHasChanged);
-                }
-            }
+            // Streaming text, thinking and per-request stats all render from the LLM event
+            // bus via LlmStreamView — the runner publishes them; this page only starts the run.
+            var result = await CompletionRunner.RunAsync(
+                new LlmRunRequest(_activeConfig, _prompt, $"Test send — {_activeConfig.Name}",
+                    Shape: CompletionShape.None),
+                _cts.Token);
+
+            if (result.Outcome != LlmRunOutcome.Completed)
+                Snackbar.Add($"Request failed: {result.Error}", Severity.Error);
         }
         catch (OperationCanceledException)
         {
             // User stopped the stream — keep whatever was received.
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Request failed: {ex.Message}", Severity.Error);
-        }
         finally
         {
-            sw.Stop();
-            _stats = new StreamStats(
-                AvgTps: metrics.TokensPerSecond(sw.Elapsed.TotalSeconds),
-                TokensIn: metrics.TokensIn,
-                TokensOut: metrics.TokensOut,
-                Elapsed: sw.Elapsed);
+            LlmEvents.Publish(new RunEnded());
             _streaming = false;
-            _currentTps = 0;
             _cts?.Dispose();
             _cts = null;
             StateHasChanged();
@@ -275,6 +240,7 @@ else
     public void Dispose()
     {
         SettingsService.OnChanged -= HandleChanged;
+        LlmEvents.Event -= HandleStreamEvent;
         _cts?.Cancel();
         _cts?.Dispose();
     }

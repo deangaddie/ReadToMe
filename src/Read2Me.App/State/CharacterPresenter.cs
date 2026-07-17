@@ -14,7 +14,8 @@ namespace Read2Me.App.State
     public class CharacterPresenter(
         IProjectReader reader,
         IBookCommandHandler commandHandler,
-        VoiceOrchestrator voiceOrchestrator)
+        VoiceOrchestrator voiceOrchestrator,
+        Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Llm.LlmStreamEvent> llmEvents)
     {
         public bool IsLoading { get; private set; }
         public bool IsBusy { get; private set; }
@@ -371,6 +372,9 @@ namespace Read2Me.App.State
             string renderedPrompt,
             CancellationToken ct = default)
         {
+            // A single voice design is a Throughput Run of one. The batch path never comes
+            // through here — it brackets its whole sweep as one run in VoiceBatchRunner.
+            llmEvents.Publish(new Read2Me.Services.Llm.RunStarted());
             try
             {
                 return await voiceOrchestrator.GenerateWithPromptAsync(renderedPrompt, ct);
@@ -380,6 +384,10 @@ namespace Read2Me.App.State
                 Error = ex.Message;
                 NotifyStateChanged();
                 return null;
+            }
+            finally
+            {
+                llmEvents.Publish(new Read2Me.Services.Llm.RunEnded());
             }
         }
 

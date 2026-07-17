@@ -82,6 +82,15 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton(sp => new EventJournal<LlmStreamEvent>(
             sp.GetRequiredService<EventBroadcaster<LlmStreamEvent>>(),
             e => e is RequestStarted));
+        // Its own family, deliberately: one of these rides every token, and every LlmStreamEvent
+        // subscriber repaints or journals whatever it receives. Not journalled — a reading is only
+        // meaningful live, and replaying a turn's worth to a late subscriber would chart the past
+        // as the present. See LlmTimingsSample.
+        services.AddSingleton<EventBroadcaster<LlmTimingsSample>>();
+        // App-scoped: one queue runs at a time on one GPU, so every circuit should read the same
+        // totals. Resolved eagerly at startup, because it only sees the events published after it
+        // subscribes — a lazily-created aggregator would miss the run that created it.
+        services.AddSingleton<ThroughputAggregator>();
         return services;
     }
 

@@ -8,6 +8,8 @@ using Read2Me.Core.Models;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Services.Events;
+using Read2Me.Services.Llm;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
 using Xunit;
@@ -33,7 +35,8 @@ namespace Read2Me.Tests.State
 
         private static CharacterPresenter CreatePresenter(
             IAudioPipeline? audioPipeline = null,
-            IBookCommandHandler? commandHandler = null)
+            IBookCommandHandler? commandHandler = null,
+            EventBroadcaster<LlmStreamEvent>? llmEvents = null)
         {
             var reader = Substitute.For<IProjectReader>();
             reader.GetCharactersWithAliasesAsync(Folder)
@@ -50,7 +53,27 @@ namespace Read2Me.Tests.State
                 voiceDesignPromptService: new FakeVoiceDesignPromptService(),
                 fileSystem: Substitute.For<IFileSystem>());
 
-            return new CharacterPresenter(reader, cmd, orchestrator);
+            return new CharacterPresenter(reader, cmd, orchestrator,
+                llmEvents ?? new EventBroadcaster<LlmStreamEvent>());
+        }
+
+        [Fact]
+        public async Task GenerateDesignPrompt_LlmFails_StillBracketsAThroughputRunOfOne()
+        {
+            var stream = new EventBroadcaster<LlmStreamEvent>();
+            var runs = new System.Collections.Generic.List<LlmStreamEvent>();
+            stream.Event += e => { if (e is RunStarted or RunEnded) runs.Add(e); };
+
+            // The fake design service always fails, so this also covers the rule that a failed
+            // run must still close — an unclosed run strands the next run's total.
+            var presenter = CreatePresenter(llmEvents: stream);
+            await presenter.LoadAsync(Folder);
+
+            Assert.Null(await presenter.GenerateDesignPromptWithTextAsync("rendered prompt"));
+
+            Assert.Collection(runs,
+                e => Assert.IsType<RunStarted>(e),
+                e => Assert.IsType<RunEnded>(e));
         }
 
         [Fact]
@@ -165,7 +188,7 @@ namespace Read2Me.Tests.State
                 voiceDesignPromptService: new FakeVoiceDesignPromptService(),
                 fileSystem: Substitute.For<IFileSystem>());
 
-            var presenter = new CharacterPresenter(reader, cmd, orchestrator);
+            var presenter = new CharacterPresenter(reader, cmd, orchestrator, new EventBroadcaster<LlmStreamEvent>());
             await presenter.LoadAsync(Folder);
             await presenter.SelectCharacterAsync(character);
             return presenter;
@@ -375,7 +398,8 @@ namespace Read2Me.Tests.State
                 voiceDesignPromptService: new FakeVoiceDesignPromptService(),
                 fileSystem: Substitute.For<IFileSystem>());
 
-            var presenter = new CharacterPresenter(reader, Substitute.For<IBookCommandHandler>(), orchestrator);
+            var presenter = new CharacterPresenter(reader, Substitute.For<IBookCommandHandler>(), orchestrator,
+                new EventBroadcaster<LlmStreamEvent>());
             await presenter.LoadAsync(Folder);
             await presenter.SelectCharacterAsync(selectedChar);
 

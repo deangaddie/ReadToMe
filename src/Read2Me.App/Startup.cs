@@ -81,6 +81,11 @@ namespace Read2Me.App
             app.ApplicationServices.GetRequiredService<EventJournal<LlmStreamEvent>>();
             app.ApplicationServices.GetRequiredService<EventJournal<AudioGenEvent>>();
 
+            // Likewise the throughput aggregator: it only sees events published after it
+            // subscribes, and nothing resolves it until a surface paints — by which time the run
+            // it should have been measuring has already started.
+            app.ApplicationServices.GetRequiredService<ThroughputAggregator>();
+
             app.UseRouting();
 
             app.UseEndpoints(endpoints =>

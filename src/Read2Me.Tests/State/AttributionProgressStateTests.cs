@@ -50,7 +50,7 @@ namespace Read2Me.Tests.State
         public void NonEscalationEvents_Ignored()
         {
             var (state, stream, _) = Make();
-            stream.Publish(new RequestStarted("preview", "prompt"));
+            stream.Publish(new RequestStarted("preview", "prompt", 1, "A"));
             stream.Publish(new ContentDelta("x"));
             Assert.False(state.HasEscalation);
         }
@@ -67,6 +67,95 @@ namespace Read2Me.Tests.State
 
             Assert.False(state.HasEscalation);
             Assert.Null(state.Step);
+        }
+
+        // ── Throughput Run boundary ────────────────────────────────────────────
+
+        private static List<LlmStreamEvent> Runs(EventBroadcaster<LlmStreamEvent> stream)
+        {
+            var events = new List<LlmStreamEvent>();
+            stream.Event += e => { if (e is RunStarted or RunEnded) events.Add(e); };
+            return events;
+        }
+
+        [Fact]
+        public void QueueGoesBusyThenIdle_BracketsOneThroughputRun()
+        {
+            var (_, stream, queue) = Make();
+            var runs = Runs(stream);
+
+            queue.Enqueue(new[] { Para(), Para() });
+            queue.CancelAll();
+
+            // Two paragraphs are one attribution queue and therefore one run — the total is
+            // per queue, not per item.
+            Assert.Collection(runs,
+                e => Assert.IsType<RunStarted>(e),
+                e => Assert.IsType<RunEnded>(e));
+        }
+
+        [Fact]
+        public void QueueStaysBusy_DoesNotReopenTheRun()
+        {
+            var (_, stream, queue) = Make();
+            var runs = Runs(stream);
+
+            queue.Enqueue(new[] { Para() });
+            queue.Enqueue(new[] { Para() });
+            queue.Enqueue(new[] { Para() });
+
+            Assert.Single(runs);
+            Assert.IsType<RunStarted>(runs[0]);
+        }
+
+        [Fact]
+        public void QueueCancelled_StillEndsTheRun()
+        {
+            var (_, stream, queue) = Make();
+            var runs = Runs(stream);
+
+            queue.Enqueue(new[] { Para() });
+            queue.CancelAll();
+
+            // Cancelling drains the queue, so it closes the run like any other drain — an
+            // unclosed run would strand the next run's total.
+            Assert.Contains(runs, e => e is RunEnded);
+        }
+
+        [Fact]
+        public void SecondQueue_OpensASecondRun()
+        {
+            var (_, stream, queue) = Make();
+            var runs = Runs(stream);
+
+            queue.Enqueue(new[] { Para() });
+            queue.CancelAll();
+            queue.Enqueue(new[] { Para() });
+            queue.CancelAll();
+
+            Assert.Collection(runs,
+                e => Assert.IsType<RunStarted>(e),
+                e => Assert.IsType<RunEnded>(e),
+                e => Assert.IsType<RunStarted>(e),
+                e => Assert.IsType<RunEnded>(e));
+        }
+
+        [Fact]
+        public void RunBoundary_DoesNotDisturbTheEscalationLatch()
+        {
+            var (state, stream, queue) = Make();
+            var runs = Runs(stream);
+
+            queue.Enqueue(new[] { Para() });
+            stream.Publish(new EscalationStarted(2, "C", 4));
+            Assert.True(state.HasEscalation);
+
+            queue.CancelAll();
+
+            // The latch and the run boundary watch the same transitions but answer different
+            // questions; both still fire.
+            Assert.False(state.HasEscalation);
+            Assert.Contains(runs, e => e is RunEnded);
         }
 
         [Fact]

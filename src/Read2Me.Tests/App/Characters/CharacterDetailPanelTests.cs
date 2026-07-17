@@ -11,6 +11,8 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Services.Events;
+using Read2Me.Services.Llm;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
 using Xunit;
@@ -74,7 +76,8 @@ namespace Read2Me.Tests.App.Characters
                 voiceDesignPromptService: new FakeVoiceDesignPromptService(buildResult, generateResult),
                 fileSystem: Substitute.For<IFileSystem>());
 
-            return new CharacterPresenter(reader, Substitute.For<IBookCommandHandler>(), orchestrator);
+            return new CharacterPresenter(reader, Substitute.For<IBookCommandHandler>(), orchestrator,
+                new EventBroadcaster<LlmStreamEvent>());
         }
 
         private static CharacterDetailPanel CreatePanel(
