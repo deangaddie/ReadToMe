@@ -12,6 +12,7 @@
 @inject VoiceBatchRunner Batch
 @inject EventBroadcaster<VoiceBatchEvent> BatchEvents
 @inject VoicePromptGenerationState VoicePromptState
+@inject ThroughputAggregator Throughput
 @implements IDisposable
 
 @*
@@ -26,6 +27,9 @@
         charSnap.QueuedCount, charSnap.ProcessingCount, charSnap.AverageSecondsPerParagraph,
         charSnap.EstimatedSecondsRemaining, charSnap.CompletedCount, charSnap.CurrentItemElapsedSeconds,
         averageUnit: "para");
+    // One pull per paint keeps the headline, live subscript and end-of-run table coherent.
+    // The existing unconditional ticker below supplies the paint cadence; throughput adds none.
+    var throughput = Throughput.Snapshot;
 
     var audioSnap = AudioQueue.Snapshot();
     var audioVm = QueueStatusViewModel.For(
@@ -46,7 +50,9 @@
     // so their live stream is the LLM stream. Either owns the LLM expander while active.
     var batchDrivesLlm = showBatch && Batch.CurrentOperation == GeneratePromptsPhase.OperationName;
     var llmOwnedByVoice = batchDrivesLlm || showSingleVoice;
-    var showChar = charVm.IsActive || (_expanded == ExpandedStream.Llm && !llmOwnedByVoice);
+    var showChar = charVm.IsActive
+        || AttrProgress.OwnsThroughputSnapshot
+        || (_expanded == ExpandedStream.Llm && !llmOwnedByVoice);
     var showAudio = audioVm.IsActive || _expanded == ExpandedStream.Audio;
 
     var isAudioMode = Presenter.ViewMode == BookViewMode.SplitAudio;
@@ -235,7 +241,12 @@
                     </span>
                 }
                 @if (charVm.ShowQueued) { <span style="opacity:0.7;">@charVm.QueuedText</span> }
-                @if (charVm.ShowAverage) { <span style="opacity:0.7;">@charVm.AverageText</span> }
+                <span style="font-weight:600; @ThroughputText.StyleFor(throughput.RunThroughput)">
+                    @ThroughputText.Rate(throughput.RunThroughput)
+                </span>
+                <span style="opacity:0.6;">
+                    <GenerationRateSubscript Snapshot="throughput" />
+                </span>
                 @if (charVm.ShowEta) { <span style="opacity:0.7;">@charVm.EtaText</span> }
                 @if (charVm.ShowCompleted) { <span style="opacity:0.5;">@charVm.CompletedText</span> }
                 <MudSpacer />
@@ -255,6 +266,7 @@
                     </MudTooltip>
                 }
             </div>
+            <ThroughputByConfigTable Snapshot="throughput" />
         }
 
         @if (showAudio)

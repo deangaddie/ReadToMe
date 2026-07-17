@@ -123,6 +123,23 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
+        public void CompletedAttributionRun_OwnsTheThroughputSnapshotUntilAnotherRunStarts()
+        {
+            var (state, stream, queue) = Make();
+
+            Assert.False(state.OwnsThroughputSnapshot);
+
+            queue.Enqueue(new[] { Para() });
+            Assert.True(state.OwnsThroughputSnapshot);
+
+            queue.CancelAll();
+            Assert.True(state.OwnsThroughputSnapshot);
+
+            stream.Publish(new RunStarted());
+            Assert.False(state.OwnsThroughputSnapshot);
+        }
+
+        [Fact]
         public void SecondQueue_OpensASecondRun()
         {
             var (_, stream, queue) = Make();

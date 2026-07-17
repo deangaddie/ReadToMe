@@ -42,6 +42,12 @@ namespace Read2Me.App.State
         /// <summary>True while an escalation label should be shown in the progress row.</summary>
         public bool HasEscalation => Step is not null;
 
+        /// <summary>
+        /// True while the shared throughput snapshot belongs to the current or most recently
+        /// completed attribution queue. A later non-attribution run takes ownership away.
+        /// </summary>
+        public bool OwnsThroughputSnapshot { get; private set; }
+
         public event Action? Changed;
 
         public AttributionProgressState(
@@ -55,6 +61,12 @@ namespace Read2Me.App.State
 
         private void OnStreamEvent(LlmStreamEvent e)
         {
+            // Our own RunStarted is published only after _runActive becomes true. A RunStarted
+            // received while idle therefore belongs to another surface, whose snapshot must not
+            // be presented as attribution throughput in StatusDock.
+            if (e is RunStarted && !_runActive)
+                OwnsThroughputSnapshot = false;
+
             if (e is not EscalationStarted es) return;
             Step = es.Step;
             ConfigName = es.ConfigName;
@@ -74,6 +86,8 @@ namespace Read2Me.App.State
             if (busy != _runActive)
             {
                 _runActive = busy;
+                if (busy)
+                    OwnsThroughputSnapshot = true;
                 _stream.Publish(busy ? new RunStarted() : new RunEnded());
             }
 
