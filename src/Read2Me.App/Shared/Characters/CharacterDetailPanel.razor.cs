@@ -53,6 +53,7 @@ namespace Read2Me.App.Shared.Characters
         bool _addingAlias;
         string _newAlias = "";
         Guid? _regeneratingPrompt;
+        bool _showAiActivity;
         Guid? _generatingAudio;
         Guid? _transcribing;
         Guid? _renamingVoice;
@@ -301,6 +302,7 @@ namespace Read2Me.App.Shared.Characters
                 // User confirmed — show the per-voice spinner while the core generates.
                 if (result?.Canceled == false && result.Data is string)
                 {
+                    _showAiActivity = true;
                     _regeneratingPrompt = voice.Id;
                     StateHasChanged();
                 }

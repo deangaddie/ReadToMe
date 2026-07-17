@@ -112,6 +112,7 @@ public sealed class VoiceBatchRunner
         // throws there is no run to end, and every other exit — completion, cancellation,
         // failure — must close the run or the next run's total is stranded.
         var runStarted = false;
+        VoiceBatchEvent? terminalEvent = null;
         try
         {
             lock (_lock) { CurrentOperation = phase.Operation; }
@@ -120,8 +121,11 @@ public sealed class VoiceBatchRunner
 
             lock (_lock) { Total = workList.Count; }
             _batchEvents.Publish(new BatchStarted(phase.Operation, workList.Count));
-            _llmEvents.Publish(new RunStarted());
-            runStarted = true;
+            if (phase.DrivesLlm)
+            {
+                _llmEvents.Publish(new RunStarted());
+                runStarted = true;
+            }
 
             foreach (var item in workList)
             {
@@ -165,7 +169,7 @@ public sealed class VoiceBatchRunner
                 CurrentVoiceName = null;
                 CurrentOperation = null;
             }
-            _batchEvents.Publish(new BatchCompleted(Processed - Failed, Failed));
+            terminalEvent = new BatchCompleted(Processed - Failed, Failed);
         }
         catch (OperationCanceledException)
         {
@@ -175,7 +179,7 @@ public sealed class VoiceBatchRunner
                 CurrentVoiceName = null;
                 CurrentOperation = null;
             }
-            _batchEvents.Publish(new BatchCancelled());
+            terminalEvent = new BatchCancelled();
         }
         catch (Exception ex)
         {
@@ -187,12 +191,17 @@ public sealed class VoiceBatchRunner
                 CurrentOperation = null;
                 LastError = ex.Message;
             }
-            _batchEvents.Publish(new BatchCompleted(Processed - Failed, Failed));
+            terminalEvent = new BatchCompleted(Processed - Failed, Failed);
         }
         finally
         {
+            // Close the Throughput Run before the ordinary terminal batch event repaints the
+            // progress UI. The batch dialog can then pull the final snapshot and reveal its table
+            // without subscribing to the LLM stream or adding a throughput-specific repaint.
             if (runStarted)
                 _llmEvents.Publish(new RunEnded());
+            if (terminalEvent is not null)
+                _batchEvents.Publish(terminalEvent);
         }
     }
 }

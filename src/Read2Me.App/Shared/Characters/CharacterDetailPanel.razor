@@ -37,6 +37,16 @@
             </MudStack>
         </MudStack>
 
+        @if (_showAiActivity)
+        {
+            <MudPaper Outlined="true" Class="pa-2">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">AI activity</MudText>
+                <div style="height:32vh; min-height:220px;">
+                    <LlmStreamView />
+                </div>
+            </MudPaper>
+        }
+
         @if (!Character.IsNarrator)
         {
             <MudStack Spacing="1">

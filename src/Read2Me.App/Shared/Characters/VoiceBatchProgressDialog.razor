@@ -1,0 +1,78 @@
+@using Read2Me.App.Characters
+@using Read2Me.Services.Events
+@inject VoiceBatchRunner Batch
+@inject EventBroadcaster<VoiceBatchEvent> BatchEvents
+@inject ThroughputAggregator Throughput
+@implements IDisposable
+
+@{
+    // One pull per paint keeps the headline, live subscript and final table coherent. Batch and
+    // stream events already drive this dialog's useful paints; throughput adds no event or timer.
+    var throughput = Throughput.Snapshot;
+}
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Generate voice prompts</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            @if (Batch.IsRunning)
+            {
+                <MudProgressLinear Indeterminate="true" />
+            }
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                @if (!string.IsNullOrEmpty(Batch.CurrentVoiceName))
+                {
+                    <MudText Typo="Typo.body2">@Batch.CurrentVoiceName</MudText>
+                }
+                @if (Batch.Total > 0)
+                {
+                    <MudText Typo="Typo.body2">@Batch.Processed / @Batch.Total</MudText>
+                }
+                @if (Batch.Failed > 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Warning">@Batch.Failed failed</MudText>
+                }
+            </MudStack>
+
+            <MudText Typo="Typo.h5" Style="@ThroughputText.StyleFor(throughput.RunThroughput)">
+                @ThroughputText.Rate(throughput.RunThroughput)
+            </MudText>
+            <MudText Typo="Typo.caption" Style="opacity:0.6;">
+                <GenerationRateSubscript Snapshot="throughput" />
+            </MudText>
+            <ThroughputByConfigTable Snapshot="throughput" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (Batch.IsRunning)
+        {
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" OnClick="Batch.Cancel">Stop</MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                       OnClick="@(() => MudDialog.Close())">Close</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    IMudDialogInstance MudDialog { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        BatchEvents.Event += OnBatchEvent;
+    }
+
+    private void OnBatchEvent(VoiceBatchEvent _) => Refresh();
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        BatchEvents.Event -= OnBatchEvent;
+    }
+}

@@ -23,6 +23,8 @@ public sealed class GeneratePromptsPhase : ISweepPhase<PromptWorkItem>
 
     public string Operation => OperationName;
 
+    public bool DrivesLlm => true;
+
     public string DisplayName(PromptWorkItem item) => item.CharacterName;
 
     public async Task<IReadOnlyList<PromptWorkItem>> PlanAsync(

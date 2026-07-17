@@ -15,6 +15,8 @@ public sealed class GenerateAudioPhase : ISweepPhase<AudioWorkItem>
 
     public string Operation => "Generating audio";
 
+    public bool DrivesLlm => false;
+
     public string DisplayName(AudioWorkItem item) => item.CharacterName;
 
     public async Task<IReadOnlyList<AudioWorkItem>> PlanAsync(

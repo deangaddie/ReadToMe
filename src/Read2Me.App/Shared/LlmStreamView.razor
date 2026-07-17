@@ -1,11 +1,32 @@
 @using System.Text
 @using Read2Me.Services.Events
 @inject EventJournal<LlmStreamEvent> Journal
+@inject ThroughputAggregator Throughput
 @inject IJSRuntime JS
 @implements IDisposable
 
+@{
+    // Pull once per paint so the headline, live subscript and final table all describe the same
+    // instant of the process-wide Throughput Run. The journal already supplies this component's
+    // paint cadence; throughput adds no subscription and no timer.
+    var throughput = Throughput.Snapshot;
+}
+
 <div @ref="_scrollContainer"
      style="height:100%; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:12px; padding:4px;">
+    @if (ShowThroughput)
+    {
+        <div style="position:sticky; top:0; z-index:1; flex:none; padding:8px 12px;
+                    background:var(--mud-palette-surface); border-bottom:1px solid var(--mud-palette-divider);">
+            <MudText Typo="Typo.h5" Style="@ThroughputText.StyleFor(throughput.RunThroughput)">
+                @ThroughputText.Rate(throughput.RunThroughput)
+            </MudText>
+            <MudText Typo="Typo.caption" Style="opacity:0.6;">
+                <GenerationRateSubscript Snapshot="throughput" />
+            </MudText>
+            <ThroughputByConfigTable Snapshot="throughput" />
+        </div>
+    }
     @if (_turns.Count == 0)
     {
         <MudText Typo="Typo.body2" Color="Color.Secondary" Style="padding:16px; text-align:center;">
@@ -89,6 +110,9 @@
             </div>
 
 @code {
+    [Parameter]
+    public bool ShowThroughput { get; set; } = true;
+
     private readonly List<StreamTurn> _turns = new();
     private ElementReference _scrollContainer;
     private bool _needsScroll;

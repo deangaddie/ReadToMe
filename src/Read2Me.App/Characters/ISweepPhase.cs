@@ -9,6 +9,7 @@ namespace Read2Me.App.Characters;
 public interface ISweepPhase<TWork>
 {
     string Operation { get; }
+    bool DrivesLlm { get; }
     string DisplayName(TWork item);
     Task<IReadOnlyList<TWork>> PlanAsync(PhaseDeps deps, ProjectFolderId folder, CancellationToken ct);
     Task<PhaseStepOutcome> RunStepAsync(TWork item, PhaseDeps deps, CancellationToken ct);

@@ -181,7 +181,10 @@ else
             if (result.Data is bool clearAll) regenerateAll = clearAll;
         }
 
-        BatchService.StartGeneratePrompts(new Core.Models.ProjectFolderId(FolderName), regenerateAll);
+        if (!BatchService.StartGeneratePrompts(new Core.Models.ProjectFolderId(FolderName), regenerateAll)) return;
+
+        var progress = await DialogService.ShowAsync<VoiceBatchProgressDialog>("Generate voice prompts");
+        await progress.Result;
     }
 
     async Task GenerateAudioAsync()

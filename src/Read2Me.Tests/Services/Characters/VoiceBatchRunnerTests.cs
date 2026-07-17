@@ -50,15 +50,18 @@ public class VoiceBatchRunnerTests
         private readonly Func<string, PhaseStepOutcome> _step;
 
         public string Operation { get; }
+        public bool DrivesLlm { get; }
 
         public FakeSweepPhase(
             IReadOnlyList<string> items,
             Func<string, PhaseStepOutcome>? step = null,
-            string operation = "Fake op")
+            string operation = "Fake op",
+            bool drivesLlm = true)
         {
             _items = items;
             _step = step ?? (_ => new PhaseStepOutcome(Ok: true, Update: null, FailReason: null));
             Operation = operation;
+            DrivesLlm = drivesLlm;
         }
 
         public string DisplayName(string item) => item;
@@ -76,6 +79,7 @@ public class VoiceBatchRunnerTests
         private readonly int _delayMs;
 
         public string Operation => "Slow op";
+        public bool DrivesLlm => false;
 
         public SlowFakeSweepPhase(IReadOnlyList<string> items, int delayMs)
         {
@@ -270,9 +274,40 @@ public class VoiceBatchRunnerTests
         Assert.Empty(llmEvents);
     }
 
+    [Fact]
+    public async Task RunPhaseAsync_NonLlmBatch_DoesNotOpenAThroughputRun()
+    {
+        var (runner, _, llmEvents) = BuildRunnerWithLlmEvents();
+        var phase = new FakeSweepPhase(new[] { "a", "b" }, drivesLlm: false);
+
+        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
+
+        Assert.Empty(llmEvents);
+    }
+
+    [Fact]
+    public async Task RunPhaseAsync_EndsThroughputBeforePublishingTheTerminalBatchEvent()
+    {
+        var sequence = new List<object>();
+        var batchEvents = new EventBroadcaster<VoiceBatchEvent>();
+        var llmEvents = new EventBroadcaster<LlmStreamEvent>();
+        batchEvents.Event += sequence.Add;
+        llmEvents.Event += sequence.Add;
+        var runner = new VoiceBatchRunner(
+            NullLogger<VoiceBatchRunner>.Instance, batchEvents, llmEvents);
+
+        await runner.RunPhaseAsync(
+            new FakeSweepPhase(new[] { "a" }),
+            DummyDeps(), Folder, CancellationToken.None);
+
+        Assert.IsType<RunEnded>(sequence[^2]);
+        Assert.IsType<BatchCompleted>(sequence[^1]);
+    }
+
     private sealed class ThrowingPlanPhase : ISweepPhase<string>
     {
         public string Operation => "Throwing plan";
+        public bool DrivesLlm => true;
         public string DisplayName(string item) => item;
 
         public Task<IReadOnlyList<string>> PlanAsync(PhaseDeps deps, ProjectFolderId folder, CancellationToken ct)
