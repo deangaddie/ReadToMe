@@ -233,8 +233,8 @@ namespace Read2Me.Services.Llm
 
                     case RequestStarted r when _isRunActive:
                         _pending = (r.ConfigId, r.ConfigName);
-                        // Rebaseline the live figures: the next request's counters start from zero
-                        // again, so differencing across the boundary would go negative.
+                        // Rebaseline the live figures: the next request restarts its cumulative
+                        // counters, so differencing across the boundary would go negative.
                         _live = new TimingsAccumulator();
                         _lastReading = null;
                         var row = Row(r.ConfigId, r.ConfigName);
