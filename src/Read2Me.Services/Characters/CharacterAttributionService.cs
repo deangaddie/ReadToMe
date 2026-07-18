@@ -90,6 +90,23 @@ namespace Read2Me.Services.Characters
         IReadOnlyList<(QueuedParagraph Item, AttributionOutcome Outcome)> Outcomes,
         IReadOnlyList<QueuedParagraph> Deferred);
 
+    /// <summary>
+    /// One config's run over a set of paragraphs — the "step" half of the escalation chain. Owns
+    /// chapter-grouping, chunking by <see cref="LlmServerConfig.AttributionBatchSize"/>, the batch
+    /// core, self-consistency, and trigger derivation; streams each item's <see cref="StepOutcome"/>
+    /// the moment its chunk returns so a confident answer surfaces live. Fires
+    /// <see cref="AttributionQueueCallbacks.ChunkStarted"/> per in-flight chunk. It never fires
+    /// <see cref="AttributionQueueCallbacks.ItemDeferred"/> nor decides escalation — that is the walk's.
+    /// </summary>
+    internal interface IChainStep
+    {
+        IAsyncEnumerable<(QueuedParagraph Item, StepOutcome Step)> RunAsync(
+            IReadOnlyList<QueuedParagraph> items,
+            ChainStepOptions opts,
+            AttributionQueueCallbacks? callbacks,
+            CancellationToken ct);
+    }
+
     public class CharacterAttributionService(
         ILlmCompletionRunner runner,
         LlmSettingsService settings,
@@ -97,7 +114,22 @@ namespace Read2Me.Services.Characters
         IProjectReader reader,
         ILogger<CharacterAttributionService> logger,
         EventBroadcaster<LlmStreamEvent> broadcaster)
+        : IChainStep
     {
+        /// <inheritdoc/>
+        /// <remarks>Lifted from <see cref="AttributeQueueAsync"/>'s per-step inner loop:
+        /// <see cref="GroupByChapter"/> → <see cref="RunStepGroupAsync"/> per group, streaming.</remarks>
+        async IAsyncEnumerable<(QueuedParagraph Item, StepOutcome Step)> IChainStep.RunAsync(
+            IReadOnlyList<QueuedParagraph> items,
+            ChainStepOptions opts,
+            AttributionQueueCallbacks? callbacks,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            foreach (var group in GroupByChapter(items))
+                await foreach (var outcome in RunStepGroupAsync(group, opts, callbacks, ct))
+                    yield return outcome;
+        }
+
         public virtual async Task<AttributionOutcome> AttributeAsync(QueuedParagraph item, CancellationToken ct)
         {
             var chain = await settings.GetAttributionChainAsync();

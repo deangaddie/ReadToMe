@@ -530,6 +530,45 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
+        public async Task ChainStep_RunAsync_StreamsOncePerItem_ChunkedByBatchSize_NoDeferral()
+        {
+            // Drive the coarse IChainStep seam directly (no chain lookup, no walk): one config over
+            // 4 items in one chapter, batch size 2 → two chunks, one StepOutcome per item, ItemDeferred
+            // never fired by the step.
+            var settings = NewSettings();
+            var config = await AddConfigAsync(settings, "A", batchSize: 2);
+
+            var ch = Guid.NewGuid();
+            var items = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(ch)).ToList();
+            var llm = new SequenceCompletionRunner()
+                .ForConfig("A", BatchJson((0, "Alice"), (1, "Alice")));
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
+
+            var chunks = new List<IReadOnlyList<QueuedParagraph>>();
+            var deferred = new List<QueuedParagraph>();
+            var callbacks = new AttributionQueueCallbacks(
+                ChunkStarted: chunk => chunks.Add([.. chunk]),
+                ItemDeferred: deferred.Add);
+
+            var outcomes = new List<(QueuedParagraph Item, StepOutcome Step)>();
+            await foreach (var pair in ((IChainStep)svc).RunAsync(
+                items, new ChainStepOptions(config, IsFinal: false, SelfConsistency: false),
+                callbacks, CancellationToken.None))
+            {
+                outcomes.Add(pair);
+            }
+
+            // One outcome per item, every item covered exactly once.
+            Assert.Equal(
+                items.Select(i => i.ParagraphId).OrderBy(g => g),
+                outcomes.Select(o => o.Item.ParagraphId).OrderBy(g => g));
+            // Two chunks of two; ChunkStarted per in-flight chunk, ItemDeferred never.
+            Assert.Equal(2, chunks.Count);
+            Assert.All(chunks, c => Assert.Equal(2, c.Count));
+            Assert.Empty(deferred);
+        }
+
+        [Fact]
         public async Task Queue_EscalationStarted_FiresOncePerStep_WithFullCrossQueueSuspectCount()
         {
             var settings = NewSettings();
