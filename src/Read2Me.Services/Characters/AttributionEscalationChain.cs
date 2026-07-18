@@ -15,7 +15,7 @@ namespace Read2Me.Services.Characters
     /// short-circuit, the <see cref="EscalationStarted"/> publish, and the
     /// <see cref="AttributionQueueCallbacks.ItemDeferred"/> fire.
     /// </summary>
-    internal sealed class AttributionEscalationChain(
+    internal class AttributionEscalationChain(
         IChainStep step,
         LlmSettingsService settings,
         EventBroadcaster<LlmStreamEvent> broadcaster,
@@ -33,7 +33,7 @@ namespace Read2Me.Services.Characters
         /// drained queue, and reports each item left suspect by its chunk so the caller can take it
         /// back out of that processing state until its next escalation step picks it up.
         /// </summary>
-        public async IAsyncEnumerable<(QueuedParagraph Item, AttributionOutcome Outcome)>
+        public virtual async IAsyncEnumerable<(QueuedParagraph Item, AttributionOutcome Outcome)>
             AttributeQueueAsync(
                 IReadOnlyList<QueuedParagraph> queued,
                 AttributionQueueCallbacks? callbacks,

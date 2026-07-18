@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
@@ -199,35 +198,6 @@ namespace Read2Me.Services.Characters
 
             // Unreachable — the final iteration always returns (accept or infra fallback).
             throw new InvalidOperationException("Attribution chain fell through without an outcome.");
-        }
-
-        /// <summary>
-        /// Queue-wide streaming attribution. Owns the whole drained set and yields each paragraph's
-        /// final outcome the moment it is decided. The primary config (step 0) runs across every queued
-        /// paragraph — grouped and batched per chapter — before any paragraph escalates; confident
-        /// step-0 answers are yielded immediately (live progress) while collected suspects from the
-        /// whole queue escalate together, one model burst per chain step. Reuses the existing cores
-        /// (batch core, per-step runner, self-consistency, final-step accept, best-prior fallback).
-        /// <paramref name="callbacks"/> reports each in-flight batch just before its LLM call, so a
-        /// caller can flip exactly the working items to a processing state rather than the whole
-        /// drained queue, and reports each item left suspect by its chunk so the caller can take it
-        /// back out of that processing state until its next escalation step picks it up.
-        /// </summary>
-        public virtual async IAsyncEnumerable<(QueuedParagraph Item, AttributionOutcome Outcome)>
-            AttributeQueueAsync(
-                IReadOnlyList<QueuedParagraph> queued,
-                AttributionQueueCallbacks? callbacks,
-                [EnumeratorCancellation] CancellationToken ct)
-        {
-            // Slice 02: temporarily delegate the walk to AttributionEscalationChain (this service is
-            // the IChainStep it walks over). Slice 03 removes this method and points
-            // CharacterQueueProcessor straight at the DI-registered chain. A NullLogger is used here
-            // only for the transition — the production path logs via the DI-injected chain in slice 03.
-            var chain = new AttributionEscalationChain(
-                this, settings, broadcaster,
-                NullLogger<AttributionEscalationChain>.Instance);
-            await foreach (var pair in chain.AttributeQueueAsync(queued, callbacks, ct))
-                yield return pair;
         }
 
         /// <summary>Groups paragraphs by (folder, chapter), preserving book order within each group.</summary>

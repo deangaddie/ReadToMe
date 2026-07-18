@@ -61,12 +61,27 @@ namespace Read2Me.Tests.Services.Characters
         private static QueuedParagraph MakeItem(string preview = "P") =>
             new(Folder, Guid.NewGuid(), preview, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
 
+        /// <summary>
+        /// Wraps the service (as the <see cref="IChainStep"/> it implements) in the production walk,
+        /// so these integration tests drive the same entry point <see cref="CharacterQueueProcessor"/>
+        /// now uses. When an <paramref name="broadcaster"/> is supplied it must be the same instance
+        /// the service was built with, so escalation events land on the observed broadcaster.
+        /// </summary>
+        private static AttributionEscalationChain Walk(
+            CharacterAttributionService svc, LlmSettingsService settings,
+            EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
+            new(svc, settings, broadcaster ?? new EventBroadcaster<LlmStreamEvent>(),
+                NullLogger<AttributionEscalationChain>.Instance);
+
         /// <summary>Drains the streaming attribution entry into a book-order list of outcomes.</summary>
         private static async Task<List<(QueuedParagraph Item, AttributionOutcome Outcome)>> DrainStreamAsync(
-            CharacterAttributionService svc, IReadOnlyList<QueuedParagraph> queued)
+            CharacterAttributionService svc, LlmSettingsService settings,
+            IReadOnlyList<QueuedParagraph> queued,
+            EventBroadcaster<LlmStreamEvent>? broadcaster = null)
         {
             var results = new List<(QueuedParagraph, AttributionOutcome)>();
-            await foreach (var pair in svc.AttributeQueueAsync(queued, callbacks: null, CancellationToken.None))
+            await foreach (var pair in
+                Walk(svc, settings, broadcaster).AttributeQueueAsync(queued, callbacks: null, CancellationToken.None))
                 results.Add(pair);
             return results;
         }
@@ -212,7 +227,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("Small", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            await DrainStreamAsync(svc, batch);
+            await DrainStreamAsync(svc, settings, batch);
 
             var prompt = Assert.Single(llm.Calls).Prompt;
             Assert.Contains("Return one entry per index", prompt);   // batch template, not the single one
@@ -436,7 +451,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var results = await DrainStreamAsync(svc, queued);
+            var results = await DrainStreamAsync(svc, settings, queued);
 
             Assert.Equal(4, results.Count);
             // The regression: every primary-config call precedes the first escalation-config call.
@@ -469,7 +484,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var results = await DrainStreamAsync(svc, queued);
+            var results = await DrainStreamAsync(svc, settings, queued);
 
             Assert.Equal(4, results.Count);
             Assert.All(results, r => Assert.Equal(AttributionStatus.Resolved, r.Outcome.Status));
@@ -492,7 +507,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var results = await DrainStreamAsync(svc, queued);
+            var results = await DrainStreamAsync(svc, settings, queued);
 
             Assert.Equal(4, results.Count);
             Assert.All(results, r => Assert.Equal(AttributionStatus.Resolved, r.Outcome.Status));
@@ -514,7 +529,7 @@ namespace Read2Me.Tests.Services.Characters
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var chunks = new List<IReadOnlyList<QueuedParagraph>>();
-            await foreach (var _ in svc.AttributeQueueAsync(
+            await foreach (var _ in Walk(svc, settings).AttributeQueueAsync(
                 queued,
                 new AttributionQueueCallbacks(ChunkStarted: chunk => chunks.Add([.. chunk])),
                 CancellationToken.None))
@@ -586,7 +601,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings, broadcaster);
 
-            await DrainStreamAsync(svc, queued);
+            await DrainStreamAsync(svc, settings, queued, broadcaster);
 
             var escalation = Assert.Single(events.OfType<EscalationStarted>());
             Assert.Equal(1, escalation.Step);
@@ -610,7 +625,7 @@ namespace Read2Me.Tests.Services.Characters
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var seen = new List<string>();
-            await foreach (var (item, _) in svc.AttributeQueueAsync([i0, i1], callbacks: null, CancellationToken.None))
+            await foreach (var (item, _) in Walk(svc, settings).AttributeQueueAsync([i0, i1], callbacks: null, CancellationToken.None))
                 seen.Add(item.ParagraphId == i0.ParagraphId ? "resolved" : "escalated");
 
             // The confident step-0 answer is yielded first; the escalated item comes after the B call.
@@ -632,7 +647,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
 
-            var results = await DrainStreamAsync(svc, batch);
+            var results = await DrainStreamAsync(svc, settings, batch, broadcaster);
 
             Assert.Equal(2, results.Count);
             Assert.Equal(AttributionStatus.Resolved, results.Single(r => r.Item == batch[0]).Outcome.Status);
@@ -651,7 +666,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner();
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var results = await DrainStreamAsync(svc, queued);
+            var results = await DrainStreamAsync(svc, settings, queued);
 
             Assert.Equal(2, results.Count);
             Assert.All(results, r => Assert.Equal(AttributionStatus.NoLlmConfigured, r.Outcome.Status));
@@ -671,7 +686,7 @@ namespace Read2Me.Tests.Services.Characters
 
             // One chapter group, batch size 1 => two chunks per step. Record the callback interleaving.
             var log = new List<string>();
-            await foreach (var _ in svc.AttributeQueueAsync(
+            await foreach (var _ in Walk(svc, settings).AttributeQueueAsync(
                 queued,
                 new AttributionQueueCallbacks(
                     ChunkStarted: chunk => log.Add($"start:{chunk[0].Preview}"),
@@ -696,7 +711,7 @@ namespace Read2Me.Tests.Services.Characters
             var item = MakeItem();
 
             var deferred = new List<QueuedParagraph>();
-            await foreach (var _ in svc.AttributeQueueAsync(
+            await foreach (var _ in Walk(svc, settings).AttributeQueueAsync(
                 [item],
                 new AttributionQueueCallbacks(ItemDeferred: deferred.Add),
                 CancellationToken.None))
@@ -717,7 +732,7 @@ namespace Read2Me.Tests.Services.Characters
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
             var deferred = new List<QueuedParagraph>();
-            await foreach (var _ in svc.AttributeQueueAsync(
+            await foreach (var _ in Walk(svc, settings).AttributeQueueAsync(
                 [MakeItem()],
                 new AttributionQueueCallbacks(ItemDeferred: deferred.Add),
                 CancellationToken.None))
@@ -735,7 +750,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var results = await DrainStreamAsync(svc, [MakeItem()]);
+            var results = await DrainStreamAsync(svc, settings, [MakeItem()]);
 
             var outcome = Assert.Single(results).Outcome;
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
@@ -751,7 +766,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Zorg")).ForConfig("B", Resolved("Mordecai"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
+            var outcome = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
             Assert.Equal("Mordecai", Speaker(outcome));
@@ -768,7 +783,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("C", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
+            var outcome = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
             Assert.Equal("Alice", Speaker(outcome));
@@ -783,7 +798,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner().ForConfig("A", "not json").ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var outcome = Assert.Single(await DrainStreamAsync(svc, [MakeItem()])).Outcome;
+            var outcome = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
             Assert.Equal("Alice", Speaker(outcome));
@@ -801,7 +816,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", BatchJson((0, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
-            var results = await DrainStreamAsync(svc, batch);
+            var results = await DrainStreamAsync(svc, settings, batch);
 
             Assert.All(results, r => Assert.Equal(AttributionStatus.Resolved, r.Outcome.Status));
             Assert.Equal(1, llm.Configs.Count(c => c.Name == "B"));   // only the one suspect escalated
@@ -822,7 +837,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", BatchJson((0, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
-            var results = await DrainStreamAsync(svc, batch);
+            var results = await DrainStreamAsync(svc, settings, batch);
 
             Assert.Equal(3, results.Count);
             Assert.All(results, r => Assert.Equal(AttributionStatus.Resolved, r.Outcome.Status));

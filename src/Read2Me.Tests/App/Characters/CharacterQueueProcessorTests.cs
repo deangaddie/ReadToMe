@@ -15,7 +15,7 @@ namespace Read2Me.Tests.App.Characters
     public class CharacterQueueProcessorTests : ProjectDbTestBase
     {
         private readonly CharacterQueueService _queue;
-        private readonly FakeAttributionService _attribution;
+        private readonly FakeEscalationChain _attribution;
         private readonly FakeResolver _resolver;
         private readonly FakeCharacterReader _reader;
         private readonly FakeCommandHandler _commands;
@@ -25,7 +25,7 @@ namespace Read2Me.Tests.App.Characters
         public CharacterQueueProcessorTests()
         {
             _queue = new CharacterQueueService();
-            _attribution = new FakeAttributionService();
+            _attribution = new FakeEscalationChain();
             _resolver = new FakeResolver();
             _reader = new FakeCharacterReader();
             _commands = new FakeCommandHandler();
@@ -479,7 +479,7 @@ namespace Read2Me.Tests.App.Characters
             Assert.Equal(ParagraphOutcomeKind.Failed, failed.Kind);
         }
 
-        private class FakeAttributionService() : CharacterAttributionService(null!, null!, null!, null!, NullLogger<CharacterAttributionService>.Instance, null!)
+        private class FakeEscalationChain() : AttributionEscalationChain(null!, null!, null!, NullLogger<AttributionEscalationChain>.Instance)
         {
             public AttributionOutcome? Outcome { get; set; }
             public Exception? ThrowException { get; set; }

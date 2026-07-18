@@ -11,9 +11,9 @@ using Read2Me.Services.Llm;
 
 namespace Read2Me.App.Characters
 {
-    public sealed class CharacterQueueProcessor(
+    internal sealed class CharacterQueueProcessor(
         CharacterQueueService queue,
-        CharacterAttributionService attribution,
+        AttributionEscalationChain chain,
         CharacterResolver resolver,
         ICharacterReader reader,
         IBookCommandHandler commands,
@@ -55,7 +55,7 @@ namespace Read2Me.App.Characters
 
                 var sw = Stopwatch.StartNew();
                 await foreach (var (streamItem, outcome) in
-                    attribution.AttributeQueueAsync(queued, callbacks, ct))
+                    chain.AttributeQueueAsync(queued, callbacks, ct))
                 {
                     var elapsed = sw.Elapsed.TotalSeconds;
                     sw.Restart();
