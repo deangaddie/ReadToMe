@@ -15,10 +15,13 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters
 {
     /// <summary>
-    /// Escalation-chain behaviour, tested through the production walk
+    /// Step mechanics and walk+step integration, tested through the production walk
     /// (<see cref="AttributionEscalationChain.AttributeQueueAsync"/>) over the real
     /// <see cref="IChainStep"/> and <see cref="LlmSettingsService"/> on the in-memory DB, with a
-    /// config-recording fake LLM. Single-item scenarios drain a one-item queue.
+    /// config-recording fake LLM: prompt tiers, batch orchestration, grouping/chunking, self-consistency,
+    /// trigger derivation, and that the walk composes over the real step end to end. Pure walk policy
+    /// (best-prior, ModelLoading short-circuit, Accept, EscalationStarted, ItemDeferred) is covered
+    /// without an LLM/DB/reader in <see cref="AttributionEscalationChainTests"/>.
     /// </summary>
     public class CharacterAttributionChainTests : AppDbTestBase
     {
@@ -243,109 +246,10 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(AttributionPromptStyle.Simple, resampled.PromptStyle);
         }
 
-        [Fact]
-        public async Task LastEntryInfraFailure_UsesBestPriorAnswer_ElseFailed()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            // Item with a prior unlisted answer from A, then B (final) infra-fails → keep A's answer.
-            var llmGood = new SequenceCompletionRunner()
-                .ForConfig("A", Resolved("Zorg"))
-                .FailFor("B", LlmRunOutcome.Failed, "B down");
-            var withPrior = NewService(llmGood, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-            var priorResult = Assert.Single(await DrainStreamAsync(withPrior, settings, [MakeItem()])).Outcome;
-            Assert.Equal(AttributionStatus.Resolved, priorResult.Status);
-            Assert.Equal("Zorg", Speaker(priorResult));
-
-            // Item with no usable prior answer (A also infra-fails) → Failed.
-            var llmNone = new SequenceCompletionRunner()
-                .FailFor("A", LlmRunOutcome.Failed, "A down")
-                .FailFor("B", LlmRunOutcome.Failed, "B down");
-            var noPrior = NewService(llmNone, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-            var noneResult = Assert.Single(await DrainStreamAsync(noPrior, settings, [MakeItem()])).Outcome;
-            Assert.Equal(AttributionStatus.Failed, noneResult.Status);
-        }
-
-        [Fact]
-        public async Task FinalUnknown_CarriesEscalationReason_MultiEntryChainOnly()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", Unknown)
-                .ForConfig("B", Unknown);
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
-
-            Assert.Equal(AttributionStatus.Unknown, result.Status);
-            Assert.Equal("Speaker unknown after escalating through 2 models (A → B)", result.FailureReason);
-        }
-
-        [Fact]
-        public async Task SingleEntryChain_UnknownCarriesNullReason_NoEscalationEvent()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8)); // active only, no escalation tail
-
-            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
-            var events = new List<LlmStreamEvent>();
-            broadcaster.Event += e => events.Add(e);
-
-            var llm = new SequenceCompletionRunner().ForConfig("A", Unknown);
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings, broadcaster);
-
-            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()], broadcaster)).Outcome;
-
-            Assert.Equal(AttributionStatus.Unknown, result.Status);
-            Assert.Null(result.FailureReason);
-            Assert.DoesNotContain(events, e => e is EscalationStarted);
-        }
-
         // ─────────────────────────────────────────────────────────────────────
-        // Model still loading: short-circuit, no escalation, no best-prior fallback
+        // Model still loading: batch-core propagation (walk-policy short-circuit
+        // itself is covered in AttributionEscalationChainTests).
         // ─────────────────────────────────────────────────────────────────────
-
-        [Fact]
-        public async Task ModelLoading_ShortCircuitsChain_DoesNotEscalate()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            // A reports the model still loading → the item must stop here (escalating would autoload
-            // a different model and evict the load we're waiting for). B is never called.
-            var llm = new SequenceCompletionRunner()
-                .FailFor("A", LlmRunOutcome.ModelLoading, "still loading")
-                .ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
-
-            Assert.Equal(AttributionStatus.ModelLoading, result.Status);
-            Assert.Equal(["A"], llm.Configs.Select(c => c.Name));
-        }
-
-        [Fact]
-        public async Task ModelLoading_AtFinalStep_DoesNotFallBackToBestPrior()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            // A answers Unknown (a usable, suspect answer → becomes the best-prior). B (final) reports
-            // the model still loading. ModelLoading must surface as-is, NOT resolve from A's best-prior
-            // answer — the item is retryable, not decided.
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", Unknown)
-                .FailFor("B", LlmRunOutcome.ModelLoading, "still loading");
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
-
-            Assert.Equal(AttributionStatus.ModelLoading, result.Status);
-            Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
-        }
 
         [Fact]
         public async Task Batch_ModelLoading_SurfacedForEveryItem_NoEscalation()
@@ -528,96 +432,6 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Queue_EscalationStarted_FiresOncePerStep_WithFullCrossQueueSuspectCount()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
-            var events = new List<LlmStreamEvent>();
-            broadcaster.Event += e => events.Add(e);
-
-            var chA = Guid.NewGuid();
-            var chB = Guid.NewGuid();
-            var queued = new List<QueuedParagraph> { MakeChapterItem(chA), MakeChapterItem(chB) };
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", Unknown)
-                .ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings, broadcaster);
-
-            await DrainStreamAsync(svc, settings, queued, broadcaster);
-
-            var escalation = Assert.Single(events.OfType<EscalationStarted>());
-            Assert.Equal(1, escalation.Step);
-            Assert.Equal("B", escalation.ConfigName);
-            Assert.Equal(2, escalation.ItemCount);   // full cross-queue suspect count
-        }
-
-        [Fact]
-        public async Task Queue_Step0Resolved_YieldedBeforeAnyEscalationCall()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 1), ("B", 1));
-
-            var ch = Guid.NewGuid();
-            // Item 0 resolves at A (known); item 1 unknown → escalates. Item 0 must stream before B runs.
-            var i0 = MakeChapterItem(ch);
-            var i1 = MakeChapterItem(ch);
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", Resolved("Alice"), Unknown)
-                .ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var seen = new List<string>();
-            await foreach (var (item, _) in Walk(svc, settings).AttributeQueueAsync([i0, i1], callbacks: null, CancellationToken.None))
-                seen.Add(item.ParagraphId == i0.ParagraphId ? "resolved" : "escalated");
-
-            // The confident step-0 answer is yielded first; the escalated item comes after the B call.
-            Assert.Equal(["resolved", "escalated"], seen);
-        }
-
-        [Fact]
-        public async Task Queue_SingleEntryChain_IdenticalToToday_NoEscalationEvent()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8)); // active only
-
-            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
-            var events = new List<LlmStreamEvent>();
-            broadcaster.Event += e => events.Add(e);
-
-            var (batch, ctx) = MakeBatch(2);
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
-
-            var results = await DrainStreamAsync(svc, settings, batch, broadcaster);
-
-            Assert.Equal(2, results.Count);
-            Assert.Equal(AttributionStatus.Resolved, results.Single(r => r.Item == batch[0]).Outcome.Status);
-            var unknown = results.Single(r => r.Item == batch[1]).Outcome;
-            Assert.Equal(AttributionStatus.Unknown, unknown.Status);
-            Assert.Null(unknown.FailureReason);
-            Assert.DoesNotContain(events, e => e is EscalationStarted);
-            Assert.Single(llm.Configs);
-        }
-
-        [Fact]
-        public async Task Queue_NoLlmConfigured_YieldsNoConfigForEveryItem()
-        {
-            var settings = NewSettings();   // no configs registered
-            var queued = new List<QueuedParagraph> { MakeItem(), MakeItem() };
-            var llm = new SequenceCompletionRunner();
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var results = await DrainStreamAsync(svc, settings, queued);
-
-            Assert.Equal(2, results.Count);
-            Assert.All(results, r => Assert.Equal(AttributionStatus.NoLlmConfigured, r.Outcome.Status));
-            Assert.Empty(llm.Configs);
-        }
-
-        [Fact]
         public async Task Queue_ChunkOutcomes_Retired_BeforeNextChunkStarts()
         {
             var settings = NewSettings();
@@ -643,94 +457,6 @@ namespace Read2Me.Tests.Services.Characters
             // whole group would emit both starts first, leaving P0 stuck showing Processing.
             var step0 = log.Take(4).ToList();
             Assert.Equal(["start:P0", "defer:P0", "start:P1", "defer:P1"], step0);
-        }
-
-        [Fact]
-        public async Task Queue_ItemDeferred_FiresForSuspect_HeldForNextStep()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            var llm = new SequenceCompletionRunner().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-            var item = MakeItem();
-
-            var deferred = new List<QueuedParagraph>();
-            await foreach (var _ in Walk(svc, settings).AttributeQueueAsync(
-                [item],
-                new AttributionQueueCallbacks(ItemDeferred: deferred.Add),
-                CancellationToken.None))
-            {
-            }
-
-            // Step 0 answered Unknown → suspect → held for config B. The caller is told exactly once,
-            // so it can drop the item out of Processing while it waits.
-            Assert.Equal([item], deferred);
-        }
-
-        [Fact]
-        public async Task Queue_ItemDeferred_DoesNotFire_ForConfidentStep0Answer()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var deferred = new List<QueuedParagraph>();
-            await foreach (var _ in Walk(svc, settings).AttributeQueueAsync(
-                [MakeItem()],
-                new AttributionQueueCallbacks(ItemDeferred: deferred.Add),
-                CancellationToken.None))
-            {
-            }
-
-            Assert.Empty(deferred);
-        }
-
-        [Fact]
-        public async Task Queue_Unknown_ResolvesAcrossTwoConfigs()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            var llm = new SequenceCompletionRunner().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var results = await DrainStreamAsync(svc, settings, [MakeItem()]);
-
-            var outcome = Assert.Single(results).Outcome;
-            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Alice", Speaker(outcome));
-            Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
-        }
-
-        [Fact]
-        public async Task Queue_UnlistedName_AcceptedAtFinalStep()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Zorg")).ForConfig("B", Resolved("Mordecai"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var outcome = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
-
-            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Mordecai", Speaker(outcome));
-        }
-
-        [Fact]
-        public async Task Queue_MidChainInfraFailure_SkipsAhead_LastEntryUsesBestPrior()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8), ("C", 8));
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", Unknown)
-                .FailFor("B", LlmRunOutcome.ServiceUnavailable, "B down")
-                .ForConfig("C", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var outcome = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
-
-            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Alice", Speaker(outcome));
         }
 
         [Fact]

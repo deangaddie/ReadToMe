@@ -186,6 +186,21 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(AttributionStatus.Failed, outcome.Status);   // nothing usable to fall back to
         }
 
+        [Fact]
+        public async Task MidChainInfraFailure_CarriesSuspectToNextConfig_ThenResolves()
+        {
+            SetChain("A", "B", "C");
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown))    // usable, escalates
+                .ForConfig("B", Confident(AttributionStatus.ServiceUnavailable, "B down"))        // mid infra → carry on
+                .ForConfig("C", Confident());                                                     // final resolves
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
+            Assert.Equal(["A", "B", "C"], step.Invocations);   // B's infra failure skipped ahead, not surfaced
+        }
+
         // ── ModelLoading short-circuit: no escalation, never best-prior ───────
 
         [Fact]
@@ -263,6 +278,18 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(1, escalation.Step);
             Assert.Equal("B", escalation.ConfigName);
             Assert.Equal(2, escalation.ItemCount);   // both suspects across the queue
+        }
+
+        [Fact]
+        public async Task SingleConfigChain_Unknown_CarriesNoEscalationReason()
+        {
+            SetChain("A");   // no escalation tail
+            var step = new ScriptedStep().ForConfig("A", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown));
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Unknown, outcome.Status);
+            Assert.Null(outcome.FailureReason);   // DidEscalate false → Accept adds no reason
         }
 
         [Fact]
