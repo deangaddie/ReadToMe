@@ -186,6 +186,8 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IProcessingGate<QueuedParagraph>, ProcessingGate<QueuedParagraph>>();
         services.AddHostedService<QueueWorker<QueuedParagraph>>();
         services.AddScoped<CharacterAttributionService>();
+        services.AddScoped<IChainStep>(sp => sp.GetRequiredService<CharacterAttributionService>());
+        services.AddScoped<AttributionEscalationChain>();
         services.AddScoped<CharacterResolver>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddScoped<CharacterPresenter>();

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
@@ -218,106 +219,15 @@ namespace Read2Me.Services.Characters
                 AttributionQueueCallbacks? callbacks,
                 [EnumeratorCancellation] CancellationToken ct)
         {
-            if (queued.Count == 0)
-                yield break;
-
-            var chain = await settings.GetAttributionChainAsync();
-            if (chain.Count == 0)
-            {
-                logger.LogWarning("No active LLM config — skipping {Count} queued paragraph(s)", queued.Count);
-                var outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null,
-                    "No active LLM server configured");
-                foreach (var item in queued)
-                    yield return (item, outcome);
-                yield break;
-            }
-
-            var selfConsistency = await settings.GetSelfConsistencyAsync();
-            var isSingleEntry = chain.Count == 1;
-
-            // Best usable (non-infra) answer seen so far, keyed by paragraph id — last-entry fallback.
-            var best = new Dictionary<Guid, StepOutcome>();
-            // Suspects collected from the whole queue, in book order, carried into the next step.
-            var suspects = new List<QueuedParagraph>();
-
-            // ── Step 0 ── run the primary across every chapter group before any escalation. A
-            // single-entry chain runs step 0 as the final step, yields every outcome, no escalation.
-            var step0Opts = new ChainStepOptions(chain[0], IsFinal: isSingleEntry, selfConsistency && !isSingleEntry);
-            foreach (var group in GroupByChapter(queued))
-            {
-                await foreach (var (item, step) in RunStepGroupAsync(group, step0Opts, callbacks, ct))
-                {
-                    if (IsUsable(step.Outcome.Status)) best[item.ParagraphId] = step;
-
-                    // Non-suspect (confident answer, or a step-0 infra failure keeping today's
-                    // semantics) is decided now and yielded live. In a single-entry chain every item
-                    // is final, so nothing is suspect.
-                    if (isSingleEntry || !IsQualitySuspect(step))
-                    {
-                        yield return (item, Accept(step, chain).Outcome);
-                    }
-                    else
-                    {
-                        // Answered but suspect: it leaves the in-flight set and waits, undecided,
-                        // for the next step's model burst. Tell the caller so its status can drop
-                        // out of Processing rather than sticking there until that step decides it.
-                        suspects.Add(item);
-                        callbacks?.ItemDeferred?.Invoke(item);
-                    }
-                }
-            }
-
-            // ── Steps 1..n ── escalate the whole-queue suspect set, one model burst per step.
-            for (var stepIndex = 1; stepIndex < chain.Count && suspects.Count > 0; stepIndex++)
-            {
-                var config = chain[stepIndex];
-                var isFinal = stepIndex == chain.Count - 1;
-                logger.LogInformation(
-                    "Escalation step {Step} config '{Config}'{Final}: {Count} suspect item(s) across the queue",
-                    stepIndex, config.Name, isFinal ? " (final)" : string.Empty, suspects.Count);
-                broadcaster.Publish(new EscalationStarted(stepIndex, config.Name, suspects.Count));
-
-                var opts = new ChainStepOptions(config, isFinal, selfConsistency && !isFinal);
-                var nextSuspects = new List<QueuedParagraph>();
-
-                foreach (var group in GroupByChapter(suspects))
-                {
-                    await foreach (var (item, step) in RunStepGroupAsync(group, opts, callbacks, ct))
-                    {
-                        if (step.Trigger == EscalationTrigger.None && IsInfraFailure(step.Outcome.Status))
-                        {
-                            // Infra failure: item not usably answered here. Carry it on, or on the
-                            // last entry resolve from the best prior usable answer, else surface it.
-                            if (!isFinal)
-                            {
-                                nextSuspects.Add(item);
-                                callbacks?.ItemDeferred?.Invoke(item);
-                                continue;
-                            }
-                            yield return (item, best.TryGetValue(item.ParagraphId, out var prior)
-                                ? Accept(prior, chain).Outcome
-                                : step.Outcome);
-                            continue;
-                        }
-
-                        if (IsUsable(step.Outcome.Status)) best[item.ParagraphId] = step;
-
-                        if (isFinal || !IsQualitySuspect(step))
-                        {
-                            yield return (item, Accept(step, chain).Outcome);
-                        }
-                        else
-                        {
-                            // Still suspect after this step — back out of the in-flight set until
-                            // the next config picks it up. See the step-0 branch above.
-                            nextSuspects.Add(item);
-                            callbacks?.ItemDeferred?.Invoke(item);
-                        }
-                    }
-                }
-
-                suspects = nextSuspects;
-            }
+            // Slice 02: temporarily delegate the walk to AttributionEscalationChain (this service is
+            // the IChainStep it walks over). Slice 03 removes this method and points
+            // CharacterQueueProcessor straight at the DI-registered chain. A NullLogger is used here
+            // only for the transition — the production path logs via the DI-injected chain in slice 03.
+            var chain = new AttributionEscalationChain(
+                this, settings, broadcaster,
+                NullLogger<AttributionEscalationChain>.Instance);
+            await foreach (var pair in chain.AttributeQueueAsync(queued, callbacks, ct))
+                yield return pair;
         }
 
         /// <summary>Groups paragraphs by (folder, chapter), preserving book order within each group.</summary>
