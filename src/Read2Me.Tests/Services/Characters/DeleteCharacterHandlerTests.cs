@@ -72,6 +72,74 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
+        public async Task DeleteCharacter_WithVoiceAndRules_DeletesVoicesAndRules()
+        {
+            var (charId, _, _) = await SeedCharacterWithParagraphAsync();
+
+            var voiceId = Guid.NewGuid();
+            await using (var seed = await OpenDbAsync())
+            {
+                seed.Voices.Add(new Read2Me.Data.Entities.Voice
+                {
+                    Id = voiceId,
+                    CharacterId = charId,
+                    Name = "Alice Voice",
+                    Source = VoiceSource.Generated
+                });
+                seed.VoiceRules.Add(new VoiceRule
+                {
+                    Id = Guid.NewGuid(), CharacterId = charId, VoiceId = voiceId, Rank = "a0", IsDefault = true
+                });
+                seed.VoiceRules.Add(new VoiceRule
+                {
+                    Id = Guid.NewGuid(), CharacterId = charId, VoiceId = voiceId, Rank = "b0", IsDefault = false,
+                    FromLevel = VoiceAnchorLevel.Chapter, FromNodeId = Guid.NewGuid()
+                });
+                await seed.SaveChangesAsync();
+            }
+
+            await _handler.HandleAsync(new DeleteCharacterCommand(_folder, charId), CancellationToken.None);
+
+            await using var verify = await OpenDbAsync();
+            Assert.False(await verify.Characters.AnyAsync(c => c.Id == charId));
+            Assert.False(await verify.Voices.AnyAsync(v => v.CharacterId == charId));
+            Assert.False(await verify.VoiceRules.AnyAsync(r => r.CharacterId == charId));
+        }
+
+        [Fact]
+        public async Task DeleteCharacter_VoiceReferencedByAnotherCharactersRule_DeletesThatRuleToo()
+        {
+            var (charId, _, _) = await SeedCharacterWithParagraphAsync();
+
+            var voiceId = Guid.NewGuid();
+            var otherCharId = Guid.NewGuid();
+            await using (var seed = await OpenDbAsync())
+            {
+                seed.Characters.Add(new Character { Id = otherCharId, Name = "Bob" });
+                seed.Voices.Add(new Read2Me.Data.Entities.Voice
+                {
+                    Id = voiceId,
+                    CharacterId = charId,
+                    Name = "Alice Voice",
+                    Source = VoiceSource.Generated
+                });
+                // Bob borrows Alice's voice — Restrict FK on VoiceRules.VoiceId.
+                seed.VoiceRules.Add(new VoiceRule
+                {
+                    Id = Guid.NewGuid(), CharacterId = otherCharId, VoiceId = voiceId, Rank = "a0", IsDefault = true
+                });
+                await seed.SaveChangesAsync();
+            }
+
+            await _handler.HandleAsync(new DeleteCharacterCommand(_folder, charId), CancellationToken.None);
+
+            await using var verify = await OpenDbAsync();
+            Assert.False(await verify.Voices.AnyAsync(v => v.Id == voiceId));
+            Assert.False(await verify.VoiceRules.AnyAsync(r => r.VoiceId == voiceId));
+            Assert.True(await verify.Characters.AnyAsync(c => c.Id == otherCharId));
+        }
+
+        [Fact]
         public async Task DeleteCharacter_NotInDb_DoesNotThrow()
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);

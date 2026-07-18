@@ -265,6 +265,15 @@
                                        OnClick="@(() => CharQueue.CancelAll())" />
                     </MudTooltip>
                 }
+                else
+                {
+                    <MudTooltip Text="Dismiss">
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                       aria-label="Dismiss character progress"
+                                       Style="color:var(--mud-palette-dark-text); opacity:0.7;"
+                                       OnClick="@(() => DismissChar())" />
+                    </MudTooltip>
+                }
             </div>
             <ThroughputByConfigTable Snapshot="throughput" />
         }
@@ -338,6 +347,15 @@
         _expanded = _expanded == stream ? ExpandedStream.None : stream;
 
     void CollapseStream() => _expanded = ExpandedStream.None;
+
+    // Retire the idle character row: drop throughput ownership and close its expander so the
+    // row can't be re-pinned by _expanded == Llm on the next paint.
+    void DismissChar()
+    {
+        if (_expanded == ExpandedStream.Llm)
+            _expanded = ExpandedStream.None;
+        AttrProgress.Dismiss();
+    }
 
     public void Dispose()
     {

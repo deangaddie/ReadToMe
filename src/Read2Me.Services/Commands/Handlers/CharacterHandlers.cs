@@ -180,6 +180,22 @@ public sealed class DeleteCharacterHandler(ProjectDbSession session) : ICommandH
             .Where(a => a.CharacterId == c.CharacterId)
             .ExecuteDeleteAsync(ct);
 
+        // VoiceRules.VoiceId is Restrict, so the DB's Character→Voice cascade cannot fire while any
+        // rule still points at one of this character's voices — including a rule owned by a different
+        // character. Clear the rules first, then the voices, then the character.
+        var voiceIds = await db.Voices
+            .Where(v => v.CharacterId == c.CharacterId)
+            .Select(v => v.Id)
+            .ToListAsync(ct);
+
+        await db.VoiceRules
+            .Where(r => r.CharacterId == c.CharacterId || voiceIds.Contains(r.VoiceId))
+            .ExecuteDeleteAsync(ct);
+
+        await db.Voices
+            .Where(v => v.CharacterId == c.CharacterId)
+            .ExecuteDeleteAsync(ct);
+
         await db.Characters
             .Where(ch => ch.Id == c.CharacterId)
             .ExecuteDeleteAsync(ct);

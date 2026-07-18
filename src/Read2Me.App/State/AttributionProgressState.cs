@@ -100,6 +100,18 @@ namespace Read2Me.App.State
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Release ownership of the throughput snapshot so the status dock can retire the
+        /// character-queue progress row once its run has finished. Only meaningful while idle —
+        /// an active run keeps re-asserting ownership through <see cref="OnQueueChanged"/>.
+        /// </summary>
+        public void Dismiss()
+        {
+            if (!OwnsThroughputSnapshot) return;
+            OwnsThroughputSnapshot = false;
+            Changed?.Invoke();
+        }
+
         public void Dispose()
         {
             _stream.Event -= OnStreamEvent;
