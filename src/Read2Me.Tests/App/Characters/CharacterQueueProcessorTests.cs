@@ -231,6 +231,45 @@ namespace Read2Me.Tests.App.Characters
         }
 
         [Fact]
+        public async Task ModelLoading_RequeuesWithBackoff_InsteadOfFailing()
+        {
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ModelLoading, null, "still loading");
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            // Provider busy, not dead: the item is back on the queue awaiting the model, not failed.
+            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(_item.Folder, _item.ParagraphId));
+            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
+        }
+
+        [Fact]
+        public async Task ModelLoading_RequeuesIndefinitely_DoesNotTripOnceThenFail()
+        {
+            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ModelLoading, null, "still loading");
+            // An item that has already exhausted the ServiceUnavailable once-then-fail budget
+            // (Requeued=true) and retried the model load several times must STILL requeue on
+            // ModelLoading — the two paths are independent and it never fails.
+            var retried = _item with { Requeued = true, LoadAttempts = 5 };
+
+            await _sut.ProcessItemAsync(retried, CancellationToken.None);
+
+            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(_item.Folder, _item.ParagraphId));
+            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
+        }
+
+        [Theory]
+        [InlineData(0, 2)]
+        [InlineData(1, 4)]
+        [InlineData(2, 8)]
+        [InlineData(3, 16)]
+        [InlineData(4, 30)]   // capped
+        [InlineData(50, 30)]  // still capped, never overflows
+        public void ModelLoadBackoff_IsExponentialWithCap(int attempt, double expectedSeconds)
+        {
+            Assert.Equal(expectedSeconds, CharacterQueueProcessor.ModelLoadBackoff(attempt).TotalSeconds);
+        }
+
+        [Fact]
         public async Task ItemLevelCancel_DoesNotMarkFailed()
         {
             _attribution.ThrowException = new OperationCanceledException();

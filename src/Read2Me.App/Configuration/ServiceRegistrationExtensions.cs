@@ -76,6 +76,7 @@ public static class ServiceRegistrationExtensions
     {
         services.AddScoped<LlmSettingsService>();
         services.AddScoped<LlmPromptService>();
+        services.AddSingleton<IModelLoadGate, ModelLoadGate>();
         services.AddScoped<ILlmClient, OpenAiLlmClient>();
         services.AddScoped<ILlmCompletionRunner, LlmCompletionRunner>();
         services.AddSingleton<EventBroadcaster<LlmStreamEvent>>();

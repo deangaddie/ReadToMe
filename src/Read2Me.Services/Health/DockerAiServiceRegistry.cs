@@ -6,7 +6,8 @@ using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
-using Read2Me.AppData.Entities;
+using Microsoft.Extensions.Logging;
+using Read2Me.Core.Exceptions;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Health;
@@ -25,7 +26,7 @@ public sealed class DockerAiServiceRegistry
     {
         var services = new[]
         {
-            new DockerAiService("llama",            "read2me-llama",          "http://localhost:8080", "/health", LlamaWarmup("http://localhost:8080"), UsesGpu: true),
+            new DockerAiService("llama",            "read2me-llama",          "http://localhost:8080", "/health", LlamaWarmup(), UsesGpu: true),
             new DockerAiService("chatterbox",       "read2me-chatterbox",     "http://localhost:8000", "/docs", UsesGpu: true),
             new DockerAiService("chatterbox-turbo", "read2me-chatterbox-turbo", "http://localhost:8001", "/docs", UsesGpu: true),
             new DockerAiService("qwen3-tts",        "read2me-qwen3-tts",      "http://localhost:8100", "/docs", UsesGpu: true),
@@ -84,35 +85,33 @@ public sealed class DockerAiServiceRegistry
         host is "127.0.0.1" ? "localhost" : host.ToLowerInvariant();
 
     /// <summary>
-    /// llama warm-up: a one-token "hi" completion sent through the real <see cref="ILlmClient"/> with
-    /// the user's active <see cref="LlmServerConfig"/> — the same model, API key and URL real traffic
-    /// uses. The TurboQuant fork has no server-default model (a completion with no <c>model</c> field
-    /// is rejected 400), and warming any other model would force a reload on the first real request,
-    /// so we must send the configured model. If no active config targets this service (or it has no
-    /// model), there is nothing safe to warm and health alone is treated as readiness.
+    /// llama warm-up: routes the user's active <see cref="Read2Me.AppData.Entities.LlmServerConfig"/>
+    /// through the same <see cref="IModelLoadGate"/> real requests use — the single model-load path in
+    /// the app. The gate no-ops when the config is not switchable or the target model is already
+    /// loaded, so a non-switchable active config (or none) means there is nothing safe to warm and
+    /// health alone is treated as readiness (matching the old "nothing safe to warm" branch).
+    /// A <see cref="ModelStillLoadingException"/> here is soft/retryable: the load is progressing
+    /// out-of-band (the gate's detached trigger runs past the budget) and the real request will wait
+    /// on the gate, so we log "model still loading" and return without failing — never a watchdog trip
+    /// or a hard preflight failure.
     /// </summary>
-    private Func<IServiceProvider, CancellationToken, Task> LlamaWarmup(string baseUrl)
+    private static Func<IServiceProvider, CancellationToken, Task> LlamaWarmup()
     {
         return async (sp, ct) =>
         {
             var settings = sp.GetRequiredService<LlmSettingsService>();
             var active = await settings.GetActiveConfigAsync();
-            if (active is null || string.IsNullOrWhiteSpace(active.Model) || !TargetsEndpoint(active.BaseUrl, baseUrl))
+            if (active is null)
                 return;
 
-            var llm = sp.GetRequiredService<ILlmClient>();
-            // Clone with max_tokens = 1: force the model load without generating a full response.
-            var warm = new LlmServerConfig
+            try
             {
-                ApiType = active.ApiType,
-                BaseUrl = active.BaseUrl,
-                ApiKey = active.ApiKey,
-                Model = active.Model,
-                MaxTokens = 1,
-            };
-            await foreach (var _ in llm.StreamChatAsync(warm, "hi", ct: ct))
+                await sp.GetRequiredService<IModelLoadGate>().EnsureModelLoadedAsync(active, ct);
+            }
+            catch (ModelStillLoadingException ex)
             {
-                // Drain the stream; the load happens server-side as the first token is produced.
+                sp.GetService<ILogger<DockerAiServiceRegistry>>()?.LogInformation(
+                    ex, "llama warm-up: model still loading on {BaseUrl}; treating health as readiness", ex.BaseUrl);
             }
         };
     }
@@ -127,22 +126,5 @@ public sealed class DockerAiServiceRegistry
             var response = await http.PostAsJsonAsync(url, new { text1 = "hi", text2 = "hello" }, ct);
             response.EnsureSuccessStatusCode();
         };
-    }
-
-    /// <summary>
-    /// True when the active config's base URL resolves to the same managed endpoint as
-    /// <paramref name="serviceBaseUrl"/> (tolerating trailing slash and 127.0.0.1 vs localhost).
-    /// </summary>
-    private static bool TargetsEndpoint(string configBaseUrl, string serviceBaseUrl)
-    {
-        if (!Uri.TryCreate(configBaseUrl, UriKind.Absolute, out var a) ||
-            !Uri.TryCreate(serviceBaseUrl, UriKind.Absolute, out var b))
-        {
-            return false;
-        }
-
-        return a.Scheme == b.Scheme
-            && NormalizeHost(a.Host) == NormalizeHost(b.Host)
-            && a.Port == b.Port;
     }
 }

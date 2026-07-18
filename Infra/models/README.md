@@ -10,11 +10,14 @@ Model files (`.gguf`, `.bin`, etc.) are excluded from git — this folder exists
 **Mount:** `./Infra/models:/models:ro` (read-only inside container)  
 **Referenced via:** preset config in `llama/config/models.ini`
 
-Switch model without restart:
+Switch model without restart via **autoload** — name the target model in an inference request and `--models-max 1` evicts the currently loaded model (the request blocks until the new model loads):
 
 ```bash
-curl -X POST http://localhost:8080/v1/models -d '{"model":"gemma-26b"}'
+curl http://localhost:8080/v1/chat/completions \
+  -d '{"model":"gemma-26b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
 ```
+
+`POST /v1/models` does **not** switch models on the pinned fork build (it 404s). Probe the loaded preset with `GET /v1/models` and read each item's `status.value` (`unloaded`/`loading`/`loaded`).
 
 Or restart the service:
 

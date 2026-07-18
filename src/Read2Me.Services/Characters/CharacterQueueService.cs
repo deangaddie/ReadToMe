@@ -12,7 +12,8 @@ namespace Read2Me.Services.Characters
         Guid ChapterId,
         Guid PartId,
         Guid VolumeId,
-        bool Requeued = false);
+        bool Requeued = false,
+        int LoadAttempts = 0);
 
     public enum ParagraphQueueStatus { Queued, Processing }
 
@@ -155,6 +156,46 @@ namespace Read2Me.Services.Characters
             _channel.Writer.TryWrite(item with { Requeued = true });
             _processingPreview = null;
             Changed?.Invoke();
+        }
+
+        /// <summary>
+        /// Requeues an item whose target model is still loading, re-entering the channel only after
+        /// <paramref name="backoff"/> elapses. Distinct from <see cref="Requeue"/>: it does NOT set
+        /// the <see cref="QueuedParagraph.Requeued"/> once-then-fail flag (a model load retries
+        /// indefinitely, never consuming the watchdog requeue budget) and instead bumps
+        /// <see cref="QueuedParagraph.LoadAttempts"/> so the next backoff grows. The item's map
+        /// status returns to Queued immediately; the delayed write is cancelled if the queue is
+        /// cleared while it waits, so a cancelled item never re-enters the channel.
+        /// </summary>
+        public void RequeueForModelLoad(QueuedParagraph item, TimeSpan backoff)
+        {
+            var key = Key(item);
+            _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
+            _processingPreview = null;
+
+            var next = item with { LoadAttempts = item.LoadAttempts + 1 };
+            if (backoff <= TimeSpan.Zero)
+                _channel.Writer.TryWrite(next);
+            else
+                _ = DelayedRequeueAsync(next, backoff, _itemCts.Token);
+
+            Changed?.Invoke();
+        }
+
+        private async Task DelayedRequeueAsync(QueuedParagraph item, TimeSpan backoff, CancellationToken ct)
+        {
+            try
+            {
+                await Task.Delay(backoff, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // The queue was cleared (CancelAll) while this item waited out its backoff — drop it.
+                return;
+            }
+            // Writing to a channel that CancelAll has since swapped is harmless (the old writer is
+            // completed), so no extra guard is needed beyond the cancellation above.
+            _channel.Writer.TryWrite(item);
         }
 
         /// <summary>

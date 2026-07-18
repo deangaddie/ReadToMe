@@ -30,6 +30,10 @@ public static class WorkspaceSeeder
         {
             Name = "fake",
             BaseUrl = "http://fake-llm",
+            // Switchable, matching the real llama fork. The default fake model store reports this model
+            // loaded, so the switch-and-wait gate is a no-op until a test opts into a switch.
+            Model = FakeAiRoutingHandler.DefaultModel,
+            SupportsModelSwitch = true,
         });
 
         await sp.GetRequiredService<TranscriptionSettingsService>().CreateConfigAsync(new TranscriptionServiceConfig

@@ -22,9 +22,6 @@ public static partial class FakeAiResponses
         return $"data: {chunk}\n\ndata: [DONE]\n\n";
     }
 
-    public static string OpenAiModels() =>
-        JsonSerializer.Serialize(new { data = new[] { new { id = "fake-model" } } });
-
     /// <summary>Whisper.CPP <c>response_format=verbose_json</c> response for transcript verification.</summary>
     public static string WhisperVerboseJson(string text) => JsonSerializer.Serialize(new { text });
 

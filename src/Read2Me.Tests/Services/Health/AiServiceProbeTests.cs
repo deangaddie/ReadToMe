@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.AppData.Entities;
+using Read2Me.Core.Exceptions;
 using Read2Me.Services;
 using Read2Me.Services.Health;
 using Read2Me.Services.Llm;
@@ -15,9 +16,11 @@ namespace Read2Me.Tests.Services.Health
     {
         private const string LlamaBaseUrl = "http://localhost:8080";
         private readonly FakeHttpClientFactory _httpFactory = new();
+        private readonly FakeModelLoadGate _gate = new();
 
-        // A DI scope containing the services a config-driven warm-up resolves: the fake HTTP factory,
-        // the active-LLM-config store, and the real LLM client (which posts through the same factory).
+        // A DI scope containing the services a config-driven warm-up resolves: the fake HTTP factory
+        // (used by health probes), the active-LLM-config store, and the model-load gate the llama
+        // warm-up now routes through — the single model-load path in the app.
         private ServiceProvider BuildProvider(AiWatchdogOptions options)
         {
             var services = new ServiceCollection();
@@ -26,7 +29,7 @@ namespace Read2Me.Tests.Services.Health
             services.AddSingleton(Factory);
             services.AddSingleton<LlmSettingsService>();
             services.AddSingleton<IOptions<AiWatchdogOptions>>(Options.Create(options));
-            services.AddSingleton<ILlmClient, OpenAiLlmClient>();
+            services.AddSingleton<IModelLoadGate>(_gate);
             return services.BuildServiceProvider();
         }
 
@@ -91,9 +94,9 @@ namespace Read2Me.Tests.Services.Health
         }
 
         [Fact]
-        public async Task Warmup_Llama_SendsOneTokenHiCompletion_WithConfiguredModel_ReturnsTrueOn2xx()
+        public async Task Warmup_Llama_RoutesActiveConfigThroughGate_ReturnsTrue()
         {
-            _httpFactory.Responder = _ => Status(HttpStatusCode.OK);
+            // The single model-load path: the warm-up hands the active config to the gate.
             var registry = new DockerAiServiceRegistry();
             var sut = CreateSut(out var provider);
             await SeedActiveLlmConfig(provider, model: "gemma-26b_QAT");
@@ -101,32 +104,45 @@ namespace Read2Me.Tests.Services.Health
             var result = await sut.WarmupAsync(registry.GetByName("llama"), CancellationToken.None);
 
             Assert.True(result);
-            Assert.Equal(HttpMethod.Post, _httpFactory.LastRequest?.Method);
-            Assert.EndsWith("/v1/chat/completions", _httpFactory.LastRequest?.RequestUri?.ToString());
-            var body = _httpFactory.LastRequestContent ?? "";
-            Assert.Contains("\"model\":\"gemma-26b_QAT\"", body);
-            Assert.Contains("\"content\":\"hi\"", body);
-            Assert.Contains("\"max_tokens\":1", body);
+            Assert.Equal(1, _gate.CallCount);
+            Assert.Equal("gemma-26b_QAT", _gate.LastConfig?.Model);
         }
 
         [Fact]
-        public async Task Warmup_Llama_NoActiveConfig_ReturnsTrue_WithoutHttpCall()
+        public async Task Warmup_Llama_NoActiveConfig_ReturnsTrue_WithoutCallingGate()
         {
             // Nothing configured → nothing safe to warm; health alone is readiness.
-            _httpFactory.Responder = _ => Status(HttpStatusCode.OK);
             var registry = new DockerAiServiceRegistry();
             var sut = CreateSut(out _);
 
             var result = await sut.WarmupAsync(registry.GetByName("llama"), CancellationToken.None);
 
             Assert.True(result);
-            Assert.Equal(0, _httpFactory.CallCount);
+            Assert.Equal(0, _gate.CallCount);
         }
 
         [Fact]
-        public async Task Warmup_ReturnsFalse_WhenRequestThrows_WithoutEscaping()
+        public async Task Warmup_Llama_ModelStillLoading_ReturnsTrue_SoftOutcome_NoWatchdogTrip()
         {
-            _httpFactory.Responder = _ => throw new HttpRequestException("boom");
+            // A responsive-but-loading endpoint is soft/retryable: the load runs on out-of-band and the
+            // real request waits on the gate, so warm-up reports readiness rather than a warm-up failure
+            // (a false would drive the recovery loop into another restart).
+            _gate.Behavior = (c, _) => throw new ModelStillLoadingException(
+                c.BaseUrl, c.Model ?? string.Empty, TimeSpan.FromSeconds(300), TimeSpan.FromSeconds(300));
+            var registry = new DockerAiServiceRegistry();
+            var sut = CreateSut(out var provider);
+            await SeedActiveLlmConfig(provider, model: "gemma-26b_QAT");
+
+            var result = await sut.WarmupAsync(registry.GetByName("llama"), CancellationToken.None);
+
+            Assert.True(result);
+        }
+
+        [Fact]
+        public async Task Warmup_Llama_ProviderException_ReturnsFalse_WithoutEscaping()
+        {
+            // A genuinely unreachable endpoint stays a hard warm-up failure (false) — the normal path.
+            _gate.Behavior = (_, _) => throw new LlmProviderException("llama unreachable", new HttpRequestException("boom"));
             var registry = new DockerAiServiceRegistry();
             var sut = CreateSut(out var provider);
             await SeedActiveLlmConfig(provider, model: "gemma-26b_QAT");
@@ -139,10 +155,9 @@ namespace Read2Me.Tests.Services.Health
         [Fact]
         public async Task Warmup_ReturnsFalse_OnTimeout_WithoutEscaping()
         {
-            _httpFactory.Responder = async _ =>
+            _gate.Behavior = async (_, ct) =>
             {
-                await Task.Delay(Timeout.Infinite, _httpFactory.LastToken);
-                return new HttpResponseMessage(HttpStatusCode.OK);
+                await Task.Delay(Timeout.Infinite, ct);
             };
             var registry = new DockerAiServiceRegistry();
             var options = new AiWatchdogOptions { WarmupTimeoutSeconds = 0 };
@@ -161,6 +176,22 @@ namespace Read2Me.Tests.Services.Health
 
             Assert.True(result);
             Assert.Equal(0, _httpFactory.CallCount);
+        }
+
+        // Stands in for the real ModelLoadGate: records the config it was handed and runs a
+        // configurable behaviour so tests can drive the loaded / still-loading / unreachable outcomes.
+        private sealed class FakeModelLoadGate : IModelLoadGate
+        {
+            public Func<LlmServerConfig, CancellationToken, Task> Behavior { get; set; } = (_, _) => Task.CompletedTask;
+            public int CallCount { get; private set; }
+            public LlmServerConfig? LastConfig { get; private set; }
+
+            public Task EnsureModelLoadedAsync(LlmServerConfig config, CancellationToken ct)
+            {
+                CallCount++;
+                LastConfig = config;
+                return Behavior(config, ct);
+            }
         }
 
         private sealed class FakeHttpClientFactory : IHttpClientFactory

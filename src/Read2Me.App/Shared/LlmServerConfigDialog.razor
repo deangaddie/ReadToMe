@@ -60,6 +60,12 @@
                 }
             </MudSelect>
 
+            <MudCheckBox @bind-Value="_form.SupportsModelSwitch" Label="Supports model switch"
+                         Color="Color.Primary" Dense="true" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8" Style="margin-top:-8px">
+                This endpoint (e.g. the local llama.cpp fork) can load the configured model on demand.
+            </MudText>
+
             <MudExpansionPanels Elevation="0">
                 <MudExpansionPanel Text="Request parameters (optional)">
                     <MudStack Spacing="3">

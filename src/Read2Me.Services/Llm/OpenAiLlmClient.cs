@@ -19,21 +19,28 @@ namespace Read2Me.Services.Llm
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<OpenAiLlmClient> _logger;
         private readonly AiWatchdogOptions _watchdogOptions;
+        private readonly IModelLoadGate _modelLoadGate;
 
         public OpenAiLlmClient(
             IHttpClientFactory httpClientFactory,
             ILogger<OpenAiLlmClient> logger,
-            IOptions<AiWatchdogOptions> watchdogOptions)
+            IOptions<AiWatchdogOptions> watchdogOptions,
+            IModelLoadGate modelLoadGate)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
             _watchdogOptions = watchdogOptions.Value;
+            _modelLoadGate = modelLoadGate;
         }
 
         public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
             LlmServerConfig config, string prompt, string? jsonSchema = null,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
+            // On a switchable llama endpoint, ensure the target model is loaded before the real request
+            // runs — otherwise the fork would block the request mid-load and trip the normal timeout.
+            await _modelLoadGate.EnsureModelLoadedAsync(config, ct);
+
             _logger.LogTrace("LLM prompt:\n{Prompt}", prompt);
 
             var http = CreateClient(config);

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Read2Me.Core.Exceptions;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
 
@@ -120,6 +121,20 @@ namespace Read2Me.Services.Llm
                 // attribution chain to the next config instead of stopping.
                 PublishAborted(timings);
                 throw new OperationCanceledException("LLM run cancelled.", ex, ct);
+            }
+            catch (ModelStillLoadingException ex)
+            {
+                // The model is still loading on a switchable endpoint (the switch-and-wait gate gave
+                // up within its budget while the server stayed responsive). This is "provider busy",
+                // not "provider dead": reporting a failure here would trip watchdog recovery (a
+                // container restart mid-load) and escalate the attribution chain to the next config
+                // (evicting the very model we are waiting for). So we skip reporter.ReportFailure and
+                // publish no StreamFailed — like the cancel paths above — but still hand the abort
+                // reading to the aggregator for timing bookkeeping. The queue requeues with backoff.
+                logger.LogInformation(
+                    "LLM run '{Label}' deferred — model still loading: {Message}", request.Label, ex.Message);
+                PublishAborted(timings);
+                return new LlmRunResult<string>(LlmRunOutcome.ModelLoading, null, sb.ToString(), ex.Message);
             }
             catch (Exception ex)
             {

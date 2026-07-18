@@ -36,6 +36,32 @@ namespace Read2Me.Tests.App
             Assert.Equal(AttributionPromptStyle.Simple, rebuilt.PromptStyle);
         }
 
+        // ---- Supports model switch ----
+
+        [Fact]
+        public void NewForm_DefaultsSupportsModelSwitchOff()
+        {
+            Assert.False(Valid().SupportsModelSwitch);
+            Assert.False(Valid().BuildConfig().SupportsModelSwitch);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void SupportsModelSwitch_SurvivesRoundTrip(bool flag)
+        {
+            var config = new LlmServerConfig
+            {
+                Name = "Local",
+                BaseUrl = "http://localhost:8080",
+                SupportsModelSwitch = flag,
+            };
+
+            var rebuilt = LlmServerConfigForm.FromConfig(config).BuildConfig();
+
+            Assert.Equal(flag, rebuilt.SupportsModelSwitch);
+        }
+
         // ---- Validate: required fields ----
 
         [Fact]

@@ -29,6 +29,9 @@ namespace Read2Me.App.Shared
         /// <summary>Attribution prompt tier this server uses.</summary>
         public AttributionPromptStyle PromptStyle { get; set; } = AttributionPromptStyle.Full;
 
+        /// <summary>True when this endpoint can switch the loaded model on demand (llama.cpp autoload).</summary>
+        public bool SupportsModelSwitch { get; set; }
+
         public static LlmServerConfigForm FromConfig(LlmServerConfig c) => new()
         {
             Id = c.Id,
@@ -44,6 +47,7 @@ namespace Read2Me.App.Shared
             PresencePenalty = c.PresencePenalty?.ToString(CultureInfo.InvariantCulture),
             AttributionBatchSize = c.AttributionBatchSize.ToString(CultureInfo.InvariantCulture),
             PromptStyle = c.PromptStyle,
+            SupportsModelSwitch = c.SupportsModelSwitch,
         };
 
         public string? Validate()
@@ -90,6 +94,7 @@ namespace Read2Me.App.Shared
                 PresencePenalty = pres,
                 AttributionBatchSize = batchSize ?? 1,
                 PromptStyle = PromptStyle,
+                SupportsModelSwitch = SupportsModelSwitch,
             };
         }
 

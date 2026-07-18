@@ -134,10 +134,20 @@ Custom image built from `Dockerfile.llama` using the TurboQuant KV-cache fork pi
 
 The fork is frozen until a failure forces a change: there is no update cadence or Dependabot entry. Before any bump, diff the candidate SHA against its upstream `ggml-org/llama.cpp` merge-base and review the fork-specific delta. Any change to networking, file I/O outside the model path, or build scripts blocks the bump.
 
-Model presets are defined in `llama/config/models.ini`. Multiple models can be configured; only one is loaded at a time (`--models-max 1`). Switch without restart:
+Model presets are defined in `llama/config/models.ini`. Multiple models can be configured; only one is loaded at a time (`--models-max 1`). Switch without restart via **autoload**: name the target model in an inference request and the fork evicts the currently loaded model to make room. (The request blocks until the new model finishes loading, then responds.)
 
 ```bash
-curl -X POST http://localhost:8080/v1/models -d '{"model":"gemma-26b"}'
+# Autoload gemma-26b by naming it in a chat-completion request:
+curl http://localhost:8080/v1/chat/completions \
+  -d '{"model":"gemma-26b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
+```
+
+> **Note:** `POST /v1/models` does **not** switch models on this pinned fork build — it 404s. Autoload (above) is the only working switch.
+
+Probe which preset is currently loaded with `GET /v1/models` — each preset item carries a `status.value` of `unloaded`, `loading`, or `loaded`:
+
+```bash
+curl http://localhost:8080/v1/models
 ```
 
 All presets are configured for a 34000-token context (`c = 34000`).

@@ -20,7 +20,7 @@ namespace Read2Me.Tests.Services.Llm
             var handler = new StreamingHandler(responseBody);
             var factory = new SingleClientFactory(new HttpClient(handler));
             var options = Options.Create(new AiWatchdogOptions { StreamInactivitySeconds = inactivitySeconds });
-            return new OpenAiLlmClient(factory, NullLogger<OpenAiLlmClient>.Instance, options);
+            return new OpenAiLlmClient(factory, NullLogger<OpenAiLlmClient>.Instance, options, new NoOpModelLoadGate());
         }
 
         private static byte[] Line(string s) => Encoding.UTF8.GetBytes(s + "\n");
@@ -74,7 +74,7 @@ namespace Read2Me.Tests.Services.Llm
             // recovery and escalating the attribution chain to the next config.
             var factory = new SingleClientFactory(new HttpClient(new BlockingHandler()));
             var options = Options.Create(new AiWatchdogOptions { StreamInactivitySeconds = 60 });
-            var client = new OpenAiLlmClient(factory, NullLogger<OpenAiLlmClient>.Instance, options);
+            var client = new OpenAiLlmClient(factory, NullLogger<OpenAiLlmClient>.Instance, options, new NoOpModelLoadGate());
             using var cts = new CancellationTokenSource();
 
             var pump = Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
@@ -91,6 +91,12 @@ namespace Read2Me.Tests.Services.Llm
         private sealed class SingleClientFactory(HttpClient client) : IHttpClientFactory
         {
             public HttpClient CreateClient(string name) => client;
+        }
+
+        /// <summary>The gate no-ops for these non-switchable configs; a stub keeps the tests focused.</summary>
+        private sealed class NoOpModelLoadGate : IModelLoadGate
+        {
+            public Task EnsureModelLoadedAsync(LlmServerConfig config, CancellationToken ct) => Task.CompletedTask;
         }
 
         /// <summary>Never responds — the send only ends when the caller's token is cancelled.</summary>

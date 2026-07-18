@@ -139,7 +139,41 @@ namespace Read2Me.App.Characters
                         queue.Requeue(item);
                     }
                     break;
+
+                case AttributionStatus.ModelLoading:
+                    // The target model is still loading on a switchable llama endpoint — provider
+                    // busy, not dead. Requeue with exponential backoff, indefinitely: failing or
+                    // escalating would evict the very load we are waiting for. This is DISTINCT from
+                    // ServiceUnavailable's requeue-once-then-fail — it never touches the Requeued
+                    // flag, so it never consumes that budget, and a genuinely wedged load simply
+                    // loops until the user cancels.
+                    var backoff = ModelLoadBackoff(item.LoadAttempts);
+                    logger.LogInformation(
+                        "Paragraph {ParagraphId} model still loading — requeuing in {Backoff:0.#}s (attempt {Attempt}): {Reason}",
+                        item.ParagraphId, backoff.TotalSeconds, item.LoadAttempts + 1, outcome.FailureReason);
+                    queue.RequeueForModelLoad(item, backoff);
+                    break;
             }
+        }
+
+        /// <summary>Base delay for the first model-load retry; doubles each attempt up to the cap.</summary>
+        private static readonly TimeSpan ModelLoadBackoffBase = TimeSpan.FromSeconds(2);
+
+        /// <summary>Upper bound on the model-load retry backoff — a wedged load polls at this cadence.</summary>
+        private static readonly TimeSpan ModelLoadBackoffCap = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Exponential-with-cap backoff for an indefinitely-retried model load. <paramref name="attempt"/>
+        /// is the 0-based prior attempt count: 0→2s, 1→4s, 2→8s, 3→16s, 4→30s (cap), and 30s
+        /// thereafter. The shift is bounded so a long-running wedged load can never overflow.
+        /// </summary>
+        internal static TimeSpan ModelLoadBackoff(int attempt)
+        {
+            if (attempt < 0) attempt = 0;
+            // Cap the doubling factor at 16 (attempt ≥ 4) before it can overflow or exceed the cap.
+            var factor = attempt >= 4 ? 16 : 1 << attempt;
+            var delay = ModelLoadBackoffBase * factor;
+            return delay < ModelLoadBackoffCap ? delay : ModelLoadBackoffCap;
         }
 
         /// <summary>

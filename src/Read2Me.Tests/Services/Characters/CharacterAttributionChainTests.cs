@@ -346,6 +346,71 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        // Model still loading: short-circuit, no escalation, no best-prior fallback
+        // ─────────────────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task ModelLoading_ShortCircuitsChain_DoesNotEscalate()
+        {
+            var settings = NewSettings();
+            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
+
+            // A reports the model still loading → the item must stop here (escalating would autoload
+            // a different model and evict the load we're waiting for). B is never called.
+            var llm = new SequenceCompletionRunner()
+                .FailFor("A", LlmRunOutcome.ModelLoading, "still loading")
+                .ForConfig("B", Resolved("Alice"));
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
+
+            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+
+            Assert.Equal(AttributionStatus.ModelLoading, result.Status);
+            Assert.Equal(["A"], llm.Configs.Select(c => c.Name));
+        }
+
+        [Fact]
+        public async Task ModelLoading_AtFinalStep_DoesNotFallBackToBestPrior()
+        {
+            var settings = NewSettings();
+            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
+
+            // A answers Unknown (a usable, suspect answer → becomes the best-prior). B (final) reports
+            // the model still loading. ModelLoading must surface as-is, NOT resolve from A's best-prior
+            // answer — the item is retryable, not decided.
+            var llm = new SequenceCompletionRunner()
+                .ForConfig("A", Unknown)
+                .FailFor("B", LlmRunOutcome.ModelLoading, "still loading");
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
+
+            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+
+            Assert.Equal(AttributionStatus.ModelLoading, result.Status);
+            Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
+        }
+
+        [Fact]
+        public async Task Batch_ModelLoading_SurfacedForEveryItem_NoEscalation()
+        {
+            var settings = NewSettings();
+            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
+
+            var (batch, ctx) = MakeBatch(2);
+            // The step-0 batch call reports the model still loading → every included item surfaces
+            // ModelLoading and nothing escalates to B.
+            var llm = new SequenceCompletionRunner()
+                .FailFor("A", LlmRunOutcome.ModelLoading, "still loading")
+                .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
+            var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
+
+            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+
+            Assert.Equal(2, result.Outcomes.Count);
+            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.ModelLoading, o.Outcome.Status));
+            Assert.Equal(1, llm.Configs.Count(c => c.Name == "A"));
+            Assert.DoesNotContain(llm.Configs, c => c.Name == "B");
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         // Queue-wide streaming escalation (the fix)
         // ─────────────────────────────────────────────────────────────────────
 

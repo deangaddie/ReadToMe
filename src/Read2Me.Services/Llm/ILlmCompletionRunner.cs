@@ -22,6 +22,13 @@ namespace Read2Me.Services.Llm
         ParseFailed,
         Failed,
         ServiceUnavailable,
+        /// <summary>
+        /// A switchable llama endpoint stayed responsive but its target model had not finished
+        /// loading within the budget. Provider is busy, not dead: the health monitor is bypassed and
+        /// the caller waits/retries rather than escalating to the next config (which would evict the
+        /// load in progress).
+        /// </summary>
+        ModelLoading,
     }
 
     /// <param name="Config">Server to call.</param>

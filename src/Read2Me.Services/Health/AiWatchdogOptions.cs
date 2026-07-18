@@ -23,6 +23,12 @@ public sealed class AiWatchdogOptions
     /// <summary>Overall bound on retrying the warm-up request.</summary>
     public int WarmupTimeoutSeconds { get; set; } = 300;
 
+    /// <summary>Overall bound on waiting for a switchable llama endpoint to load its target model.</summary>
+    public int ModelLoadBudgetSeconds { get; set; } = 300;
+
+    /// <summary>Delay between <c>GET /v1/models</c> polls while waiting for a model to load.</summary>
+    public int ModelLoadPollIntervalSeconds { get; set; } = 1;
+
     /// <summary>Consecutive failed recoveries before the watchdog gives up and pauses the queue.</summary>
     public int MaxRecoveryAttempts { get; set; } = 2;
 

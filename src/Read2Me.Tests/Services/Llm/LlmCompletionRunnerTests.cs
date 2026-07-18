@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
+using Read2Me.Core.Exceptions;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 using Read2Me.Tests.Fakes;
@@ -386,6 +387,33 @@ namespace Read2Me.Tests.Services.Llm
             Assert.Equal(LlmRunOutcome.Failed, result.Outcome);
             Assert.Equal("boom", result.Error);
             Assert.IsType<StreamFailed>(_events[^1]);
+        }
+
+        // ---- Model still loading (switch-and-wait) ----
+
+        [Fact]
+        public async Task ModelStillLoading_ReturnsModelLoading_WithoutReportingFailure()
+        {
+            // A switchable llama endpoint stayed responsive but the model had not finished loading
+            // in budget. Reporting it as a failure would trip watchdog recovery (restart mid-load)
+            // and escalate the chain to the next config, evicting the very model we are waiting for.
+            var llm = new ChunkedLlmClient().Throws(new ModelStillLoadingException(
+                "http://localhost:8080", "gemma-4b",
+                TimeSpan.FromSeconds(300), TimeSpan.FromSeconds(300)));
+            _reporter.Managed = true;   // even a managed (restartable) endpoint must not be reported
+            var runner = Runner(llm);
+
+            var result = await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L"),
+                CancellationToken.None);
+
+            Assert.Equal(LlmRunOutcome.ModelLoading, result.Outcome);
+            // The health monitor never sees it — no failure and no spurious success.
+            Assert.Empty(_reporter.Failures);
+            Assert.Empty(_reporter.Successes);
+            // Not an error the user sees, so no StreamFailed; but the abort reading is still published.
+            Assert.DoesNotContain(_events, e => e is StreamFailed);
+            Assert.Contains(_events, e => e is StreamAborted);
         }
 
         // ---- Cancel vs timeout ----

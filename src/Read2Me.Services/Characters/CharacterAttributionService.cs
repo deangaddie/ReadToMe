@@ -7,7 +7,7 @@ using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
 {
-    public enum AttributionStatus { Resolved, Unknown, NoLlmConfigured, Failed, ServiceUnavailable }
+    public enum AttributionStatus { Resolved, Unknown, NoLlmConfigured, Failed, ServiceUnavailable, ModelLoading }
 
     /// <summary>
     /// Why a step's answer looks suspect and might be re-asked on a stronger config. Additive
@@ -455,6 +455,14 @@ namespace Read2Me.Services.Characters
                 case LlmRunOutcome.ParseFailed:
                     logger.LogWarning("Failed to parse LLM response for {ParagraphId}: {Raw}", item.ParagraphId, run.Raw);
                     return ParseFailure(run.Error);
+                case LlmRunOutcome.ModelLoading:
+                    // The model is still loading on a switchable endpoint. This is neither a quality
+                    // suspect nor an infra failure: with a None trigger the chain short-circuits (it
+                    // must not escalate — that would autoload a different model and evict the load we
+                    // are waiting for) and, because ModelLoading is not usable, it never feeds the
+                    // best-prior fallback. It surfaces to the queue, which requeues with backoff.
+                    logger.LogInformation("Paragraph {ParagraphId} model still loading — deferring to queue backoff", item.ParagraphId);
+                    return ModelLoading(run.Error);
                 case LlmRunOutcome.Failed:
                 case LlmRunOutcome.ServiceUnavailable:
                     // Infra failure is orthogonal to quality — it carries no EscalationTrigger.
@@ -506,6 +514,14 @@ namespace Read2Me.Services.Characters
 
         private static StepOutcome ParseFailure(string? error) =>
             new(new AttributionOutcome(AttributionStatus.Failed, null, error), EscalationTrigger.ParseFailure);
+
+        /// <summary>
+        /// Model-still-loading outcome. A None trigger so the chain accepts it immediately (no
+        /// escalation), and a non-usable status so it never feeds the best-prior fallback — the queue
+        /// requeues the item with backoff until the model is ready.
+        /// </summary>
+        private static StepOutcome ModelLoading(string? error) =>
+            new(new AttributionOutcome(AttributionStatus.ModelLoading, null, error), EscalationTrigger.None);
 
         private static bool TryParseSegments(
             string raw, out SegmentAttributionResult? parsed, out string? error)
@@ -821,6 +837,19 @@ namespace Read2Me.Services.Characters
                 new LlmRunRequest(runConfig, prompt, $"{included.Count} paragraphs: {first.Preview}",
                     SegmentBatchAttributionSchema.JsonSchema, CompletionShape.Array),
                 TryParseBatchSegments, ct);
+
+            if (run.Outcome == LlmRunOutcome.ModelLoading)
+            {
+                // Model still loading — surface ModelLoading (None trigger) for every included item
+                // so the chain short-circuits and the queue requeues with backoff. Not a quality
+                // suspect and not an infra failure, so it neither escalates nor feeds best-prior.
+                // Deferred items are returned untouched, as with an infra failure below.
+                logger.LogInformation("Batch of {Count} paragraphs: model still loading — deferring to queue backoff", included.Count);
+                var loading = ModelLoading(run.Error);
+                foreach (var item in included)
+                    outcomes.Add((item, loading));
+                return new BatchCoreResult(outcomes, deferred);
+            }
 
             if (run.Outcome is LlmRunOutcome.Failed or LlmRunOutcome.ServiceUnavailable)
             {

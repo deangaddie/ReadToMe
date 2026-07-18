@@ -59,10 +59,11 @@ Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB
 
 **Chatterbox** requires `reference_audio` (WAV/MP3) on every request — no built-in voices.
 
-**llama.cpp** uses a TurboQuant KV-cache fork. Switch model without restart:
+**llama.cpp** uses a TurboQuant KV-cache fork. Switch model without restart via autoload — name the target model in an inference request; `--models-max 1` evicts the loaded model (`POST /v1/models` does NOT switch on this fork build — it 404s):
 ```bash
-curl -X POST http://localhost:8080/v1/models -d '{"model":"gemma-26b"}'
+curl http://localhost:8080/v1/chat/completions -d '{"model":"gemma-26b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
 ```
+Probe the loaded preset with `GET /v1/models` (each item's `status.value` is `unloaded`/`loading`/`loaded`).
 Model presets defined in `Infra/llama/config/models.ini` (e.g. `gemma-26b`, `qwen-28b`, `gemma-12b_QAT`, `gemma-4b`, `qwen-9b`, `qwen-4b`, `ornith-1.0-9b-q4`).
 
 GGUF model files live in `Infra/models/` (bind-mounted, not committed).

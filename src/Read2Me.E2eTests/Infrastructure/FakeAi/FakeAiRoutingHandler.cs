@@ -11,9 +11,22 @@ namespace Read2Me.E2eTests.Infrastructure.FakeAi;
 /// </summary>
 public sealed class FakeAiRoutingHandler : HttpMessageHandler
 {
+    /// <summary>
+    /// Model the seeded llama config targets. It reads <c>loaded</c> in the default model store, so the
+    /// switch-and-wait gate is a no-op for every test that doesn't opt into a switch.
+    /// </summary>
+    public const string DefaultModel = "fake-model";
+
     /// <summary>Per-test hook: given the LLM prompt, return the assistant reply content.</summary>
     public Func<string, string> LlmReply { get; set; } =
         p => FakeAiResponses.AttributionReply(p, "Narrator");
+
+    /// <summary>
+    /// Per-test llama model state driving <c>GET /v1/models</c> status and autoload semantics. Default:
+    /// the seeded model reads <c>loaded</c> (no switch). A switch test swaps in
+    /// <see cref="FakeLlmModelStore.Switching"/> so the target starts unloaded and loads over polls.
+    /// </summary>
+    public FakeLlmModelStore LlmModels { get; set; } = FakeLlmModelStore.AllLoaded(DefaultModel);
 
     /// <summary>Text of the last /api/stream TTS request; echoed back by fake-whisper.</summary>
     private volatile string _lastTtsText = "";
@@ -28,6 +41,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     public void Reset()
     {
         LlmReply = p => FakeAiResponses.AttributionReply(p, "Narrator");
+        LlmModels = FakeLlmModelStore.AllLoaded(DefaultModel);
         _lastTtsText = "";
         lock (LlmPromptsSeen) LlmPromptsSeen.Clear();
     }
@@ -55,11 +69,14 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         HttpRequestMessage request, string path, CancellationToken ct)
     {
         if (path.EndsWith("v1/models", StringComparison.Ordinal))
-            return Json(FakeAiResponses.OpenAiModels());
+            return Json(LlmModels.RenderJson());
 
         if (path.EndsWith("v1/chat/completions", StringComparison.Ordinal))
         {
             var body = await request.Content!.ReadAsStringAsync(ct);
+            // Naming a model kicks off its autoload in the model store (the real fork's --models-max 1
+            // behaviour); the switch-and-wait gate's max_tokens=1 trigger and the real request both land here.
+            LlmModels.NoteRequest(ExtractModel(body));
             var prompt = ExtractPrompt(body);
             lock (LlmPromptsSeen) LlmPromptsSeen.Add(prompt);
             var sse = FakeAiResponses.OpenAiSse(LlmReply(prompt));
@@ -96,6 +113,14 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         {
             Content = new ByteArrayContent(FakeAiResponses.SilentWav()),
         };
+    }
+
+    private static string? ExtractModel(string requestBody)
+    {
+        using var doc = JsonDocument.Parse(requestBody);
+        return doc.RootElement.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.String
+            ? m.GetString()
+            : null;
     }
 
     private static string ExtractPrompt(string requestBody)

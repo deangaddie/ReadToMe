@@ -35,3 +35,25 @@ public class LlmProviderException : Read2MeException
 {
     public LlmProviderException(string message, Exception innerException) : base(message, innerException) { }
 }
+
+/// <summary>
+/// Thrown when a switchable llama endpoint stays responsive but the target model has not finished
+/// loading within the budget. Distinct from <see cref="LlmProviderException"/> so callers wait/retry
+/// (the model is still loading) rather than treat the endpoint as dead and escalate to another config.
+/// </summary>
+public class ModelStillLoadingException : Read2MeException
+{
+    public string BaseUrl { get; }
+    public string Model { get; }
+    public TimeSpan Elapsed { get; }
+    public TimeSpan Budget { get; }
+
+    public ModelStillLoadingException(string baseUrl, string model, TimeSpan elapsed, TimeSpan budget)
+        : base($"Model \"{model}\" is still loading on {baseUrl} after {elapsed.TotalSeconds:0}s (budget {budget.TotalSeconds:0}s).")
+    {
+        BaseUrl = baseUrl;
+        Model = model;
+        Elapsed = elapsed;
+        Budget = budget;
+    }
+}
