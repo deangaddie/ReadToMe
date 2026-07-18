@@ -148,7 +148,7 @@ namespace Read2Me.Services.Characters
         private static bool IsUsable(AttributionStatus status) =>
             status is AttributionStatus.Resolved or AttributionStatus.Unknown;
 
-        /// <summary>Chain length ≥ 2. Names in escalation order.</summary>
+        /// <summary>True when the chain has an escalation tail (length ≥ 2).</summary>
         private static bool DidEscalate(IReadOnlyList<LlmServerConfig> chain) => chain.Count >= 2;
 
         /// <summary>
