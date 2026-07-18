@@ -15,9 +15,10 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters
 {
     /// <summary>
-    /// Slice-003 escalation-chain behaviour, tested through the public
-    /// <see cref="CharacterAttributionService.AttributeAsync"/>/<c>AttributeBatchAsync</c> seam plus
-    /// <see cref="LlmSettingsService"/> over the in-memory DB, with a config-recording fake LLM.
+    /// Escalation-chain behaviour, tested through the production walk
+    /// (<see cref="AttributionEscalationChain.AttributeQueueAsync"/>) over the real
+    /// <see cref="IChainStep"/> and <see cref="LlmSettingsService"/> on the in-memory DB, with a
+    /// config-recording fake LLM. Single-item scenarios drain a one-item queue.
     /// </summary>
     public class CharacterAttributionChainTests : AppDbTestBase
     {
@@ -29,9 +30,8 @@ namespace Read2Me.Tests.Services.Characters
         private CharacterAttributionService NewService(
             ILlmCompletionRunner runner, IProjectReader reader, LlmSettingsService settings,
             EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
-            new(runner, settings, NewPrompts(), reader,
-                NullLogger<CharacterAttributionService>.Instance,
-                broadcaster ?? new EventBroadcaster<LlmStreamEvent>());
+            new(runner, NewPrompts(), reader,
+                NullLogger<CharacterAttributionService>.Instance);
 
         private static async Task<LlmServerConfig> AddConfigAsync(
             LlmSettingsService svc, string name, int batchSize = 8)
@@ -181,7 +181,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner().ForConfig("Small", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            await DrainStreamAsync(svc, settings, [MakeItem()]);
 
             var prompt = Assert.Single(llm.Calls).Prompt;
             Assert.Contains(SimpleMarker, prompt);
@@ -201,7 +201,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("Big", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal("Alice", Speaker(result));
@@ -244,62 +244,6 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Unknown_ResolvesAcrossTwoConfigs()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", Unknown)
-                .ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
-
-            Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", Speaker(result));
-            Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
-        }
-
-        [Fact]
-        public async Task UnlistedName_AcceptedAtFinalStep()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            // Both name an unlisted character; A escalates, B is final so its unlisted name stands.
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", Resolved("Zorg"))
-                .ForConfig("B", Resolved("Mordecai"));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
-
-            Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Mordecai", Speaker(result));
-            Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
-        }
-
-        [Fact]
-        public async Task MidChainInfraFailure_SkipsAhead()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8), ("C", 8));
-
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", Unknown)                                              // escalates
-                .FailFor("B", LlmRunOutcome.ServiceUnavailable, "B down")             // infra → skip
-                .ForConfig("C", Resolved("Alice"));                                   // final answer
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
-
-            Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal("Alice", Speaker(result));
-            Assert.Equal(["A", "B", "C"], llm.Configs.Select(c => c.Name));
-        }
-
-        [Fact]
         public async Task LastEntryInfraFailure_UsesBestPriorAnswer_ElseFailed()
         {
             var settings = NewSettings();
@@ -310,7 +254,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("A", Resolved("Zorg"))
                 .FailFor("B", LlmRunOutcome.Failed, "B down");
             var withPrior = NewService(llmGood, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-            var priorResult = await withPrior.AttributeAsync(MakeItem(), CancellationToken.None);
+            var priorResult = Assert.Single(await DrainStreamAsync(withPrior, settings, [MakeItem()])).Outcome;
             Assert.Equal(AttributionStatus.Resolved, priorResult.Status);
             Assert.Equal("Zorg", Speaker(priorResult));
 
@@ -319,7 +263,7 @@ namespace Read2Me.Tests.Services.Characters
                 .FailFor("A", LlmRunOutcome.Failed, "A down")
                 .FailFor("B", LlmRunOutcome.Failed, "B down");
             var noPrior = NewService(llmNone, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-            var noneResult = await noPrior.AttributeAsync(MakeItem(), CancellationToken.None);
+            var noneResult = Assert.Single(await DrainStreamAsync(noPrior, settings, [MakeItem()])).Outcome;
             Assert.Equal(AttributionStatus.Failed, noneResult.Status);
         }
 
@@ -334,7 +278,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", Unknown);
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
             Assert.Equal("Speaker unknown after escalating through 2 models (A → B)", result.FailureReason);
@@ -353,7 +297,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner().ForConfig("A", Unknown);
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings, broadcaster);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()], broadcaster)).Outcome;
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
             Assert.Null(result.FailureReason);
@@ -377,7 +321,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.ModelLoading, result.Status);
             Assert.Equal(["A"], llm.Configs.Select(c => c.Name));
@@ -397,7 +341,7 @@ namespace Read2Me.Tests.Services.Characters
                 .FailFor("B", LlmRunOutcome.ModelLoading, "still loading");
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.ModelLoading, result.Status);
             Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
@@ -417,10 +361,10 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
             var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
 
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+            var results = await DrainStreamAsync(svc, settings, batch);
 
-            Assert.Equal(2, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.ModelLoading, o.Outcome.Status));
+            Assert.Equal(2, results.Count);
+            Assert.All(results, o => Assert.Equal(AttributionStatus.ModelLoading, o.Outcome.Status));
             Assert.Equal(1, llm.Configs.Count(c => c.Name == "A"));
             Assert.DoesNotContain(llm.Configs, c => c.Name == "B");
         }
@@ -864,130 +808,14 @@ namespace Read2Me.Tests.Services.Characters
             var reader = new ChainReader(DefaultContext(), ctx, KnownAlice());
             var svc = NewService(llm, reader, settings);
 
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+            var results = await DrainStreamAsync(svc, settings, batch);
 
-            Assert.Equal(2, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Failed, o.Outcome.Status));
+            Assert.Equal(2, results.Count);
+            Assert.All(results, o => Assert.Equal(AttributionStatus.Failed, o.Outcome.Status));
             // A: 1 batch call. B: 1 batch call + 2 single fallbacks = 3. Total 4.
             Assert.Equal(4, llm.Calls.Count);
             Assert.Equal("A", llm.Configs[0].Name);
             Assert.All(llm.Configs.Skip(1), c => Assert.Equal("B", c.Name));
-        }
-
-        [Fact]
-        public async Task Batch_Step0DeferralsPassThroughUnchanged()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            var (batch, _) = MakeBatch(3);
-            // Step-0 context trims the third item as deferred.
-            var ctx = new ParagraphBatchContext(
-                [new BatchContextEntry(QueryText, [], 0), new BatchContextEntry(QueryText, [], 1)],
-                [batch[0].ParagraphId, batch[1].ParagraphId],
-                [batch[2].ParagraphId]);
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
-
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            Assert.Equal(2, result.Outcomes.Count);
-            var deferred = Assert.Single(result.Deferred);
-            Assert.Equal(batch[2], deferred);
-        }
-
-        [Fact]
-        public async Task Batch_Step2BatchSizeRespected()
-        {
-            var settings = NewSettings();
-            // A batch size 4 (one step-0 call for 4 items); B batch size 2 (suspects grouped in 2s).
-            await RegisterChainAsync(settings, ("A", 4), ("B", 2));
-
-            var (batch, _) = MakeBatch(4);
-            // All four are unknown from A → all four escalate to B. Dynamic reader (null fixed ctx)
-            // builds a context matching each chunk, so re-grouping into 2s is exercised faithfully.
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", BatchJson((0, "unknown"), (1, "unknown"), (2, "unknown"), (3, "unknown")))
-                .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
-
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            Assert.Equal(4, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
-            // A: 1 call. B: 4 suspects / batch size 2 = 2 calls. Total 3.
-            Assert.Equal(1, llm.Configs.Count(c => c.Name == "A"));
-            Assert.Equal(2, llm.Configs.Count(c => c.Name == "B"));
-        }
-
-        [Fact]
-        public async Task Batch_EscalationStartedPublished_BeforeStepOne()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
-            var events = new List<LlmStreamEvent>();
-            broadcaster.Event += e => events.Add(e);
-
-            var (batch, ctx) = MakeBatch(2);
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", BatchJson((0, "unknown"), (1, "unknown")))
-                .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
-
-            await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            var escalation = Assert.Single(events.OfType<EscalationStarted>());
-            Assert.Equal(1, escalation.Step);
-            Assert.Equal("B", escalation.ConfigName);
-            Assert.Equal(2, escalation.ItemCount);
-        }
-
-        [Fact]
-        public async Task Batch_SingleEntryChain_IdenticalToToday_NoEscalationEvent()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8)); // active only
-
-            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
-            var events = new List<LlmStreamEvent>();
-            broadcaster.Event += e => events.Add(e);
-
-            var (batch, ctx) = MakeBatch(2);
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings, broadcaster);
-
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[0].Outcome.Status);
-            Assert.Equal(AttributionStatus.Unknown, result.Outcomes[1].Outcome.Status);
-            Assert.Null(result.Outcomes[1].Outcome.FailureReason);
-            Assert.DoesNotContain(events, e => e is EscalationStarted);
-            Assert.Single(llm.Configs);
-        }
-
-        [Fact]
-        public async Task Batch_NonSuspectItems_NotReAsked()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-
-            var (batch, ctx) = MakeBatch(2);
-            // Item 0 resolves to a known character (accepted at step 0); item 1 is unknown (escalates).
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")))
-                .ForConfig("B", BatchJson((0, "Alice")));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
-
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[0].Outcome.Status);
-            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[1].Outcome.Status);
-            // Only one suspect entered step 1.
-            Assert.Equal(1, llm.Configs.Count(c => c.Name == "B"));
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -1007,7 +835,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("A", Resolved("Alice"), Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal("Alice", Speaker(result));
@@ -1028,7 +856,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", Resolved("Mordecai"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal("Mordecai", Speaker(result));       // B's final answer, not sample 1
@@ -1057,7 +885,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Alice"), Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            await DrainStreamAsync(svc, settings, [MakeItem()]);
 
             var temps = llm.Configs.Where(c => c.Name == "A").Select(c => c.Temperature).ToList();
             Assert.Equal(2, temps.Count);
@@ -1077,7 +905,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("A", Resolved("Alice"), "not json");
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal("Alice", Speaker(result));
@@ -1096,7 +924,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            await DrainStreamAsync(svc, settings, [MakeItem()]);
 
             Assert.Equal(1, llm.Configs.Count(c => c.Name == "A"));
             Assert.Equal(1, llm.Configs.Count(c => c.Name == "B"));
@@ -1116,7 +944,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("B", Resolved("Alice"), Resolved("Zorg"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal("Alice", Speaker(result));            // B's single (first) answer stands
@@ -1141,37 +969,11 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("A", Resolved("Liz"), Resolved("Elizabeth"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, chars), settings);
 
-            var result = await svc.AttributeAsync(MakeItem(), CancellationToken.None);
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal("Liz", Speaker(result));          // sample 1 carried verbatim
             Assert.DoesNotContain(llm.Configs, c => c.Name == "B");
-        }
-
-        [Fact]
-        public async Task SelfConsistency_Batch_PerIndex_OnlyDisagreeingIndexEscalates()
-        {
-            var settings = NewSettings();
-            await RegisterChainAsync(settings, ("A", 8), ("B", 8));
-            await settings.SetSelfConsistencyAsync(true);
-
-            var (batch, ctx) = MakeBatch(3);
-            // Step 0 (A, non-final) self-samples the batch twice. Index 2 disagrees between samples;
-            // indices 0 and 1 agree. Only index 2 becomes an Inconsistent suspect → escalates to B.
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("A",
-                    BatchJson((0, "Alice"), (1, "Alice"), (2, "Alice")),
-                    BatchJson((0, "Alice"), (1, "Alice"), (2, "Zorg")))
-                .ForConfig("B", BatchJson((0, "Alice")));
-            var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
-
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            Assert.Equal(3, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
-            // A self-sampled twice (2 calls); only index 2 escalated → exactly one B call.
-            Assert.Equal(2, llm.Configs.Count(c => c.Name == "A"));
-            Assert.Equal(1, llm.Configs.Count(c => c.Name == "B"));
         }
     }
 }

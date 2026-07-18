@@ -71,8 +71,8 @@ namespace Read2Me.Services.Characters
         string? FailureReason);
 
     /// <summary>
-    /// Progress signals raised by <see cref="CharacterAttributionService.AttributeQueueAsync"/> so a
-    /// caller can mirror the chain's true in-flight set in the UI.
+    /// Progress signals raised by the escalation-chain walk so a caller can mirror the chain's true
+    /// in-flight set in the UI.
     /// <see cref="ChunkStarted"/> fires with each batch just before its LLM call.
     /// <see cref="ItemDeferred"/> fires for an item whose chunk answered it but left it suspect —
     /// it is no longer in flight and waits, un-decided, for the next escalation step.
@@ -80,15 +80,6 @@ namespace Read2Me.Services.Characters
     public sealed record AttributionQueueCallbacks(
         Action<IReadOnlyList<QueuedParagraph>>? ChunkStarted = null,
         Action<QueuedParagraph>? ItemDeferred = null);
-
-    /// <summary>
-    /// Result of a multi-paragraph attribution request. <see cref="Deferred"/> holds items trimmed
-    /// off the contiguous run (an unassigned character paragraph outside the batch sat between
-    /// them); the caller should process them as a fresh batch.
-    /// </summary>
-    public sealed record BatchAttributionResult(
-        IReadOnlyList<(QueuedParagraph Item, AttributionOutcome Outcome)> Outcomes,
-        IReadOnlyList<QueuedParagraph> Deferred);
 
     /// <summary>
     /// One config's run over a set of paragraphs — the "step" half of the escalation chain. Owns
@@ -109,16 +100,14 @@ namespace Read2Me.Services.Characters
 
     public class CharacterAttributionService(
         ILlmCompletionRunner runner,
-        LlmSettingsService settings,
         LlmPromptService prompts,
         IProjectReader reader,
-        ILogger<CharacterAttributionService> logger,
-        EventBroadcaster<LlmStreamEvent> broadcaster)
+        ILogger<CharacterAttributionService> logger)
         : IChainStep
     {
         /// <inheritdoc/>
-        /// <remarks>Lifted from <see cref="AttributeQueueAsync"/>'s per-step inner loop:
-        /// <see cref="GroupByChapter"/> → <see cref="RunStepGroupAsync"/> per group, streaming.</remarks>
+        /// <remarks>Runs one config across the given items: <see cref="GroupByChapter"/> →
+        /// <see cref="RunStepGroupAsync"/> per group, streaming.</remarks>
         async IAsyncEnumerable<(QueuedParagraph Item, StepOutcome Step)> IChainStep.RunAsync(
             IReadOnlyList<QueuedParagraph> items,
             ChainStepOptions opts,
@@ -128,76 +117,6 @@ namespace Read2Me.Services.Characters
             foreach (var group in GroupByChapter(items))
                 await foreach (var outcome in RunStepGroupAsync(group, opts, callbacks, ct))
                     yield return outcome;
-        }
-
-        public virtual async Task<AttributionOutcome> AttributeAsync(QueuedParagraph item, CancellationToken ct)
-        {
-            var chain = await settings.GetAttributionChainAsync();
-            if (chain.Count == 0)
-            {
-                logger.LogWarning("No active LLM config — skipping paragraph {ParagraphId}", item.ParagraphId);
-                return new AttributionOutcome(AttributionStatus.NoLlmConfigured, null,
-                    "No active LLM server configured");
-            }
-
-            // Single-entry chain (no escalation) is byte-identical to today: one step, no telemetry,
-            // no tooltip reason — the zero-risk adoption guarantee.
-            if (chain.Count == 1)
-            {
-                var only = await AttributeCoreAsync(item, new ChainStepOptions(chain[0], IsFinal: true, false), ct);
-                return only.Outcome;
-            }
-
-            // Walk the chain. A suspect (non-None trigger) answer re-asks on the next config; the
-            // best usable (non-infra) answer seen so far survives a last-entry infra failure.
-            var selfConsistency = await settings.GetSelfConsistencyAsync();
-            logger.LogInformation(
-                "Paragraph {ParagraphId} entering escalation chain of {Steps} configs ({Chain}), selfConsistency={SelfConsistency}",
-                item.ParagraphId, chain.Count, string.Join(" → ", chain.Select(c => c.Name)), selfConsistency);
-            StepOutcome? best = null;
-            for (var i = 0; i < chain.Count; i++)
-            {
-                var isFinal = i == chain.Count - 1;
-                var opts = new ChainStepOptions(chain[i], isFinal, selfConsistency && !isFinal);
-
-                if (i >= 1)
-                {
-                    logger.LogInformation(
-                        "Paragraph {ParagraphId} escalating to step {Step} config '{Config}'{Final}",
-                        item.ParagraphId, i, chain[i].Name, isFinal ? " (final)" : string.Empty);
-                    broadcaster.Publish(new EscalationStarted(i, chain[i].Name, 1));
-                }
-
-                var step = await AttributeCoreAsync(item, opts, ct);
-
-                // Infra failure (SU/Failed *status* with no quality trigger) is orthogonal to quality.
-                // A parse failure carries Trigger=ParseFailure and is a quality escalation, not infra.
-                if (step.Trigger == EscalationTrigger.None && IsInfraFailure(step.Outcome.Status))
-                {
-                    // Mid-chain infra failure carries the same item to the next entry (reporter/stream
-                    // already fired inside the core). On the last entry, fall back to the best prior
-                    // usable answer, else surface the infra failure.
-                    if (!isFinal) continue;
-                    return best is not null ? Accept(best, chain).Outcome : step.Outcome;
-                }
-
-                // Track the best *usable* answer (a real Resolved/Unknown) for last-entry fallback.
-                // A parse failure at a non-final step is not usable — it just escalates.
-                if (IsUsable(step.Outcome.Status))
-                    best = step;
-
-                if (step.Trigger == EscalationTrigger.None || isFinal)
-                {
-                    var accepted = Accept(step, chain);
-                    logger.LogInformation(
-                        "Paragraph {ParagraphId} attributed by config '{Config}' (step {Step})",
-                        item.ParagraphId, chain[i].Name, i);
-                    return accepted.Outcome;
-                }
-            }
-
-            // Unreachable — the final iteration always returns (accept or infra fallback).
-            throw new InvalidOperationException("Attribution chain fell through without an outcome.");
         }
 
         /// <summary>Groups paragraphs by (folder, chapter), preserving book order within each group.</summary>
@@ -241,30 +160,6 @@ namespace Read2Me.Services.Characters
                 foreach (var d in core.Deferred)
                     pending.Enqueue(d);
             }
-        }
-
-        private static bool IsUsable(AttributionStatus status) =>
-            status is AttributionStatus.Resolved or AttributionStatus.Unknown;
-
-        /// <summary>Chain length ≥ 2. Names in escalation order.</summary>
-        private static bool DidEscalate(IReadOnlyList<LlmServerConfig> chain) => chain.Count >= 2;
-
-        /// <summary>
-        /// Final-step acceptance for a suspect answer. UnlistedName → Resolved (new character);
-        /// Unknown → Unknown carrying an escalation reason (only when the chain actually escalated);
-        /// everything else stands. A None-trigger answer is returned unchanged.
-        /// </summary>
-        private static StepOutcome Accept(StepOutcome step, IReadOnlyList<LlmServerConfig> chain)
-        {
-            if (step.Trigger == EscalationTrigger.Unknown &&
-                step.Outcome.Status == AttributionStatus.Unknown &&
-                DidEscalate(chain))
-            {
-                var names = string.Join(" → ", chain.Select(c => c.Name));
-                var reason = $"Speaker unknown after escalating through {chain.Count} models ({names})";
-                return step with { Outcome = step.Outcome with { FailureReason = reason } };
-            }
-            return step;
         }
 
         private static bool IsInfraFailure(AttributionStatus status) =>
@@ -447,179 +342,6 @@ namespace Read2Me.Services.Characters
             parsed = null;
             error = "Could not parse LLM response.";
             return false;
-        }
-
-        /// <summary>
-        /// Attributes several queued paragraphs (same chapter, book order) in one LLM request.
-        /// A single-item batch delegates to <see cref="AttributeAsync"/> so batch size 1 behaves
-        /// exactly like the single-paragraph flow. An unparseable batch response, or an index
-        /// missing from an otherwise valid response, falls back to the single-paragraph path for
-        /// the affected items.
-        /// </summary>
-        public virtual async Task<BatchAttributionResult> AttributeBatchAsync(
-            IReadOnlyList<QueuedParagraph> batch, CancellationToken ct)
-        {
-            if (batch.Count == 1)
-                return new BatchAttributionResult(
-                    [(batch[0], await AttributeAsync(batch[0], ct))], []);
-
-            var chain = await settings.GetAttributionChainAsync();
-            if (chain.Count == 0)
-            {
-                logger.LogWarning("No active LLM config — skipping batch of {Count} paragraphs", batch.Count);
-                var outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null,
-                    "No active LLM server configured");
-                return new BatchAttributionResult([.. batch.Select(b => (b, outcome))], []);
-            }
-
-            // Single-entry chain (no escalation) is byte-identical to today: run the drained batch
-            // once on the sole config as the final step, no telemetry.
-            if (chain.Count == 1)
-            {
-                var only = await AttributeBatchCoreAsync(
-                    batch, new ChainStepOptions(chain[0], IsFinal: true, false), ct);
-                return new BatchAttributionResult(
-                    [.. only.Outcomes.Select(o => (o.Item, o.Step.Outcome))], only.Deferred);
-            }
-
-            var selfConsistency = await settings.GetSelfConsistencyAsync();
-            return await OrchestrateChainBatchAsync(batch, chain, selfConsistency, ct);
-        }
-
-        /// <summary>
-        /// Runs the drained batch through the escalation chain. Step 0 runs as today (its deferrals
-        /// pass straight through to the caller unchanged). Suspects — items whose step-0 answer has a
-        /// non-None quality trigger — escalate, re-grouped in book order into chunks of each next
-        /// step's batch size, running strictly one step at a time until every suspect is decided.
-        /// </summary>
-        private async Task<BatchAttributionResult> OrchestrateChainBatchAsync(
-            IReadOnlyList<QueuedParagraph> batch,
-            IReadOnlyList<LlmServerConfig> chain,
-            bool selfConsistency,
-            CancellationToken ct)
-        {
-            // Final accepted StepOutcome per item, in book order (step-0 order preserved).
-            var final = new List<(QueuedParagraph Item, StepOutcome Step)>();
-            // Best usable (non-infra) answer seen so far, keyed by paragraph id — for last-entry fallback.
-            var best = new Dictionary<Guid, StepOutcome>();
-            // Suspects carried into the next step, in book order.
-            var suspects = new List<QueuedParagraph>();
-
-            // ── Step 0 ── runs the drained batch exactly as today (self-consistency when toggled;
-            // step 0 is never final here — the orchestrator only runs for chains of length ≥ 2).
-            var step0 = await AttributeBatchCoreAsync(
-                batch, new ChainStepOptions(chain[0], IsFinal: false, selfConsistency), ct);
-
-            foreach (var (item, step) in step0.Outcomes)
-            {
-                if (IsUsable(step.Outcome.Status)) best[item.ParagraphId] = step;
-
-                if (IsQualitySuspect(step))
-                    suspects.Add(item);
-                else
-                    final.Add((item, step)); // None trigger, or an infra failure (step-0 semantics: stands).
-            }
-            LogAttributions(step0.Outcomes, chain[0].Name, 0);
-            logger.LogInformation(
-                "Step 0 (config '{Config}') drained: {Resolved} decided, {Suspects} suspect(s) to escalate through {Remaining} more config(s)",
-                chain[0].Name, final.Count, suspects.Count, chain.Count - 1);
-
-            // ── Steps 1..n ── escalate suspects sequentially.
-            for (var stepIndex = 1; stepIndex < chain.Count && suspects.Count > 0; stepIndex++)
-            {
-                var config = chain[stepIndex];
-                var isFinal = stepIndex == chain.Count - 1;
-                logger.LogInformation(
-                    "Escalation step {Step} config '{Config}'{Final}: {Count} suspect item(s)",
-                    stepIndex, config.Name, isFinal ? " (final)" : string.Empty, suspects.Count);
-                broadcaster.Publish(new EscalationStarted(stepIndex, config.Name, suspects.Count));
-
-                var nextSuspects = new List<QueuedParagraph>();
-
-                foreach (var (item, step) in await RunStepAsync(suspects, config, isFinal, selfConsistency, ct))
-                {
-                    if (step.Trigger == EscalationTrigger.None && IsInfraFailure(step.Outcome.Status))
-                    {
-                        // Infra failure at this step: item was not usably answered here. Carry it on.
-                        if (!isFinal) { nextSuspects.Add(item); continue; }
-                        // Last entry infra failure: resolve from best prior usable answer, else Failed.
-                        final.Add((item, best.TryGetValue(item.ParagraphId, out var prior)
-                            ? Accept(prior, chain)
-                            : step));
-                        continue;
-                    }
-
-                    if (IsUsable(step.Outcome.Status)) best[item.ParagraphId] = step;
-
-                    if (isFinal || !IsQualitySuspect(step))
-                        final.Add((item, Accept(step, chain)));
-                    else
-                        nextSuspects.Add(item);
-                }
-
-                LogAttributions(final.Where(f => suspects.Contains(f.Item)), config.Name, stepIndex);
-                suspects = nextSuspects;
-                if (suspects.Count > 0)
-                    logger.LogInformation(
-                        "Step {Step} config '{Config}' drained: {Remaining} item(s) still suspect, carrying to next config",
-                        stepIndex, config.Name, suspects.Count);
-            }
-
-            // A single-entry chain never reaches here, so any leftover suspects mean the loop above
-            // decided them (isFinal path) — nothing remains. Assemble in original step-0 order.
-            var byItem = final.ToDictionary(f => f.Item, f => f.Step);
-            var ordered = new List<(QueuedParagraph, AttributionOutcome)>();
-            foreach (var (item, _) in step0.Outcomes)
-                if (byItem.TryGetValue(item, out var step))
-                    ordered.Add((item, step.Outcome));
-
-            return new BatchAttributionResult(ordered, step0.Deferred);
-        }
-
-        /// <summary>
-        /// Runs one escalation step over the given suspects: re-groups them in book order into chunks
-        /// of the step config's batch size and runs each chunk, looping on intra-step deferrals until
-        /// every suspect has an outcome. Returns per-suspect <see cref="StepOutcome"/>s.
-        /// </summary>
-        private async Task<List<(QueuedParagraph Item, StepOutcome Step)>> RunStepAsync(
-            IReadOnlyList<QueuedParagraph> suspects, LlmServerConfig config, bool isFinal,
-            bool selfConsistency, CancellationToken ct)
-        {
-            var results = new List<(QueuedParagraph, StepOutcome)>();
-            var pending = new Queue<QueuedParagraph>(suspects);
-            var batchSize = Math.Max(1, config.AttributionBatchSize);
-            var opts = new ChainStepOptions(config, isFinal, selfConsistency && !isFinal);
-
-            while (pending.Count > 0)
-            {
-                var chunk = new List<QueuedParagraph>();
-                while (chunk.Count < batchSize && pending.Count > 0)
-                    chunk.Add(pending.Dequeue());
-
-                var core = chunk.Count == 1
-                    ? new BatchCoreResult(
-                        [(chunk[0], await AttributeCoreAsync(chunk[0], opts, ct))], [])
-                    : await AttributeBatchCoreAsync(chunk, opts, ct);
-
-                results.AddRange(core.Outcomes);
-                // Intra-step deferrals loop back into this step's pending queue.
-                foreach (var d in core.Deferred)
-                    pending.Enqueue(d);
-            }
-            return results;
-        }
-
-        /// <summary>A successful-status answer with a non-None quality trigger (unknown/unlisted/parse).</summary>
-        private static bool IsQualitySuspect(StepOutcome step) =>
-            step.Trigger != EscalationTrigger.None;
-
-        private void LogAttributions(
-            IEnumerable<(QueuedParagraph Item, StepOutcome Step)> outcomes, string configName, int step)
-        {
-            foreach (var (item, _) in outcomes)
-                logger.LogInformation(
-                    "Paragraph {ParagraphId} attributed by config '{Config}' (step {Step})",
-                    item.ParagraphId, configName, step);
         }
 
         private sealed record BatchCoreResult(

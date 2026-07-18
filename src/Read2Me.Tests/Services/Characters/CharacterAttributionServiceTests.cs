@@ -5,7 +5,6 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
-using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 using Read2Me.Tests.Fakes;
 using Read2Me.Tests.Infrastructure;
@@ -13,6 +12,13 @@ using Xunit;
 
 namespace Read2Me.Tests.Services.Characters
 {
+    /// <summary>
+    /// Step-mechanic tests for <see cref="CharacterAttributionService"/> as an <see cref="IChainStep"/>:
+    /// one config's run over items — prompt building, parse/classify, batch core, and the batch→single
+    /// fallback. Drives the coarse <c>RunAsync</c> seam directly (no chain lookup, no walk). Walk policy
+    /// (escalation, best-prior, ModelLoading short-circuit, no-config) lives in
+    /// <see cref="CharacterAttributionChainTests"/>.
+    /// </summary>
     public class CharacterAttributionServiceTests : AppDbTestBase
     {
         private static readonly ProjectFolderId Folder = new("test-book");
@@ -25,25 +31,36 @@ namespace Read2Me.Tests.Services.Characters
             Guid.NewGuid(),
             Guid.NewGuid());
 
-        private LlmSettingsService NewSettings() =>
-            new(Factory, NullLogger<LlmSettingsService>.Instance);
-
         private LlmPromptService NewPrompts() =>
             new(Factory, NullLogger<LlmPromptService>.Instance);
 
         private CharacterAttributionService NewService(ILlmCompletionRunner runner, IProjectReader reader,
-            LlmSettingsService? settings = null, LlmPromptService? prompts = null) =>
-            new(runner, settings ?? NewSettings(), prompts ?? NewPrompts(), reader,
-                NullLogger<CharacterAttributionService>.Instance,
-                new EventBroadcaster<LlmStreamEvent>());
+            LlmPromptService? prompts = null) =>
+            new(runner, prompts ?? NewPrompts(), reader,
+                NullLogger<CharacterAttributionService>.Instance);
 
-        private static async Task<LlmServerConfig> RegisterActiveConfigAsync(LlmSettingsService svc)
+        /// <summary>A single in-memory config; RunAsync uses it directly (never the DB/settings).</summary>
+        private static LlmServerConfig Config(int batchSize = 8) =>
+            new() { Name = "Test", BaseUrl = "http://localhost:8080", Model = "test", AttributionBatchSize = batchSize };
+
+        /// <summary>
+        /// Drives the step over the items as the final config (no self-consistency) and collects each
+        /// item's outcome in yield order.
+        /// </summary>
+        private static async Task<List<(QueuedParagraph Item, AttributionOutcome Outcome)>> RunConfigAsync(
+            CharacterAttributionService svc, LlmServerConfig config, IReadOnlyList<QueuedParagraph> items,
+            CancellationToken ct = default)
         {
-            var config = new LlmServerConfig { Name = "Test", BaseUrl = "http://localhost:8080", Model = "test" };
-            config = await svc.CreateConfigAsync(config);
-            await svc.SetActiveConfigAsync(config.Id);
-            return config;
+            var outcomes = new List<(QueuedParagraph, AttributionOutcome)>();
+            await foreach (var (item, step) in ((IChainStep)svc).RunAsync(
+                items, new ChainStepOptions(config, IsFinal: true, SelfConsistency: false), callbacks: null, ct))
+                outcomes.Add((item, step.Outcome));
+            return outcomes;
         }
+
+        private static async Task<AttributionOutcome> RunSingleAsync(
+            CharacterAttributionService svc, LlmServerConfig config, QueuedParagraph item) =>
+            Assert.Single(await RunConfigAsync(svc, config, [item])).Outcome;
 
         // ---------------------------------------------------------------
         // Fakes
@@ -168,31 +185,16 @@ namespace Read2Me.Tests.Services.Characters
                 $$"""{ "index": {{e.Index}}, "reasoning": "r", "segments": [ {{Segment($"Text {e.Index}", e.Speaker)}} ] }""")) + "]";
 
         // ---------------------------------------------------------------
-        // Tests
+        // Single-paragraph step
         // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task NoActiveConfig_ReturnsNoLlmConfigured_WithoutRunning()
-        {
-            var runner = new FakeLlmCompletionRunner();
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
-
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
-
-            Assert.Equal(AttributionStatus.NoLlmConfigured, result.Status);
-            Assert.Empty(runner.Requests);
-        }
 
         [Fact]
         public async Task ValidSegmentResponse_ReturnsResolved_WithSegments()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice", "calm"));
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             var segment = Assert.Single(result.Segments!);
@@ -211,9 +213,6 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task MultiSpeakerAnswer_ReturnsEverySegment_SlicedFromTheOriginal()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var ctx = new ParagraphContext(
                 new ContextParagraph("\"Hello,\" she said. \"Goodbye.\"", []), [], []);
             var runner = new FakeLlmCompletionRunner().Completes($$"""
@@ -223,9 +222,9 @@ namespace Read2Me.Tests.Services.Characters
                     {{Segment("\"Goodbye.\"", "Bob")}} ] }
                 """);
             var svc = NewService(runner, new FakeProjectReader(ctx, DefaultProject(),
-                [Character("Alice"), Character("Bob")]), settings);
+                [Character("Alice"), Character("Bob")]));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal(3, result.Segments!.Count);
@@ -237,13 +236,10 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task LlmReturnsUnknownSpeaker_ReturnsUnknownStatus_StillCarryingSegments()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner().Completes(Answer("unknown"));
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
             // The answer still applies: the segmentation is real even when the speaker is not known.
@@ -253,14 +249,11 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task SegmentsDoNotReconstructParagraph_ReturnsFailed()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             // The model dropped a word — a fidelity failure, which escalates like a parse failure.
             var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice", text: "Hello"));
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.Failed, result.Status);
             Assert.Null(result.Segments);
@@ -269,14 +262,11 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task RunFailed_ReturnsFailed()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner()
                 .Fails(LlmRunOutcome.Failed, "connection refused");
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.Failed, result.Status);
             Assert.Contains("connection refused", result.FailureReason);
@@ -285,14 +275,11 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task ServiceUnavailableRun_ReturnsServiceUnavailable()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner()
                 .Fails(LlmRunOutcome.ServiceUnavailable, "stalled");
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.ServiceUnavailable, result.Status);
         }
@@ -300,13 +287,10 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task UnparseableResponse_ReturnsFailed()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner().Completes("This is not JSON at all.");
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.Failed, result.Status);
         }
@@ -314,29 +298,30 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Cancellation_Propagates()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
             var runner = new FakeLlmCompletionRunner().Throws(new OperationCanceledException());
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
 
-            await Assert.ThrowsAsync<OperationCanceledException>(
-                () => svc.AttributeAsync(TestItem, cts.Token));
+            await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            {
+                await foreach (var _ in ((IChainStep)svc).RunAsync(
+                    [TestItem], new ChainStepOptions(Config(), IsFinal: true, SelfConsistency: false),
+                    callbacks: null, cts.Token))
+                {
+                }
+            });
         }
 
         [Fact]
         public async Task BlankQueryText_ReturnsUnknown_WithoutRunning()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner();
             var ctx = new ParagraphContext(new ContextParagraph("   ", []), [], []);
-            var svc = NewService(runner, new FakeProjectReader(ctx, DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(ctx, DefaultProject()));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
             Assert.Empty(runner.Requests);
@@ -345,13 +330,10 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task NullContext_ReturnsUnknown_WithoutRunning()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner();
-            var svc = NewService(runner, new FakeProjectReader(null, DefaultProject()), settings);
+            var svc = NewService(runner, new FakeProjectReader(null, DefaultProject()));
 
-            var result = await svc.AttributeAsync(TestItem, CancellationToken.None);
+            var result = await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
             Assert.Empty(runner.Requests);
@@ -360,15 +342,12 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task ContextWindowDefaults_PassedToReader()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner()
                 .Completes(Answer("Alice"));
             var fakeReader = new FakeProjectReader(DefaultContext(), DefaultProject());
-            var svc = NewService(runner, fakeReader, settings);
+            var svc = NewService(runner, fakeReader);
 
-            await svc.AttributeAsync(TestItem, CancellationToken.None);
+            await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(PromptTemplates.DefaultContextParagraphsBefore, fakeReader.ReceivedBefore);
             Assert.Equal(PromptTemplates.DefaultContextParagraphsAfter, fakeReader.ReceivedAfter);
@@ -377,25 +356,22 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task CustomContextWindow_PassedToReader()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var prompts = NewPrompts();
             await prompts.SetContextWindowAsync(7, 3);
 
             var runner = new FakeLlmCompletionRunner()
                 .Completes(Answer("Alice"));
             var fakeReader = new FakeProjectReader(DefaultContext(), DefaultProject());
-            var svc = NewService(runner, fakeReader, settings, prompts);
+            var svc = NewService(runner, fakeReader, prompts);
 
-            await svc.AttributeAsync(TestItem, CancellationToken.None);
+            await RunSingleAsync(svc, Config(), TestItem);
 
             Assert.Equal(7, fakeReader.ReceivedBefore);
             Assert.Equal(3, fakeReader.ReceivedAfter);
         }
 
         // ---------------------------------------------------------------
-        // Batch attribution
+        // Batch step (batch core)
         // ---------------------------------------------------------------
 
         private static (List<QueuedParagraph> Batch, ParagraphBatchContext Ctx) MakeBatch(int count)
@@ -415,29 +391,25 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Batch_ValidResponse_ResolvesEachIndex_SingleRun()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var (batch, ctx) = MakeBatch(3);
             var runner = new FakeLlmCompletionRunner()
                 .Completes(BatchAnswer((0, "Alice"), (1, "unknown"), (2, "Bob")));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader, settings);
+            var svc = NewService(runner, reader);
 
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+            var result = await RunConfigAsync(svc, Config(), batch);
 
-            Assert.Empty(result.Deferred);
-            Assert.Equal(3, result.Outcomes.Count);
-            Assert.Equal(batch[0], result.Outcomes[0].Item);
-            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[0].Outcome.Status);
+            Assert.Equal(3, result.Count);
+            Assert.Equal(batch[0], result[0].Item);
+            Assert.Equal(AttributionStatus.Resolved, result[0].Outcome.Status);
             // Each index's segments are sliced from that index's own paragraph text.
-            Assert.Equal("Text 0", Assert.Single(result.Outcomes[0].Outcome.Segments!).Text);
-            Assert.Equal("Alice", result.Outcomes[0].Outcome.Segments![0].Speaker);
-            Assert.Equal(AttributionStatus.Unknown, result.Outcomes[1].Outcome.Status);
-            Assert.Equal(AttributionStatus.Resolved, result.Outcomes[2].Outcome.Status);
-            Assert.Equal("Text 2", Assert.Single(result.Outcomes[2].Outcome.Segments!).Text);
+            Assert.Equal("Text 0", Assert.Single(result[0].Outcome.Segments!).Text);
+            Assert.Equal("Alice", result[0].Outcome.Segments![0].Speaker);
+            Assert.Equal(AttributionStatus.Unknown, result[1].Outcome.Status);
+            Assert.Equal(AttributionStatus.Resolved, result[2].Outcome.Status);
+            Assert.Equal("Text 2", Assert.Single(result[2].Outcome.Segments!).Text);
 
-            // One array-shaped, schema-constrained run for the whole batch.
+            // One array-shaped, schema-constrained run for the whole batch (batch size covers all 3).
             var request = Assert.Single(runner.Requests);
             Assert.Equal("3 paragraphs: P0", request.Label);
             Assert.Equal(CompletionShape.Array, request.Shape);
@@ -447,37 +419,31 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Batch_ExtraUnrequestedIndex_IsIgnored()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var (batch, ctx) = MakeBatch(2);
             // Models also answer for context paragraphs; indexes nobody asked for are dropped.
             var runner = new FakeLlmCompletionRunner()
                 .Completes(BatchAnswer((0, "Alice"), (1, "Bob"), (7, "Nobody")));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader, settings);
+            var svc = NewService(runner, reader);
 
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+            var result = await RunConfigAsync(svc, Config(), batch);
 
             Assert.Single(runner.Requests);
-            Assert.Equal(2, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
+            Assert.Equal(2, result.Count);
+            Assert.All(result, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
         }
 
         [Fact]
-        public async Task Batch_OfOne_DelegatesToSinglePath()
+        public async Task Batch_OfOne_UsesSinglePath()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var runner = new FakeLlmCompletionRunner()
                 .Completes(Answer("Alice", "calm"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject());
-            var svc = NewService(runner, reader, settings);
+            var svc = NewService(runner, reader);
 
-            var result = await svc.AttributeBatchAsync([TestItem], CancellationToken.None);
+            var result = await RunConfigAsync(svc, Config(), [TestItem]);
 
-            var (item, outcome) = Assert.Single(result.Outcomes);
+            var (item, outcome) = Assert.Single(result);
             Assert.Equal(TestItem, item);
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
             Assert.Equal("Alice", Assert.Single(outcome.Segments!).Speaker);
@@ -488,30 +454,24 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Batch_UnparseableResponse_FallsBackToSinglePerItem()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var (batch, ctx) = MakeBatch(2);
             var runner = new FakeLlmCompletionRunner()
                 .Completes("not json at all")
                 .Completes(Answer("Alice"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader, settings);
+            var svc = NewService(runner, reader);
 
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+            var result = await RunConfigAsync(svc, Config(), batch);
 
-            // 1 batch run + 2 single fallbacks
+            // 1 batch run + 2 single fallbacks (final step falls back to the single path per item).
             Assert.Equal(3, runner.Requests.Count);
-            Assert.Equal(2, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
+            Assert.Equal(2, result.Count);
+            Assert.All(result, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
         }
 
         [Fact]
         public async Task Batch_MissingIndex_FallsBackToSingleForTheWholeChunk()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             // Escalation's unit is the paragraph, so a batch answer that skips a requested index is
             // rejected whole — the chunk falls back to the single path, not just the missing item.
             var (batch, ctx) = MakeBatch(3);
@@ -519,113 +479,45 @@ namespace Read2Me.Tests.Services.Characters
                 .Completes(BatchAnswer((0, "Alice"), (2, "Bob")))
                 .Completes(Answer("Fallback"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader, settings);
+            var svc = NewService(runner, reader);
 
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+            var result = await RunConfigAsync(svc, Config(), batch);
 
             // 1 batch run + 3 single fallbacks.
             Assert.Equal(4, runner.Requests.Count);
-            Assert.All(result.Outcomes, o =>
+            Assert.All(result, o =>
                 Assert.Equal("Fallback", Assert.Single(o.Outcome.Segments!).Speaker));
-        }
-
-        [Fact]
-        public async Task Batch_DeferredIds_ReturnedAsDeferredItems()
-        {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
-            var (batch, _) = MakeBatch(3);
-            // Context only includes the first two; the third was trimmed off the run.
-            var ctx = new ParagraphBatchContext(
-                [new BatchContextEntry("Text 0", [], 0), new BatchContextEntry("Text 1", [], 1)],
-                [batch[0].ParagraphId, batch[1].ParagraphId],
-                [batch[2].ParagraphId]);
-            var runner = new FakeLlmCompletionRunner()
-                .Completes(BatchAnswer((0, "Alice"), (1, "Bob")));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader, settings);
-
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            Assert.Equal(2, result.Outcomes.Count);
-            var deferred = Assert.Single(result.Deferred);
-            Assert.Equal(batch[2], deferred);
-        }
-
-        [Fact]
-        public async Task Batch_IncludedRunOfOne_UsesSinglePathAndReturnsDeferred()
-        {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
-            var (batch, _) = MakeBatch(2);
-            var ctx = new ParagraphBatchContext(
-                [new BatchContextEntry("Text 0", [], 0)],
-                [batch[0].ParagraphId],
-                [batch[1].ParagraphId]);
-            var runner = new FakeLlmCompletionRunner()
-                .Completes(Answer("Alice"));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader, settings);
-
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            var (item, outcome) = Assert.Single(result.Outcomes);
-            Assert.Equal(batch[0], item);
-            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal(batch[1], Assert.Single(result.Deferred));
-        }
-
-        [Fact]
-        public async Task Batch_NoActiveConfig_AllItemsNoLlmConfigured()
-        {
-            var (batch, _) = MakeBatch(2);
-            var runner = new FakeLlmCompletionRunner().Completes("unused");
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
-
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
-
-            Assert.Empty(runner.Requests);
-            Assert.Equal(2, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.NoLlmConfigured, o.Outcome.Status));
         }
 
         [Fact]
         public async Task Batch_NullContext_FallsBackToSinglePerItem()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var (batch, _) = MakeBatch(2);
             var runner = new FakeLlmCompletionRunner()
                 .Completes(Answer("Alice"));
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = null };
-            var svc = NewService(runner, reader, settings);
+            var svc = NewService(runner, reader);
 
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+            var result = await RunConfigAsync(svc, Config(), batch);
 
             Assert.Equal(2, runner.Requests.Count);
-            Assert.Equal(2, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
+            Assert.Equal(2, result.Count);
+            Assert.All(result, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
         }
 
         [Fact]
         public async Task Batch_ServiceUnavailableRun_AllItemsServiceUnavailable()
         {
-            var settings = NewSettings();
-            await RegisterActiveConfigAsync(settings);
-
             var (batch, ctx) = MakeBatch(2);
             var runner = new FakeLlmCompletionRunner()
                 .Fails(LlmRunOutcome.ServiceUnavailable, "stalled");
             var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader, settings);
+            var svc = NewService(runner, reader);
 
-            var result = await svc.AttributeBatchAsync(batch, CancellationToken.None);
+            var result = await RunConfigAsync(svc, Config(), batch);
 
-            Assert.Equal(2, result.Outcomes.Count);
-            Assert.All(result.Outcomes, o => Assert.Equal(AttributionStatus.ServiceUnavailable, o.Outcome.Status));
+            Assert.Equal(2, result.Count);
+            Assert.All(result, o => Assert.Equal(AttributionStatus.ServiceUnavailable, o.Outcome.Status));
         }
     }
 }
