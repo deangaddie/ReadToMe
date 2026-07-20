@@ -28,6 +28,17 @@ namespace Read2Me.Services.Characters
     /// </summary>
     internal sealed record ChainStepOptions(LlmServerConfig Config, bool IsFinal, bool SelfConsistency);
 
+    /// <summary>
+    /// Which server answered, and what it actually said. Carried into classification purely so an
+    /// answer that fails alignment can be logged in full — the raw is otherwise unrecoverable, and
+    /// which model produced it is not recorded anywhere else.
+    /// </summary>
+    internal sealed record AnswerProvenance(string ConfigName, string Model, string? Raw)
+    {
+        public static AnswerProvenance From(LlmServerConfig config, string? raw) =>
+            new(config.Name, string.IsNullOrWhiteSpace(config.Model) ? "(server default)" : config.Model, raw);
+    }
+
     internal static class LlmServerConfigExtensions
     {
         /// <summary>Shallow copy of the config with <see cref="LlmServerConfig.Temperature"/> replaced.</summary>
@@ -285,7 +296,8 @@ namespace Read2Me.Services.Characters
 
             // The query the LLM answered is ctx.Query.Text — align against that exact string, so the
             // stored segment texts are slices of the paragraph the prompt showed it.
-            return Classify(item.ParagraphId, ctx.Query.Text, run.Value!.Segments, characters);
+            return Classify(item.ParagraphId, ctx.Query.Text, run.Value!.Segments, characters,
+                AnswerProvenance.From(config, run.Raw));
         }
 
         /// <summary>
@@ -297,13 +309,21 @@ namespace Read2Me.Services.Characters
         /// </summary>
         private StepOutcome Classify(
             Guid paragraphId, string originalText, IReadOnlyList<AttributionSegment> segments,
-            IReadOnlyList<Data.Entities.Character> characters)
+            IReadOnlyList<Data.Entities.Character> characters, AnswerProvenance provenance)
         {
             if (!SegmentAligner.TryAlign(originalText, segments, out var aligned))
             {
+                // The raw answer and the exact text it was asked about are logged together because
+                // nothing else persists them: the runner abandons the stream once the JSON scanner
+                // completes, so the client's own response log never runs for a structured attribution
+                // run. Without this pair a misalignment is unreadable after the fact — you cannot tell
+                // a near-miss transcription drift from an answer about the wrong paragraph. Matches
+                // the parse-failure site above, which already logs the raw.
                 logger.LogWarning(
-                    "Segment texts do not reconstruct paragraph {ParagraphId} — treating as a parse failure",
-                    paragraphId);
+                    "Segment texts do not reconstruct paragraph {ParagraphId} — treating as a parse failure. "
+                    + "Config {ConfigName} (model {Model}), {SegmentCount} segment(s). Paragraph: {Original} Answer: {Raw}",
+                    paragraphId, provenance.ConfigName, provenance.Model, segments.Count,
+                    originalText, provenance.Raw);
                 return ParseFailure("Segment texts did not match the paragraph text.");
             }
 
@@ -529,9 +549,13 @@ namespace Read2Me.Services.Characters
                 .Where(e => e.TargetIndex is not null)
                 .ToDictionary(e => e.TargetIndex!.Value, e => e.Text);
 
+            // One raw for the whole chunk — a per-paragraph misalignment is logged against the batch
+            // answer it came out of, which is the only form the response ever existed in.
+            var provenance = AnswerProvenance.From(runConfig, run.Raw);
+
             for (var i = 0; i < included.Count; i++)
                 outcomes.Add((included[i],
-                    Classify(included[i].ParagraphId, queryTexts[i], parsed[i].Segments, characters)));
+                    Classify(included[i].ParagraphId, queryTexts[i], parsed[i].Segments, characters, provenance)));
 
             return new BatchCoreResult(outcomes, deferred);
         }
