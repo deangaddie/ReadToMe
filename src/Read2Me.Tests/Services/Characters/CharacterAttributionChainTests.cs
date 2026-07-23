@@ -57,7 +57,8 @@ namespace Read2Me.Tests.Services.Characters
             foreach (var (name, batchSize) in configs)
                 created.Add(await AddConfigAsync(svc, name, batchSize));
             await svc.SetActiveConfigAsync(created[0].Id);
-            await svc.SetAttributionChainIdsAsync(created.Select(c => c.Id).ToList());
+            await svc.SetAttributionChainEntriesAsync(
+                created.Select(c => new AttributionChainEntry(c.Id, Thinking: false)).ToList());
             return created;
         }
 
@@ -605,7 +606,8 @@ namespace Read2Me.Tests.Services.Characters
             var b = new LlmServerConfig { Name = "B", BaseUrl = "http://localhost/B", Model = "B", AttributionBatchSize = 8 };
             var created = new List<LlmServerConfig> { await settings.CreateConfigAsync(a), await settings.CreateConfigAsync(b) };
             await settings.SetActiveConfigAsync(created[0].Id);
-            await settings.SetAttributionChainIdsAsync([created[0].Id, created[1].Id]);
+            await settings.SetAttributionChainEntriesAsync(
+                [new AttributionChainEntry(created[0].Id, false), new AttributionChainEntry(created[1].Id, false)]);
             await settings.SetSelfConsistencyAsync(true);
 
             var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Alice"), Resolved("Alice"));

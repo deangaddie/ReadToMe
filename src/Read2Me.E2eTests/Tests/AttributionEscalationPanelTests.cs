@@ -40,7 +40,7 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
 
             // Save-on-change persists the flat chain — poll the DB until it lands.
             await PollAsync(async () =>
-                (await settings.GetAttributionChainIdsAsync()).Contains(big.Id));
+                (await settings.GetAttributionChainEntriesAsync()).Any(e => e.ConfigId == big.Id));
 
             // Toggle self-consistency on.
             await Page.GetByRole(AriaRole.Switch).ClickAsync();
@@ -49,7 +49,7 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
             // Reload — persisted chain + toggle must come back.
             await GotoAsync("/llm-settings");
 
-            Assert.Contains(big.Id, await settings.GetAttributionChainIdsAsync());
+            Assert.Contains(big.Id, (await settings.GetAttributionChainEntriesAsync()).Select(e => e.ConfigId));
             Assert.True(await settings.GetSelfConsistencyAsync());
 
             // The chain row (a body paragraph, not the config card heading) is present after reload.
@@ -58,7 +58,7 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
         }
         finally
         {
-            await settings.SetAttributionChainIdsAsync(System.Array.Empty<int>());
+            await settings.SetAttributionChainEntriesAsync(System.Array.Empty<AttributionChainEntry>());
             await settings.SetSelfConsistencyAsync(false);
             await settings.DeleteConfigAsync(big.Id);
         }

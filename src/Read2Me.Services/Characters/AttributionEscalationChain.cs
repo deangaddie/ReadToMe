@@ -63,7 +63,7 @@ namespace Read2Me.Services.Characters
 
             // ── Step 0 ── run the primary across every chapter group before any escalation. A
             // single-entry chain runs step 0 as the final step, yields every outcome, no escalation.
-            var step0Opts = new ChainStepOptions(chain[0], IsFinal: isSingleEntry, selfConsistency && !isSingleEntry);
+            var step0Opts = new ChainStepOptions(chain[0].Config, IsFinal: isSingleEntry, selfConsistency && !isSingleEntry);
             foreach (var group in GroupByChapter(queued))
             {
                 await foreach (var (item, stepOutcome) in step.RunAsync(group, step0Opts, callbacks, ct))
@@ -91,7 +91,7 @@ namespace Read2Me.Services.Characters
             // ── Steps 1..n ── escalate the whole-queue suspect set, one model burst per step.
             for (var stepIndex = 1; stepIndex < chain.Count && suspects.Count > 0; stepIndex++)
             {
-                var config = chain[stepIndex];
+                var config = chain[stepIndex].Config;
                 var isFinal = stepIndex == chain.Count - 1;
                 logger.LogInformation(
                     "Escalation step {Step} config '{Config}'{Final}: {Count} suspect item(s) across the queue",
@@ -149,20 +149,20 @@ namespace Read2Me.Services.Characters
             status is AttributionStatus.Resolved or AttributionStatus.Unknown;
 
         /// <summary>True when the chain has an escalation tail (length ≥ 2).</summary>
-        private static bool DidEscalate(IReadOnlyList<LlmServerConfig> chain) => chain.Count >= 2;
+        private static bool DidEscalate(IReadOnlyList<ResolvedChainStep> chain) => chain.Count >= 2;
 
         /// <summary>
         /// Final-step acceptance for a suspect answer. UnlistedName → Resolved (new character);
         /// Unknown → Unknown carrying an escalation reason (only when the chain actually escalated);
         /// everything else stands. A None-trigger answer is returned unchanged.
         /// </summary>
-        private static StepOutcome Accept(StepOutcome step, IReadOnlyList<LlmServerConfig> chain)
+        private static StepOutcome Accept(StepOutcome step, IReadOnlyList<ResolvedChainStep> chain)
         {
             if (step.Trigger == EscalationTrigger.Unknown &&
                 step.Outcome.Status == AttributionStatus.Unknown &&
                 DidEscalate(chain))
             {
-                var names = string.Join(" → ", chain.Select(c => c.Name));
+                var names = string.Join(" → ", chain.Select(s => s.Config.Name));
                 var reason = $"Speaker unknown after escalating through {chain.Count} models ({names})";
                 return step with { Outcome = step.Outcome with { FailureReason = reason } };
             }

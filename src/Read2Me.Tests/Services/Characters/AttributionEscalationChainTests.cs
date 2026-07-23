@@ -35,7 +35,8 @@ namespace Read2Me.Tests.Services.Characters
 
         private void SetChain(params string[] names) =>
             _settings.GetAttributionChainAsync().Returns(
-                names.Select(n => new LlmServerConfig { Name = n, AttributionBatchSize = 8 }).ToList());
+                names.Select(n => new ResolvedChainStep(
+                    new LlmServerConfig { Name = n, AttributionBatchSize = 8 }, Thinking: false)).ToList());
 
         private AttributionEscalationChain Chain(IChainStep step, EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
             new(step, _settings, broadcaster ?? new EventBroadcaster<LlmStreamEvent>(),

@@ -52,7 +52,7 @@ namespace Read2Me.Tests.App.Preflight
 
         private void SetChain(params string[] urls) =>
             _llm.GetAttributionChainAsync().Returns(
-                urls.Select(u => new LlmServerConfig { BaseUrl = u }).ToList());
+                urls.Select(u => new ResolvedChainStep(new LlmServerConfig { BaseUrl = u }, Thinking: false)).ToList());
 
         [Theory]
         [InlineData(AiTaskKind.VoicePromptGeneration)]

@@ -45,7 +45,7 @@ namespace Read2Me.App.Services.Preflight
         private async Task<string?[]> AttributionChainUrlsAsync()
         {
             var chain = await llmSettings.GetAttributionChainAsync();
-            return [.. chain.Select(ServiceConfigBaseUrls.For)];
+            return [.. chain.Select(s => ServiceConfigBaseUrls.For(s.Config))];
         }
 
         private async Task<string?> LlmUrlAsync()

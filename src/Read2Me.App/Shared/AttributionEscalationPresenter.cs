@@ -31,6 +31,12 @@ namespace Read2Me.App.Shared
         /// <summary>Global self-consistency toggle.</summary>
         public bool SelfConsistency { get; private set; }
 
+        /// <summary>
+        /// The stored chain behind <see cref="Chain"/>, kept so mutations preserve each entry's
+        /// thinking flag. Row-level thinking control lands with the panel checkbox.
+        /// </summary>
+        private List<AttributionChainEntry> _entries = new();
+
         /// <summary>Re-read all state from the settings service.</summary>
         public async Task LoadAsync()
         {
@@ -40,11 +46,10 @@ namespace Read2Me.App.Shared
             var activeId = await settings.GetActiveConfigIdAsync();
             FallbackConfig = activeId is int aid && byId.TryGetValue(aid, out var active) ? active : null;
 
-            var chainIds = await settings.GetAttributionChainIdsAsync();
-            Chain = chainIds
-                .Where(byId.ContainsKey)
-                .Select(id => byId[id])
+            _entries = (await settings.GetAttributionChainEntriesAsync())
+                .Where(e => byId.ContainsKey(e.ConfigId))
                 .ToList();
+            Chain = _entries.Select(e => byId[e.ConfigId]).ToList();
 
             var inChain = new HashSet<int>(Chain.Select(c => c.Id));
             AvailableToAdd = all.Where(c => !inChain.Contains(c.Id)).ToList();
@@ -55,10 +60,9 @@ namespace Read2Me.App.Shared
         /// <summary>Append a config to the chain and persist.</summary>
         public async Task AddAsync(int configId)
         {
-            var ids = Chain.Select(c => c.Id).ToList();
-            if (ids.Contains(configId)) return;
-            ids.Add(configId);
-            await settings.SetAttributionChainIdsAsync(ids);
+            if (_entries.Any(e => e.ConfigId == configId)) return;
+            var entries = _entries.Append(new AttributionChainEntry(configId, Thinking: false)).ToList();
+            await settings.SetAttributionChainEntriesAsync(entries);
             await LoadAsync();
         }
 
@@ -88,17 +92,17 @@ namespace Read2Me.App.Shared
             int j = i + delta;
             if (i < 0 || j < 0 || j >= Chain.Count) return;
 
-            var ids = Chain.Select(c => c.Id).ToList();
-            (ids[i], ids[j]) = (ids[j], ids[i]);
-            await settings.SetAttributionChainIdsAsync(ids);
+            var entries = _entries.ToList();
+            (entries[i], entries[j]) = (entries[j], entries[i]);
+            await settings.SetAttributionChainEntriesAsync(entries);
             await LoadAsync();
         }
 
         /// <summary>Drop a config from the chain and persist. Index 0 is removable like any other row.</summary>
         public async Task RemoveAsync(int configId)
         {
-            var ids = Chain.Select(c => c.Id).Where(id => id != configId).ToList();
-            await settings.SetAttributionChainIdsAsync(ids);
+            var entries = _entries.Where(e => e.ConfigId != configId).ToList();
+            await settings.SetAttributionChainEntriesAsync(entries);
             await LoadAsync();
         }
 

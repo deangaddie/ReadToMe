@@ -29,17 +29,25 @@ namespace Read2Me.Tests.App.LlmSettings
             return (svc, p, cfgs);
         }
 
+        /// <summary>Stores a chain of plain (thinking-off) entries — what these tests exercise.</summary>
+        private static Task SetChainAsync(LlmSettingsService svc, IReadOnlyList<int> ids) =>
+            svc.SetAttributionChainEntriesAsync(
+                ids.Select(id => new AttributionChainEntry(id, Thinking: false)).ToList());
+
+        private static async Task<int[]> ChainIdsAsync(LlmSettingsService svc) =>
+            (await svc.GetAttributionChainEntriesAsync()).Select(e => e.ConfigId).ToArray();
+
         [Fact]
         public async Task Add_AppendsConfig_AndPersistsFlatChain()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id });
             await p.LoadAsync();
 
             await p.AddAsync(cfgs[1].Id);
 
             // The stored chain IS the flat chain — no active prepend, no tail semantics.
-            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, await svc.GetAttributionChainIdsAsync());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, await ChainIdsAsync(svc));
             Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, p.Chain.Select(c => c.Id).ToArray());
         }
 
@@ -47,13 +55,13 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task MoveDown_SwapsWithNext_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(4);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
             await p.MoveDownAsync(cfgs[0].Id);
 
             Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id },
-                await svc.GetAttributionChainIdsAsync());
+                await ChainIdsAsync(svc));
             Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id },
                 p.Chain.Select(c => c.Id).ToArray());
         }
@@ -62,7 +70,7 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task MoveUp_SwapsWithPrevious_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(4);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
             await p.MoveUpAsync(cfgs[2].Id);
@@ -75,7 +83,7 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task Index0_CanMoveDown_AndBeRemoved_LikeAnyOtherRow()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
             // Index 0 is not special: it can move down.
@@ -88,14 +96,14 @@ namespace Read2Me.Tests.App.LlmSettings
             // And it can be removed — nothing is promoted in its place beyond the natural shift.
             await p.RemoveAsync(cfgs[1].Id);
             Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id },
-                await svc.GetAttributionChainIdsAsync());
+                await ChainIdsAsync(svc));
         }
 
         [Fact]
         public async Task MoveUp_AtFirst_IsNoOp()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
             await p.MoveUpAsync(cfgs[0].Id);
@@ -108,7 +116,7 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task MoveDown_AtLast_IsNoOp()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
             await p.MoveDownAsync(cfgs[1].Id);
@@ -121,7 +129,7 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task CanMove_ReflectsPositionAcrossWholeChain()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
             Assert.False(p.CanMoveUp(cfgs[0].Id));
@@ -134,12 +142,12 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task Remove_DropsConfig_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
             await p.RemoveAsync(cfgs[1].Id);
 
-            Assert.Equal(new[] { cfgs[0].Id }, await svc.GetAttributionChainIdsAsync());
+            Assert.Equal(new[] { cfgs[0].Id }, await ChainIdsAsync(svc));
             Assert.Equal(new[] { cfgs[0].Id }, p.Chain.Select(c => c.Id).ToArray());
         }
 
@@ -159,7 +167,7 @@ namespace Read2Me.Tests.App.LlmSettings
         public async Task AvailableToAdd_ExcludesChainedConfigs()
         {
             var (svc, p, cfgs) = await SetupAsync(4);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[0].Id, cfgs[1].Id });
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
             // available = all(0,1,2,3) - chained(0,1) = {2,3}
@@ -195,7 +203,7 @@ namespace Read2Me.Tests.App.LlmSettings
         {
             var (svc, p, cfgs) = await SetupAsync(2);
             await svc.SetActiveConfigAsync(cfgs[0].Id);
-            await svc.SetAttributionChainIdsAsync(new[] { cfgs[1].Id });
+            await SetChainAsync(svc, new[] { cfgs[1].Id });
             await p.LoadAsync();
 
             // The active config does not auto-appear in the chain (that is the whole point of ticket 01).

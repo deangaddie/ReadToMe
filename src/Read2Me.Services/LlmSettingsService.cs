@@ -42,70 +42,75 @@ namespace Read2Me.Services
             await _store.DeleteConfigAsync(configId);
             // Eager prune: a deleted config must never linger in the attribution chain. This
             // includes index 0 — the chain shortens, nothing is promoted.
-            var ids = await ReadChainIdsAsync();
-            if (ids.Contains(configId))
+            var entries = await ReadChainEntriesAsync();
+            if (entries.Any(e => e.ConfigId == configId))
             {
-                await WriteChainIdsAsync(ids.Where(id => id != configId).ToList());
+                await WriteChainEntriesAsync(entries.Where(e => e.ConfigId != configId).ToList());
                 OnChanged?.Invoke();
             }
         }
 
         /// <summary>
-        /// The whole attribution chain as stored config IDs, index 0 first, pruned of any ID that
-        /// no longer maps to a config. Prunes lazily: if anything was dropped, the column is re-saved.
+        /// The whole attribution chain as stored entries, index 0 first, pruned of any entry whose
+        /// config ID no longer maps to a config. Prunes lazily: if anything was dropped, the column is
+        /// re-saved.
         /// </summary>
-        public virtual async Task<IReadOnlyList<int>> GetAttributionChainIdsAsync()
+        public virtual async Task<IReadOnlyList<AttributionChainEntry>> GetAttributionChainEntriesAsync()
         {
-            var stored = await ReadChainIdsAsync();
+            var stored = await ReadChainEntriesAsync();
             if (stored.Count == 0) return stored;
 
             await using var db = await _dbFactory.CreateDbContextAsync();
             var existing = await db.LlmServerConfigs.Select(c => c.Id).ToListAsync();
             var existingSet = existing.ToHashSet();
 
-            var pruned = stored.Where(existingSet.Contains).ToList();
+            var pruned = stored.Where(e => existingSet.Contains(e.ConfigId)).ToList();
             if (pruned.Count != stored.Count)
-                await WriteChainIdsAsync(pruned);
+                await WriteChainEntriesAsync(pruned);
             return pruned;
         }
 
-        public virtual async Task SetAttributionChainIdsAsync(IReadOnlyList<int> ids)
+        public virtual async Task SetAttributionChainEntriesAsync(IReadOnlyList<AttributionChainEntry> entries)
         {
-            await WriteChainIdsAsync(ids);
+            await WriteChainEntriesAsync(entries);
             OnChanged?.Invoke();
         }
 
         /// <summary>
-        /// Resolved attribution chain: the stored chain in order, deduped by ID, with **no** active
-        /// prepend. Fallback rule: a stored chain resolving to one or more configs is returned as-is;
-        /// an empty stored chain with an active config resolves to <c>[active]</c>; otherwise empty.
+        /// Resolved attribution chain: the stored chain in order, deduped by (config ID, thinking)
+        /// pair, with **no** active prepend. Fallback rule: a stored chain resolving to one or more
+        /// configs is returned as-is; an empty stored chain with an active config resolves to
+        /// <c>[(active, thinking: false)]</c>; otherwise empty.
         /// </summary>
-        public virtual async Task<IReadOnlyList<LlmServerConfig>> GetAttributionChainAsync()
+        public virtual async Task<IReadOnlyList<ResolvedChainStep>> GetAttributionChainAsync()
         {
-            var chainIds = await GetAttributionChainIdsAsync();
+            var stored = await GetAttributionChainEntriesAsync();
 
-            var orderedIds = new List<int>();
-            var seen = new HashSet<int>();
-            foreach (var id in chainIds)
-                if (seen.Add(id)) orderedIds.Add(id);
+            var ordered = new List<AttributionChainEntry>();
+            var seen = new HashSet<(int, bool)>();
+            foreach (var entry in stored)
+                if (seen.Add((entry.ConfigId, entry.Thinking))) ordered.Add(entry);
 
-            // Empty stored chain falls back to the active config as a single step.
-            if (orderedIds.Count == 0)
+            // Empty stored chain falls back to the active config as a single non-thinking step.
+            if (ordered.Count == 0)
             {
                 var activeId = await GetActiveConfigIdAsync();
-                if (activeId is int aid) orderedIds.Add(aid);
+                if (activeId is int aid) ordered.Add(new AttributionChainEntry(aid, Thinking: false));
             }
 
-            if (orderedIds.Count == 0) return Array.Empty<LlmServerConfig>();
+            if (ordered.Count == 0) return Array.Empty<ResolvedChainStep>();
+
+            var orderedIds = ordered.Select(e => e.ConfigId).Distinct().ToList();
 
             await using var db = await _dbFactory.CreateDbContextAsync();
             var byId = await db.LlmServerConfigs
                 .Where(c => orderedIds.Contains(c.Id))
                 .ToDictionaryAsync(c => c.Id);
 
-            var chain = new List<LlmServerConfig>();
-            foreach (var id in orderedIds)
-                if (byId.TryGetValue(id, out var cfg)) chain.Add(cfg);
+            var chain = new List<ResolvedChainStep>();
+            foreach (var entry in ordered)
+                if (byId.TryGetValue(entry.ConfigId, out var cfg))
+                    chain.Add(new ResolvedChainStep(cfg, entry.Thinking));
             return chain;
         }
 
@@ -122,29 +127,69 @@ namespace Read2Me.Services
             OnChanged?.Invoke();
         }
 
-        private async Task<List<int>> ReadChainIdsAsync()
+        private async Task<List<AttributionChainEntry>> ReadChainEntriesAsync()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var settings = await db.Settings.SingleOrDefaultAsync();
             return Deserialize(settings?.AttributionChainIdsJson);
         }
 
-        private async Task WriteChainIdsAsync(IReadOnlyList<int> ids)
+        private async Task WriteChainEntriesAsync(IReadOnlyList<AttributionChainEntry> entries)
         {
-            await MutateSettingsAsync(s => s.AttributionChainIdsJson = JsonSerializer.Serialize(ids));
+            await MutateSettingsAsync(s => s.AttributionChainIdsJson = JsonSerializer.Serialize(entries));
         }
 
-        private static List<int> Deserialize(string? json)
+        /// <summary>
+        /// Tolerant read of the chain column: the object list written today
+        /// (<c>[{"id":3,"thinking":true}]</c>), or the legacy bare-int list (<c>[3,5]</c>) which maps to
+        /// entries with thinking off. Anything malformed degrades to an empty chain.
+        /// </summary>
+        private static List<AttributionChainEntry> Deserialize(string? json)
         {
-            if (string.IsNullOrWhiteSpace(json)) return new List<int>();
+            if (string.IsNullOrWhiteSpace(json)) return new List<AttributionChainEntry>();
             try
             {
-                return JsonSerializer.Deserialize<List<int>>(json) ?? new List<int>();
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) return new List<AttributionChainEntry>();
+
+                var entries = new List<AttributionChainEntry>();
+                foreach (var element in doc.RootElement.EnumerateArray())
+                {
+                    switch (element.ValueKind)
+                    {
+                        case JsonValueKind.Number when element.TryGetInt32(out var legacyId):
+                            entries.Add(new AttributionChainEntry(legacyId, Thinking: false));
+                            break;
+                        case JsonValueKind.Object when element.TryGetProperty("id", out var idProp)
+                                                       && idProp.TryGetInt32(out var id)
+                                                       && TryReadThinking(element, out var thinking):
+                            entries.Add(new AttributionChainEntry(id, thinking));
+                            break;
+                        default:
+                            return new List<AttributionChainEntry>();
+                    }
+                }
+                return entries;
             }
             catch (JsonException)
             {
-                return new List<int>();
+                return new List<AttributionChainEntry>();
             }
+        }
+
+        /// <summary>
+        /// An absent thinking flag reads as off; a present one must be a real boolean — anything else
+        /// is malformed, not a silent "off".
+        /// </summary>
+        private static bool TryReadThinking(JsonElement entry, out bool thinking)
+        {
+            if (!entry.TryGetProperty("thinking", out var value))
+            {
+                thinking = false;
+                return true;
+            }
+            thinking = value.ValueKind == JsonValueKind.True;
+            return value.ValueKind is JsonValueKind.True or JsonValueKind.False;
         }
 
         private async Task MutateSettingsAsync(Action<AppSettings> mutate)

@@ -130,6 +130,12 @@ namespace Read2Me.Tests.Services
             Assert.Single(await svc.GetAllConfigsAsync());
         }
 
+        private static AttributionChainEntry[] Entries(params int[] ids) =>
+            ids.Select(id => new AttributionChainEntry(id, Thinking: false)).ToArray();
+
+        private static int[] IdsOf(IReadOnlyList<AttributionChainEntry> entries) =>
+            entries.Select(e => e.ConfigId).ToArray();
+
         [Fact]
         public async Task AttributionChainOrder_RoundTrips()
         {
@@ -137,23 +143,89 @@ namespace Read2Me.Tests.Services
             var c1 = await svc.CreateConfigAsync(Config("A"));
             var c2 = await svc.CreateConfigAsync(Config("B"));
             var c3 = await svc.CreateConfigAsync(Config("C"));
-            var ordered = new[] { c3.Id, c1.Id, c2.Id };
+            var ordered = Entries(c3.Id, c1.Id, c2.Id);
 
-            await svc.SetAttributionChainIdsAsync(ordered);
+            await svc.SetAttributionChainEntriesAsync(ordered);
 
-            Assert.Equal(ordered, await svc.GetAttributionChainIdsAsync());
+            Assert.Equal(ordered, await svc.GetAttributionChainEntriesAsync());
         }
 
         [Fact]
-        public async Task GetAttributionChainIds_PrunesStaleId_AndReSaves()
+        public async Task AttributionChainEntries_RoundTripThinkingFlags()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            var b = await svc.CreateConfigAsync(Config("B"));
+            var stored = new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false),
+                new AttributionChainEntry(b.Id, Thinking: true),
+                new AttributionChainEntry(a.Id, Thinking: true),
+            };
+
+            await svc.SetAttributionChainEntriesAsync(stored);
+
+            // A fresh service re-reads the persisted column, not any in-memory state.
+            Assert.Equal(stored, await NewService().GetAttributionChainEntriesAsync());
+        }
+
+        [Fact]
+        public async Task LegacyBareIntChainJson_ReadsAsEntriesWithThinkingOff()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            var b = await svc.CreateConfigAsync(Config("B"));
+            await WriteRawChainJsonAsync($"[{a.Id},{b.Id}]");
+
+            var entries = await svc.GetAttributionChainEntriesAsync();
+
+            Assert.Equal(new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false),
+                new AttributionChainEntry(b.Id, Thinking: false),
+            }, entries);
+        }
+
+        [Fact]
+        public async Task ChainWrite_EmitsObjectShape()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+
+            await svc.SetAttributionChainEntriesAsync(new[] { new AttributionChainEntry(a.Id, Thinking: true) });
+
+            Assert.Equal($$"""[{"id":{{a.Id}},"thinking":true}]""", await ReadRawChainJsonAsync());
+        }
+
+        [Fact]
+        public async Task GetAttributionChainEntries_PrunesStaleId_AndReSaves()
         {
             var svc = NewService();
             var c = await svc.CreateConfigAsync(Config("A")); // real id
-            await svc.SetAttributionChainIdsAsync(new[] { c.Id, 999 });
+            await svc.SetAttributionChainEntriesAsync(Entries(c.Id, 999));
 
-            Assert.Equal(new[] { c.Id }, await svc.GetAttributionChainIdsAsync());
+            Assert.Equal(new[] { c.Id }, IdsOf(await svc.GetAttributionChainEntriesAsync()));
             // Re-read confirms the prune was persisted, not recomputed each call.
-            Assert.Equal(new[] { c.Id }, await NewService().GetAttributionChainIdsAsync());
+            Assert.Equal(new[] { c.Id }, IdsOf(await NewService().GetAttributionChainEntriesAsync()));
+        }
+
+        [Fact]
+        public async Task GetAttributionChainEntries_PrunesStaleId_KeepingThinkingRungs()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            await svc.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false),
+                new AttributionChainEntry(999, Thinking: true),
+                new AttributionChainEntry(a.Id, Thinking: true),
+            });
+
+            Assert.Equal(new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false),
+                new AttributionChainEntry(a.Id, Thinking: true),
+            }, await svc.GetAttributionChainEntriesAsync());
         }
 
         [Fact]
@@ -162,11 +234,30 @@ namespace Read2Me.Tests.Services
             var svc = NewService();
             var a = await svc.CreateConfigAsync(Config("A"));
             var b = await svc.CreateConfigAsync(Config("B"));
-            await svc.SetAttributionChainIdsAsync(new[] { a.Id, b.Id });
+            await svc.SetAttributionChainEntriesAsync(Entries(a.Id, b.Id));
 
             await svc.DeleteConfigAsync(b.Id);
 
-            Assert.Equal(new[] { a.Id }, await svc.GetAttributionChainIdsAsync());
+            Assert.Equal(new[] { a.Id }, IdsOf(await svc.GetAttributionChainEntriesAsync()));
+        }
+
+        [Fact]
+        public async Task DeleteConfig_PrunesEveryRungOfThatConfig_RegardlessOfThinking()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            var b = await svc.CreateConfigAsync(Config("B"));
+            await svc.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false),
+                new AttributionChainEntry(b.Id, Thinking: false),
+                new AttributionChainEntry(b.Id, Thinking: true),
+            });
+
+            await svc.DeleteConfigAsync(b.Id);
+
+            Assert.Equal(new[] { new AttributionChainEntry(a.Id, Thinking: false) },
+                await svc.GetAttributionChainEntriesAsync());
         }
 
         [Fact]
@@ -175,21 +266,21 @@ namespace Read2Me.Tests.Services
             var svc = NewService();
             var a = await svc.CreateConfigAsync(Config("A"));
             var b = await svc.CreateConfigAsync(Config("B"));
-            await svc.SetAttributionChainIdsAsync(new[] { a.Id, b.Id });
+            await svc.SetAttributionChainEntriesAsync(Entries(a.Id, b.Id));
 
             await svc.DeleteConfigAsync(a.Id); // index 0
 
-            Assert.Equal(new[] { b.Id }, await svc.GetAttributionChainIdsAsync());
+            Assert.Equal(new[] { b.Id }, IdsOf(await svc.GetAttributionChainEntriesAsync()));
         }
 
         [Fact]
-        public async Task SetAttributionChainIds_FiresOnChanged()
+        public async Task SetAttributionChainEntries_FiresOnChanged()
         {
             var svc = NewService();
             int count = 0;
             svc.OnChanged += () => count++;
 
-            await svc.SetAttributionChainIdsAsync(new[] { 1 });
+            await svc.SetAttributionChainEntriesAsync(Entries(1));
 
             Assert.Equal(1, count);
         }
@@ -225,22 +316,40 @@ namespace Read2Me.Tests.Services
             var c7 = await svc.CreateConfigAsync(Config("Seven"));
             await svc.SetActiveConfigAsync(a.Id);
             // Active (a) is NOT prepended; the stored list is returned in order, deduped.
-            await svc.SetAttributionChainIdsAsync(new[] { c6.Id, c7.Id, c6.Id });
+            await svc.SetAttributionChainEntriesAsync(Entries(c6.Id, c7.Id, c6.Id));
 
             var chain = await svc.GetAttributionChainAsync();
 
-            Assert.Equal(new[] { c6.Id, c7.Id }, chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { c6.Id, c7.Id }, chain.Select(s => s.Config.Id).ToArray());
         }
 
         [Fact]
-        public async Task EmptyChain_WithActive_FallsBackToActive()
+        public async Task GetAttributionChain_DedupesByPair_KeepingSameConfigAtBothThinkingValues()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            await svc.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false),
+                new AttributionChainEntry(a.Id, Thinking: true),
+                new AttributionChainEntry(a.Id, Thinking: false), // exact duplicate — collapses
+            });
+
+            var chain = await svc.GetAttributionChainAsync();
+
+            Assert.Equal([(a.Id, false), (a.Id, true)], chain.Select(s => (s.Config.Id, s.Thinking)).ToArray());
+        }
+
+        [Fact]
+        public async Task EmptyChain_WithActive_FallsBackToActive_ThinkingOff()
         {
             var svc = NewService();
             var a = await svc.CreateConfigAsync(Config("A"));
 
-            Assert.Empty(await svc.GetAttributionChainIdsAsync());
-            var chain = await svc.GetAttributionChainAsync();
-            Assert.Equal(new[] { a.Id }, chain.Select(c => c.Id).ToArray());
+            Assert.Empty(await svc.GetAttributionChainEntriesAsync());
+            var step = Assert.Single(await svc.GetAttributionChainAsync());
+            Assert.Equal(a.Id, step.Config.Id);
+            Assert.False(step.Thinking);
         }
 
         [Fact]
@@ -260,16 +369,39 @@ namespace Read2Me.Tests.Services
             var a = await svc.CreateConfigAsync(Config("A"));
             await svc.SetActiveConfigAsync(a.Id);
             // Poke a corrupted JSON blob directly into the settings row.
-            await using (var db = await Factory.CreateDbContextAsync())
-            {
-                var settings = await db.Settings.SingleAsync();
-                settings.AttributionChainIdsJson = "{ not an array";
-                await db.SaveChangesAsync();
-            }
+            await WriteRawChainJsonAsync("{ not an array");
 
-            Assert.Empty(await svc.GetAttributionChainIdsAsync());
+            Assert.Empty(await svc.GetAttributionChainEntriesAsync());
             var chain = await svc.GetAttributionChainAsync();
-            Assert.Equal(new[] { a.Id }, chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { a.Id }, chain.Select(s => s.Config.Id).ToArray());
+        }
+
+        [Theory]
+        [InlineData("""["three"]""")]      // array of the wrong element type
+        [InlineData("""[{"thinking":true}]""")] // object entry with no id
+        [InlineData("""{"id":1}""")]       // object, not an array
+        [InlineData("""[{"id":1,"thinking":"yes"}]""")] // thinking present but not a boolean
+        public async Task MalformedChainJson_ReadsAsEmptyChain(string json)
+        {
+            var svc = NewService();
+            await svc.CreateConfigAsync(Config("A"));
+            await WriteRawChainJsonAsync(json);
+
+            Assert.Empty(await svc.GetAttributionChainEntriesAsync());
+        }
+
+        private async Task WriteRawChainJsonAsync(string json)
+        {
+            await using var db = await Factory.CreateDbContextAsync();
+            var settings = await db.Settings.SingleAsync();
+            settings.AttributionChainIdsJson = json;
+            await db.SaveChangesAsync();
+        }
+
+        private async Task<string?> ReadRawChainJsonAsync()
+        {
+            await using var db = await Factory.CreateDbContextAsync();
+            return (await db.Settings.SingleAsync()).AttributionChainIdsJson;
         }
 
         [Fact]
