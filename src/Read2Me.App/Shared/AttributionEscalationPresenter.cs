@@ -11,13 +11,15 @@ namespace Read2Me.App.Shared
     /// attribution chain (every step, index 0 first) and the self-consistency toggle, and drives every
     /// mutation (add/remove/reorder/toggle) through <see cref="LlmSettingsService"/> with an immediate
     /// save followed by a reload from persisted state. The chain has no special hidden first entry:
-    /// index 0 is reorderable and removable like any other step. The active config is exposed only so
-    /// the panel can name what attribution falls back to when the chain is empty.
+    /// index 0 is reorderable and removable like any other step. Rows are addressed by index, not by
+    /// config ID, because the same config may appear twice (a fast rung and a thinking rung). The
+    /// active config is exposed only so the panel can name what attribution falls back to when the
+    /// chain is empty.
     /// </summary>
     public sealed class AttributionEscalationPresenter(LlmSettingsService settings)
     {
-        /// <summary>The whole attribution chain in order, index 0 first.</summary>
-        public IReadOnlyList<LlmServerConfig> Chain { get; private set; } = new List<LlmServerConfig>();
+        /// <summary>The whole attribution chain in order, index 0 first, with each rung's thinking flag.</summary>
+        public IReadOnlyList<ResolvedChainStep> Chain { get; private set; } = new List<ResolvedChainStep>();
 
         /// <summary>
         /// The active/default config attribution falls back to when the chain is empty, or null when
@@ -25,15 +27,19 @@ namespace Read2Me.App.Shared
         /// </summary>
         public LlmServerConfig? FallbackConfig { get; private set; }
 
-        /// <summary>Configs eligible to add: all configs minus those already in the chain.</summary>
+        /// <summary>
+        /// Configs eligible to add: all configs minus those already present as a thinking-off rung.
+        /// Adding always appends thinking-off, so an exact duplicate would collapse on the (config,
+        /// thinking) dedupe; a config present only as a thinking rung is still worth offering.
+        /// </summary>
         public IReadOnlyList<LlmServerConfig> AvailableToAdd { get; private set; } = new List<LlmServerConfig>();
 
         /// <summary>Global self-consistency toggle.</summary>
         public bool SelfConsistency { get; private set; }
 
         /// <summary>
-        /// The stored chain behind <see cref="Chain"/>, kept so mutations preserve each entry's
-        /// thinking flag. Row-level thinking control lands with the panel checkbox.
+        /// The stored chain behind <see cref="Chain"/>, filtered to entries whose config resolves so it
+        /// stays index-aligned with the rows the panel renders.
         /// </summary>
         private List<AttributionChainEntry> _entries = new();
 
@@ -49,61 +55,60 @@ namespace Read2Me.App.Shared
             _entries = (await settings.GetAttributionChainEntriesAsync())
                 .Where(e => byId.ContainsKey(e.ConfigId))
                 .ToList();
-            Chain = _entries.Select(e => byId[e.ConfigId]).ToList();
+            Chain = _entries.Select(e => new ResolvedChainStep(byId[e.ConfigId], e.Thinking)).ToList();
 
-            var inChain = new HashSet<int>(Chain.Select(c => c.Id));
-            AvailableToAdd = all.Where(c => !inChain.Contains(c.Id)).ToList();
+            var fastRungs = new HashSet<int>(_entries.Where(e => !e.Thinking).Select(e => e.ConfigId));
+            AvailableToAdd = all.Where(c => !fastRungs.Contains(c.Id)).ToList();
 
             SelfConsistency = await settings.GetSelfConsistencyAsync();
         }
 
-        /// <summary>Append a config to the chain and persist.</summary>
+        /// <summary>Append a config as a thinking-off rung and persist.</summary>
         public async Task AddAsync(int configId)
         {
-            if (_entries.Any(e => e.ConfigId == configId)) return;
+            if (_entries.Any(e => e.ConfigId == configId && !e.Thinking)) return;
             var entries = _entries.Append(new AttributionChainEntry(configId, Thinking: false)).ToList();
-            await settings.SetAttributionChainEntriesAsync(entries);
-            await LoadAsync();
+            await SaveAsync(entries);
         }
 
-        /// <summary>True when the config is a chain entry that is not already first.</summary>
-        public bool CanMoveUp(int configId)
+        /// <summary>True when the row exists and is not already first.</summary>
+        public bool CanMoveUp(int index) => index > 0 && index < Chain.Count;
+
+        /// <summary>True when the row exists and is not already last.</summary>
+        public bool CanMoveDown(int index) => index >= 0 && index < Chain.Count - 1;
+
+        /// <summary>Swap the row with its predecessor and persist. No-op at the first position.</summary>
+        public Task MoveUpAsync(int index) => SwapAsync(index, -1);
+
+        /// <summary>Swap the row with its successor and persist. No-op at the last position.</summary>
+        public Task MoveDownAsync(int index) => SwapAsync(index, +1);
+
+        private async Task SwapAsync(int index, int delta)
         {
-            int i = IndexOf(configId);
-            return i > 0;
-        }
-
-        /// <summary>True when the config is a chain entry that is not already last.</summary>
-        public bool CanMoveDown(int configId)
-        {
-            int i = IndexOf(configId);
-            return i >= 0 && i < Chain.Count - 1;
-        }
-
-        /// <summary>Swap the config with its predecessor and persist. No-op at the first position.</summary>
-        public Task MoveUpAsync(int configId) => SwapAsync(configId, -1);
-
-        /// <summary>Swap the config with its successor and persist. No-op at the last position.</summary>
-        public Task MoveDownAsync(int configId) => SwapAsync(configId, +1);
-
-        private async Task SwapAsync(int configId, int delta)
-        {
-            int i = IndexOf(configId);
-            int j = i + delta;
-            if (i < 0 || j < 0 || j >= Chain.Count) return;
+            int j = index + delta;
+            if (index < 0 || index >= Chain.Count || j < 0 || j >= _entries.Count) return;
 
             var entries = _entries.ToList();
-            (entries[i], entries[j]) = (entries[j], entries[i]);
-            await settings.SetAttributionChainEntriesAsync(entries);
-            await LoadAsync();
+            (entries[index], entries[j]) = (entries[j], entries[index]);
+            await SaveAsync(entries);
         }
 
-        /// <summary>Drop a config from the chain and persist. Index 0 is removable like any other row.</summary>
-        public async Task RemoveAsync(int configId)
+        /// <summary>Drop a row from the chain and persist. Index 0 is removable like any other row.</summary>
+        public async Task RemoveAsync(int index)
         {
-            var entries = _entries.Where(e => e.ConfigId != configId).ToList();
-            await settings.SetAttributionChainEntriesAsync(entries);
-            await LoadAsync();
+            if (index < 0 || index >= Chain.Count) return;
+            var entries = _entries.ToList();
+            entries.RemoveAt(index);
+            await SaveAsync(entries);
+        }
+
+        /// <summary>Set one rung's thinking flag and persist.</summary>
+        public async Task SetThinkingAsync(int index, bool value)
+        {
+            if (index < 0 || index >= Chain.Count) return;
+            var entries = _entries.ToList();
+            entries[index] = entries[index] with { Thinking = value };
+            await SaveAsync(entries);
         }
 
         /// <summary>Set the global self-consistency toggle and persist.</summary>
@@ -113,11 +118,18 @@ namespace Read2Me.App.Shared
             await LoadAsync();
         }
 
-        private int IndexOf(int configId)
+        /// <summary>
+        /// Persist a mutated chain and reload. Collapses exact (config, thinking) duplicates first,
+        /// keeping the first occurrence: the walk dedupes on that pair anyway, so storing a duplicate
+        /// would render a row the chain never runs. Toggling thinking off on a rung whose fast twin
+        /// already exists therefore drops the rung rather than ghosting it.
+        /// </summary>
+        private async Task SaveAsync(IEnumerable<AttributionChainEntry> entries)
         {
-            for (int i = 0; i < Chain.Count; i++)
-                if (Chain[i].Id == configId) return i;
-            return -1;
+            var seen = new HashSet<(int, bool)>();
+            var deduped = entries.Where(e => seen.Add((e.ConfigId, e.Thinking))).ToList();
+            await settings.SetAttributionChainEntriesAsync(deduped);
+            await LoadAsync();
         }
     }
 }

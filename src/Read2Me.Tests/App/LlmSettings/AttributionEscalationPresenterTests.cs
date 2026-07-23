@@ -29,13 +29,22 @@ namespace Read2Me.Tests.App.LlmSettings
             return (svc, p, cfgs);
         }
 
-        /// <summary>Stores a chain of plain (thinking-off) entries — what these tests exercise.</summary>
+        /// <summary>Stores a chain of plain (thinking-off) entries — what most of these tests exercise.</summary>
         private static Task SetChainAsync(LlmSettingsService svc, IReadOnlyList<int> ids) =>
             svc.SetAttributionChainEntriesAsync(
                 ids.Select(id => new AttributionChainEntry(id, Thinking: false)).ToList());
 
+        private static Task SetChainAsync(LlmSettingsService svc, params AttributionChainEntry[] entries) =>
+            svc.SetAttributionChainEntriesAsync(entries);
+
         private static async Task<int[]> ChainIdsAsync(LlmSettingsService svc) =>
             (await svc.GetAttributionChainEntriesAsync()).Select(e => e.ConfigId).ToArray();
+
+        private static async Task<(int Id, bool Thinking)[]> ChainEntriesAsync(LlmSettingsService svc) =>
+            (await svc.GetAttributionChainEntriesAsync()).Select(e => (e.ConfigId, e.Thinking)).ToArray();
+
+        private static int[] RowIds(AttributionEscalationPresenter p) =>
+            p.Chain.Select(r => r.Config.Id).ToArray();
 
         [Fact]
         public async Task Add_AppendsConfig_AndPersistsFlatChain()
@@ -48,7 +57,18 @@ namespace Read2Me.Tests.App.LlmSettings
 
             // The stored chain IS the flat chain — no active prepend, no tail semantics.
             Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, await ChainIdsAsync(svc));
-            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, p.Chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, RowIds(p));
+        }
+
+        [Fact]
+        public async Task Add_AppendsWithThinkingOff()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+
+            await p.AddAsync(cfgs[0].Id);
+
+            Assert.Equal(new[] { (cfgs[0].Id, false) }, await ChainEntriesAsync(svc));
+            Assert.False(p.Chain[0].Thinking);
         }
 
         [Fact]
@@ -58,12 +78,11 @@ namespace Read2Me.Tests.App.LlmSettings
             await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
-            await p.MoveDownAsync(cfgs[0].Id);
+            await p.MoveDownAsync(0);
 
             Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id },
                 await ChainIdsAsync(svc));
-            Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id },
-                p.Chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id }, RowIds(p));
         }
 
         [Fact]
@@ -73,10 +92,9 @@ namespace Read2Me.Tests.App.LlmSettings
             await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id, cfgs[2].Id });
             await p.LoadAsync();
 
-            await p.MoveUpAsync(cfgs[2].Id);
+            await p.MoveUpAsync(2);
 
-            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id, cfgs[1].Id },
-                p.Chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id, cfgs[1].Id }, RowIds(p));
         }
 
         [Fact]
@@ -87,16 +105,14 @@ namespace Read2Me.Tests.App.LlmSettings
             await p.LoadAsync();
 
             // Index 0 is not special: it can move down.
-            Assert.True(p.CanMoveDown(cfgs[0].Id));
-            Assert.False(p.CanMoveUp(cfgs[0].Id));
-            await p.MoveDownAsync(cfgs[0].Id);
-            Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id },
-                p.Chain.Select(c => c.Id).ToArray());
+            Assert.True(p.CanMoveDown(0));
+            Assert.False(p.CanMoveUp(0));
+            await p.MoveDownAsync(0);
+            Assert.Equal(new[] { cfgs[1].Id, cfgs[0].Id, cfgs[2].Id }, RowIds(p));
 
             // And it can be removed — nothing is promoted in its place beyond the natural shift.
-            await p.RemoveAsync(cfgs[1].Id);
-            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id },
-                await ChainIdsAsync(svc));
+            await p.RemoveAsync(0);
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[2].Id }, await ChainIdsAsync(svc));
         }
 
         [Fact]
@@ -106,10 +122,9 @@ namespace Read2Me.Tests.App.LlmSettings
             await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            await p.MoveUpAsync(cfgs[0].Id);
+            await p.MoveUpAsync(0);
 
-            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id },
-                p.Chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, RowIds(p));
         }
 
         [Fact]
@@ -119,10 +134,26 @@ namespace Read2Me.Tests.App.LlmSettings
             await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            await p.MoveDownAsync(cfgs[1].Id);
+            await p.MoveDownAsync(1);
 
-            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id },
-                p.Chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[1].Id }, RowIds(p));
+        }
+
+        [Fact]
+        public async Task MoveAndRemove_OutOfRangeIndex_IsNoOp()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
+            await p.LoadAsync();
+
+            await p.MoveUpAsync(-1);
+            await p.MoveDownAsync(7);
+            await p.RemoveAsync(7);
+            await p.SetThinkingAsync(7, true);
+
+            Assert.False(p.CanMoveUp(-1));
+            Assert.False(p.CanMoveDown(7));
+            Assert.Equal(new[] { (cfgs[0].Id, false), (cfgs[1].Id, false) }, await ChainEntriesAsync(svc));
         }
 
         [Fact]
@@ -132,23 +163,90 @@ namespace Read2Me.Tests.App.LlmSettings
             await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            Assert.False(p.CanMoveUp(cfgs[0].Id));
-            Assert.True(p.CanMoveUp(cfgs[1].Id));
-            Assert.True(p.CanMoveDown(cfgs[0].Id));
-            Assert.False(p.CanMoveDown(cfgs[1].Id));
+            Assert.False(p.CanMoveUp(0));
+            Assert.True(p.CanMoveUp(1));
+            Assert.True(p.CanMoveDown(0));
+            Assert.False(p.CanMoveDown(1));
         }
 
         [Fact]
-        public async Task Remove_DropsConfig_AndPersists()
+        public async Task Remove_DropsRow_AndPersists()
         {
             var (svc, p, cfgs) = await SetupAsync(3);
             await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            await p.RemoveAsync(cfgs[1].Id);
+            await p.RemoveAsync(1);
 
             Assert.Equal(new[] { cfgs[0].Id }, await ChainIdsAsync(svc));
-            Assert.Equal(new[] { cfgs[0].Id }, p.Chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[0].Id }, RowIds(p));
+        }
+
+        [Fact]
+        public async Task Move_WithDuplicateConfigs_MovesTheAddressedRowOnly()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await SetChainAsync(svc,
+                new AttributionChainEntry(cfgs[0].Id, Thinking: false),
+                new AttributionChainEntry(cfgs[1].Id, Thinking: false),
+                new AttributionChainEntry(cfgs[0].Id, Thinking: true));
+            await p.LoadAsync();
+
+            // Move the thinking rung (index 2) up past cfg1 — the fast rung at index 0 stays put.
+            await p.MoveUpAsync(2);
+
+            Assert.Equal(
+                new[] { (cfgs[0].Id, false), (cfgs[0].Id, true), (cfgs[1].Id, false) },
+                await ChainEntriesAsync(svc));
+            Assert.Equal(new[] { cfgs[0].Id, cfgs[0].Id, cfgs[1].Id }, RowIds(p));
+            Assert.Equal(new[] { false, true, false }, p.Chain.Select(r => r.Thinking).ToArray());
+        }
+
+        [Fact]
+        public async Task Remove_WithDuplicateConfigs_DropsOnlyTheAddressedRow()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await SetChainAsync(svc,
+                new AttributionChainEntry(cfgs[0].Id, Thinking: false),
+                new AttributionChainEntry(cfgs[0].Id, Thinking: true));
+            await p.LoadAsync();
+
+            await p.RemoveAsync(1);
+
+            Assert.Equal(new[] { (cfgs[0].Id, false) }, await ChainEntriesAsync(svc));
+        }
+
+        [Fact]
+        public async Task SetThinking_PersistsAndReloads()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
+            await p.LoadAsync();
+
+            await p.SetThinkingAsync(1, true);
+
+            Assert.Equal(new[] { (cfgs[0].Id, false), (cfgs[1].Id, true) }, await ChainEntriesAsync(svc));
+            Assert.Equal(new[] { false, true }, p.Chain.Select(r => r.Thinking).ToArray());
+
+            await p.SetThinkingAsync(1, false);
+
+            Assert.Equal(new[] { (cfgs[0].Id, false), (cfgs[1].Id, false) }, await ChainEntriesAsync(svc));
+        }
+
+        [Fact]
+        public async Task SetThinking_Off_CollapsesIntoExistingFastRung()
+        {
+            var (svc, p, cfgs) = await SetupAsync(1);
+            await SetChainAsync(svc,
+                new AttributionChainEntry(cfgs[0].Id, Thinking: false),
+                new AttributionChainEntry(cfgs[0].Id, Thinking: true));
+            await p.LoadAsync();
+
+            // The walk dedupes on (config, thinking), so the duplicate must not survive as a ghost row.
+            await p.SetThinkingAsync(1, false);
+
+            Assert.Equal(new[] { (cfgs[0].Id, false) }, await ChainEntriesAsync(svc));
+            Assert.Single(p.Chain);
         }
 
         [Fact]
@@ -164,15 +262,28 @@ namespace Read2Me.Tests.App.LlmSettings
         }
 
         [Fact]
-        public async Task AvailableToAdd_ExcludesChainedConfigs()
+        public async Task AvailableToAdd_ExcludesConfigsPresentWithThinkingOff()
         {
             var (svc, p, cfgs) = await SetupAsync(4);
             await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
             await p.LoadAsync();
 
-            // available = all(0,1,2,3) - chained(0,1) = {2,3}
+            // available = all(0,1,2,3) - present-with-thinking-off(0,1) = {2,3}
             Assert.Equal(new[] { cfgs[2].Id, cfgs[3].Id },
                 p.AvailableToAdd.Select(c => c.Id).OrderBy(x => x).ToArray());
+        }
+
+        [Fact]
+        public async Task AvailableToAdd_StillOffersConfigPresentOnlyAsThinkingRung()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await SetChainAsync(svc,
+                new AttributionChainEntry(cfgs[0].Id, Thinking: true),
+                new AttributionChainEntry(cfgs[1].Id, Thinking: false));
+            await p.LoadAsync();
+
+            // cfg0 is only a thinking rung — adding a fast rung for it is still a distinct step.
+            Assert.Equal(new[] { cfgs[0].Id }, p.AvailableToAdd.Select(c => c.Id).ToArray());
         }
 
         [Fact]
@@ -207,8 +318,23 @@ namespace Read2Me.Tests.App.LlmSettings
             await p.LoadAsync();
 
             // The active config does not auto-appear in the chain (that is the whole point of ticket 01).
-            Assert.Equal(new[] { cfgs[1].Id }, p.Chain.Select(c => c.Id).ToArray());
+            Assert.Equal(new[] { cfgs[1].Id }, RowIds(p));
             Assert.Contains(cfgs[0].Id, p.AvailableToAdd.Select(c => c.Id));
+        }
+
+        /// <summary>
+        /// End-to-end guard that a deleted config leaves no row. The service eager-prunes, and the
+        /// presenter filters unresolvable ids on top — this pins the observable result of both.
+        /// </summary>
+        [Fact]
+        public async Task DeletedConfig_LeavesNoRow()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
+            await svc.DeleteConfigAsync(cfgs[1].Id);
+            await p.LoadAsync();
+
+            Assert.Equal(new[] { cfgs[0].Id }, RowIds(p));
         }
     }
 }

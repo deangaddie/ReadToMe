@@ -9,7 +9,8 @@
         Character attribution runs each chain config in order. The first config answers the easy lines;
         suspect answers (unknown, unlisted name, parse failure) escalate to the next. Every step is
         reorderable and removable. Same-server multi-model chains are supported — the llama.cpp fork
-        loads the requested preset per request.
+        loads the requested preset per request. "Thinking" runs that rung with model thinking enabled —
+        slower but higher recall; the same config can appear twice, once fast and once thinking.
     </MudText>
 
     @if (_presenter is null)
@@ -35,25 +36,30 @@
             }
         }
 
-        @foreach (var cfg in _presenter.Chain)
+        @for (int r = 0; r < _presenter.Chain.Count; r++)
         {
-            var c = cfg;
+            var index = r; // captured per row: every handler below addresses its row by index
+            var step = _presenter.Chain[index];
+            var cfg = step.Config;
             <MudPaper Class="pa-2 mb-2" Outlined="true">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small"
-                                   Disabled="@(!_presenter.CanMoveUp(c.Id))"
-                                   OnClick="@(() => MoveUpAsync(c.Id))" />
+                                   Disabled="@(!_presenter.CanMoveUp(index))"
+                                   OnClick="@(() => MoveUpAsync(index))" />
                     <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small"
-                                   Disabled="@(!_presenter.CanMoveDown(c.Id))"
-                                   OnClick="@(() => MoveDownAsync(c.Id))" />
-                    <MudText Typo="Typo.body1">@c.Name</MudText>
-                    @if (!string.IsNullOrWhiteSpace(c.Model))
+                                   Disabled="@(!_presenter.CanMoveDown(index))"
+                                   OnClick="@(() => MoveDownAsync(index))" />
+                    <MudText Typo="Typo.body1">@cfg.Name</MudText>
+                    @if (!string.IsNullOrWhiteSpace(cfg.Model))
                     {
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@c.Model</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@cfg.Model</MudText>
                     }
                     <MudSpacer />
+                    <MudCheckBox T="bool" Value="step.Thinking" Dense="true" Size="Size.Small"
+                                 Label="Thinking"
+                                 ValueChanged="@(async (bool v) => await SetThinkingAsync(index, v))" />
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                   OnClick="@(() => RemoveAsync(c.Id))" />
+                                   OnClick="@(() => RemoveAsync(index))" />
                 </MudStack>
             </MudPaper>
         }
@@ -95,21 +101,27 @@
         StateHasChanged();
     }
 
-    async Task MoveUpAsync(int id)
+    async Task MoveUpAsync(int index)
     {
-        await _presenter!.MoveUpAsync(id);
+        await _presenter!.MoveUpAsync(index);
         StateHasChanged();
     }
 
-    async Task MoveDownAsync(int id)
+    async Task MoveDownAsync(int index)
     {
-        await _presenter!.MoveDownAsync(id);
+        await _presenter!.MoveDownAsync(index);
         StateHasChanged();
     }
 
-    async Task RemoveAsync(int id)
+    async Task RemoveAsync(int index)
     {
-        await _presenter!.RemoveAsync(id);
+        await _presenter!.RemoveAsync(index);
+        StateHasChanged();
+    }
+
+    async Task SetThinkingAsync(int index, bool value)
+    {
+        await _presenter!.SetThinkingAsync(index, value);
         StateHasChanged();
     }
 
