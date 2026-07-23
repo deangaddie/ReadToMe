@@ -24,9 +24,11 @@ namespace Read2Me.Services.Characters
     /// Per-step config + flags for a chain step. <see cref="IsFinal"/> gates final-step behaviour
     /// (batch→single fallback on parse failure/missing index; unlisted-name acceptance).
     /// <see cref="SelfConsistency"/> gates double-sampling (slice 004): set only on non-final steps
-    /// when the global toggle is on.
+    /// when the global toggle is on. <see cref="Thinking"/> is the chain entry's per-rung thinking
+    /// flag — off by default (attribution's primary pass runs fast), opted into per rung.
     /// </summary>
-    internal sealed record ChainStepOptions(LlmServerConfig Config, bool IsFinal, bool SelfConsistency);
+    internal sealed record ChainStepOptions(
+        LlmServerConfig Config, bool IsFinal, bool SelfConsistency, bool Thinking = false);
 
     /// <summary>
     /// Which server answered, and what it actually said. Carried into classification purely so an
@@ -186,17 +188,17 @@ namespace Read2Me.Services.Characters
             QueuedParagraph item, ChainStepOptions opts, CancellationToken ct)
         {
             if (!opts.SelfConsistency)
-                return await AttributeSampleCoreAsync(item, opts.Config, ct);
+                return await AttributeSampleCoreAsync(item, opts, ct);
 
             // Self-consistency: both samples use an effective temperature so sample 1 is not greedy.
-            var config = opts.Config.WithTemperature(EffectiveTemperature(opts.Config));
+            var sampleOpts = opts with { Config = opts.Config.WithTemperature(EffectiveTemperature(opts.Config)) };
 
-            var sample1 = await AttributeSampleCoreAsync(item, config, ct);
+            var sample1 = await AttributeSampleCoreAsync(item, sampleOpts, ct);
             // A parse/infra failure on sample 1 stands on its own — no second sample can help it.
             if (sample1.Trigger == EscalationTrigger.ParseFailure || IsInfraFailure(sample1.Outcome.Status))
                 return sample1;
 
-            var sample2 = await AttributeSampleCoreAsync(item, config, ct);
+            var sample2 = await AttributeSampleCoreAsync(item, sampleOpts, ct);
             var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
             return Reconcile(sample1, sample2, characters);
         }
@@ -227,13 +229,14 @@ namespace Read2Me.Services.Characters
             config.Temperature is { } t && t > 0 ? t : 0.7;
 
         /// <summary>
-        /// One streamed attribution sample against the given config. Returns the same
+        /// One streamed attribution sample against the step's config. Returns the same
         /// <see cref="AttributionOutcome"/> the public path returned before the escalation refactor,
         /// tagged with the quality <see cref="EscalationTrigger"/> derived from the same facts.
         /// </summary>
         private async Task<StepOutcome> AttributeSampleCoreAsync(
-            QueuedParagraph item, LlmServerConfig config, CancellationToken ct)
+            QueuedParagraph item, ChainStepOptions opts, CancellationToken ct)
         {
+            var config = opts.Config;
             var (before, after) = await prompts.GetContextWindowAsync();
 
             var ctx = await reader.GetParagraphContextAsync(
@@ -265,7 +268,8 @@ namespace Read2Me.Services.Characters
 
             var run = await runner.RunAsync<SegmentAttributionResult>(
                 new LlmRunRequest(config, prompt, item.Preview,
-                    SegmentAttributionSchema.JsonSchema, CompletionShape.Object),
+                    SegmentAttributionSchema.JsonSchema, CompletionShape.Object,
+                    DisableThinking: !opts.Thinking),
                 TryParseSegments, ct);
 
             switch (run.Outcome)
@@ -489,7 +493,8 @@ namespace Read2Me.Services.Characters
 
             var run = await runner.RunAsync<IReadOnlyDictionary<int, SegmentAttributionResult>>(
                 new LlmRunRequest(runConfig, prompt, $"{included.Count} paragraphs: {first.Preview}",
-                    SegmentBatchAttributionSchema.JsonSchema, CompletionShape.Array),
+                    SegmentBatchAttributionSchema.JsonSchema, CompletionShape.Array,
+                    DisableThinking: !opts.Thinking),
                 TryParseBatchSegments, ct);
 
             if (run.Outcome == LlmRunOutcome.ModelLoading)

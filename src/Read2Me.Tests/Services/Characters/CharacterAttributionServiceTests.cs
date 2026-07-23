@@ -49,11 +49,12 @@ namespace Read2Me.Tests.Services.Characters
         /// </summary>
         private static async Task<List<(QueuedParagraph Item, AttributionOutcome Outcome)>> RunConfigAsync(
             CharacterAttributionService svc, LlmServerConfig config, IReadOnlyList<QueuedParagraph> items,
-            CancellationToken ct = default)
+            bool thinking = false, CancellationToken ct = default)
         {
             var outcomes = new List<(QueuedParagraph, AttributionOutcome)>();
             await foreach (var (item, step) in ((IChainStep)svc).RunAsync(
-                items, new ChainStepOptions(config, IsFinal: true, SelfConsistency: false), callbacks: null, ct))
+                items, new ChainStepOptions(config, IsFinal: true, SelfConsistency: false, thinking),
+                callbacks: null, ct))
                 outcomes.Add((item, step.Outcome));
             return outcomes;
         }
@@ -208,6 +209,20 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("Preview", request.Label);
             Assert.Equal(CompletionShape.Object, request.Shape);
             Assert.Equal(SegmentAttributionSchema.JsonSchema, request.JsonSchema);
+            // Attribution answers ride the schema + prompt context; hidden thinking only adds
+            // minutes per batch (measured 75-95% of generation) without changing speakers.
+            Assert.True(request.DisableThinking);
+        }
+
+        [Fact]
+        public async Task ThinkingStep_EnablesThinking_OnTheSingleRun()
+        {
+            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
+            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
+
+            await RunConfigAsync(svc, Config(), [TestItem], thinking: true);
+
+            Assert.False(Assert.Single(runner.Requests).DisableThinking);
         }
 
         [Fact]
@@ -414,6 +429,21 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("3 paragraphs: P0", request.Label);
             Assert.Equal(CompletionShape.Array, request.Shape);
             Assert.Equal(SegmentBatchAttributionSchema.JsonSchema, request.JsonSchema);
+            Assert.True(request.DisableThinking);
+        }
+
+        [Fact]
+        public async Task Batch_ThinkingStep_EnablesThinking_OnTheBatchRun()
+        {
+            var (batch, ctx) = MakeBatch(3);
+            var runner = new FakeLlmCompletionRunner()
+                .Completes(BatchAnswer((0, "Alice"), (1, "Bob"), (2, "Bob")));
+            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+            var svc = NewService(runner, reader);
+
+            await RunConfigAsync(svc, Config(), batch, thinking: true);
+
+            Assert.False(Assert.Single(runner.Requests).DisableThinking);
         }
 
         [Fact]

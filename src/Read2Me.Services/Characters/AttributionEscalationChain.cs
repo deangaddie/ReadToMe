@@ -63,7 +63,11 @@ namespace Read2Me.Services.Characters
 
             // ── Step 0 ── run the primary across every chapter group before any escalation. A
             // single-entry chain runs step 0 as the final step, yields every outcome, no escalation.
-            var step0Opts = new ChainStepOptions(chain[0].Config, IsFinal: isSingleEntry, selfConsistency && !isSingleEntry);
+            var step0Opts = new ChainStepOptions(
+                chain[0].Config,
+                IsFinal: isSingleEntry,
+                SelfConsistency: selfConsistency && !isSingleEntry,
+                Thinking: chain[0].Thinking);
             foreach (var group in GroupByChapter(queued))
             {
                 await foreach (var (item, stepOutcome) in step.RunAsync(group, step0Opts, callbacks, ct))
@@ -91,14 +95,19 @@ namespace Read2Me.Services.Characters
             // ── Steps 1..n ── escalate the whole-queue suspect set, one model burst per step.
             for (var stepIndex = 1; stepIndex < chain.Count && suspects.Count > 0; stepIndex++)
             {
-                var config = chain[stepIndex].Config;
+                var entry = chain[stepIndex];
+                var name = StepName(entry);
                 var isFinal = stepIndex == chain.Count - 1;
                 logger.LogInformation(
                     "Escalation step {Step} config '{Config}'{Final}: {Count} suspect item(s) across the queue",
-                    stepIndex, config.Name, isFinal ? " (final)" : string.Empty, suspects.Count);
-                broadcaster.Publish(new EscalationStarted(stepIndex, config.Name, suspects.Count));
+                    stepIndex, name, isFinal ? " (final)" : string.Empty, suspects.Count);
+                broadcaster.Publish(new EscalationStarted(stepIndex, name, suspects.Count));
 
-                var opts = new ChainStepOptions(config, isFinal, selfConsistency && !isFinal);
+                var opts = new ChainStepOptions(
+                    entry.Config,
+                    IsFinal: isFinal,
+                    SelfConsistency: selfConsistency && !isFinal,
+                    Thinking: entry.Thinking);
                 var nextSuspects = new List<QueuedParagraph>();
 
                 foreach (var group in GroupByChapter(suspects))
@@ -148,6 +157,13 @@ namespace Read2Me.Services.Characters
         private static bool IsUsable(AttributionStatus status) =>
             status is AttributionStatus.Resolved or AttributionStatus.Unknown;
 
+        /// <summary>
+        /// How a rung reads to a human. The same config can appear as both a fast and a thinking rung,
+        /// so the thinking one carries a suffix to stay distinguishable in reasons, logs, and events.
+        /// </summary>
+        private static string StepName(ResolvedChainStep entry) =>
+            entry.Thinking ? $"{entry.Config.Name} (thinking)" : entry.Config.Name;
+
         /// <summary>True when the chain has an escalation tail (length ≥ 2).</summary>
         private static bool DidEscalate(IReadOnlyList<ResolvedChainStep> chain) => chain.Count >= 2;
 
@@ -162,7 +178,7 @@ namespace Read2Me.Services.Characters
                 step.Outcome.Status == AttributionStatus.Unknown &&
                 DidEscalate(chain))
             {
-                var names = string.Join(" → ", chain.Select(s => s.Config.Name));
+                var names = string.Join(" → ", chain.Select(StepName));
                 var reason = $"Speaker unknown after escalating through {chain.Count} models ({names})";
                 return step with { Outcome = step.Outcome with { FailureReason = reason } };
             }

@@ -34,9 +34,13 @@ namespace Read2Me.Tests.Services.Characters
             new(Folder, Guid.NewGuid(), preview, Chapter, Guid.NewGuid(), Guid.NewGuid());
 
         private void SetChain(params string[] names) =>
+            SetThinkingChain([.. names.Select(n => (n, false))]);
+
+        /// <summary>Chain of (config name, thinking) rungs — the same name may appear twice.</summary>
+        private void SetThinkingChain(params (string Name, bool Thinking)[] steps) =>
             _settings.GetAttributionChainAsync().Returns(
-                names.Select(n => new ResolvedChainStep(
-                    new LlmServerConfig { Name = n, AttributionBatchSize = 8 }, Thinking: false)).ToList());
+                steps.Select(s => new ResolvedChainStep(
+                    new LlmServerConfig { Name = s.Name, AttributionBatchSize = 8 }, s.Thinking)).ToList());
 
         private AttributionEscalationChain Chain(IChainStep step, EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
             new(step, _settings, broadcaster ?? new EventBroadcaster<LlmStreamEvent>(),
@@ -70,6 +74,9 @@ namespace Read2Me.Tests.Services.Characters
             /// <summary>Config names in the order the walk called into them.</summary>
             public List<string> Invocations { get; } = [];
 
+            /// <summary>The options the walk built for each of those calls, same order.</summary>
+            public List<ChainStepOptions> Options { get; } = [];
+
             public ScriptedStep ForConfig(string name, StepOutcome outcome) => ForConfig(name, _ => outcome);
 
             public ScriptedStep ForConfig(string name, Func<QueuedParagraph, StepOutcome> script)
@@ -83,6 +90,7 @@ namespace Read2Me.Tests.Services.Characters
                 AttributionQueueCallbacks? callbacks, [EnumeratorCancellation] CancellationToken ct)
             {
                 Invocations.Add(opts.Config.Name);
+                Options.Add(opts);
                 trace?.Add($"run:{opts.Config.Name}");
                 if (!_scripts.TryGetValue(opts.Config.Name, out var script))
                     throw new InvalidOperationException($"No scripted outcome for config '{opts.Config.Name}'");
@@ -306,6 +314,50 @@ namespace Read2Me.Tests.Services.Characters
             await DrainAsync(Chain(step, broadcaster), [Item()]);
 
             Assert.DoesNotContain(events, e => e is EscalationStarted);
+        }
+
+        // ── per-entry thinking ────────────────────────────────────────────────
+
+        [Fact]
+        public async Task StepOptions_CarryEachEntrysThinkingFlag()
+        {
+            SetThinkingChain(("A", false), ("A", true));   // same config, fast rung then thinking rung
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown));
+
+            await DrainAsync(Chain(step), [Item()]);
+
+            Assert.Equal([false, true], step.Options.Select(o => o.Thinking));
+        }
+
+        [Fact]
+        public async Task ThinkingRung_RendersWithSuffix_InEscalationReason()
+        {
+            SetThinkingChain(("A", false), ("A", true));
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown));
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal("Speaker unknown after escalating through 2 models (A → A (thinking))",
+                outcome.FailureReason);
+        }
+
+        [Fact]
+        public async Task ThinkingRung_RendersWithSuffix_InEscalationStarted()
+        {
+            SetThinkingChain(("A", false), ("B", true));
+            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
+            var events = new List<LlmStreamEvent>();
+            broadcaster.Event += e => events.Add(e);
+
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown))
+                .ForConfig("B", Confident());
+
+            await DrainAsync(Chain(step, broadcaster), [Item()]);
+
+            Assert.Equal("B (thinking)", Assert.Single(events.OfType<EscalationStarted>()).ConfigName);
         }
 
         // ── ItemDeferred fire ─────────────────────────────────────────────────
