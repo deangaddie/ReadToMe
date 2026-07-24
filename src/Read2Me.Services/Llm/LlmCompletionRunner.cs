@@ -78,7 +78,8 @@ namespace Read2Me.Services.Llm
                 };
 
                 await foreach (var chunk in llm.StreamChatAsync(
-                    request.Config, request.Prompt, request.JsonSchema, request.DisableThinking, ct))
+                    request.Config, request.Prompt, request.JsonSchema, request.DisableThinking,
+                    request.Overrides, ct))
                 {
                     // One stamp, both consumers: the accumulator's window and the aggregator's ring
                     // must agree about when this chunk landed.

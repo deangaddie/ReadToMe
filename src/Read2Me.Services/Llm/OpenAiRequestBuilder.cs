@@ -12,7 +12,7 @@ namespace Read2Me.Services.Llm
     {
         public static string BuildChatBody(
             LlmServerConfig config, string prompt, bool stream, string? jsonSchema = null,
-            bool disableThinking = false)
+            bool disableThinking = false, LlmRunOverrides? overrides = null)
         {
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
@@ -46,9 +46,10 @@ namespace Read2Me.Services.Llm
                 writer.WriteEndArray();
 
                 // Optional params: emit only when set so the server default applies otherwise.
-                if (config.Temperature is { } temp) writer.WriteNumber("temperature", temp);
+                // A per-run override wins over the config's own value; unset on both stays omitted.
+                if ((overrides?.Temperature ?? config.Temperature) is { } temp) writer.WriteNumber("temperature", temp);
                 if (config.TopP is { } topP) writer.WriteNumber("top_p", topP);
-                if (config.MaxTokens is { } maxTokens) writer.WriteNumber("max_tokens", maxTokens);
+                if ((overrides?.MaxTokens ?? config.MaxTokens) is { } maxTokens) writer.WriteNumber("max_tokens", maxTokens);
                 if (config.FrequencyPenalty is { } freq) writer.WriteNumber("frequency_penalty", freq);
                 if (config.PresencePenalty is { } pres) writer.WriteNumber("presence_penalty", pres);
 

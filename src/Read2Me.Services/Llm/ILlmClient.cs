@@ -13,10 +13,13 @@ namespace Read2Me.Services.Llm
         /// When <paramref name="disableThinking"/> is set, the request asks the server's chat
         /// template to skip the hidden thinking phase (llama.cpp chat_template_kwargs
         /// enable_thinking=false); no-op on models without a thinking mode.
+        /// When <paramref name="overrides"/> is set, its non-null properties replace the config's
+        /// own values for this request only; the config itself is untouched.
         /// </summary>
         IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
             LlmServerConfig config, string prompt, string? jsonSchema = null,
-            bool disableThinking = false, CancellationToken ct = default);
+            bool disableThinking = false, LlmRunOverrides? overrides = null,
+            CancellationToken ct = default);
 
         /// <summary>
         /// Fetches the list of available model ids from the server's models endpoint.

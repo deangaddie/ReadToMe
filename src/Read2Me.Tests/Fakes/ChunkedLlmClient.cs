@@ -18,7 +18,8 @@ namespace Read2Me.Tests.Fakes
         /// <summary>Chunks the consumer actually pulled (enumeration advances).</summary>
         public int ChunksPulled { get; private set; }
 
-        public List<(LlmServerConfig Config, string Prompt, string? Schema, bool DisableThinking)> Calls { get; } = [];
+        public List<(LlmServerConfig Config, string Prompt, string? Schema, bool DisableThinking,
+            LlmRunOverrides? Overrides)> Calls { get; } = [];
 
         public ChunkedLlmClient Content(params string[] chunks)
         {
@@ -52,10 +53,10 @@ namespace Read2Me.Tests.Fakes
 
         public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
             LlmServerConfig config, string prompt, string? jsonSchema = null,
-            bool disableThinking = false,
+            bool disableThinking = false, LlmRunOverrides? overrides = null,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
-            Calls.Add((config, prompt, jsonSchema, disableThinking));
+            Calls.Add((config, prompt, jsonSchema, disableThinking, overrides));
             foreach (var step in _script)
             {
                 if (step.Throws != null) throw step.Throws;

@@ -31,6 +31,13 @@ namespace Read2Me.Services.Llm
         ModelLoading,
     }
 
+    /// <summary>
+    /// Per-run parameters that are not the server's persisted settings. A set property wins over the
+    /// config's own value for this request only; a null one falls back to the config. Kept to the
+    /// two parameters callers actually vary per run — do not grow it speculatively.
+    /// </summary>
+    public sealed record LlmRunOverrides(int? MaxTokens = null, double? Temperature = null);
+
     /// <param name="Config">Server to call.</param>
     /// <param name="Prompt">Full rendered prompt.</param>
     /// <param name="Label">Short label shown in the live-stream panel's RequestStarted event.</param>
@@ -42,10 +49,14 @@ namespace Read2Me.Services.Llm
     /// recall-heavy asks: keep it for character discovery and voice plans, disable it for
     /// attribution and voice-design prompts where measured accuracy holds without it.
     /// </param>
+    /// <param name="Overrides">
+    /// Per-run parameters that are not the server's persisted settings; null leaves the config's
+    /// own values in force.
+    /// </param>
     public sealed record LlmRunRequest(
         LlmServerConfig Config, string Prompt, string Label,
         string? JsonSchema = null, CompletionShape Shape = CompletionShape.Object,
-        bool DisableThinking = false);
+        bool DisableThinking = false, LlmRunOverrides? Overrides = null);
 
     /// <param name="Outcome">How the run ended.</param>
     /// <param name="Value">Parsed value on <see cref="LlmRunOutcome.Completed"/>; default otherwise.</param>

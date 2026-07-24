@@ -115,6 +115,61 @@ namespace Read2Me.Tests.Services.Llm
         }
 
         [Fact]
+        public void BuildChatBody_OverrideWinsOverConfigTemperatureAndMaxTokens()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x", Temperature = 0.5, MaxTokens = 100 };
+            var json = OpenAiRequestBuilder.BuildChatBody(
+                cfg, "hi", stream: false, overrides: new LlmRunOverrides(MaxTokens: 4096, Temperature: 0.1));
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.Equal(0.1, doc.RootElement.GetProperty("temperature").GetDouble());
+            Assert.Equal(4096, doc.RootElement.GetProperty("max_tokens").GetInt32());
+        }
+
+        [Fact]
+        public void BuildChatBody_NullOverridePropertiesFallBackToConfig()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x", Temperature = 0.5, MaxTokens = 100 };
+            var json = OpenAiRequestBuilder.BuildChatBody(
+                cfg, "hi", stream: false, overrides: new LlmRunOverrides());
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.Equal(0.5, doc.RootElement.GetProperty("temperature").GetDouble());
+            Assert.Equal(100, doc.RootElement.GetProperty("max_tokens").GetInt32());
+        }
+
+        [Fact]
+        public void BuildChatBody_NoOverridesUsesConfigValues()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x", Temperature = 0.5, MaxTokens = 100 };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: false);
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.Equal(0.5, doc.RootElement.GetProperty("temperature").GetDouble());
+            Assert.Equal(100, doc.RootElement.GetProperty("max_tokens").GetInt32());
+        }
+
+        [Fact]
+        public void BuildChatBody_UnsetConfigMaxTokensStillOmitsMaxTokens()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(
+                cfg, "hi", stream: false, overrides: new LlmRunOverrides(Temperature: 0.1));
+            Assert.DoesNotContain("max_tokens", json);
+        }
+
+        [Fact]
+        public void BuildChatBody_OverrideSuppliesMaxTokensWhenConfigHasNone()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(
+                cfg, "hi", stream: false, overrides: new LlmRunOverrides(MaxTokens: 512));
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.Equal(512, doc.RootElement.GetProperty("max_tokens").GetInt32());
+        }
+
+        [Fact]
         public void BuildChatBody_SingleUserMessageWithPrompt()
         {
             var cfg = new LlmServerConfig { BaseUrl = "http://x" };

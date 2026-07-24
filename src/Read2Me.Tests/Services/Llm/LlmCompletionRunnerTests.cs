@@ -66,6 +66,24 @@ namespace Read2Me.Tests.Services.Llm
             Assert.False(llm.Calls[1].DisableThinking);
         }
 
+        [Fact]
+        public async Task Overrides_PassThroughToClient()
+        {
+            var llm = new ChunkedLlmClient().Content("ok");
+            var runner = Runner(llm);
+            var overrides = new LlmRunOverrides(MaxTokens: 4096, Temperature: 0.1);
+
+            await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None, Overrides: overrides),
+                CancellationToken.None);
+            await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None),
+                CancellationToken.None);
+
+            Assert.Equal(overrides, llm.Calls[0].Overrides);
+            Assert.Null(llm.Calls[1].Overrides);
+        }
+
         // ---- Broadcast lifecycle + health streak, happy path ----
 
         [Fact]
