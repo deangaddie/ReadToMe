@@ -114,7 +114,7 @@ namespace Read2Me.Services.Characters
 
                 await foreach (var (item, stepOutcome) in RunRungAsync(suspects, opts, callbacks, ct))
                 {
-                    if (stepOutcome.Trigger == EscalationTrigger.None && IsInfraFailure(stepOutcome.Outcome.Status))
+                    if (stepOutcome.Trigger == EscalationTrigger.None && stepOutcome.Outcome.Status.IsInfraFailure())
                     {
                         // Infra failure: item not usably answered here. Carry it on, or on the
                         // last entry resolve from the best prior usable answer, else surface it.
@@ -191,17 +191,14 @@ namespace Read2Me.Services.Characters
         {
             var retry = new List<QueuedParagraph>();
 
-            foreach (var group in GroupByChapter(items))
+            await foreach (var pair in step.RunAsync(items, opts, callbacks, ct))
             {
-                await foreach (var pair in step.RunAsync(group, opts, callbacks, ct))
+                if (!opts.IsFinal && pair.Step.Trigger == EscalationTrigger.ParseFailure)
                 {
-                    if (!opts.IsFinal && pair.Step.Trigger == EscalationTrigger.ParseFailure)
-                    {
-                        retry.Add(pair.Item);
-                        continue;
-                    }
-                    yield return pair;
+                    retry.Add(pair.Item);
+                    continue;
                 }
+                yield return pair;
             }
 
             if (retry.Count == 0)
@@ -212,16 +209,9 @@ namespace Read2Me.Services.Characters
                 opts.Config.Name, retry.Count);
 
             var retryOpts = opts with { Config = opts.Config.ForResample() };
-            foreach (var group in GroupByChapter(retry))
-            {
-                await foreach (var pair in step.RunAsync(group, retryOpts, callbacks, ct))
-                    yield return pair;
-            }
+            await foreach (var pair in step.RunAsync(retry, retryOpts, callbacks, ct))
+                yield return pair;
         }
-
-        /// <summary>Groups paragraphs by (folder, chapter), preserving book order within each group.</summary>
-        private static IEnumerable<List<QueuedParagraph>> GroupByChapter(IReadOnlyList<QueuedParagraph> items) =>
-            items.GroupBy(i => (i.Folder, i.ChapterId)).Select(g => g.ToList());
 
         /// <summary>
         /// Records <paramref name="step"/> as the paragraph's best answer so far when it is usable
@@ -300,9 +290,6 @@ namespace Read2Me.Services.Characters
             }
             return step;
         }
-
-        private static bool IsInfraFailure(AttributionStatus status) =>
-            status is AttributionStatus.ServiceUnavailable or AttributionStatus.Failed;
 
         /// <summary>A successful-status answer with a non-None quality trigger (unknown/unlisted/parse).</summary>
         private static bool IsQualitySuspect(StepOutcome step) =>

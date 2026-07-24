@@ -198,9 +198,6 @@ namespace Read2Me.Services.Characters
             }
         }
 
-        private static bool IsInfraFailure(AttributionStatus status) =>
-            status is AttributionStatus.ServiceUnavailable or AttributionStatus.Failed;
-
         /// <summary>
         /// Config-parameterized single-item attribution. When <see cref="ChainStepOptions.SelfConsistency"/>
         /// is set, samples the LLM twice with the same prompt and escalates on disagreement
@@ -218,7 +215,7 @@ namespace Read2Me.Services.Characters
 
             var sample1 = await AttributeSampleCoreAsync(item, sampleOpts, ct);
             // A parse/infra failure on sample 1 stands on its own — no second sample can help it.
-            if (sample1.Trigger == EscalationTrigger.ParseFailure || IsInfraFailure(sample1.Outcome.Status))
+            if (sample1.Trigger == EscalationTrigger.ParseFailure || sample1.Outcome.Status.IsInfraFailure())
                 return sample1;
 
             var sample2 = await AttributeSampleCoreAsync(item, sampleOpts, ct);
@@ -235,7 +232,7 @@ namespace Read2Me.Services.Characters
         private static StepOutcome Reconcile(
             StepOutcome sample1, StepOutcome sample2, IReadOnlyList<Data.Entities.Character> characters)
         {
-            if (sample2.Trigger == EscalationTrigger.ParseFailure || IsInfraFailure(sample2.Outcome.Status))
+            if (sample2.Trigger == EscalationTrigger.ParseFailure || sample2.Outcome.Status.IsInfraFailure())
                 return sample1;
 
             // An answer with no segments (empty paragraph) has nothing to compare.
@@ -453,7 +450,7 @@ namespace Read2Me.Services.Characters
             var reconciled = new List<(QueuedParagraph, StepOutcome)>();
             foreach (var (item, step1) in sample1.Outcomes)
             {
-                if (step1.Trigger == EscalationTrigger.ParseFailure || IsInfraFailure(step1.Outcome.Status)
+                if (step1.Trigger == EscalationTrigger.ParseFailure || step1.Outcome.Status.IsInfraFailure()
                     || !byId.TryGetValue(item.ParagraphId, out var step2))
                 {
                     reconciled.Add((item, step1));
