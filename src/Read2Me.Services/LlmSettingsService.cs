@@ -77,21 +77,22 @@ namespace Read2Me.Services
         }
 
         /// <summary>
-        /// Resolved attribution chain: the stored chain in order, deduped by (config ID, thinking)
-        /// pair, with **no** active prepend. Fallback rule: a stored chain resolving to one or more
-        /// configs is returned as-is; an empty stored chain with an active config resolves to
-        /// <c>[(active, thinking: false)]</c>; otherwise empty.
+        /// Resolved attribution chain: the stored chain in order, deduped by (config ID, thinking,
+        /// style) triple, with **no** active prepend. Fallback rule: a stored chain resolving to one
+        /// or more configs is returned as-is; an empty stored chain with an active config resolves to
+        /// <c>[(active, thinking: false, its own style)]</c>; otherwise empty.
         /// </summary>
         public virtual async Task<IReadOnlyList<ResolvedChainStep>> GetAttributionChainAsync()
         {
             var stored = await GetAttributionChainEntriesAsync();
 
             var ordered = new List<AttributionChainEntry>();
-            var seen = new HashSet<(int, bool)>();
+            var seen = new HashSet<(int, bool, AttributionPromptStyle?)>();
             foreach (var entry in stored)
-                if (seen.Add((entry.ConfigId, entry.Thinking))) ordered.Add(entry);
+                if (seen.Add((entry.ConfigId, entry.Thinking, entry.Style))) ordered.Add(entry);
 
-            // Empty stored chain falls back to the active config as a single non-thinking step.
+            // Empty stored chain falls back to the active config as a single non-thinking step
+            // inheriting that config's own prompt style.
             if (ordered.Count == 0)
             {
                 var activeId = await GetActiveConfigIdAsync();
@@ -110,7 +111,7 @@ namespace Read2Me.Services
             var chain = new List<ResolvedChainStep>();
             foreach (var entry in ordered)
                 if (byId.TryGetValue(entry.ConfigId, out var cfg))
-                    chain.Add(new ResolvedChainStep(cfg, entry.Thinking));
+                    chain.Add(new ResolvedChainStep(cfg, entry.Thinking, entry.Style ?? cfg.PromptStyle));
             return chain;
         }
 
@@ -141,8 +142,9 @@ namespace Read2Me.Services
 
         /// <summary>
         /// Tolerant read of the chain column: the object list written today
-        /// (<c>[{"id":3,"thinking":true}]</c>), or the legacy bare-int list (<c>[3,5]</c>) which maps to
-        /// entries with thinking off. Anything malformed degrades to an empty chain.
+        /// (<c>[{"id":3,"thinking":true,"style":"Simple"}]</c>), or the legacy bare-int list
+        /// (<c>[3,5]</c>) which maps to entries with thinking off. Both <c>thinking</c> and
+        /// <c>style</c> are optional. Anything malformed degrades to an empty chain.
         /// </summary>
         private static List<AttributionChainEntry> Deserialize(string? json)
         {
@@ -162,8 +164,9 @@ namespace Read2Me.Services
                             break;
                         case JsonValueKind.Object when element.TryGetProperty("id", out var idProp)
                                                        && idProp.TryGetInt32(out var id)
-                                                       && TryReadThinking(element, out var thinking):
-                            entries.Add(new AttributionChainEntry(id, thinking));
+                                                       && TryReadThinking(element, out var thinking)
+                                                       && TryReadStyle(element, out var style):
+                            entries.Add(new AttributionChainEntry(id, thinking, style));
                             break;
                         default:
                             return new List<AttributionChainEntry>();
@@ -190,6 +193,24 @@ namespace Read2Me.Services
             }
             thinking = value.ValueKind == JsonValueKind.True;
             return value.ValueKind is JsonValueKind.True or JsonValueKind.False;
+        }
+
+        /// <summary>
+        /// An absent (or explicitly null) style flag reads as "inherit the config's own"; a present
+        /// one must name a real <see cref="AttributionPromptStyle"/> — anything else is malformed,
+        /// not a silent inherit, so a hand-edited typo cannot quietly restore the config default.
+        /// </summary>
+        private static bool TryReadStyle(JsonElement entry, out AttributionPromptStyle? style)
+        {
+            style = null;
+            if (!entry.TryGetProperty("style", out var value) || value.ValueKind == JsonValueKind.Null)
+                return true;
+            if (value.ValueKind != JsonValueKind.String)
+                return false;
+            if (!Enum.TryParse<AttributionPromptStyle>(value.GetString(), ignoreCase: true, out var parsed))
+                return false;
+            style = parsed;
+            return true;
         }
 
         private async Task MutateSettingsAsync(Action<AppSettings> mutate)

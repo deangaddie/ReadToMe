@@ -198,6 +198,122 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task AttributionChainEntries_RoundTripStyles()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            var stored = new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false, AttributionPromptStyle.Simple),
+                new AttributionChainEntry(a.Id, Thinking: false, AttributionPromptStyle.Full),
+                new AttributionChainEntry(a.Id, Thinking: true, AttributionPromptStyle.Simple),
+                new AttributionChainEntry(a.Id, Thinking: false),
+            };
+
+            await svc.SetAttributionChainEntriesAsync(stored);
+
+            Assert.Equal(stored, await NewService().GetAttributionChainEntriesAsync());
+        }
+
+        [Fact]
+        public async Task ChainWrite_EmitsStyleAsName_AndOmitsItWhenInherited()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+
+            await svc.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false, AttributionPromptStyle.Simple),
+                new AttributionChainEntry(a.Id, Thinking: true),
+            });
+
+            Assert.Equal(
+                $$"""[{"id":{{a.Id}},"thinking":false,"style":"Simple"},{"id":{{a.Id}},"thinking":true}]""",
+                await ReadRawChainJsonAsync());
+        }
+
+        [Fact]
+        public async Task ChainEntryWithoutStyle_ResolvesToConfigsOwnStyle()
+        {
+            var svc = NewService();
+            var full = await svc.CreateConfigAsync(Config("Full"));
+            var simple = Config("Simple");
+            simple.PromptStyle = AttributionPromptStyle.Simple;
+            simple = await svc.CreateConfigAsync(simple);
+            await svc.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(full.Id, Thinking: false),
+                new AttributionChainEntry(simple.Id, Thinking: false),
+            });
+
+            var chain = await svc.GetAttributionChainAsync();
+
+            Assert.Equal(
+                new[] { AttributionPromptStyle.Full, AttributionPromptStyle.Simple },
+                chain.Select(s => s.Style));
+        }
+
+        [Fact]
+        public async Task ChainEntryStyle_OverridesConfigsOwnStyle()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A")); // config default is Full
+            await svc.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false, AttributionPromptStyle.Simple),
+                new AttributionChainEntry(a.Id, Thinking: false, AttributionPromptStyle.Full),
+            });
+
+            var chain = await svc.GetAttributionChainAsync();
+
+            Assert.Equal(
+                new[] { AttributionPromptStyle.Simple, AttributionPromptStyle.Full },
+                chain.Select(s => s.Style));
+        }
+
+        [Fact]
+        public async Task ChainRungs_DifferingOnlyByStyle_BothSurviveDedupe()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            await svc.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(a.Id, Thinking: false, AttributionPromptStyle.Simple),
+                new AttributionChainEntry(a.Id, Thinking: false, AttributionPromptStyle.Simple),
+                new AttributionChainEntry(a.Id, Thinking: false, AttributionPromptStyle.Full),
+            });
+
+            var chain = await svc.GetAttributionChainAsync();
+
+            Assert.Equal(2, chain.Count);
+        }
+
+        [Theory]
+        [InlineData("\"Nonsense\"")]
+        [InlineData("7")]
+        [InlineData("true")]
+        public async Task ChainJsonWithMalformedStyle_DegradesToEmptyChain(string styleJson)
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            await WriteRawChainJsonAsync($$"""[{"id":{{a.Id}},"thinking":false,"style":{{styleJson}}}]""");
+
+            Assert.Empty(await svc.GetAttributionChainEntriesAsync());
+        }
+
+        [Fact]
+        public async Task ChainJsonWithNullStyle_ReadsAsInherit()
+        {
+            var svc = NewService();
+            var a = await svc.CreateConfigAsync(Config("A"));
+            await WriteRawChainJsonAsync($$"""[{"id":{{a.Id}},"thinking":false,"style":null}]""");
+
+            var entries = await svc.GetAttributionChainEntriesAsync();
+
+            Assert.Equal(new[] { new AttributionChainEntry(a.Id, Thinking: false) }, entries);
+        }
+
+        [Fact]
         public async Task GetAttributionChainEntries_PrunesStaleId_AndReSaves()
         {
             var svc = NewService();

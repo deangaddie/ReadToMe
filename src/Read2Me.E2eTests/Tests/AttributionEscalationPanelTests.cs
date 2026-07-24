@@ -36,7 +36,9 @@ public class AttributionEscalationPanelTests(E2eAppFixture app, PlaywrightFixtur
 
             // Add "fake-big" via the add-select — it becomes a flat chain step.
             await Page.GetByLabel("Add chain step").ClickAsync();
-            await Page.GetByRole(AriaRole.Option, new() { Name = "fake-big" }).ClickAsync();
+            // Exact — each config is offered as four variants ("fake-big", "fake-big (simple)",
+            // "fake-big (thinking)", "fake-big (simple, thinking)"); the bare name is the plain rung.
+            await Page.GetByRole(AriaRole.Option, new() { Name = "fake-big", Exact = true }).ClickAsync();
 
             // Save-on-change persists the flat chain — poll the DB until it lands.
             await PollAsync(async () =>

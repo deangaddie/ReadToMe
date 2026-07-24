@@ -43,6 +43,17 @@ namespace Read2Me.Tests.App.LlmSettings
         private static async Task<(int Id, bool Thinking)[]> ChainEntriesAsync(LlmSettingsService svc) =>
             (await svc.GetAttributionChainEntriesAsync()).Select(e => (e.ConfigId, e.Thinking)).ToArray();
 
+        private static (int Id, bool Thinking, AttributionPromptStyle Style)[] Options(
+            AttributionEscalationPresenter p) =>
+            p.AvailableToAdd.Select(o => (o.Config.Id, o.Thinking, o.Style)).ToArray();
+
+        private const AttributionPromptStyle Full = AttributionPromptStyle.Full;
+        private const AttributionPromptStyle Simple = AttributionPromptStyle.Simple;
+
+        /// <summary>The four rung variants a single config is offered as, in add-list order.</summary>
+        private static (int Id, bool Thinking, AttributionPromptStyle Style)[] AllVariants(int id) =>
+            [(id, false, Full), (id, false, Simple), (id, true, Full), (id, true, Simple)];
+
         private static int[] RowIds(AttributionEscalationPresenter p) =>
             p.Chain.Select(r => r.Config.Id).ToArray();
 
@@ -61,7 +72,7 @@ namespace Read2Me.Tests.App.LlmSettings
         }
 
         [Fact]
-        public async Task Add_AppendsWithThinkingOff()
+        public async Task Add_DefaultsToThinkingOff()
         {
             var (svc, p, cfgs) = await SetupAsync(2);
 
@@ -69,6 +80,39 @@ namespace Read2Me.Tests.App.LlmSettings
 
             Assert.Equal(new[] { (cfgs[0].Id, false) }, await ChainEntriesAsync(svc));
             Assert.False(p.Chain[0].Thinking);
+        }
+
+        [Fact]
+        public async Task Add_WithThinking_AppendsThinkingRung()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+
+            await p.AddAsync(cfgs[0].Id, thinking: true);
+
+            Assert.Equal(new[] { (cfgs[0].Id, true) }, await ChainEntriesAsync(svc));
+            Assert.True(p.Chain[0].Thinking);
+        }
+
+        [Fact]
+        public async Task Add_BothModesOfSameConfig_AreDistinctRungs()
+        {
+            var (svc, p, cfgs) = await SetupAsync(1);
+
+            await p.AddAsync(cfgs[0].Id, thinking: false);
+            await p.AddAsync(cfgs[0].Id, thinking: true);
+
+            Assert.Equal(new[] { (cfgs[0].Id, false), (cfgs[0].Id, true) }, await ChainEntriesAsync(svc));
+        }
+
+        [Fact]
+        public async Task Add_SameModeTwice_IsNoOp()
+        {
+            var (svc, p, cfgs) = await SetupAsync(1);
+
+            await p.AddAsync(cfgs[0].Id, thinking: true);
+            await p.AddAsync(cfgs[0].Id, thinking: true);
+
+            Assert.Equal(new[] { (cfgs[0].Id, true) }, await ChainEntriesAsync(svc));
         }
 
         [Fact]
@@ -149,7 +193,6 @@ namespace Read2Me.Tests.App.LlmSettings
             await p.MoveUpAsync(-1);
             await p.MoveDownAsync(7);
             await p.RemoveAsync(7);
-            await p.SetThinkingAsync(7, true);
 
             Assert.False(p.CanMoveUp(-1));
             Assert.False(p.CanMoveDown(7));
@@ -217,36 +260,15 @@ namespace Read2Me.Tests.App.LlmSettings
         }
 
         [Fact]
-        public async Task SetThinking_PersistsAndReloads()
+        public async Task Chain_SurfacesEachRungsThinkingFlag()
         {
             var (svc, p, cfgs) = await SetupAsync(2);
-            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
-            await p.LoadAsync();
-
-            await p.SetThinkingAsync(1, true);
-
-            Assert.Equal(new[] { (cfgs[0].Id, false), (cfgs[1].Id, true) }, await ChainEntriesAsync(svc));
-            Assert.Equal(new[] { false, true }, p.Chain.Select(r => r.Thinking).ToArray());
-
-            await p.SetThinkingAsync(1, false);
-
-            Assert.Equal(new[] { (cfgs[0].Id, false), (cfgs[1].Id, false) }, await ChainEntriesAsync(svc));
-        }
-
-        [Fact]
-        public async Task SetThinking_Off_CollapsesIntoExistingFastRung()
-        {
-            var (svc, p, cfgs) = await SetupAsync(1);
             await SetChainAsync(svc,
                 new AttributionChainEntry(cfgs[0].Id, Thinking: false),
-                new AttributionChainEntry(cfgs[0].Id, Thinking: true));
+                new AttributionChainEntry(cfgs[1].Id, Thinking: true));
             await p.LoadAsync();
 
-            // The walk dedupes on (config, thinking), so the duplicate must not survive as a ghost row.
-            await p.SetThinkingAsync(1, false);
-
-            Assert.Equal(new[] { (cfgs[0].Id, false) }, await ChainEntriesAsync(svc));
-            Assert.Single(p.Chain);
+            Assert.Equal(new[] { false, true }, p.Chain.Select(r => r.Thinking).ToArray());
         }
 
         [Fact]
@@ -262,28 +284,124 @@ namespace Read2Me.Tests.App.LlmSettings
         }
 
         [Fact]
-        public async Task AvailableToAdd_ExcludesConfigsPresentWithThinkingOff()
+        public async Task AvailableToAdd_OffersEveryConfigInEveryVariant()
         {
-            var (svc, p, cfgs) = await SetupAsync(4);
-            await SetChainAsync(svc, new[] { cfgs[0].Id, cfgs[1].Id });
-            await p.LoadAsync();
+            var (_, p, cfgs) = await SetupAsync(2);
 
-            // available = all(0,1,2,3) - present-with-thinking-off(0,1) = {2,3}
-            Assert.Equal(new[] { cfgs[2].Id, cfgs[3].Id },
-                p.AvailableToAdd.Select(c => c.Id).OrderBy(x => x).ToArray());
+            Assert.Equal([.. AllVariants(cfgs[0].Id), .. AllVariants(cfgs[1].Id)], Options(p));
         }
 
         [Fact]
-        public async Task AvailableToAdd_StillOffersConfigPresentOnlyAsThinkingRung()
+        public async Task AvailableToAdd_ExcludesOnlyTheExactRungAlreadyPresent()
         {
             var (svc, p, cfgs) = await SetupAsync(2);
             await SetChainAsync(svc,
-                new AttributionChainEntry(cfgs[0].Id, Thinking: true),
-                new AttributionChainEntry(cfgs[1].Id, Thinking: false));
+                new AttributionChainEntry(cfgs[0].Id, Thinking: false, Simple),
+                new AttributionChainEntry(cfgs[1].Id, Thinking: true, Full));
             await p.LoadAsync();
 
-            // cfg0 is only a thinking rung — adding a fast rung for it is still a distinct step.
-            Assert.Equal(new[] { cfgs[0].Id }, p.AvailableToAdd.Select(c => c.Id).ToArray());
+            // Every other variant of each config stays offered.
+            Assert.Equal(
+                new[]
+                {
+                    (cfgs[0].Id, false, Full), (cfgs[0].Id, true, Full), (cfgs[0].Id, true, Simple),
+                    (cfgs[1].Id, false, Full), (cfgs[1].Id, false, Simple), (cfgs[1].Id, true, Simple),
+                },
+                Options(p));
+        }
+
+        /// <summary>
+        /// A rung stored without a style occupies the slot it actually runs as — its config's own
+        /// style — rather than leaving that variant still on offer as an effective duplicate.
+        /// </summary>
+        [Fact]
+        public async Task AvailableToAdd_ExcludesInheritedRungByItsEffectiveStyle()
+        {
+            var svc = NewSettings();
+            var simpleCfg = Config("simple");
+            simpleCfg.PromptStyle = Simple;
+            var cfg = await svc.CreateConfigAsync(simpleCfg);
+            await SetChainAsync(svc, new AttributionChainEntry(cfg.Id, Thinking: false));
+            var p = new AttributionEscalationPresenter(svc);
+            await p.LoadAsync();
+
+            Assert.Equal(Simple, p.Chain[0].Style);
+            Assert.DoesNotContain((cfg.Id, false, Simple), Options(p));
+            Assert.Contains((cfg.Id, false, Full), Options(p));
+        }
+
+        [Fact]
+        public async Task AvailableToAdd_DropsConfigEntirely_WhenEveryVariantPresent()
+        {
+            var (svc, p, cfgs) = await SetupAsync(2);
+            await SetChainAsync(svc,
+                new AttributionChainEntry(cfgs[0].Id, Thinking: false, Full),
+                new AttributionChainEntry(cfgs[0].Id, Thinking: false, Simple),
+                new AttributionChainEntry(cfgs[0].Id, Thinking: true, Full),
+                new AttributionChainEntry(cfgs[0].Id, Thinking: true, Simple));
+            await p.LoadAsync();
+
+            Assert.Equal(AllVariants(cfgs[1].Id), Options(p));
+        }
+
+        [Fact]
+        public async Task AvailableToAdd_LabelsAndKeys_DistinguishEveryVariant()
+        {
+            var (_, p, cfgs) = await SetupAsync(1);
+            var id = cfgs[0].Id;
+
+            Assert.Equal(
+                new[] { "cfg0", "cfg0 (simple)", "cfg0 (thinking)", "cfg0 (simple, thinking)" },
+                p.AvailableToAdd.Select(o => o.Label).ToArray());
+            Assert.Equal(
+                new[] { $"{id}:f:Full", $"{id}:f:Simple", $"{id}:t:Full", $"{id}:t:Simple" },
+                p.AvailableToAdd.Select(o => o.Key).ToArray());
+        }
+
+        [Fact]
+        public async Task Add_WithStyle_AppendsStyledRung_AndSurfacesIt()
+        {
+            var (svc, p, cfgs) = await SetupAsync(1);
+
+            await p.AddAsync(cfgs[0].Id, thinking: false, style: Simple);
+
+            Assert.Equal(
+                new[] { new AttributionChainEntry(cfgs[0].Id, Thinking: false, Simple) },
+                await svc.GetAttributionChainEntriesAsync());
+            Assert.Equal(Simple, p.Chain[0].Style);
+        }
+
+        [Fact]
+        public async Task Add_BothStylesOfSameConfig_AreDistinctRungs()
+        {
+            var (svc, p, cfgs) = await SetupAsync(1);
+
+            await p.AddAsync(cfgs[0].Id, thinking: false, style: Simple);
+            await p.AddAsync(cfgs[0].Id, thinking: false, style: Full);
+
+            Assert.Equal(new[] { Simple, Full }, p.Chain.Select(r => r.Style).ToArray());
+        }
+
+        [Fact]
+        public async Task Add_SameStyleTwice_IsNoOp()
+        {
+            var (svc, p, cfgs) = await SetupAsync(1);
+
+            await p.AddAsync(cfgs[0].Id, thinking: false, style: Simple);
+            await p.AddAsync(cfgs[0].Id, thinking: false, style: Simple);
+
+            Assert.Single(await svc.GetAttributionChainEntriesAsync());
+        }
+
+        [Fact]
+        public async Task Add_WithoutStyle_StoresNoStyle_SoTheRungInherits()
+        {
+            var (svc, p, cfgs) = await SetupAsync(1);
+
+            await p.AddAsync(cfgs[0].Id);
+
+            Assert.Null((await svc.GetAttributionChainEntriesAsync())[0].Style);
+            Assert.Equal(Full, p.Chain[0].Style); // the config's own
         }
 
         [Fact]
@@ -319,7 +437,7 @@ namespace Read2Me.Tests.App.LlmSettings
 
             // The active config does not auto-appear in the chain (that is the whole point of ticket 01).
             Assert.Equal(new[] { cfgs[1].Id }, RowIds(p));
-            Assert.Contains(cfgs[0].Id, p.AvailableToAdd.Select(c => c.Id));
+            Assert.Contains((cfgs[0].Id, false, Full), Options(p));
         }
 
         /// <summary>

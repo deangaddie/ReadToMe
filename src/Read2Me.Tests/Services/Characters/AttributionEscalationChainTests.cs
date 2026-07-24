@@ -40,7 +40,9 @@ namespace Read2Me.Tests.Services.Characters
         private void SetThinkingChain(params (string Name, bool Thinking)[] steps) =>
             _settings.GetAttributionChainAsync().Returns(
                 steps.Select(s => new ResolvedChainStep(
-                    new LlmServerConfig { Name = s.Name, AttributionBatchSize = 8 }, s.Thinking)).ToList());
+                    new LlmServerConfig { Name = s.Name, AttributionBatchSize = 8 },
+                    s.Thinking,
+                    AttributionPromptStyle.Full)).ToList());
 
         private AttributionEscalationChain Chain(IChainStep step, EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
             new(step, _settings, broadcaster ?? new EventBroadcaster<LlmStreamEvent>(),
@@ -235,6 +237,151 @@ namespace Read2Me.Tests.Services.Characters
             var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
 
             Assert.Equal(AttributionStatus.ModelLoading, outcome.Status);   // retryable, NOT A's Unknown best-prior
+        }
+
+        // ── same-rung parse-failure retry ─────────────────────────────────────
+
+        [Fact]
+        public async Task ParseFailure_ReAsksSameConfig_BeforeEscalating()
+        {
+            SetChain("A", "B");
+            var attempts = 0;
+            var step = new ScriptedStep()
+                .ForConfig("A", _ => ++attempts == 1
+                    ? Suspect(EscalationTrigger.ParseFailure, AttributionStatus.Failed)
+                    : Confident())
+                .ForConfig("B", Confident());
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
+            Assert.Equal(["A", "A"], step.Invocations);   // the re-ask settled it; B never woken
+        }
+
+        [Fact]
+        public async Task ParseFailure_RetryOnly_Once_ThenEscalates()
+        {
+            SetChain("A", "B");
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.ParseFailure, AttributionStatus.Failed))
+                .ForConfig("B", Confident());
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
+            Assert.Equal(["A", "A", "B"], step.Invocations);   // one re-ask, not a loop
+        }
+
+        [Fact]
+        public async Task ParseFailureRetry_UsesNonGreedySampling()
+        {
+            SetChain("A", "B");
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.ParseFailure, AttributionStatus.Failed))
+                .ForConfig("B", Confident());
+
+            await DrainAsync(Chain(step), [Item()]);
+
+            Assert.True(step.Options[1].Config.Temperature > 0);
+        }
+
+        [Fact]
+        public async Task ParseFailure_OnFinalRung_NotReAsked()
+        {
+            // The final rung already re-asks each parse failure item-by-item inside the step.
+            SetChain("A");
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.ParseFailure, AttributionStatus.Failed));
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Failed, outcome.Status);
+            Assert.Equal(["A"], step.Invocations);
+        }
+
+        [Fact]
+        public async Task ParseFailure_RetriedItems_DoNotHoldUpTheirNeighbours()
+        {
+            SetChain("A", "B");
+            var good = Item("good");
+            var bad = Item("bad");
+            var step = new ScriptedStep()
+                .ForConfig("A", i => i.Preview == "bad"
+                    ? Suspect(EscalationTrigger.ParseFailure, AttributionStatus.Failed)
+                    : Confident())
+                .ForConfig("B", Confident());
+
+            var results = await DrainAsync(Chain(step), [good, bad]);
+
+            Assert.Equal(2, results.Count);
+            Assert.All(results, r => Assert.Equal(AttributionStatus.Resolved, r.Outcome.Status));
+            Assert.Equal("good", results[0].Item.Preview);   // yielded live, not held for the re-ask
+        }
+
+        // ── best-prior wins over a worse final answer ─────────────────────────
+
+        [Fact]
+        public async Task FinalStep_Unknown_FallsBackToEarlierNamedAnswer()
+        {
+            // The regression this guards: a rung names a new character, the next rung comes back
+            // "unknown", and the name is thrown away — so the character is never created.
+            SetChain("A", "B");
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.UnlistedName, AttributionStatus.Resolved))
+                .ForConfig("B", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown));
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);   // A's named answer, not B's unknown
+            Assert.Null(outcome.FailureReason);
+        }
+
+        [Fact]
+        public async Task FinalStep_ParseFailure_FallsBackToEarlierUsableAnswer()
+        {
+            SetChain("A", "B");
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.UnlistedName, AttributionStatus.Resolved))
+                .ForConfig("B", Suspect(EscalationTrigger.ParseFailure, AttributionStatus.Failed));
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);   // an unusable final never decides
+        }
+
+        [Fact]
+        public async Task FinalStep_ConfidentAnswer_BeatsEarlierSuspect()
+        {
+            SetChain("A", "B");
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown))
+                .ForConfig("B", Confident());
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
+            Assert.Null(outcome.FailureReason);   // no escalation reason — the final answer stands
+        }
+
+        [Fact]
+        public async Task FinalStep_EquallyRankedAnswer_Wins()
+        {
+            // Ties go to the later, normally stronger rung: B re-attributes rather than deferring
+            // to A's equally-confident-but-unlisted answer.
+            SetChain("A", "B");
+            var step = new ScriptedStep()
+                .ForConfig("A", Suspect(EscalationTrigger.UnlistedName, AttributionStatus.Resolved) with
+                {
+                    Outcome = new AttributionOutcome(AttributionStatus.Resolved, null, "from A"),
+                })
+                .ForConfig("B", Suspect(EscalationTrigger.UnlistedName, AttributionStatus.Resolved) with
+                {
+                    Outcome = new AttributionOutcome(AttributionStatus.Resolved, null, "from B"),
+                });
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal("from B", outcome.FailureReason);
         }
 
         // ── final-step Accept ─────────────────────────────────────────────────

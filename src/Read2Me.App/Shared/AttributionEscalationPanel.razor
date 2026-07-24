@@ -9,8 +9,12 @@
         Character attribution runs each chain config in order. The first config answers the easy lines;
         suspect answers (unknown, unlisted name, parse failure) escalate to the next. Every step is
         reorderable and removable. Same-server multi-model chains are supported — the llama.cpp fork
-        loads the requested preset per request. "Thinking" runs that rung with model thinking enabled —
-        slower but higher recall; the same config can appear twice, once fast and once thinking.
+        loads the requested preset per request. Each config is offered four times in the add list, one
+        per combination of two per-rung flags. "(thinking)" runs that rung with model thinking enabled:
+        slower but higher recall. "(simple)" asks with the strict prompt, which assigns a speaker only
+        when the text explicitly names one and otherwise answers "unknown" — far less confabulation on
+        scenes where the speaker is never named, at the cost of escalating more often. The same config
+        can hold every combination; to change a rung's mode, remove it and add the other variant.
     </MudText>
 
     @if (_presenter is null)
@@ -55,9 +59,11 @@
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@cfg.Model</MudText>
                     }
                     <MudSpacer />
+                    @* Both flags are fixed at add time — the row shows which variant was picked. *@
+                    <MudCheckBox T="bool" Value="@(step.Style == AttributionPromptStyle.Simple)" Dense="true"
+                                 Size="Size.Small" ReadOnly="true" Label="Simple prompt" />
                     <MudCheckBox T="bool" Value="step.Thinking" Dense="true" Size="Size.Small"
-                                 Label="Thinking"
-                                 ValueChanged="@(async (bool v) => await SetThinkingAsync(index, v))" />
+                                 ReadOnly="true" Label="Thinking" />
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                    OnClick="@(() => RemoveAsync(index))" />
                 </MudStack>
@@ -66,11 +72,13 @@
 
         @if (_presenter.AvailableToAdd.Count > 0)
         {
-            <MudSelect T="int?" Label="Add chain step" Value="_addSelection"
+            @* Keyed on a nonce so the select is a fresh component after each add — otherwise it keeps
+               the previously picked value and re-picking the same option raises no ValueChanged. *@
+            <MudSelect T="string" Label="Add chain step" Value="@(null as string)" @key="_addNonce"
                        ValueChanged="OnAddSelectedAsync" Dense="true" Class="mt-2" Variant="Variant.Outlined">
-                @foreach (var cfg in _presenter.AvailableToAdd)
+                @foreach (var option in _presenter.AvailableToAdd)
                 {
-                    <MudSelectItem T="int?" Value="@((int?)cfg.Id)">@cfg.Name</MudSelectItem>
+                    <MudSelectItem T="string" Value="@option.Key">@option.Label</MudSelectItem>
                 }
             </MudSelect>
         }
@@ -83,7 +91,7 @@
 
 @code {
     AttributionEscalationPresenter? _presenter;
-    int? _addSelection;
+    int _addNonce;
 
     protected override async Task OnInitializedAsync()
     {
@@ -119,20 +127,30 @@
         StateHasChanged();
     }
 
-    async Task SetThinkingAsync(int index, bool value)
+    async Task OnAddSelectedAsync(string? key)
     {
-        await _presenter!.SetThinkingAsync(index, value);
-        StateHasChanged();
-    }
-
-    async Task OnAddSelectedAsync(int? id)
-    {
-        if (id is int configId)
+        if (TryParseKey(key, out int configId, out bool thinking, out var style))
         {
-            await _presenter!.AddAsync(configId);
-            _addSelection = null; // reset the placeholder
+            await _presenter!.AddAsync(configId, thinking, style);
+            _addNonce++; // rebuild the select so it drops back to the placeholder
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// Split a "<c>&lt;configId&gt;:&lt;t|f&gt;:&lt;style&gt;</c>" option key back into its parts.
+    /// Every key the add list emits names a style explicitly, so a rung added here never inherits.
+    /// </summary>
+    static bool TryParseKey(string? key, out int configId, out bool thinking, out AttributionPromptStyle style)
+    {
+        configId = 0;
+        thinking = false;
+        style = AttributionPromptStyle.Full;
+        var parts = key?.Split(':');
+        if (parts is not { Length: 3 } || !int.TryParse(parts[0], out configId)) return false;
+        if (!Enum.TryParse(parts[2], out style)) return false;
+        thinking = parts[1] == "t";
+        return true;
     }
 
     async Task OnSelfConsistencyChangedAsync(bool value)

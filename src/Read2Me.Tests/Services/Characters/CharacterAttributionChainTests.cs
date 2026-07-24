@@ -239,6 +239,65 @@ namespace Read2Me.Tests.Services.Characters
             Assert.DoesNotContain(FullMarker, prompt);
         }
 
+        /// <summary>
+        /// The whole point of the per-rung style: one server, one model, asked strictly on the cold
+        /// rung and with the full heuristics on escalation. Both rungs are the same config, so the
+        /// config's own <see cref="LlmServerConfig.PromptStyle"/> cannot be what distinguishes them.
+        /// </summary>
+        [Fact]
+        public async Task SameConfigTwice_DiffersOnlyByRungStyle_SendsEachRungsOwnPrompt()
+        {
+            var settings = NewSettings();
+            var config = await AddConfigAsync(settings, "Only", batchSize: 1);
+            await settings.SetActiveConfigAsync(config.Id);
+            await settings.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(config.Id, Thinking: false, AttributionPromptStyle.Simple),
+                new AttributionChainEntry(config.Id, Thinking: false, AttributionPromptStyle.Full),
+            });
+
+            // Cold rung answers unknown (as the strict prompt is meant to), escalation resolves it.
+            var llm = new SequenceCompletionRunner().ForConfig("Only", Unknown, Resolved("Alice"));
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
+
+            var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Resolved, result.Status);
+            Assert.Equal("Alice", Speaker(result));
+            Assert.Equal(2, llm.Calls.Count);
+            Assert.Contains(SimpleMarker, llm.Calls[0].Prompt);
+            Assert.DoesNotContain(FullMarker, llm.Calls[0].Prompt);
+            Assert.Contains(FullMarker, llm.Calls[1].Prompt);
+            Assert.DoesNotContain(SimpleMarker, llm.Calls[1].Prompt);
+        }
+
+        /// <summary>
+        /// A rung's style overrides its config's, in the direction that matters least intuitively:
+        /// a Simple-styled config asked with the full prompt on its escalation rung.
+        /// </summary>
+        [Fact]
+        public async Task RungStyle_OverridesConfigStyle()
+        {
+            var settings = NewSettings();
+            var config = await AddConfigAsync(settings, "Small", batchSize: 1);
+            config.PromptStyle = AttributionPromptStyle.Simple;
+            await settings.UpdateConfigAsync(config);
+            await settings.SetActiveConfigAsync(config.Id);
+            await settings.SetAttributionChainEntriesAsync(new[]
+            {
+                new AttributionChainEntry(config.Id, Thinking: false, AttributionPromptStyle.Full),
+            });
+
+            var llm = new SequenceCompletionRunner().ForConfig("Small", Resolved("Alice"));
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
+
+            await DrainStreamAsync(svc, settings, [MakeItem()]);
+
+            var prompt = Assert.Single(llm.Calls).Prompt;
+            Assert.Contains(FullMarker, prompt);
+            Assert.DoesNotContain(SimpleMarker, prompt);
+        }
+
         [Fact]
         public void WithTemperature_PreservesPromptStyle()
         {
@@ -461,11 +520,11 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Queue_ParseFailureEscalatesMidChain()
+        public async Task Queue_ParseFailure_RetriesSameConfigOnce_ThenEscalates()
         {
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 1), ("B", 1));
-            // A returns garbage (ParseFailure → escalate); B resolves.
+            // A returns garbage twice (the re-ask is asked of A before B is woken); B resolves.
             var llm = new SequenceCompletionRunner().ForConfig("A", "not json").ForConfig("B", Resolved("Alice"));
             var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
 
@@ -473,7 +532,39 @@ namespace Read2Me.Tests.Services.Characters
 
             Assert.Equal(AttributionStatus.Resolved, outcome.Status);
             Assert.Equal("Alice", Speaker(outcome));
-            Assert.Equal(["A", "B"], llm.Configs.Select(c => c.Name));
+            Assert.Equal(["A", "A", "B"], llm.Configs.Select(c => c.Name));
+        }
+
+        [Fact]
+        public async Task Queue_ParseFailure_RetryThatParses_DoesNotEscalate()
+        {
+            var settings = NewSettings();
+            await RegisterChainAsync(settings, ("A", 1), ("B", 1));
+            // A garbles the first answer and gets the re-ask right — B is never woken.
+            var llm = new SequenceCompletionRunner()
+                .ForConfig("A", "not json", Resolved("Alice"))
+                .ForConfig("B", Resolved("Alice"));
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
+
+            var outcome = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
+
+            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
+            Assert.Equal("Alice", Speaker(outcome));
+            Assert.Equal(["A", "A"], llm.Configs.Select(c => c.Name));
+        }
+
+        [Fact]
+        public async Task Queue_ParseFailureRetry_SamplesOffGreedy()
+        {
+            var settings = NewSettings();
+            await RegisterChainAsync(settings, ("A", 1), ("B", 1));
+            var llm = new SequenceCompletionRunner().ForConfig("A", "not json").ForConfig("B", Resolved("Alice"));
+            var svc = NewService(llm, new ChainReader(DefaultContext(), null, KnownAlice()), settings);
+
+            await DrainStreamAsync(svc, settings, [MakeItem()]);
+
+            // A greedy re-ask of an identical prompt would return the identical garbage.
+            Assert.True(llm.Configs[1].Temperature > 0);
         }
 
         [Fact]
@@ -527,8 +618,9 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterChainAsync(settings, ("A", 8), ("B", 8));
 
             var (batch, ctx) = MakeBatch(2);
-            // A returns garbage (non-final ParseFailure → whole chunk escalates), B (final) also
-            // returns garbage in batch → final falls back to single-item; single also garbage → Failed.
+            // A returns garbage (non-final ParseFailure → re-asked once, then the whole chunk
+            // escalates), B (final) also returns garbage in batch → final falls back to single-item;
+            // single also garbage → Failed.
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", "not json")
                 .ForConfig("B", "still not json");
@@ -539,10 +631,11 @@ namespace Read2Me.Tests.Services.Characters
 
             Assert.Equal(2, results.Count);
             Assert.All(results, o => Assert.Equal(AttributionStatus.Failed, o.Outcome.Status));
-            // A: 1 batch call. B: 1 batch call + 2 single fallbacks = 3. Total 4.
-            Assert.Equal(4, llm.Calls.Count);
-            Assert.Equal("A", llm.Configs[0].Name);
-            Assert.All(llm.Configs.Skip(1), c => Assert.Equal("B", c.Name));
+            // A: 1 batch call + 1 same-rung re-ask = 2. B is final, so it is exempt from the
+            // re-ask and spends 1 batch call + 2 single fallbacks = 3. Total 5.
+            Assert.Equal(5, llm.Calls.Count);
+            Assert.Equal(["A", "A"], llm.Configs.Take(2).Select(c => c.Name));
+            Assert.All(llm.Configs.Skip(2), c => Assert.Equal("B", c.Name));
         }
 
         // ─────────────────────────────────────────────────────────────────────

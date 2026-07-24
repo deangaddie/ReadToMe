@@ -28,9 +28,21 @@ namespace Read2Me.Services.Characters
     /// <see cref="SelfConsistency"/> gates double-sampling (slice 004): set only on non-final steps
     /// when the global toggle is on. <see cref="Thinking"/> is the chain entry's per-rung thinking
     /// flag — off by default (attribution's primary pass runs fast), opted into per rung.
+    /// <see cref="Style"/> is the rung's <em>effective</em> attribution prompt style, already
+    /// resolved against the config's own by <see cref="LlmSettingsService.GetAttributionChainAsync"/>;
+    /// it is the only place the style should be read from, since a rung may deliberately ask with a
+    /// different style than its config's default (a Simple cold rung on a Full config).
     /// </summary>
     internal sealed record ChainStepOptions(
-        LlmServerConfig Config, bool IsFinal, bool SelfConsistency, bool Thinking = false);
+        LlmServerConfig Config,
+        bool IsFinal,
+        bool SelfConsistency,
+        bool Thinking = false,
+        AttributionPromptStyle? Style = null)
+    {
+        /// <summary>The style to ask with: the rung's own, falling back to the config's.</summary>
+        public AttributionPromptStyle EffectiveStyle => Style ?? Config.PromptStyle;
+    }
 
     /// <summary>
     /// Which server answered, and what it actually said. Carried into classification purely so an
@@ -261,7 +273,7 @@ namespace Read2Me.Services.Characters
             var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
             var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
 
-            var template = await prompts.GetCharacterPromptAsync(config.PromptStyle);
+            var template = await prompts.GetCharacterPromptAsync(opts.EffectiveStyle);
             var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
             {
                 [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,
@@ -496,7 +508,7 @@ namespace Read2Me.Services.Characters
             var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
             var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
 
-            var template = await prompts.GetBatchCharacterPromptAsync(config.PromptStyle);
+            var template = await prompts.GetBatchCharacterPromptAsync(opts.EffectiveStyle);
             var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
             {
                 [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,

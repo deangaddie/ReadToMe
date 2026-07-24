@@ -70,7 +70,8 @@ namespace Read2Me.Services.Characters
                 chain[0].Config,
                 IsFinal: isSingleEntry,
                 SelfConsistency: selfConsistency && !isSingleEntry,
-                Thinking: chain[0].Thinking);
+                Thinking: chain[0].Thinking,
+                Style: chain[0].Style);
             await foreach (var (item, stepOutcome) in RunRungAsync(queued, step0Opts, callbacks, ct))
             {
                 Remember(best, item.ParagraphId, stepOutcome);
@@ -107,7 +108,8 @@ namespace Read2Me.Services.Characters
                     entry.Config,
                     IsFinal: isFinal,
                     SelfConsistency: selfConsistency && !isFinal,
-                    Thinking: entry.Thinking);
+                    Thinking: entry.Thinking,
+                    Style: entry.Style);
                 var nextSuspects = new List<QueuedParagraph>();
 
                 await foreach (var (item, stepOutcome) in RunRungAsync(suspects, opts, callbacks, ct))
@@ -263,11 +265,20 @@ namespace Read2Me.Services.Characters
             status is AttributionStatus.Resolved or AttributionStatus.Unknown;
 
         /// <summary>
-        /// How a rung reads to a human. The same config can appear as both a fast and a thinking rung,
-        /// so the thinking one carries a suffix to stay distinguishable in reasons, logs, and events.
+        /// How a rung reads to a human. The same config can appear as several rungs differing only in
+        /// thinking and prompt style, so those carry suffixes to stay distinguishable in reasons,
+        /// logs, and events. Only the non-default halves are named: a plain full-prompt rung reads as
+        /// the bare config name, as it always has.
         /// </summary>
-        private static string StepName(ResolvedChainStep entry) =>
-            entry.Thinking ? $"{entry.Config.Name} (thinking)" : entry.Config.Name;
+        private static string StepName(ResolvedChainStep entry)
+        {
+            var suffixes = new List<string>(2);
+            if (entry.Style == AttributionPromptStyle.Simple) suffixes.Add("simple");
+            if (entry.Thinking) suffixes.Add("thinking");
+            return suffixes.Count == 0
+                ? entry.Config.Name
+                : $"{entry.Config.Name} ({string.Join(", ", suffixes)})";
+        }
 
         /// <summary>True when the chain has an escalation tail (length ≥ 2).</summary>
         private static bool DidEscalate(IReadOnlyList<ResolvedChainStep> chain) => chain.Count >= 2;
