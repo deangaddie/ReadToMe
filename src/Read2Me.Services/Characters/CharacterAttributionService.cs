@@ -13,9 +13,11 @@ namespace Read2Me.Services.Characters
     /// Why a step's answer looks suspect and might be re-asked on a stronger config. Additive
     /// metadata computed alongside attribution; today's public API discards it (no behavior change
     /// until the chain loop in a later slice consumes it). <see cref="Inconsistent"/> is produced by
-    /// the self-consistency check (slice 004) when two samples disagree.
+    /// the self-consistency check (slice 004) when two samples disagree. <see cref="DialogLost"/> is
+    /// produced when the answer drops every dialog segment a paragraph previously had — see
+    /// <see cref="SegmentEscalation.LosesDialog"/>.
     /// </summary>
-    internal enum EscalationTrigger { None, Unknown, UnlistedName, ParseFailure, Inconsistent }
+    internal enum EscalationTrigger { None, Unknown, UnlistedName, ParseFailure, Inconsistent, DialogLost }
 
     /// <summary>An <see cref="AttributionOutcome"/> plus the quality trigger that classifies it.</summary>
     internal sealed record StepOutcome(AttributionOutcome Outcome, EscalationTrigger Trigger);
@@ -46,6 +48,15 @@ namespace Read2Me.Services.Characters
         /// <summary>Shallow copy of the config with <see cref="LlmServerConfig.Temperature"/> replaced.</summary>
         public static LlmServerConfig WithTemperature(this LlmServerConfig config, double temperature) =>
             Copy(config, config.MaxTokens, temperature);
+
+        /// <summary>
+        /// Shallow copy set up to be sampled more than once for the same paragraph: the config's own
+        /// temperature when &gt; 0, else 0.7. A null/0 temperature is greedy, which would make every
+        /// resample a verbatim repeat of the first — useless to both self-consistency (it would
+        /// always agree) and the same-rung parse-failure retry (it would fail identically).
+        /// </summary>
+        public static LlmServerConfig ForResample(this LlmServerConfig config) =>
+            config.WithTemperature(config.Temperature is { } t && t > 0 ? t : 0.7);
 
         /// <summary>Shallow copy of the config with <see cref="LlmServerConfig.MaxTokens"/> replaced.</summary>
         public static LlmServerConfig WithMaxTokens(this LlmServerConfig config, int? maxTokens) =>
@@ -191,7 +202,7 @@ namespace Read2Me.Services.Characters
                 return await AttributeSampleCoreAsync(item, opts, ct);
 
             // Self-consistency: both samples use an effective temperature so sample 1 is not greedy.
-            var sampleOpts = opts with { Config = opts.Config.WithTemperature(EffectiveTemperature(opts.Config)) };
+            var sampleOpts = opts with { Config = opts.Config.ForResample() };
 
             var sample1 = await AttributeSampleCoreAsync(item, sampleOpts, ct);
             // A parse/infra failure on sample 1 stands on its own — no second sample can help it.
@@ -223,10 +234,6 @@ namespace Read2Me.Services.Characters
                 ? sample1
                 : sample1 with { Trigger = EscalationTrigger.Inconsistent };
         }
-
-        /// <summary>Config temperature when &gt; 0, else 0.7 (a null/0 temp would make sample 1 greedy).</summary>
-        private static double EffectiveTemperature(LlmServerConfig config) =>
-            config.Temperature is { } t && t > 0 ? t : 0.7;
 
         /// <summary>
         /// One streamed attribution sample against the step's config. Returns the same
@@ -301,7 +308,7 @@ namespace Read2Me.Services.Characters
             // The query the LLM answered is ctx.Query.Text — align against that exact string, so the
             // stored segment texts are slices of the paragraph the prompt showed it.
             return Classify(item.ParagraphId, ctx.Query.Text, run.Value!.Segments, characters,
-                AnswerProvenance.From(config, run.Raw));
+                AnswerProvenance.From(config, run.Raw), run.Value!.Reasoning, ctx.Query.Segments);
         }
 
         /// <summary>
@@ -310,10 +317,19 @@ namespace Read2Me.Services.Characters
         /// segments are re-sliced from the original text and the answer carries the trigger derived
         /// from its speakers. Status is <see cref="AttributionStatus.Unknown"/> when a dialog segment
         /// is unattributed (the answer still applies — its known segments stamp), else Resolved.
+        /// <paramref name="reasoning"/> is the model's own one-sentence account of why it split and
+        /// attributed the way it did. It is logged, never stored or acted on: a confident-but-wrong
+        /// attribution is otherwise untraceable, because the raw answer is only logged when parsing
+        /// or alignment fails, and the reasoning exists nowhere else once the answer is classified.
+        /// <paramref name="priorSegments"/> is the paragraph's split as it stood before this answer;
+        /// it is the only evidence that the answer dropped the paragraph's dialog
+        /// (<see cref="SegmentEscalation.LosesDialog"/>), and it costs nothing — the context reader
+        /// already loads it for every paragraph, target or not, and only the prompt builders drop it.
         /// </summary>
         private StepOutcome Classify(
             Guid paragraphId, string originalText, IReadOnlyList<AttributionSegment> segments,
-            IReadOnlyList<Data.Entities.Character> characters, AnswerProvenance provenance)
+            IReadOnlyList<Data.Entities.Character> characters, AnswerProvenance provenance,
+            string? reasoning, IReadOnlyList<ContextSegment>? priorSegments)
         {
             if (!SegmentAligner.TryAlign(originalText, segments, out var aligned))
             {
@@ -325,9 +341,10 @@ namespace Read2Me.Services.Characters
                 // the parse-failure site above, which already logs the raw.
                 logger.LogWarning(
                     "Segment texts do not reconstruct paragraph {ParagraphId} — treating as a parse failure. "
-                    + "Config {ConfigName} (model {Model}), {SegmentCount} segment(s). Paragraph: {Original} Answer: {Raw}",
+                    + "Config {ConfigName} (model {Model}), {SegmentCount} segment(s). Reasoning: {Reasoning} "
+                    + "Paragraph: {Original} Answer: {Raw}",
                     paragraphId, provenance.ConfigName, provenance.Model, segments.Count,
-                    originalText, provenance.Raw);
+                    reasoning, originalText, provenance.Raw);
                 return ParseFailure("Segment texts did not match the paragraph text.");
             }
 
@@ -336,12 +353,37 @@ namespace Read2Me.Services.Characters
                 ? AttributionStatus.Unknown
                 : AttributionStatus.Resolved;
 
+            if (SegmentEscalation.LosesDialog(priorSegments, aligned))
+            {
+                // Logged at warning, unlike the ordinary classification line below: this answer
+                // would otherwise pass as confident and fully resolved, and applying it destroys
+                // the Character item it dropped. Rare enough in practice to be worth one line each.
+                logger.LogWarning(
+                    "Paragraph {ParagraphId} answer folded all dialog into narration — escalating. "
+                    + "Config {ConfigName} (model {Model}). Reasoning: {Reasoning} Paragraph: {Original}",
+                    paragraphId, provenance.ConfigName, provenance.Model, reasoning, originalText);
+                trigger = EscalationTrigger.DialogLost;
+            }
+
+            // Speakers and reasoning together: the pair is what makes a wrong-but-confident answer
+            // readable after the fact — the names it chose, and the account it gave for choosing them.
             logger.LogInformation(
-                "LLM segmented paragraph {ParagraphId} into {Count} segment(s), status {Status}, trigger {Trigger}",
-                paragraphId, aligned.Count, status, trigger);
+                "LLM segmented paragraph {ParagraphId} into {Count} segment(s), status {Status}, trigger {Trigger}, "
+                + "config {ConfigName} (model {Model}). Dialog speakers: {Speakers}. Reasoning: {Reasoning}",
+                paragraphId, aligned.Count, status, trigger, provenance.ConfigName, provenance.Model,
+                DialogSpeakers(aligned), reasoning);
 
             return new StepOutcome(new AttributionOutcome(status, aligned, null), trigger);
         }
+
+        /// <summary>
+        /// The answer's dialog speakers in segment order, for the log line. Narration is dropped —
+        /// it is always "narrator" and would bury the names that matter.
+        /// </summary>
+        private static string DialogSpeakers(IReadOnlyList<AttributionSegment> segments) =>
+            string.Join(", ", segments
+                .Where(s => s.Type == AttributionSegmentType.Dialog)
+                .Select(s => s.Speaker));
 
         private static StepOutcome ParseFailure(string? error) =>
             new(new AttributionOutcome(AttributionStatus.Failed, null, error), EscalationTrigger.ParseFailure);
@@ -384,7 +426,7 @@ namespace Read2Me.Services.Characters
         {
             var effOpts = opts with
             {
-                Config = opts.Config.WithTemperature(EffectiveTemperature(opts.Config)),
+                Config = opts.Config.ForResample(),
                 SelfConsistency = false,
             };
 
@@ -549,10 +591,12 @@ namespace Read2Me.Services.Characters
             }
 
             var parsed = run.Value!;
-            // Each target's own query text — the same string the prompt showed for that index.
-            var queryTexts = ctx.Entries
-                .Where(e => e.TargetIndex is not null)
-                .ToDictionary(e => e.TargetIndex!.Value, e => e.Text);
+            // Each target's own query text — the same string the prompt showed for that index —
+            // and its pre-answer split, which the reader populates for targets too even though the
+            // prompt deliberately shows them raw text only.
+            var targets = ctx.Entries.Where(e => e.TargetIndex is not null).ToList();
+            var queryTexts = targets.ToDictionary(e => e.TargetIndex!.Value, e => e.Text);
+            var priorSegments = targets.ToDictionary(e => e.TargetIndex!.Value, e => e.Segments);
 
             // One raw for the whole chunk — a per-paragraph misalignment is logged against the batch
             // answer it came out of, which is the only form the response ever existed in.
@@ -560,7 +604,8 @@ namespace Read2Me.Services.Characters
 
             for (var i = 0; i < included.Count; i++)
                 outcomes.Add((included[i],
-                    Classify(included[i].ParagraphId, queryTexts[i], parsed[i].Segments, characters, provenance)));
+                    Classify(included[i].ParagraphId, queryTexts[i], parsed[i].Segments, characters, provenance,
+                        parsed[i].Reasoning, priorSegments[i])));
 
             return new BatchCoreResult(outcomes, deferred);
         }

@@ -1,4 +1,5 @@
 using Read2Me.Data.Entities;
+using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
 using Xunit;
@@ -73,6 +74,55 @@ namespace Read2Me.Tests.Services.Characters
         {
             var trigger = SegmentEscalation.DeriveTrigger([Dialog("Mock Turtle")], Characters);
             Assert.Equal(EscalationTrigger.UnlistedName, trigger);
+        }
+
+        [Fact]
+        public void UnlistedSpeakerNamedByNarrationTag_TriggerNone()
+        {
+            // "…and Tathar said," is direct textual evidence for a first appearance, so the answer
+            // is confident and lands now — the character is created on apply — rather than costing
+            // a walk down the whole escalation chain.
+            var trigger = SegmentEscalation.DeriveTrigger(
+                [Narration("Borric motioned for the boys to approach, and Tathar said, "),
+                 Dialog("Tathar", "“Which of you found this outworlder?”")],
+                Characters);
+            Assert.Equal(EscalationTrigger.None, trigger);
+        }
+
+        [Fact]
+        public void UnlistedSpeakerNamedByPossessiveInNarration_TriggerNone()
+        {
+            var trigger = SegmentEscalation.DeriveTrigger(
+                [Narration("Tathar’s gaze did not waver. "), Dialog("Tathar")], Characters);
+            Assert.Equal(EscalationTrigger.None, trigger);
+        }
+
+        [Fact]
+        public void UnlistedSpeakerNamedOnlyInsideDialog_TriggerUnlistedName()
+        {
+            // A name inside a quote is usually a vocative — the character addressed, not the
+            // speaker. Exactly what escalation exists to catch, so narration alone attests.
+            var trigger = SegmentEscalation.DeriveTrigger(
+                [Dialog("Mock Turtle", "“Well, Gryphon?”")], Characters);
+            Assert.Equal(EscalationTrigger.UnlistedName, trigger);
+        }
+
+        [Fact]
+        public void UnlistedSpeakerMatchingOnlyPartOfANarrationWord_TriggerUnlistedName()
+        {
+            // "Tom" must not be attested by "Tomas" — whole-word match only.
+            var trigger = SegmentEscalation.DeriveTrigger(
+                [Narration("Tomas began haltingly. "), Dialog("Tom")], Characters);
+            Assert.Equal(EscalationTrigger.UnlistedName, trigger);
+        }
+
+        [Fact]
+        public void UnknownSpeakerAlongsideAttestedUnlistedSpeaker_TriggerUnknown()
+        {
+            // Attestation clears the unlisted name, so the unattributed segment is what is left.
+            var trigger = SegmentEscalation.DeriveTrigger(
+                [Narration("Tathar said, "), Dialog("Tathar"), Dialog("unknown")], Characters);
+            Assert.Equal(EscalationTrigger.Unknown, trigger);
         }
 
         [Fact]
@@ -171,6 +221,76 @@ namespace Read2Me.Tests.Services.Characters
                 Answer(Dialog("Mock Turtle")), Answer(Dialog("mock turtle")), Characters));
             Assert.False(SegmentEscalation.AnswersAgree(
                 Answer(Dialog("Mock Turtle")), Answer(Dialog("Gryphon")), Characters));
+        }
+
+        // --- LosesDialog ---
+
+        private static ContextSegment PriorDialog(string speaker = "Alice", string text = "“Hi.”") =>
+            new(text, SegmentWire.Dialog, speaker);
+
+        private static ContextSegment PriorNarration(string text = "she said.") =>
+            new(text, SegmentWire.Narration, SegmentWire.Narrator);
+
+        [Fact]
+        public void DialogFoldedIntoNarration_LosesDialog()
+        {
+            Assert.True(SegmentEscalation.LosesDialog(
+                [PriorNarration(), PriorDialog()],
+                Answer(Narration("she said. “Hi.”"))));
+        }
+
+        [Fact]
+        public void PriorDialogStillDialog_DoesNotLose()
+        {
+            Assert.False(SegmentEscalation.LosesDialog(
+                [PriorNarration(), PriorDialog()],
+                Answer(Narration(), Dialog("Alice"))));
+        }
+
+        /// <summary>
+        /// An unattributed prior dialog segment still counts as dialog — the wire sentinel marks a
+        /// missing speaker, not a missing line.
+        /// </summary>
+        [Fact]
+        public void PriorUnknownSpeakerDialog_StillCountsAsDialog()
+        {
+            Assert.True(SegmentEscalation.LosesDialog(
+                [PriorDialog(SegmentWire.Unknown)], Answer(Narration("“Hi.”"))));
+        }
+
+        /// <summary>The reverse direction is the re-segmentation doing its job, not a loss.</summary>
+        [Fact]
+        public void NarrationPriorGainingDialog_DoesNotLose()
+        {
+            Assert.False(SegmentEscalation.LosesDialog(
+                [PriorNarration("she said. “Hi.”")],
+                Answer(Narration(), Dialog("Alice"))));
+        }
+
+        [Fact]
+        public void AllNarrationBothSides_DoesNotLose()
+        {
+            Assert.False(SegmentEscalation.LosesDialog(
+                [PriorNarration()], Answer(Narration())));
+        }
+
+        /// <summary>Missing evidence never manufactures a loss.</summary>
+        [Fact]
+        public void NullPrior_DoesNotLose()
+        {
+            Assert.False(SegmentEscalation.LosesDialog(null, Answer(Narration())));
+        }
+
+        /// <summary>
+        /// A lost-dialog answer is invisible to the other two checks — that is exactly why it needs
+        /// its own trigger.
+        /// </summary>
+        [Fact]
+        public void LostDialogAnswer_ScoresCleanOnTheOtherChecks()
+        {
+            var answer = Answer(Narration("she said. “Hi.”"));
+            Assert.Equal(EscalationTrigger.None, SegmentEscalation.DeriveTrigger(answer, Characters));
+            Assert.False(SegmentEscalation.HasUnknownSpeaker(answer));
         }
     }
 }

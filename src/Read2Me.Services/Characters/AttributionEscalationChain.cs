@@ -10,9 +10,10 @@ namespace Read2Me.Services.Characters
     /// The escalation-chain <em>walk</em>: traverses the configured chain over a single
     /// <see cref="IChainStep"/>, deciding each paragraph's final outcome. The step owns one config's
     /// run across a set of items (grouping, chunking, batch core, self-consistency, trigger
-    /// derivation); the walk owns policy — the step-0-vs-steps-1..n split, best-prior fallback, the
-    /// <see cref="EscalationTrigger"/> routing, the <see cref="AttributionStatus.ModelLoading"/>
-    /// short-circuit, the <see cref="EscalationStarted"/> publish, and the
+    /// derivation); the walk owns policy — the step-0-vs-steps-1..n split, the same-rung
+    /// parse-failure retry, best-prior fallback, the <see cref="EscalationTrigger"/> routing, the
+    /// <see cref="AttributionStatus.ModelLoading"/> short-circuit, the
+    /// <see cref="EscalationStarted"/> publish, and the
     /// <see cref="AttributionQueueCallbacks.ItemDeferred"/> fire.
     /// </summary>
     internal class AttributionEscalationChain(
@@ -56,7 +57,9 @@ namespace Read2Me.Services.Characters
             var selfConsistency = await settings.GetSelfConsistencyAsync();
             var isSingleEntry = chain.Count == 1;
 
-            // Best usable (non-infra) answer seen so far, keyed by paragraph id — last-entry fallback.
+            // Best usable (non-infra) answer seen so far, keyed by paragraph id — last-entry
+            // fallback. "Best" is by answer quality (see Rank), not by recency: a later, stronger
+            // rung that regresses to "unknown" must not throw away an earlier rung's named answer.
             var best = new Dictionary<Guid, StepOutcome>();
             // Suspects collected from the whole queue, in book order, carried into the next step.
             var suspects = new List<QueuedParagraph>();
@@ -68,27 +71,24 @@ namespace Read2Me.Services.Characters
                 IsFinal: isSingleEntry,
                 SelfConsistency: selfConsistency && !isSingleEntry,
                 Thinking: chain[0].Thinking);
-            foreach (var group in GroupByChapter(queued))
+            await foreach (var (item, stepOutcome) in RunRungAsync(queued, step0Opts, callbacks, ct))
             {
-                await foreach (var (item, stepOutcome) in step.RunAsync(group, step0Opts, callbacks, ct))
-                {
-                    if (IsUsable(stepOutcome.Outcome.Status)) best[item.ParagraphId] = stepOutcome;
+                Remember(best, item.ParagraphId, stepOutcome);
 
-                    // Non-suspect (confident answer, or a step-0 infra failure keeping today's
-                    // semantics) is decided now and yielded live. In a single-entry chain every item
-                    // is final, so nothing is suspect.
-                    if (isSingleEntry || !IsQualitySuspect(stepOutcome))
-                    {
-                        yield return (item, Accept(stepOutcome, chain).Outcome);
-                    }
-                    else
-                    {
-                        // Answered but suspect: it leaves the in-flight set and waits, undecided,
-                        // for the next step's model burst. Tell the caller so its status can drop
-                        // out of Processing rather than sticking there until that step decides it.
-                        suspects.Add(item);
-                        callbacks?.ItemDeferred?.Invoke(item);
-                    }
+                // Non-suspect (confident answer, or a step-0 infra failure keeping today's
+                // semantics) is decided now and yielded live. In a single-entry chain every item
+                // is final, so nothing is suspect.
+                if (isSingleEntry || !IsQualitySuspect(stepOutcome))
+                {
+                    yield return (item, Accept(stepOutcome, chain).Outcome);
+                }
+                else
+                {
+                    // Answered but suspect: it leaves the in-flight set and waits, undecided,
+                    // for the next step's model burst. Tell the caller so its status can drop
+                    // out of Processing rather than sticking there until that step decides it.
+                    suspects.Add(item);
+                    callbacks?.ItemDeferred?.Invoke(item);
                 }
             }
 
@@ -110,39 +110,49 @@ namespace Read2Me.Services.Characters
                     Thinking: entry.Thinking);
                 var nextSuspects = new List<QueuedParagraph>();
 
-                foreach (var group in GroupByChapter(suspects))
+                await foreach (var (item, stepOutcome) in RunRungAsync(suspects, opts, callbacks, ct))
                 {
-                    await foreach (var (item, stepOutcome) in step.RunAsync(group, opts, callbacks, ct))
+                    if (stepOutcome.Trigger == EscalationTrigger.None && IsInfraFailure(stepOutcome.Outcome.Status))
                     {
-                        if (stepOutcome.Trigger == EscalationTrigger.None && IsInfraFailure(stepOutcome.Outcome.Status))
+                        // Infra failure: item not usably answered here. Carry it on, or on the
+                        // last entry resolve from the best prior usable answer, else surface it.
+                        if (!isFinal)
                         {
-                            // Infra failure: item not usably answered here. Carry it on, or on the
-                            // last entry resolve from the best prior usable answer, else surface it.
-                            if (!isFinal)
-                            {
-                                nextSuspects.Add(item);
-                                callbacks?.ItemDeferred?.Invoke(item);
-                                continue;
-                            }
-                            yield return (item, best.TryGetValue(item.ParagraphId, out var prior)
-                                ? Accept(prior, chain).Outcome
-                                : stepOutcome.Outcome);
-                            continue;
-                        }
-
-                        if (IsUsable(stepOutcome.Outcome.Status)) best[item.ParagraphId] = stepOutcome;
-
-                        if (isFinal || !IsQualitySuspect(stepOutcome))
-                        {
-                            yield return (item, Accept(stepOutcome, chain).Outcome);
-                        }
-                        else
-                        {
-                            // Still suspect after this step — back out of the in-flight set until
-                            // the next config picks it up. See the step-0 branch above.
                             nextSuspects.Add(item);
                             callbacks?.ItemDeferred?.Invoke(item);
+                            continue;
                         }
+                        yield return (item, best.TryGetValue(item.ParagraphId, out var prior)
+                            ? Accept(prior, chain).Outcome
+                            : stepOutcome.Outcome);
+                        continue;
+                    }
+
+                    Remember(best, item.ParagraphId, stepOutcome);
+
+                    if (isFinal || !IsQualitySuspect(stepOutcome))
+                    {
+                        // On the last rung the decision is the best answer the whole walk
+                        // produced, not merely the last one: a stronger model that comes back
+                        // "unknown" (or fails to parse) must not discard an earlier rung's named
+                        // answer. Ranking ties go to the later rung, so a final answer that is no
+                        // worse than everything before it still wins. ModelLoading is exempt —
+                        // it is a retry signal, not an answer, so it must reach the queue
+                        // untouched rather than be settled from history.
+                        var decided =
+                            isFinal &&
+                            stepOutcome.Outcome.Status != AttributionStatus.ModelLoading &&
+                            best.TryGetValue(item.ParagraphId, out var b)
+                                ? b
+                                : stepOutcome;
+                        yield return (item, Accept(decided, chain).Outcome);
+                    }
+                    else
+                    {
+                        // Still suspect after this step — back out of the in-flight set until
+                        // the next config picks it up. See the step-0 branch above.
+                        nextSuspects.Add(item);
+                        callbacks?.ItemDeferred?.Invoke(item);
                     }
                 }
 
@@ -150,9 +160,104 @@ namespace Read2Me.Services.Characters
             }
         }
 
+        /// <summary>
+        /// One rung's run over <paramref name="items"/>, with a single same-rung retry for parse
+        /// failures. A parse failure is not evidence the model is too weak for the paragraph — the
+        /// observed cause is the model garbling one batch (dropping an attribution tag from a
+        /// segment, or repeating the previous batch's answer wholesale), which the very next call
+        /// usually gets right. Escalating instead spends a slower model on a problem a re-ask
+        /// solves, so the failures are held back, re-asked once against the same config, and only
+        /// then routed by the caller.
+        /// <para>
+        /// The retry re-asks the failures on their own, so a garbled batch is not merely repeated:
+        /// the batch composition differs, and <see cref="LlmServerConfigExtensions.ForResample"/>
+        /// keeps sampling off greedy so an identical prompt cannot return an identical answer. One
+        /// retry only — the second answer stands, parse failure or not.
+        /// </para>
+        /// <para>
+        /// The final rung is exempt: it already re-asks each parse failure on its own, via the
+        /// step's batch→single-item fallback, so retrying there would be a third ask of the same
+        /// paragraph. The retry exists to avoid escalating, and the final rung has nowhere to
+        /// escalate to.
+        /// </para>
+        /// </summary>
+        private async IAsyncEnumerable<(QueuedParagraph Item, StepOutcome Step)> RunRungAsync(
+            IReadOnlyList<QueuedParagraph> items,
+            ChainStepOptions opts,
+            AttributionQueueCallbacks? callbacks,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            var retry = new List<QueuedParagraph>();
+
+            foreach (var group in GroupByChapter(items))
+            {
+                await foreach (var pair in step.RunAsync(group, opts, callbacks, ct))
+                {
+                    if (!opts.IsFinal && pair.Step.Trigger == EscalationTrigger.ParseFailure)
+                    {
+                        retry.Add(pair.Item);
+                        continue;
+                    }
+                    yield return pair;
+                }
+            }
+
+            if (retry.Count == 0)
+                yield break;
+
+            logger.LogInformation(
+                "Re-asking config '{Config}' for {Count} paragraph(s) it failed to parse before escalating",
+                opts.Config.Name, retry.Count);
+
+            var retryOpts = opts with { Config = opts.Config.ForResample() };
+            foreach (var group in GroupByChapter(retry))
+            {
+                await foreach (var pair in step.RunAsync(group, retryOpts, callbacks, ct))
+                    yield return pair;
+            }
+        }
+
         /// <summary>Groups paragraphs by (folder, chapter), preserving book order within each group.</summary>
         private static IEnumerable<List<QueuedParagraph>> GroupByChapter(IReadOnlyList<QueuedParagraph> items) =>
             items.GroupBy(i => (i.Folder, i.ChapterId)).Select(g => g.ToList());
+
+        /// <summary>
+        /// Records <paramref name="step"/> as the paragraph's best answer so far when it is usable
+        /// and ranks at least as high as what is held. Ties go to the newer (later, normally
+        /// stronger) rung.
+        /// </summary>
+        private static void Remember(Dictionary<Guid, StepOutcome> best, Guid paragraphId, StepOutcome step)
+        {
+            if (!IsUsable(step.Outcome.Status))
+                return;
+            if (best.TryGetValue(paragraphId, out var held) && Rank(held) > Rank(step))
+                return;
+            best[paragraphId] = step;
+        }
+
+        /// <summary>
+        /// Answer quality, high to low: a confident answer beats one naming an unlisted character
+        /// (still a full attribution — the final accept creates the character), which beats a
+        /// self-inconsistent one, which beats one leaving a speaker unattributed, which beats one
+        /// that lost the paragraph's dialog altogether. Only usable statuses reach this, so
+        /// parse/infra failures rank below everything by never being held.
+        /// <para>
+        /// <see cref="EscalationTrigger.DialogLost"/> ranks last among usable answers on purpose: it
+        /// is a *successful*-status answer, so it is held as a best-prior candidate, but it discards
+        /// a segment every other answer kept. It must lose every tie-break, including to an answer
+        /// that merely left the speaker unknown — an unattributed line still gets read in a
+        /// character's voice slot and stays re-queueable; a lost one does not.
+        /// </para>
+        /// </summary>
+        private static int Rank(StepOutcome step) => step.Trigger switch
+        {
+            EscalationTrigger.None => 5,
+            EscalationTrigger.UnlistedName => 4,
+            EscalationTrigger.Inconsistent => 3,
+            EscalationTrigger.Unknown => 2,
+            EscalationTrigger.DialogLost => 1,
+            _ => 0,
+        };
 
         private static bool IsUsable(AttributionStatus status) =>
             status is AttributionStatus.Resolved or AttributionStatus.Unknown;
