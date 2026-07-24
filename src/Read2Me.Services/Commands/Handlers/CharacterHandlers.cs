@@ -7,6 +7,15 @@ using Read2Me.Services.Characters;
 
 namespace Read2Me.Services.Commands.Handlers;
 
+/// <summary>
+/// Stamps one item's speaker. Only <see cref="ParagraphItemType.Character"/> items can carry a
+/// speaker: narration is always the narrator's, and a pause is nobody's. Its two siblings already
+/// hold that line — <see cref="SetParagraphCharacterHandler"/> filters its query to Character items,
+/// and <c>ParagraphCharacterStamp.Apply</c> skips the rest — so without the same guard here a
+/// per-item edit is the one way to produce a narration item pointing at a character. That state is
+/// audio-inert (the voice resolver keys off the item type and ignores the id), which is why it can
+/// persist unnoticed: it shows a speaker in the UI that nothing will ever read in.
+/// </summary>
 public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommandHandler<SetItemCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(SetItemCharacterCommand c, CancellationToken ct)
@@ -14,6 +23,9 @@ public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommand
         var db = await session.OpenAsync(c.FolderId);
         var item = await db.ParagraphItems.Include(i => i.Character).FirstOrDefaultAsync(i => i.Id == c.ItemId);
         if (item == null) return null;
+        // Clearing a speaker stays allowed whatever the type — it can only ever repair the state
+        // this guard exists to prevent.
+        if (c.CharacterId.HasValue && item.ItemType != ParagraphItemType.Character) return null;
         item.CharacterId = c.CharacterId;
         item.Character = c.CharacterId.HasValue
             ? await db.Characters.FindAsync(c.CharacterId.Value)

@@ -175,12 +175,48 @@ namespace Read2Me.Tests.Services
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
-            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddRawItem("item", ParagraphItemType.Character, "Hello world")))).BuildAsync();
 
             await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_LeavesNarrationItemAlone()
+        {
+            // Only Character items carry a speaker. A narration item stamped with a character is
+            // audio-inert (the voice resolver keys off the item type), so it would sit in the book
+            // showing a speaker nothing ever reads in.
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddNarration("item", "Hello world")))).BuildAsync();
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.NotEqual(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_ClearsSpeakerOnNarrationItem()
+        {
+            // Clearing is the repair path for a narration item that already carries a character,
+            // so it must stay open whatever the item's type.
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddRawItem("item", ParagraphItemType.Narration, "Hello world", character.Id)))).BuildAsync();
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
         }
 
         // ---------------------------------------------------------------
