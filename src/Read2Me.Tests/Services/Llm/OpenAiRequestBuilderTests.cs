@@ -46,6 +46,22 @@ namespace Read2Me.Tests.Services.Llm
         }
 
         [Fact]
+        public void BuildChatBody_OmitsChatTemplateKwargsByDefault()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true);
+            Assert.DoesNotContain("chat_template_kwargs", json);
+        }
+
+        [Fact]
+        public void BuildChatBody_EmitsEnableThinkingFalseWhenThinkingDisabled()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true, disableThinking: true);
+            Assert.Contains("\"chat_template_kwargs\":{\"enable_thinking\":false}", json);
+        }
+
+        [Fact]
         public void BuildChatBody_OmitsResponseFormatWhenNoSchema()
         {
             var cfg = new LlmServerConfig { BaseUrl = "http://x" };

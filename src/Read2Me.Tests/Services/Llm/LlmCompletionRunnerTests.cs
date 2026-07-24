@@ -49,6 +49,23 @@ namespace Read2Me.Tests.Services.Llm
             Assert.Equal(2, llm.ChunksPulled);
         }
 
+        [Fact]
+        public async Task DisableThinking_PassesThroughToClient()
+        {
+            var llm = new ChunkedLlmClient().Content("ok");
+            var runner = Runner(llm);
+
+            await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None, DisableThinking: true),
+                CancellationToken.None);
+            await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None),
+                CancellationToken.None);
+
+            Assert.True(llm.Calls[0].DisableThinking);
+            Assert.False(llm.Calls[1].DisableThinking);
+        }
+
         // ---- Broadcast lifecycle + health streak, happy path ----
 
         [Fact]

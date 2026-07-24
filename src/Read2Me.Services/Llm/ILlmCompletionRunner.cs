@@ -36,9 +36,16 @@ namespace Read2Me.Services.Llm
     /// <param name="Label">Short label shown in the live-stream panel's RequestStarted event.</param>
     /// <param name="JsonSchema">Optional schema for grammar-constrained completion.</param>
     /// <param name="Shape">Completion kind for the early-stop scan.</param>
+    /// <param name="DisableThinking">
+    /// Ask the server to skip the hidden thinking phase. Thinking dominates generation time on
+    /// thinking models (measured 75–95% of output tokens on attribution batches) and helps only
+    /// recall-heavy asks: keep it for character discovery and voice plans, disable it for
+    /// attribution and voice-design prompts where measured accuracy holds without it.
+    /// </param>
     public sealed record LlmRunRequest(
         LlmServerConfig Config, string Prompt, string Label,
-        string? JsonSchema = null, CompletionShape Shape = CompletionShape.Object);
+        string? JsonSchema = null, CompletionShape Shape = CompletionShape.Object,
+        bool DisableThinking = false);
 
     /// <param name="Outcome">How the run ended.</param>
     /// <param name="Value">Parsed value on <see cref="LlmRunOutcome.Completed"/>; default otherwise.</param>

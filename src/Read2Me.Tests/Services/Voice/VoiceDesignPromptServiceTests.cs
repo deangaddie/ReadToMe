@@ -72,6 +72,7 @@ namespace Read2Me.Tests.Services.Voice
             Assert.Equal(CompletionShape.None, request.Shape);
             Assert.Null(request.JsonSchema);
             Assert.Equal("http://x", request.Config.BaseUrl);
+            Assert.True(request.DisableThinking);
         }
 
         [Fact]
@@ -120,6 +121,8 @@ namespace Read2Me.Tests.Services.Voice
             Assert.Equal("Voice plan: Paul", request.Label);
             Assert.Equal(CompletionShape.Array, request.Shape);
             Assert.Equal(VoicePlanSchema.JsonSchema, request.JsonSchema);
+            // Plans keep thinking: change points across a published book are recall-heavy.
+            Assert.False(request.DisableThinking);
         }
 
         [Fact]

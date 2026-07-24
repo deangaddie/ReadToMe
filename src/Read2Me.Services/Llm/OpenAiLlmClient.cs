@@ -35,6 +35,7 @@ namespace Read2Me.Services.Llm
 
         public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
             LlmServerConfig config, string prompt, string? jsonSchema = null,
+            bool disableThinking = false,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             // On a switchable llama endpoint, ensure the target model is loaded before the real request
@@ -45,7 +46,7 @@ namespace Read2Me.Services.Llm
 
             var http = CreateClient(config);
 
-            var body = OpenAiRequestBuilder.BuildChatBody(config, prompt, stream: true, jsonSchema);
+            var body = OpenAiRequestBuilder.BuildChatBody(config, prompt, stream: true, jsonSchema, disableThinking);
             using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiStreamParser.Combine(config.BaseUrl, "v1/chat/completions"))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),

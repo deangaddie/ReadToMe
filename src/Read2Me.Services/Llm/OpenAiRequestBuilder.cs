@@ -11,7 +11,8 @@ namespace Read2Me.Services.Llm
     public static class OpenAiRequestBuilder
     {
         public static string BuildChatBody(
-            LlmServerConfig config, string prompt, bool stream, string? jsonSchema = null)
+            LlmServerConfig config, string prompt, bool stream, string? jsonSchema = null,
+            bool disableThinking = false)
         {
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
@@ -50,6 +51,16 @@ namespace Read2Me.Services.Llm
                 if (config.MaxTokens is { } maxTokens) writer.WriteNumber("max_tokens", maxTokens);
                 if (config.FrequencyPenalty is { } freq) writer.WriteNumber("frequency_penalty", freq);
                 if (config.PresencePenalty is { } pres) writer.WriteNumber("presence_penalty", pres);
+
+                // Emitted only when requested: chat_template_kwargs is a llama.cpp extension and
+                // strict OpenAI-compatible servers may reject unknown top-level fields.
+                if (disableThinking)
+                {
+                    writer.WritePropertyName("chat_template_kwargs");
+                    writer.WriteStartObject();
+                    writer.WriteBoolean("enable_thinking", false);
+                    writer.WriteEndObject();
+                }
 
                 if (!string.IsNullOrWhiteSpace(jsonSchema))
                 {

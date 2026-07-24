@@ -172,6 +172,8 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("Discover characters", request.Label);
             Assert.Equal(CompletionShape.Object, request.Shape);
             Assert.Equal(CharacterDiscoverySchema.JsonSchema, request.JsonSchema);
+            // Discovery keeps thinking: cast recall without it hallucinates plausible fake names.
+            Assert.False(request.DisableThinking);
 
             var prompt = request.Prompt;
             Assert.Contains("The Hobbit", prompt);

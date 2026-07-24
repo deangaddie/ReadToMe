@@ -10,10 +10,13 @@ namespace Read2Me.Services.Llm
         /// When <paramref name="jsonSchema"/> is set, the request asks the server to constrain
         /// output to that JSON schema (OpenAI response_format json_schema; llama.cpp compiles
         /// it to a grammar so the model cannot emit anything but the schema).
+        /// When <paramref name="disableThinking"/> is set, the request asks the server's chat
+        /// template to skip the hidden thinking phase (llama.cpp chat_template_kwargs
+        /// enable_thinking=false); no-op on models without a thinking mode.
         /// </summary>
         IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
             LlmServerConfig config, string prompt, string? jsonSchema = null,
-            CancellationToken ct = default);
+            bool disableThinking = false, CancellationToken ct = default);
 
         /// <summary>
         /// Fetches the list of available model ids from the server's models endpoint.

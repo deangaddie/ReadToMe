@@ -141,8 +141,12 @@ namespace Read2Me.Services.Voice
                 return new GenerateResult(GenerateStatus.NoLlmConfigured, null, "No active LLM server configured");
             }
 
+            // Thinking off: a voice prompt is creative writing with no recall pressure — measured
+            // output quality holds without thinking at a fraction of the time. Voice plans above
+            // keep thinking: choosing change points across a published book is recall-heavy.
             var result = await runner.RunAsync(
-                new LlmRunRequest(config, renderedPrompt, "Voice prompt", Shape: CompletionShape.None), ct);
+                new LlmRunRequest(config, renderedPrompt, "Voice prompt", Shape: CompletionShape.None,
+                    DisableThinking: true), ct);
 
             return result.Outcome == LlmRunOutcome.Completed
                 ? new GenerateResult(GenerateStatus.Success, result.Value!.Trim(), null)
