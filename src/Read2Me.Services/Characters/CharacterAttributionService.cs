@@ -1,8 +1,6 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
-using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
@@ -95,10 +93,10 @@ namespace Read2Me.Services.Characters
 
     /// <summary>
     /// One config's run over a set of paragraphs — the "step" half of the escalation chain. Owns
-    /// chapter-grouping, chunking by <see cref="LlmServerConfig.AttributionBatchSize"/>, the batch
-    /// core, self-consistency, and trigger derivation; streams each item's <see cref="StepOutcome"/>
-    /// the moment its chunk returns so a confident answer surfaces live. Fires
-    /// <see cref="AttributionQueueCallbacks.ChunkStarted"/> per in-flight chunk. It never fires
+    /// chapter-grouping, chunking by <see cref="LlmServerConfig.AttributionBatchSize"/>, the chunk
+    /// pipeline, self-consistency, and trigger derivation; streams each item's
+    /// <see cref="StepOutcome"/> the moment its chunk returns so a confident answer surfaces live.
+    /// Fires <see cref="AttributionQueueCallbacks.ChunkStarted"/> per in-flight chunk. It never fires
     /// <see cref="AttributionQueueCallbacks.ItemDeferred"/> nor decides escalation — that is the walk's.
     /// </summary>
     internal interface IChainStep
@@ -110,10 +108,17 @@ namespace Read2Me.Services.Characters
             CancellationToken ct);
     }
 
-    public class CharacterAttributionService(
+    /// <summary>
+    /// One chunk pipeline, where a single paragraph is a chunk of 1: every ask goes through
+    /// <see cref="RunOnce"/>, and the two branches that can add a second ask — self-consistency and
+    /// the final-rung parse-failure fallback — sit above it in <see cref="RunChunkAsync"/>. Request
+    /// construction (context load, roster, template, budget) belongs to
+    /// <see cref="AttributionRequestBuilder"/>; what is left here is control flow plus the
+    /// classification of an answer that arrived.
+    /// </summary>
+    internal class CharacterAttributionService(
         ILlmCompletionRunner runner,
-        LlmPromptService prompts,
-        IProjectReader reader,
+        AttributionRequestBuilder builder,
         ILogger<CharacterAttributionService> logger)
         : IChainStep
     {
@@ -137,7 +142,7 @@ namespace Read2Me.Services.Characters
 
         /// <summary>
         /// Runs one chain step over a single-chapter group: re-groups it in book order into chunks of
-        /// the step config's batch size, runs each chunk on the existing batch core, looping on
+        /// the step config's batch size, runs each chunk through the one chunk pipeline, looping on
         /// intra-step context-trim deferrals until every item in the group has an outcome.
         /// Streams each chunk's outcomes the moment that chunk returns rather than buffering the whole
         /// group: only one chunk is ever in flight, so the caller can retire the previous chunk's items
@@ -162,9 +167,7 @@ namespace Read2Me.Services.Characters
                 // (batch size, e.g. 3) rather than the whole drained queue.
                 callbacks?.ChunkStarted?.Invoke(chunk);
 
-                var core = chunk.Count == 1
-                    ? new BatchCoreResult([(chunk[0], await AttributeCoreAsync(chunk[0], opts, ct))], [])
-                    : await AttributeBatchCoreAsync(chunk, opts, ct);
+                var core = await RunChunkAsync(chunk, opts, isFallback: false, ct);
 
                 foreach (var outcome in core.Outcomes)
                     yield return outcome;
@@ -175,28 +178,95 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
-        /// Config-parameterized single-item attribution. When <see cref="ChainStepOptions.SelfConsistency"/>
-        /// is set, samples the LLM twice with the same prompt and escalates on disagreement
-        /// (<see cref="EscalationTrigger.Inconsistent"/>), carrying sample 1 as the answer. Otherwise
-        /// runs a single sample (verbatim today's behaviour).
+        /// One chunk's answer: the single ask of <see cref="RunOnceAsync"/>, plus the only two branches
+        /// that can spend a second ask on the same paragraphs — self-consistency (non-final rungs) and
+        /// the final-rung parse-failure fallback. The two cannot co-occur:
+        /// <see cref="ChainStepOptions.SelfConsistency"/> is only ever set on a non-final rung and the
+        /// fallback only fires on the final one, so there is no ordering question between them.
+        /// <para>
+        /// The fallback answers an unparseable <em>run</em> (<see cref="ChunkResult.Run"/>), not a
+        /// per-item <see cref="EscalationTrigger.ParseFailure"/>: an answer that parsed but whose
+        /// segments do not reconstruct their paragraph carries the same trigger, and re-asking that has
+        /// never been this rung's job. It is one level and flag-terminated, for 2 asks per paragraph at
+        /// most. A failed chunk of N re-asks each paragraph on its own with the config as-is — the
+        /// template shape changes, which is the point. A failed chunk of 1 has no shape left to change,
+        /// so it re-asks off greedy (<see cref="ChainStepOptions.Resampled"/>), an identical prompt at
+        /// temperature 0 being certain to return the identical unparseable answer. Either way
+        /// <paramref name="isFallback"/> marks the second ask, so a parse failure there stands.
+        /// </para>
         /// </summary>
-        private async Task<StepOutcome> AttributeCoreAsync(
-            QueuedParagraph item, ChainStepOptions opts, CancellationToken ct)
+        private async Task<ChunkResult> RunChunkAsync(
+            IReadOnlyList<QueuedParagraph> chunk, ChainStepOptions opts, bool isFallback, CancellationToken ct)
         {
-            if (!opts.SelfConsistency)
-                return await AttributeSampleCoreAsync(item, opts, ct);
+            var result = opts.SelfConsistency
+                ? await SelfConsistentChunkAsync(chunk, opts, ct)
+                : await RunOnceAsync(chunk, opts, ct);
 
-            // Self-consistency: both samples use an effective temperature so sample 1 is not greedy.
-            var sampleOpts = opts.Resampled();
+            if (!opts.IsFinal || result.Run != LlmRunOutcome.ParseFailed || isFallback)
+                return result;
 
-            var sample1 = await AttributeSampleCoreAsync(item, sampleOpts, ct);
-            // A parse/infra failure on sample 1 stands on its own — no second sample can help it.
-            if (sample1.Trigger == EscalationTrigger.ParseFailure || sample1.Outcome.Status.IsInfraFailure())
+            // The unparseable run stamped every included item; unaskable items in the same chunk
+            // already have their Unknown and are left alone.
+            var failed = result.Outcomes
+                .Where(o => o.Step.Trigger == EscalationTrigger.ParseFailure)
+                .Select(o => o.Item)
+                .ToList();
+
+            logger.LogWarning(
+                "Failed to parse the answer for a chunk of {Count} paragraph(s) on the final config — re-asking {Mode}",
+                failed.Count, failed.Count > 1 ? "each on its own" : "once off greedy");
+
+            // A chunk of 1 never defers (the context trim has nothing to trim), so a re-ask's own
+            // deferrals are empty and the chunk's deferrals stay with the result they came from.
+            var reaskOpts = failed.Count > 1 ? opts : opts.Resampled();
+            var singles = new List<(QueuedParagraph Item, StepOutcome Step)>();
+            foreach (var item in failed)
+                singles.AddRange((await RunChunkAsync([item], reaskOpts, isFallback: true, ct)).Outcomes);
+
+            return result.Replacing(singles);
+        }
+
+        /// <summary>
+        /// Self-consistency for a chunk: sample the same prompt twice and escalate the paragraphs the
+        /// two samples disagree about (<see cref="EscalationTrigger.Inconsistent"/>), always carrying
+        /// sample 1 as the answer — the check may only ever add a trigger, never change an answer.
+        /// <para>
+        /// The sample-1 guard is chunk-wide because it tests the <em>run</em>
+        /// (<see cref="ChunkResult.Answered"/>), which is chunk-wide by construction: a parse, infra or
+        /// still-loading outcome is what the one call returned, and no second call can improve on it.
+        /// A per-item quality trigger — including the parse failure <see cref="Classify"/> raises for
+        /// an answer whose segments do not reconstruct their paragraph — does not suppress sample 2;
+        /// <see cref="Reconcile"/> keeps such an item on sample 1 while the rest of the chunk still
+        /// gets compared.
+        /// </para>
+        /// <para>
+        /// Sample 2 is matched by paragraph id, never positionally; an unmatched item degrades to
+        /// sample 1. Deferrals pass through from sample 1 — the context trim is deterministic, so both
+        /// samples cover the same included set. The roster comes back on the sample itself, so the
+        /// reconcile compares against provably the roster the prompt was built from.
+        /// </para>
+        /// </summary>
+        private async Task<ChunkResult> SelfConsistentChunkAsync(
+            IReadOnlyList<QueuedParagraph> chunk, ChainStepOptions opts, CancellationToken ct)
+        {
+            // Both samples resample: a greedy sample 1 would guarantee agreement and make the check a
+            // pure cost. RunOnceAsync never reads SelfConsistency, so this cannot recurse.
+            var scOpts = opts.Resampled();
+
+            var sample1 = await RunOnceAsync(chunk, scOpts, ct);
+            if (!sample1.Answered)
                 return sample1;
 
-            var sample2 = await AttributeSampleCoreAsync(item, sampleOpts, ct);
-            var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
-            return Reconcile(sample1, sample2, characters);
+            var sample2 = await RunOnceAsync(chunk, scOpts, ct);
+            var byId = sample2.Outcomes.ToDictionary(o => o.Item.ParagraphId, o => o.Step);
+
+            var reconciled = sample1.Outcomes
+                .Select(o => byId.TryGetValue(o.Item.ParagraphId, out var step2)
+                    ? (o.Item, Reconcile(o.Step, step2, sample1.Characters))
+                    : o)
+                .ToList();
+
+            return sample1 with { Outcomes = reconciled };
         }
 
         /// <summary>
@@ -221,67 +291,99 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
-        /// One streamed attribution sample against the step's config. Returns the same
-        /// <see cref="AttributionOutcome"/> the public path returned before the escalation refactor,
-        /// tagged with the quality <see cref="EscalationTrigger"/> derived from the same facts.
+        /// One ask for one chunk, at any chunk size: build the request, resolve the unaskable without
+        /// an LLM call, run, route the run outcome, classify what came back. This is the only place
+        /// that calls the runner, and it never reads
+        /// <see cref="ChainStepOptions.SelfConsistency"/> — which is what makes the two-ask branches
+        /// above impossible to re-enter.
         /// </summary>
-        private async Task<StepOutcome> AttributeSampleCoreAsync(
-            QueuedParagraph item, ChainStepOptions opts, CancellationToken ct)
+        private async Task<ChunkResult> RunOnceAsync(
+            IReadOnlyList<QueuedParagraph> chunk, ChainStepOptions opts, CancellationToken ct)
         {
-            var config = opts.Config;
-            var (before, after) = await prompts.GetContextWindowAsync();
+            var req = await builder.Build(chunk, opts);
+            var steps = new Dictionary<Guid, StepOutcome>();
+            LlmRunOutcome? runOutcome = null;
 
-            var ctx = await reader.GetParagraphContextAsync(
-                item.Folder, item.ChapterId, item.ParagraphId, before, after);
-
-            if (ctx == null || string.IsNullOrWhiteSpace(ctx.Query.Text))
+            foreach (var item in req.Unaskable)
             {
+                // Blank/whitespace text, or no content item at all: nothing to attribute and nothing
+                // an LLM could add. Unknown with an Unknown trigger, exactly as the old single path.
                 logger.LogInformation("Paragraph {ParagraphId} has no text — marking unknown", item.ParagraphId);
-                return new StepOutcome(
+                steps[item.ParagraphId] = new StepOutcome(
                     new AttributionOutcome(AttributionStatus.Unknown, null, null),
                     EscalationTrigger.Unknown);
             }
 
-            var project = await reader.GetProjectAsync(item.Folder);
-            var characters = await reader.GetCharactersWithAliasesAsync(item.Folder);
-            var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
-
-            var template = await prompts.GetCharacterPromptAsync(opts.EffectiveStyle);
-            var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
+            if (req.Request is not null)
             {
-                [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,
-                [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
-                [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
-                [PromptTemplates.ContextJson]     = PromptTemplates.BuildContextJson(ctx),
-                [PromptTemplates.ResponseFormat]  = SegmentAttributionSchema.JsonExample,
-            });
+                logger.LogDebug("Sending character attribution prompt for {Count} paragraph(s)", req.Included.Count);
 
-            logger.LogDebug("Sending character attribution prompt for paragraph {ParagraphId}", item.ParagraphId);
+                var run = await runner.RunAsync(req.Request, req.Parser!, ct);
+                runOutcome = run.Outcome;
 
-            var run = await runner.RunAsync<SegmentAttributionResult>(
-                new LlmRunRequest(config, prompt, item.Preview,
-                    SegmentAttributionSchema.JsonSchema, CompletionShape.Object,
-                    DisableThinking: !opts.Thinking,
-                    Overrides: new LlmRunOverrides(Temperature: opts.TemperatureOverride)),
-                TryParseSegments, ct);
+                if (RouteRunOutcome(run, req.Included.Count, opts) is { } routed)
+                {
+                    foreach (var item in req.Included)
+                        steps[item.ParagraphId] = routed;
+                }
+                else
+                {
+                    var parsed = run.Value!;
+                    // One raw for the whole chunk — a per-paragraph misalignment is logged against the
+                    // answer it came out of, which is the only form the response ever existed in.
+                    var provenance = AnswerProvenance.From(opts.Config, run.Raw);
+                    for (var i = 0; i < req.Included.Count; i++)
+                        steps[req.Included[i].ParagraphId] = Classify(
+                            req.Included[i].ParagraphId, req.QueryTexts[i], parsed[i].Segments,
+                            req.Characters, provenance, parsed[i].Reasoning, req.PriorSegments[i]);
+                }
+            }
 
+            // Book order, as the chunk was handed to us. Deferred items have no outcome yet — the
+            // group's pending queue re-asks them in a later chunk.
+            var outcomes = chunk
+                .Where(i => steps.ContainsKey(i.ParagraphId))
+                .Select(i => (i, steps[i.ParagraphId]))
+                .ToList();
+
+            return new ChunkResult(outcomes, req.Deferred, req.Characters, runOutcome);
+        }
+
+        /// <summary>
+        /// The one copy of the non-answer routing: everything a run can come back as that is not an
+        /// answer to classify, fanned to every included item. Returns null when the run parsed and the
+        /// caller should classify it.
+        /// </summary>
+        private StepOutcome? RouteRunOutcome(
+            LlmRunResult<IReadOnlyDictionary<int, SegmentAttributionResult>> run, int count, ChainStepOptions opts)
+        {
             switch (run.Outcome)
             {
                 case LlmRunOutcome.ParseFailed:
-                    logger.LogWarning("Failed to parse LLM response for {ParagraphId}: {Raw}", item.ParagraphId, run.Raw);
+                    // An unparseable answer, or one missing a requested index (the parser rejects the
+                    // whole answer), fails the chunk: escalation's unit is the paragraph, and a
+                    // half-answered chunk is not one.
+                    logger.LogWarning(
+                        "Failed to parse the LLM answer for {Count} paragraph(s) on config {ConfigName}: {Raw}",
+                        count, opts.Config.Name, run.Raw);
                     return ParseFailure(run.Error);
+
                 case LlmRunOutcome.ModelLoading:
                     // The model is still loading on a switchable endpoint. This is neither a quality
                     // suspect nor an infra failure: with a None trigger the chain short-circuits (it
                     // must not escalate — that would autoload a different model and evict the load we
                     // are waiting for) and, because ModelLoading is not usable, it never feeds the
                     // best-prior fallback. It surfaces to the queue, which requeues with backoff.
-                    logger.LogInformation("Paragraph {ParagraphId} model still loading — deferring to queue backoff", item.ParagraphId);
+                    logger.LogInformation(
+                        "{Count} paragraph(s): model still loading — deferring to queue backoff", count);
                     return ModelLoading(run.Error);
+
                 case LlmRunOutcome.Failed:
                 case LlmRunOutcome.ServiceUnavailable:
                     // Infra failure is orthogonal to quality — it carries no EscalationTrigger.
-                    logger.LogError("Error attributing paragraph {ParagraphId}: {Reason}", item.ParagraphId, run.Error);
+                    logger.LogError(
+                        "Error attributing {Count} paragraph(s) on config {ConfigName}: {Reason}",
+                        count, opts.Config.Name, run.Error);
                     return new StepOutcome(
                         new AttributionOutcome(
                             run.Outcome == LlmRunOutcome.ServiceUnavailable
@@ -289,12 +391,10 @@ namespace Read2Me.Services.Characters
                                 : AttributionStatus.Failed,
                             null, run.Error),
                         EscalationTrigger.None);
-            }
 
-            // The query the LLM answered is ctx.Query.Text — align against that exact string, so the
-            // stored segment texts are slices of the paragraph the prompt showed it.
-            return Classify(item.ParagraphId, ctx.Query.Text, run.Value!.Segments, characters,
-                AnswerProvenance.From(config, run.Raw), run.Value!.Reasoning, ctx.Query.Segments);
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
@@ -382,216 +482,35 @@ namespace Read2Me.Services.Characters
         private static StepOutcome ModelLoading(string? error) =>
             new(new AttributionOutcome(AttributionStatus.ModelLoading, null, error), EscalationTrigger.None);
 
-        private static bool TryParseSegments(
-            string raw, out SegmentAttributionResult? parsed, out string? error)
-        {
-            if (SegmentAttributionParser.TryParse(raw, out var p))
-            {
-                parsed = p;
-                error = null;
-                return true;
-            }
-            parsed = null;
-            error = "Could not parse LLM response.";
-            return false;
-        }
-
-        private sealed record BatchCoreResult(
+        /// <summary>
+        /// One chunk's worth of answers: an outcome per item that was answered (or resolved without
+        /// an ask), the items the context trim pushed back to the group's pending queue, the roster
+        /// the prompt was built from — carried so a reconcile never has to refetch it — and how the
+        /// one LLM call went, <c>null</c> when the chunk needed no call at all.
+        /// </summary>
+        private sealed record ChunkResult(
             IReadOnlyList<(QueuedParagraph Item, StepOutcome Step)> Outcomes,
-            IReadOnlyList<QueuedParagraph> Deferred);
-
-        /// <summary>
-        /// Self-consistency for a batch step: samples the batch twice (same prompt, effective
-        /// temperature), then reconciles per index. Only disagreeing indices become
-        /// <see cref="EscalationTrigger.Inconsistent"/>; agreeing indices keep their sample-1 outcome.
-        /// A sample-1 parse/infra failure per item stands (a second sample can't help it). Deferred
-        /// items pass through from sample 1 unchanged.
-        /// </summary>
-        private async Task<BatchCoreResult> SelfConsistentBatchAsync(
-            IReadOnlyList<QueuedParagraph> batch, ChainStepOptions opts, CancellationToken ct)
+            IReadOnlyList<QueuedParagraph> Deferred,
+            IReadOnlyList<Data.Entities.Character> Characters,
+            LlmRunOutcome? Run)
         {
-            var effOpts = opts.Resampled() with { SelfConsistency = false };
+            /// <summary>
+            /// True when the call produced an answer to work with — or when there was nothing to ask.
+            /// The one call's outcome covers the whole chunk, so this is the chunk-wide question a
+            /// per-item trigger cannot answer.
+            /// </summary>
+            public bool Answered => Run is null or LlmRunOutcome.Completed;
 
-            var sample1 = await AttributeBatchCoreAsync(batch, effOpts, ct);
-            var sample2 = await AttributeBatchCoreAsync(batch, effOpts, ct);
-            var characters = await reader.GetCharactersWithAliasesAsync(batch[0].Folder);
-
-            // Match sample 2 by paragraph id; the trimmed context is deterministic so the two runs
-            // cover the same included items. A missing match falls back to sample 1 unchanged.
-            var byId = sample2.Outcomes.ToDictionary(o => o.Item.ParagraphId, o => o.Step);
-
-            var reconciled = new List<(QueuedParagraph, StepOutcome)>();
-            foreach (var (item, step1) in sample1.Outcomes)
+            /// <summary>Overlays re-asked outcomes onto this chunk's, by paragraph id, keeping book order.</summary>
+            public ChunkResult Replacing(IReadOnlyList<(QueuedParagraph Item, StepOutcome Step)> replacements)
             {
-                if (step1.Trigger == EscalationTrigger.ParseFailure || step1.Outcome.Status.IsInfraFailure()
-                    || !byId.TryGetValue(item.ParagraphId, out var step2))
+                var byId = replacements.ToDictionary(o => o.Item.ParagraphId, o => o.Step);
+                return this with
                 {
-                    reconciled.Add((item, step1));
-                    continue;
-                }
-                reconciled.Add((item, Reconcile(step1, step2, characters)));
+                    Outcomes = [.. Outcomes.Select(o =>
+                        byId.TryGetValue(o.Item.ParagraphId, out var step) ? (o.Item, step) : o)],
+                };
             }
-
-            return new BatchCoreResult(reconciled, sample1.Deferred);
-        }
-
-        /// <summary>
-        /// Config-parameterized batch attribution. Behaves verbatim as today: builds one batch
-        /// request, and on parse failure or a missing index falls back to single-item attribution
-        /// for the affected items. Returns per-item <see cref="StepOutcome"/>s carrying the same
-        /// outcomes plus their quality triggers.
-        /// </summary>
-        private async Task<BatchCoreResult> AttributeBatchCoreAsync(
-            IReadOnlyList<QueuedParagraph> batch, ChainStepOptions opts, CancellationToken ct)
-        {
-            if (opts.SelfConsistency)
-                return await SelfConsistentBatchAsync(batch, opts, ct);
-
-            var config = opts.Config;
-            var outcomes = new List<(QueuedParagraph Item, StepOutcome Step)>();
-
-            var (before, after) = await prompts.GetContextWindowAsync();
-            var first = batch[0];
-
-            var ctx = await reader.GetParagraphBatchContextAsync(
-                first.Folder, first.ChapterId, [.. batch.Select(b => b.ParagraphId)], before, after);
-
-            if (ctx == null)
-            {
-                // First paragraph not found — let the single path give each item its usual outcome.
-                foreach (var item in batch)
-                    outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
-                return new BatchCoreResult(outcomes, []);
-            }
-
-            var byId = batch.ToDictionary(b => b.ParagraphId);
-            var included = ctx.IncludedIds.Select(id => byId[id]).ToList();
-            var deferred = new List<QueuedParagraph>([.. ctx.DeferredIds.Select(id => byId[id])]);
-
-            if (included.Count == 1)
-            {
-                outcomes.Add((included[0], await AttributeCoreAsync(included[0], opts, ct)));
-                return new BatchCoreResult(outcomes, deferred);
-            }
-
-            var project = await reader.GetProjectAsync(first.Folder);
-            var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
-            var characterNames = characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() });
-
-            var template = await prompts.GetBatchCharacterPromptAsync(opts.EffectiveStyle);
-            var prompt = PromptTemplates.Render(template, new Dictionary<string, string>
-            {
-                [PromptTemplates.BookTitle]       = project?.BookTitle ?? string.Empty,
-                [PromptTemplates.BookAuthor]      = project?.Author ?? string.Empty,
-                [PromptTemplates.KnownCharacters] = JsonSerializer.Serialize(characterNames),
-                [PromptTemplates.ContextJson]     = PromptTemplates.BuildBatchContextJson(ctx),
-                [PromptTemplates.ResponseFormat]  = SegmentBatchAttributionSchema.JsonExample,
-            });
-
-            logger.LogDebug("Sending batch character attribution prompt for {Count} paragraphs", included.Count);
-
-            // The answer copies every indexed paragraph back as segments, so the output budget has to
-            // grow with the passage — a fixed config max_tokens truncates (and so fails to parse) a
-            // batch of long paragraphs. Rides the request as a per-run override so the real config
-            // (with SupportsModelSwitch intact) reaches the model-load gate.
-            var maxTokens = AttributionTokenBudget.ForPassage(
-                config.MaxTokens,
-                ctx.Entries.Where(e => e.TargetIndex is not null).Select(e => e.Text));
-
-            // The answer must cover every requested index; a missing one is a parse failure for the
-            // whole chunk (escalation's unit is the paragraph, and a half-answered batch is not one).
-            var requested = Enumerable.Range(0, included.Count).ToList();
-
-            bool TryParseBatchSegments(
-                string raw, out IReadOnlyDictionary<int, SegmentAttributionResult>? parsed, out string? error)
-            {
-                if (SegmentAttributionParser.TryParseBatch(raw, requested, out var p))
-                {
-                    parsed = p;
-                    error = null;
-                    return true;
-                }
-                parsed = null;
-                error = "Could not parse batch LLM response.";
-                return false;
-            }
-
-            var run = await runner.RunAsync<IReadOnlyDictionary<int, SegmentAttributionResult>>(
-                new LlmRunRequest(config, prompt, $"{included.Count} paragraphs: {first.Preview}",
-                    SegmentBatchAttributionSchema.JsonSchema, CompletionShape.Array,
-                    DisableThinking: !opts.Thinking,
-                    Overrides: new LlmRunOverrides(MaxTokens: maxTokens, Temperature: opts.TemperatureOverride)),
-                TryParseBatchSegments, ct);
-
-            if (run.Outcome == LlmRunOutcome.ModelLoading)
-            {
-                // Model still loading — surface ModelLoading (None trigger) for every included item
-                // so the chain short-circuits and the queue requeues with backoff. Not a quality
-                // suspect and not an infra failure, so it neither escalates nor feeds best-prior.
-                // Deferred items are returned untouched, as with an infra failure below.
-                logger.LogInformation("Batch of {Count} paragraphs: model still loading — deferring to queue backoff", included.Count);
-                var loading = ModelLoading(run.Error);
-                foreach (var item in included)
-                    outcomes.Add((item, loading));
-                return new BatchCoreResult(outcomes, deferred);
-            }
-
-            if (run.Outcome is LlmRunOutcome.Failed or LlmRunOutcome.ServiceUnavailable)
-            {
-                // Same failure semantics as the single path, applied to every included item.
-                // Deferred items are returned untouched; the caller retries them and they hit the
-                // same failure (and its requeue handling) individually. Infra failure is orthogonal
-                // to quality — it carries no EscalationTrigger.
-                logger.LogError("Error attributing batch of {Count} paragraphs: {Reason}", batch.Count, run.Error);
-                var outcome = new AttributionOutcome(
-                    run.Outcome == LlmRunOutcome.ServiceUnavailable
-                        ? AttributionStatus.ServiceUnavailable
-                        : AttributionStatus.Failed,
-                    null, run.Error);
-                foreach (var item in included)
-                    outcomes.Add((item, new StepOutcome(outcome, EscalationTrigger.None)));
-                return new BatchCoreResult(outcomes, deferred);
-            }
-
-            if (run.Outcome == LlmRunOutcome.ParseFailed)
-            {
-                // An unparseable response, or one missing a requested index (the parser rejects the
-                // whole answer), fails the chunk. Final step: today's behaviour — fall back to
-                // single-item attribution. Non-final: the chunk hands off to the next step as
-                // ParseFailure suspects.
-                if (opts.IsFinal)
-                {
-                    logger.LogWarning("Failed to parse batch LLM response — falling back to single attribution: {Raw}", run.Raw);
-                    foreach (var item in included)
-                        outcomes.Add((item, await AttributeCoreAsync(item, opts, ct)));
-                }
-                else
-                {
-                    logger.LogWarning("Failed to parse batch LLM response — escalating chunk: {Raw}", run.Raw);
-                    foreach (var item in included)
-                        outcomes.Add((item, ParseFailure(run.Error)));
-                }
-                return new BatchCoreResult(outcomes, deferred);
-            }
-
-            var parsed = run.Value!;
-            // Each target's own query text — the same string the prompt showed for that index —
-            // and its pre-answer split, which the reader populates for targets too even though the
-            // prompt deliberately shows them raw text only.
-            var targets = ctx.Entries.Where(e => e.TargetIndex is not null).ToList();
-            var queryTexts = targets.ToDictionary(e => e.TargetIndex!.Value, e => e.Text);
-            var priorSegments = targets.ToDictionary(e => e.TargetIndex!.Value, e => e.Segments);
-
-            // One raw for the whole chunk — a per-paragraph misalignment is logged against the batch
-            // answer it came out of, which is the only form the response ever existed in.
-            var provenance = AnswerProvenance.From(config, run.Raw);
-
-            for (var i = 0; i < included.Count; i++)
-                outcomes.Add((included[i],
-                    Classify(included[i].ParagraphId, queryTexts[i], parsed[i].Segments, characters, provenance,
-                        parsed[i].Reasoning, priorSegments[i])));
-
-            return new BatchCoreResult(outcomes, deferred);
         }
     }
 }

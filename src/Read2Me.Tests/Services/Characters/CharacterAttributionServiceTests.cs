@@ -14,29 +14,31 @@ namespace Read2Me.Tests.Services.Characters
 {
     /// <summary>
     /// Step-mechanic tests for <see cref="CharacterAttributionService"/> as an <see cref="IChainStep"/>:
-    /// one config's run over items — prompt building, parse/classify, batch core, and the batch→single
-    /// fallback. Drives the coarse <c>RunAsync</c> seam directly (no chain lookup, no walk). Walk policy
-    /// (escalation, best-prior, ModelLoading short-circuit, no-config) lives in
-    /// <see cref="CharacterAttributionChainTests"/>.
+    /// one config's run over items — the chunk pipeline, parse/classify, the unaskable pre-filter and
+    /// the final-rung parse-failure fallback. Drives the coarse <c>RunAsync</c> seam directly (no chain
+    /// lookup, no walk). A single paragraph is a chunk of 1, so these cases are chunk-size
+    /// parameterized rather than split into single/batch pairs. Request construction is pinned
+    /// directly in <see cref="AttributionRequestBuilderTests"/>; walk policy (escalation, best-prior,
+    /// ModelLoading short-circuit, no-config) lives in <see cref="CharacterAttributionChainTests"/>.
     /// </summary>
     public class CharacterAttributionServiceTests : AppDbTestBase
     {
         private static readonly ProjectFolderId Folder = new("test-book");
+        private static readonly Guid Chapter = Guid.NewGuid();
 
-        private static readonly QueuedParagraph TestItem = new(
-            Folder,
-            Guid.NewGuid(),
-            "Preview",
-            Guid.NewGuid(),  // chapterId
-            Guid.NewGuid(),
-            Guid.NewGuid());
+        private static QueuedParagraph Para(string preview) =>
+            new(Folder, Guid.NewGuid(), preview, Chapter, Guid.NewGuid(), Guid.NewGuid());
+
+        /// <summary>n paragraphs in one chapter, previewed P0..Pn-1.</summary>
+        private static List<QueuedParagraph> Paras(int count) =>
+            [.. Enumerable.Range(0, count).Select(i => Para($"P{i}"))];
 
         private LlmPromptService NewPrompts() =>
             new(Factory, NullLogger<LlmPromptService>.Instance);
 
-        private CharacterAttributionService NewService(ILlmCompletionRunner runner, IProjectReader reader,
-            LlmPromptService? prompts = null) =>
-            new(runner, prompts ?? NewPrompts(), reader,
+        private CharacterAttributionService NewService(
+            ILlmCompletionRunner runner, IProjectReader reader, LlmPromptService? prompts = null) =>
+            new(runner, new AttributionRequestBuilder(prompts ?? NewPrompts(), reader),
                 NullLogger<CharacterAttributionService>.Instance);
 
         /// <summary>A single in-memory config; RunAsync uses it directly (never the DB/settings).</summary>
@@ -44,122 +46,98 @@ namespace Read2Me.Tests.Services.Characters
             new() { Name = "Test", BaseUrl = "http://localhost:8080", Model = "test", AttributionBatchSize = batchSize };
 
         /// <summary>
-        /// Drives the step over the items as the final config (no self-consistency) and collects each
-        /// item's outcome in yield order.
+        /// Drives the step over the items on one config (no self-consistency) and collects each item's
+        /// outcome in yield order. Final by default, so the final-rung fallback is in play.
         /// </summary>
         private static async Task<List<(QueuedParagraph Item, AttributionOutcome Outcome)>> RunConfigAsync(
             CharacterAttributionService svc, LlmServerConfig config, IReadOnlyList<QueuedParagraph> items,
-            bool thinking = false, CancellationToken ct = default)
+            bool thinking = false, bool isFinal = true, bool selfConsistency = false,
+            CancellationToken ct = default)
         {
             var outcomes = new List<(QueuedParagraph, AttributionOutcome)>();
             await foreach (var (item, step) in ((IChainStep)svc).RunAsync(
-                items, new ChainStepOptions(config, IsFinal: true, SelfConsistency: false, thinking),
+                items, new ChainStepOptions(config, isFinal, selfConsistency, thinking),
                 callbacks: null, ct))
                 outcomes.Add((item, step.Outcome));
             return outcomes;
         }
 
-        private static async Task<AttributionOutcome> RunSingleAsync(
-            CharacterAttributionService svc, LlmServerConfig config, QueuedParagraph item) =>
-            Assert.Single(await RunConfigAsync(svc, config, [item])).Outcome;
-
         // ---------------------------------------------------------------
         // Fakes
         // ---------------------------------------------------------------
 
-        private sealed class FakeProjectReader : IProjectReader
+        /// <summary>
+        /// Serves batch contexts the way the real reader does, since attribution now only ever uses
+        /// the batch reader: a requested id with no text has no content item, so the reader returns
+        /// null if it is the <em>first</em> id, and otherwise ends the leading contiguous run there
+        /// and defers the remainder. <see cref="Defer"/> forces that same break for an id that does
+        /// have text, modelling an intervening unattributed paragraph.
+        /// </summary>
+        private sealed class FakeProjectReader(
+            IReadOnlyDictionary<Guid, string?> texts,
+            Project? project = null,
+            List<Character>? characters = null) : ProjectReaderFakeBase
         {
+            private readonly List<Character> _characters = characters ?? [];
+
             public int ReceivedBefore { get; private set; }
             public int ReceivedAfter { get; private set; }
-            private readonly ParagraphContext? _context;
-            private readonly Project? _project;
-            private readonly List<Character> _characters;
+            public List<IReadOnlyList<Guid>> ReceivedBatchIds { get; } = [];
 
-            public FakeProjectReader(
-                ParagraphContext? context = null,
-                Project? project = null,
-                List<Character>? characters = null)
-            {
-                _context = context;
-                _project = project;
-                _characters = characters ?? [];
-            }
+            /// <summary>Ids that end the run when they are not the first requested id.</summary>
+            public HashSet<Guid> Defer { get; init; } = [];
 
-            public Task<ParagraphContext?> GetParagraphContextAsync(
-                ProjectFolderId folderId, Guid chapterId, Guid paragraphId, int before, int after)
-            {
-                ReceivedBefore = before;
-                ReceivedAfter = after;
-                return Task.FromResult(_context);
-            }
+            private string? TextOf(Guid id) => texts.TryGetValue(id, out var t) ? t : null;
 
-            public ParagraphBatchContext? BatchContext { get; set; }
-            public IReadOnlyList<Guid>? ReceivedBatchIds { get; private set; }
-
-            public Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
+            public override Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
                 ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after)
             {
                 ReceivedBefore = before;
                 ReceivedAfter = after;
-                ReceivedBatchIds = paragraphIds;
-                return Task.FromResult(BatchContext);
+                ReceivedBatchIds.Add([.. paragraphIds]);
+
+                if (paragraphIds.Count == 0 || TextOf(paragraphIds[0]) is null)
+                    return Task.FromResult<ParagraphBatchContext?>(null);
+
+                var included = new List<Guid> { paragraphIds[0] };
+                var next = 1;
+                while (next < paragraphIds.Count
+                    && TextOf(paragraphIds[next]) is not null
+                    && !Defer.Contains(paragraphIds[next]))
+                {
+                    included.Add(paragraphIds[next]);
+                    next++;
+                }
+
+                var entries = included.Select((id, i) => new BatchContextEntry(TextOf(id)!, [], i)).ToList();
+                return Task.FromResult<ParagraphBatchContext?>(
+                    new ParagraphBatchContext(entries, included, [.. paragraphIds.Skip(next)]));
             }
 
-            public Task<Data.Entities.Project?> GetProjectAsync(ProjectFolderId folderId)
-                => Task.FromResult(_project);
-
-            public Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId)
-                => Task.FromResult(_characters);
-
-            public Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId)
-                => Task.FromResult(_characters);
-
-            public Task<List<Read2Me.Core.Models.CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId)
-                => Task.FromResult(new List<Read2Me.Core.Models.CharacterLine>());
-
-            // Unused members — not under test
-            public Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId) =>
-                Task.FromResult(new BookOverview(null, false, [], [], 0, 0, [], new System.Collections.Generic.Dictionary<System.Guid, int>()));
-            public IReadOnlyList<string> GetProjects() => [];
-            public Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync() => Task.FromResult<IReadOnlyList<ProjectSummary>>([]);
-            public Task<bool> HasBookContentAsync(ProjectFolderId folderId) => Task.FromResult(false);
-            public Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId) => Task.FromResult(new List<Volume>());
-            public Task<List<Part>> GetPartsAsync(ProjectFolderId folderId, Guid volumeId) => Task.FromResult(new List<Part>());
-            public Task<List<Chapter>> GetChaptersAsync(ProjectFolderId folderId, Guid partId) => Task.FromResult(new List<Chapter>());
-            public Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId folderId, Guid chapterId) => Task.FromResult(new List<Paragraph>());
-            public Task<int> GetTotalPartCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
-            public Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
-            public Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
-                ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
-                => Task.FromResult(new List<CharacterParagraphRef>());
-            public Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
-            public Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId) => Task.FromResult(0);
-            public Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) => Task.FromResult(new List<(Guid, string)>());
-            public Task<List<Read2Me.Data.Entities.Voice>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<Read2Me.Data.Entities.Voice>());
-            public Task<Read2Me.Data.Entities.Voice?> GetVoiceAsync(ProjectFolderId folderId, Guid voiceId) => Task.FromResult<Read2Me.Data.Entities.Voice?>(null);
-            public Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult<Guid?>(null);
-            public Task<HierarchyChildren> GetChildrenAsync(ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId)
-                => Task.FromResult(new HierarchyChildren(null, null, null));
-            public Task<List<Read2Me.Core.Models.AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false)
-                => Task.FromResult(new List<Read2Me.Core.Models.AudioItemRef>());
-            public Task<IReadOnlyDictionary<Guid, int>> GetNodeAudioItemCountsAsync(ProjectFolderId folderId)
-                => Task.FromResult<IReadOnlyDictionary<Guid, int>>(new System.Collections.Generic.Dictionary<Guid, int>());
-            public Task<List<Read2Me.Core.Models.AudioItemRef>> GetOrderedAudioItemRefsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphItemIds)
-                => Task.FromResult(new List<Read2Me.Core.Models.AudioItemRef>());
-            public Task<List<(Guid ParagraphItemId, Read2Me.Services.Audio.AudioReviewInfo Info)>> GetAudioReviewsAsync(ProjectFolderId folderId)
-                => Task.FromResult(new List<(Guid, Read2Me.Services.Audio.AudioReviewInfo)>());
-            public Task<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>> GetNodeStatusSeedAsync(ProjectFolderId folderId)
-                => Task.FromResult<IReadOnlyList<Read2Me.Services.NodeStatus.ParagraphStatusSeedRow>>([]);
-            public Task<IReadOnlyList<AssemblyManifestEntry>> GetAssemblyManifestAsync(ProjectFolderId folder, CancellationToken ct)
-                => Task.FromResult<IReadOnlyList<AssemblyManifestEntry>>([]);
-            public Task<IReadOnlyList<AudioSampleInfo>> GetAudioSampleInfosAsync(ProjectFolderId folderId, IReadOnlyCollection<Guid> itemIds)
-                => Task.FromResult<IReadOnlyList<AudioSampleInfo>>([]);
-            public Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId)
-                => Task.FromResult(new List<VoiceRuleRow>());
+            public override Task<Project?> GetProjectAsync(ProjectFolderId folderId) => Task.FromResult(project);
+            public override Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId) => Task.FromResult(_characters);
+            public override Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) => Task.FromResult(_characters);
         }
 
-        private static ParagraphContext DefaultContext() =>
-            new(new ContextParagraph("Hello world", []), [], []);
+        private static Dictionary<Guid, string?> TextsFor(
+            IReadOnlyList<QueuedParagraph> items, Func<int, string?> textFor) =>
+            items.Select((p, i) => (p.ParagraphId, Text: textFor(i)))
+                .ToDictionary(x => x.ParagraphId, x => x.Text);
+
+        /// <summary>A reader over these items, item i reading <c>textFor(i)</c> (null = no content item).</summary>
+        private static FakeProjectReader Reader(
+            IReadOnlyList<QueuedParagraph> items, Func<int, string?> textFor, List<Character>? characters = null) =>
+            new(TextsFor(items, textFor), DefaultProject(), characters);
+
+        /// <summary>Every paragraph reads "Hello world" — the one-paragraph default.</summary>
+        private static FakeProjectReader Reader(
+            IReadOnlyList<QueuedParagraph> items, List<Character>? characters = null) =>
+            Reader(items, _ => "Hello world", characters);
+
+        /// <summary>Item i reads "Text i", so each index answers about its own text.</summary>
+        private static FakeProjectReader IndexedReader(
+            IReadOnlyList<QueuedParagraph> items, List<Character>? characters = null) =>
+            Reader(items, i => $"Text {i}", characters);
 
         private static Project DefaultProject() =>
             new() { Id = Guid.NewGuid(), Title = "Book", BookTitle = "The Book", Author = "Author", Filename = "b.epub" };
@@ -169,33 +147,34 @@ namespace Read2Me.Tests.Services.Characters
 
         // ---------------------------------------------------------------
         // Segment answers. Segment texts must reconstruct the paragraph they answer
-        // ("Hello world" for the single path, "Text N" for batch index N) — an answer that
+        // ("Hello world" for a chunk of 1, "Text N" for index N) — an answer that
         // does not is a fidelity failure, which is what ParseFailure means here.
         // ---------------------------------------------------------------
 
         private static string Segment(string text, string speaker, string type = "dialog", string voice = "") =>
             $$"""{ "text": {{JsonSerializer.Serialize(text)}}, "type": "{{type}}", "speaker": "{{speaker}}", "voice_instructions": "{{voice}}" }""";
 
-        /// <summary>Single-paragraph answer covering the whole of "Hello world".</summary>
+        /// <summary>Object-shaped answer covering the whole of "Hello world".</summary>
         private static string Answer(string speaker, string voice = "", string text = "Hello world") =>
             $$"""{ "reasoning": "r", "segments": [ {{Segment(text, speaker, voice: voice)}} ] }""";
 
-        /// <summary>Batch answer: index i speaks the whole of its own paragraph text.</summary>
+        /// <summary>Array-shaped answer: index i speaks the whole of its own paragraph text.</summary>
         private static string BatchAnswer(params (int Index, string Speaker)[] entries) =>
             "[" + string.Join(",", entries.Select(e =>
                 $$"""{ "index": {{e.Index}}, "reasoning": "r", "segments": [ {{Segment($"Text {e.Index}", e.Speaker)}} ] }""")) + "]";
 
         // ---------------------------------------------------------------
-        // Single-paragraph step
+        // Chunk of 1 (object-shaped ask)
         // ---------------------------------------------------------------
 
         [Fact]
         public async Task ValidSegmentResponse_ReturnsResolved_WithSegments()
         {
+            var items = Paras(1);
             var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice", "calm"));
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
+            var svc = NewService(runner, Reader(items));
 
-            var result = await RunSingleAsync(svc, Config(), TestItem);
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             var segment = Assert.Single(result.Segments!);
@@ -204,9 +183,9 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("Alice", segment.Speaker);
             Assert.Equal("calm", segment.VoiceInstructions);
 
-            // Single path runs a schema-constrained object completion labelled with the preview.
+            // A chunk of 1 runs a schema-constrained object completion labelled with the preview.
             var request = Assert.Single(runner.Requests);
-            Assert.Equal("Preview", request.Label);
+            Assert.Equal("P0", request.Label);
             Assert.Equal(CompletionShape.Object, request.Shape);
             Assert.Equal(SegmentAttributionSchema.JsonSchema, request.JsonSchema);
             // Attribution answers ride the schema + prompt context; hidden thinking only adds
@@ -214,13 +193,18 @@ namespace Read2Me.Tests.Services.Characters
             Assert.True(request.DisableThinking);
         }
 
-        [Fact]
-        public async Task ThinkingStep_EnablesThinking_OnTheSingleRun()
+        [Theory]
+        [InlineData(1)]
+        [InlineData(3)]
+        public async Task ThinkingStep_EnablesThinking_AtAnyChunkSize(int count)
         {
-            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
+            var items = Paras(count);
+            var runner = new FakeLlmCompletionRunner().Completes(count == 1
+                ? Answer("Alice", text: "Text 0")
+                : BatchAnswer([.. Enumerable.Range(0, count).Select(i => (i, "Alice"))]));
+            var svc = NewService(runner, IndexedReader(items));
 
-            await RunConfigAsync(svc, Config(), [TestItem], thinking: true);
+            await RunConfigAsync(svc, Config(), items, thinking: true);
 
             Assert.False(Assert.Single(runner.Requests).DisableThinking);
         }
@@ -228,33 +212,33 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task MultiSpeakerAnswer_ReturnsEverySegment_SlicedFromTheOriginal()
         {
-            var ctx = new ParagraphContext(
-                new ContextParagraph("\"Hello,\" she said. \"Goodbye.\"", []), [], []);
+            const string text = "\"Hello,\" she said. \"Goodbye.\"";
+            var items = Paras(1);
             var runner = new FakeLlmCompletionRunner().Completes($$"""
                 { "reasoning": "r", "segments": [
                     {{Segment("\"Hello,\"", "Alice")}},
                     {{Segment("she said.", "narrator", type: "narration")}},
                     {{Segment("\"Goodbye.\"", "Bob")}} ] }
                 """);
-            var svc = NewService(runner, new FakeProjectReader(ctx, DefaultProject(),
-                [Character("Alice"), Character("Bob")]));
+            var svc = NewService(runner, Reader(items, _ => text, [Character("Alice"), Character("Bob")]));
 
-            var result = await RunSingleAsync(svc, Config(), TestItem);
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal(3, result.Segments!.Count);
             // The slices concatenate back to the original text, verbatim.
-            Assert.Equal(ctx.Query.Text, string.Concat(result.Segments.Select(s => s.Text)));
+            Assert.Equal(text, string.Concat(result.Segments.Select(s => s.Text)));
             Assert.Equal(AttributionSegmentType.Narration, result.Segments[1].Type);
         }
 
         [Fact]
         public async Task LlmReturnsUnknownSpeaker_ReturnsUnknownStatus_StillCarryingSegments()
         {
+            var items = Paras(1);
             var runner = new FakeLlmCompletionRunner().Completes(Answer("unknown"));
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
+            var svc = NewService(runner, Reader(items));
 
-            var result = await RunSingleAsync(svc, Config(), TestItem);
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
             // The answer still applies: the segmentation is real even when the speaker is not known.
@@ -262,52 +246,54 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task SegmentsDoNotReconstructParagraph_ReturnsFailed()
+        public async Task SegmentsDoNotReconstructParagraph_ReturnsFailed_WithoutAReAsk()
         {
             // The model dropped a word — a fidelity failure, which escalates like a parse failure.
+            // The final-rung fallback answers an unparseable *run*, not this, so the answer stands
+            // on one ask even on the final rung.
+            var items = Paras(1);
             var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice", text: "Hello"));
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
+            var svc = NewService(runner, Reader(items));
 
-            var result = await RunSingleAsync(svc, Config(), TestItem);
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Failed, result.Status);
             Assert.Null(result.Segments);
+            Assert.Single(runner.Requests);
         }
 
-        [Fact]
-        public async Task RunFailed_ReturnsFailed()
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        public async Task RunFailed_ReturnsFailed_ForEveryItem(int count)
         {
-            var runner = new FakeLlmCompletionRunner()
-                .Fails(LlmRunOutcome.Failed, "connection refused");
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
+            var items = Paras(count);
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.Failed, "connection refused");
+            var svc = NewService(runner, IndexedReader(items));
 
-            var result = await RunSingleAsync(svc, Config(), TestItem);
+            var results = await RunConfigAsync(svc, Config(), items);
 
-            Assert.Equal(AttributionStatus.Failed, result.Status);
-            Assert.Contains("connection refused", result.FailureReason);
+            Assert.Equal(count, results.Count);
+            Assert.All(results, r =>
+            {
+                Assert.Equal(AttributionStatus.Failed, r.Outcome.Status);
+                Assert.Contains("connection refused", r.Outcome.FailureReason);
+            });
         }
 
-        [Fact]
-        public async Task ServiceUnavailableRun_ReturnsServiceUnavailable()
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        public async Task ServiceUnavailableRun_ReturnsServiceUnavailable_ForEveryItem(int count)
         {
-            var runner = new FakeLlmCompletionRunner()
-                .Fails(LlmRunOutcome.ServiceUnavailable, "stalled");
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
+            var items = Paras(count);
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.ServiceUnavailable, "stalled");
+            var svc = NewService(runner, IndexedReader(items));
 
-            var result = await RunSingleAsync(svc, Config(), TestItem);
+            var results = await RunConfigAsync(svc, Config(), items);
 
-            Assert.Equal(AttributionStatus.ServiceUnavailable, result.Status);
-        }
-
-        [Fact]
-        public async Task UnparseableResponse_ReturnsFailed()
-        {
-            var runner = new FakeLlmCompletionRunner().Completes("This is not JSON at all.");
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
-
-            var result = await RunSingleAsync(svc, Config(), TestItem);
-
-            Assert.Equal(AttributionStatus.Failed, result.Status);
+            Assert.Equal(count, results.Count);
+            Assert.All(results, r => Assert.Equal(AttributionStatus.ServiceUnavailable, r.Outcome.Status));
         }
 
         [Fact]
@@ -316,27 +302,32 @@ namespace Read2Me.Tests.Services.Characters
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
+            var items = Paras(1);
             var runner = new FakeLlmCompletionRunner().Throws(new OperationCanceledException());
-            var svc = NewService(runner, new FakeProjectReader(DefaultContext(), DefaultProject()));
+            var svc = NewService(runner, Reader(items));
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 await foreach (var _ in ((IChainStep)svc).RunAsync(
-                    [TestItem], new ChainStepOptions(Config(), IsFinal: true, SelfConsistency: false),
+                    items, new ChainStepOptions(Config(), IsFinal: true, SelfConsistency: false),
                     callbacks: null, cts.Token))
                 {
                 }
             });
         }
 
+        // ---------------------------------------------------------------
+        // Unaskable pre-filter: nothing to attribute, so no LLM call at any chunk size
+        // ---------------------------------------------------------------
+
         [Fact]
         public async Task BlankQueryText_ReturnsUnknown_WithoutRunning()
         {
+            var items = Paras(1);
             var runner = new FakeLlmCompletionRunner();
-            var ctx = new ParagraphContext(new ContextParagraph("   ", []), [], []);
-            var svc = NewService(runner, new FakeProjectReader(ctx, DefaultProject()));
+            var svc = NewService(runner, Reader(items, _ => "   "));
 
-            var result = await RunSingleAsync(svc, Config(), TestItem);
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
             Assert.Empty(runner.Requests);
@@ -345,27 +336,76 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task NullContext_ReturnsUnknown_WithoutRunning()
         {
+            var items = Paras(1);
             var runner = new FakeLlmCompletionRunner();
-            var svc = NewService(runner, new FakeProjectReader(null, DefaultProject()));
+            // No content item for the paragraph: the reader has nothing to window on and returns null.
+            var svc = NewService(runner, Reader(items, _ => null));
 
-            var result = await RunSingleAsync(svc, Config(), TestItem);
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
             Assert.Empty(runner.Requests);
         }
 
         [Fact]
+        public async Task Batch_BlankTarget_IsUnknown_AndTheRestAreStillAsked()
+        {
+            // The batch-shaped counterpart: a blank target is demoted out of the prompt rather than
+            // dragging the whole chunk into an alignment failure.
+            var items = Paras(3);
+            var runner = new FakeLlmCompletionRunner().Completes(BatchAnswer((0, "Alice"), (1, "Bob")));
+            var svc = NewService(runner, Reader(items, i => i switch
+            {
+                0 => "Text 0",
+                1 => "   ",
+                _ => "Text 1",
+            }));
+
+            var results = await RunConfigAsync(svc, Config(), items);
+
+            Assert.Single(runner.Requests);
+            Assert.Equal(3, results.Count);
+            // Book order is preserved, and the blank one is Unknown without ever being asked about.
+            Assert.Equal(items.Select(i => i.ParagraphId), results.Select(r => r.Item.ParagraphId));
+            Assert.Equal(AttributionStatus.Resolved, results[0].Outcome.Status);
+            Assert.Equal(AttributionStatus.Unknown, results[1].Outcome.Status);
+            Assert.Null(results[1].Outcome.Segments);
+            Assert.Equal(AttributionStatus.Resolved, results[2].Outcome.Status);
+        }
+
+        [Fact]
+        public async Task Batch_MissingFirstParagraph_IsUnknown_AndTheRestAreStillAsked()
+        {
+            // The reader returns null when the *first* requested id has no content item; the builder
+            // bins it Unaskable and re-asks for the rest, instead of falling back to per-item asks.
+            var items = Paras(3);
+            var runner = new FakeLlmCompletionRunner().Completes(BatchAnswer((0, "Alice"), (1, "Bob")));
+            var svc = NewService(runner, Reader(items, i => i == 0 ? null : $"Text {i - 1}"));
+
+            var results = await RunConfigAsync(svc, Config(), items);
+
+            Assert.Single(runner.Requests);
+            Assert.Equal(AttributionStatus.Unknown, results[0].Outcome.Status);
+            Assert.Equal(AttributionStatus.Resolved, results[1].Outcome.Status);
+            Assert.Equal(AttributionStatus.Resolved, results[2].Outcome.Status);
+        }
+
+        // ---------------------------------------------------------------
+        // Context window
+        // ---------------------------------------------------------------
+
+        [Fact]
         public async Task ContextWindowDefaults_PassedToReader()
         {
-            var runner = new FakeLlmCompletionRunner()
-                .Completes(Answer("Alice"));
-            var fakeReader = new FakeProjectReader(DefaultContext(), DefaultProject());
-            var svc = NewService(runner, fakeReader);
+            var items = Paras(1);
+            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
+            var reader = Reader(items);
+            var svc = NewService(runner, reader);
 
-            await RunSingleAsync(svc, Config(), TestItem);
+            await RunConfigAsync(svc, Config(), items);
 
-            Assert.Equal(PromptTemplates.DefaultContextParagraphsBefore, fakeReader.ReceivedBefore);
-            Assert.Equal(PromptTemplates.DefaultContextParagraphsAfter, fakeReader.ReceivedAfter);
+            Assert.Equal(PromptTemplates.DefaultContextParagraphsBefore, reader.ReceivedBefore);
+            Assert.Equal(PromptTemplates.DefaultContextParagraphsAfter, reader.ReceivedAfter);
         }
 
         [Fact]
@@ -374,48 +414,33 @@ namespace Read2Me.Tests.Services.Characters
             var prompts = NewPrompts();
             await prompts.SetContextWindowAsync(7, 3);
 
-            var runner = new FakeLlmCompletionRunner()
-                .Completes(Answer("Alice"));
-            var fakeReader = new FakeProjectReader(DefaultContext(), DefaultProject());
-            var svc = NewService(runner, fakeReader, prompts);
+            var items = Paras(1);
+            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
+            var reader = Reader(items);
+            var svc = NewService(runner, reader, prompts);
 
-            await RunSingleAsync(svc, Config(), TestItem);
+            await RunConfigAsync(svc, Config(), items);
 
-            Assert.Equal(7, fakeReader.ReceivedBefore);
-            Assert.Equal(3, fakeReader.ReceivedAfter);
+            Assert.Equal(7, reader.ReceivedBefore);
+            Assert.Equal(3, reader.ReceivedAfter);
         }
 
         // ---------------------------------------------------------------
-        // Batch step (batch core)
+        // Chunk of many (array-shaped ask)
         // ---------------------------------------------------------------
-
-        private static (List<QueuedParagraph> Batch, ParagraphBatchContext Ctx) MakeBatch(int count)
-        {
-            var chapterId = Guid.NewGuid();
-            var batch = Enumerable.Range(0, count)
-                .Select(i => new QueuedParagraph(Folder, Guid.NewGuid(), $"P{i}", chapterId, Guid.NewGuid(), Guid.NewGuid()))
-                .ToList();
-            var entries = batch
-                .Select((_, i) => new BatchContextEntry($"Text {i}", [], i))
-                .ToList();
-            var ctx = new ParagraphBatchContext(
-                entries, [.. batch.Select(b => b.ParagraphId)], []);
-            return (batch, ctx);
-        }
 
         [Fact]
         public async Task Batch_ValidResponse_ResolvesEachIndex_SingleRun()
         {
-            var (batch, ctx) = MakeBatch(3);
+            var items = Paras(3);
             var runner = new FakeLlmCompletionRunner()
                 .Completes(BatchAnswer((0, "Alice"), (1, "unknown"), (2, "Bob")));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader);
+            var svc = NewService(runner, IndexedReader(items));
 
-            var result = await RunConfigAsync(svc, Config(), batch);
+            var result = await RunConfigAsync(svc, Config(), items);
 
             Assert.Equal(3, result.Count);
-            Assert.Equal(batch[0], result[0].Item);
+            Assert.Equal(items[0], result[0].Item);
             Assert.Equal(AttributionStatus.Resolved, result[0].Outcome.Status);
             // Each index's segments are sliced from that index's own paragraph text.
             Assert.Equal("Text 0", Assert.Single(result[0].Outcome.Segments!).Text);
@@ -424,7 +449,7 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(AttributionStatus.Resolved, result[2].Outcome.Status);
             Assert.Equal("Text 2", Assert.Single(result[2].Outcome.Segments!).Text);
 
-            // One array-shaped, schema-constrained run for the whole batch (batch size covers all 3).
+            // One array-shaped, schema-constrained run for the whole chunk (batch size covers all 3).
             var request = Assert.Single(runner.Requests);
             Assert.Equal("3 paragraphs: P0", request.Label);
             Assert.Equal(CompletionShape.Array, request.Shape);
@@ -433,30 +458,15 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Batch_ThinkingStep_EnablesThinking_OnTheBatchRun()
-        {
-            var (batch, ctx) = MakeBatch(3);
-            var runner = new FakeLlmCompletionRunner()
-                .Completes(BatchAnswer((0, "Alice"), (1, "Bob"), (2, "Bob")));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader);
-
-            await RunConfigAsync(svc, Config(), batch, thinking: true);
-
-            Assert.False(Assert.Single(runner.Requests).DisableThinking);
-        }
-
-        [Fact]
         public async Task Batch_ExtraUnrequestedIndex_IsIgnored()
         {
-            var (batch, ctx) = MakeBatch(2);
+            var items = Paras(2);
             // Models also answer for context paragraphs; indexes nobody asked for are dropped.
             var runner = new FakeLlmCompletionRunner()
                 .Completes(BatchAnswer((0, "Alice"), (1, "Bob"), (7, "Nobody")));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader);
+            var svc = NewService(runner, IndexedReader(items));
 
-            var result = await RunConfigAsync(svc, Config(), batch);
+            var result = await RunConfigAsync(svc, Config(), items);
 
             Assert.Single(runner.Requests);
             Assert.Equal(2, result.Count);
@@ -464,90 +474,190 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task Batch_OfOne_UsesSinglePath()
+        public async Task ChunkOfOne_UsesTheBatchReader_WithTheSingleTemplate()
         {
-            var runner = new FakeLlmCompletionRunner()
-                .Completes(Answer("Alice", "calm"));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject());
+            var items = Paras(1);
+            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
+            var reader = Reader(items);
             var svc = NewService(runner, reader);
 
-            var result = await RunConfigAsync(svc, Config(), [TestItem]);
+            var result = await RunConfigAsync(svc, Config(), items);
 
-            var (item, outcome) = Assert.Single(result);
-            Assert.Equal(TestItem, item);
-            Assert.Equal(AttributionStatus.Resolved, outcome.Status);
-            Assert.Equal("Alice", Assert.Single(outcome.Segments!).Speaker);
-            // Single path — the single-paragraph reader method was used, not the batch one.
-            Assert.Null(reader.ReceivedBatchIds);
+            Assert.Equal(AttributionStatus.Resolved, Assert.Single(result).Outcome.Status);
+            // The batch reader is universal: one id in, one entry back, object-shaped ask out.
+            Assert.Single(Assert.Single(reader.ReceivedBatchIds));
+            Assert.Equal(CompletionShape.Object, Assert.Single(runner.Requests).Shape);
         }
 
         [Fact]
-        public async Task Batch_UnparseableResponse_FallsBackToSinglePerItem()
+        public async Task ContextDeferral_ReAsksTheTrimmedItems_InALaterChunk()
         {
-            var (batch, ctx) = MakeBatch(2);
+            var items = Paras(2);
             var runner = new FakeLlmCompletionRunner()
-                .Completes("not json at all")
-                .Completes(Answer("Alice"));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
+                .Completes(Answer("Alice", text: "Text 0"))
+                .Completes(Answer("Alice", text: "Text 1"));
+            var reader = new FakeProjectReader(
+                TextsFor(items, i => $"Text {i}"), DefaultProject())
+            {
+                Defer = [items[1].ParagraphId],
+            };
             var svc = NewService(runner, reader);
 
-            var result = await RunConfigAsync(svc, Config(), batch);
+            var results = await RunConfigAsync(svc, Config(), items);
 
-            // 1 batch run + 2 single fallbacks (final step falls back to the single path per item).
+            // Chunk 1 asks about P0 only and defers P1; the group's pending loop then asks P1 alone,
+            // where it is the first requested id and so is included.
+            Assert.Equal(2, results.Count);
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.All(runner.Requests, r => Assert.Equal(CompletionShape.Object, r.Shape));
+        }
+
+        // ---------------------------------------------------------------
+        // Final-rung parse-failure fallback (D6/D14): 2 asks per paragraph, at most
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task Final_ChunkParseFailure_ReAsksEachParagraphOnItsOwn()
+        {
+            var items = Paras(2);
+            var runner = new FakeLlmCompletionRunner()
+                .Completes("not json at all")
+                .Completes(Answer("Alice", text: "Text 0"))
+                .Completes(Answer("Alice", text: "Text 1"));
+            var svc = NewService(runner, IndexedReader(items));
+
+            var result = await RunConfigAsync(svc, Config(), items);
+
+            // 1 chunk run + 2 single re-asks.
             Assert.Equal(3, runner.Requests.Count);
             Assert.Equal(2, result.Count);
             Assert.All(result, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
+            // The re-asks are object-shaped: the template follows the included count, so a fallback
+            // single gets the single prompt for free by re-entering the same pipeline.
+            Assert.All(runner.Requests.Skip(1), r => Assert.Equal(CompletionShape.Object, r.Shape));
         }
 
         [Fact]
-        public async Task Batch_MissingIndex_FallsBackToSingleForTheWholeChunk()
+        public async Task Final_MissingIndex_ReAsksTheWholeChunkAsSingles()
         {
-            // Escalation's unit is the paragraph, so a batch answer that skips a requested index is
-            // rejected whole — the chunk falls back to the single path, not just the missing item.
-            var (batch, ctx) = MakeBatch(3);
+            // Escalation's unit is the paragraph, so a chunk answer that skips a requested index is
+            // rejected whole — every included paragraph is re-asked, not just the missing one.
+            var items = Paras(3);
             var runner = new FakeLlmCompletionRunner()
                 .Completes(BatchAnswer((0, "Alice"), (2, "Bob")))
-                .Completes(Answer("Fallback"));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader);
+                .Completes(Answer("Fallback", text: "Text 0"))
+                .Completes(Answer("Fallback", text: "Text 1"))
+                .Completes(Answer("Fallback", text: "Text 2"));
+            var svc = NewService(runner, IndexedReader(items));
 
-            var result = await RunConfigAsync(svc, Config(), batch);
+            var result = await RunConfigAsync(svc, Config(), items);
 
-            // 1 batch run + 3 single fallbacks.
+            // 1 chunk run + 3 single re-asks.
             Assert.Equal(4, runner.Requests.Count);
             Assert.All(result, o =>
                 Assert.Equal("Fallback", Assert.Single(o.Outcome.Segments!).Speaker));
         }
 
         [Fact]
-        public async Task Batch_NullContext_FallsBackToSinglePerItem()
+        public async Task Final_SingleParseFailure_IsReAskedOnce_OffGreedy()
         {
-            var (batch, _) = MakeBatch(2);
+            var items = Paras(1);
             var runner = new FakeLlmCompletionRunner()
+                .Completes("not json at all")
                 .Completes(Answer("Alice"));
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = null };
-            var svc = NewService(runner, reader);
+            var svc = NewService(runner, Reader(items));
 
-            var result = await RunConfigAsync(svc, Config(), batch);
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
+            Assert.Equal(AttributionStatus.Resolved, result.Status);
             Assert.Equal(2, runner.Requests.Count);
-            Assert.Equal(2, result.Count);
-            Assert.All(result, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
+            // A greedy re-ask of an identical prompt would return the identical garbage.
+            Assert.Null(runner.Requests[0].Overrides!.Temperature);
+            Assert.True(runner.Requests[1].Overrides!.Temperature > 0);
         }
 
         [Fact]
-        public async Task Batch_ServiceUnavailableRun_AllItemsServiceUnavailable()
+        public async Task Final_SingleParseFailure_ReAskAlsoFails_StopsAtTwoAsks()
         {
-            var (batch, ctx) = MakeBatch(2);
+            var items = Paras(1);
+            var runner = new FakeLlmCompletionRunner().Completes("not json at all");
+            var svc = NewService(runner, Reader(items));
+
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
+
+            Assert.Equal(AttributionStatus.Failed, result.Status);
+            Assert.Equal(2, runner.Requests.Count);
+        }
+
+        [Fact]
+        public async Task Final_ChunkParseFailure_SinglesThatAlsoFail_AreNotReAskedAgain()
+        {
+            // Each fallback single is already its paragraph's second ask, so it terminates there:
+            // 1 chunk + 2 singles = 3, never 5.
+            var items = Paras(2);
+            var runner = new FakeLlmCompletionRunner().Completes("not json at all");
+            var svc = NewService(runner, IndexedReader(items));
+
+            var result = await RunConfigAsync(svc, Config(), items);
+
+            Assert.Equal(3, runner.Requests.Count);
+            Assert.All(result, o => Assert.Equal(AttributionStatus.Failed, o.Outcome.Status));
+        }
+
+        // ---------------------------------------------------------------
+        // Self-consistency: the sample-1 guard is about the run, not one item's answer
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task SelfConsistency_OneMisalignedItem_StillTakesSample2_ForTheRest()
+        {
+            // Index 1's segments do not reconstruct its paragraph — a per-item fidelity failure, not
+            // an unparseable run. The chunk-wide guard must not read it as one and skip sample 2,
+            // which would silently drop the check for every other paragraph in the chunk.
+            var items = Paras(2);
             var runner = new FakeLlmCompletionRunner()
-                .Fails(LlmRunOutcome.ServiceUnavailable, "stalled");
-            var reader = new FakeProjectReader(DefaultContext(), DefaultProject()) { BatchContext = ctx };
-            var svc = NewService(runner, reader);
+                .Completes("""
+                    [ { "index": 0, "reasoning": "r", "segments": [
+                          { "text": "Text 0", "type": "dialog", "speaker": "Alice", "voice_instructions": "" } ] },
+                      { "index": 1, "reasoning": "r", "segments": [
+                          { "text": "Something else", "type": "dialog", "speaker": "Bob", "voice_instructions": "" } ] } ]
+                    """)
+                .Completes(BatchAnswer((0, "Alice"), (1, "Bob")));
+            var svc = NewService(runner, IndexedReader(items, [Character("Alice"), Character("Bob")]));
 
-            var result = await RunConfigAsync(svc, Config(), batch);
+            var results = await RunConfigAsync(svc, Config(), items, isFinal: false, selfConsistency: true);
 
-            Assert.Equal(2, result.Count);
-            Assert.All(result, o => Assert.Equal(AttributionStatus.ServiceUnavailable, o.Outcome.Status));
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.Equal(AttributionStatus.Resolved, results[0].Outcome.Status);
+            Assert.Equal(AttributionStatus.Failed, results[1].Outcome.Status);   // sample 1 stands
+        }
+
+        [Fact]
+        public async Task SelfConsistency_UnparseableRun_MakesOneCall_NotTwo()
+        {
+            var items = Paras(2);
+            var runner = new FakeLlmCompletionRunner().Completes("not json at all");
+            var svc = NewService(runner, IndexedReader(items));
+
+            var results = await RunConfigAsync(svc, Config(), items, isFinal: false, selfConsistency: true);
+
+            // The one call's outcome covers the whole chunk; a second sample cannot improve on it.
+            Assert.Single(runner.Requests);
+            Assert.All(results, r => Assert.Equal(AttributionStatus.Failed, r.Outcome.Status));
+        }
+
+        [Fact]
+        public async Task NonFinal_ParseFailure_IsNotReAsked()
+        {
+            // Non-final rungs hand the chunk on as ParseFailure suspects; the walk owns the retry.
+            var items = Paras(2);
+            var runner = new FakeLlmCompletionRunner().Completes("not json at all");
+            var svc = NewService(runner, IndexedReader(items));
+
+            var result = await RunConfigAsync(svc, Config(), items, isFinal: false);
+
+            Assert.Single(runner.Requests);
+            Assert.All(result, o => Assert.Equal(AttributionStatus.Failed, o.Outcome.Status));
         }
     }
 }

@@ -185,6 +185,7 @@ public static class ServiceRegistrationExtensions
             sp => sp.GetRequiredService<ICharacterQueueProcessor>());
         services.AddSingleton<IProcessingGate<QueuedParagraph>, ProcessingGate<QueuedParagraph>>();
         services.AddHostedService<QueueWorker<QueuedParagraph>>();
+        services.AddScoped<AttributionRequestBuilder>();
         services.AddScoped<CharacterAttributionService>();
         services.AddScoped<IChainStep>(sp => sp.GetRequiredService<CharacterAttributionService>());
         services.AddScoped<AttributionEscalationChain>();
