@@ -299,11 +299,49 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public void WithTemperature_PreservesPromptStyle()
+        public void Resampled_KeepsPositiveConfigTemperature_AndOtherSettings()
         {
-            var config = new LlmServerConfig { Name = "Small", PromptStyle = AttributionPromptStyle.Simple };
-            var resampled = config.WithTemperature(0.7);
-            Assert.Equal(AttributionPromptStyle.Simple, resampled.PromptStyle);
+            var config = new LlmServerConfig { Name = "Small", Temperature = 0.4, PromptStyle = AttributionPromptStyle.Simple };
+            var opts = new ChainStepOptions(config, IsFinal: false, SelfConsistency: false);
+
+            var resampled = opts.Resampled();
+
+            Assert.Equal(0.4, resampled.TemperatureOverride);
+            // Nothing is copied, so nothing the rung carried can be lost.
+            Assert.Same(config, resampled.Config);
+            Assert.Equal(AttributionPromptStyle.Simple, resampled.EffectiveStyle);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData(0.0)]
+        public void Resampled_NullOrGreedyTemperature_BecomesDefault(double? temperature)
+        {
+            var config = new LlmServerConfig { Name = "Small", Temperature = temperature };
+            var opts = new ChainStepOptions(config, IsFinal: false, SelfConsistency: false);
+
+            Assert.Equal(0.7, opts.Resampled().TemperatureOverride);
+        }
+
+        [Fact]
+        public async Task Batch_ReachesRunnerWithModelSwitchFlagIntact()
+        {
+            var settings = NewSettings();
+            var created = await RegisterChainAsync(settings, ("A", 8));
+            created[0].SupportsModelSwitch = true;
+            await settings.UpdateConfigAsync(created[0]);
+
+            var (batch, ctx) = MakeBatch(2);
+            var llm = new SequenceCompletionRunner().ForConfig("A", BatchJson((0, "Alice"), (1, "Alice")));
+            var svc = NewService(llm, new ChainReader(DefaultContext(), ctx, KnownAlice()), settings);
+
+            await DrainStreamAsync(svc, settings, batch);
+
+            // The batch path used to smuggle a config copy that silently dropped SupportsModelSwitch,
+            // so the model-load gate no-opped. With per-run overrides the real config reaches the
+            // runner (and, in production, EnsureModelLoadedAsync) with the flag intact.
+            Assert.NotEmpty(llm.Configs);
+            Assert.All(llm.Configs, c => Assert.True(c.SupportsModelSwitch));
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -563,8 +601,9 @@ namespace Read2Me.Tests.Services.Characters
 
             await DrainStreamAsync(svc, settings, [MakeItem()]);
 
-            // A greedy re-ask of an identical prompt would return the identical garbage.
-            Assert.True(llm.Configs[1].Temperature > 0);
+            // A greedy re-ask of an identical prompt would return the identical garbage. The resample
+            // temperature rides as a per-run override, not on the persisted config.
+            Assert.True(llm.Overrides[1]?.Temperature > 0);
         }
 
         [Fact]
@@ -708,7 +747,11 @@ namespace Read2Me.Tests.Services.Characters
 
             await DrainStreamAsync(svc, settings, [MakeItem()]);
 
-            var temps = llm.Configs.Where(c => c.Name == "A").Select(c => c.Temperature).ToList();
+            // The resample temperature rides as a per-run override, not on the persisted config.
+            var temps = llm.Configs.Zip(llm.Overrides)
+                .Where(x => x.First.Name == "A")
+                .Select(x => x.Second?.Temperature)
+                .ToList();
             Assert.Equal(2, temps.Count);
             Assert.All(temps, t => Assert.Equal(expected, t));
         }

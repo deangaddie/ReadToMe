@@ -19,6 +19,9 @@ namespace Read2Me.Tests.Fakes
         /// <summary>Config used on each call, in call order.</summary>
         public List<LlmServerConfig> Configs { get; } = [];
 
+        /// <summary>Per-run overrides supplied on each call, in call order (parallel to <see cref="Configs"/>).</summary>
+        public List<LlmRunOverrides?> Overrides { get; } = [];
+
         /// <summary>(config, prompt) recorded per call, in call order.</summary>
         public List<(LlmServerConfig Config, string Prompt)> Calls { get; } = [];
 
@@ -84,6 +87,7 @@ namespace Read2Me.Tests.Fakes
         private Step Record(LlmRunRequest request)
         {
             Configs.Add(request.Config);
+            Overrides.Add(request.Overrides);
             Calls.Add((request.Config, request.Prompt));
             return Next(request.Config.Name);
         }

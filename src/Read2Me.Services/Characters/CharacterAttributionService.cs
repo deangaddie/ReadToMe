@@ -38,10 +38,23 @@ namespace Read2Me.Services.Characters
         bool IsFinal,
         bool SelfConsistency,
         bool Thinking = false,
-        AttributionPromptStyle? Style = null)
+        AttributionPromptStyle? Style = null,
+        double? TemperatureOverride = null)
     {
         /// <summary>The style to ask with: the rung's own, falling back to the config's.</summary>
         public AttributionPromptStyle EffectiveStyle => Style ?? Config.PromptStyle;
+
+        /// <summary>
+        /// A repeat ask of the same paragraph: off greedy, so a second answer to an identical prompt
+        /// cannot be a verbatim first. Uses the config's own temperature when &gt; 0, else 0.7 — a
+        /// null/0 temperature is greedy, useless to both self-consistency (it would always agree) and
+        /// the same-rung parse-failure retry (it would fail identically). Rides the request as an
+        /// override, never a config copy.
+        /// </summary>
+        public ChainStepOptions Resampled() => this with
+        {
+            TemperatureOverride = Config.Temperature is { } t && t > 0 ? t : 0.7,
+        };
     }
 
     /// <summary>
@@ -53,43 +66,6 @@ namespace Read2Me.Services.Characters
     {
         public static AnswerProvenance From(LlmServerConfig config, string? raw) =>
             new(config.Name, string.IsNullOrWhiteSpace(config.Model) ? "(server default)" : config.Model, raw);
-    }
-
-    internal static class LlmServerConfigExtensions
-    {
-        /// <summary>Shallow copy of the config with <see cref="LlmServerConfig.Temperature"/> replaced.</summary>
-        public static LlmServerConfig WithTemperature(this LlmServerConfig config, double temperature) =>
-            Copy(config, config.MaxTokens, temperature);
-
-        /// <summary>
-        /// Shallow copy set up to be sampled more than once for the same paragraph: the config's own
-        /// temperature when &gt; 0, else 0.7. A null/0 temperature is greedy, which would make every
-        /// resample a verbatim repeat of the first — useless to both self-consistency (it would
-        /// always agree) and the same-rung parse-failure retry (it would fail identically).
-        /// </summary>
-        public static LlmServerConfig ForResample(this LlmServerConfig config) =>
-            config.WithTemperature(config.Temperature is { } t && t > 0 ? t : 0.7);
-
-        /// <summary>Shallow copy of the config with <see cref="LlmServerConfig.MaxTokens"/> replaced.</summary>
-        public static LlmServerConfig WithMaxTokens(this LlmServerConfig config, int? maxTokens) =>
-            Copy(config, maxTokens, config.Temperature);
-
-        private static LlmServerConfig Copy(LlmServerConfig config, int? maxTokens, double? temperature) => new()
-        {
-            Id = config.Id,
-            Name = config.Name,
-            ApiType = config.ApiType,
-            BaseUrl = config.BaseUrl,
-            ApiKey = config.ApiKey,
-            Model = config.Model,
-            Temperature = temperature,
-            TopP = config.TopP,
-            MaxTokens = maxTokens,
-            FrequencyPenalty = config.FrequencyPenalty,
-            PresencePenalty = config.PresencePenalty,
-            AttributionBatchSize = config.AttributionBatchSize,
-            PromptStyle = config.PromptStyle,
-        };
     }
 
     /// <summary>
@@ -211,7 +187,7 @@ namespace Read2Me.Services.Characters
                 return await AttributeSampleCoreAsync(item, opts, ct);
 
             // Self-consistency: both samples use an effective temperature so sample 1 is not greedy.
-            var sampleOpts = opts with { Config = opts.Config.ForResample() };
+            var sampleOpts = opts.Resampled();
 
             var sample1 = await AttributeSampleCoreAsync(item, sampleOpts, ct);
             // A parse/infra failure on sample 1 stands on its own — no second sample can help it.
@@ -285,7 +261,8 @@ namespace Read2Me.Services.Characters
             var run = await runner.RunAsync<SegmentAttributionResult>(
                 new LlmRunRequest(config, prompt, item.Preview,
                     SegmentAttributionSchema.JsonSchema, CompletionShape.Object,
-                    DisableThinking: !opts.Thinking),
+                    DisableThinking: !opts.Thinking,
+                    Overrides: new LlmRunOverrides(Temperature: opts.TemperatureOverride)),
                 TryParseSegments, ct);
 
             switch (run.Outcome)
@@ -433,11 +410,7 @@ namespace Read2Me.Services.Characters
         private async Task<BatchCoreResult> SelfConsistentBatchAsync(
             IReadOnlyList<QueuedParagraph> batch, ChainStepOptions opts, CancellationToken ct)
         {
-            var effOpts = opts with
-            {
-                Config = opts.Config.ForResample(),
-                SelfConsistency = false,
-            };
+            var effOpts = opts.Resampled() with { SelfConsistency = false };
 
             var sample1 = await AttributeBatchCoreAsync(batch, effOpts, ct);
             var sample2 = await AttributeBatchCoreAsync(batch, effOpts, ct);
@@ -519,10 +492,11 @@ namespace Read2Me.Services.Characters
 
             // The answer copies every indexed paragraph back as segments, so the output budget has to
             // grow with the passage — a fixed config max_tokens truncates (and so fails to parse) a
-            // batch of long paragraphs.
-            var runConfig = config.WithMaxTokens(AttributionTokenBudget.ForPassage(
+            // batch of long paragraphs. Rides the request as a per-run override so the real config
+            // (with SupportsModelSwitch intact) reaches the model-load gate.
+            var maxTokens = AttributionTokenBudget.ForPassage(
                 config.MaxTokens,
-                ctx.Entries.Where(e => e.TargetIndex is not null).Select(e => e.Text)));
+                ctx.Entries.Where(e => e.TargetIndex is not null).Select(e => e.Text));
 
             // The answer must cover every requested index; a missing one is a parse failure for the
             // whole chunk (escalation's unit is the paragraph, and a half-answered batch is not one).
@@ -543,9 +517,10 @@ namespace Read2Me.Services.Characters
             }
 
             var run = await runner.RunAsync<IReadOnlyDictionary<int, SegmentAttributionResult>>(
-                new LlmRunRequest(runConfig, prompt, $"{included.Count} paragraphs: {first.Preview}",
+                new LlmRunRequest(config, prompt, $"{included.Count} paragraphs: {first.Preview}",
                     SegmentBatchAttributionSchema.JsonSchema, CompletionShape.Array,
-                    DisableThinking: !opts.Thinking),
+                    DisableThinking: !opts.Thinking,
+                    Overrides: new LlmRunOverrides(MaxTokens: maxTokens, Temperature: opts.TemperatureOverride)),
                 TryParseBatchSegments, ct);
 
             if (run.Outcome == LlmRunOutcome.ModelLoading)
@@ -609,7 +584,7 @@ namespace Read2Me.Services.Characters
 
             // One raw for the whole chunk — a per-paragraph misalignment is logged against the batch
             // answer it came out of, which is the only form the response ever existed in.
-            var provenance = AnswerProvenance.From(runConfig, run.Raw);
+            var provenance = AnswerProvenance.From(config, run.Raw);
 
             for (var i = 0; i < included.Count; i++)
                 outcomes.Add((included[i],

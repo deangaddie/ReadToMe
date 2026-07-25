@@ -282,7 +282,7 @@ namespace Read2Me.Tests.Services.Characters
 
             await DrainAsync(Chain(step), [Item()]);
 
-            Assert.True(step.Options[1].Config.Temperature > 0);
+            Assert.True(step.Options[1].TemperatureOverride > 0);
         }
 
         [Fact]

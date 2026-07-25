@@ -172,7 +172,7 @@ namespace Read2Me.Services.Characters
         /// then routed by the caller.
         /// <para>
         /// The retry re-asks the failures on their own, so a garbled batch is not merely repeated:
-        /// the batch composition differs, and <see cref="LlmServerConfigExtensions.ForResample"/>
+        /// the batch composition differs, and <see cref="ChainStepOptions.Resampled"/>
         /// keeps sampling off greedy so an identical prompt cannot return an identical answer. One
         /// retry only — the second answer stands, parse failure or not.
         /// </para>
@@ -208,7 +208,7 @@ namespace Read2Me.Services.Characters
                 "Re-asking config '{Config}' for {Count} paragraph(s) it failed to parse before escalating",
                 opts.Config.Name, retry.Count);
 
-            var retryOpts = opts with { Config = opts.Config.ForResample() };
+            var retryOpts = opts.Resampled();
             await foreach (var pair in step.RunAsync(retry, retryOpts, callbacks, ct))
                 yield return pair;
         }
