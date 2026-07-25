@@ -36,9 +36,8 @@ namespace Read2Me.Tests.Services.Characters
         private LlmPromptService NewPrompts() =>
             new(Factory, NullLogger<LlmPromptService>.Instance);
 
-        private CharacterAttributionService NewService(
-            ILlmCompletionRunner runner, IProjectReader reader, LlmPromptService? prompts = null) =>
-            new(runner, new AttributionRequestBuilder(prompts ?? NewPrompts(), reader),
+        private CharacterAttributionService NewService(ILlmCompletionRunner runner, IProjectReader reader) =>
+            new(runner, new AttributionRequestBuilder(NewPrompts(), reader),
                 NullLogger<CharacterAttributionService>.Instance);
 
         /// <summary>A single in-memory config; RunAsync uses it directly (never the DB/settings).</summary>
@@ -80,10 +79,6 @@ namespace Read2Me.Tests.Services.Characters
         {
             private readonly List<Character> _characters = characters ?? [];
 
-            public int ReceivedBefore { get; private set; }
-            public int ReceivedAfter { get; private set; }
-            public List<IReadOnlyList<Guid>> ReceivedBatchIds { get; } = [];
-
             /// <summary>Ids that end the run when they are not the first requested id.</summary>
             public HashSet<Guid> Defer { get; init; } = [];
 
@@ -92,10 +87,6 @@ namespace Read2Me.Tests.Services.Characters
             public override Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
                 ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after)
             {
-                ReceivedBefore = before;
-                ReceivedAfter = after;
-                ReceivedBatchIds.Add([.. paragraphIds]);
-
                 if (paragraphIds.Count == 0 || TextOf(paragraphIds[0]) is null)
                     return Task.FromResult<ParagraphBatchContext?>(null);
 
@@ -183,30 +174,9 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("Alice", segment.Speaker);
             Assert.Equal("calm", segment.VoiceInstructions);
 
-            // A chunk of 1 runs a schema-constrained object completion labelled with the preview.
-            var request = Assert.Single(runner.Requests);
-            Assert.Equal("P0", request.Label);
-            Assert.Equal(CompletionShape.Object, request.Shape);
-            Assert.Equal(SegmentAttributionSchema.JsonSchema, request.JsonSchema);
-            // Attribution answers ride the schema + prompt context; hidden thinking only adds
-            // minutes per batch (measured 75-95% of generation) without changing speakers.
-            Assert.True(request.DisableThinking);
-        }
-
-        [Theory]
-        [InlineData(1)]
-        [InlineData(3)]
-        public async Task ThinkingStep_EnablesThinking_AtAnyChunkSize(int count)
-        {
-            var items = Paras(count);
-            var runner = new FakeLlmCompletionRunner().Completes(count == 1
-                ? Answer("Alice", text: "Text 0")
-                : BatchAnswer([.. Enumerable.Range(0, count).Select(i => (i, "Alice"))]));
-            var svc = NewService(runner, IndexedReader(items));
-
-            await RunConfigAsync(svc, Config(), items, thinking: true);
-
-            Assert.False(Assert.Single(runner.Requests).DisableThinking);
+            // One ask for the chunk. What that ask looks like (label, schema, shape, thinking) is
+            // pinned directly in AttributionRequestBuilderTests.
+            Assert.Single(runner.Requests);
         }
 
         [Fact]
@@ -391,41 +361,6 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         // ---------------------------------------------------------------
-        // Context window
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task ContextWindowDefaults_PassedToReader()
-        {
-            var items = Paras(1);
-            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
-            var reader = Reader(items);
-            var svc = NewService(runner, reader);
-
-            await RunConfigAsync(svc, Config(), items);
-
-            Assert.Equal(PromptTemplates.DefaultContextParagraphsBefore, reader.ReceivedBefore);
-            Assert.Equal(PromptTemplates.DefaultContextParagraphsAfter, reader.ReceivedAfter);
-        }
-
-        [Fact]
-        public async Task CustomContextWindow_PassedToReader()
-        {
-            var prompts = NewPrompts();
-            await prompts.SetContextWindowAsync(7, 3);
-
-            var items = Paras(1);
-            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
-            var reader = Reader(items);
-            var svc = NewService(runner, reader, prompts);
-
-            await RunConfigAsync(svc, Config(), items);
-
-            Assert.Equal(7, reader.ReceivedBefore);
-            Assert.Equal(3, reader.ReceivedAfter);
-        }
-
-        // ---------------------------------------------------------------
         // Chunk of many (array-shaped ask)
         // ---------------------------------------------------------------
 
@@ -449,12 +384,8 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(AttributionStatus.Resolved, result[2].Outcome.Status);
             Assert.Equal("Text 2", Assert.Single(result[2].Outcome.Segments!).Text);
 
-            // One array-shaped, schema-constrained run for the whole chunk (batch size covers all 3).
-            var request = Assert.Single(runner.Requests);
-            Assert.Equal("3 paragraphs: P0", request.Label);
-            Assert.Equal(CompletionShape.Array, request.Shape);
-            Assert.Equal(SegmentBatchAttributionSchema.JsonSchema, request.JsonSchema);
-            Assert.True(request.DisableThinking);
+            // One run for the whole chunk — the batch size covers all 3, so they are not re-chunked.
+            Assert.Single(runner.Requests);
         }
 
         [Fact]
@@ -471,22 +402,6 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Single(runner.Requests);
             Assert.Equal(2, result.Count);
             Assert.All(result, o => Assert.Equal(AttributionStatus.Resolved, o.Outcome.Status));
-        }
-
-        [Fact]
-        public async Task ChunkOfOne_UsesTheBatchReader_WithTheSingleTemplate()
-        {
-            var items = Paras(1);
-            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
-            var reader = Reader(items);
-            var svc = NewService(runner, reader);
-
-            var result = await RunConfigAsync(svc, Config(), items);
-
-            Assert.Equal(AttributionStatus.Resolved, Assert.Single(result).Outcome.Status);
-            // The batch reader is universal: one id in, one entry back, object-shaped ask out.
-            Assert.Single(Assert.Single(reader.ReceivedBatchIds));
-            Assert.Equal(CompletionShape.Object, Assert.Single(runner.Requests).Shape);
         }
 
         [Fact]

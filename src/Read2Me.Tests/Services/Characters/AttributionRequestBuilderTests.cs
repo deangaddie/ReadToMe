@@ -61,6 +61,8 @@ namespace Read2Me.Tests.Services.Characters
             private readonly Project? _project;
 
             public List<IReadOnlyList<Guid>> ReceivedIds { get; } = [];
+            public int ReceivedBefore { get; private set; }
+            public int ReceivedAfter { get; private set; }
 
             public BatchReaderFake(
                 IEnumerable<ParagraphBatchContext?> contexts,
@@ -76,6 +78,8 @@ namespace Read2Me.Tests.Services.Characters
                 ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after)
             {
                 ReceivedIds.Add([.. paragraphIds]);
+                ReceivedBefore = before;
+                ReceivedAfter = after;
                 return Task.FromResult(_contexts.Count > 0 ? _contexts.Dequeue() : null);
             }
 
@@ -93,8 +97,39 @@ namespace Read2Me.Tests.Services.Characters
             return new ParagraphBatchContext(entries, [.. targets.Select(t => t.Item.ParagraphId)], []);
         }
 
-        private AttributionRequestBuilder NewBuilder(IProjectReader reader) =>
-            new(NewPrompts(), reader);
+        private AttributionRequestBuilder NewBuilder(IProjectReader reader, LlmPromptService? prompts = null) =>
+            new(prompts ?? NewPrompts(), reader);
+
+        // ---------------------------------------------------------------
+        // Context window: the builder is the only reader of it
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task ContextWindowDefaults_PassedToReader()
+        {
+            var p = Para("Preview");
+            var reader = new BatchReaderFake([Ctx((p, "Hello world"))], project: Project());
+
+            await NewBuilder(reader).Build([p], Opts(Config()));
+
+            Assert.Equal(PromptTemplates.DefaultContextParagraphsBefore, reader.ReceivedBefore);
+            Assert.Equal(PromptTemplates.DefaultContextParagraphsAfter, reader.ReceivedAfter);
+        }
+
+        [Fact]
+        public async Task CustomContextWindow_PassedToReader()
+        {
+            var prompts = NewPrompts();
+            await prompts.SetContextWindowAsync(7, 3);
+
+            var p = Para("Preview");
+            var reader = new BatchReaderFake([Ctx((p, "Hello world"))], project: Project());
+
+            await NewBuilder(reader, prompts).Build([p], Opts(Config()));
+
+            Assert.Equal(7, reader.ReceivedBefore);
+            Assert.Equal(3, reader.ReceivedAfter);
+        }
 
         // ---------------------------------------------------------------
         // Template + shape by included count
@@ -143,15 +178,18 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(["Text 0", "Text 1", "Text 2"], result.QueryTexts);
         }
 
-        [Fact]
-        public async Task Thinking_TogglesDisableThinking()
+        [Theory]
+        [InlineData(1)]
+        [InlineData(3)]
+        public async Task Thinking_TogglesDisableThinking_AtAnyChunkSize(int count)
         {
-            var p = Para("Preview");
-            var reader = new BatchReaderFake([Ctx((p, "Hello world"))], project: Project());
+            var ps = Enumerable.Range(0, count).Select(i => Para($"P{i}")).ToList();
+            var ctx = () => Ctx([.. ps.Select((p, i) => (p, $"Text {i}"))]);
 
-            var on = await NewBuilder(reader).Build([p], Opts(Config(), thinking: true));
-            var reader2 = new BatchReaderFake([Ctx((p, "Hello world"))], project: Project());
-            var off = await NewBuilder(reader2).Build([p], Opts(Config(), thinking: false));
+            var on = await NewBuilder(new BatchReaderFake([ctx()], project: Project()))
+                .Build(ps, Opts(Config(), thinking: true));
+            var off = await NewBuilder(new BatchReaderFake([ctx()], project: Project()))
+                .Build(ps, Opts(Config(), thinking: false));
 
             Assert.False(on.Request!.DisableThinking);
             Assert.True(off.Request!.DisableThinking);

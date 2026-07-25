@@ -22,10 +22,13 @@ namespace Read2Me.Services.Characters
 
     /// <summary>
     /// Per-step config + flags for a chain step. <see cref="IsFinal"/> gates final-step behaviour
-    /// (batch→single fallback on parse failure/missing index; unlisted-name acceptance).
+    /// (an unparseable chunk is re-asked as chunks of 1, one extra ask per paragraph; unlisted-name
+    /// acceptance).
     /// <see cref="SelfConsistency"/> gates double-sampling (slice 004): set only on non-final steps
     /// when the global toggle is on. <see cref="Thinking"/> is the chain entry's per-rung thinking
-    /// flag — off by default (attribution's primary pass runs fast), opted into per rung.
+    /// flag — off by default, opted into per rung: attribution answers ride the schema and the
+    /// prompt's context, so hidden thinking adds minutes per chunk (measured at 75-95% of
+    /// generation) without changing the speakers it picks.
     /// <see cref="Style"/> is the rung's <em>effective</em> attribution prompt style, already
     /// resolved against the config's own by <see cref="LlmSettingsService.GetAttributionChainAsync"/>;
     /// it is the only place the style should be read from, since a rung may deliberately ask with a
@@ -83,7 +86,8 @@ namespace Read2Me.Services.Characters
     /// <summary>
     /// Progress signals raised by the escalation-chain walk so a caller can mirror the chain's true
     /// in-flight set in the UI.
-    /// <see cref="ChunkStarted"/> fires with each batch just before its LLM call.
+    /// <see cref="ChunkStarted"/> fires with each chunk — one paragraph or many — just before its
+    /// LLM call.
     /// <see cref="ItemDeferred"/> fires for an item whose chunk answered it but left it suspect —
     /// it is no longer in flight and waits, un-decided, for the next escalation step.
     /// </summary>
@@ -307,7 +311,8 @@ namespace Read2Me.Services.Characters
             foreach (var item in req.Unaskable)
             {
                 // Blank/whitespace text, or no content item at all: nothing to attribute and nothing
-                // an LLM could add. Unknown with an Unknown trigger, exactly as the old single path.
+                // an LLM could add. Unknown with an Unknown trigger, so the walk keeps escalating it
+                // like any other unresolved paragraph — the bin is a property of the text, not the ask.
                 logger.LogInformation("Paragraph {ParagraphId} has no text — marking unknown", item.ParagraphId);
                 steps[item.ParagraphId] = new StepOutcome(
                     new AttributionOutcome(AttributionStatus.Unknown, null, null),

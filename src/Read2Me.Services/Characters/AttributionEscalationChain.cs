@@ -9,7 +9,7 @@ namespace Read2Me.Services.Characters
     /// <summary>
     /// The escalation-chain <em>walk</em>: traverses the configured chain over a single
     /// <see cref="IChainStep"/>, deciding each paragraph's final outcome. The step owns one config's
-    /// run across a set of items (grouping, chunking, batch core, self-consistency, trigger
+    /// run across a set of items (grouping, chunking, the chunk pipeline, self-consistency, trigger
     /// derivation); the walk owns policy — the step-0-vs-steps-1..n split, the same-rung
     /// parse-failure retry, best-prior fallback, the <see cref="EscalationTrigger"/> routing, the
     /// <see cref="AttributionStatus.ModelLoading"/> short-circuit, the
@@ -25,11 +25,12 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// Queue-wide streaming attribution. Owns the whole drained set and yields each paragraph's
         /// final outcome the moment it is decided. The primary config (step 0) runs across every queued
-        /// paragraph — grouped and batched per chapter — before any paragraph escalates; confident
+        /// paragraph — grouped and chunked per chapter — before any paragraph escalates; confident
         /// step-0 answers are yielded immediately (live progress) while collected suspects from the
-        /// whole queue escalate together, one model burst per chain step. Reuses the existing cores
-        /// (batch core, per-step runner, self-consistency, final-step accept, best-prior fallback).
-        /// <paramref name="callbacks"/> reports each in-flight batch just before its LLM call, so a
+        /// whole queue escalate together, one model burst per chain step. Every ask goes through the
+        /// step's one chunk pipeline; the walk adds only policy (same-rung retry, final-step accept,
+        /// best-prior fallback).
+        /// <paramref name="callbacks"/> reports each in-flight chunk just before its LLM call, so a
         /// caller can flip exactly the working items to a processing state rather than the whole
         /// drained queue, and reports each item left suspect by its chunk so the caller can take it
         /// back out of that processing state until its next escalation step picks it up.
@@ -165,20 +166,20 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// One rung's run over <paramref name="items"/>, with a single same-rung retry for parse
         /// failures. A parse failure is not evidence the model is too weak for the paragraph — the
-        /// observed cause is the model garbling one batch (dropping an attribution tag from a
-        /// segment, or repeating the previous batch's answer wholesale), which the very next call
+        /// observed cause is the model garbling one chunk's answer (dropping an attribution tag from
+        /// a segment, or repeating the previous chunk's answer wholesale), which the very next call
         /// usually gets right. Escalating instead spends a slower model on a problem a re-ask
         /// solves, so the failures are held back, re-asked once against the same config, and only
         /// then routed by the caller.
         /// <para>
-        /// The retry re-asks the failures on their own, so a garbled batch is not merely repeated:
-        /// the batch composition differs, and <see cref="ChainStepOptions.Resampled"/>
+        /// The retry re-asks the failures on their own, so a garbled answer is not merely repeated:
+        /// the chunk composition differs, and <see cref="ChainStepOptions.Resampled"/>
         /// keeps sampling off greedy so an identical prompt cannot return an identical answer. One
         /// retry only — the second answer stands, parse failure or not.
         /// </para>
         /// <para>
-        /// The final rung is exempt: it already re-asks each parse failure on its own, via the
-        /// step's batch→single-item fallback, so retrying there would be a third ask of the same
+        /// The final rung is exempt: it already re-asks each parse failure as a chunk of 1, via the
+        /// step's own final-rung fallback, so retrying there would be a third ask of the same
         /// paragraph. The retry exists to avoid escalating, and the final rung has nowhere to
         /// escalate to.
         /// </para>

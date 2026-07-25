@@ -18,8 +18,10 @@ namespace Read2Me.Tests.Services.Characters
     /// Step mechanics and walk+step integration, tested through the production walk
     /// (<see cref="AttributionEscalationChain.AttributeQueueAsync"/>) over the real
     /// <see cref="IChainStep"/> and <see cref="LlmSettingsService"/> on the in-memory DB, with a
-    /// config-recording fake LLM: prompt tiers, batch orchestration, grouping/chunking, self-consistency,
-    /// trigger derivation, and that the walk composes over the real step end to end. Pure walk policy
+    /// config-recording fake LLM: prompt tiers, chunk orchestration, grouping/chunking,
+    /// self-consistency, trigger derivation, and that the walk composes over the real step end to end.
+    /// Chunk-shaped rules run at both chunk sizes off one <c>AnswerFor</c> helper rather than as
+    /// single/batch pairs. Pure walk policy
     /// (best-prior, ModelLoading short-circuit, Accept, EscalationStarted, ItemDeferred) is covered
     /// without an LLM/DB/reader in <see cref="AttributionEscalationChainTests"/>.
     /// </summary>
@@ -30,9 +32,7 @@ namespace Read2Me.Tests.Services.Characters
         private LlmSettingsService NewSettings() => new(Factory, NullLogger<LlmSettingsService>.Instance);
         private LlmPromptService NewPrompts() => new(Factory, NullLogger<LlmPromptService>.Instance);
 
-        private CharacterAttributionService NewService(
-            ILlmCompletionRunner runner, IProjectReader reader, LlmSettingsService settings,
-            EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
+        private CharacterAttributionService NewService(ILlmCompletionRunner runner, IProjectReader reader) =>
             new(runner, new AttributionRequestBuilder(NewPrompts(), reader),
                 NullLogger<CharacterAttributionService>.Instance);
 
@@ -121,6 +121,14 @@ namespace Read2Me.Tests.Services.Characters
             "[" + string.Join(",", entries.Select(e =>
                 $$"""{ "index": {{e.Index}}, "reasoning": "r", "segments": [ {{Segment(e.Speaker)}} ] }""")) + "]";
 
+        /// <summary>
+        /// One answer per included index, all naming <paramref name="speaker"/>: the object shape for
+        /// a chunk of 1, the array shape above it. Whatever holds at one chunk size holds at the
+        /// other, so the chunk-shaped cases run at both sizes off this one helper.
+        /// </summary>
+        private static string AnswerFor(int count, string speaker) =>
+            count == 1 ? Resolved(speaker) : BatchJson([.. Enumerable.Range(0, count).Select(i => (i, speaker))]);
+
         /// <summary>The speaker of a single-segment answer.</summary>
         private static string? Speaker(AttributionOutcome outcome) =>
             outcome.Segments is { Count: > 0 } s ? s[0].Speaker : null;
@@ -150,10 +158,6 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // Single-item chain walk
-        // ─────────────────────────────────────────────────────────────────────
-
-        // ─────────────────────────────────────────────────────────────────────
         // Prompt tier per config
         // ─────────────────────────────────────────────────────────────────────
 
@@ -163,23 +167,34 @@ namespace Read2Me.Tests.Services.Characters
         /// <summary>Phrase present only in the Full attribution prompt's inference heuristics.</summary>
         private const string FullMarker = "Vocatives:";
 
-        [Fact]
-        public async Task SimpleStyleConfig_SendsStrictPrompt()
+        /// <summary>Phrase present only in the batch (array-shaped) attribution prompt.</summary>
+        private const string BatchMarker = "Return one entry per index";
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        public async Task SimpleStyleConfig_SendsStrictPrompt_AtAnyChunkSize(int count)
         {
+            // The style is a property of the rung, not of the ask shape: a chunk of 1 gets the strict
+            // single prompt, a chunk of many the strict batch prompt.
             var settings = NewSettings();
-            var config = await AddConfigAsync(settings, "Small", batchSize: 1);
+            var config = await AddConfigAsync(settings, "Small", batchSize: 4);
             config.PromptStyle = AttributionPromptStyle.Simple;
             await settings.UpdateConfigAsync(config);
             await settings.SetActiveConfigAsync(config.Id);
 
-            var llm = new SequenceCompletionRunner().ForConfig("Small", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var llm = new SequenceCompletionRunner().ForConfig("Small", AnswerFor(count, "Alice"));
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
-            await DrainStreamAsync(svc, settings, [MakeItem()]);
+            await DrainStreamAsync(svc, settings, MakeItems(count));
 
             var prompt = Assert.Single(llm.Calls).Prompt;
             Assert.Contains(SimpleMarker, prompt);
             Assert.DoesNotContain(FullMarker, prompt);
+            if (count > 1)
+                Assert.Contains(BatchMarker, prompt);
+            else
+                Assert.DoesNotContain(BatchMarker, prompt);
         }
 
         [Fact]
@@ -193,7 +208,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("Small", Unknown)
                 .ForConfig("Big", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
@@ -205,28 +220,6 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Contains(SimpleMarker, small);
             Assert.Contains(FullMarker, big);
             Assert.DoesNotContain(SimpleMarker, big);
-        }
-
-        [Fact]
-        public async Task SimpleStyleConfig_BatchMode_SendsStrictBatchPrompt()
-        {
-            var settings = NewSettings();
-            var config = await AddConfigAsync(settings, "Small", batchSize: 4);
-            config.PromptStyle = AttributionPromptStyle.Simple;
-            await settings.UpdateConfigAsync(config);
-            await settings.SetActiveConfigAsync(config.Id);
-
-            var batch = MakeItems(2);
-            var llm = new SequenceCompletionRunner()
-                .ForConfig("Small", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
-
-            await DrainStreamAsync(svc, settings, batch);
-
-            var prompt = Assert.Single(llm.Calls).Prompt;
-            Assert.Contains("Return one entry per index", prompt);   // batch template, not the single one
-            Assert.Contains(SimpleMarker, prompt);
-            Assert.DoesNotContain(FullMarker, prompt);
         }
 
         /// <summary>
@@ -248,7 +241,7 @@ namespace Read2Me.Tests.Services.Characters
 
             // Cold rung answers unknown (as the strict prompt is meant to), escalation resolves it.
             var llm = new SequenceCompletionRunner().ForConfig("Only", Unknown, Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
@@ -279,7 +272,7 @@ namespace Read2Me.Tests.Services.Characters
             });
 
             var llm = new SequenceCompletionRunner().ForConfig("Small", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             await DrainStreamAsync(svc, settings, [MakeItem()]);
 
@@ -323,7 +316,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var batch = MakeItems(2);
             var llm = new SequenceCompletionRunner().ForConfig("A", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             await DrainStreamAsync(svc, settings, batch);
 
@@ -351,7 +344,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .FailFor("A", LlmRunOutcome.ModelLoading, "still loading")
                 .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, batch);
 
@@ -385,7 +378,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown)
                 .ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, queued);
 
@@ -418,7 +411,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", BatchJson((0, "unknown"), (1, "unknown")))
                 .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, queued);
 
@@ -441,7 +434,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", BatchJson((0, "unknown"), (1, "unknown"), (2, "unknown"), (3, "unknown")))
                 .ForConfig("B", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, queued);
 
@@ -462,7 +455,7 @@ namespace Read2Me.Tests.Services.Characters
             var queued = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(ch)).ToList();
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var chunks = new List<IReadOnlyList<QueuedParagraph>>();
             await foreach (var _ in Walk(svc, settings).AttributeQueueAsync(
@@ -493,7 +486,7 @@ namespace Read2Me.Tests.Services.Characters
             var items = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(ch)).ToList();
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", BatchJson((0, "Alice"), (1, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var chunks = new List<IReadOnlyList<QueuedParagraph>>();
             var deferred = new List<QueuedParagraph>();
@@ -525,7 +518,7 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 1), ("B", 1));
             var llm = new SequenceCompletionRunner().ForConfig("A", Unknown).ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var ch = Guid.NewGuid();
             var queued = new List<QueuedParagraph> { MakeChapterItem(ch, "P0"), MakeChapterItem(ch, "P1") };
@@ -554,7 +547,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterChainAsync(settings, ("A", 1), ("B", 1));
             // A returns garbage twice (the re-ask is asked of A before B is woken); B resolves.
             var llm = new SequenceCompletionRunner().ForConfig("A", "not json").ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var outcome = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
@@ -572,7 +565,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", "not json", Resolved("Alice"))
                 .ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var outcome = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
@@ -587,7 +580,7 @@ namespace Read2Me.Tests.Services.Characters
             var settings = NewSettings();
             await RegisterChainAsync(settings, ("A", 1), ("B", 1));
             var llm = new SequenceCompletionRunner().ForConfig("A", "not json").ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             await DrainStreamAsync(svc, settings, [MakeItem()]);
 
@@ -605,7 +598,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", BatchJson((0, "Alice"), (1, "unknown")))
                 .ForConfig("B", BatchJson((0, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, batch);
 
@@ -626,7 +619,7 @@ namespace Read2Me.Tests.Services.Characters
                     BatchJson((0, "Alice"), (1, "Alice"), (2, "Alice")),
                     BatchJson((0, "Alice"), (1, "Alice"), (2, "Zorg")))
                 .ForConfig("B", BatchJson((0, "Alice")));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, batch);
 
@@ -654,7 +647,7 @@ namespace Read2Me.Tests.Services.Characters
                 .ForConfig("A", "not json")
                 .ForConfig("B", "still not json");
             var reader = new ChainReader(KnownAlice());
-            var svc = NewService(llm, reader, settings);
+            var svc = NewService(llm, reader);
 
             var results = await DrainStreamAsync(svc, settings, batch);
 
@@ -672,14 +665,6 @@ namespace Read2Me.Tests.Services.Characters
         // on disagreement. Toggle off by default; never applied to the final step.
         // ─────────────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// One answer per included index, all naming <paramref name="speaker"/>: the object shape for
-        /// a chunk of 1, the array shape above it. Self-consistency is chunk-shaped, so its cases run
-        /// at both sizes off this one helper.
-        /// </summary>
-        private static string AnswerFor(int count, string speaker) =>
-            count == 1 ? Resolved(speaker) : BatchJson([.. Enumerable.Range(0, count).Select(i => (i, speaker))]);
-
         [Theory]
         [InlineData(1)]
         [InlineData(2)]
@@ -692,7 +677,7 @@ namespace Read2Me.Tests.Services.Characters
             // Step 0 (non-final) self-samples the chunk twice; both agree → accepted at A, B never called.
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", AnswerFor(count, "Alice"), AnswerFor(count, "Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, MakeItems(count));
 
@@ -722,7 +707,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", "not json")
                 .ForConfig("B", AnswerFor(count, "Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, MakeItems(count));
 
@@ -743,7 +728,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Alice"), Resolved("Zorg"))
                 .ForConfig("B", Resolved("Mordecai"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
@@ -773,7 +758,7 @@ namespace Read2Me.Tests.Services.Characters
             await settings.SetSelfConsistencyAsync(true);
 
             var llm = new SequenceCompletionRunner().ForConfig("A", Resolved("Alice"), Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             await DrainStreamAsync(svc, settings, [MakeItem()]);
 
@@ -799,7 +784,7 @@ namespace Read2Me.Tests.Services.Characters
             // Inconsistent, accepted at A with sample 1, B never reached.
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", AnswerFor(count, "Alice"), "not json");
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var results = await DrainStreamAsync(svc, settings, MakeItems(count));
 
@@ -822,7 +807,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown)
                 .ForConfig("B", Resolved("Alice"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             await DrainStreamAsync(svc, settings, [MakeItem()]);
 
@@ -842,7 +827,7 @@ namespace Read2Me.Tests.Services.Characters
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Unknown, Unknown)
                 .ForConfig("B", Resolved("Alice"), Resolved("Zorg"));
-            var svc = NewService(llm, new ChainReader(KnownAlice()), settings);
+            var svc = NewService(llm, new ChainReader(KnownAlice()));
 
             var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
@@ -867,7 +852,7 @@ namespace Read2Me.Tests.Services.Characters
             // agreement → accepted at A, no escalation.
             var llm = new SequenceCompletionRunner()
                 .ForConfig("A", Resolved("Liz"), Resolved("Elizabeth"));
-            var svc = NewService(llm, new ChainReader(chars), settings);
+            var svc = NewService(llm, new ChainReader(chars));
 
             var result = Assert.Single(await DrainStreamAsync(svc, settings, [MakeItem()])).Outcome;
 
