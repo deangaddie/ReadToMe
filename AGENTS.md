@@ -15,7 +15,7 @@ This repository is a Blazor Server app plus AI inference infrastructure for audi
 - UI: Razor pages and Blazor components under `Pages/` and `Shared/`.
 - Solution: `src/Read2Me.slnx`.
 - Infra: `Infra/` contains GPU-backed LLM/TTS containers plus CPU-only Whisper and semantic similarity containers.
-- Models: `Infra/models/` holds GGUF model files; these are not committed and must be provided separately.
+- Models: `Infra/models/` holds GGUF model files by default; these are not committed and must be provided separately. `GGUF_MODELS_DIR` in `Infra/.env` can point the llama mount at a shared directory outside the repo.
 
 ## Build and run
 

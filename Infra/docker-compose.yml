@@ -36,7 +36,9 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - ./models:/models:ro
+      # Host GGUF directory. Override with GGUF_MODELS_DIR in Infra/.env to share
+      # model files with other projects; container path stays /models.
+      - ${GGUF_MODELS_DIR:-./models}:/models:ro
       - ./llama/config:/config:ro
       - ./logs:/logs
     # Exception: models.ini enables mlock so model pages stay resident.
