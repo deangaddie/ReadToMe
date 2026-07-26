@@ -176,6 +176,150 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Equal(8, proposals.Count); // first batch kept, second never completed
         }
 
+        [Fact]
+        public async Task ProposeOne_Llm_SendsSingleItemAndFoldsHintIntoInstruction()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""
+                [ { "index": 0, "reasoning": "r", "new_text": "Storm's Coming" } ]
+                """);
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix the title"));
+            var target = Target(2, "storm coming");
+
+            var proposal = await NewService(runner, settings)
+                .ProposeOneAsync(Folder, program, target, "use an apostrophe", CancellationToken.None);
+
+            Assert.Equal("Storm's Coming", proposal.NewValue);
+            Assert.Equal(ProposalStatus.Proposed, proposal.Status);
+            var request = Assert.Single(runner.Requests);
+            Assert.Contains("fix the title\n\nAdditional guidance from the user: use an apostrophe", request.Prompt);
+            Assert.StartsWith("1 edit(s):", request.Label);
+            // batch of one: the items block is exactly this target at index 0
+            Assert.Contains(
+                PromptTemplates.BuildEditItemsJson([(0, target.DisplayPath, target.CurrentValue)]),
+                request.Prompt);
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_BlankHint_LeavesPromptIdentical()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""
+                [ { "index": 0, "reasoning": "r", "new_text": "Storm" } ]
+                """);
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix the title"));
+            var target = Target(2, "storm coming");
+            var service = NewService(runner, settings);
+
+            await service.ProposeOneAsync(Folder, program, target, null, CancellationToken.None);
+            await service.ProposeOneAsync(Folder, program, target, "   ", CancellationToken.None);
+
+            Assert.Equal(runner.Requests[0].Prompt, runner.Requests[1].Prompt);
+            Assert.DoesNotContain("Additional guidance", runner.Requests[0].Prompt);
+
+            // and identical to what the batch path renders for the same single target
+            var batchRunner = new FakeLlmCompletionRunner().Completes("[]");
+            await NewService(batchRunner, settings)
+                .ProposeAsync(Folder, program, [target], null, CancellationToken.None);
+            Assert.Equal(batchRunner.Requests[0].Prompt, runner.Requests[0].Prompt);
+        }
+
+        [Fact]
+        public async Task ProposeOne_DeterministicProgram_FailsWithoutCallingLlm()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner();
+            var program = Program(new EditTransform(TransformKind.SetTemplate, Template: "Chapter {n}"));
+
+            var proposal = await NewService(runner, settings)
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), "hint", CancellationToken.None);
+
+            Assert.Equal(ProposalStatus.Failed, proposal.Status);
+            Assert.Empty(runner.Requests);
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_ResponseMissingIndexZero_Fails()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""
+                [ { "index": 1, "reasoning": "r", "new_text": "wrong slot" } ]
+                """);
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
+
+            var proposal = await NewService(runner, settings)
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, CancellationToken.None);
+
+            Assert.Equal(ProposalStatus.Failed, proposal.Status);
+            Assert.Equal("The AI response did not include this item.", proposal.FailureReason);
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_UnchangedText_IsNoChange()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""
+                [ { "index": 0, "reasoning": "r", "new_text": "Intro" } ]
+                """);
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
+
+            var proposal = await NewService(runner, settings)
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, CancellationToken.None);
+
+            Assert.Equal(ProposalStatus.NoChange, proposal.Status);
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_RunFails_FailsWithRunError()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.ServiceUnavailable, "down");
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
+
+            var proposal = await NewService(runner, settings)
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, CancellationToken.None);
+
+            Assert.Equal(ProposalStatus.Failed, proposal.Status);
+            Assert.Equal("down", proposal.FailureReason);
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_Cancelled_FailsInsteadOfThrowing()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+            var runner = new FakeLlmCompletionRunner().Throws(new OperationCanceledException(cts.Token));
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
+
+            var proposal = await NewService(runner, settings)
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, cts.Token);
+
+            Assert.Equal(ProposalStatus.Failed, proposal.Status);
+            Assert.Contains("Cancelled", proposal.FailureReason);
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_NoConfig_FailsWithoutCallingLlm()
+        {
+            var runner = new FakeLlmCompletionRunner();
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
+
+            var proposal = await NewService(runner, NewSettings())
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, CancellationToken.None);
+
+            Assert.Equal(ProposalStatus.Failed, proposal.Status);
+            Assert.Contains("No active LLM", proposal.FailureReason);
+            Assert.Empty(runner.Requests);
+        }
+
         private BookEditProposalService NewService2(ILlmCompletionRunner runner, LlmSettingsService settings) =>
             new(runner, settings, new EmptyReader(),
                 NullLogger<BookEditProposalService>.Instance);

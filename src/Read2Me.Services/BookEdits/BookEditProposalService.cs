@@ -32,6 +32,9 @@ namespace Read2Me.Services.BookEdits
         ILogger<BookEditProposalService> logger)
     {
         private const int BatchSize = 8;
+        private const string MissingItemMessage = "The AI response did not include this item.";
+        private const string NoConfigMessage = "No active LLM server configured";
+        private const string RunFailed = "The AI request failed.";
 
         public virtual async Task<IReadOnlyList<ProposedEdit>> ProposeAsync(
             ProjectFolderId folderId,
@@ -86,7 +89,7 @@ namespace Read2Me.Services.BookEdits
             if (config == null)
             {
                 foreach (var target in targets)
-                    proposals.Add(Build(target, null, "No active LLM server configured"));
+                    proposals.Add(Build(target, null, NoConfigMessage));
                 return proposals;
             }
 
@@ -115,7 +118,7 @@ namespace Read2Me.Services.BookEdits
 
                     // Service likely down — fail every remaining target instead of retrying batch after batch.
                     foreach (var target in targets.Skip(offset))
-                        proposals.Add(Build(target, null, run.Error));
+                        proposals.Add(Build(target, null, run.Error ?? RunFailed));
                     progress?.Report((targets.Count, targets.Count));
                     return proposals;
                 }
@@ -125,7 +128,7 @@ namespace Read2Me.Services.BookEdits
                 {
                     proposals.Add(results != null && results.TryGetValue(i, out var newText)
                         ? Build(batch[i], newText, null)
-                        : Build(batch[i], null, "The AI response did not include this item."));
+                        : Build(batch[i], null, MissingItemMessage));
                 }
 
                 progress?.Report((proposals.Count, targets.Count));
@@ -133,6 +136,55 @@ namespace Read2Me.Services.BookEdits
 
             return proposals;
         }
+
+        /// <summary>
+        /// Re-proposes a single target, optionally steered by a free-text <paramref name="hint"/>
+        /// folded into the plan's instruction. LLM plans only — deterministic plans have no
+        /// instruction to steer, so they fail fast rather than silently running the LLM.
+        /// </summary>
+        public virtual async Task<ProposedEdit> ProposeOneAsync(
+            ProjectFolderId folderId,
+            EditProgram program,
+            EditTarget target,
+            string? hint,
+            CancellationToken ct)
+        {
+            if (program.Transform.Kind != TransformKind.Llm)
+                return Build(target, null, "Asking the AI again is only available for AI-written plans.");
+
+            var config = await settings.GetActiveConfigAsync();
+            if (config == null)
+                return Build(target, null, NoConfigMessage);
+
+            var project = await catalog.GetProjectAsync(folderId);
+            var instruction = WithHint(program.Transform.Instruction!, hint);
+
+            LlmRunResult<IReadOnlyDictionary<int, string>> run;
+            try
+            {
+                run = await RunBatchAsync(config, project, instruction, [target], ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return Build(target, null, "Cancelled before the AI replied.");
+            }
+
+            if (run.Outcome is LlmRunOutcome.Failed or LlmRunOutcome.ServiceUnavailable)
+            {
+                logger.LogError("Single edit request failed for {Path}: {Reason}", target.DisplayPath, run.Error);
+                return Build(target, null, run.Error ?? RunFailed);
+            }
+
+            var results = run.Outcome == LlmRunOutcome.Completed ? run.Value : null;
+            return results != null && results.TryGetValue(0, out var newText)
+                ? Build(target, newText, null)
+                : Build(target, null, MissingItemMessage);
+        }
+
+        private static string WithHint(string instruction, string? hint) =>
+            string.IsNullOrWhiteSpace(hint)
+                ? instruction
+                : $"{instruction}\n\nAdditional guidance from the user: {hint.Trim()}";
 
         private Task<LlmRunResult<IReadOnlyDictionary<int, string>>> RunBatchAsync(
             LlmServerConfig config, Read2Me.Data.Entities.Project? project,
