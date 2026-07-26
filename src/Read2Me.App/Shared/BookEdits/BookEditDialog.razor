@@ -135,15 +135,37 @@
                                                           Variant="Variant.Outlined"
                                                           Value="@context.EffectiveValue"
                                                           ValueChanged="@(v => _selection.SetValue(context, v))"
+                                                          Disabled="@IsRetrying(context)"
                                                           Error="@(context.State == ReviewRowState.Invalid)"
                                                           ErrorText="This can't be empty — AI edits never delete text." />
+                                            @if (_isLlmTransform)
+                                            {
+                                                @* A failed retry stays on its row — the row's own cell above shows
+                                                   the reason — rather than in the dialog-level banner, so one bad
+                                                   row doesn't read as the whole job failing. *@
+                                                <MudTextField T="string" Label="Hint for the AI (optional)" Class="mt-2"
+                                                              Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                                              @bind-Value="_hint" Disabled="@IsRetrying(context)"
+                                                              Placeholder="e.g. keep the original spelling of names" />
+                                            }
                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
                                                 <MudButton Size="Size.Small" Variant="Variant.Text"
                                                            OnClick="@(() => _selection.Revert(context))"
-                                                           Disabled="@(!context.IsUserEdited)">
+                                                           Disabled="@(!context.IsUserEdited || IsRetrying(context))">
                                                     Revert to AI
                                                 </MudButton>
-                                                @* Slice 04 adds "Ask AI again" + the sticky hint field here. *@
+                                                @if (_isLlmTransform)
+                                                {
+                                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                                               OnClick="@(() => RetryRowAsync(context))"
+                                                               Disabled="@IsRetrying(context)">
+                                                        @if (IsRetrying(context))
+                                                        {
+                                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                                        }
+                                                        Ask AI again
+                                                    </MudButton>
+                                                }
                                                 <MudSpacer />
                                                 <MudButton Size="Size.Small" Variant="Variant.Text"
                                                            OnClick="@(() => _openRowId = null)">
@@ -233,6 +255,9 @@
     IReadOnlyList<EditTarget> _targets = [];
     BookEditReviewSelection _selection = new([]);
     Guid? _openRowId;
+    // Sticky for the dialog's lifetime: the same steer usually applies to the next row retried.
+    string _hint = "";
+    Guid? _retryingRowId;
     int _progressDone;
     CancellationTokenSource? _cts;
 
@@ -333,6 +358,53 @@
         finally
         {
             _busy = false;
+        }
+    }
+
+    bool IsRetrying(BookEditReviewRow row) => _retryingRowId == row.Proposal.Id;
+
+    /// <summary>
+    /// Re-asks the AI for this one row, steered by the sticky hint. Busy state is row-local so
+    /// the rest of the table stays usable, and a failure lands in the row rather than the
+    /// dialog-level banner.
+    /// </summary>
+    async Task RetryRowAsync(BookEditReviewRow row)
+    {
+        var target = _targets.FindTarget(row);
+        if (target == null)
+        {
+            // Shouldn't happen — the rows came from these targets — but say so on the row rather
+            // than spinning and quietly doing nothing.
+            _selection.ReplaceProposal(row, row.Proposal with
+            {
+                NewValue = null,
+                Status = ProposalStatus.Failed,
+                FailureReason = "This row no longer maps to an item in the plan.",
+            });
+            return;
+        }
+
+        _retryingRowId = row.Proposal.Id;
+        // Fresh token: cancelling the Generate phase leaves the old one tripped, which would
+        // cancel every later retry. Cancel/Dispose only ever needs the current one.
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        try
+        {
+            // Re-gate: minutes may have passed in review and a GPU sweep can have stopped llama.
+            if (!await Preflight.EnsureReadyAsync(AiTaskKind.BookEdit, _cts.Token))
+                return;
+
+            var result = await Proposals.ProposeOneAsync(FolderId, _program!, target, _hint, _cts.Token);
+            _selection.ReplaceProposal(row, result);
+        }
+        catch (OperationCanceledException)
+        {
+            // dialog closed mid-retry
+        }
+        finally
+        {
+            _retryingRowId = null;
         }
     }
 

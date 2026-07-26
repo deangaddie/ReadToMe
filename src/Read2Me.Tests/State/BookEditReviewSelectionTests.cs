@@ -9,10 +9,24 @@ namespace Read2Me.Tests.State
     {
         private static BookEditReviewRow Row(
             ProposalStatus status, string oldValue = "Chapter I", string? newValue = "Chapter 1") =>
-            new(new ProposedEdit(
-                BookEditTargetKind.ChapterTitle, Guid.NewGuid(), "Book / " + oldValue, oldValue,
-                status == ProposalStatus.Failed ? null : newValue, status,
-                status == ProposalStatus.Failed ? "model returned nothing" : null));
+            new(Verdict(
+                new ProposedEdit(BookEditTargetKind.ChapterTitle, Guid.NewGuid(), "Book / " + oldValue,
+                    oldValue, null, status, null),
+                status, newValue));
+
+        /// <summary>What a retry hands back for a row that already exists.</summary>
+        private static ProposedEdit RetryResult(
+            BookEditReviewRow row, ProposalStatus status, string? newValue) =>
+            Verdict(row.Proposal, status, newValue);
+
+        private static ProposedEdit Verdict(
+            ProposedEdit edit, ProposalStatus status, string? newValue) =>
+            edit with
+            {
+                NewValue = status == ProposalStatus.Failed ? null : newValue,
+                Status = status,
+                FailureReason = status == ProposalStatus.Failed ? "model returned nothing" : null,
+            };
 
         private static BookEditReviewSelection Selection(params BookEditReviewRow[] rows) =>
             new(rows);
@@ -175,6 +189,38 @@ namespace Read2Me.Tests.State
 
             Assert.Equal(0, selection.Count);
             Assert.Empty(selection.ToEditItems());
+        }
+
+        [Fact]
+        public void ReplaceProposal_WithAProposedRetryResult_SelectsTheRowAndDropsTheHandEdit()
+        {
+            // The user asked for this row again, so a usable answer is wanted — even if they had
+            // unticked it, or typed over the answer the retry just replaced.
+            var row = Row(ProposalStatus.Failed);
+            var selection = Selection(row);
+            selection.SetValue(row, "Chapter One");
+            selection.Set(row, false);
+
+            selection.ReplaceProposal(row, RetryResult(row, ProposalStatus.Proposed, "Chapter 1"));
+
+            Assert.False(row.IsUserEdited);
+            Assert.Equal("Chapter 1", row.EffectiveValue);
+            Assert.True(selection.IsSelected(row));
+            Assert.Equal(1, selection.Count);
+        }
+
+        [Theory]
+        [InlineData(ProposalStatus.Failed)]
+        [InlineData(ProposalStatus.NoChange)]
+        public void ReplaceProposal_WithAnUnusableRetryResult_DeselectsTheRow(ProposalStatus status)
+        {
+            var row = Row(ProposalStatus.Proposed);
+            var selection = Selection(row);
+
+            selection.ReplaceProposal(row, RetryResult(row, status, "Chapter I"));
+
+            Assert.False(selection.IsSelected(row));
+            Assert.Equal(0, selection.Count);
         }
 
         [Fact]

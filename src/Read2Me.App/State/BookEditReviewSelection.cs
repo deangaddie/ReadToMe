@@ -1,4 +1,5 @@
 using Read2Me.Core.Models;
+using Read2Me.Services.BookEdits;
 
 namespace Read2Me.App.State
 {
@@ -43,6 +44,23 @@ namespace Read2Me.App.State
 
         /// <summary>Drops a hand edit, restoring the AI's proposal, and re-reconciles.</summary>
         public void Revert(BookEditReviewRow row) => Edit(row, row.Revert);
+
+        /// <summary>
+        /// Takes a per-row retry result onto the row and reconciles its selection: a usable answer
+        /// is ticked, an unusable one unticked.
+        /// </summary>
+        /// <remarks>
+        /// Unlike a hand edit, this ticks even a row the user had unticked — asking the AI again is
+        /// a deliberate act on that row, so a usable answer is wanted. The old id is dropped and
+        /// the new one added, so it holds even if a retry ever returns a different target's id.
+        /// </remarks>
+        public void ReplaceProposal(BookEditReviewRow row, ProposedEdit proposal)
+        {
+            _selected.Remove(row.Proposal.Id);
+            row.ReplaceProposal(proposal);
+            if (row.IsAppliable)
+                _selected.Add(row.Proposal.Id);
+        }
 
         public void SelectAll()
         {
