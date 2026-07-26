@@ -229,7 +229,16 @@ else
     async Task OpenAiEditDialogAsync()
     {
         var parameters = new DialogParameters<BookEditDialog> { { d => d.FolderId, _folderId } };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
+        // No titlebar X, no backdrop close: the review phase warns before throwing away hand-edited
+        // proposals, and neither of those routes can be intercepted to ask. Every phase carries its
+        // own Cancel/Close button instead.
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = false,
+            BackdropClick = false,
+        };
         var dialog = await DialogService.ShowAsync<BookEditDialog>("Edit with AI", parameters, options);
         var result = await dialog.Result;
         if (result?.Canceled == false)
