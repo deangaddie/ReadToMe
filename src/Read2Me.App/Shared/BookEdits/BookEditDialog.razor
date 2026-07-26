@@ -123,29 +123,34 @@
                             {
                                 <MudTr>
                                     <MudTd colspan="4">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Current</MudText>
-                                        <div style="max-height:18vh; overflow-y:auto; white-space:pre-wrap;" class="mb-2">
-                                            <MudText Typo="Typo.body2">@context.Proposal.OldValue</MudText>
+                                        @* MudTable raises OnRowClick for this row too, so without
+                                           stopping the click here, clicking into the textarea
+                                           collapses the panel out from under the cursor. *@
+                                        <div @onclick:stopPropagation="true">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Current</MudText>
+                                            <div style="max-height:18vh; overflow-y:auto; white-space:pre-wrap;" class="mb-2">
+                                                <MudText Typo="Typo.body2">@context.Proposal.OldValue</MudText>
+                                            </div>
+                                            <MudTextField T="string" Label="Proposed" Lines="5" Immediate="true"
+                                                          Variant="Variant.Outlined"
+                                                          Value="@context.EffectiveValue"
+                                                          ValueChanged="@(v => _selection.SetValue(context, v))"
+                                                          Error="@(context.State == ReviewRowState.Invalid)"
+                                                          ErrorText="This can't be empty — AI edits never delete text." />
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                                                <MudButton Size="Size.Small" Variant="Variant.Text"
+                                                           OnClick="@(() => _selection.Revert(context))"
+                                                           Disabled="@(!context.IsUserEdited)">
+                                                    Revert to AI
+                                                </MudButton>
+                                                @* Slice 04 adds "Ask AI again" + the sticky hint field here. *@
+                                                <MudSpacer />
+                                                <MudButton Size="Size.Small" Variant="Variant.Text"
+                                                           OnClick="@(() => _openRowId = null)">
+                                                    Done
+                                                </MudButton>
+                                            </MudStack>
                                         </div>
-                                        <MudTextField T="string" Label="Proposed" Lines="5" Immediate="true"
-                                                      Variant="Variant.Outlined"
-                                                      Value="@context.EffectiveValue"
-                                                      ValueChanged="@(v => _selection.SetValue(context, v))"
-                                                      Error="@(context.State == ReviewRowState.Invalid)"
-                                                      ErrorText="This can't be empty — AI edits never delete text." />
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
-                                            <MudButton Size="Size.Small" Variant="Variant.Text"
-                                                       OnClick="@(() => _selection.Revert(context))"
-                                                       Disabled="@(!context.IsUserEdited)">
-                                                Revert to AI
-                                            </MudButton>
-                                            @* Slice 04 adds "Ask AI again" + the sticky hint field here. *@
-                                            <MudSpacer />
-                                            <MudButton Size="Size.Small" Variant="Variant.Text"
-                                                       OnClick="@(() => _openRowId = null)">
-                                                Done
-                                            </MudButton>
-                                        </MudStack>
                                     </MudTd>
                                 </MudTr>
                             }
