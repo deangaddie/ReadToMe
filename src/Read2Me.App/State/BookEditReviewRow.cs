@@ -56,7 +56,10 @@ namespace Read2Me.App.State
                 {
                     ProposalStatus.Proposed => ReviewRowState.Proposed,
                     ProposalStatus.NoChange => ReviewRowState.NoChange,
-                    _ => ReviewRowState.Failed,
+                    ProposalStatus.Failed => ReviewRowState.Failed,
+                    // Mirrored, not defaulted: a new ProposalStatus should stop here loudly rather
+                    // than quietly render as one of the states above.
+                    var s => throw new NotSupportedException($"Unmapped proposal status {s}."),
                 },
                 var v when string.IsNullOrWhiteSpace(v) => ReviewRowState.Invalid,
                 var v when v == Proposal.OldValue => ReviewRowState.NoChange,

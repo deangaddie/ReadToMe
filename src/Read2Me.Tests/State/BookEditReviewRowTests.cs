@@ -71,6 +71,21 @@ namespace Read2Me.Tests.State
         }
 
         [Fact]
+        public void OnANoChangeRow_RetypingTheSameText_KeepsTheMarkButStaysNoChange()
+        {
+            // Where the two rules collide: the mark says the user owns the value, the value says
+            // there is nothing to apply. Nothing to apply wins.
+            var row = new BookEditReviewRow(
+                Proposal(ProposalStatus.NoChange, newValue: "Chapter I"));
+
+            row.UserValue = "Chapter I";
+
+            Assert.True(row.IsUserEdited);
+            Assert.Equal(ReviewRowState.NoChange, row.State);
+            Assert.False(row.IsAppliable);
+        }
+
+        [Fact]
         public void AHandEditBackToTheCurrentText_ReadsAsNoChange()
         {
             var row = new BookEditReviewRow(Proposal(ProposalStatus.Proposed));
