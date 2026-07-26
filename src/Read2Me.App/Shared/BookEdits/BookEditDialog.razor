@@ -1,4 +1,8 @@
 @using Read2Me.Services.BookEdits
+@using Read2Me.App.Services.Preflight
+@using Read2Me.App.State
+@inject IAiPreflight Preflight
+@inject IDialogService Dialogs
 @inject BookEditPlanner Planner
 @inject ScopeResolver Resolver
 @inject BookEditProposalService Proposals
@@ -56,10 +60,14 @@
                     <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectAll">Select all</MudButton>
                     <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectNone">Select none</MudButton>
                     <MudSpacer />
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_selected.Count of @SelectableCount selected</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_selection.Count of @_selection.SelectableCount selected</MudText>
                 </MudStack>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">
+                    Click a row to read it in full and correct the AI's suggestion by hand.
+                </MudText>
                 <div style="max-height: 55vh; overflow-y: auto;">
-                    <MudTable T="ProposedEdit" Items="_proposals" Dense="true" Hover="true" Bordered="false" Striped="true">
+                    <MudTable T="BookEditReviewRow" Items="_selection.Rows" Dense="true" Hover="true"
+                              Bordered="false" Striped="true" OnRowClick="@(a => ToggleOpen(a.Item))">
                         <HeaderContent>
                             <MudTh Style="width:36px" />
                             <MudTh>Where</MudTh>
@@ -68,33 +76,80 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd>
-                                <MudCheckBox T="bool" Size="Size.Small" Dense="true"
-                                             Value="@_selected.Contains(context.Id)"
-                                             ValueChanged="@(v => Toggle(context.Id, v))"
-                                             Disabled="@(context.Status != ProposalStatus.Proposed)" />
+                                @* The checkbox lives inside the clickable row, so its click must not
+                                   also toggle the detail panel open. *@
+                                <span @onclick:stopPropagation="true">
+                                    <MudCheckBox T="bool" Size="Size.Small" Dense="true"
+                                                 Value="@_selection.IsSelected(context)"
+                                                 ValueChanged="@(v => _selection.Set(context, v))"
+                                                 Disabled="@(!context.IsAppliable)" />
+                                </span>
                             </MudTd>
-                            <MudTd><MudText Typo="Typo.caption">@context.DisplayPath</MudText></MudTd>
+                            <MudTd><MudText Typo="Typo.caption">@context.Proposal.DisplayPath</MudText></MudTd>
                             <MudTd>
                                 <MudText Typo="Typo.body2"
-                                         Style="@(context.Status == ProposalStatus.Proposed ? "text-decoration: line-through; opacity: 0.7;" : null)">
-                                    @Truncate(context.OldValue)
+                                         Style="@(context.IsAppliable ? "text-decoration: line-through; opacity: 0.7;" : null)">
+                                    @Truncate(context.Proposal.OldValue)
                                 </MudText>
                             </MudTd>
                             <MudTd>
-                                @if (context.Status == ProposalStatus.Failed)
-                                {
-                                    <MudText Typo="Typo.body2" Color="Color.Error">@context.FailureReason</MudText>
-                                }
-                                else if (context.Status == ProposalStatus.NoChange)
-                                {
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">(no change)</MudText>
-                                }
-                                else
-                                {
-                                    <MudText Typo="Typo.body2" Color="Color.Success">@Truncate(context.NewValue)</MudText>
-                                }
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    @switch (context.State)
+                                    {
+                                        case ReviewRowState.Failed:
+                                            <MudText Typo="Typo.body2" Color="Color.Error">@context.Proposal.FailureReason</MudText>
+                                            break;
+                                        case ReviewRowState.NoChange:
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">(no change)</MudText>
+                                            break;
+                                        case ReviewRowState.Invalid:
+                                            <MudText Typo="Typo.body2" Color="Color.Error">Can't be empty</MudText>
+                                            break;
+                                        default:
+                                            <MudText Typo="Typo.body2" Color="Color.Success">@Truncate(context.EffectiveValue)</MudText>
+                                            break;
+                                    }
+                                    @if (context.IsUserEdited)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                            Edited
+                                        </MudChip>
+                                    }
+                                </MudStack>
                             </MudTd>
                         </RowTemplate>
+                        <ChildRowContent>
+                            @if (_openRowId == context.Proposal.Id)
+                            {
+                                <MudTr>
+                                    <MudTd colspan="4">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Current</MudText>
+                                        <div style="max-height:18vh; overflow-y:auto; white-space:pre-wrap;" class="mb-2">
+                                            <MudText Typo="Typo.body2">@context.Proposal.OldValue</MudText>
+                                        </div>
+                                        <MudTextField T="string" Label="Proposed" Lines="5" Immediate="true"
+                                                      Variant="Variant.Outlined"
+                                                      Value="@context.EffectiveValue"
+                                                      ValueChanged="@(v => _selection.SetValue(context, v))"
+                                                      Error="@(context.State == ReviewRowState.Invalid)"
+                                                      ErrorText="This can't be empty — AI edits never delete text." />
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                                            <MudButton Size="Size.Small" Variant="Variant.Text"
+                                                       OnClick="@(() => _selection.Revert(context))"
+                                                       Disabled="@(!context.IsUserEdited)">
+                                                Revert to AI
+                                            </MudButton>
+                                            @* Slice 04 adds "Ask AI again" + the sticky hint field here. *@
+                                            <MudSpacer />
+                                            <MudButton Size="Size.Small" Variant="Variant.Text"
+                                                       OnClick="@(() => _openRowId = null)">
+                                                Done
+                                            </MudButton>
+                                        </MudStack>
+                                    </MudTd>
+                                </MudTr>
+                            }
+                        </ChildRowContent>
                     </MudTable>
                 </div>
                 break;
@@ -138,15 +193,15 @@
                 <MudButton Color="Color.Error" OnClick="CancelProposing">Cancel</MudButton>
                 break;
             case Phase.Review:
-                <MudButton OnClick="BackToInstruct" Disabled="_busy">Start over</MudButton>
-                <MudButton OnClick="Cancel" Disabled="_busy">Close</MudButton>
+                <MudButton OnClick="StartOverAsync" Disabled="_busy">Start over</MudButton>
+                <MudButton OnClick="CloseReviewAsync" Disabled="_busy">Close</MudButton>
                 <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ApplyAsync"
-                           Disabled="@(_busy || _selected.Count == 0)">
+                           Disabled="@(_busy || _selection.Count == 0)">
                     @if (_busy)
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                     }
-                    Apply @_selected.Count selected
+                    Apply @_selection.Count selected
                 </MudButton>
                 break;
         }
@@ -170,14 +225,13 @@
     string _planSummary = "";
     EditProgram? _program;
     IReadOnlyList<EditTarget> _targets = [];
-    IReadOnlyList<ProposedEdit> _proposals = [];
-    readonly HashSet<Guid> _selected = [];
+    BookEditReviewSelection _selection = new([]);
+    Guid? _openRowId;
     int _progressDone;
     CancellationTokenSource? _cts;
 
     bool _isLlmTransform => _program?.Transform.Kind == TransformKind.Llm;
     string BatchCountText => ((_targets.Count + BatchSize - 1) / BatchSize).ToString();
-    int SelectableCount => _proposals.Count(p => p.Status == ProposalStatus.Proposed);
     double _progressPercent => _targets.Count == 0 ? 0 : 100.0 * _progressDone / _targets.Count;
 
     static string Truncate(string? s) =>
@@ -190,6 +244,11 @@
         _cts = new CancellationTokenSource();
         try
         {
+            // Same gate every other AI action goes through — offers to start/free the LLM
+            // container instead of failing with a raw "service unavailable".
+            if (!await Preflight.EnsureReadyAsync(AiTaskKind.BookEdit, _cts.Token))
+                return;
+
             var outcome = await Planner.PlanAsync(FolderId, _instruction, _cts.Token);
             if (outcome.Status != EditPlanStatus.Ok)
             {
@@ -227,22 +286,28 @@
     async Task GenerateAsync()
     {
         _error = null;
+        _cts = new CancellationTokenSource();
+
+        // Re-gate: the plan phase may have been minutes ago, and a GPU sweep for another task
+        // can have stopped llama since. Deterministic transforms need no LLM at all.
+        if (_isLlmTransform && !await Preflight.EnsureReadyAsync(AiTaskKind.BookEdit, _cts.Token))
+            return;
+
         _phase = Phase.Proposing;
         _progressDone = 0;
-        _cts = new CancellationTokenSource();
         var progress = new SyncProgress(this);
+        IReadOnlyList<ProposedEdit> proposals = [];
         try
         {
-            _proposals = await Proposals.ProposeAsync(FolderId, _program!, _targets, progress, _cts.Token);
+            proposals = await Proposals.ProposeAsync(FolderId, _program!, _targets, progress, _cts.Token);
         }
         catch (OperationCanceledException)
         {
             // Cancel returns partial proposals from the service; a hard cancel here means none.
-            _proposals ??= [];
         }
-        _selected.Clear();
-        foreach (var p in _proposals.Where(p => p.Status == ProposalStatus.Proposed))
-            _selected.Add(p.Id);
+        // New rows, so new selection: every appliable row starts ticked.
+        _selection = new BookEditReviewSelection([.. proposals.Select(p => new BookEditReviewRow(p))]);
+        _openRowId = null;
         _phase = Phase.Review;
     }
 
@@ -251,11 +316,8 @@
         _busy = true;
         try
         {
-            var edits = _proposals
-                .Where(p => p.Status == ProposalStatus.Proposed && _selected.Contains(p.Id))
-                .Select(p => p.ToEditItem())
-                .ToList();
-            await CommandHandler.ExecuteAsync(new ApplyBookEditsCommand(FolderId, edits));
+            await CommandHandler.ExecuteAsync(
+                new ApplyBookEditsCommand(FolderId, _selection.ToEditItems()));
             MudDialog.Close(DialogResult.Ok(true));
         }
         catch (Exception ex)
@@ -268,26 +330,44 @@
         }
     }
 
-    void Toggle(Guid id, bool value)
+    void SelectAll() => _selection.SelectAll();
+
+    void SelectNone() => _selection.Clear();
+
+    void ToggleOpen(BookEditReviewRow? row) =>
+        _openRowId = row == null || _openRowId == row.Proposal.Id ? null : row.Proposal.Id;
+
+    async Task StartOverAsync()
     {
-        if (value) _selected.Add(id);
-        else _selected.Remove(id);
+        if (!await ConfirmDiscardEditsAsync("Start over")) return;
+        BackToInstruct();
     }
 
-    void SelectAll()
+    async Task CloseReviewAsync()
     {
-        foreach (var p in _proposals.Where(p => p.Status == ProposalStatus.Proposed))
-            _selected.Add(p.Id);
+        if (!await ConfirmDiscardEditsAsync("Close")) return;
+        Cancel();
     }
 
-    void SelectNone() => _selected.Clear();
+    /// <summary>
+    /// Hand edits live in the open dialog only — nothing is stored — so leaving the review
+    /// screen throws them away. Ask first when there are any.
+    /// </summary>
+    async Task<bool> ConfirmDiscardEditsAsync(string action)
+    {
+        var edited = _selection.HandEditedCount;
+        return edited == 0 || await Dialogs.ConfirmAsync(
+            $"{action}?",
+            $"Discard {edited} hand-edited proposal{(edited == 1 ? "" : "s")}?",
+            "Discard");
+    }
 
     void BackToInstruct()
     {
         _phase = Phase.Instruct;
         _error = null;
-        _proposals = [];
-        _selected.Clear();
+        _selection = new BookEditReviewSelection([]);
+        _openRowId = null;
     }
 
     void CancelProposing() => _cts?.Cancel();
