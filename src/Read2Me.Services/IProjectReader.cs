@@ -169,7 +169,23 @@ namespace Read2Me.Services
 
         // All volume/part/chapter node ids that contain at least one character paragraph.
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);
+
+        /// <summary>
+        /// What a bulk character assign over <paramref name="paragraphIds"/> would write. Deliberately
+        /// character-agnostic: the confirm dialog states what will be written, never what changes, so
+        /// items already pointing at the target still count. Answers for every listed paragraph, loaded
+        /// or not — a selection can cover chapters that were never expanded.
+        /// </summary>
+        Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
+            ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default);
     }
+
+    /// <summary>
+    /// The two figures behind the bulk-assign confirm. The third the dialog wants — selected
+    /// paragraphs with nothing to stamp — is arithmetic at the call site:
+    /// <c>paragraphIds.Count - ParagraphsWithCharacterItems</c>.
+    /// </summary>
+    public sealed record BulkAssignPreview(int ParagraphsWithCharacterItems, int CharacterItems);
 
     /// <summary>A generated paragraph item offered as an audio sample: its text and who speaks it.</summary>
     public sealed record AudioSampleInfo(

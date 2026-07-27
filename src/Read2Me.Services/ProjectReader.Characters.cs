@@ -247,6 +247,24 @@ namespace Read2Me.Services
                 i.CharacterId == null);
         }
 
+        public async Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
+            ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default)
+        {
+            if (paragraphIds.Count == 0) return new BulkAssignPreview(0, 0);
+
+            var db = await _session.OpenAsync(folderId);
+
+            // One round trip: item count per paragraph that has at least one Character item.
+            // EF renders Contains as IN (SELECT value FROM json_each(@ids)) — one parameter at any length.
+            var perParagraph = await db.ParagraphItems
+                .Where(i => paragraphIds.Contains(i.ParagraphId) && i.ItemType == ParagraphItemType.Character)
+                .GroupBy(i => i.ParagraphId)
+                .Select(g => g.Count())
+                .ToListAsync(ct);
+
+            return new BulkAssignPreview(perParagraph.Count, perParagraph.Sum());
+        }
+
         public async Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);

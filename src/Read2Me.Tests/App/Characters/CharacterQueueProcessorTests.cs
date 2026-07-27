@@ -588,6 +588,9 @@ namespace Read2Me.Tests.App.Characters
                 ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
                 => Task.FromResult(new List<CharacterParagraphRef>());
             public Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
+            public Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
+                ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default)
+                => Task.FromResult(new BulkAssignPreview(0, 0));
         }
 
         private class FakeCommandHandler : IBookCommandHandler
