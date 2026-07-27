@@ -45,7 +45,8 @@ namespace Read2Me.Tests.State
             BookTreeState TreeState,
             AudioReviewService AudioReviews,
             NodeStatusService NodeStatus,
-            FakeVoiceResolver VoiceResolver);
+            FakeVoiceResolver VoiceResolver,
+            CharacterQueueService CharacterQueue);
 
         private static BookProjectSnapshot EmptySnapshot(
             IReadOnlyDictionary<Guid, int>? nodeCounts = null,
@@ -107,7 +108,7 @@ namespace Read2Me.Tests.State
             var audioQueue = new AudioQueueService();
             var coordinator = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
             var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, voiceResolver, coordinator, new EventBroadcaster<ParagraphItemsChanged>());
-            return new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver);
+            return new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue);
         }
 
         // ---------------------------------------------------------------
@@ -802,7 +803,7 @@ namespace Read2Me.Tests.State
                 VerifyOk: false, Wer: 0.3, VerifyReason: "WER too high",
                 Transcript: "t", OriginalTextSnapshot: "o"));
 
-            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, new FakeVoiceResolver());
+            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, new FakeVoiceResolver(), characterQueue);
             return (ctx, itemId, chapterId, partId, volumeId);
         }
 
@@ -901,7 +902,7 @@ namespace Read2Me.Tests.State
             // Expand chapter so paragraphs are loaded into the cache.
             await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
 
-            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver());
+            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), queue);
             var queuedPara = new QueuedParagraph(Folder, para.Id, "preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
             return (ctx, queue, para, queuedPara, events889, reader);
         }
@@ -1204,7 +1205,7 @@ namespace Read2Me.Tests.State
             await presenter.LoadAsync(Folder);
             await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
 
-            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, new FakeVoiceResolver());
+            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, new FakeVoiceResolver(), characterQueue);
             return (ctx, audioQueue, para, chapterId, partId, volumeId);
         }
 
@@ -1461,6 +1462,65 @@ namespace Read2Me.Tests.State
             audioQueue.MarkComplete(otherFolder, itemRef, "audio/item.wav");
 
             Assert.Null(item.AudioFileName);
+        }
+
+        // ---------------------------------------------------------------
+        // Bulk mode force-off while the character queue is busy
+        // ---------------------------------------------------------------
+
+        private static QueuedParagraph AnyQueuedParagraph() =>
+            new(Folder, Guid.NewGuid(), "preview", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+
+        [Fact]
+        public async Task CharacterQueueGoesBusy_DisarmsBulkMode()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+            ctx.Presenter.Selection.BulkMode = true;
+
+            ctx.CharacterQueue.Enqueue([AnyQueuedParagraph()]);
+
+            Assert.False(ctx.Presenter.Selection.BulkMode);
+        }
+
+        [Fact]
+        public async Task CharacterQueueChangedWhileIdle_DoesNotDisarmBulkMode()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+            ctx.Presenter.Selection.BulkMode = true;
+
+            // CancelAll on an empty queue raises Changed with an idle snapshot.
+            ctx.CharacterQueue.CancelAll();
+
+            Assert.True(ctx.Presenter.Selection.BulkMode);
+        }
+
+        [Fact]
+        public async Task CharacterQueueGoesIdle_DoesNotReArmBulkMode()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+            ctx.Presenter.Selection.BulkMode = true;
+            ctx.CharacterQueue.Enqueue([AnyQueuedParagraph()]);
+
+            ctx.CharacterQueue.CancelAll();
+
+            Assert.False(ctx.Presenter.Selection.BulkMode);
+        }
+
+        [Fact]
+        public async Task Dispose_UnsubscribesFromCharacterQueue()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+            var selection = ctx.Presenter.Selection;
+            ctx.Presenter.Dispose();
+
+            selection.BulkMode = true;
+            ctx.CharacterQueue.Enqueue([AnyQueuedParagraph()]);
+
+            Assert.True(selection.BulkMode);
         }
     }
 }

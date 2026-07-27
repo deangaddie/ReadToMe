@@ -29,7 +29,14 @@ namespace Read2Me.Services.Characters
         double EstimatedSecondsRemaining,
         int CompletedCount,
         double CurrentItemElapsedSeconds
-    );
+    )
+    {
+        /// <summary>
+        /// Work in hand, globally — one worker drains every folder's queue. Settled outcomes
+        /// (Failed/Unknown) are not busy: those paragraphs are finished.
+        /// </summary>
+        public bool IsBusy => QueuedCount + ProcessingCount > 0;
+    }
 
     internal readonly record struct ParagraphKey(ProjectFolderId Folder, Guid ParagraphId);
 

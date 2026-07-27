@@ -170,6 +170,31 @@ namespace Read2Me.App.State
     {
         private readonly RollupSelection<ParagraphEntry> _inner = new();
 
+        private bool _bulkMode;
+
+        public FolderSelection()
+        {
+            // Emptying the selection disarms: a fresh selection always starts in single-assign
+            // mode. Hung off the change event rather than derived from the count on read, so
+            // "select 12 → arm → uncheck all → check 1" lands disarmed rather than re-armed.
+            // Unchecking rows one at a time never calls Clear(), which is why this is not on Clear().
+            _inner.OnChanged += () =>
+            {
+                if (_inner.SelectedCount == 0) _bulkMode = false;
+            };
+        }
+
+        /// <summary>
+        /// Bulk-assign arming: while set, a character picked on a selected row applies across the
+        /// whole selection. Read at click time by the presenter — no row renders against it, so the
+        /// setter deliberately raises no <see cref="OnChanged"/> (it would repaint the tree for nothing).
+        /// </summary>
+        public bool BulkMode
+        {
+            get => _bulkMode;
+            set => _bulkMode = value;
+        }
+
         public event Action? OnChanged
         {
             add => _inner.OnChanged += value;

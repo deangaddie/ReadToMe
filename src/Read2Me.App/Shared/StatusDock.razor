@@ -115,6 +115,14 @@
                         <b>@attrSelCount</b> paragraph@(attrSelCount == 1 ? "" : "s") selected
                     </MudText>
                     <MudSpacer />
+                    @* A busy character queue blocks arming; the presenter force-offs an already- *@
+                    @* armed flag from the same condition, so a bulk write can never meet the LLM. *@
+                    <MudTooltip Text="Pick a speaker on any selected row to apply it across the whole selection">
+                        <MudSwitch T="bool" Color="Color.Primary" Size="Size.Small"
+                                   Label="Bulk assign" Disabled="@charSnap.IsBusy"
+                                   Value="@Presenter.Selection.BulkMode"
+                                   ValueChanged="@((bool v) => Presenter.Selection.BulkMode = v)" />
+                    </MudTooltip>
                     <MudButton StartIcon="@Icons.Material.Filled.Add"
                                Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small"
                                OnClick="@(() => Presenter.AddSelectionToCharacterQueueAsync())">

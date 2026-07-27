@@ -239,5 +239,102 @@ namespace Read2Me.Tests.State
             sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
             Assert.False(sel.IsNodeFullySelected(BookNodeLevel.Chapter, chId));
         }
+
+        // ---------------------------------------------------------------
+        // BulkMode
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public void BulkMode_DefaultsOff()
+        {
+            var (sel, _, _, _) = MakeAncestry();
+            Assert.False(sel.BulkMode);
+        }
+
+        [Fact]
+        public void BulkMode_Set_Arms()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+
+            sel.BulkMode = true;
+
+            Assert.True(sel.BulkMode);
+        }
+
+        [Fact]
+        public void BulkMode_ParagraphRemovedButSelectionNotEmpty_StaysArmed()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            var first = Id();
+            sel.AddParagraph(first, new ParagraphSelection(volId, ptId, chId));
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            sel.BulkMode = true;
+
+            sel.RemoveParagraph(first);
+
+            Assert.True(sel.BulkMode);
+        }
+
+        // Unchecking rows one at a time never calls Clear(), so the disarm has to
+        // hang off the inner selection's change event, not off Clear().
+        [Fact]
+        public void BulkMode_LastParagraphRemovedOneAtATime_Disarms()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            var first = Id();
+            var second = Id();
+            sel.AddParagraph(first, new ParagraphSelection(volId, ptId, chId));
+            sel.AddParagraph(second, new ParagraphSelection(volId, ptId, chId));
+            sel.BulkMode = true;
+
+            sel.RemoveParagraph(first);
+            sel.RemoveParagraph(second);
+
+            Assert.False(sel.BulkMode);
+        }
+
+        [Fact]
+        public void BulkMode_Clear_Disarms()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            sel.BulkMode = true;
+
+            sel.Clear();
+
+            Assert.False(sel.BulkMode);
+        }
+
+        // Emptying then re-selecting must land disarmed — the reason the flag is
+        // cleared on the empty event rather than derived from the count on read.
+        [Fact]
+        public void BulkMode_EmptiedThenReselected_StaysDisarmed()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+            sel.BulkMode = true;
+            sel.Clear();
+
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+
+            Assert.False(sel.BulkMode);
+        }
+
+        // No row renders against the flag, so raising OnChanged would repaint the
+        // whole tree for nothing.
+        [Fact]
+        public void BulkMode_Set_RaisesNoOnChanged()
+        {
+            var (sel, volId, ptId, chId) = MakeAncestry();
+            sel.AddParagraph(Id(), new ParagraphSelection(volId, ptId, chId));
+
+            var raised = 0;
+            sel.OnChanged += () => raised++;
+            sel.BulkMode = true;
+            sel.BulkMode = false;
+
+            Assert.Equal(0, raised);
+        }
     }
 }

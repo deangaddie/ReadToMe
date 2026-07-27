@@ -111,6 +111,7 @@ namespace Read2Me.App.State
         private ProjectFolderId? _lastFolder;
         private bool _audioQueueSubscribed;
         private bool _itemsChangedSubscribed;
+        private bool _characterQueueSubscribed;
 
         public event Action? StateChanged;
 
@@ -128,6 +129,12 @@ namespace Read2Me.App.State
             {
                 paragraphItemsChanged.Event += OnParagraphItemsChanged;
                 _itemsChangedSubscribed = true;
+            }
+
+            if (!_characterQueueSubscribed)
+            {
+                characterQueue.Changed += DisarmBulkIfQueueBusy;
+                _characterQueueSubscribed = true;
             }
 
             if (_lastFolder.HasValue && _lastFolder.Value.Value != folderId.Value)
@@ -443,8 +450,24 @@ namespace Read2Me.App.State
             nodeStatus.OnAudioAssigned(folder, item.ParagraphId);
         }
 
+        /// <summary>
+        /// A bulk write must never meet an in-flight attribution, so any armed bulk mode is turned
+        /// off — not merely greyed out — the moment the character queue has work.
+        /// </summary>
+        private void DisarmBulkIfQueueBusy()
+        {
+            if (characterQueue.Snapshot().IsBusy && Selection is not null)
+                Selection.BulkMode = false;
+        }
+
         public void Dispose()
         {
+            if (_characterQueueSubscribed)
+            {
+                characterQueue.Changed -= DisarmBulkIfQueueBusy;
+                _characterQueueSubscribed = false;
+            }
+
             if (_audioQueueSubscribed)
             {
                 audioQueue.AudioFileAssigned -= OnAudioFileAssigned;
