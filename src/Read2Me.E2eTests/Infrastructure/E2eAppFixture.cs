@@ -72,6 +72,11 @@ public sealed class E2eAppFixture : IAsyncLifetime
         string folderName, string title, string author, string characterName = "Alice") =>
         WorkspaceSeeder.SeedProjectAsync(Services, WorkspaceDir, folderName, title, author, characterName);
 
+    public Task<TestUtils.BookHierarchyBuilder> SeedThreeDialogParagraphProjectAsync(
+        string folderName, string title, string author, string characterName = "Alice") =>
+        WorkspaceSeeder.SeedThreeDialogParagraphProjectAsync(
+            Services, WorkspaceDir, folderName, title, author, characterName);
+
     public Task<Guid> SeedEditableVoiceAsync(string folderName, Guid characterId, string voiceName = "Alice Voice") =>
         WorkspaceSeeder.SeedEditableVoiceAsync(Services, WorkspaceDir, folderName, characterId, voiceName);
 

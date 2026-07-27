@@ -70,9 +70,44 @@ public static class WorkspaceSeeder
     /// character, three paragraphs — narration, an unattributed character line, narration.
     /// Returns the builder for named-id lookups.
     /// </summary>
-    public static async Task<BookHierarchyBuilder> SeedProjectAsync(
+    public static Task<BookHierarchyBuilder> SeedProjectAsync(
         IServiceProvider services, string workspaceDir, string folderName,
-        string title, string author, string characterName = "Alice")
+        string title, string author, string characterName = "Alice") =>
+        SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c => c
+            .AddParagraph("p1", p => p
+                .AddNarration("n1", "It was a dark and stormy night."))
+            .AddParagraph("p2", p => p
+                .AddRawItem("line1", ParagraphItemType.Character,
+                    "“Hello there,” she said.", characterId: null))
+            .AddParagraph("p3", p => p
+                .AddNarration("n2", "The rain kept falling.")));
+
+    /// <summary>
+    /// Creates a project folder whose single chapter holds opening narration and then three
+    /// unattributed dialog paragraphs, so the attribution tree offers three selectable rows.
+    /// Returns the builder for named-id lookups.
+    /// </summary>
+    public static Task<BookHierarchyBuilder> SeedThreeDialogParagraphProjectAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string title, string author, string characterName = "Alice") =>
+        SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c => c
+            .AddParagraph("p1", p => p
+                .AddNarration("n1", "It was a dark and stormy night."))
+            .AddParagraph("p2", p => p
+                .AddRawItem("line1", ParagraphItemType.Character,
+                    "“Hello there,” she said.", characterId: null))
+            .AddParagraph("p3", p => p
+                .AddRawItem("line2", ParagraphItemType.Character,
+                    "“Who goes there?” came the reply.", characterId: null))
+            .AddParagraph("p4", p => p
+                .AddRawItem("line3", ParagraphItemType.Character,
+                    "“Only me,” she answered.", characterId: null)));
+
+    /// One volume, one chapter named "ch1", one known character; the caller fills the chapter.
+    private static async Task<BookHierarchyBuilder> SeedBookAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string title, string author, string characterName,
+        Action<BookHierarchyBuilder.ChapterScope> chapter)
     {
         var factory = services.GetRequiredService<IProjectDbContextFactory>();
         var folderPath = Path.Combine(workspaceDir, folderName);
@@ -81,15 +116,7 @@ public static class WorkspaceSeeder
         builder
             .WithProject(title: title, author: author)
             .WithCharacter(characterName, new Character { Id = Guid.NewGuid(), Name = characterName })
-            .AddVolume("v1", v => v
-                .AddChapter("ch1", c => c
-                    .AddParagraph("p1", p => p
-                        .AddNarration("n1", "It was a dark and stormy night."))
-                    .AddParagraph("p2", p => p
-                        .AddRawItem("line1", Data.Enums.ParagraphItemType.Character,
-                            "“Hello there,” she said.", characterId: null))
-                    .AddParagraph("p3", p => p
-                        .AddNarration("n2", "The rain kept falling."))));
+            .AddVolume("v1", v => v.AddChapter("ch1", chapter));
         await builder.BuildAsync();
         return builder;
     }
