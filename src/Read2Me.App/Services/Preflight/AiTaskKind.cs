@@ -24,5 +24,8 @@ namespace Read2Me.App.Services.Preflight
 
         /// <summary>Reference-audio transcription via the active transcription config.</summary>
         Transcription,
+
+        /// <summary>AI book edits (plan + per-item rewrites) via the active LLM config.</summary>
+        BookEdit,
     }
 }

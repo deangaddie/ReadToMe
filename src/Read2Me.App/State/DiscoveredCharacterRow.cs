@@ -13,5 +13,12 @@ namespace Read2Me.App.State
         public List<string> Aliases { get; set; } = [];
         public bool Included { get; set; } = true;
         public bool AlreadyExists { get; set; }
+
+        /// <summary>
+        /// The roster character this row will resolve onto when applied, if any. Set with
+        /// <see cref="AlreadyExists"/>; lets collision detection tell "this row *is* Elizabeth"
+        /// from "this row collides with Elizabeth".
+        /// </summary>
+        public Guid? ExistingCharacterId { get; set; }
     }
 }

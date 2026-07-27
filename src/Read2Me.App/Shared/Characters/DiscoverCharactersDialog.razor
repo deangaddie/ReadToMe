@@ -1,4 +1,5 @@
 @using Read2Me.App.State
+@using Read2Me.Data.Entities
 @using Read2Me.Services.Characters
 @inject CharacterDiscoveryService Discovery
 @inject IProjectReader Reader
@@ -14,6 +15,17 @@
             <MudAlert Severity="Severity.Warning" Class="mb-3" ShowCloseIcon="true" CloseIconClicked="@(() => _error = null)">@_error</MudAlert>
         }
 
+        @* Discovery leans on the model's knowledge of the book: the first pass runs fast without
+           thinking, and thinking is the opt-in retry when the roster comes back thin or wrong. *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+            <MudSwitch T="bool" @bind-Value="_useThinking" Color="Color.Primary" Size="Size.Small"
+                       Disabled="@(_phase == Phase.Discovering)" Label="Enable thinking" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Slower, better recall</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh"
+                       Disabled="@(_phase == Phase.Discovering)" OnClick="DiscoverAsync">Re-run</MudButton>
+        </MudStack>
+
         @if (_phase == Phase.Discovering)
         {
             <MudProgressLinear Indeterminate="true" Class="my-3" />
@@ -21,6 +33,15 @@
         }
         else if (_phase == Phase.Review)
         {
+            var collisions = AliasCollisions.Find(_rows, _roster);
+            @if (collisions.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-3" Dense="true">
+                    Shared by more than one character: @string.Join(", ", collisions.Order()).
+                    Attribution resolves a name to a single character, so a shared one always picks the
+                    same character and never the others. Remove it from all but one row.
+                </MudAlert>
+            }
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
                 <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectAll">Select all</MudButton>
                 <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectNone">Select none</MudButton>
@@ -40,7 +61,8 @@
                             <MudCheckBox T="bool" Value="@r.Included" ValueChanged="@(v => r.Included = v)" />
                             <MudStack Spacing="1" Style="flex:1;">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudTextField T="string" @bind-Value="r.Name" Variant="Variant.Text" Margin="Margin.Dense" Style="max-width:260px;" />
+                                    <MudTextField T="string" @bind-Value="r.Name" Variant="Variant.Text" Margin="Margin.Dense" Style="max-width:260px;"
+                                                  Error="@collisions.Contains(r.Name.Trim())" />
                                     @if (r.AlreadyExists)
                                     {
                                         <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Already exists</MudChip>
@@ -50,7 +72,8 @@
                                     @foreach (var alias in r.Aliases)
                                     {
                                         var a = alias;
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                 Color="@(collisions.Contains(a.Trim()) ? Color.Warning : Color.Secondary)"
                                                  CloseIcon="@Icons.Material.Filled.Close" OnClose="@(() => r.Aliases.Remove(a))">
                                             @a
                                         </MudChip>
@@ -105,15 +128,17 @@
 </MudDialog>
 
 @code {
-    enum Phase { Discovering, Review }
+    enum Phase { Discovering, Review, Failed }
 
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
 
     Phase _phase = Phase.Discovering;
+    bool _useThinking;
     bool _showStream;
     string? _error;
     List<DiscoveredCharacterRow> _rows = [];
+    List<Character> _roster = [];
     DiscoveredCharacterRow? _addingAliasFor;
     string _newAlias = "";
     CancellationTokenSource? _cts;
@@ -124,30 +149,38 @@
     {
         _error = null;
         _phase = Phase.Discovering;
+        _cts?.Dispose();
         _cts = new CancellationTokenSource();
         try
         {
-            var outcome = await Discovery.DiscoverAsync(FolderId, _cts.Token);
+            var outcome = await Discovery.DiscoverAsync(FolderId, _useThinking, _cts.Token);
             if (outcome.Status != DiscoveryStatus.Ok)
             {
+                // Stay open on failure: the error and the Re-run button are the point — a
+                // failed pass is exactly when the user reaches for thinking.
                 _error = outcome.Status switch
                 {
                     DiscoveryStatus.NoLlmConfigured => "No LLM server is configured. Set one up under Settings → LLM.",
                     DiscoveryStatus.ServiceUnavailable => $"The LLM service is unavailable: {outcome.Reason}",
                     _ => $"Character discovery failed: {outcome.Reason}",
                 };
-                MudDialog.Cancel();
+                _phase = Phase.Failed;
                 return;
             }
 
-            var roster = await Reader.GetCharactersWithAliasesAsync(FolderId);
-            _rows = outcome.Characters.Select(c => new DiscoveredCharacterRow
+            _roster = await Reader.GetCharactersWithAliasesAsync(FolderId);
+            _rows = outcome.Characters.Select(c =>
             {
-                Name = c.Name,
-                Aliases = c.Aliases.ToList(),
-                AlreadyExists = roster.Any(existing =>
-                    CharacterResolver.Matches(existing, c.Name) ||
-                    c.Aliases.Any(a => CharacterResolver.Matches(existing, a))),
+                var existing = _roster.FirstOrDefault(e =>
+                    CharacterResolver.Matches(e, c.Name) ||
+                    c.Aliases.Any(a => CharacterResolver.Matches(e, a)));
+                return new DiscoveredCharacterRow
+                {
+                    Name = c.Name,
+                    Aliases = c.Aliases.ToList(),
+                    AlreadyExists = existing != null,
+                    ExistingCharacterId = existing?.Id,
+                };
             }).ToList();
             _phase = Phase.Review;
         }

@@ -19,6 +19,11 @@ namespace Read2Me.Services.Characters
     /// runner owns the streaming envelope; this service builds the prompt and maps the four
     /// run outcomes onto <see cref="DiscoveryStatus"/>.
     /// </summary>
+    /// <remarks>
+    /// Discovery leans on the model's own knowledge of the book, so thinking is the caller's
+    /// call rather than the service's: the fast pass runs without it, and the user re-runs with
+    /// thinking on when the roster comes back thin or confabulated.
+    /// </remarks>
     public class CharacterDiscoveryService(
         ILlmCompletionRunner runner,
         LlmSettingsService settings,
@@ -28,8 +33,12 @@ namespace Read2Me.Services.Characters
         EventBroadcaster<LlmStreamEvent> stream,
         ILogger<CharacterDiscoveryService> logger)
     {
+        /// <param name="useThinking">
+        /// Let the model run its hidden thinking phase. Slower; use it as the retry when a
+        /// no-thinking pass returns a thin or wrong cast.
+        /// </param>
         public virtual async Task<DiscoveryOutcome> DiscoverAsync(
-            ProjectFolderId folderId, CancellationToken ct)
+            ProjectFolderId folderId, bool useThinking, CancellationToken ct)
         {
             var config = await settings.GetActiveConfigAsync();
             if (config == null)
@@ -63,7 +72,8 @@ namespace Read2Me.Services.Characters
             {
                 result = await runner.RunAsync<IReadOnlyList<DiscoveredCharacter>>(
                     new LlmRunRequest(config, prompt, "Discover characters",
-                        CharacterDiscoverySchema.JsonSchema, CompletionShape.Object),
+                        CharacterDiscoverySchema.JsonSchema, CompletionShape.Object,
+                        DisableThinking: !useThinking),
                     CharacterDiscoveryParser.TryParse, ct);
             }
             finally

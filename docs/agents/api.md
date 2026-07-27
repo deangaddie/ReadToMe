@@ -69,6 +69,8 @@ chapter children carry the paragraphs with their items).
 
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/discover
+# thin or wrong cast? re-run with the model's thinking phase on (slower, better recall):
+curl -s -X POST 'http://localhost:5000/api/projects/{folder}/characters/discover?thinking=true'
 # review the rows, then persist the ones you keep:
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/discover/apply \
   -H 'content-type: application/json' \

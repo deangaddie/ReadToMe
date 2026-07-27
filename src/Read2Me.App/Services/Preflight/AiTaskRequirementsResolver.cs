@@ -28,7 +28,7 @@ namespace Read2Me.App.Services.Preflight
                 // the chain's fallback when no chain is stored.)
                 AiTaskKind.CharacterAttribution =>
                     await AttributionChainUrlsAsync(),
-                AiTaskKind.VoicePromptGeneration or AiTaskKind.CharacterDiscovery =>
+                AiTaskKind.VoicePromptGeneration or AiTaskKind.CharacterDiscovery or AiTaskKind.BookEdit =>
                     new[] { await LlmUrlAsync() },
                 AiTaskKind.AudioGeneration =>
                     new[] { await TtsUrlAsync(), await TranscriptionUrlAsync(), await SimilarityUrlAsync() },

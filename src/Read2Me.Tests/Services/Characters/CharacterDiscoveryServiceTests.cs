@@ -80,7 +80,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var runner = new FakeLlmCompletionRunner().Completes(ValidJson);
             var outcome = await NewService(runner, NewSettings())
-                .DiscoverAsync(Folder, CancellationToken.None);
+                .DiscoverAsync(Folder, useThinking: false, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.NoLlmConfigured, outcome.Status);
             Assert.Empty(outcome.Characters);
@@ -94,7 +94,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var outcome = await NewService(new FakeLlmCompletionRunner().Completes(ValidJson), settings)
-                .DiscoverAsync(Folder, CancellationToken.None);
+                .DiscoverAsync(Folder, useThinking: false, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.Ok, outcome.Status);
             var c = Assert.Single(outcome.Characters);
@@ -120,7 +120,7 @@ namespace Read2Me.Tests.Services.Characters
             var runs = Runs(stream);
 
             await NewService(new FakeLlmCompletionRunner().Completes(ValidJson), settings, stream)
-                .DiscoverAsync(Folder, CancellationToken.None);
+                .DiscoverAsync(Folder, useThinking: false, CancellationToken.None);
 
             // A single request is a genuine run of one — that is what makes a "total" mean
             // the same thing on every surface.
@@ -139,7 +139,7 @@ namespace Read2Me.Tests.Services.Characters
             var runner = new FakeLlmCompletionRunner().Throws(new InvalidOperationException("boom"));
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                NewService(runner, settings, stream).DiscoverAsync(Folder, CancellationToken.None));
+                NewService(runner, settings, stream).DiscoverAsync(Folder, useThinking: false, CancellationToken.None));
 
             Assert.Collection(runs,
                 e => Assert.IsType<RunStarted>(e),
@@ -153,7 +153,7 @@ namespace Read2Me.Tests.Services.Characters
             var runs = Runs(stream);
 
             await NewService(new FakeLlmCompletionRunner().Completes(ValidJson), NewSettings(), stream)
-                .DiscoverAsync(Folder, CancellationToken.None);
+                .DiscoverAsync(Folder, useThinking: false, CancellationToken.None);
 
             // Nothing reached an LLM, so there was no run to bracket.
             Assert.Empty(runs);
@@ -166,14 +166,12 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
             var runner = new FakeLlmCompletionRunner().Completes(ValidJson);
 
-            await NewService(runner, settings).DiscoverAsync(Folder, CancellationToken.None);
+            await NewService(runner, settings).DiscoverAsync(Folder, useThinking: false, CancellationToken.None);
 
             var request = Assert.Single(runner.Requests);
             Assert.Equal("Discover characters", request.Label);
             Assert.Equal(CompletionShape.Object, request.Shape);
             Assert.Equal(CharacterDiscoverySchema.JsonSchema, request.JsonSchema);
-            // Discovery keeps thinking: cast recall without it hallucinates plausible fake names.
-            Assert.False(request.DisableThinking);
 
             var prompt = request.Prompt;
             Assert.Contains("The Hobbit", prompt);
@@ -183,6 +181,20 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Contains("the wizard", prompt);            // known alias
         }
 
+        [Theory]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        public async Task Discover_ThinkingIsTheCallersChoice(bool useThinking, bool expectedDisableThinking)
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes(ValidJson);
+
+            await NewService(runner, settings).DiscoverAsync(Folder, useThinking, CancellationToken.None);
+
+            Assert.Equal(expectedDisableThinking, Assert.Single(runner.Requests).DisableThinking);
+        }
+
         [Fact]
         public async Task Discover_GarbageResponse_ReturnsFailed()
         {
@@ -190,7 +202,7 @@ namespace Read2Me.Tests.Services.Characters
             await RegisterActiveConfigAsync(settings);
 
             var outcome = await NewService(new FakeLlmCompletionRunner().Completes("not json at all"), settings)
-                .DiscoverAsync(Folder, CancellationToken.None);
+                .DiscoverAsync(Folder, useThinking: false, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.Failed, outcome.Status);
             Assert.NotNull(outcome.Reason);
@@ -204,7 +216,7 @@ namespace Read2Me.Tests.Services.Characters
             var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.Failed, "boom");
 
             var outcome = await NewService(runner, settings)
-                .DiscoverAsync(Folder, CancellationToken.None);
+                .DiscoverAsync(Folder, useThinking: false, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.Failed, outcome.Status);
             Assert.Equal("boom", outcome.Reason);
@@ -218,7 +230,7 @@ namespace Read2Me.Tests.Services.Characters
             var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.ServiceUnavailable, "down");
 
             var outcome = await NewService(runner, settings)
-                .DiscoverAsync(Folder, CancellationToken.None);
+                .DiscoverAsync(Folder, useThinking: false, CancellationToken.None);
 
             Assert.Equal(DiscoveryStatus.ServiceUnavailable, outcome.Status);
         }
@@ -233,7 +245,7 @@ namespace Read2Me.Tests.Services.Characters
             var runner = new FakeLlmCompletionRunner().Throws(new OperationCanceledException());
 
             await Assert.ThrowsAsync<OperationCanceledException>(
-                () => NewService(runner, settings).DiscoverAsync(Folder, cts.Token));
+                () => NewService(runner, settings).DiscoverAsync(Folder, useThinking: false, cts.Token));
         }
     }
 }

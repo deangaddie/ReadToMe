@@ -18,18 +18,18 @@ namespace Read2Me.App.Api
         public static void MapDiscoveryEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost("/api/projects/{folder}/characters/discover", DiscoverAsync)
-                .WithSummary("Ask the active LLM for the book's notable characters and aliases. Synchronous; takes seconds to a minute.");
+                .WithSummary("Ask the active LLM for the book's notable characters and aliases. Synchronous; takes seconds to a minute. Pass ?thinking=true to let the model think first — slower, better recall.");
             endpoints.MapPost("/api/projects/{folder}/characters/discover/apply", ApplyAsync)
                 .WithSummary("Persist discovered characters: one create per row (idempotent on name/alias match) plus its aliases.");
         }
 
         private static async Task<IResult> DiscoverAsync(
-            string folder, IFileSystem fs, CharacterDiscoveryService discovery, CancellationToken ct)
+            string folder, bool? thinking, IFileSystem fs, CharacterDiscoveryService discovery, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
-            var outcome = await discovery.DiscoverAsync(folderId, ct);
+            var outcome = await discovery.DiscoverAsync(folderId, thinking ?? false, ct);
             if (outcome.Status == DiscoveryStatus.NoLlmConfigured)
                 return Results.Problem(outcome.Reason ?? "No active LLM server configured.",
                     statusCode: StatusCodes.Status422UnprocessableEntity);
