@@ -102,7 +102,7 @@
                                            Variant="@(isCharItem ? Variant.Filled : Variant.Outlined)"
                                            Icon="@(isCharItem ? null : chipIcon)"
                                            Style="width:100%; justify-content:center;"
-                                           OnSelected="@(id => Presenter.SetItemCharacterAsync(FolderId, it, id))" />
+                                           OnSelected="@(id => Presenter.AssignCharacterAsync(FolderId, Para, it, id))" />
                         @if (!string.IsNullOrWhiteSpace(it.Text))
                         {
                             <div>
@@ -267,7 +267,7 @@ else
                                    Color="@chipColor"
                                    Variant="Variant.Filled"
                                    Style="flex-shrink:0;"
-                                   OnSelected="@(id => Presenter.SetParagraphCharacterAsync(FolderId, Para, id))" />
+                                   OnSelected="@(id => Presenter.AssignCharacterAsync(FolderId, Para, null, id))" />
             }
             <MudText Typo="Typo.body2" Style="flex:1">@string.Join(" ", Para.Items.Select(i => i.Text))</MudText>
             @if (!isBusy)

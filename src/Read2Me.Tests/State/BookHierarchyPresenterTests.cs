@@ -1799,5 +1799,108 @@ namespace Read2Me.Tests.State
                 "Zelda becomes the speaker for 4 dialog lines in 1 paragraph. Existing speakers are replaced.",
                 CapturedConfirm(ctx.Dialogs).Message);
         }
+
+        // ---------------------------------------------------------------
+        // AssignCharacterAsync — the chip front door
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task AssignCharacter_ArmedAndInSelection_ParagraphChip_FansOutAcrossTheSelection()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            ctx.Presenter.Selection.BulkMode = true;
+            var charId = Guid.NewGuid();
+
+            await ctx.Presenter.AssignCharacterAsync(Folder, selected, null, charId);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphsCharacterCommand>(c => c != null && c.CharacterId == charId));
+            await AssertNoSingleAssignAsync(ctx);
+        }
+
+        [Fact]
+        public async Task AssignCharacter_ArmedAndInSelection_SegmentChip_FansOutTheSameWay()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            ctx.Presenter.Selection.BulkMode = true;
+            var charId = Guid.NewGuid();
+
+            await ctx.Presenter.AssignCharacterAsync(Folder, selected, selected.Items.First(), charId);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphsCharacterCommand>(c => c != null && c.CharacterId == charId));
+            await AssertNoSingleAssignAsync(ctx);
+        }
+
+        [Fact]
+        public async Task AssignCharacter_ArmedAndInSelection_NullId_FansOutAsAClear()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            ctx.Presenter.Selection.BulkMode = true;
+
+            await ctx.Presenter.AssignCharacterAsync(Folder, selected, null, null);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphsCharacterCommand>(c => c != null && c.CharacterId == null));
+            await AssertNoSingleAssignAsync(ctx);
+        }
+
+        /// <summary>Neither single-assign leg fired — the pick went out as one bulk command only.</summary>
+        private static async Task AssertNoSingleAssignAsync(Context ctx)
+        {
+            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphCharacterCommand>());
+            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetItemCharacterCommand>());
+        }
+
+        [Fact]
+        public async Task AssignCharacter_ArmedButRowOutsideTheSelection_AssignsSingly()
+        {
+            var (ctx, _, unselected) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            ctx.Presenter.Selection.BulkMode = true;
+            var charId = Guid.NewGuid();
+
+            await ctx.Presenter.AssignCharacterAsync(Folder, unselected, null, charId);
+            await ctx.Presenter.AssignCharacterAsync(Folder, unselected, unselected.Items.First(), charId);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphCharacterCommand>(c =>
+                    c != null && c.ParagraphId == unselected.Id && c.CharacterId == charId));
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetItemCharacterCommand>(c =>
+                    c != null && c.ItemId == unselected.Items.First().Id && c.CharacterId == charId));
+            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
+        }
+
+        [Fact]
+        public async Task AssignCharacter_Disarmed_AssignsSingly_BothChipKinds()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            var charId = Guid.NewGuid();
+
+            Assert.False(ctx.Presenter.Selection.BulkMode);
+
+            await ctx.Presenter.AssignCharacterAsync(Folder, selected, null, charId);
+            await ctx.Presenter.AssignCharacterAsync(Folder, selected, selected.Items.First(), charId);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphCharacterCommand>(c =>
+                    c != null && c.ParagraphId == selected.Id && c.CharacterId == charId));
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetItemCharacterCommand>(c =>
+                    c != null && c.ItemId == selected.Items.First().Id && c.CharacterId == charId));
+            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
+        }
+
+        [Fact]
+        public async Task AssignCharacter_Disarmed_NullId_ClearsThatRowOnly()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+
+            await ctx.Presenter.AssignCharacterAsync(Folder, selected, null, null);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphCharacterCommand>(c => c != null && c.CharacterId == null));
+            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
+        }
     }
 }
