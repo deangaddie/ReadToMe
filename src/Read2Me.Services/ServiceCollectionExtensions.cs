@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<SetItemCharacterCommand>, SetItemCharacterHandler>();
         services.AddScoped<ICommandHandler<CreateCharacterCommand>, CreateCharacterHandler>();
         services.AddScoped<ICommandHandler<SetParagraphCharacterCommand>, SetParagraphCharacterHandler>();
+        services.AddScoped<ICommandHandler<SetParagraphsCharacterCommand>, SetParagraphsCharacterHandler>();
         services.AddScoped<ICommandHandler<ApplySegmentationCommand>, ApplySegmentationHandler>();
         services.TryAddSingleton<Events.EventBroadcaster<Events.ParagraphItemsChanged>>();
         services.AddScoped<ICommandHandler<AddCharacterAliasCommand>, AddCharacterAliasHandler>();

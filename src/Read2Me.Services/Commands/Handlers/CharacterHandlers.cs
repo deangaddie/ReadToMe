@@ -69,6 +69,25 @@ public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICo
     }
 }
 
+/// <summary>
+/// The bulk sibling of <see cref="SetParagraphCharacterHandler"/>: one set-based update, no
+/// entities loaded, so a thousand-paragraph selection costs no change-tracker time. The id list
+/// is not chunked — EF translates <c>Contains</c> to <c>IN (SELECT value FROM json_each(@ids))</c>,
+/// a single parameter at any length. <c>VoiceInstructions</c> is left alone: there is no
+/// per-line instruction to spread across a selection.
+/// </summary>
+public sealed class SetParagraphsCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphsCharacterCommand>
+{
+    public async Task<Guid?> HandleAsync(SetParagraphsCharacterCommand c, CancellationToken ct)
+    {
+        var db = await session.OpenAsync(c.FolderId);
+        await db.ParagraphItems
+            .Where(i => c.ParagraphIds.Contains(i.ParagraphId) && i.ItemType == ParagraphItemType.Character)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.CharacterId, c.CharacterId), ct);
+        return null;
+    }
+}
+
 public sealed class AddCharacterAliasHandler(ProjectDbSession session) : ICommandHandler<AddCharacterAliasCommand>
 {
     public async Task<Guid?> HandleAsync(AddCharacterAliasCommand c, CancellationToken ct)

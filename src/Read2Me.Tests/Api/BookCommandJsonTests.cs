@@ -57,6 +57,21 @@ namespace Read2Me.Tests.Api
         }
 
         [Fact]
+        public void Guid_lists_bind()
+        {
+            var first = Guid.NewGuid();
+            var second = Guid.NewGuid();
+            var characterId = Guid.NewGuid();
+            var command = (SetParagraphsCharacterCommand)Deserialize(
+                "SetParagraphsCharacter",
+                $$"""{ "paragraphIds": ["{{first}}", "{{second}}"], "characterId": "{{characterId}}" }""");
+
+            Assert.Equal([first, second], command.ParagraphIds);
+            Assert.Equal(characterId, command.CharacterId);
+            Assert.Equal(Folder, command.FolderId);
+        }
+
+        [Fact]
         public void Enums_bind_from_strings()
         {
             var anchorId = Guid.NewGuid();

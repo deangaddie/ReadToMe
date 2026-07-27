@@ -34,6 +34,13 @@ public record MergeParagraphItemCommand(ProjectFolderId FolderId, Guid ItemId, M
 public record SetItemCharacterCommand(ProjectFolderId FolderId, Guid ItemId, Guid? CharacterId) : BookCommand(FolderId);
 public record CreateCharacterCommand(ProjectFolderId FolderId, string Name) : BookCommand(FolderId);
 public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid ParagraphId, Guid? CharacterId, string? VoiceInstructions = null) : BookCommand(FolderId);
+
+/// <summary>
+/// Stamps one speaker across every Character item in every listed paragraph — the bulk-assign
+/// write, and the bulk sibling of <see cref="SetParagraphCharacterCommand"/>, which is left
+/// unchanged and keeps its own callers.
+/// </summary>
+public record SetParagraphsCharacterCommand(ProjectFolderId FolderId, IReadOnlyList<Guid> ParagraphIds, Guid? CharacterId) : BookCommand(FolderId);
 public enum SegmentItemType { Narration, Character }
 
 /// One segment of a re-segmented paragraph, ready to apply: text is a slice of the original
