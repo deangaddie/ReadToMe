@@ -46,7 +46,10 @@ namespace Read2Me.Tests.State
             AudioReviewService AudioReviews,
             NodeStatusService NodeStatus,
             FakeVoiceResolver VoiceResolver,
-            CharacterQueueService CharacterQueue);
+            CharacterQueueService CharacterQueue,
+            // Only the Create() fixture wires these; the bespoke fixtures below leave them null.
+            IDialogService Dialogs = null!,
+            ISnackbar Snackbar = null!);
 
         private static BookProjectSnapshot EmptySnapshot(
             IReadOnlyDictionary<Guid, int>? nodeCounts = null,
@@ -107,8 +110,8 @@ namespace Read2Me.Tests.State
             var voiceResolver = new FakeVoiceResolver();
             var audioQueue = new AudioQueueService();
             var coordinator = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, voiceResolver, coordinator, new EventBroadcaster<ParagraphItemsChanged>());
-            return new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue);
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, voiceResolver, coordinator, new EventBroadcaster<ParagraphItemsChanged>());
+            return new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue, dialogService, snackbar);
         }
 
         // ---------------------------------------------------------------
@@ -692,7 +695,7 @@ namespace Read2Me.Tests.State
             var audioQueueLocal = new AudioQueueService();
             var coordinatorLocal = new BookSelectionCoordinator(reader, queue, audioQueueLocal, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
             var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, audioSelectionState, dialogService, queue, audioQueueLocal, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinatorLocal, new EventBroadcaster<ParagraphItemsChanged>());
+                treeState, selectionState, audioSelectionState, dialogService, snackbar, queue, audioQueueLocal, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinatorLocal, new EventBroadcaster<ParagraphItemsChanged>());
             await presenter.LoadAsync(Folder);
 
             var paragraphId = Guid.NewGuid();
@@ -790,7 +793,7 @@ namespace Read2Me.Tests.State
             var audioReviews = new AudioReviewService();
             var nodeStatus = new NodeStatusService();
             var coordinator788 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator788, new EventBroadcaster<ParagraphItemsChanged>());
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator788, new EventBroadcaster<ParagraphItemsChanged>());
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraph is loaded into cache (item→paragraph mapping).
@@ -896,7 +899,7 @@ namespace Read2Me.Tests.State
             var audioQueue889 = new AudioQueueService();
             var coordinator889 = new BookSelectionCoordinator(reader, queue, audioQueue889, paragraphTtsSettings2, snackbar2, selectionState, audioSelectionState, new FakeAiPreflight());
             var events889 = new EventBroadcaster<ParagraphItemsChanged>();
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, queue, audioQueue889, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinator889, events889);
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, queue, audioQueue889, new AudioReviewService(), new NodeStatusService(), new FakeVoiceResolver(), coordinator889, events889);
 
             await presenter.LoadAsync(Folder);
             // Expand chapter so paragraphs are loaded into the cache.
@@ -1200,7 +1203,7 @@ namespace Read2Me.Tests.State
             var audioReviews = new AudioReviewService();
             var nodeStatus = new NodeStatusService();
             var coordinator1173 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator1173, new EventBroadcaster<ParagraphItemsChanged>());
+            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator1173, new EventBroadcaster<ParagraphItemsChanged>());
 
             await presenter.LoadAsync(Folder);
             await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
@@ -1521,6 +1524,280 @@ namespace Read2Me.Tests.State
             ctx.CharacterQueue.Enqueue([AnyQueuedParagraph()]);
 
             Assert.True(selection.BulkMode);
+        }
+
+        // ---------------------------------------------------------------
+        // AssignCharacterToSelectionAsync — the bulk apply path
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Two paragraphs loaded under one expanded chapter, the first of them selected. The reader
+        /// answers the preview with <paramref name="preview"/> and the confirm resolves to
+        /// <paramref name="confirmed"/>.
+        /// </summary>
+        private static async Task<(Context ctx, Paragraph selected, Paragraph unselected)>
+            CreateWithBulkSelectionAsync(BulkAssignPreview preview, bool confirmed = true)
+        {
+            var chapterId = Guid.NewGuid();
+            var partId = Guid.NewGuid();
+            var volumeId = Guid.NewGuid();
+
+            static Paragraph MakeParagraph(Guid chapter) =>
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChapterId = chapter,
+                    Items =
+                    [
+                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a" },
+                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b" },
+                    ],
+                };
+
+            var selected = MakeParagraph(chapterId);
+            var unselected = MakeParagraph(chapterId);
+
+            var ctx = Create();
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(hasContent: true));
+            ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
+                .Returns(new HierarchyChildren(null, null, [selected, unselected]));
+            ctx.Reader.GetBulkAssignPreviewAsync(Folder, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+                .Returns(preview);
+            ctx.Reader.GetNodeStatusSeedAsync(Folder)
+                .Returns(_ => (IReadOnlyList<ParagraphStatusSeedRow>)Array.Empty<ParagraphStatusSeedRow>());
+
+            StubConfirm(ctx.Dialogs, confirmed);
+
+            await ctx.Presenter.LoadAsync(Folder);
+            await ctx.Presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
+
+            ctx.Presenter.Selection.AddParagraph(
+                selected.Id, new ParagraphSelection(volumeId, partId, chapterId));
+
+            return (ctx, selected, unselected);
+        }
+
+        private static void StubConfirm(IDialogService dialogs, bool confirmed)
+        {
+            var dialogRef = Substitute.For<IDialogReference>();
+            dialogRef.Result.Returns(Task.FromResult<DialogResult?>(
+                confirmed ? DialogResult.Ok(true) : DialogResult.Cancel()));
+
+            dialogs.ShowAsync<Read2Me.App.Shared.ConfirmDialog>(
+                    Arg.Any<string>(),
+                    Arg.Any<DialogParameters<Read2Me.App.Shared.ConfirmDialog>>())
+                .Returns(Task.FromResult(dialogRef));
+        }
+
+        private static (string Title, string Message, string ConfirmText) CapturedConfirm(IDialogService dialogs)
+        {
+            var call = dialogs.ReceivedCalls().Single(c => c.GetMethodInfo().Name == nameof(IDialogService.ShowAsync));
+            var args = call.GetArguments();
+            var parameters = (DialogParameters<Read2Me.App.Shared.ConfirmDialog>)args[1]!;
+            return ((string)args[0]!, (string)parameters["Message"]!, (string)parameters["ConfirmText"]!);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_RunsOutcomeClearThenCommandThenSeedThenStampThenNotify()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            var charId = Guid.NewGuid();
+            var log = new List<string>();
+
+            // A stored outcome so ClearOutcome actually raises Changed.
+            var queued = new QueuedParagraph(Folder, selected.Id, "preview", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            ctx.CharacterQueue.Enqueue([queued]);
+            ctx.CharacterQueue.MarkProcessing(queued);
+            ctx.CharacterQueue.MarkFailed(queued, "boom");
+
+            ctx.CommandHandler.ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>())
+                .Returns(_ => { log.Add("command"); return (Guid?)null; });
+            ctx.Reader.GetNodeStatusSeedAsync(Folder)
+                .Returns(_ => { log.Add("seed"); return (IReadOnlyList<ParagraphStatusSeedRow>)Array.Empty<ParagraphStatusSeedRow>(); });
+            ctx.CharacterQueue.Changed += () => log.Add("outcome-cleared");
+            ctx.Presenter.StateChanged += () =>
+                log.Add(selected.Items.First().CharacterId == charId ? "notify-after-stamp" : "notify-before-stamp");
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
+
+            Assert.Equal(new[] { "outcome-cleared", "command", "seed", "notify-after-stamp" }, log);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_StampsSelectedLoadedParagraphsOnly()
+        {
+            var (ctx, selected, unselected) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            var charId = Guid.NewGuid();
+            ctx.Reader.GetCharactersAsync(Folder).Returns([new Character { Id = charId, Name = "Zelda" }]);
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
+
+            Assert.Equal(charId, selected.Items.First().CharacterId);
+            Assert.Equal("Zelda", selected.Items.First().Character?.Name);
+            // Narration is never stamped, and a loaded paragraph outside the selection is untouched.
+            Assert.Null(selected.Items.Last().CharacterId);
+            Assert.Null(unselected.Items.First().CharacterId);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_IssuesOneBulkCommandCarryingTheSelectedIds()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            var charId = Guid.NewGuid();
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphsCharacterCommand>(c =>
+                    c != null && c.CharacterId == charId &&
+                    c.ParagraphIds.Count == 1 && c.ParagraphIds[0] == selected.Id));
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_NullId_ClearsAcrossTheSelection()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            selected.Items.First().CharacterId = Guid.NewGuid();
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, null);
+
+            await ctx.CommandHandler.Received(1).ExecuteAsync(
+                Arg.Is<SetParagraphsCharacterCommand>(c => c != null && c.CharacterId == null));
+            Assert.Null(selected.Items.First().CharacterId);
+
+            var (title, message, confirmText) = CapturedConfirm(ctx.Dialogs);
+            Assert.Equal("Clear speakers in selection", title);
+            Assert.Equal("1 dialog line in 1 paragraph lose their speaker and need attributing again.", message);
+            Assert.Equal("Clear", confirmText);
+            ctx.Snackbar.Received(1).Add(
+                "Cleared speakers on 1 lines in 1 paragraphs.", Severity.Success,
+                Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_NoDialogInSelection_InfoSnackbarNoConfirmNoCommand()
+        {
+            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(0, 0));
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
+
+            ctx.Snackbar.Received(1).Add(
+                "No dialog in the selection — nothing to assign.", Severity.Info,
+                Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+            Assert.Empty(ctx.Dialogs.ReceivedCalls());
+            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_CancelledConfirm_WritesNothing_AndKeepsSelectionAndBulkMode()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1), confirmed: false);
+            ctx.Presenter.Selection.BulkMode = true;
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
+
+            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
+            Assert.Null(selected.Items.First().CharacterId);
+            Assert.True(ctx.Presenter.Selection.IsParagraphSelected(selected.Id));
+            Assert.True(ctx.Presenter.Selection.BulkMode);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_UnknownCharacterId_RefreshesRosterBeforeStamping()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            Assert.Empty(ctx.Presenter.Characters);
+
+            var charId = Guid.NewGuid();
+            ctx.Reader.GetCharactersAsync(Folder).Returns([new Character { Id = charId, Name = "NewChar" }]);
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
+
+            await ctx.Reader.Received().GetCharactersAsync(Folder);
+            Assert.Equal("NewChar", selected.Items.First().Character?.Name);
+            Assert.Equal("Assign NewChar to selection", CapturedConfirm(ctx.Dialogs).Title);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_IdTheRosterCannotExplain_StillReadsAsAnAssign()
+        {
+            // Defensive: the roster refresh above cannot place the id. The wording must not flip to
+            // the clear verbs, because a character id is still being written.
+            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
+
+            var (title, _, confirmText) = CapturedConfirm(ctx.Dialogs);
+            Assert.Equal("Assign the character to selection", title);
+            Assert.Equal("Assign", confirmText);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_KeepsTheSelection()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
+
+            Assert.True(ctx.Presenter.Selection.IsParagraphSelected(selected.Id));
+            Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_ReSeedsNodeStatusForTheWholeFolder()
+        {
+            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid();
+
+            ctx.Reader.GetNodeStatusSeedAsync(Folder).Returns(
+                new List<ParagraphStatusSeedRow> { MakeSeedRow(Guid.NewGuid(), ch, part, vol, unattributed: 2) });
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
+
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_ConfirmQuotesTheFigures_AndNamesTheSkippedParagraphs()
+        {
+            // 3 paragraphs selected, 2 of them holding the 5 dialog lines.
+            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(2, 5));
+            // Two more selected paragraphs under a chapter that was never expanded — not loaded, so
+            // they only move the counts.
+            var unloadedChapterId = Guid.NewGuid();
+            ctx.Presenter.Selection.AddParagraph(Guid.NewGuid(), new ParagraphSelection(Guid.NewGuid(), Guid.NewGuid(), unloadedChapterId));
+            ctx.Presenter.Selection.AddParagraph(Guid.NewGuid(), new ParagraphSelection(Guid.NewGuid(), Guid.NewGuid(), unloadedChapterId));
+
+            var charId = Guid.NewGuid();
+            ctx.Reader.GetCharactersAsync(Folder).Returns([new Character { Id = charId, Name = "Zelda" }]);
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
+
+            var (title, message, confirmText) = CapturedConfirm(ctx.Dialogs);
+            Assert.Equal("Assign Zelda to selection", title);
+            Assert.Equal(
+                "Zelda becomes the speaker for 5 dialog lines in 2 paragraphs. Existing speakers are replaced. " +
+                "1 selected paragraph have no dialog and stay unchanged.",
+                message);
+            Assert.Equal("Assign", confirmText);
+            ctx.Snackbar.Received(1).Add(
+                "Assigned Zelda to 5 lines in 2 paragraphs.", Severity.Success,
+                Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_NoSkippedParagraphs_OmitsThatSentence()
+        {
+            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 4));
+            var charId = Guid.NewGuid();
+            ctx.Reader.GetCharactersAsync(Folder).Returns([new Character { Id = charId, Name = "Zelda" }]);
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
+
+            Assert.Equal(
+                "Zelda becomes the speaker for 4 dialog lines in 1 paragraph. Existing speakers are replaced.",
+                CapturedConfirm(ctx.Dialogs).Message);
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using MudBlazor;
+using Read2Me.App.Shared;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
@@ -24,6 +25,7 @@ namespace Read2Me.App.State
         BookSelectionState selectionState,
         AudioItemSelectionState audioSelectionState,
         IDialogService dialogService,
+        ISnackbar snackbar,
         CharacterQueueService characterQueue,
         AudioQueueService audioQueue,
         AudioReviewService audioReviews,
@@ -231,12 +233,7 @@ namespace Read2Me.App.State
             await commandHandler.ExecuteAsync(new SetItemCharacterCommand(folderId, item.Id, characterId));
             characterQueue.ClearOutcome(folderId, item.ParagraphId);
 
-            var character = characterId.HasValue ? Characters.Find(c => c.Id == characterId.Value) : null;
-            if (characterId.HasValue && character is null)
-            {
-                Characters = await reader.GetCharactersAsync(folderId);
-                character = Characters.Find(c => c.Id == characterId.Value);
-            }
+            var character = await ResolveCharacterAsync(folderId, characterId);
 
             item.CharacterId = characterId;
             item.Character = character;
@@ -263,6 +260,106 @@ namespace Read2Me.App.State
             InvalidateVoicePreview();
             NotifyStateChanged();
         }
+
+        /// <summary>
+        /// Bulk apply: one character — or a clear, when <paramref name="characterId"/> is null — across
+        /// every Character item in every selected paragraph, behind one confirm. The selection is kept,
+        /// so the dock bar stays up and bulk mode stays armed.
+        /// </summary>
+        public async Task AssignCharacterToSelectionAsync(ProjectFolderId folderId, Guid? characterId)
+        {
+            var ids = Selection.SelectedParagraphIds().ToList();
+            var preview = await reader.GetBulkAssignPreviewAsync(folderId, ids);
+
+            if (preview.ParagraphsWithCharacterItems == 0)
+            {
+                snackbar.Add("No dialog in the selection — nothing to assign.", Severity.Info);
+                return;
+            }
+
+            // Resolved before the confirm, not after, because the dialog quotes the character's name:
+            // on the add-new path the id can be newer than the roster. A read, so a cancelled confirm
+            // still writes nothing.
+            var character = await ResolveCharacterAsync(folderId, characterId);
+
+            var items = preview.CharacterItems;
+            var paras = preview.ParagraphsWithCharacterItems;
+            // Selected paragraphs the write will not touch: all narration and pauses.
+            var skipped = ids.Count - paras;
+
+            // Null name means a clear throughout the wording. Keyed on characterId, not on the
+            // resolved entity, so an id the roster still cannot explain reads as an assign.
+            var name = characterId.HasValue ? character?.Name ?? "the character" : null;
+
+            if (!await dialogService.ConfirmAsync(
+                    BulkConfirmTitle(name),
+                    BulkConfirmMessage(name, items, paras, skipped),
+                    name is null ? "Clear" : "Assign"))
+                return;
+
+            foreach (var id in ids)
+                characterQueue.ClearOutcome(folderId, id);
+
+            await commandHandler.ExecuteAsync(new SetParagraphsCharacterCommand(folderId, ids, characterId));
+
+            // Folder-wide re-seed rather than per-paragraph patching: uniform for assign and clear, and
+            // correct for selected paragraphs whose chapters were never expanded. Fires Changed once,
+            // and does so before the stamp so it cannot land mid-walk.
+            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
+
+            // Walk the loaded paragraphs testing membership, never the selection looking ids up — the
+            // selection can dwarf what is in memory. Unloaded paragraphs need nothing: their chapter
+            // reads the committed write when it expands.
+            foreach (var p in Tree.AllParagraphs())
+            {
+                if (Selection.IsParagraphSelected(p.Id))
+                    ParagraphCharacterStamp.Apply(p.Items, characterId, character);
+            }
+
+            InvalidateVoicePreview();
+            NotifyStateChanged();
+
+            snackbar.Add(
+                name is null
+                    ? $"Cleared speakers on {items} lines in {paras} paragraphs."
+                    : $"Assigned {name} to {items} lines in {paras} paragraphs.",
+                Severity.Success);
+        }
+
+        /// <summary>
+        /// The roster entry behind a picked id, refreshing from the reader when the id is newer than
+        /// the roster — the add-new path, where the character was created after this presenter loaded.
+        /// Null for a clear.
+        /// </summary>
+        private async Task<Character?> ResolveCharacterAsync(ProjectFolderId folderId, Guid? characterId)
+        {
+            if (characterId is not { } id) return null;
+
+            var character = Characters.Find(c => c.Id == id);
+            if (character is not null) return character;
+
+            Characters = await reader.GetCharactersAsync(folderId);
+            return Characters.Find(c => c.Id == id);
+        }
+
+        private static string BulkConfirmTitle(string? name) =>
+            name is null ? "Clear speakers in selection" : $"Assign {name} to selection";
+
+        private static string BulkConfirmMessage(string? name, int items, int paras, int skipped)
+        {
+            var scope = $"{items} dialog line{Plural(items)} in {paras} paragraph{Plural(paras)}";
+
+            var message = name is null
+                ? $"{scope} lose their speaker and need attributing again."
+                : $"{name} becomes the speaker for {scope}. Existing speakers are replaced.";
+
+            if (skipped == 0) return message;
+
+            return message + $" {skipped} selected paragraph{Plural(skipped)} have no dialog and stay unchanged.";
+        }
+
+        /// <summary>Noun-suffix pluralisation only, the idiom the confirm wordings are written in.</summary>
+        private static string Plural(int n) => n == 1 ? "" : "s";
 
         public async Task<Guid?> AddCharacterAsync(ProjectFolderId folderId)
         {
