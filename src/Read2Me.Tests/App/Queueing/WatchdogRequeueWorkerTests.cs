@@ -20,12 +20,12 @@ namespace Read2Me.Tests.App.Queueing
             var queue = new CharacterQueueService();
             var gate = new ProcessingGate<QueuedParagraph>();
             var completed = new TaskCompletionSource();
-            var attempts = new List<bool>(); // Requeued flag observed per processing attempt
+            var attempts = new List<int>(); // Retries budget observed per processing attempt
 
             var processor = new FakeProcessor((item, _) =>
             {
-                attempts.Add(item.Requeued);
-                if (!item.Requeued)
+                attempts.Add(item.Attempts.Retries);
+                if (item.Attempts.Retries == 0)
                 {
                     // Simulate the ServiceUnavailable path: requeue the item and close the gate as
                     // recovery would, so the requeued item must wait.
@@ -66,7 +66,7 @@ namespace Read2Me.Tests.App.Queueing
             await worker.StopAsync(CancellationToken.None);
 
             Assert.Equal(completed.Task, done);
-            Assert.Equal(new[] { false, true }, attempts);
+            Assert.Equal(new[] { 0, 1 }, attempts);
         }
 
         private sealed class FakeProcessor(Func<QueuedParagraph, CancellationToken, Task> handle)

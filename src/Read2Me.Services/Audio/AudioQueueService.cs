@@ -5,7 +5,8 @@ using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Audio
 {
-    public readonly record struct QueuedAudioItem(ProjectFolderId Folder, AudioItemRef Item, bool Requeued = false);
+    public readonly record struct QueuedAudioItem(
+        ProjectFolderId Folder, AudioItemRef Item, AttemptState Attempts = default);
 
     public enum AudioItemQueueStatus { Queued, Processing }
 
@@ -55,15 +56,16 @@ namespace Read2Me.Services.Audio
         }
 
         /// <summary>
-        /// Puts an interrupted item back on the queue with its retry flag set (watchdog recovery path):
-        /// status returns to Queued and it re-enters the channel, waiting on the closed gate until
-        /// recovery reopens it. The flag guards against an endless requeue if the service is down.
+        /// Puts an interrupted item back on the queue with a watchdog retry spent (watchdog recovery
+        /// path): status returns to Queued and it re-enters the channel, waiting on the closed gate
+        /// until recovery reopens it. The once-only budget guards against an endless requeue if the
+        /// service is down.
         /// </summary>
         public void Requeue(QueuedAudioItem queued)
         {
             var key = new AudioItemKey(queued.Folder, queued.Item.ParagraphItemId);
             _store.Requeue(key);
-            _channel.Writer.TryWrite(queued with { Requeued = true });
+            _channel.Writer.TryWrite(queued with { Attempts = queued.Attempts.WithRetry() });
             Changed?.Invoke();
         }
 

@@ -124,7 +124,7 @@ namespace Read2Me.App.Characters
                 case WorkOutcome.Unavailable unavailable:
                     // Watchdog is recovering the service. Requeue once so recovery is invisible in
                     // the results; a second outage for the same item (service down) fails it.
-                    if (item.Requeued)
+                    if (item.Attempts.Retries > 0)
                     {
                         logger.LogWarning("Paragraph {ParagraphId} service unavailable again after requeue — failing: {Reason}",
                             item.ParagraphId, unavailable.Reason);
@@ -142,13 +142,12 @@ namespace Read2Me.App.Characters
                     // The target model is still loading on a switchable llama endpoint — provider
                     // busy, not dead. Requeue with exponential backoff, indefinitely: failing or
                     // escalating would evict the very load we are waiting for. This is DISTINCT from
-                    // ServiceUnavailable's requeue-once-then-fail — it never touches the Requeued
-                    // flag, so it never consumes that budget, and a genuinely wedged load simply
-                    // loops until the user cancels.
-                    var backoff = ModelLoadBackoff(item.LoadAttempts);
+                    // ServiceUnavailable's requeue-once-then-fail — it never spends the Retries
+                    // budget, and a genuinely wedged load simply loops until the user cancels.
+                    var backoff = ModelLoadBackoff(item.Attempts.Busies);
                     logger.LogInformation(
                         "Paragraph {ParagraphId} model still loading — requeuing in {Backoff:0.#}s (attempt {Attempt}): {Reason}",
-                        item.ParagraphId, backoff.TotalSeconds, item.LoadAttempts + 1, busy.Reason);
+                        item.ParagraphId, backoff.TotalSeconds, item.Attempts.Busies + 1, busy.Reason);
                     queue.RequeueForModelLoad(item, backoff);
                     break;
             }

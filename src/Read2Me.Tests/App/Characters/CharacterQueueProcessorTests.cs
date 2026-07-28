@@ -6,6 +6,7 @@ using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Queueing;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -219,7 +220,7 @@ namespace Read2Me.Tests.App.Characters
         public async Task ServiceUnavailable_SecondTimeForRequeuedItem_MarksFailed()
         {
             _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, "stalled");
-            var requeued = _item with { Requeued = true };
+            var requeued = _item with { Attempts = default(AttemptState).WithRetry() };
 
             await _sut.ProcessItemAsync(requeued, CancellationToken.None);
 
@@ -246,9 +247,9 @@ namespace Read2Me.Tests.App.Characters
         {
             _attribution.Outcome = new AttributionOutcome(AttributionStatus.ModelLoading, null, "still loading");
             // An item that has already exhausted the ServiceUnavailable once-then-fail budget
-            // (Requeued=true) and retried the model load several times must STILL requeue on
-            // ModelLoading — the two paths are independent and it never fails.
-            var retried = _item with { Requeued = true, LoadAttempts = 5 };
+            // (Retries=1) and retried the model load several times must STILL requeue on
+            // ModelLoading — the two budgets are independent and it never fails.
+            var retried = _item with { Attempts = new AttemptState(Retries: 1, Busies: 5) };
 
             await _sut.ProcessItemAsync(retried, CancellationToken.None);
 

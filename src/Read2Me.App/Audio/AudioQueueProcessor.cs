@@ -64,7 +64,7 @@ namespace Read2Me.App.Audio
             {
                 // Watchdog is recovering the service. Requeue once so recovery is invisible in the
                 // results; a second outage for the same item (service down) fails it.
-                if (queued.Requeued)
+                if (queued.Attempts.Retries > 0)
                 {
                     logger.LogWarning("Audio item {ItemId} service unavailable again after requeue — failing", itemRef.ParagraphItemId);
                     broadcaster.Publish(new Failed(itemRef.ParagraphItemId, Attempt: 1, ex.Message));

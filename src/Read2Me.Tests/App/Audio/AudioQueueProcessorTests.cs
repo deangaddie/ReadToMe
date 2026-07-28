@@ -6,6 +6,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Health;
+using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
 using Xunit;
 
@@ -160,7 +161,7 @@ namespace Read2Me.Tests.App.Audio
             var itemId = Guid.NewGuid();
             _resolver.Result = SuccessResolution(itemId);
             _pipeline.Throws = new AiServiceUnavailableException("http://localhost:8003", new Exception("timeout"));
-            var queued = MakeItem(itemId) with { Requeued = true };
+            var queued = MakeItem(itemId) with { Attempts = default(AttemptState).WithRetry() };
 
             await _sut.ProcessItemAsync(queued, CancellationToken.None);
 

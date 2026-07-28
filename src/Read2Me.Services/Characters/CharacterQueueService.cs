@@ -13,8 +13,7 @@ namespace Read2Me.Services.Characters
         Guid ChapterId,
         Guid PartId,
         Guid VolumeId,
-        bool Requeued = false,
-        int LoadAttempts = 0);
+        AttemptState Attempts = default);
 
     public enum ParagraphQueueStatus { Queued, Processing }
 
@@ -134,23 +133,24 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
-        /// Puts an interrupted item back on the queue with its retry flag set (watchdog recovery path):
-        /// status returns to Queued and it re-enters the channel, waiting on the closed gate until
-        /// recovery reopens it. The flag guards against an endless requeue if the service is down.
+        /// Puts an interrupted item back on the queue with a watchdog retry spent (watchdog recovery
+        /// path): status returns to Queued and it re-enters the channel, waiting on the closed gate
+        /// until recovery reopens it. The once-only budget guards against an endless requeue if the
+        /// service is down.
         /// </summary>
         public void Requeue(QueuedParagraph item)
         {
             _store.Requeue(Key(item));
-            _channel.Writer.TryWrite(item with { Requeued = true });
+            _channel.Writer.TryWrite(item with { Attempts = item.Attempts.WithRetry() });
             Changed?.Invoke();
         }
 
         /// <summary>
         /// Requeues an item whose target model is still loading, re-entering the channel only after
-        /// <paramref name="backoff"/> elapses. Distinct from <see cref="Requeue"/>: it does NOT set
-        /// the <see cref="QueuedParagraph.Requeued"/> once-then-fail flag (a model load retries
-        /// indefinitely, never consuming the watchdog requeue budget) and instead bumps
-        /// <see cref="QueuedParagraph.LoadAttempts"/> so the next backoff grows. The item's queue
+        /// <paramref name="backoff"/> elapses. Distinct from <see cref="Requeue"/>: it spends no
+        /// <see cref="AttemptState.Retries"/> (a model load retries indefinitely, never consuming
+        /// the watchdog requeue budget) and instead spends an
+        /// <see cref="AttemptState.Busies"/> so the next backoff grows. The item's queue
         /// status returns to Queued immediately; the delayed write targets the writer captured here,
         /// so if <see cref="CancelAll"/> swaps the channel while the backoff runs the write lands on
         /// the completed old writer and is dropped — a cancelled item never re-enters the queue.
@@ -159,7 +159,7 @@ namespace Read2Me.Services.Characters
         {
             _store.Requeue(Key(item));
 
-            var next = item with { LoadAttempts = item.LoadAttempts + 1 };
+            var next = item with { Attempts = item.Attempts.WithBusy() };
             var writer = _channel.Writer;
             if (backoff <= TimeSpan.Zero)
                 writer.TryWrite(next);
