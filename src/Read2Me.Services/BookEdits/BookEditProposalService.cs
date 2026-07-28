@@ -36,15 +36,20 @@ namespace Read2Me.Services.BookEdits
         private const string NoConfigMessage = "No active LLM server configured";
         private const string RunFailed = "The AI request failed.";
 
+        /// <param name="disableThinking">
+        /// Skip the model's hidden thinking phase on the per-item edit calls. Ignored by
+        /// deterministic transforms, which never reach the LLM.
+        /// </param>
         public virtual async Task<IReadOnlyList<ProposedEdit>> ProposeAsync(
             ProjectFolderId folderId,
             EditProgram program,
             IReadOnlyList<EditTarget> targets,
             IProgress<(int Done, int Total)>? progress,
+            bool disableThinking,
             CancellationToken ct)
         {
             return program.Transform.Kind == TransformKind.Llm
-                ? await ProposeWithLlmAsync(folderId, program, targets, progress, ct)
+                ? await ProposeWithLlmAsync(folderId, program, targets, progress, disableThinking, ct)
                 : ProposeDeterministic(program, targets, progress);
         }
 
@@ -81,6 +86,7 @@ namespace Read2Me.Services.BookEdits
             EditProgram program,
             IReadOnlyList<EditTarget> targets,
             IProgress<(int, int)>? progress,
+            bool disableThinking,
             CancellationToken ct)
         {
             var proposals = new List<ProposedEdit>(targets.Count);
@@ -105,7 +111,7 @@ namespace Read2Me.Services.BookEdits
                 LlmRunResult<IReadOnlyDictionary<int, string>> run;
                 try
                 {
-                    run = await RunBatchAsync(config, project, instruction, batch, ct);
+                    run = await RunBatchAsync(config, project, instruction, batch, disableThinking, ct);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -147,6 +153,7 @@ namespace Read2Me.Services.BookEdits
             EditProgram program,
             EditTarget target,
             string? hint,
+            bool disableThinking,
             CancellationToken ct)
         {
             if (program.Transform.Kind != TransformKind.Llm)
@@ -162,7 +169,7 @@ namespace Read2Me.Services.BookEdits
             LlmRunResult<IReadOnlyDictionary<int, string>> run;
             try
             {
-                run = await RunBatchAsync(config, project, instruction, [target], ct);
+                run = await RunBatchAsync(config, project, instruction, [target], disableThinking, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -188,7 +195,8 @@ namespace Read2Me.Services.BookEdits
 
         private Task<LlmRunResult<IReadOnlyDictionary<int, string>>> RunBatchAsync(
             LlmServerConfig config, Read2Me.Data.Entities.Project? project,
-            string instruction, IReadOnlyList<EditTarget> batch, CancellationToken ct)
+            string instruction, IReadOnlyList<EditTarget> batch, bool disableThinking,
+            CancellationToken ct)
         {
             var itemsJson = PromptTemplates.BuildEditItemsJson(
                 batch.Select((t, i) => (i, t.DisplayPath, t.CurrentValue)));
@@ -204,7 +212,7 @@ namespace Read2Me.Services.BookEdits
 
             return runner.RunAsync<IReadOnlyDictionary<int, string>>(
                 new LlmRunRequest(config, prompt, $"{batch.Count} edit(s): {batch[0].DisplayPath}",
-                    BookEditBatchSchema.JsonSchema, CompletionShape.Array),
+                    BookEditBatchSchema.JsonSchema, CompletionShape.Array, disableThinking),
                 TryParseBatch, ct);
         }
 

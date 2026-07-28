@@ -46,7 +46,7 @@ namespace Read2Me.Tests.Services.BookEdits
         public async Task Plan_NoConfig_ReturnsNoLlmConfigured()
         {
             var planner = NewPlanner(new FakeLlmCompletionRunner().Completes(ValidPlanJson), NewSettings());
-            var outcome = await planner.PlanAsync(Folder, "rename chapters", CancellationToken.None);
+            var outcome = await planner.PlanAsync(Folder, "rename chapters", false, CancellationToken.None);
             Assert.Equal(EditPlanStatus.NoLlmConfigured, outcome.Status);
         }
 
@@ -57,7 +57,7 @@ namespace Read2Me.Tests.Services.BookEdits
             await RegisterActiveConfigAsync(settings);
             var runner = new FakeLlmCompletionRunner().Completes(ValidPlanJson);
 
-            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "rename every chapter to 'Chapter {n}'", CancellationToken.None);
+            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "rename every chapter to 'Chapter {n}'", false, CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.Ok, outcome.Status);
             Assert.Equal(EditTargetSelector.ChapterTitle, outcome.Program!.Target);
@@ -68,6 +68,21 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Equal("rename every chapter to 'Chapter {n}'", request.Label);
             Assert.Equal(CompletionShape.Object, request.Shape);
             Assert.Equal(EditProgramSchema.JsonSchema, request.JsonSchema);
+            Assert.False(request.DisableThinking);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task Plan_PassesDisableThinkingThrough(bool disableThinking)
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes(ValidPlanJson);
+
+            await NewPlanner(runner, settings).PlanAsync(Folder, "x", disableThinking, CancellationToken.None);
+
+            Assert.Equal(disableThinking, Assert.Single(runner.Requests).DisableThinking);
         }
 
         [Fact]
@@ -83,7 +98,7 @@ namespace Read2Me.Tests.Services.BookEdits
                   "transform": { "kind": "llm", "pattern": null, "replacement": null, "template": null, "instruction": null } }
                 """;
 
-            var outcome = await NewPlanner(new FakeLlmCompletionRunner().Completes(raw), settings).PlanAsync(Folder, "split chapter 4", CancellationToken.None);
+            var outcome = await NewPlanner(new FakeLlmCompletionRunner().Completes(raw), settings).PlanAsync(Folder, "split chapter 4", false, CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.Unsupported, outcome.Status);
             Assert.Equal("Cannot split chapters.", outcome.Reason);
@@ -95,7 +110,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var settings = NewSettings();
             await RegisterActiveConfigAsync(settings);
 
-            var outcome = await NewPlanner(new FakeLlmCompletionRunner().Completes("not json at all"), settings).PlanAsync(Folder, "x", CancellationToken.None);
+            var outcome = await NewPlanner(new FakeLlmCompletionRunner().Completes("not json at all"), settings).PlanAsync(Folder, "x", false, CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.Failed, outcome.Status);
             Assert.NotNull(outcome.Reason);
@@ -108,7 +123,7 @@ namespace Read2Me.Tests.Services.BookEdits
             await RegisterActiveConfigAsync(settings);
             var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.Failed, "boom");
 
-            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "x", CancellationToken.None);
+            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "x", false, CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.Failed, outcome.Status);
             Assert.Equal("boom", outcome.Reason);
@@ -121,7 +136,7 @@ namespace Read2Me.Tests.Services.BookEdits
             await RegisterActiveConfigAsync(settings);
             var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.ServiceUnavailable, "down");
 
-            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "x", CancellationToken.None);
+            var outcome = await NewPlanner(runner, settings).PlanAsync(Folder, "x", false, CancellationToken.None);
 
             Assert.Equal(EditPlanStatus.ServiceUnavailable, outcome.Status);
         }

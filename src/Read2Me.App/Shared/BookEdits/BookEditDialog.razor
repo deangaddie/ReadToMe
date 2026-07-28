@@ -29,6 +29,9 @@
                 </MudText>
                 <MudTextField T="string" @bind-Value="_instruction" Label="Instruction" Lines="4"
                               Variant="Variant.Outlined" AutoFocus="true" Disabled="_busy" />
+                <MudSwitch T="bool" @bind-Value="_planThinking" Color="Color.Primary" Size="Size.Small"
+                           Class="mt-2" Disabled="_busy"
+                           Label="Let the AI think before planning (slower, better on vague instructions)" />
                 break;
 
             case Phase.PlanReady:
@@ -45,6 +48,14 @@
                     <MudAlert Severity="Severity.Warning" Class="mt-2">
                         This is a large AI job (@_targets.Count items). It may take a long time.
                     </MudAlert>
+                }
+                @if (_isLlmTransform)
+                {
+                    @* Separate from the plan toggle: thinking costs most of the generation time, and
+                       this one is paid once per batch across the whole job. *@
+                    <MudSwitch T="bool" @bind-Value="_fixThinking" Color="Color.Primary" Size="Size.Small"
+                               Class="mt-2"
+                               Label="Let the AI think on each item (slower, better on subtle edits)" />
                 }
                 break;
 
@@ -147,6 +158,13 @@
                                                               Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
                                                               @bind-Value="_hint" Disabled="@IsRetrying(context)"
                                                               Placeholder="e.g. keep the original spelling of names" />
+                                                @* Same sticky flag the batch used — one bad row is the
+                                                   usual reason to turn thinking on, and it applies to
+                                                   every later retry too. *@
+                                                <MudSwitch T="bool" @bind-Value="_fixThinking" Color="Color.Primary"
+                                                           Size="Size.Small" Class="mt-1"
+                                                           Disabled="@IsRetrying(context)"
+                                                           Label="Think before answering" />
                                             }
                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
                                                 <MudButton Size="Size.Small" Variant="Variant.Text"
@@ -257,6 +275,11 @@
     Guid? _openRowId;
     // Sticky for the dialog's lifetime: the same steer usually applies to the next row retried.
     string _hint = "";
+    // Thinking is chosen per phase because the two calls trade off differently: the plan is one
+    // call where thinking is cheap, the fix runs once per batch/row where it dominates the runtime.
+    // Both default off — thinking is opt-in, for when a plain run gets the edit wrong.
+    bool _planThinking;
+    bool _fixThinking;
     Guid? _retryingRowId;
     int _progressDone;
     CancellationTokenSource? _cts;
@@ -280,7 +303,7 @@
             if (!await Preflight.EnsureReadyAsync(AiTaskKind.BookEdit, _cts.Token))
                 return;
 
-            var outcome = await Planner.PlanAsync(FolderId, _instruction, _cts.Token);
+            var outcome = await Planner.PlanAsync(FolderId, _instruction, !_planThinking, _cts.Token);
             if (outcome.Status != EditPlanStatus.Ok)
             {
                 _error = outcome.Status switch
@@ -330,7 +353,8 @@
         IReadOnlyList<ProposedEdit> proposals = [];
         try
         {
-            proposals = await Proposals.ProposeAsync(FolderId, _program!, _targets, progress, _cts.Token);
+            proposals = await Proposals.ProposeAsync(
+                FolderId, _program!, _targets, progress, !_fixThinking, _cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -395,7 +419,8 @@
             if (!await Preflight.EnsureReadyAsync(AiTaskKind.BookEdit, _cts.Token))
                 return;
 
-            var result = await Proposals.ProposeOneAsync(FolderId, _program!, target, _hint, _cts.Token);
+            var result = await Proposals.ProposeOneAsync(
+                FolderId, _program!, target, _hint, !_fixThinking, _cts.Token);
             _selection.ReplaceProposal(row, result);
         }
         catch (OperationCanceledException)

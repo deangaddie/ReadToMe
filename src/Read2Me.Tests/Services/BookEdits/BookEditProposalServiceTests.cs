@@ -44,7 +44,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var targets = new[] { Target(1, "Intro"), Target(2, "Storm") };
 
             var proposals = await NewService(new FakeLlmCompletionRunner(), NewSettings())
-                .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
+                .ProposeAsync(Folder, program, targets, null, false, CancellationToken.None);
 
             Assert.Equal("Chapter 1: Intro", proposals[0].NewValue);
             Assert.Equal("Chapter 2: Storm", proposals[1].NewValue);
@@ -58,7 +58,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var targets = new[] { Target(1, "1. Intro"), Target(2, "No prefix") };
 
             var proposals = await NewService(new FakeLlmCompletionRunner(), NewSettings())
-                .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
+                .ProposeAsync(Folder, program, targets, null, false, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.Proposed, proposals[0].Status);
             Assert.Equal("Intro", proposals[0].NewValue);
@@ -78,7 +78,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var targets = new[] { Target(1, "t is a truth."), Target(2, "second"), Target(3, "hird") };
 
             var proposals = await NewService(runner, settings)
-                .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
+                .ProposeAsync(Folder, program, targets, null, false, CancellationToken.None);
 
             Assert.Equal("It is a truth.", proposals[0].NewValue);
             Assert.Equal(ProposalStatus.Failed, proposals[1].Status);
@@ -100,7 +100,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var progress = new SyncProgress(reports);
 
             var proposals = await NewService(runner, settings)
-                .ProposeAsync(Folder, program, targets, progress, CancellationToken.None);
+                .ProposeAsync(Folder, program, targets, progress, false, CancellationToken.None);
 
             Assert.Equal(2, runner.Requests.Count);
             Assert.Equal(10, proposals.Count);
@@ -115,7 +115,7 @@ namespace Read2Me.Tests.Services.BookEdits
         {
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
             var proposals = await NewService(new FakeLlmCompletionRunner(), NewSettings())
-                .ProposeAsync(Folder, program, [Target(1, "x")], null, CancellationToken.None);
+                .ProposeAsync(Folder, program, [Target(1, "x")], null, false, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.Failed, proposals[0].Status);
             Assert.Contains("No active LLM", proposals[0].FailureReason);
@@ -131,7 +131,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var targets = Enumerable.Range(1, 10).Select(n => Target(n, $"old{n}")).ToList();
 
             var proposals = await NewService(runner, settings)
-                .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
+                .ProposeAsync(Folder, program, targets, null, false, CancellationToken.None);
 
             Assert.Equal(10, proposals.Count);
             Assert.All(proposals, p => Assert.Equal(ProposalStatus.Failed, p.Status));
@@ -150,7 +150,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var targets = Enumerable.Range(1, 10).Select(n => Target(n, $"old{n}")).ToList();
 
             var proposals = await NewService(runner, settings)
-                .ProposeAsync(Folder, program, targets, null, CancellationToken.None);
+                .ProposeAsync(Folder, program, targets, null, false, CancellationToken.None);
 
             Assert.Equal(10, proposals.Count);
             Assert.All(proposals.Take(8), p => Assert.Equal(ProposalStatus.Failed, p.Status));
@@ -171,7 +171,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var targets = Enumerable.Range(1, 10).Select(n => Target(n, $"old{n}")).ToList();
 
             var proposals = await NewService2(runner, settings)
-                .ProposeAsync(Folder, program, targets, null, cts.Token);
+                .ProposeAsync(Folder, program, targets, null, false, cts.Token);
 
             Assert.Equal(8, proposals.Count); // first batch kept, second never completed
         }
@@ -188,7 +188,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var target = Target(2, "storm coming");
 
             var proposal = await NewService(runner, settings)
-                .ProposeOneAsync(Folder, program, target, "use an apostrophe", CancellationToken.None);
+                .ProposeOneAsync(Folder, program, target, "use an apostrophe", false, CancellationToken.None);
 
             Assert.Equal("Storm's Coming", proposal.NewValue);
             Assert.Equal(ProposalStatus.Proposed, proposal.Status);
@@ -213,8 +213,8 @@ namespace Read2Me.Tests.Services.BookEdits
             var target = Target(2, "storm coming");
             var service = NewService(runner, settings);
 
-            await service.ProposeOneAsync(Folder, program, target, null, CancellationToken.None);
-            await service.ProposeOneAsync(Folder, program, target, "   ", CancellationToken.None);
+            await service.ProposeOneAsync(Folder, program, target, null, false, CancellationToken.None);
+            await service.ProposeOneAsync(Folder, program, target, "   ", false, CancellationToken.None);
 
             Assert.Equal(runner.Requests[0].Prompt, runner.Requests[1].Prompt);
             Assert.DoesNotContain("Additional guidance", runner.Requests[0].Prompt);
@@ -222,8 +222,28 @@ namespace Read2Me.Tests.Services.BookEdits
             // and identical to what the batch path renders for the same single target
             var batchRunner = new FakeLlmCompletionRunner().Completes("[]");
             await NewService(batchRunner, settings)
-                .ProposeAsync(Folder, program, [target], null, CancellationToken.None);
+                .ProposeAsync(Folder, program, [target], null, false, CancellationToken.None);
             Assert.Equal(batchRunner.Requests[0].Prompt, runner.Requests[0].Prompt);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task Propose_Llm_PassesDisableThinkingThrough(bool disableThinking)
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("[]");
+            var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
+            var service = NewService(runner, settings);
+
+            await service.ProposeAsync(
+                Folder, program, [Target(1, "a")], null, disableThinking, CancellationToken.None);
+            await service.ProposeOneAsync(
+                Folder, program, Target(2, "b"), null, disableThinking, CancellationToken.None);
+
+            Assert.All(runner.Requests, r => Assert.Equal(disableThinking, r.DisableThinking));
+            Assert.Equal(2, runner.Requests.Count);
         }
 
         [Fact]
@@ -235,7 +255,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var program = Program(new EditTransform(TransformKind.SetTemplate, Template: "Chapter {n}"));
 
             var proposal = await NewService(runner, settings)
-                .ProposeOneAsync(Folder, program, Target(1, "Intro"), "hint", CancellationToken.None);
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), "hint", false, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.Failed, proposal.Status);
             Assert.Empty(runner.Requests);
@@ -252,7 +272,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
 
             var proposal = await NewService(runner, settings)
-                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, CancellationToken.None);
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, false, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.Failed, proposal.Status);
             Assert.Equal("The AI response did not include this item.", proposal.FailureReason);
@@ -269,7 +289,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
 
             var proposal = await NewService(runner, settings)
-                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, CancellationToken.None);
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, false, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.NoChange, proposal.Status);
         }
@@ -283,7 +303,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
 
             var proposal = await NewService(runner, settings)
-                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, CancellationToken.None);
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, false, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.Failed, proposal.Status);
             Assert.Equal("down", proposal.FailureReason);
@@ -300,7 +320,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
 
             var proposal = await NewService(runner, settings)
-                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, cts.Token);
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, false, cts.Token);
 
             Assert.Equal(ProposalStatus.Failed, proposal.Status);
             Assert.Contains("Cancelled", proposal.FailureReason);
@@ -313,7 +333,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var program = Program(new EditTransform(TransformKind.Llm, Instruction: "fix"));
 
             var proposal = await NewService(runner, NewSettings())
-                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, CancellationToken.None);
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, false, CancellationToken.None);
 
             Assert.Equal(ProposalStatus.Failed, proposal.Status);
             Assert.Contains("No active LLM", proposal.FailureReason);

@@ -19,8 +19,12 @@ namespace Read2Me.Services.BookEdits
         ChapterOutlineBuilder outlineBuilder,
         ILogger<BookEditPlanner> logger)
     {
+        /// <param name="disableThinking">
+        /// Skip the model's hidden thinking phase for this plan call. Thinking helps on tricky or
+        /// ambiguous instructions and costs most of the generation time, so the user chooses per run.
+        /// </param>
         public virtual async Task<EditPlanOutcome> PlanAsync(
-            ProjectFolderId folderId, string instruction, CancellationToken ct)
+            ProjectFolderId folderId, string instruction, bool disableThinking, CancellationToken ct)
         {
             var config = await settings.GetActiveConfigAsync();
             if (config == null)
@@ -43,7 +47,7 @@ namespace Read2Me.Services.BookEdits
 
             var result = await runner.RunAsync<EditProgram>(
                 new LlmRunRequest(config, prompt, instruction,
-                    EditProgramSchema.JsonSchema, CompletionShape.Object),
+                    EditProgramSchema.JsonSchema, CompletionShape.Object, disableThinking),
                 EditProgramParser.TryParse, ct);
 
             switch (result.Outcome)
