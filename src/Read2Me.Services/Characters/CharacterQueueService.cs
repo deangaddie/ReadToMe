@@ -164,8 +164,9 @@ namespace Read2Me.Services.Characters
         /// the <see cref="QueuedParagraph.Requeued"/> once-then-fail flag (a model load retries
         /// indefinitely, never consuming the watchdog requeue budget) and instead bumps
         /// <see cref="QueuedParagraph.LoadAttempts"/> so the next backoff grows. The item's map
-        /// status returns to Queued immediately; the delayed write is cancelled if the queue is
-        /// cleared while it waits, so a cancelled item never re-enters the channel.
+        /// status returns to Queued immediately; the delayed write targets the writer captured here,
+        /// so if <see cref="CancelAll"/> swaps the channel while the backoff runs the write lands on
+        /// the completed old writer and is dropped — a cancelled item never re-enters the queue.
         /// </summary>
         public void RequeueForModelLoad(QueuedParagraph item, TimeSpan backoff)
         {
@@ -173,15 +174,25 @@ namespace Read2Me.Services.Characters
             _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
 
             var next = item with { LoadAttempts = item.LoadAttempts + 1 };
+            var writer = _channel.Writer;
             if (backoff <= TimeSpan.Zero)
-                _channel.Writer.TryWrite(next);
+                writer.TryWrite(next);
             else
-                _ = DelayedRequeueAsync(next, backoff, _itemCts.Token);
+                _ = DelayedRequeueAsync(writer, next, backoff, _itemCts.Token);
 
             Changed?.Invoke();
         }
 
-        private async Task DelayedRequeueAsync(QueuedParagraph item, TimeSpan backoff, CancellationToken ct)
+        /// <summary>
+        /// Waits out <paramref name="backoff"/> and writes to the writer captured at schedule time.
+        /// Capturing the writer — rather than re-reading the <c>_channel</c> field after the delay —
+        /// is what makes the write safe: a <see cref="CancelAll"/> during the delay completes that
+        /// writer, so the late write fails harmlessly instead of resurrecting cancelled work on the
+        /// replacement channel. <paramref name="ct"/> is not load-bearing for that correctness; it
+        /// only ends a pending delay promptly rather than letting it linger.
+        /// </summary>
+        private static async Task DelayedRequeueAsync(
+            ChannelWriter<QueuedParagraph> writer, QueuedParagraph item, TimeSpan backoff, CancellationToken ct)
         {
             try
             {
@@ -192,9 +203,7 @@ namespace Read2Me.Services.Characters
                 // The queue was cleared (CancelAll) while this item waited out its backoff — drop it.
                 return;
             }
-            // Writing to a channel that CancelAll has since swapped is harmless (the old writer is
-            // completed), so no extra guard is needed beyond the cancellation above.
-            _channel.Writer.TryWrite(item);
+            writer.TryWrite(item);
         }
 
         /// <summary>

@@ -249,6 +249,32 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
+        public async Task RequeueForModelLoad_CancelAllDuringBackoff_DoesNotResurrectOnNewChannel()
+        {
+            var svc = new CharacterQueueService();
+            var stale = MakeItem();
+            EnqueueAndProcess(svc, stale);
+            await svc.Reader.ReadAsync();
+
+            svc.RequeueForModelLoad(stale, TimeSpan.FromMilliseconds(50));
+
+            // The channel (and its writer) is replaced while the delayed write is still pending.
+            svc.CancelAll();
+
+            // A fresh item on the *new* channel, so the assertion distinguishes "nothing arrived"
+            // from "the reader simply had nothing to read yet".
+            var fresh = MakeItem();
+            svc.Enqueue([fresh]);
+
+            await Task.Delay(300);
+
+            Assert.True(svc.Reader.TryRead(out var read));
+            Assert.Equal(fresh.ParagraphId, read.ParagraphId);
+            Assert.False(svc.Reader.TryPeek(out _));
+            Assert.Null(svc.StatusOf(Folder, stale.ParagraphId));
+        }
+
+        [Fact]
         public void ClearOutcome_RemovesAndFiresChanged()
         {
             var svc = new CharacterQueueService();
