@@ -64,7 +64,7 @@ namespace Read2Me.Services.Audio
         public void Requeue(QueuedAudioItem queued)
         {
             var key = new AudioItemKey(queued.Folder, queued.Item.ParagraphItemId);
-            _store.Requeue(key);
+            _store.ReturnToQueued(key);
             _channel.Writer.TryWrite(queued with { Attempts = queued.Attempts.WithRetry() });
             Changed?.Invoke();
         }
@@ -72,7 +72,7 @@ namespace Read2Me.Services.Audio
         public void MarkComplete(ProjectFolderId folder, AudioItemRef item, string relativePath)
         {
             var key = new AudioItemKey(folder, item.ParagraphItemId);
-            _store.Finish(key);
+            _store.Settle(key);
             _versions[key] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             AudioFileAssigned?.Invoke(folder, item.ParagraphItemId, relativePath);
             Changed?.Invoke();
@@ -81,7 +81,7 @@ namespace Read2Me.Services.Audio
         public void MarkFailed(ProjectFolderId folder, AudioItemRef item, string? reason)
         {
             var key = new AudioItemKey(folder, item.ParagraphItemId);
-            _store.SetOutcome(key, new AudioItemOutcome(AudioItemOutcomeKind.Failed, reason));
+            _store.Abandon(key, new AudioItemOutcome(AudioItemOutcomeKind.Failed, reason));
             Changed?.Invoke();
         }
 

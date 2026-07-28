@@ -128,7 +128,7 @@ namespace Read2Me.Services.Characters
         /// </summary>
         public void MarkDeferred(QueuedParagraph item)
         {
-            _store.Requeue(Key(item));
+            _store.ReturnToQueued(Key(item));
             Changed?.Invoke();
         }
 
@@ -140,7 +140,7 @@ namespace Read2Me.Services.Characters
         /// </summary>
         public void Requeue(QueuedParagraph item)
         {
-            _store.Requeue(Key(item));
+            _store.ReturnToQueued(Key(item));
             _channel.Writer.TryWrite(item with { Attempts = item.Attempts.WithRetry() });
             Changed?.Invoke();
         }
@@ -157,7 +157,7 @@ namespace Read2Me.Services.Characters
         /// </summary>
         public void RequeueForModelLoad(QueuedParagraph item, TimeSpan backoff)
         {
-            _store.Requeue(Key(item));
+            _store.ReturnToQueued(Key(item));
 
             var next = item with { Attempts = item.Attempts.WithBusy() };
             var writer = _channel.Writer;
@@ -200,22 +200,20 @@ namespace Read2Me.Services.Characters
         public void MarkComplete(QueuedParagraph item, double elapsedSeconds)
         {
             var key = Key(item);
-            _store.RemoveOutcome(key);
-            _store.Finish(key, elapsedSeconds);
+            _store.Settle(key, elapsedSeconds: elapsedSeconds);
             Changed?.Invoke();
         }
 
         public void MarkUnknown(QueuedParagraph item, double elapsedSeconds, string? reason = null)
         {
             var key = Key(item);
-            _store.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, reason));
-            _store.Finish(key, elapsedSeconds);
+            _store.Settle(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, reason), elapsedSeconds);
             Changed?.Invoke();
         }
 
         public void MarkFailed(QueuedParagraph item, string? reason)
         {
-            _store.SetOutcome(Key(item), new ParagraphOutcome(ParagraphOutcomeKind.Failed, reason));
+            _store.Abandon(Key(item), new ParagraphOutcome(ParagraphOutcomeKind.Failed, reason));
             Changed?.Invoke();
         }
 

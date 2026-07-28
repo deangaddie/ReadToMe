@@ -34,7 +34,7 @@ namespace Read2Me.Services.Queueing
         /// Returns a currently-tracked (typically Processing) key to Queued and clears any prior
         /// outcome, so an interrupted item can be re-driven. Stops the elapsed clock.
         /// </summary>
-        public void Requeue(TKey key)
+        public void ReturnToQueued(TKey key)
         {
             _outcomes.TryRemove(key, out _);
             _status[key] = QueueItemStatus.Queued;
@@ -49,12 +49,20 @@ namespace Read2Me.Services.Queueing
         }
 
         /// <summary>
-        /// Removes the key from active tracking and records a completion against the
-        /// rolling average. If <paramref name="elapsedSeconds"/> is null the elapsed
-        /// time is measured from the last <see cref="MarkProcessing"/> call.
+        /// Ends the key's turn in the queue after real work was done: removes it from active
+        /// tracking and records a completion against the rolling average. A non-null
+        /// <paramref name="outcome"/> is stamped as the terminal marker; a null one *clears* any
+        /// prior marker, so a completion can never leave a stale badge behind. If
+        /// <paramref name="elapsedSeconds"/> is null the elapsed time is measured from the last
+        /// <see cref="MarkProcessing"/> call — null never means "do not record".
         /// </summary>
-        public void Finish(TKey key, double? elapsedSeconds = null)
+        public void Settle(TKey key, TOutcome? outcome = null, double? elapsedSeconds = null)
         {
+            if (outcome is null)
+                _outcomes.TryRemove(key, out _);
+            else
+                _outcomes[key] = outcome;
+
             _status.TryRemove(key, out _);
 
             var elapsed = elapsedSeconds ?? CurrentElapsedSeconds();
@@ -63,17 +71,22 @@ namespace Read2Me.Services.Queueing
         }
 
         /// <summary>
-        /// Records a terminal outcome and removes the key from active status without
-        /// recording a completion (failed/unknown items do not count toward the average).
+        /// Ends the key's turn after the work was aborted: stamps the terminal outcome and removes
+        /// the key from active status <em>without</em> recording a completion.
+        /// <para>
+        /// The policy the two names encode: <see cref="Settle"/> is terminal-and-did-work and counts
+        /// toward the rolling average; <c>Abandon</c> is aborted and does not. The average feeds an
+        /// ETA of <c>queuedCount * avg</c>, so it must predict how long a remaining queued item takes
+        /// to drain. An abandoned item did no measurable work and commonly returns through requeue —
+        /// counting it would double-bill the same item.
+        /// </para>
         /// </summary>
-        public void SetOutcome(TKey key, TOutcome outcome)
+        public void Abandon(TKey key, TOutcome outcome)
         {
             _outcomes[key] = outcome;
             _status.TryRemove(key, out _);
             ClearProcessing();
         }
-
-        public void RemoveOutcome(TKey key) => _outcomes.TryRemove(key, out _);
 
         /// <summary>Clears any outcome for the key. Returns whether anything was removed.</summary>
         public bool ClearOutcome(TKey key) => _outcomes.TryRemove(key, out _);

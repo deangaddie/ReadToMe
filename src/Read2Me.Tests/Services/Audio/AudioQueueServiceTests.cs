@@ -80,6 +80,19 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public void MarkComplete_ClearsStaleOutcome()
+        {
+            var svc = new AudioQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+            svc.MarkFailed(Folder, item, "network error");
+
+            svc.MarkComplete(Folder, item, "audio/test.wav");
+
+            Assert.Null(svc.OutcomeOf(Folder, item.ParagraphItemId));
+        }
+
+        [Fact]
         public void MarkFailed_RecordsOutcome()
         {
             var svc = new AudioQueueService();

@@ -39,13 +39,27 @@ namespace Read2Me.Tests.Services.Queueing
         }
 
         [Fact]
-        public void Finish_RemovesStatus_AndRecordsCompletion()
+        public void ReturnToQueued_SetsQueued_AndClearsPriorOutcome()
+        {
+            var store = NewStore();
+            store.TryMarkQueued(1);
+            store.MarkProcessing(1);
+            store.Abandon(1, new Outcome("failed"));
+
+            store.ReturnToQueued(1);
+
+            Assert.Equal(QueueItemStatus.Queued, store.StatusOf(1));
+            Assert.Null(store.OutcomeOf(1));
+        }
+
+        [Fact]
+        public void Settle_WithoutOutcome_RemovesStatus_AndRecordsCompletion()
         {
             var store = NewStore();
             store.TryMarkQueued(1);
             store.MarkProcessing(1);
 
-            store.Finish(1, 5.0);
+            store.Settle(1, elapsedSeconds: 5.0);
 
             Assert.Null(store.StatusOf(1));
             var (completed, avg) = store.Metrics();
@@ -54,13 +68,55 @@ namespace Read2Me.Tests.Services.Queueing
         }
 
         [Fact]
-        public void SetOutcome_RecordsOutcome_RemovesStatus_NoCompletion()
+        public void Settle_WithoutOutcome_ClearsAnyStaleOutcome()
+        {
+            var store = NewStore();
+            store.TryMarkQueued(1);
+            store.MarkProcessing(1);
+            store.Abandon(1, new Outcome("unfinished"));
+
+            store.Settle(1);
+
+            Assert.Null(store.OutcomeOf(1));
+        }
+
+        [Fact]
+        public void Settle_WithOutcome_RecordsOutcome_AndCountsTowardAverage()
         {
             var store = NewStore();
             store.TryMarkQueued(1);
             store.MarkProcessing(1);
 
-            store.SetOutcome(1, new Outcome("failed"));
+            store.Settle(1, new Outcome("unfinished"), 5.0);
+
+            Assert.Null(store.StatusOf(1));
+            Assert.Equal("unfinished", store.OutcomeOf(1)!.Reason);
+            var (completed, avg) = store.Metrics();
+            Assert.Equal(1, completed);
+            Assert.Equal(5.0, avg);
+        }
+
+        [Fact]
+        public void Settle_NullElapsed_MeasuresFromMarkProcessing()
+        {
+            var store = NewStore();
+            store.TryMarkQueued(1);
+            store.MarkProcessing(1);
+
+            store.Settle(1);
+
+            Assert.Equal(1, store.Metrics().completed);
+            Assert.Equal(0, store.CurrentElapsedSeconds());
+        }
+
+        [Fact]
+        public void Abandon_RecordsOutcome_RemovesStatus_NoCompletion()
+        {
+            var store = NewStore();
+            store.TryMarkQueued(1);
+            store.MarkProcessing(1);
+
+            store.Abandon(1, new Outcome("failed"));
 
             Assert.Null(store.StatusOf(1));
             Assert.Equal("failed", store.OutcomeOf(1)!.Reason);
@@ -71,7 +127,7 @@ namespace Read2Me.Tests.Services.Queueing
         public void TryMarkQueued_ClearsPriorOutcome()
         {
             var store = NewStore();
-            store.SetOutcome(1, new Outcome("failed"));
+            store.Abandon(1, new Outcome("failed"));
 
             store.TryMarkQueued(1);
 
@@ -82,7 +138,7 @@ namespace Read2Me.Tests.Services.Queueing
         public void ClearOutcome_RemovesOutcome_ReturnsWhetherRemoved()
         {
             var store = NewStore();
-            store.SetOutcome(1, new Outcome("failed"));
+            store.Abandon(1, new Outcome("failed"));
 
             Assert.True(store.ClearOutcome(1));
             Assert.False(store.ClearOutcome(1));
@@ -108,9 +164,9 @@ namespace Read2Me.Tests.Services.Queueing
         public void Metrics_RollingAverageAcrossCompletions()
         {
             var store = NewStore();
-            store.Finish(1, 2);
-            store.Finish(2, 4);
-            store.Finish(3, 6);
+            store.Settle(1, elapsedSeconds: 2);
+            store.Settle(2, elapsedSeconds: 4);
+            store.Settle(3, elapsedSeconds: 6);
 
             var (completed, avg) = store.Metrics();
 
@@ -122,9 +178,9 @@ namespace Read2Me.Tests.Services.Queueing
         public void ClearAll_RemovesStatus_PreservesOutcomes_KeepsMetrics()
         {
             var store = NewStore();
-            store.Finish(1, 3);
+            store.Settle(1, elapsedSeconds: 3);
             store.TryMarkQueued(2);
-            store.SetOutcome(3, new Outcome("failed"));
+            store.Abandon(3, new Outcome("failed"));
 
             store.ClearAll();
 
