@@ -24,7 +24,6 @@ namespace Read2Me.Services.Characters
     public sealed record QueueSnapshot(
         int QueuedCount,
         int ProcessingCount,
-        string? ProcessingPreview,
         double AverageSecondsPerParagraph,
         double EstimatedSecondsRemaining,
         int CompletedCount,
@@ -52,8 +51,6 @@ namespace Read2Me.Services.Characters
 
         private readonly ParagraphStatusMap _map = new();
 
-        private string? _processingPreview;
-
         private CancellationTokenSource _itemCts = new();
 
         public event Action? Changed;
@@ -78,7 +75,6 @@ namespace Read2Me.Services.Characters
             oldChannel.Writer.TryComplete();
 
             _map.ClearAll();
-            _processingPreview = null;
 
             Changed?.Invoke();
         }
@@ -133,7 +129,6 @@ namespace Read2Me.Services.Characters
         {
             var key = Key(item);
             _map.MarkProcessing(key);
-            _processingPreview = item.Preview;
             Changed?.Invoke();
         }
 
@@ -147,7 +142,6 @@ namespace Read2Me.Services.Characters
         {
             var key = Key(item);
             _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
-            _processingPreview = null;
             Changed?.Invoke();
         }
 
@@ -161,7 +155,6 @@ namespace Read2Me.Services.Characters
             var key = Key(item);
             _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
             _channel.Writer.TryWrite(item with { Requeued = true });
-            _processingPreview = null;
             Changed?.Invoke();
         }
 
@@ -178,7 +171,6 @@ namespace Read2Me.Services.Characters
         {
             var key = Key(item);
             _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
-            _processingPreview = null;
 
             var next = item with { LoadAttempts = item.LoadAttempts + 1 };
             if (backoff <= TimeSpan.Zero)
@@ -215,7 +207,6 @@ namespace Read2Me.Services.Characters
             var key = Key(item);
             _map.RemoveOutcome(key);
             _map.Finish(key, elapsedSeconds);
-            _processingPreview = null;
             Changed?.Invoke();
         }
 
@@ -224,7 +215,6 @@ namespace Read2Me.Services.Characters
             var key = Key(item);
             _map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, reason));
             _map.Finish(key, elapsedSeconds);
-            _processingPreview = null;
             Changed?.Invoke();
         }
 
@@ -233,7 +223,6 @@ namespace Read2Me.Services.Characters
             var key = Key(item);
             _map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Failed, reason));
             _map.DropAncestry(key);
-            _processingPreview = null;
             Changed?.Invoke();
         }
 
@@ -262,7 +251,6 @@ namespace Read2Me.Services.Characters
             return new QueueSnapshot(
                 QueuedCount: queuedCount,
                 ProcessingCount: processingCount,
-                ProcessingPreview: _processingPreview,
                 AverageSecondsPerParagraph: avg,
                 EstimatedSecondsRemaining: eta,
                 CompletedCount: completed,

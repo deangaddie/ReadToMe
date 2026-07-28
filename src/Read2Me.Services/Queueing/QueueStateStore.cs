@@ -21,7 +21,6 @@ namespace Read2Me.Services.Queueing
         private readonly ConcurrentDictionary<TKey, TOutcome> _outcomes = new();
         private readonly QueueMetrics _metrics = new();
 
-        private TKey? _processingKey;
         private DateTimeOffset? _processingStartedAt;
 
         /// <summary>Adds the key as Queued, clearing any prior outcome. False if already tracked.</summary>
@@ -46,7 +45,6 @@ namespace Read2Me.Services.Queueing
         public void MarkProcessing(TKey key)
         {
             _status[key] = QueueItemStatus.Processing;
-            _processingKey = key;
             _processingStartedAt = DateTimeOffset.UtcNow;
         }
 
@@ -118,7 +116,6 @@ namespace Read2Me.Services.Queueing
 
         private void ClearProcessing()
         {
-            _processingKey = default;
             _processingStartedAt = null;
         }
     }
