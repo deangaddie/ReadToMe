@@ -398,8 +398,14 @@ namespace Read2Me.App.Shared.Characters
             var result = await dialog.Result;
             if (result?.Canceled != false) return;
 
-            if (result.Data is MergeCharacterDialog.MergeResult m)
-                await Presenter.MergeAsync(m.SurvivorId, Character.Id, m.AddNameAsAlias);
+            if (result.Data is not MergeCharacterDialog.MergeResult m) return;
+
+            await Presenter.MergeAsync(m.SurvivorId, Character.Id, m.AddNameAsAlias);
+
+            // The tab's error alert sits below the lines list, far off-screen on a character with
+            // any real dialogue — a merge that fails there reads as "nothing happened".
+            if (Presenter.Error != null)
+                Snackbar.Add(Presenter.Error, Severity.Error);
         }
 
         async Task ConfirmDeleteAsync()

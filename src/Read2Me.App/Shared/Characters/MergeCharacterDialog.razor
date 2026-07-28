@@ -16,6 +16,16 @@
             </MudSelect>
             <MudCheckBox @bind-Value="_addAsAlias" Color="Color.Primary"
                          Label=@($"Add \"{MergedCharacter.Name}\" as an alias of the survivor") />
+            @if (LostVoices.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    @MergedCharacter.Name is deleted by this merge, and
+                    @(LostVoices.Count == 1 ? "its voice goes with it" : $"its {LostVoices.Count} voices go with it")
+                    — including any generated audio and voice rules.
+                    <strong>@string.Join(", ", LostVoices.Select(v => v.Name))</strong>.
+                    The survivor keeps its own voices.
+                </MudAlert>
+            }
             @if (_error != null)
             {
                 <MudText Color="Color.Error" Typo="Typo.caption">@_error</MudText>
@@ -37,6 +47,11 @@
     Guid _survivorId;
     bool _addAsAlias = true;
     string? _error;
+
+    // Voices are loaded with the character (GetCharactersWithAliasesAsync includes them), so the
+    // warning needs no extra round trip.
+    IReadOnlyList<Voice> LostVoices =>
+        MergedCharacter.Voices is { } v ? v.OrderBy(x => x.Name).ToList() : [];
 
     protected override void OnParametersSet()
     {

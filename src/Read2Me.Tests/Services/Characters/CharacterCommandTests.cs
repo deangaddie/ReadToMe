@@ -167,6 +167,64 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
+        public async Task Merge_DeletesMergedVoicesAndRules_WhenMergedHasAVoice()
+        {
+            await InitProjectAsync();
+            var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
+            var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
+            var voiceId = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, mergedId!.Value, "MergedVoice"));
+
+            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId.Value, true));
+
+            await using var verify = await OpenDbAsync();
+            Assert.False(await verify.Characters.AnyAsync(c => c.Id == mergedId.Value));
+            Assert.Null(await verify.Voices.FindAsync(voiceId!.Value));
+            Assert.Empty(await verify.VoiceRules.Where(r => r.VoiceId == voiceId.Value).ToListAsync());
+        }
+
+        [Fact]
+        public async Task Merge_LeavesSurvivorVoicesAndDefaultRuleAlone()
+        {
+            await InitProjectAsync();
+            var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
+            var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
+            var survivorVoiceId = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, survivorId!.Value, "SurvivorVoice"));
+            await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, mergedId!.Value, "MergedVoice"));
+
+            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId.Value, mergedId.Value, true));
+
+            await using var verify = await OpenDbAsync();
+            var voice = Assert.Single(await verify.Voices.Where(v => v.CharacterId == survivorId.Value).ToListAsync());
+            Assert.Equal(survivorVoiceId!.Value, voice.Id);
+            var rule = Assert.Single(await verify.VoiceRules.Where(r => r.CharacterId == survivorId.Value).ToListAsync());
+            Assert.True(rule.IsDefault);
+            Assert.Equal(survivorVoiceId.Value, rule.VoiceId);
+        }
+
+        /// <summary>
+        /// A positional rule owned by another character can point at the merged character's voice.
+        /// VoiceRules.VoiceId is Restrict, so that rule has to go too or the merge dies on the FK.
+        /// </summary>
+        [Fact]
+        public async Task Merge_DeletesForeignRulesPointingAtMergedVoices()
+        {
+            await InitProjectAsync();
+            var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
+            var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
+            var otherId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Other"));
+            var voiceId = await _svc.ExecuteAsync(new CreateVoiceCommand(_folder, mergedId!.Value, "MergedVoice"));
+            await _svc.ExecuteAsync(new CreateVoiceRuleCommand(
+                _folder, otherId!.Value, voiceId!.Value, null, null, null, null));
+
+            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId.Value, true));
+
+            await using var verify = await OpenDbAsync();
+            Assert.False(await verify.Characters.AnyAsync(c => c.Id == mergedId.Value));
+            Assert.Empty(await verify.VoiceRules.Where(r => r.VoiceId == voiceId.Value).ToListAsync());
+            Assert.True(await verify.Characters.AnyAsync(c => c.Id == otherId.Value));
+        }
+
+        [Fact]
         public async Task Merge_IgnoresNarrator_WhenNarratorIsMerged()
         {
             await InitProjectAsync();

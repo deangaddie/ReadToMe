@@ -142,6 +142,24 @@ public sealed class MergeCharactersHandler(ProjectDbSession session) : ICommandH
             .Where(a => a.CharacterId == c.MergedId)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.CharacterId, c.SurvivorId), ct);
 
+        // The merged character's voices die with it — the survivor keeps its own. Rules and voices
+        // must go explicitly, in this order: the DB cascades Character→Voice, but VoiceRules.VoiceId
+        // is Restrict, so leaving them to the cascade makes the character delete below fail on the FK
+        // and rolls the whole merge back. Same shape as DeleteCharacterHandler, including the rule
+        // owned by a *different* character that points at one of these voices.
+        var mergedVoiceIds = await db.Voices
+            .Where(v => v.CharacterId == c.MergedId)
+            .Select(v => v.Id)
+            .ToListAsync(ct);
+
+        await db.VoiceRules
+            .Where(r => r.CharacterId == c.MergedId || mergedVoiceIds.Contains(r.VoiceId))
+            .ExecuteDeleteAsync(ct);
+
+        await db.Voices
+            .Where(v => v.CharacterId == c.MergedId)
+            .ExecuteDeleteAsync(ct);
+
         if (c.AddNameAsAlias)
         {
             var survivorAliasNames = await db.CharacterAliases
