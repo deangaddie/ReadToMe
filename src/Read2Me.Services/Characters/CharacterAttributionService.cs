@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Characters
 {
@@ -81,7 +82,32 @@ namespace Read2Me.Services.Characters
     public sealed record AttributionOutcome(
         AttributionStatus Status,
         IReadOnlyList<AttributionSegment>? Segments,
-        string? FailureReason);
+        string? FailureReason)
+    {
+        /// <summary>
+        /// This answer reduced to provider behaviour — what the queue decides retries and settles
+        /// from. Quality stays on <see cref="Status"/>: both <see cref="AttributionStatus.Resolved"/>
+        /// and <see cref="AttributionStatus.Unknown"/> are <see cref="WorkOutcome.Ok"/>, because an
+        /// answer that left a speaker unidentified is still an answer — whether the paragraph is
+        /// finished is decided after apply, from the items.
+        /// A missing LLM config and a parse failure are both <see cref="WorkOutcome.Failed"/>.
+        /// </summary>
+        public WorkOutcome Work => Status switch
+        {
+            // Resolved carries no reason by construction — nothing went wrong to report.
+            AttributionStatus.Resolved => new WorkOutcome.Ok(null),
+            AttributionStatus.Unknown => new WorkOutcome.Ok(FailureReason),
+            AttributionStatus.NoLlmConfigured => new WorkOutcome.Failed(FailureReason),
+            AttributionStatus.Failed => new WorkOutcome.Failed(FailureReason),
+            AttributionStatus.ServiceUnavailable => new WorkOutcome.Unavailable(FailureReason),
+            AttributionStatus.ModelLoading => new WorkOutcome.Busy(FailureReason),
+            // Deliberately not a fall-through to Failed: a seventh status must be translated
+            // explicitly, not silently swallowed as a failure. The exhaustiveness test in
+            // CharacterDispositionTests fires here first.
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(Status), Status, "No WorkOutcome translation for this AttributionStatus."),
+        };
+    }
 
     /// <summary>
     /// Progress signals raised by the escalation-chain walk so a caller can mirror the chain's true

@@ -8,6 +8,7 @@ using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Characters
 {
@@ -83,20 +84,22 @@ namespace Read2Me.App.Characters
         private async Task ApplyOutcomeAsync(
             QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds, CancellationToken ct)
         {
-            switch (outcome.Status)
+            // The queue decides from provider behaviour, not from the answer's quality: an Ok answer
+            // that left a speaker unidentified is still an answer, and whether the paragraph is
+            // finished is settled below, after apply, from the items. See WorkOutcome.
+            switch (outcome.Work)
             {
                 // An answer applies whether or not every speaker in it was identified: the segments
                 // it *did* attribute are real work, and the paragraph stays queue-eligible while any
                 // Character item is left unstamped.
-                case AttributionStatus.Resolved:
-                case AttributionStatus.Unknown when outcome.Segments is not null:
-                    await ApplySegmentsAsync(item, outcome.Segments!, ct);
+                case WorkOutcome.Ok ok when outcome.Segments is not null:
+                    await ApplySegmentsAsync(item, outcome.Segments, ct);
                     var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
                     if (unattributed > 0)
                     {
                         logger.LogInformation("Paragraph {ParagraphId} has {Count} unattributed item(s) after apply",
                             item.ParagraphId, unattributed);
-                        queue.MarkUnknown(item, elapsedSeconds, outcome.FailureReason);
+                        queue.MarkUnknown(item, elapsedSeconds, ok.Reason);
                     }
                     else
                     {
@@ -106,41 +109,36 @@ namespace Read2Me.App.Characters
                     }
                     break;
 
-                case AttributionStatus.Unknown:
+                case WorkOutcome.Ok ok:
                     // No segments to apply (an empty paragraph) — nothing was attributed.
                     logger.LogInformation("Paragraph {ParagraphId} speaker unknown", item.ParagraphId);
-                    queue.MarkUnknown(item, elapsedSeconds, outcome.FailureReason);
+                    queue.MarkUnknown(item, elapsedSeconds, ok.Reason);
                     break;
 
-                case AttributionStatus.NoLlmConfigured:
-                    logger.LogWarning("Paragraph {ParagraphId} failed — no LLM configured", item.ParagraphId);
-                    queue.MarkFailed(item, outcome.FailureReason);
-                    break;
-
-                case AttributionStatus.Failed:
+                case WorkOutcome.Failed failed:
                     logger.LogWarning("Paragraph {ParagraphId} failed: {Reason}",
-                        item.ParagraphId, outcome.FailureReason);
-                    queue.MarkFailed(item, outcome.FailureReason);
+                        item.ParagraphId, failed.Reason);
+                    queue.MarkFailed(item, failed.Reason);
                     break;
 
-                case AttributionStatus.ServiceUnavailable:
+                case WorkOutcome.Unavailable unavailable:
                     // Watchdog is recovering the service. Requeue once so recovery is invisible in
                     // the results; a second outage for the same item (service down) fails it.
                     if (item.Requeued)
                     {
                         logger.LogWarning("Paragraph {ParagraphId} service unavailable again after requeue — failing: {Reason}",
-                            item.ParagraphId, outcome.FailureReason);
-                        queue.MarkFailed(item, outcome.FailureReason);
+                            item.ParagraphId, unavailable.Reason);
+                        queue.MarkFailed(item, unavailable.Reason);
                     }
                     else
                     {
                         logger.LogInformation("Paragraph {ParagraphId} service unavailable — requeuing: {Reason}",
-                            item.ParagraphId, outcome.FailureReason);
+                            item.ParagraphId, unavailable.Reason);
                         queue.Requeue(item);
                     }
                     break;
 
-                case AttributionStatus.ModelLoading:
+                case WorkOutcome.Busy busy:
                     // The target model is still loading on a switchable llama endpoint — provider
                     // busy, not dead. Requeue with exponential backoff, indefinitely: failing or
                     // escalating would evict the very load we are waiting for. This is DISTINCT from
@@ -150,7 +148,7 @@ namespace Read2Me.App.Characters
                     var backoff = ModelLoadBackoff(item.LoadAttempts);
                     logger.LogInformation(
                         "Paragraph {ParagraphId} model still loading — requeuing in {Backoff:0.#}s (attempt {Attempt}): {Reason}",
-                        item.ParagraphId, backoff.TotalSeconds, item.LoadAttempts + 1, outcome.FailureReason);
+                        item.ParagraphId, backoff.TotalSeconds, item.LoadAttempts + 1, busy.Reason);
                     queue.RequeueForModelLoad(item, backoff);
                     break;
             }
