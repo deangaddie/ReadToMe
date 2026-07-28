@@ -45,16 +45,11 @@ namespace Read2Me.Services.Characters
         private Channel<QueuedParagraph> _channel =
             Channel.CreateUnbounded<QueuedParagraph>(new UnboundedChannelOptions { SingleReader = true });
 
-        private readonly ParagraphStatusMap _map = new();
+        private readonly QueueStateStore<ParagraphKey, ParagraphOutcome> _store = new();
 
         private CancellationTokenSource _itemCts = new();
 
         public event Action? Changed;
-
-        public CharacterQueueService()
-        {
-            _map.Changed += () => Changed?.Invoke();
-        }
 
         public ChannelReader<QueuedParagraph> Reader => _channel.Reader;
 
@@ -70,7 +65,7 @@ namespace Read2Me.Services.Characters
                 Channel.CreateUnbounded<QueuedParagraph>(new UnboundedChannelOptions { SingleReader = true }));
             oldChannel.Writer.TryComplete();
 
-            _map.ClearAll();
+            _store.ClearAll();
 
             Changed?.Invoke();
         }
@@ -79,8 +74,7 @@ namespace Read2Me.Services.Characters
         {
             foreach (var p in paragraphs)
             {
-                var key = Key(p);
-                if (_map.TryMarkQueued(key, p.ChapterId, p.PartId, p.VolumeId))
+                if (_store.TryMarkQueued(Key(p)))
                     _channel.Writer.TryWrite(p);
             }
             Changed?.Invoke();
@@ -123,8 +117,7 @@ namespace Read2Me.Services.Characters
 
         public void MarkProcessing(QueuedParagraph item)
         {
-            var key = Key(item);
-            _map.MarkProcessing(key);
+            _store.MarkProcessing(Key(item));
             Changed?.Invoke();
         }
 
@@ -136,8 +129,7 @@ namespace Read2Me.Services.Characters
         /// </summary>
         public void MarkDeferred(QueuedParagraph item)
         {
-            var key = Key(item);
-            _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
+            _store.Requeue(Key(item));
             Changed?.Invoke();
         }
 
@@ -148,8 +140,7 @@ namespace Read2Me.Services.Characters
         /// </summary>
         public void Requeue(QueuedParagraph item)
         {
-            var key = Key(item);
-            _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
+            _store.Requeue(Key(item));
             _channel.Writer.TryWrite(item with { Requeued = true });
             Changed?.Invoke();
         }
@@ -159,15 +150,14 @@ namespace Read2Me.Services.Characters
         /// <paramref name="backoff"/> elapses. Distinct from <see cref="Requeue"/>: it does NOT set
         /// the <see cref="QueuedParagraph.Requeued"/> once-then-fail flag (a model load retries
         /// indefinitely, never consuming the watchdog requeue budget) and instead bumps
-        /// <see cref="QueuedParagraph.LoadAttempts"/> so the next backoff grows. The item's map
+        /// <see cref="QueuedParagraph.LoadAttempts"/> so the next backoff grows. The item's queue
         /// status returns to Queued immediately; the delayed write targets the writer captured here,
         /// so if <see cref="CancelAll"/> swaps the channel while the backoff runs the write lands on
         /// the completed old writer and is dropped — a cancelled item never re-enters the queue.
         /// </summary>
         public void RequeueForModelLoad(QueuedParagraph item, TimeSpan backoff)
         {
-            var key = Key(item);
-            _map.Requeue(key, item.ChapterId, item.PartId, item.VolumeId);
+            _store.Requeue(Key(item));
 
             var next = item with { LoadAttempts = item.LoadAttempts + 1 };
             var writer = _channel.Writer;
@@ -210,48 +200,46 @@ namespace Read2Me.Services.Characters
         public void MarkComplete(QueuedParagraph item, double elapsedSeconds)
         {
             var key = Key(item);
-            _map.RemoveOutcome(key);
-            _map.Finish(key, elapsedSeconds);
+            _store.RemoveOutcome(key);
+            _store.Finish(key, elapsedSeconds);
             Changed?.Invoke();
         }
 
         public void MarkUnknown(QueuedParagraph item, double elapsedSeconds, string? reason = null)
         {
             var key = Key(item);
-            _map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, reason));
-            _map.Finish(key, elapsedSeconds);
+            _store.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, reason));
+            _store.Finish(key, elapsedSeconds);
             Changed?.Invoke();
         }
 
         public void MarkFailed(QueuedParagraph item, string? reason)
         {
-            var key = Key(item);
-            _map.SetOutcome(key, new ParagraphOutcome(ParagraphOutcomeKind.Failed, reason));
-            _map.DropAncestry(key);
+            _store.SetOutcome(Key(item), new ParagraphOutcome(ParagraphOutcomeKind.Failed, reason));
             Changed?.Invoke();
         }
 
         public ParagraphQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphId)
-            => _map.StatusOf(folder, paragraphId);
+            => Map(_store.StatusOf(new ParagraphKey(folder, paragraphId)));
 
         public ParagraphOutcome? OutcomeOf(ProjectFolderId folder, Guid paragraphId)
-            => _map.OutcomeOf(folder, paragraphId);
+            => _store.OutcomeOf(new ParagraphKey(folder, paragraphId));
 
         public void ClearOutcome(ProjectFolderId folder, Guid paragraphId)
-            => _map.ClearOutcome(folder, paragraphId);
+        {
+            if (_store.ClearOutcome(new ParagraphKey(folder, paragraphId)))
+                Changed?.Invoke();
+        }
 
         public bool IsBusy(ProjectFolderId folder, Guid paragraphId) =>
             StatusOf(folder, paragraphId) is not null;
 
-        public (bool HasProcessing, int QueuedCount) SummaryForNode(ProjectFolderId folder, Guid nodeId)
-            => _map.SummaryForNode(folder, nodeId);
-
         public QueueSnapshot Snapshot()
         {
-            var (queuedCount, processingCount) = _map.CountStatuses();
-            var (completed, avg) = _map.Metrics();
+            var (queuedCount, processingCount) = _store.CountStatuses();
+            var (completed, avg) = _store.Metrics();
             double eta = avg > 0 ? queuedCount * avg : 0;
-            var elapsed = _map.CurrentElapsedSeconds();
+            var elapsed = _store.CurrentElapsedSeconds();
 
             return new QueueSnapshot(
                 QueuedCount: queuedCount,
@@ -264,5 +252,17 @@ namespace Read2Me.Services.Characters
         }
 
         private static ParagraphKey Key(QueuedParagraph i) => new(i.Folder, i.ParagraphId);
+
+        /// <summary>
+        /// Narrows the shared store's status to the two states callers outside the queue can see.
+        /// A settled item (Failed/Unknown) has no status at all — it is read through
+        /// <see cref="OutcomeOf"/>.
+        /// </summary>
+        private static ParagraphQueueStatus? Map(QueueItemStatus? s) => s switch
+        {
+            QueueItemStatus.Queued => ParagraphQueueStatus.Queued,
+            QueueItemStatus.Processing => ParagraphQueueStatus.Processing,
+            _ => null,
+        };
     }
 }

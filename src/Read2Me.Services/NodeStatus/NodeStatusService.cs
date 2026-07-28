@@ -145,6 +145,15 @@ namespace Read2Me.Services.NodeStatus
         /// Rolls every paragraph under <paramref name="nodeId"/> up into one summary in a single
         /// pass — outstanding counts and queue in-flight state share the ancestry scan.
         /// </summary>
+        /// <remarks>
+        /// <b>This answers only for a seeded folder.</b> Ancestry lives here and nowhere else: the
+        /// queue holds no <c>(chapter, part, volume)</c> map of its own, so a paragraph queued in a
+        /// folder that was never <see cref="Seed"/>ed contributes nothing to the in-flight fields.
+        /// That is not a regression — the tree renders only the folder it has just seeded, and
+        /// seeding is folder-wide from the database, so it covers paragraphs a queue-side map would
+        /// have missed after an edit — but it is a real narrowing and is stated here rather than
+        /// left to be rediscovered.
+        /// </remarks>
         public NodeStatusSummary StatusForNode(ProjectFolderId folder, Guid nodeId)
         {
             int attribution = 0;

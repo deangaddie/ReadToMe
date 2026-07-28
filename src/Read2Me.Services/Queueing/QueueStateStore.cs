@@ -8,8 +8,8 @@ namespace Read2Me.Services.Queueing
     /// The common queue state machine shared by the Character and Audio queues:
     /// per-key queued/processing status, terminal outcomes, single-reader
     /// elapsed-time tracking, and a rolling-average ETA. Queue-specific extras
-    /// (ancestry roll-up, resolved overlay, cache-bust versions) are composed
-    /// alongside this store, not pushed into it.
+    /// (resolved overlay, cache-bust versions) are composed alongside this store,
+    /// not pushed into it.
     /// </summary>
     /// <typeparam name="TKey">Item key, e.g. ParagraphKey or AudioItemKey.</typeparam>
     /// <typeparam name="TOutcome">Terminal outcome, e.g. ParagraphOutcome or AudioItemOutcome.</typeparam>

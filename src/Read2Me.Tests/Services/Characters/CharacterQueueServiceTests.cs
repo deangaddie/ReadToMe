@@ -292,6 +292,32 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
+        public void ClearOutcome_NothingToRemove_DoesNotFireChanged()
+        {
+            var svc = new CharacterQueueService();
+            int changeCount = 0;
+            svc.Changed += () => changeCount++;
+
+            svc.ClearOutcome(Folder, Guid.NewGuid());
+
+            Assert.Equal(0, changeCount);
+        }
+
+        [Fact]
+        public void Enqueue_SameParagraphTwice_OnlyQueuesOnce()
+        {
+            var svc = new CharacterQueueService();
+            var item = MakeItem();
+
+            svc.Enqueue([item]);
+            svc.Enqueue([item]);
+
+            Assert.True(svc.Reader.TryRead(out _));
+            Assert.False(svc.Reader.TryRead(out _));
+            Assert.Equal(1, svc.Snapshot().QueuedCount);
+        }
+
+        [Fact]
         public void CancelAll_PreservesOutcomes()
         {
             var svc = new CharacterQueueService();

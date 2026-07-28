@@ -417,6 +417,27 @@ namespace Read2Me.Tests.Services.NodeStatus
             Assert.Equal(0, svc.StatusForNode(Folder, ch).AttributionQueued);
         }
 
+        /// <summary>
+        /// Pins the deliberate narrowing: ancestry lives only in the seed, so an in-flight paragraph
+        /// the folder was never seeded with contributes nothing. The tree only ever renders a folder
+        /// it has just seeded folder-wide, so this is unobservable in the app — but it is the
+        /// behaviour, and it should fail loudly if someone reintroduces a queue-side ancestry map.
+        /// </summary>
+        [Fact]
+        public void StatusForNode_InFlightParagraphNotSeeded_IsNotCounted()
+        {
+            var probe = new FakeParagraphQueueProbe();
+            var svc = new NodeStatusService(probe);
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid();
+            svc.Seed(Folder, [MakeRow(Guid.NewGuid(), ch, part, vol)]);
+            probe.Set(Folder, Guid.NewGuid(), ParagraphQueueStatus.Queued);
+
+            var s = svc.StatusForNode(Folder, ch);
+
+            Assert.Equal(0, s.AttributionQueued);
+            Assert.False(s.AttributionProcessing);
+        }
+
         [Fact]
         public void ProbeChanged_ReRaisesChanged()
         {
