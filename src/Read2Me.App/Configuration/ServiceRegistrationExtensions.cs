@@ -49,6 +49,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IProjectCatalogReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IBookContentReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<ICharacterReader>(sp => sp.GetRequiredService<ProjectReader>());
+        services.AddScoped<IUnattributedItemCounter>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IAudioItemReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IVoiceResolver, VoiceResolver>();
         services.AddBookCommandHandlers();

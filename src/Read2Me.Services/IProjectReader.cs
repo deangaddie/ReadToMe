@@ -144,8 +144,23 @@ namespace Read2Me.Services
             ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after);
     }
 
+    /// <summary>
+    /// The single "is this paragraph fully stamped?" probe, split out of <see cref="ICharacterReader"/>
+    /// so the attribution queue processor — its only consumer — depends on one method rather than
+    /// twelve.
+    /// </summary>
+    public interface IUnattributedItemCounter
+    {
+        /// <summary>
+        /// Number of Character items in <paramref name="paragraphId"/> with no character stamped.
+        /// The paragraph is attributed when this is 0; a partly attributed paragraph stays
+        /// queue-eligible.
+        /// </summary>
+        Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId);
+    }
+
     /// <summary>Characters, their aliases/voices/voice rules, and character-paragraph attribution queries.</summary>
-    public interface ICharacterReader
+    public interface ICharacterReader : IUnattributedItemCounter
     {
         Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId);
         Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId);
@@ -159,13 +174,6 @@ namespace Read2Me.Services
 
         Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
             ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false);
-
-        /// <summary>
-        /// Number of Character items in <paramref name="paragraphId"/> with no character stamped.
-        /// The paragraph is attributed when this is 0; a partly attributed paragraph stays
-        /// queue-eligible.
-        /// </summary>
-        Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId);
 
         // All volume/part/chapter node ids that contain at least one character paragraph.
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);

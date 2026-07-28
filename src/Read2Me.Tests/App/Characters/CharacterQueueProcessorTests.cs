@@ -8,7 +8,6 @@ using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
-using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Tests.App.Characters
 {
@@ -570,27 +569,12 @@ namespace Read2Me.Tests.App.Characters
         }
 
         /// <summary>Stands in for the post-apply "is this paragraph fully stamped?" read.</summary>
-        private sealed class FakeCharacterReader : ICharacterReader
+        private sealed class FakeCharacterReader : IUnattributedItemCounter
         {
             public int Unattributed { get; set; }
 
             public Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId)
                 => Task.FromResult(Unattributed);
-
-            public Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId) => Task.FromResult(new List<Character>());
-            public Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) => Task.FromResult(new List<Character>());
-            public Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<VoiceEntity>());
-            public Task<VoiceEntity?> GetVoiceAsync(ProjectFolderId folderId, Guid voiceId) => Task.FromResult<VoiceEntity?>(null);
-            public Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult<Guid?>(null);
-            public Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<VoiceRuleRow>());
-            public Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<CharacterLine>());
-            public Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
-                ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
-                => Task.FromResult(new List<CharacterParagraphRef>());
-            public Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
-            public Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
-                ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default)
-                => Task.FromResult(new BulkAssignPreview(0, 0));
         }
 
         private class FakeCommandHandler : IBookCommandHandler

@@ -15,7 +15,7 @@ namespace Read2Me.App.Characters
         CharacterQueueService queue,
         AttributionEscalationChain chain,
         CharacterResolver resolver,
-        ICharacterReader reader,
+        IUnattributedItemCounter reader,
         IBookCommandHandler commands,
         ILogger<CharacterQueueProcessor> logger) : ICharacterQueueProcessor
     {

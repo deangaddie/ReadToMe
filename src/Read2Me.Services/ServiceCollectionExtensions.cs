@@ -100,6 +100,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IProjectCatalogReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IBookContentReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<ICharacterReader>(sp => sp.GetRequiredService<ProjectReader>());
+        services.AddScoped<IUnattributedItemCounter>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IAudioItemReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
