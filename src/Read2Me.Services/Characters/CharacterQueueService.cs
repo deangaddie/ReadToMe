@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Read2Me.Core.Models;
+using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Queueing;
 
 
@@ -39,12 +40,7 @@ namespace Read2Me.Services.Characters
 
     internal readonly record struct ParagraphKey(ProjectFolderId Folder, Guid ParagraphId);
 
-    public readonly record struct NodeQueueSummary(bool HasProcessing, int QueuedCount)
-    {
-        public bool IsEmpty => !HasProcessing && QueuedCount == 0;
-    }
-
-    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>
+    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>, IParagraphQueueProbe
     {
         private Channel<QueuedParagraph> _channel =
             Channel.CreateUnbounded<QueuedParagraph>(new UnboundedChannelOptions { SingleReader = true });
@@ -247,7 +243,7 @@ namespace Read2Me.Services.Characters
         public bool IsBusy(ProjectFolderId folder, Guid paragraphId) =>
             StatusOf(folder, paragraphId) is not null;
 
-        public NodeQueueSummary SummaryForNode(ProjectFolderId folder, Guid nodeId)
+        public (bool HasProcessing, int QueuedCount) SummaryForNode(ProjectFolderId folder, Guid nodeId)
             => _map.SummaryForNode(folder, nodeId);
 
         public QueueSnapshot Snapshot()

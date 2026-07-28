@@ -1,9 +1,27 @@
 using System.Collections.Concurrent;
 using Read2Me.Core.Models;
+using Read2Me.Services.Characters;
 
 namespace Read2Me.Services.NodeStatus
 {
-    public readonly record struct NodeStatusSummary(int AttributionRemaining, int AudioRemaining, int Review)
+    /// <summary>
+    /// Everything a book-tree node row shows, in one value: the three counts of work still
+    /// outstanding (seeded from the database, patched by the On* transitions) plus what the
+    /// attribution queue currently has in flight beneath the node (probed live). The two sources
+    /// and cadences differ inside <see cref="NodeStatusService"/>; the row sees one shape.
+    /// </summary>
+    /// <remarks>
+    /// The in-flight fields are attribution-specific by name on purpose: they come from the
+    /// character queue and only from it, so adding audio in-flight later is an addition, not a
+    /// rename. <see cref="IsDone"/> deliberately ignores them — <em>done</em> means no work
+    /// remains, not that nothing is running.
+    /// </remarks>
+    public readonly record struct NodeStatusSummary(
+        int AttributionRemaining,
+        int AudioRemaining,
+        int Review,
+        bool AttributionProcessing,
+        int AttributionQueued)
     {
         public bool IsDone => AttributionRemaining == 0 && AudioRemaining == 0 && Review == 0;
     }
@@ -32,8 +50,21 @@ namespace Read2Me.Services.NodeStatus
         }
 
         private readonly ConcurrentDictionary<ParagraphKey, ParagraphStatus> _entries = new();
+        private readonly IParagraphQueueProbe _queue;
 
         public event Action? Changed;
+
+        /// <summary>
+        /// The probe is required, not optional: a no-op default would let a mis-wired registration
+        /// render permanently empty in-flight chips and still pass every test. Both this service and
+        /// the probe's implementation are singletons, so this constructor-time subscription lives for
+        /// the process and never leaks.
+        /// </summary>
+        public NodeStatusService(IParagraphQueueProbe queue)
+        {
+            _queue = queue;
+            _queue.Changed += () => Changed?.Invoke();
+        }
 
         public void Seed(ProjectFolderId folder, IEnumerable<ParagraphStatusSeedRow> rows)
         {
@@ -110,11 +141,17 @@ namespace Read2Me.Services.NodeStatus
             return audio;
         }
 
+        /// <summary>
+        /// Rolls every paragraph under <paramref name="nodeId"/> up into one summary in a single
+        /// pass — outstanding counts and queue in-flight state share the ancestry scan.
+        /// </summary>
         public NodeStatusSummary StatusForNode(ProjectFolderId folder, Guid nodeId)
         {
             int attribution = 0;
             int audio = 0;
             int review = 0;
+            bool processing = false;
+            int queued = 0;
 
             foreach (var (key, status) in _entries)
             {
@@ -124,9 +161,15 @@ namespace Read2Me.Services.NodeStatus
                 if (status.Unattributed > 0) attribution++;
                 if (status.MissingAudio > 0) audio++;
                 if (status.Review > 0) review++;
+
+                switch (_queue.StatusOf(folder, key.ParagraphId))
+                {
+                    case ParagraphQueueStatus.Processing: processing = true; break;
+                    case ParagraphQueueStatus.Queued: queued++; break;
+                }
             }
 
-            return new NodeStatusSummary(attribution, audio, review);
+            return new NodeStatusSummary(attribution, audio, review, processing, queued);
         }
     }
 }

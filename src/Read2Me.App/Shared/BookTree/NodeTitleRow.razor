@@ -1,26 +1,18 @@
 @using Read2Me.App.State
 @using Read2Me.App.Shared.BookMenus
-@using Read2Me.Services.Characters
 @using Read2Me.Services.NodeStatus
 @inject BookHierarchyPresenter Presenter
-@inject CharacterQueueService Queue
 @inject NodeStatusService NodeStatus
 @implements IDisposable
 
 @{
     var isAudioMode = Presenter.ViewMode == BookViewMode.SplitAudio;
-    var nodeStatus = NodeStatus.StatusForNode(FolderId, NodeId);
-    var row = isAudioMode
-        ? NodeRowViewModel.For(
-            Presenter.IsNodeAudioSelectable(NodeId),
-            Presenter.AudioSelection.NodeState(Level, NodeId),
-            Queue.SummaryForNode(FolderId, NodeId),
-            nodeStatus)
-        : NodeRowViewModel.For(
-            Presenter.IsNodeSelectable(NodeId),
-            Presenter.Selection.NodeState(Level, NodeId),
-            Queue.SummaryForNode(FolderId, NodeId),
-            nodeStatus);
+    var row = NodeRowViewModel.For(
+        isAudioMode ? Presenter.IsNodeAudioSelectable(NodeId) : Presenter.IsNodeSelectable(NodeId),
+        isAudioMode
+            ? Presenter.AudioSelection.NodeState(Level, NodeId)
+            : Presenter.Selection.NodeState(Level, NodeId),
+        NodeStatus.StatusForNode(FolderId, NodeId));
 }
 <MudStack Row="true" AlignItems="AlignItems.Center" Style="width:100%">
     @if (row.ShowSelectionControls)
@@ -70,16 +62,16 @@
         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small"
                  Color="Color.Success" Style="opacity:0.5;pointer-events:none;" />
     }
-    @if (row.ShowProcessingChip)
+    @if (row.ShowAttributionProcessingChip)
     {
         <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
                  Icon="@Icons.Material.Filled.HourglassEmpty" Class="mt-0"
                  Style="pointer-events:none;">Processing</MudChip>
     }
-    @if (row.ShowQueuedChip)
+    @if (row.ShowAttributionQueuedChip)
     {
         <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
-                 Class="mt-0" Style="pointer-events:none;">@row.QueuedCount queued</MudChip>
+                 Class="mt-0" Style="pointer-events:none;">@row.AttributionQueuedCount queued</MudChip>
     }
     <BookNodeMenu Spec="@Spec"
                  IsFirst="IsFirst"
@@ -109,7 +101,6 @@
 
     protected override void OnInitialized()
     {
-        Queue.Changed += Refresh;
         NodeStatus.Changed += Refresh;
     }
 
@@ -117,7 +108,6 @@
 
     public void Dispose()
     {
-        Queue.Changed -= Refresh;
         NodeStatus.Changed -= Refresh;
     }
 }

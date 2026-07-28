@@ -67,7 +67,7 @@ namespace Read2Me.Services.Characters
         public ParagraphOutcome? OutcomeOf(ProjectFolderId folder, Guid paragraphId)
             => _store.OutcomeOf(new ParagraphKey(folder, paragraphId));
 
-        public NodeQueueSummary SummaryForNode(ProjectFolderId folder, Guid nodeId)
+        public (bool HasProcessing, int QueuedCount) SummaryForNode(ProjectFolderId folder, Guid nodeId)
         {
             bool hasProcessing = false;
             int queued = 0;
@@ -79,7 +79,7 @@ namespace Read2Me.Services.Characters
                 if (status == QueueItemStatus.Processing) hasProcessing = true;
                 else if (status == QueueItemStatus.Queued) queued++;
             }
-            return new NodeQueueSummary(hasProcessing, queued);
+            return (hasProcessing, queued);
         }
 
         public (int queued, int processing) CountStatuses() => _store.CountStatuses();
