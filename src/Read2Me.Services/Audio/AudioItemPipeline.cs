@@ -7,6 +7,8 @@ using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Events;
+using Read2Me.Services.Health;
+using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Audio
 {
@@ -23,7 +25,46 @@ namespace Read2Me.Services.Audio
         IFileSystem fs,
         ILogger<AudioItemPipeline> logger) : IAudioItemPipeline
     {
+        /// <summary>
+        /// The module's edge, where the exception that <see cref="RunToCompletionAsync"/> uses as
+        /// control flow becomes a value. One outer catch, discriminating on the same answer
+        /// <c>IAiServiceReporter.ReportFailure</c> gives <c>LlmCompletionRunner</c>: an
+        /// <see cref="AiServiceUnavailableException"/> <i>is</i> "reported to the watchdog" —
+        /// audio's base URL is client-private, so the exception type is how that bool travels up.
+        /// Everything else is <see cref="WorkOutcome.Failed"/>.
+        /// </summary>
         public async Task<PipelineResult> RunAsync(PipelineRequest req, CancellationToken ct)
+        {
+            try
+            {
+                return await RunToCompletionAsync(req, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (AiServiceUnavailableException ex)
+            {
+                logger.LogWarning(ex, "Item {Id} pipeline aborted — managed AI service unavailable",
+                    req.ParagraphItemId);
+                return Aborted(new WorkOutcome.Unavailable(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Item {Id} pipeline failed", req.ParagraphItemId);
+                return Aborted(new WorkOutcome.Failed(ex.Message));
+            }
+        }
+
+        /// A run that never produced audio. The three product fields are placeholders carrying the
+        /// same reason, so nothing downstream has to special-case a null.
+        private static PipelineResult Aborted(WorkOutcome outcome) => new(
+            [],
+            new NormalizeOutcome(false, outcome.Reason),
+            new VerifyOutcome(false, null, outcome.Reason, null, false),
+            outcome);
+
+        private async Task<PipelineResult> RunToCompletionAsync(PipelineRequest req, CancellationToken ct)
         {
             var id = req.ParagraphItemId;
             var ttsText = ReplaceTrailingComma(req.SourceText);
@@ -56,7 +97,8 @@ namespace Read2Me.Services.Audio
                 var attemptSw = Stopwatch.StartNew();
                 logger.LogDebug("Item {Id} attempt {A}/{Max} start", id, attempt, req.MaxAttempts);
 
-                // TTS — propagate hard exceptions to caller
+                // TTS — hard failures unwind the whole attempt loop (a dead service is not worth
+                // retrying) and become an outcome at RunAsync's edge.
                 logger.LogDebug("Item {Id} attempt {A}: TTS start ({Chars} chars via {Provider})",
                     id, attempt, ttsText.Length, req.TtsConfig.Type);
                 var ttsSw = Stopwatch.StartNew();
@@ -136,7 +178,7 @@ namespace Read2Me.Services.Audio
                 id, pipelineSw.ElapsedMilliseconds, attemptsUsed, normalizeOutcome.Ok, verifyOutcome.Ok,
                 verifyOutcome.Wer, audioBytes.Length, CanonicalWav.DurationMs(audioBytes.Length));
 
-            return new PipelineResult(audioBytes, normalizeOutcome, verifyOutcome);
+            return new PipelineResult(audioBytes, normalizeOutcome, verifyOutcome, new WorkOutcome.Ok());
         }
 
         /// Parks the normalized-but-not-yet-stepped audio as this item's Preview Source, so the A/B
@@ -211,10 +253,11 @@ namespace Read2Me.Services.Audio
             {
                 throw;
             }
-            catch (Read2Me.Services.Health.AiServiceUnavailableException)
+            catch (AiServiceUnavailableException)
             {
-                // Managed transcription service is down — let it propagate so the item requeues
-                // instead of being recorded as an unverifiable failure.
+                // Managed transcription service is down. Re-thrown deliberately to skip the generic
+                // catch below, which would record an outage as "could not verify" — this unwinds the
+                // attempt loop and reaches RunAsync's edge, where it becomes WorkOutcome.Unavailable.
                 throw;
             }
             catch (Exception ex)

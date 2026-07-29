@@ -6,7 +6,7 @@ using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
-using Read2Me.Services.Health;
+using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Audio
 {
@@ -33,8 +33,7 @@ namespace Read2Me.App.Audio
                 {
                     logger.LogWarning("Resolution failed for item {ItemId}: {Reason}",
                         itemRef.ParagraphItemId, resolution.FailureReason);
-                    broadcaster.Publish(new Failed(itemRef.ParagraphItemId, Attempt: 1, resolution.FailureReason!));
-                    queue.MarkFailed(folder, itemRef, resolution.FailureReason!);
+                    Fail(resolution.FailureReason!);
                     return;
                 }
 
@@ -45,10 +44,52 @@ namespace Read2Me.App.Audio
 
                 var result = await pipeline.RunAsync(req, ct);
 
-                logger.LogInformation("Pipeline complete for item {ItemId} normalizeOk={NormalizeOk} verifyOk={VerifyOk}",
-                    itemRef.ParagraphItemId, result.Normalize.Ok, result.Verify.Ok);
+                logger.LogInformation("Pipeline complete for item {ItemId} outcome={Outcome} normalizeOk={NormalizeOk} verifyOk={VerifyOk}",
+                    itemRef.ParagraphItemId, result.Outcome.GetType().Name, result.Normalize.Ok, result.Verify.Ok);
 
-                var relativePath = await recorder.RecordAsync(folder, itemRef.ParagraphItemId, result, req.SourceText, ct);
+                // The pipeline is total, so an AI outage arrives as a value. Only Ok has audio worth
+                // recording; audio never emits Busy, so the default arm is Failed's.
+                switch (result.Outcome)
+                {
+                    case WorkOutcome.Ok:
+                        break;
+
+                    // Watchdog is recovering the service. Requeue once so recovery is invisible in
+                    // the results; a second outage for the same item (service down) fails it.
+                    case WorkOutcome.Unavailable unavailable when queued.Attempts.Retries == 0:
+                        logger.LogInformation("Audio item {ItemId} service unavailable ({Reason}) — requeuing",
+                            itemRef.ParagraphItemId, unavailable.Reason);
+                        queue.Requeue(queued);
+                        return;
+
+                    case WorkOutcome.Unavailable unavailable:
+                        logger.LogWarning("Audio item {ItemId} service unavailable again after requeue — failing",
+                            itemRef.ParagraphItemId);
+                        Fail(unavailable.Reason);
+                        return;
+
+                    default:
+                        Fail(result.Outcome.Reason);
+                        return;
+                }
+
+                string relativePath;
+                try
+                {
+                    relativePath = await recorder.RecordAsync(folder, itemRef.ParagraphItemId, result, req.SourceText, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                // The one catch that survives the pipeline going total, and it is not an AI seam:
+                // recording writes the audio file and can fail on ordinary I/O.
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed recording audio item {ItemId}", itemRef.ParagraphItemId);
+                    Fail(ex.Message);
+                    return;
+                }
 
                 queue.MarkComplete(folder, itemRef, relativePath);
             }
@@ -60,27 +101,12 @@ namespace Read2Me.App.Audio
             {
                 logger.LogInformation("Cancelled audio item {ItemId}", itemRef.ParagraphItemId);
             }
-            catch (AiServiceUnavailableException ex)
+
+            void Fail(string? reason)
             {
-                // Watchdog is recovering the service. Requeue once so recovery is invisible in the
-                // results; a second outage for the same item (service down) fails it.
-                if (queued.Attempts.Retries > 0)
-                {
-                    logger.LogWarning("Audio item {ItemId} service unavailable again after requeue — failing", itemRef.ParagraphItemId);
-                    broadcaster.Publish(new Failed(itemRef.ParagraphItemId, Attempt: 1, ex.Message));
-                    queue.MarkFailed(folder, itemRef, ex.Message);
-                }
-                else
-                {
-                    logger.LogInformation("Audio item {ItemId} service unavailable — requeuing", itemRef.ParagraphItemId);
-                    queue.Requeue(queued);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed processing audio item {ItemId}", itemRef.ParagraphItemId);
-                broadcaster.Publish(new Failed(itemRef.ParagraphItemId, Attempt: 1, ex.Message));
-                queue.MarkFailed(folder, itemRef, ex.Message);
+                var message = reason ?? "audio generation failed";
+                broadcaster.Publish(new Failed(itemRef.ParagraphItemId, Attempt: 1, message));
+                queue.MarkFailed(folder, itemRef, message);
             }
         }
     }

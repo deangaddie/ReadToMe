@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
 using Xunit;
 
@@ -22,7 +23,8 @@ namespace Read2Me.Tests.Services.Audio
         private static PipelineResult OkResult() => new(
             AudioBytes: [0x52, 0x49, 0x46, 0x46],
             Normalize: new NormalizeOutcome(Ok: true, Reason: null),
-            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "In a hole in the ground", Rescued: false));
+            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "In a hole in the ground", Rescued: false),
+            Outcome: new WorkOutcome.Ok());
 
         public AudioResultRecorderTests()
         {
@@ -61,7 +63,8 @@ namespace Read2Me.Tests.Services.Audio
             var result = new PipelineResult(
                 AudioBytes: [0x52, 0x49, 0x46, 0x46],
                 Normalize: new NormalizeOutcome(Ok: false, Reason: "ffmpeg failed"),
-                Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "text", Rescued: false));
+                Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "text", Rescued: false),
+                Outcome: new WorkOutcome.Ok());
 
             await _sut.RecordAsync(_folder, id, result, "source text", CancellationToken.None);
 
@@ -77,7 +80,8 @@ namespace Read2Me.Tests.Services.Audio
             var result = new PipelineResult(
                 AudioBytes: [0x52, 0x49, 0x46, 0x46],
                 Normalize: new NormalizeOutcome(Ok: true, Reason: null),
-                Verify: new VerifyOutcome(Ok: false, Wer: 0.42, Reason: "WER 0.42", Transcript: "wrong", Rescued: false));
+                Verify: new VerifyOutcome(Ok: false, Wer: 0.42, Reason: "WER 0.42", Transcript: "wrong", Rescued: false),
+                Outcome: new WorkOutcome.Ok());
 
             await _sut.RecordAsync(_folder, id, result, "source text", CancellationToken.None);
 

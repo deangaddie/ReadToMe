@@ -1,5 +1,6 @@
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
 using Xunit;
 
@@ -26,7 +27,8 @@ namespace Read2Me.Tests.Fakes
             var expected = new PipelineResult(
                 AudioBytes: [1, 2, 3],
                 Normalize: new NormalizeOutcome(Ok: true, Reason: null),
-                Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "Hello world", Rescued: false));
+                Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "Hello world", Rescued: false),
+                Outcome: new WorkOutcome.Ok());
             var fake = new FakeAudioItemPipeline { Result = expected };
             var req = MakeRequest();
 

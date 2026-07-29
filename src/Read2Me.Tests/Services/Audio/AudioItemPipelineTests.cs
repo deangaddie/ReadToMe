@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Queueing;
 using Read2Me.Services.Events;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.SemanticSimilarity;
@@ -388,13 +389,28 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
-        public async Task HardTtsException_Propagates()
+        public async Task HardTtsException_BecomesFailedOutcome_NotAThrow()
         {
             _tts.Throws = new InvalidOperationException("tts boom");
             var req = MakeRequest();
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _sut.RunAsync(req, CancellationToken.None));
+            var result = await _sut.RunAsync(req, CancellationToken.None);
+
+            Assert.Equal("tts boom", Assert.IsType<WorkOutcome.Failed>(result.Outcome).Reason);
+            Assert.Empty(result.AudioBytes);
+        }
+
+        [Fact]
+        public async Task SuccessfulRun_OutcomeIsOk_EvenWhenVerifyFails()
+        {
+            _wer.Result = 0.9;
+            var req = MakeRequest();
+
+            var result = await _sut.RunAsync(req, CancellationToken.None);
+
+            // Provider behaviour only: the verifier's verdict is not the queue's retry signal.
+            Assert.False(result.Verify.Ok);
+            Assert.IsType<WorkOutcome.Ok>(result.Outcome);
         }
 
         [Fact]

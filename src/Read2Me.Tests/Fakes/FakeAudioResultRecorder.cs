@@ -12,6 +12,8 @@ namespace Read2Me.Tests.Fakes
 
         public string CannedRelativePath { get; set; } = string.Empty;
 
+        public Exception? Throws { get; set; }
+
         public Task<string> RecordAsync(
             ProjectFolderId folder,
             Guid paragraphItemId,
@@ -23,6 +25,7 @@ namespace Read2Me.Tests.Fakes
             LastParagraphItemId = paragraphItemId;
             LastResult = result;
             LastSourceText = sourceText;
+            if (Throws is not null) throw Throws;
             var path = string.IsNullOrEmpty(CannedRelativePath)
                 ? $"audio/{paragraphItemId}.wav"
                 : CannedRelativePath;

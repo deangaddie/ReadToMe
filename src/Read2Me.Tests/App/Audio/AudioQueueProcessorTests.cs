@@ -5,7 +5,6 @@ using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
 using Read2Me.Services.Audio.ParagraphTts;
-using Read2Me.Services.Health;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -41,7 +40,15 @@ namespace Read2Me.Tests.App.Audio
         private static PipelineResult OkResult() => new(
             AudioBytes: [0x52, 0x49, 0x46, 0x46],
             Normalize: new NormalizeOutcome(Ok: true, Reason: null),
-            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "In a hole in the ground", Rescued: false));
+            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "In a hole in the ground", Rescued: false),
+            Outcome: new WorkOutcome.Ok());
+
+        /// The pipeline is total, so an AI failure reaches the processor as a value, not a throw.
+        private static PipelineResult AbortedResult(WorkOutcome outcome) => new(
+            AudioBytes: [],
+            Normalize: new NormalizeOutcome(Ok: false, Reason: outcome.Reason),
+            Verify: new VerifyOutcome(Ok: false, Wer: null, Reason: outcome.Reason, Transcript: null, Rescued: false),
+            Outcome: outcome);
 
         private static ResolutionResult SuccessResolution(Guid? itemId = null) => new(
             Speaker: "Bilbo",
@@ -126,11 +133,11 @@ namespace Read2Me.Tests.App.Audio
         }
 
         [Fact]
-        public async Task PipelineException_MarksFailedAndPublishesFailed()
+        public async Task PipelineFailed_MarksFailedAndPublishesFailed()
         {
             var itemId = Guid.NewGuid();
             _resolver.Result = SuccessResolution(itemId);
-            _pipeline.Throws = new Exception("tts boom");
+            _pipeline.Result = AbortedResult(new WorkOutcome.Failed("tts boom"));
             var queued = MakeItem(itemId);
 
             await _sut.ProcessItemAsync(queued, CancellationToken.None);
@@ -146,7 +153,7 @@ namespace Read2Me.Tests.App.Audio
         {
             var itemId = Guid.NewGuid();
             _resolver.Result = SuccessResolution(itemId);
-            _pipeline.Throws = new AiServiceUnavailableException("http://localhost:8003", new Exception("timeout"));
+            _pipeline.Result = AbortedResult(new WorkOutcome.Unavailable("service at http://localhost:8003 is unavailable"));
             var queued = MakeItem(itemId);
 
             await _sut.ProcessItemAsync(queued, CancellationToken.None);
@@ -160,7 +167,7 @@ namespace Read2Me.Tests.App.Audio
         {
             var itemId = Guid.NewGuid();
             _resolver.Result = SuccessResolution(itemId);
-            _pipeline.Throws = new AiServiceUnavailableException("http://localhost:8003", new Exception("timeout"));
+            _pipeline.Result = AbortedResult(new WorkOutcome.Unavailable("service at http://localhost:8003 is unavailable"));
             var queued = MakeItem(itemId) with { Attempts = default(AttemptState).WithRetry() };
 
             await _sut.ProcessItemAsync(queued, CancellationToken.None);
@@ -168,6 +175,24 @@ namespace Read2Me.Tests.App.Audio
             var outcome = _queue.OutcomeOf(_folder, itemId);
             Assert.NotNull(outcome);
             Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
+        }
+
+        /// <summary>
+        /// The only catch left in the processor, and it is not an AI seam — recording writes the
+        /// audio file and can fail on ordinary I/O after a perfectly good pipeline run.
+        /// </summary>
+        [Fact]
+        public async Task RecorderThrows_MarksFailed()
+        {
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _recorder.Throws = new IOException("disk full");
+            var queued = MakeItem(itemId);
+
+            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+
+            Assert.Contains(_events, e => e is Failed f && f.Reason.Contains("disk full"));
+            Assert.Equal(AudioItemOutcomeKind.Failed, _queue.OutcomeOf(_folder, itemId)!.Kind);
         }
 
         [Fact]

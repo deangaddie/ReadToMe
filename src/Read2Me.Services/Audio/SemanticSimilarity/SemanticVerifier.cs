@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Read2Me.Services.Audio.SemanticSimilarity.Settings;
+using Read2Me.Services.Health;
 
 namespace Read2Me.Services.Audio.SemanticSimilarity
 {
@@ -40,6 +41,15 @@ namespace Read2Me.Services.Audio.SemanticSimilarity
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (AiServiceUnavailableException ex)
+            {
+                // The one AI outage in the pipeline that must *not* reach RunAsync's edge. The
+                // semantic check is a rescue for an already-failed WER, so a down similarity
+                // service degrades to "not rescued" — it cannot fail an item that TTS and
+                // transcription both served.
+                logger.LogWarning(ex, "Semantic similarity service unavailable; not rescued, WER fail stands.");
+                return (false, null, null);
             }
             catch (Exception ex)
             {
