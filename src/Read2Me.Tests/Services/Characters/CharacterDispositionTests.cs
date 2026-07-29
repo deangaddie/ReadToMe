@@ -7,8 +7,9 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters
 {
     /// <summary>
-    /// The character queue's translation surface: an <see cref="AttributionOutcome"/> reduced to the
-    /// provider behaviour the queue decides from. Pure — no fakes, no database.
+    /// The character queue's two pure surfaces: the translation of an <see cref="AttributionOutcome"/>
+    /// into the provider behaviour the queue decides from, and the phase-2 decision that reads the
+    /// apply's own product. No fakes, no database.
     /// </summary>
     public class CharacterDispositionTests
     {
@@ -73,5 +74,36 @@ namespace Read2Me.Tests.Services.Characters
                 Assert.Equal(expected, Translate(status));
             }
         }
+
+        // ── Phase 2: is the paragraph finished, after the apply? ──────────────
+
+        private const double Elapsed = 4.5;
+
+        /// <summary>
+        /// Any residue leaves the paragraph unfinished, carrying the answer's reason and the queue's
+        /// own elapsed figure (one stopwatch spans a drained batch, so the store must not measure it).
+        /// </summary>
+        [Fact]
+        public void UnattributedItemsRemain_IsUnfinished() =>
+            Assert.Equal(
+                new Disposition.Unfinished(Reason, Elapsed),
+                CharacterDisposition.DecideApplied(unattributed: 1, Elapsed, Reason));
+
+        /// <summary>
+        /// An "unknown" answer whose segments matched already-stamped items leaves nothing
+        /// unattributed — the paragraph is done, whatever the LLM's own confidence was, and no
+        /// marker is left behind.
+        /// </summary>
+        [Fact]
+        public void NothingLeftUnattributed_IsComplete_WithNoMarker() =>
+            Assert.Equal(
+                new Disposition.Complete(Elapsed),
+                CharacterDisposition.DecideApplied(unattributed: 0, Elapsed, Reason));
+
+        /// <summary>The character queue never records a product — that field is audio's.</summary>
+        [Fact]
+        public void Complete_CarriesNoProduct() =>
+            Assert.Null(Assert.IsType<Disposition.Complete>(
+                CharacterDisposition.DecideApplied(unattributed: 0, Elapsed, null)).Product);
     }
 }

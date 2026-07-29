@@ -137,11 +137,14 @@ namespace Read2Me.Tests.App.Characters
                 _queue.OutcomeOf(_item.Folder, _item.ParagraphId)!.Kind);
         }
 
+        /// <summary>
+        /// The wiring half of the post-apply check: the processor feeds the reader's count into
+        /// <see cref="CharacterDisposition.DecideApplied"/>. What that count <em>means</em> is the
+        /// phase-2 table in <c>CharacterDispositionTests</c>.
+        /// </summary>
         [Fact]
         public async Task UnknownAnswer_ButEveryItemStamped_CompletesWithoutOutcome()
         {
-            // An unknown segment that matched an already-stamped item leaves nothing unattributed —
-            // the paragraph is done, whatever the LLM's own confidence was.
             _attribution.Outcome = Segments(AttributionStatus.Unknown, null, Dialog("unknown"));
             _reader.Unattributed = 0;
 
@@ -151,6 +154,10 @@ namespace Read2Me.Tests.App.Characters
             Assert.Null(_queue.StatusOf(_item.Folder, _item.ParagraphId));
         }
 
+        /// <summary>
+        /// The orchestration half: a segment-less answer never reaches the apply. That it settles
+        /// unfinished is the policy table's row in <c>QueueDispositionTests</c>.
+        /// </summary>
         [Fact]
         public async Task EmptyParagraph_NoSegments_MarksUnknown_WithoutApplying()
         {
@@ -163,111 +170,10 @@ namespace Read2Me.Tests.App.Characters
                 _queue.OutcomeOf(_item.Folder, _item.ParagraphId)!.Kind);
         }
 
-        [Fact]
-        public async Task Unknown_WithReason_FlowsReasonIntoOutcome()
-        {
-            _attribution.Outcome = new AttributionOutcome(
-                AttributionStatus.Unknown, null,
-                "Speaker unknown after escalating through 2 models (A → B)");
-
-            await _sut.ProcessItemAsync(_item, CancellationToken.None);
-
-            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
-            Assert.NotNull(outcome);
-            Assert.Equal(ParagraphOutcomeKind.Unknown, outcome.Kind);
-            Assert.Equal("Speaker unknown after escalating through 2 models (A → B)", outcome.Reason);
-        }
-
-        [Fact]
-        public async Task NoLlmConfigured_MarksFailed_WithReason()
-        {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.NoLlmConfigured, null, "No config");
-
-            await _sut.ProcessItemAsync(_item, CancellationToken.None);
-
-            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
-            Assert.NotNull(outcome);
-            Assert.Equal(ParagraphOutcomeKind.Failed, outcome.Kind);
-            Assert.Equal("No config", outcome.Reason);
-        }
-
-        [Fact]
-        public async Task Failed_MarksFailed_WithReason()
-        {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.Failed, null, "LLM Error");
-
-            await _sut.ProcessItemAsync(_item, CancellationToken.None);
-
-            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
-            Assert.NotNull(outcome);
-            Assert.Equal(ParagraphOutcomeKind.Failed, outcome.Kind);
-            Assert.Equal("LLM Error", outcome.Reason);
-        }
-
-        [Fact]
-        public async Task ServiceUnavailable_FirstTime_RequeuesInsteadOfFailing()
-        {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, "stalled");
-
-            await _sut.ProcessItemAsync(_item, CancellationToken.None);
-
-            // Back on the queue, waiting for recovery — not a terminal failure.
-            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(_item.Folder, _item.ParagraphId));
-            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
-        }
-
-        [Fact]
-        public async Task ServiceUnavailable_SecondTimeForRequeuedItem_MarksFailed()
-        {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ServiceUnavailable, null, "stalled");
-            var requeued = _item with { Attempts = default(AttemptState).WithRetry() };
-
-            await _sut.ProcessItemAsync(requeued, CancellationToken.None);
-
-            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
-            Assert.NotNull(outcome);
-            Assert.Equal(ParagraphOutcomeKind.Failed, outcome.Kind);
-            Assert.Equal("stalled", outcome.Reason);
-        }
-
-        [Fact]
-        public async Task ModelLoading_RequeuesWithBackoff_InsteadOfFailing()
-        {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ModelLoading, null, "still loading");
-
-            await _sut.ProcessItemAsync(_item, CancellationToken.None);
-
-            // Provider busy, not dead: the item is back on the queue awaiting the model, not failed.
-            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(_item.Folder, _item.ParagraphId));
-            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
-        }
-
-        [Fact]
-        public async Task ModelLoading_RequeuesIndefinitely_DoesNotTripOnceThenFail()
-        {
-            _attribution.Outcome = new AttributionOutcome(AttributionStatus.ModelLoading, null, "still loading");
-            // An item that has already exhausted the ServiceUnavailable once-then-fail budget
-            // (Retries=1) and retried the model load several times must STILL requeue on
-            // ModelLoading — the two budgets are independent and it never fails.
-            var retried = _item with { Attempts = new AttemptState(Retries: 1, Busies: 5) };
-
-            await _sut.ProcessItemAsync(retried, CancellationToken.None);
-
-            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(_item.Folder, _item.ParagraphId));
-            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
-        }
-
-        [Theory]
-        [InlineData(0, 2)]
-        [InlineData(1, 4)]
-        [InlineData(2, 8)]
-        [InlineData(3, 16)]
-        [InlineData(4, 30)]   // capped
-        [InlineData(50, 30)]  // still capped, never overflows
-        public void ModelLoadBackoff_IsExponentialWithCap(int attempt, double expectedSeconds)
-        {
-            Assert.Equal(expectedSeconds, CharacterQueueProcessor.ModelLoadBackoff(attempt).TotalSeconds);
-        }
+        // Retry and settle policy — ServiceUnavailable's once-only budget, ModelLoading's unbounded
+        // one, the backoff curve, and Failed/NoLlmConfigured's terminal reason — is not orchestration.
+        // It lives as a table in QueueDispositionTests (phase 1) and CharacterDispositionTests
+        // (translation + phase 2), with no fakes and nothing to drive.
 
         [Fact]
         public async Task ItemLevelCancel_DoesNotMarkFailed()

@@ -197,14 +197,14 @@ namespace Read2Me.Services.Characters
         /// themselves reach the UI through <c>ParagraphItemsChanged</c>, published by the apply
         /// command — the queue only carries queue state.
         /// </summary>
-        public void MarkComplete(QueuedParagraph item, double elapsedSeconds)
+        public void MarkComplete(QueuedParagraph item, double? elapsedSeconds)
         {
             var key = Key(item);
             _store.Settle(key, elapsedSeconds: elapsedSeconds);
             Changed?.Invoke();
         }
 
-        public void MarkUnknown(QueuedParagraph item, double elapsedSeconds, string? reason = null)
+        public void MarkUnknown(QueuedParagraph item, double? elapsedSeconds, string? reason = null)
         {
             var key = Key(item);
             _store.Settle(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, reason), elapsedSeconds);

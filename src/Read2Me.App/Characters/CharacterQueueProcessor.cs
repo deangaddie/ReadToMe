@@ -81,96 +81,103 @@ namespace Read2Me.App.Characters
             }
         }
 
+        /// <summary>
+        /// Decides the paragraph's fate and executes it. The policy itself is not here: phase 1 is
+        /// <see cref="QueueDisposition.Decide"/> — provider behaviour and retry budgets, shared with
+        /// the audio queue — and phase 2 is <see cref="CharacterDisposition.DecideApplied"/>. What
+        /// stays is the apply and the probe, which need this processor's collaborators.
+        /// </summary>
         private async Task ApplyOutcomeAsync(
             QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds, CancellationToken ct)
         {
             // The queue decides from provider behaviour, not from the answer's quality: an Ok answer
             // that left a speaker unidentified is still an answer, and whether the paragraph is
-            // finished is settled below, after apply, from the items. See WorkOutcome.
-            switch (outcome.Work)
+            // finished is settled after the apply, from the items. See WorkOutcome.
+            var plan = QueueDisposition.Decide(outcome.Work, outcome.Segments is not null, item.Attempts);
+
+            var disposition = plan switch
             {
-                // An answer applies whether or not every speaker in it was identified: the segments
-                // it *did* attribute are real work, and the paragraph stays queue-eligible while any
-                // Character item is left unstamped.
-                case WorkOutcome.Ok ok when outcome.Segments is not null:
-                    await ApplySegmentsAsync(item, outcome.Segments, ct);
-                    var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
-                    if (unattributed > 0)
-                    {
-                        logger.LogInformation("Paragraph {ParagraphId} has {Count} unattributed item(s) after apply",
-                            item.ParagraphId, unattributed);
-                        queue.MarkUnknown(item, elapsedSeconds, ok.Reason);
-                    }
-                    else
-                    {
-                        queue.MarkComplete(item, elapsedSeconds);
-                        logger.LogInformation("Completed paragraph {ParagraphId} in {Elapsed:F1}s",
-                            item.ParagraphId, elapsedSeconds);
-                    }
+                Plan.ApplyFirst => await ApplyAndDecideAsync(item, outcome, elapsedSeconds, ct),
+
+                // Phase 1's one settling arm is the empty paragraph.
+                Plan.Now { D: Disposition.Unfinished unfinished } => EmptyParagraph(item, unfinished, elapsedSeconds),
+
+                Plan.Now now => now.D,
+
+                _ => throw new ArgumentOutOfRangeException(nameof(plan), plan, "Unhandled Plan."),
+            };
+
+            Execute(item, disposition);
+        }
+
+        /// <summary>
+        /// The <see cref="Plan.ApplyFirst"/> branch: apply the answer, probe what it left behind, and
+        /// hand the residue to phase 2. The probe is only meaningful <em>after</em> a successful
+        /// apply — which is why the decision that gates the apply runs first.
+        /// </summary>
+        private async Task<Disposition> ApplyAndDecideAsync(
+            QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds, CancellationToken ct)
+        {
+            await ApplySegmentsAsync(item, outcome.Segments!, ct);
+
+            var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
+            if (unattributed > 0)
+                logger.LogInformation("Paragraph {ParagraphId} has {Count} unattributed item(s) after apply",
+                    item.ParagraphId, unattributed);
+
+            return CharacterDisposition.DecideApplied(unattributed, elapsedSeconds, outcome.Work.Reason);
+        }
+
+        /// <summary>
+        /// Runs the decided transition. Every <see cref="Disposition"/> member executes — impl-10
+        /// folds this switch into <c>CharacterQueueService.Apply</c> and the five mutators die with it.
+        /// </summary>
+        private void Execute(QueuedParagraph item, Disposition disposition)
+        {
+            switch (disposition)
+            {
+                case Disposition.Complete complete:
+                    queue.MarkComplete(item, complete.Elapsed);
+                    logger.LogInformation("Completed paragraph {ParagraphId} in {Elapsed:F1}s",
+                        item.ParagraphId, complete.Elapsed ?? 0);
                     break;
 
-                case WorkOutcome.Ok ok:
-                    // No segments to apply (an empty paragraph) — nothing was attributed.
-                    logger.LogInformation("Paragraph {ParagraphId} speaker unknown", item.ParagraphId);
-                    queue.MarkUnknown(item, elapsedSeconds, ok.Reason);
+                case Disposition.Unfinished unfinished:
+                    queue.MarkUnknown(item, unfinished.Elapsed, unfinished.Reason);
                     break;
 
-                case WorkOutcome.Failed failed:
+                case Disposition.Failed failed:
                     logger.LogWarning("Paragraph {ParagraphId} failed: {Reason}",
                         item.ParagraphId, failed.Reason);
                     queue.MarkFailed(item, failed.Reason);
                     break;
 
-                case WorkOutcome.Unavailable unavailable:
-                    // Watchdog is recovering the service. Requeue once so recovery is invisible in
-                    // the results; a second outage for the same item (service down) fails it.
-                    if (item.Attempts.Retries > 0)
-                    {
-                        logger.LogWarning("Paragraph {ParagraphId} service unavailable again after requeue — failing: {Reason}",
-                            item.ParagraphId, unavailable.Reason);
-                        queue.MarkFailed(item, unavailable.Reason);
-                    }
-                    else
-                    {
-                        logger.LogInformation("Paragraph {ParagraphId} service unavailable — requeuing: {Reason}",
-                            item.ParagraphId, unavailable.Reason);
-                        queue.Requeue(item);
-                    }
+                case Disposition.RetryOnce:
+                    logger.LogInformation("Paragraph {ParagraphId} service unavailable — requeuing",
+                        item.ParagraphId);
+                    queue.Requeue(item);
                     break;
 
-                case WorkOutcome.Busy busy:
-                    // The target model is still loading on a switchable llama endpoint — provider
-                    // busy, not dead. Requeue with exponential backoff, indefinitely: failing or
-                    // escalating would evict the very load we are waiting for. This is DISTINCT from
-                    // ServiceUnavailable's requeue-once-then-fail — it never spends the Retries
-                    // budget, and a genuinely wedged load simply loops until the user cancels.
-                    var backoff = ModelLoadBackoff(item.Attempts.Busies);
+                case Disposition.RetryAfter retryAfter:
                     logger.LogInformation(
-                        "Paragraph {ParagraphId} model still loading — requeuing in {Backoff:0.#}s (attempt {Attempt}): {Reason}",
-                        item.ParagraphId, backoff.TotalSeconds, item.Attempts.Busies + 1, busy.Reason);
-                    queue.RequeueForModelLoad(item, backoff);
+                        "Paragraph {ParagraphId} model still loading — requeuing in {Backoff:0.#}s (attempt {Attempt})",
+                        item.ParagraphId, retryAfter.Delay.TotalSeconds, item.Attempts.Busies + 1);
+                    queue.RequeueForModelLoad(item, retryAfter.Delay);
                     break;
             }
         }
 
-        /// <summary>Base delay for the first model-load retry; doubles each attempt up to the cap.</summary>
-        private static readonly TimeSpan ModelLoadBackoffBase = TimeSpan.FromSeconds(2);
-
-        /// <summary>Upper bound on the model-load retry backoff — a wedged load polls at this cadence.</summary>
-        private static readonly TimeSpan ModelLoadBackoffCap = TimeSpan.FromSeconds(30);
-
         /// <summary>
-        /// Exponential-with-cap backoff for an indefinitely-retried model load. <paramref name="attempt"/>
-        /// is the 0-based prior attempt count: 0→2s, 1→4s, 2→8s, 3→16s, 4→30s (cap), and 30s
-        /// thereafter. The shift is bounded so a long-running wedged load can never overflow.
+        /// The one settling disposition phase 1 can reach: an answer with no segments to apply, so
+        /// nothing was attributed. Phase 1 cannot know this queue's elapsed figure — one stopwatch
+        /// spans a whole drained batch here, rather than the store measuring from
+        /// <c>MarkProcessing</c> — so the queue stamps it on the way past.
         /// </summary>
-        internal static TimeSpan ModelLoadBackoff(int attempt)
+        private Disposition EmptyParagraph(
+            QueuedParagraph item, Disposition.Unfinished unfinished, double elapsedSeconds)
         {
-            if (attempt < 0) attempt = 0;
-            // Cap the doubling factor at 16 (attempt ≥ 4) before it can overflow or exceed the cap.
-            var factor = attempt >= 4 ? 16 : 1 << attempt;
-            var delay = ModelLoadBackoffBase * factor;
-            return delay < ModelLoadBackoffCap ? delay : ModelLoadBackoffCap;
+            logger.LogInformation("Paragraph {ParagraphId} speaker unknown", item.ParagraphId);
+            return unfinished with { Elapsed = elapsedSeconds };
         }
 
         /// <summary>
