@@ -9,6 +9,7 @@ Domain vocabulary for ReadToMe. Use these terms exactly in code, tests, and disc
 | Character attribution | [context/attribution.md](context/attribution.md) | Character attribution, processed/unprocessed, Character Queue |
 | LLM infrastructure | [context/llm.md](context/llm.md) | Constrained completion, Completion Runner, completion scanner stop, Run outcome, Health streak |
 | Audio pipeline | [context/audio-pipeline.md](context/audio-pipeline.md) | Normalisation, Canonical WAV, Audio Queue, Audio Gen Stream, Audio Retry, pipeline/resolver/recorder seams, outcomes, Sentence Chunking |
+| Queueing (shared) | [context/queueing.md](context/queueing.md) | Work outcome, Disposition, Plan, apply product, Attempt state — the shared queue-disposition vocabulary |
 | Semantic verification | [context/semantic-verification.md](context/semantic-verification.md) | Semantic Similarity Check, Semantic Rescue, `ISemanticVerifier` |
 | Audiobook assembly & live-event infra | [context/assembly.md](context/assembly.md) | Audiobook Assembly, manifest, pauses, concat/chapters/cover, `EventBroadcaster<T>`, `VoiceBatchRunner`, Sweep Phase |
 | Container health dashboard | [context/container-health-dashboard.md](context/container-health-dashboard.md) | Service Adapter, shared operator-console boundary |
