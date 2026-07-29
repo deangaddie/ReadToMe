@@ -1221,7 +1221,7 @@ namespace Read2Me.Tests.State
 
             var item = para.Items.First();
             var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            audioQueue.MarkComplete(Folder, itemRef, "audio/item.wav");
+            audioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
 
             Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
             Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, partId).AudioRemaining);
@@ -1236,7 +1236,7 @@ namespace Read2Me.Tests.State
 
             var item = para.Items.First();
             var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            audioQueue.MarkComplete(Folder, itemRef, "audio/item.wav");
+            audioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
 
             // Still 1 missing audio item in paragraph → still contributes 1 to node count
             Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
@@ -1426,7 +1426,7 @@ namespace Read2Me.Tests.State
 
             var item = para.Items.First();
             var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            audioQueue.MarkComplete(Folder, itemRef, "audio/chapter1/item.wav");
+            audioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/chapter1/item.wav"));
 
             Assert.Equal("audio/chapter1/item.wav", item.AudioFileName);
         }
@@ -1439,7 +1439,7 @@ namespace Read2Me.Tests.State
 
             var item = para.Items.First();
             var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            audioQueue.MarkComplete(Folder, itemRef, "audio/item.wav");
+            audioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
 
             Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
         }
@@ -1450,7 +1450,8 @@ namespace Read2Me.Tests.State
             var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
 
             var unknownRef = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), chapterId, partId, volumeId);
-            var ex = Record.Exception(() => audioQueue.MarkComplete(Folder, unknownRef, "audio/ghost.wav"));
+            var ex = Record.Exception(() => audioQueue.Apply(
+                new QueuedAudioItem(Folder, unknownRef), new Disposition.Complete(null, "audio/ghost.wav")));
 
             Assert.Null(ex);
         }
@@ -1463,7 +1464,7 @@ namespace Read2Me.Tests.State
             var item = para.Items.First();
             var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
             var otherFolder = new ProjectFolderId("other-book");
-            audioQueue.MarkComplete(otherFolder, itemRef, "audio/item.wav");
+            audioQueue.Apply(new QueuedAudioItem(otherFolder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
 
             Assert.Null(item.AudioFileName);
         }

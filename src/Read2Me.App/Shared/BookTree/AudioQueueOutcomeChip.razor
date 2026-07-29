@@ -10,6 +10,17 @@
         </MudChip>
     </MudTooltip>
 }
+else if (Outcome.Kind == AudioItemOutcomeKind.Unfinished)
+{
+    @* No current path reaches this: it exists so Apply stays total over Disposition. *@
+    <MudTooltip Text="@(Outcome.Reason ?? "Unfinished")" Placement="Placement.Top">
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+                 Icon="@Icons.Material.Outlined.HelpOutline" Class="mt-0"
+                 Style="pointer-events:none; opacity:0.75;">
+            Unfinished
+        </MudChip>
+    </MudTooltip>
+}
 
 @code {
     [Parameter, EditorRequired] public AudioItemOutcome Outcome { get; set; } = null!;

@@ -42,7 +42,7 @@ namespace Read2Me.Tests.App.Audio
 
             var item1 = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
             var item2 = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-            queue.Enqueue(Folder, [item1, item2]);
+            queue.Enqueue([new QueuedAudioItem(Folder, item1), new QueuedAudioItem(Folder, item2)]);
 
             var workerTask = worker.StartAsync(cts.Token);
 

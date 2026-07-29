@@ -44,7 +44,7 @@ namespace Read2Me.Services.UseCases
                 return 0;
 
             var ordered = await audioReader.GetOrderedAudioItemRefsAsync(folder, refs.Select(r => r.ParagraphItemId));
-            audioQueue.Enqueue(folder, ordered);
+            audioQueue.Enqueue(ordered.Select(r => new QueuedAudioItem(folder, r)));
             return ordered.Count;
         }
     }

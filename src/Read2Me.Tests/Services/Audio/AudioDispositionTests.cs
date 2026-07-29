@@ -138,5 +138,20 @@ namespace Read2Me.Tests.Services.Audio
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
                 () => sut.RunAsync(Request(), cts.Token));
         }
+
+        // ── Phase 2 ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Audio's phase 2 has one case: a recorded item is finished, carrying the recorder's path so
+        /// the queue's <c>Complete</c> arm can publish it. Elapsed stays null — one item is one unit
+        /// of work here, so the store measures it from <c>MarkProcessing</c>.
+        /// </summary>
+        [Fact]
+        public void DecideApplied_IsCompleteCarryingTheRecordedPath()
+        {
+            var d = AudioDisposition.DecideApplied("audio/ch1/item.wav");
+
+            Assert.Equal(new Disposition.Complete(null, "audio/ch1/item.wav"), d);
+        }
     }
 }

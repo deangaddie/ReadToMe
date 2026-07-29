@@ -101,6 +101,8 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<Read2Me.Services.Audio.AudioQueueService>();
         services.AddSingleton<IQueueSource<Read2Me.Services.Audio.QueuedAudioItem>>(
             sp => sp.GetRequiredService<Read2Me.Services.Audio.AudioQueueService>());
+        services.AddSingleton<Read2Me.Services.Audio.IAudioQueue>(
+            sp => sp.GetRequiredService<Read2Me.Services.Audio.AudioQueueService>());
         services.AddScoped<IAudioQueueProcessor, AudioQueueProcessor>();
         services.AddScoped<IQueueProcessor<Read2Me.Services.Audio.QueuedAudioItem>>(
             sp => sp.GetRequiredService<IAudioQueueProcessor>());

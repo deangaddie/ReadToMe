@@ -127,7 +127,7 @@ namespace Read2Me.App.State
             if (!await preflight.EnsureReadyAsync(AiTaskKind.AudioGeneration)) return;
 
             var items = await reader.GetOrderedAudioItemRefsAsync(folder, selectedIds);
-            audioQueue.Enqueue(folder, items);
+            audioQueue.Enqueue(items.Select(r => new QueuedAudioItem(folder, r)));
             sel.Clear();
         }
     }

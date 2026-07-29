@@ -1,5 +1,6 @@
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
@@ -8,14 +9,22 @@ namespace Read2Me.Tests.Services.Audio
     {
         private static readonly ProjectFolderId Folder = new("test-book");
 
-        private static AudioItemRef MakeItem(Guid? paragraphItemId = null) =>
-            new(paragraphItemId ?? Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        private static QueuedAudioItem MakeItem(Guid? paragraphItemId = null) =>
+            new(Folder, new AudioItemRef(
+                paragraphItemId ?? Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()));
 
-        private static void EnqueueAndProcess(AudioQueueService svc, AudioItemRef item)
+        /// <summary>
+        /// Puts the item through the queue exactly as the worker does — including taking it off the
+        /// channel — so a later retry arm's write is the only thing left to read.
+        /// </summary>
+        private static void EnqueueAndProcess(AudioQueueService svc, QueuedAudioItem item)
         {
-            svc.Enqueue(Folder, [item]);
-            svc.MarkProcessing(Folder, item);
+            svc.Enqueue([item]);
+            svc.Reader.TryRead(out _);
+            svc.MarkProcessing(item);
         }
+
+        private static Guid IdOf(QueuedAudioItem item) => item.Item.ParagraphItemId;
 
         [Fact]
         public void Enqueue_SetsStatusQueued()
@@ -23,20 +32,19 @@ namespace Read2Me.Tests.Services.Audio
             var svc = new AudioQueueService();
             var item = MakeItem();
 
-            svc.Enqueue(Folder, [item]);
+            svc.Enqueue([item]);
 
-            Assert.Equal(AudioItemQueueStatus.Queued, svc.StatusOf(Folder, item.ParagraphItemId));
+            Assert.Equal(AudioItemQueueStatus.Queued, svc.StatusOf(Folder, IdOf(item)));
         }
 
         [Fact]
         public void Enqueue_Duplicate_IsNoOp()
         {
             var svc = new AudioQueueService();
-            var id = Guid.NewGuid();
-            var item = MakeItem(id);
+            var item = MakeItem();
 
-            svc.Enqueue(Folder, [item]);
-            svc.Enqueue(Folder, [item]);
+            svc.Enqueue([item]);
+            svc.Enqueue([item]);
 
             var snapshot = svc.Snapshot();
             Assert.Equal(1, snapshot.QueuedCount);
@@ -48,11 +56,11 @@ namespace Read2Me.Tests.Services.Audio
             var svc = new AudioQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
-            svc.MarkComplete(Folder, item, "audio/test.wav");
+            svc.Apply(item, new Disposition.Complete(null, "audio/test.wav"));
 
-            svc.Enqueue(Folder, [item]);
+            svc.Enqueue([item]);
 
-            Assert.Equal(AudioItemQueueStatus.Queued, svc.StatusOf(Folder, item.ParagraphItemId));
+            Assert.Equal(AudioItemQueueStatus.Queued, svc.StatusOf(Folder, IdOf(item)));
         }
 
         [Fact]
@@ -60,52 +68,135 @@ namespace Read2Me.Tests.Services.Audio
         {
             var svc = new AudioQueueService();
             var item = MakeItem();
-            svc.Enqueue(Folder, [item]);
+            svc.Enqueue([item]);
 
-            svc.MarkProcessing(Folder, item);
+            svc.MarkProcessing(item);
 
-            Assert.Equal(AudioItemQueueStatus.Processing, svc.StatusOf(Folder, item.ParagraphItemId));
+            Assert.Equal(AudioItemQueueStatus.Processing, svc.StatusOf(Folder, IdOf(item)));
         }
 
+        // ── Apply: the five arms ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Completion is one transition, not a settle followed by two side effects: the arm stamps
+        /// the cache-bust version and publishes the recorded path, so nothing can complete an item
+        /// without them.
+        /// </summary>
         [Fact]
-        public void MarkComplete_ClearsStatus()
+        public void Apply_Complete_Settles_StampsVersion_AndPublishesPath()
         {
             var svc = new AudioQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
-            svc.MarkComplete(Folder, item, "audio/test.wav");
+            (ProjectFolderId Folder, Guid Id, string Path)? assigned = null;
+            svc.AudioFileAssigned += (f, id, p) => assigned = (f, id, p);
 
-            Assert.Null(svc.StatusOf(Folder, item.ParagraphItemId));
+            svc.Apply(item, new Disposition.Complete(null, "audio/test.wav"));
+
+            Assert.Null(svc.StatusOf(Folder, IdOf(item)));
+            Assert.NotNull(svc.AudioVersionOf(Folder, IdOf(item)));
+            Assert.Equal((Folder, IdOf(item), "audio/test.wav"), assigned);
         }
 
         [Fact]
-        public void MarkComplete_ClearsStaleOutcome()
+        public void Apply_Complete_ClearsStaleOutcome()
         {
             var svc = new AudioQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
-            svc.MarkFailed(Folder, item, "network error");
+            svc.Apply(item, new Disposition.Failed("network error"));
 
-            svc.MarkComplete(Folder, item, "audio/test.wav");
+            svc.Apply(item, new Disposition.Complete(null, "audio/test.wav"));
 
-            Assert.Null(svc.OutcomeOf(Folder, item.ParagraphItemId));
+            Assert.Null(svc.OutcomeOf(Folder, IdOf(item)));
         }
 
+        /// <summary>
+        /// No current path reaches this arm — audio's own empty case is a failed resolution, which
+        /// is a <c>Failed</c> work outcome. It exists so <c>Apply</c> stays total, and recording it
+        /// as <c>Failed</c> would lie to the UI chip.
+        /// </summary>
         [Fact]
-        public void MarkFailed_RecordsOutcome()
+        public void Apply_Unfinished_RecordsUnfinishedOutcome()
         {
             var svc = new AudioQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
-            svc.MarkFailed(Folder, item, "network error");
+            svc.Apply(item, new Disposition.Unfinished("nothing to say", 1.5));
 
-            var outcome = svc.OutcomeOf(Folder, item.ParagraphItemId);
+            var outcome = svc.OutcomeOf(Folder, IdOf(item));
+            Assert.NotNull(outcome);
+            Assert.Equal(AudioItemOutcomeKind.Unfinished, outcome.Kind);
+            Assert.Equal("nothing to say", outcome.Reason);
+            Assert.Null(svc.StatusOf(Folder, IdOf(item)));
+        }
+
+        [Fact]
+        public void Apply_Failed_RecordsOutcome()
+        {
+            var svc = new AudioQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+
+            svc.Apply(item, new Disposition.Failed("network error"));
+
+            var outcome = svc.OutcomeOf(Folder, IdOf(item));
             Assert.NotNull(outcome);
             Assert.Equal(AudioItemOutcomeKind.Failed, outcome.Kind);
             Assert.Equal("network error", outcome.Reason);
-            Assert.Null(svc.StatusOf(Folder, item.ParagraphItemId));
+            Assert.Null(svc.StatusOf(Folder, IdOf(item)));
+        }
+
+        [Fact]
+        public async Task Apply_RetryOnce_ReturnsToQueued_AndSpendsARetry()
+        {
+            var svc = new AudioQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+
+            svc.Apply(item, new Disposition.RetryOnce());
+
+            Assert.Equal(AudioItemQueueStatus.Queued, svc.StatusOf(Folder, IdOf(item)));
+            var back = await svc.Reader.ReadAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(1, back.Attempts.Retries);
+            Assert.Equal(0, back.Attempts.Busies);
+        }
+
+        [Fact]
+        public async Task Apply_RetryAfter_ReturnsToQueued_AndSpendsABusy()
+        {
+            var svc = new AudioQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+
+            svc.Apply(item, new Disposition.RetryAfter(TimeSpan.Zero));
+
+            Assert.Equal(AudioItemQueueStatus.Queued, svc.StatusOf(Folder, IdOf(item)));
+            var back = await svc.Reader.ReadAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(0, back.Attempts.Retries);
+            Assert.Equal(1, back.Attempts.Busies);
+        }
+
+        /// <summary>
+        /// The reason the delayed write captures its writer: a cancel-all during the backoff must
+        /// drop the item, not resurrect it on the replacement channel.
+        /// </summary>
+        [Fact]
+        public async Task Apply_RetryAfter_ThenCancelAll_DoesNotResurrectTheItem()
+        {
+            var svc = new AudioQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+
+            svc.Apply(item, new Disposition.RetryAfter(TimeSpan.FromMilliseconds(50)));
+            svc.CancelAll();
+
+            await Task.Delay(200, TestContext.Current.CancellationToken);
+
+            Assert.False(svc.Reader.TryRead(out _));
+            Assert.Equal(0, svc.Snapshot().QueuedCount);
         }
 
         [Fact]
@@ -113,11 +204,11 @@ namespace Read2Me.Tests.Services.Audio
         {
             var svc = new AudioQueueService();
             var item = MakeItem();
-            svc.Enqueue(Folder, [item]);
+            svc.Enqueue([item]);
 
             svc.CancelAll();
 
-            Assert.Null(svc.StatusOf(Folder, item.ParagraphItemId));
+            Assert.Null(svc.StatusOf(Folder, IdOf(item)));
             Assert.Equal(0, svc.Snapshot().QueuedCount);
             Assert.Equal(0, svc.Snapshot().ProcessingCount);
         }
@@ -128,8 +219,8 @@ namespace Read2Me.Tests.Services.Audio
             var svc = new AudioQueueService();
             var item1 = MakeItem();
             var item2 = MakeItem();
-            svc.Enqueue(Folder, [item1, item2]);
-            svc.MarkProcessing(Folder, item1);
+            svc.Enqueue([item1, item2]);
+            svc.MarkProcessing(item1);
 
             var snap = svc.Snapshot();
 
@@ -144,13 +235,13 @@ namespace Read2Me.Tests.Services.Audio
             int count = 0;
             svc.Changed += () => count++;
 
-            svc.Enqueue(Folder, [MakeItem()]);
+            svc.Enqueue([MakeItem()]);
 
             Assert.True(count > 0);
         }
 
         [Fact]
-        public void Changed_FiresOnMarkFailed()
+        public void Changed_FiresOnceOnApply()
         {
             var svc = new AudioQueueService();
             var item = MakeItem();
@@ -158,25 +249,25 @@ namespace Read2Me.Tests.Services.Audio
 
             int count = 0;
             svc.Changed += () => count++;
-            svc.MarkFailed(Folder, item, "err");
+            svc.Apply(item, new Disposition.Failed("err"));
 
-            Assert.True(count > 0);
+            Assert.Equal(1, count);
         }
 
         [Fact]
-        public void AudioVersionOf_ChangesAfterEachMarkComplete()
+        public void AudioVersionOf_ChangesAfterEachCompletion()
         {
             var svc = new AudioQueueService();
             var item1 = MakeItem();
             EnqueueAndProcess(svc, item1);
-            svc.MarkComplete(Folder, item1, "audio/one.wav");
-            var v1 = svc.AudioVersionOf(Folder, item1.ParagraphItemId);
+            svc.Apply(item1, new Disposition.Complete(null, "audio/one.wav"));
+            var v1 = svc.AudioVersionOf(Folder, IdOf(item1));
 
             // Re-enqueue is a no-op once complete, but a fresh item gets its own version.
             var item2 = MakeItem();
             EnqueueAndProcess(svc, item2);
-            svc.MarkComplete(Folder, item2, "audio/two.wav");
-            var v2 = svc.AudioVersionOf(Folder, item2.ParagraphItemId);
+            svc.Apply(item2, new Disposition.Complete(null, "audio/two.wav"));
+            var v2 = svc.AudioVersionOf(Folder, IdOf(item2));
 
             Assert.NotNull(v1);
             Assert.NotNull(v2);
@@ -186,7 +277,7 @@ namespace Read2Me.Tests.Services.Audio
         public void Changed_FiresOnCancelAll()
         {
             var svc = new AudioQueueService();
-            svc.Enqueue(Folder, [MakeItem()]);
+            svc.Enqueue([MakeItem()]);
 
             int count = 0;
             svc.Changed += () => count++;

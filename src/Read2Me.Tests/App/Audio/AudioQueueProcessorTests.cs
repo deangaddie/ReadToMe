@@ -11,9 +11,19 @@ using Xunit;
 
 namespace Read2Me.Tests.App.Audio
 {
+    /// <summary>
+    /// Orchestration only: the events published, what reaches the pipeline and recorder, and the
+    /// <see cref="Disposition"/> the processor decided. The queue is a <b>recorder</b>, so each test
+    /// names that disposition rather than reading state back through the real queue — which cannot
+    /// tell <c>RetryOnce</c> from <c>RetryAfter</c> at all.
+    /// <para>
+    /// Retry and settle <i>policy</i> is not here. It lives as a table in <c>QueueDispositionTests</c>
+    /// (phase 1) and <c>AudioDispositionTests</c> (translation + phase 2), with no fakes.
+    /// </para>
+    /// </summary>
     public class AudioQueueProcessorTests
     {
-        private readonly AudioQueueService _queue;
+        private readonly RecordingQueue _queue;
         private readonly FakeAudioItemResolver _resolver;
         private readonly FakeAudioItemPipeline _pipeline;
         private readonly FakeAudioResultRecorder _recorder;
@@ -62,7 +72,7 @@ namespace Read2Me.Tests.App.Audio
         public AudioQueueProcessorTests()
         {
             _folder = new ProjectFolderId(FolderName);
-            _queue = new AudioQueueService();
+            _queue = new RecordingQueue();
             _broadcaster = new EventBroadcaster<AudioGenEvent>();
             _broadcaster.Event += e => _events.Add(e);
 
@@ -82,27 +92,45 @@ namespace Read2Me.Tests.App.Audio
             return new QueuedAudioItem(_folder, itemRef);
         }
 
+        /// <summary>The one disposition applied to <paramref name="item"/>.</summary>
+        private T DispositionFor<T>(QueuedAudioItem item) where T : Disposition =>
+            Assert.IsType<T>(Assert.Single(_queue.Applied, a => a.Item.Equals(item)).D);
+
         [Fact]
         public async Task Success_PublishesItemStarted_WithSpeakerAndText()
         {
             var queued = MakeItem();
 
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
             Assert.Single(_events.OfType<ItemStarted>(), e => e.Attempt == 1 && e.Character == "Bilbo");
         }
 
+        /// <summary>
+        /// The recorder's own product rides <see cref="Disposition.Complete.Product"/>, so the queue
+        /// cannot complete an item without the path it needs to publish.
+        /// </summary>
         [Fact]
-        public async Task Success_MarkComplete_UsesRecorderReturnedPath()
+        public async Task Success_CompletesWithRecorderReturnedPath()
         {
             var itemId = Guid.NewGuid();
             _resolver.Result = SuccessResolution(itemId);
             _recorder.CannedRelativePath = "audio/canned.wav";
             var queued = MakeItem(itemId);
 
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
-            Assert.Null(_queue.OutcomeOf(_folder, itemId));
+            Assert.Equal("audio/canned.wav", DispositionFor<Disposition.Complete>(queued).Product);
+        }
+
+        [Fact]
+        public async Task ProcessItem_MarksProcessingFirst()
+        {
+            var queued = MakeItem();
+
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
+
+            Assert.Equal(queued, Assert.Single(_queue.Processing));
         }
 
         [Fact]
@@ -112,13 +140,11 @@ namespace Read2Me.Tests.App.Audio
             _resolver.Result = FailureResolution("No character assigned to item", speaker: null, text: null);
             var queued = MakeItem(itemId);
 
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
             Assert.Contains(_events, e => e is ItemStarted s && s.Character == null && s.Text == null);
             Assert.Contains(_events, e => e is Failed f && f.Reason.Contains("No character"));
-            var outcome = _queue.OutcomeOf(_folder, itemId);
-            Assert.NotNull(outcome);
-            Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
+            Assert.Contains("No character", DispositionFor<Disposition.Failed>(queued).Reason);
         }
 
         [Fact]
@@ -127,72 +153,56 @@ namespace Read2Me.Tests.App.Audio
             _resolver.Result = FailureResolution("No voice");
             var queued = MakeItem();
 
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
             Assert.Null(_pipeline.LastRequest);
         }
 
         [Fact]
-        public async Task PipelineFailed_MarksFailedAndPublishesFailed()
+        public async Task PipelineFailed_FailsAndPublishesFailed()
         {
             var itemId = Guid.NewGuid();
             _resolver.Result = SuccessResolution(itemId);
             _pipeline.Result = AbortedResult(new WorkOutcome.Failed("tts boom"));
             var queued = MakeItem(itemId);
 
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
             Assert.Contains(_events, e => e is Failed f && f.Reason.Contains("tts boom"));
-            var outcome = _queue.OutcomeOf(_folder, itemId);
-            Assert.NotNull(outcome);
-            Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
-        }
-
-        [Fact]
-        public async Task ServiceUnavailable_FirstTime_RequeuesInsteadOfFailing()
-        {
-            var itemId = Guid.NewGuid();
-            _resolver.Result = SuccessResolution(itemId);
-            _pipeline.Result = AbortedResult(new WorkOutcome.Unavailable("service at http://localhost:8003 is unavailable"));
-            var queued = MakeItem(itemId);
-
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
-
-            Assert.Equal(AudioItemQueueStatus.Queued, _queue.StatusOf(_folder, itemId));
-            Assert.Null(_queue.OutcomeOf(_folder, itemId));
-        }
-
-        [Fact]
-        public async Task ServiceUnavailable_SecondTimeForRequeuedItem_MarksFailed()
-        {
-            var itemId = Guid.NewGuid();
-            _resolver.Result = SuccessResolution(itemId);
-            _pipeline.Result = AbortedResult(new WorkOutcome.Unavailable("service at http://localhost:8003 is unavailable"));
-            var queued = MakeItem(itemId) with { Attempts = default(AttemptState).WithRetry() };
-
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
-
-            var outcome = _queue.OutcomeOf(_folder, itemId);
-            Assert.NotNull(outcome);
-            Assert.Equal(AudioItemOutcomeKind.Failed, outcome!.Kind);
+            Assert.Equal("tts boom", DispositionFor<Disposition.Failed>(queued).Reason);
         }
 
         /// <summary>
-        /// The only catch left in the processor, and it is not an AI seam — recording writes the
-        /// audio file and can fail on ordinary I/O after a perfectly good pipeline run.
+        /// The only catch left in the processor's work, and it is not an AI seam — recording writes
+        /// the audio file and can fail on ordinary I/O after a perfectly good pipeline run.
         /// </summary>
         [Fact]
-        public async Task RecorderThrows_MarksFailed()
+        public async Task RecorderThrows_Fails()
         {
             var itemId = Guid.NewGuid();
             _resolver.Result = SuccessResolution(itemId);
             _recorder.Throws = new IOException("disk full");
             var queued = MakeItem(itemId);
 
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
             Assert.Contains(_events, e => e is Failed f && f.Reason.Contains("disk full"));
-            Assert.Equal(AudioItemOutcomeKind.Failed, _queue.OutcomeOf(_folder, itemId)!.Kind);
+            Assert.Contains("disk full", DispositionFor<Disposition.Failed>(queued).Reason);
+        }
+
+        /// <summary>
+        /// Resolution reads the book and voice settings, not an AI service. A throw there used to
+        /// escape to the worker and leave the item stuck in Processing.
+        /// </summary>
+        [Fact]
+        public async Task ResolverThrows_Fails()
+        {
+            _resolver.Throws = new InvalidOperationException("db gone");
+            var queued = MakeItem();
+
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
+
+            Assert.Equal("db gone", DispositionFor<Disposition.Failed>(queued).Reason);
         }
 
         [Fact]
@@ -212,9 +222,21 @@ namespace Read2Me.Tests.App.Audio
             _resolver.Result = FailureResolution("No default voice for Bilbo", speaker: "Bilbo", text: "Some text");
             var queued = MakeItem();
 
-            await _sut.ProcessItemAsync(queued, CancellationToken.None);
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
             Assert.Contains(_events, e => e is ItemStarted s && s.Character == "Bilbo" && s.Text == "Some text");
+        }
+
+        private sealed class RecordingQueue : IAudioQueue
+        {
+            public List<(QueuedAudioItem Item, Disposition D)> Applied { get; } = [];
+            public List<QueuedAudioItem> Processing { get; } = [];
+
+            public void Enqueue(IEnumerable<QueuedAudioItem> items) { }
+
+            public void MarkProcessing(QueuedAudioItem item) => Processing.Add(item);
+
+            public void Apply(QueuedAudioItem item, Disposition disposition) => Applied.Add((item, disposition));
         }
     }
 }
