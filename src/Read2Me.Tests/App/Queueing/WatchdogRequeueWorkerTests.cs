@@ -29,7 +29,7 @@ namespace Read2Me.Tests.App.Queueing
                 {
                     // Simulate the ServiceUnavailable path: requeue the item and close the gate as
                     // recovery would, so the requeued item must wait.
-                    queue.Requeue(item);
+                    queue.Apply(item, new Disposition.RetryOnce());
                     gate.Close("recovering");
                 }
                 else

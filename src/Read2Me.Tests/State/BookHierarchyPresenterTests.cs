@@ -9,6 +9,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.NodeStatus;
+using Read2Me.Services.Queueing;
 using Read2Me.Services.UseCases;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Fakes;
@@ -702,7 +703,7 @@ namespace Read2Me.Tests.State
             var queuedItem = new QueuedParagraph(Folder, paragraphId, "Preview", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
             queue.Enqueue([queuedItem]);
             queue.MarkProcessing(queuedItem);
-            queue.MarkFailed(queuedItem, "some error");
+            queue.Apply(queuedItem, new Disposition.Failed("some error"));
             Assert.NotNull(queue.OutcomeOf(Folder, paragraphId));
 
             var item = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paragraphId, Order = "a" };
@@ -1609,7 +1610,7 @@ namespace Read2Me.Tests.State
             var queued = new QueuedParagraph(Folder, selected.Id, "preview", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
             ctx.CharacterQueue.Enqueue([queued]);
             ctx.CharacterQueue.MarkProcessing(queued);
-            ctx.CharacterQueue.MarkFailed(queued, "boom");
+            ctx.CharacterQueue.Apply(queued, new Disposition.Failed("boom"));
 
             ctx.CommandHandler.ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>())
                 .Returns(_ => { log.Add("command"); return (Guid?)null; });

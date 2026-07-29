@@ -17,7 +17,7 @@ namespace Read2Me.Services.Characters
 
     public enum ParagraphQueueStatus { Queued, Processing }
 
-    public enum ParagraphOutcomeKind { Failed, Unknown }
+    public enum ParagraphOutcomeKind { Failed, Unfinished }
 
     public sealed record ParagraphOutcome(ParagraphOutcomeKind Kind, string? Reason);
 
@@ -32,14 +32,14 @@ namespace Read2Me.Services.Characters
     {
         /// <summary>
         /// Work in hand, globally — one worker drains every folder's queue. Settled outcomes
-        /// (Failed/Unknown) are not busy: those paragraphs are finished.
+        /// (Failed/Unfinished) are not busy: those paragraphs are finished.
         /// </summary>
         public bool IsBusy => QueuedCount + ProcessingCount > 0;
     }
 
     internal readonly record struct ParagraphKey(ProjectFolderId Folder, Guid ParagraphId);
 
-    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>, IParagraphQueueProbe
+    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>, IParagraphQueueProbe, ICharacterQueue
     {
         private Channel<QueuedParagraph> _channel =
             Channel.CreateUnbounded<QueuedParagraph>(new UnboundedChannelOptions { SingleReader = true });
@@ -133,87 +133,64 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
-        /// Puts an interrupted item back on the queue with a watchdog retry spent (watchdog recovery
-        /// path): status returns to Queued and it re-enters the channel, waiting on the closed gate
-        /// until recovery reopens it. The once-only budget guards against an endless requeue if the
-        /// service is down.
+        /// Runs the transition the decision produced. One entry point for every outcome, so the
+        /// processor names what it decided instead of picking a differently-named method per case.
+        /// <para>
+        /// Total: every <see cref="Disposition"/> member executes and no arm throws. It performs no
+        /// work — applying the answer and probing what it left behind stay with the processor, which
+        /// owns those collaborators.
+        /// </para>
+        /// <para>
+        /// Each retry arm bumps exactly the counter its own <see cref="QueueDisposition.Decide"/> arm
+        /// reads: <see cref="Disposition.RetryOnce"/> spends the once-only
+        /// <see cref="AttemptState.Retries"/> budget that a watchdog recovery is allowed, and
+        /// <see cref="Disposition.RetryAfter"/> spends an <see cref="AttemptState.Busies"/> so the
+        /// next backoff grows without ever touching the once-only budget. That makes the two budgets
+        /// independent structurally rather than by comment.
+        /// </para>
         /// </summary>
-        public void Requeue(QueuedParagraph item)
-        {
-            _store.ReturnToQueued(Key(item));
-            _channel.Writer.TryWrite(item with { Attempts = item.Attempts.WithRetry() });
-            Changed?.Invoke();
-        }
-
-        /// <summary>
-        /// Requeues an item whose target model is still loading, re-entering the channel only after
-        /// <paramref name="backoff"/> elapses. Distinct from <see cref="Requeue"/>: it spends no
-        /// <see cref="AttemptState.Retries"/> (a model load retries indefinitely, never consuming
-        /// the watchdog requeue budget) and instead spends an
-        /// <see cref="AttemptState.Busies"/> so the next backoff grows. The item's queue
-        /// status returns to Queued immediately; the delayed write targets the writer captured here,
-        /// so if <see cref="CancelAll"/> swaps the channel while the backoff runs the write lands on
-        /// the completed old writer and is dropped — a cancelled item never re-enters the queue.
-        /// </summary>
-        public void RequeueForModelLoad(QueuedParagraph item, TimeSpan backoff)
-        {
-            _store.ReturnToQueued(Key(item));
-
-            var next = item with { Attempts = item.Attempts.WithBusy() };
-            var writer = _channel.Writer;
-            if (backoff <= TimeSpan.Zero)
-                writer.TryWrite(next);
-            else
-                _ = DelayedRequeueAsync(writer, next, backoff, _itemCts.Token);
-
-            Changed?.Invoke();
-        }
-
-        /// <summary>
-        /// Waits out <paramref name="backoff"/> and writes to the writer captured at schedule time.
-        /// Capturing the writer — rather than re-reading the <c>_channel</c> field after the delay —
-        /// is what makes the write safe: a <see cref="CancelAll"/> during the delay completes that
-        /// writer, so the late write fails harmlessly instead of resurrecting cancelled work on the
-        /// replacement channel. <paramref name="ct"/> is not load-bearing for that correctness; it
-        /// only ends a pending delay promptly rather than letting it linger.
-        /// </summary>
-        private static async Task DelayedRequeueAsync(
-            ChannelWriter<QueuedParagraph> writer, QueuedParagraph item, TimeSpan backoff, CancellationToken ct)
-        {
-            try
-            {
-                await Task.Delay(backoff, ct);
-            }
-            catch (OperationCanceledException)
-            {
-                // The queue was cleared (CancelAll) while this item waited out its backoff — drop it.
-                return;
-            }
-            writer.TryWrite(item);
-        }
-
-        /// <summary>
-        /// The paragraph is fully attributed: every Character item carries a character. The stamps
-        /// themselves reach the UI through <c>ParagraphItemsChanged</c>, published by the apply
-        /// command — the queue only carries queue state.
-        /// </summary>
-        public void MarkComplete(QueuedParagraph item, double? elapsedSeconds)
+        public void Apply(QueuedParagraph item, Disposition disposition)
         {
             var key = Key(item);
-            _store.Settle(key, elapsedSeconds: elapsedSeconds);
-            Changed?.Invoke();
-        }
+            switch (disposition)
+            {
+                // The stamps themselves reach the UI through ParagraphItemsChanged, published by the
+                // apply command — the queue only carries queue state.
+                case Disposition.Complete complete:
+                    _store.Settle(key, elapsedSeconds: complete.Elapsed);
+                    break;
 
-        public void MarkUnknown(QueuedParagraph item, double? elapsedSeconds, string? reason = null)
-        {
-            var key = Key(item);
-            _store.Settle(key, new ParagraphOutcome(ParagraphOutcomeKind.Unknown, reason), elapsedSeconds);
-            Changed?.Invoke();
-        }
+                case Disposition.Unfinished unfinished:
+                    _store.Settle(
+                        key,
+                        new ParagraphOutcome(ParagraphOutcomeKind.Unfinished, unfinished.Reason),
+                        unfinished.Elapsed);
+                    break;
 
-        public void MarkFailed(QueuedParagraph item, string? reason)
-        {
-            _store.Abandon(Key(item), new ParagraphOutcome(ParagraphOutcomeKind.Failed, reason));
+                case Disposition.Failed failed:
+                    _store.Abandon(key, new ParagraphOutcome(ParagraphOutcomeKind.Failed, failed.Reason));
+                    break;
+
+                // Status returns to Queued and the item re-enters the channel, where it waits on the
+                // gate closed by recovery until that reopens it.
+                case Disposition.RetryOnce:
+                    _store.ReturnToQueued(key);
+                    _channel.Writer.TryWrite(item with { Attempts = item.Attempts.WithRetry() });
+                    break;
+
+                // Status returns to Queued immediately; the write is deferred against the writer
+                // captured now, so a CancelAll during the backoff drops the item instead of
+                // resurrecting it on the replacement channel.
+                case Disposition.RetryAfter retryAfter:
+                    _store.ReturnToQueued(key);
+                    _ = DelayedWrite.Schedule(
+                        _channel.Writer,
+                        item with { Attempts = item.Attempts.WithBusy() },
+                        retryAfter.Delay,
+                        _itemCts.Token);
+                    break;
+            }
+
             Changed?.Invoke();
         }
 
@@ -253,7 +230,7 @@ namespace Read2Me.Services.Characters
 
         /// <summary>
         /// Narrows the shared store's status to the two states callers outside the queue can see.
-        /// A settled item (Failed/Unknown) has no status at all — it is read through
+        /// A settled item (Failed/Unfinished) has no status at all — it is read through
         /// <see cref="OutcomeOf"/>.
         /// </summary>
         private static ParagraphQueueStatus? Map(QueueItemStatus? s) => s switch

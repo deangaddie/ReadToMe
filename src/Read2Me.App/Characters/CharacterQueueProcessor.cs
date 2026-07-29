@@ -13,7 +13,7 @@ using Read2Me.Services.Queueing;
 namespace Read2Me.App.Characters
 {
     internal sealed class CharacterQueueProcessor(
-        CharacterQueueService queue,
+        ICharacterQueue queue,
         AttributionEscalationChain chain,
         CharacterResolver resolver,
         IUnattributedItemCounter reader,
@@ -77,7 +77,7 @@ namespace Read2Me.App.Characters
             {
                 logger.LogError(ex, "Failed processing paragraph {ParagraphId}", item.ParagraphId);
                 foreach (var p in pending)
-                    queue.MarkFailed(p, ex.Message);
+                    queue.Apply(p, new Disposition.Failed(ex.Message));
             }
         }
 
@@ -107,7 +107,8 @@ namespace Read2Me.App.Characters
                 _ => throw new ArgumentOutOfRangeException(nameof(plan), plan, "Unhandled Plan."),
             };
 
-            Execute(item, disposition);
+            Log(item, disposition);
+            queue.Apply(item, disposition);
         }
 
         /// <summary>
@@ -129,40 +130,32 @@ namespace Read2Me.App.Characters
         }
 
         /// <summary>
-        /// Runs the decided transition. Every <see cref="Disposition"/> member executes — impl-10
-        /// folds this switch into <c>CharacterQueueService.Apply</c> and the five mutators die with it.
+        /// Narrates the decided transition. Running it is <see cref="ICharacterQueue.Apply"/>'s job;
+        /// only the operator-facing story of why belongs to the processor.
         /// </summary>
-        private void Execute(QueuedParagraph item, Disposition disposition)
+        private void Log(QueuedParagraph item, Disposition disposition)
         {
             switch (disposition)
             {
                 case Disposition.Complete complete:
-                    queue.MarkComplete(item, complete.Elapsed);
                     logger.LogInformation("Completed paragraph {ParagraphId} in {Elapsed:F1}s",
                         item.ParagraphId, complete.Elapsed ?? 0);
-                    break;
-
-                case Disposition.Unfinished unfinished:
-                    queue.MarkUnknown(item, unfinished.Elapsed, unfinished.Reason);
                     break;
 
                 case Disposition.Failed failed:
                     logger.LogWarning("Paragraph {ParagraphId} failed: {Reason}",
                         item.ParagraphId, failed.Reason);
-                    queue.MarkFailed(item, failed.Reason);
                     break;
 
                 case Disposition.RetryOnce:
                     logger.LogInformation("Paragraph {ParagraphId} service unavailable — requeuing",
                         item.ParagraphId);
-                    queue.Requeue(item);
                     break;
 
                 case Disposition.RetryAfter retryAfter:
                     logger.LogInformation(
                         "Paragraph {ParagraphId} model still loading — requeuing in {Backoff:0.#}s (attempt {Attempt})",
                         item.ParagraphId, retryAfter.Delay.TotalSeconds, item.Attempts.Busies + 1);
-                    queue.RequeueForModelLoad(item, retryAfter.Delay);
                     break;
             }
         }

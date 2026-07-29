@@ -1,20 +1,27 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Characters;
-using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
-using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Queueing;
-using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.App.Characters
 {
-    public class CharacterQueueProcessorTests : ProjectDbTestBase
+    /// <summary>
+    /// Orchestration only: stream order, chunk/defer signals, the command's shape, and the failure
+    /// fan-out. The queue is a <b>recorder</b>, so each test names the <see cref="Disposition"/> the
+    /// processor decided rather than reading state back through the real queue — which cannot tell
+    /// <c>RetryOnce</c> from <c>RetryAfter</c> at all.
+    /// <para>
+    /// Retry and settle <i>policy</i> is not here. It lives as a table in <c>QueueDispositionTests</c>
+    /// (phase 1) and <c>CharacterDispositionTests</c> (translation + phase 2), with no fakes.
+    /// </para>
+    /// </summary>
+    public class CharacterQueueProcessorTests
     {
-        private readonly CharacterQueueService _queue;
+        private readonly RecordingQueue _queue;
         private readonly FakeEscalationChain _attribution;
         private readonly FakeResolver _resolver;
         private readonly FakeCharacterReader _reader;
@@ -24,7 +31,7 @@ namespace Read2Me.Tests.App.Characters
 
         public CharacterQueueProcessorTests()
         {
-            _queue = new CharacterQueueService();
+            _queue = new RecordingQueue();
             _attribution = new FakeEscalationChain();
             _resolver = new FakeResolver();
             _reader = new FakeCharacterReader();
@@ -62,6 +69,10 @@ namespace Read2Me.Tests.App.Characters
             AttributionStatus status, string? reason, params AttributionSegment[] segments) =>
             new(status, segments, reason);
 
+        /// <summary>The one disposition applied to <paramref name="item"/>.</summary>
+        private T DispositionFor<T>(QueuedParagraph item) where T : Disposition =>
+            Assert.IsType<T>(Assert.Single(_queue.Applied, a => a.Item.Equals(item)).D);
+
         // ── Apply ─────────────────────────────────────────────────────────────
 
         [Fact]
@@ -94,12 +105,11 @@ namespace Read2Me.Tests.App.Characters
                     Assert.Null(s.VoiceInstructions);
                 });
 
-            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
-            Assert.Null(_queue.StatusOf(_item.Folder, _item.ParagraphId));
+            DispositionFor<Disposition.Complete>(_item);
         }
 
         [Fact]
-        public async Task UnknownSpeaker_AppliesWithNullStamp_AndMarksUnknown_WhenItemsStayUnattributed()
+        public async Task UnknownSpeaker_AppliesWithNullStamp_AndMarksUnfinished_WhenItemsStayUnattributed()
         {
             _attribution.Outcome = Segments(AttributionStatus.Unknown, "still unknown",
                 Dialog("unknown"), Narration());
@@ -112,14 +122,11 @@ namespace Read2Me.Tests.App.Characters
             var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
             Assert.Null(cmd.Segments[0].CharacterId);
 
-            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
-            Assert.NotNull(outcome);
-            Assert.Equal(ParagraphOutcomeKind.Unknown, outcome.Kind);
-            Assert.Equal("still unknown", outcome.Reason);
+            Assert.Equal("still unknown", DispositionFor<Disposition.Unfinished>(_item).Reason);
         }
 
         [Fact]
-        public async Task PartialAnswer_StampsKnownSegments_AndStaysUnknown()
+        public async Task PartialAnswer_StampsKnownSegments_AndStaysUnfinished()
         {
             var charId = Guid.NewGuid();
             _resolver.ResolvedId = charId;
@@ -133,8 +140,7 @@ namespace Read2Me.Tests.App.Characters
             Assert.Equal(charId, cmd.Segments[0].CharacterId);
             Assert.Null(cmd.Segments[1].CharacterId);
 
-            Assert.Equal(ParagraphOutcomeKind.Unknown,
-                _queue.OutcomeOf(_item.Folder, _item.ParagraphId)!.Kind);
+            DispositionFor<Disposition.Unfinished>(_item);
         }
 
         /// <summary>
@@ -150,54 +156,43 @@ namespace Read2Me.Tests.App.Characters
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            Assert.Null(_queue.OutcomeOf(_item.Folder, _item.ParagraphId));
-            Assert.Null(_queue.StatusOf(_item.Folder, _item.ParagraphId));
+            DispositionFor<Disposition.Complete>(_item);
         }
 
         /// <summary>
-        /// The orchestration half: a segment-less answer never reaches the apply. That it settles
-        /// unfinished is the policy table's row in <c>QueueDispositionTests</c>.
+        /// The orchestration half: a segment-less answer never reaches the apply, and the processor
+        /// stamps its own elapsed figure on the way past — phase 1 cannot know it, because one
+        /// stopwatch spans a whole drained batch here rather than the store measuring per item.
+        /// That it settles unfinished at all is the policy table's row in <c>QueueDispositionTests</c>.
         /// </summary>
         [Fact]
-        public async Task EmptyParagraph_NoSegments_MarksUnknown_WithoutApplying()
+        public async Task EmptyParagraph_NoSegments_MarksUnfinished_WithoutApplying()
         {
             _attribution.Outcome = new AttributionOutcome(AttributionStatus.Unknown, null, null);
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
             Assert.Empty(_commands.SentCommands);
-            Assert.Equal(ParagraphOutcomeKind.Unknown,
-                _queue.OutcomeOf(_item.Folder, _item.ParagraphId)!.Kind);
+            Assert.NotNull(DispositionFor<Disposition.Unfinished>(_item).Elapsed);
         }
-
-        // Retry and settle policy — ServiceUnavailable's once-only budget, ModelLoading's unbounded
-        // one, the backoff curve, and Failed/NoLlmConfigured's terminal reason — is not orchestration.
-        // It lives as a table in QueueDispositionTests (phase 1) and CharacterDispositionTests
-        // (translation + phase 2), with no fakes and nothing to drive.
 
         [Fact]
         public async Task ItemLevelCancel_DoesNotMarkFailed()
         {
             _attribution.ThrowException = new OperationCanceledException();
-            // Host token not cancelled, but item-level cancel happened inside Processor (simulated by ThrowException)
+            // Host token not cancelled, but item-level cancel happened inside Processor (simulated by
+            // ThrowException). OperationCanceledException never becomes a WorkOutcome, so it never
+            // reaches the decision at all.
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            // In Processor, OCE is caught and logged, but MarkFailed is NOT called for OCE.
-            var outcome = _queue.OutcomeOf(_item.Folder, _item.ParagraphId);
-            Assert.Null(outcome);
+            Assert.Empty(_queue.Applied);
         }
 
         // ── Batch processing ──────────────────────────────────────────────────
 
         private QueuedParagraph MakeChapterItem(Guid chapterId) =>
             new(_item.Folder, Guid.NewGuid(), "Preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
-
-        private void AssertCompleted(QueuedParagraph item)
-        {
-            Assert.Null(_queue.StatusOf(item.Folder, item.ParagraphId));
-            Assert.Null(_queue.OutcomeOf(item.Folder, item.ParagraphId));
-        }
 
         [Fact]
         public async Task DrainsWholeQueue_AppliesOutcomePerItem()
@@ -208,12 +203,11 @@ namespace Read2Me.Tests.App.Characters
             var chapterId = Guid.NewGuid();
             var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
             _queue.Enqueue(items);
-            var first = await _queue.Reader.ReadAsync();
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(items[0], CancellationToken.None);
 
             foreach (var item in items)
-                AssertCompleted(item);
+                DispositionFor<Disposition.Complete>(item);
             Assert.Equal(3, _commands.SentCommands.Count);
         }
 
@@ -221,20 +215,17 @@ namespace Read2Me.Tests.App.Characters
         public async Task MultiChapterDrain_AppliesEachOutcome()
         {
             _resolver.ResolvedId = Guid.NewGuid();
-            var chA = Guid.NewGuid();
-            var chB = Guid.NewGuid();
-            var a1 = MakeChapterItem(chA);
-            var b1 = MakeChapterItem(chB);
+            var a1 = MakeChapterItem(Guid.NewGuid());
+            var b1 = MakeChapterItem(Guid.NewGuid());
             _queue.Enqueue([a1, b1]);
-            var first = await _queue.Reader.ReadAsync();
 
             _attribution.StreamResults.Enqueue((a1, Resolved()));
             _attribution.StreamResults.Enqueue((b1, new AttributionOutcome(AttributionStatus.Unknown, null, null)));
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(a1, CancellationToken.None);
 
-            AssertCompleted(a1);
-            Assert.Equal(ParagraphOutcomeKind.Unknown, _queue.OutcomeOf(b1.Folder, b1.ParagraphId)!.Kind);
+            DispositionFor<Disposition.Complete>(a1);
+            DispositionFor<Disposition.Unfinished>(b1);
         }
 
         [Fact]
@@ -243,21 +234,17 @@ namespace Read2Me.Tests.App.Characters
             var chapterId = Guid.NewGuid();
             var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
             _queue.Enqueue(items);
-            var first = await _queue.Reader.ReadAsync();
 
             _resolver.ResolvedId = Guid.NewGuid();
             _attribution.StreamResults.Enqueue((items[0], Resolved()));
             _attribution.StreamResults.Enqueue((items[1], new AttributionOutcome(AttributionStatus.Unknown, null, null)));
             _attribution.StreamResults.Enqueue((items[2], new AttributionOutcome(AttributionStatus.Failed, null, "boom")));
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(items[0], CancellationToken.None);
 
-            AssertCompleted(items[0]);
-            Assert.Equal(ParagraphOutcomeKind.Unknown, _queue.OutcomeOf(items[1].Folder, items[1].ParagraphId)!.Kind);
-            var failed = _queue.OutcomeOf(items[2].Folder, items[2].ParagraphId);
-            Assert.NotNull(failed);
-            Assert.Equal(ParagraphOutcomeKind.Failed, failed.Kind);
-            Assert.Equal("boom", failed.Reason);
+            DispositionFor<Disposition.Complete>(items[0]);
+            DispositionFor<Disposition.Unfinished>(items[1]);
+            Assert.Equal("boom", DispositionFor<Disposition.Failed>(items[2]).Reason);
         }
 
         [Fact]
@@ -267,7 +254,6 @@ namespace Read2Me.Tests.App.Characters
             var early = MakeChapterItem(chapterId);
             var late = MakeChapterItem(chapterId);
             _queue.Enqueue([early, late]);
-            var first = await _queue.Reader.ReadAsync();
 
             _resolver.ResolvedId = Guid.NewGuid();
             // Stream yields the step-0 resolve first; by the time the second item streams, the first
@@ -275,7 +261,7 @@ namespace Read2Me.Tests.App.Characters
             _attribution.StreamResults.Enqueue((early, Resolved("Bilbo")));
             _attribution.StreamResults.Enqueue((late, Resolved("Frodo")));
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(early, CancellationToken.None);
 
             // Commands applied in stream order.
             Assert.Equal(2, _commands.SentCommands.Count);
@@ -290,18 +276,18 @@ namespace Read2Me.Tests.App.Characters
             var worked = MakeChapterItem(chapterId);
             var untouched = MakeChapterItem(chapterId);
             _queue.Enqueue([worked, untouched]);
-            var first = await _queue.Reader.ReadAsync();
 
             _resolver.ResolvedId = Guid.NewGuid();
             // Only 'worked' is signalled + yielded; 'untouched' is drained but never streamed. It must
-            // stay Queued — proof the whole drained queue is not flipped to Processing up front.
+            // never be marked Processing — proof the whole drained queue is not flipped up front.
             _attribution.StreamResults.Enqueue((worked, Resolved()));
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(worked, CancellationToken.None);
 
-            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(untouched.Folder, untouched.ParagraphId));
+            Assert.DoesNotContain(untouched, _queue.Processing);
+            Assert.DoesNotContain(untouched, _queue.Applied.Select(a => a.Item));
             // The item that was actually worked was chunk-signalled before its outcome applied.
-            Assert.Contains(_attribution.ChunksStarted, c => c.Contains(worked));
+            Assert.Contains(worked, _queue.Processing);
         }
 
         [Fact]
@@ -311,7 +297,6 @@ namespace Read2Me.Tests.App.Characters
             var deferred = MakeChapterItem(chapterId);
             var decided = MakeChapterItem(chapterId);
             _queue.Enqueue([deferred, decided]);
-            var first = await _queue.Reader.ReadAsync();
 
             _resolver.ResolvedId = Guid.NewGuid();
             // 'deferred' goes in flight, is answered suspect, and is held back for a later chain step
@@ -319,19 +304,17 @@ namespace Read2Me.Tests.App.Characters
             _attribution.DeferItems.Add(deferred);
             _attribution.StreamResults.Enqueue((decided, Resolved()));
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(deferred, CancellationToken.None);
 
-            Assert.Equal(ParagraphQueueStatus.Queued, _queue.StatusOf(deferred.Folder, deferred.ParagraphId));
-            Assert.Contains(_attribution.ChunksStarted, c => c.Contains(deferred));
+            Assert.Contains(deferred, _queue.Deferred);
+            Assert.Contains(deferred, _queue.Processing);
         }
 
         [Fact]
         public async Task DeferredItem_DecidedByLaterStep_CompletesNormally()
         {
-            var chapterId = Guid.NewGuid();
-            var item = MakeChapterItem(chapterId);
+            var item = MakeChapterItem(Guid.NewGuid());
             _queue.Enqueue([item]);
-            var first = await _queue.Reader.ReadAsync();
 
             _resolver.ResolvedId = Guid.NewGuid();
             // Held back by step 0, then resolved by a later escalation step: the deferral is transient
@@ -339,9 +322,9 @@ namespace Read2Me.Tests.App.Characters
             _attribution.DeferItems.Add(item);
             _attribution.StreamResults.Enqueue((item, Resolved()));
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(item, CancellationToken.None);
 
-            AssertCompleted(item);
+            DispositionFor<Disposition.Complete>(item);
         }
 
         [Fact]
@@ -350,18 +333,13 @@ namespace Read2Me.Tests.App.Characters
             var chapterId = Guid.NewGuid();
             var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
             _queue.Enqueue(items);
-            var first = await _queue.Reader.ReadAsync();
 
             _attribution.ThrowException = new InvalidOperationException("boom");
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(items[0], CancellationToken.None);
 
             foreach (var item in items)
-            {
-                var outcome = _queue.OutcomeOf(item.Folder, item.ParagraphId);
-                Assert.NotNull(outcome);
-                Assert.Equal(ParagraphOutcomeKind.Failed, outcome.Kind);
-            }
+                Assert.Equal("boom", DispositionFor<Disposition.Failed>(item).Reason);
         }
 
         [Fact]
@@ -371,18 +349,46 @@ namespace Read2Me.Tests.App.Characters
             var decided = MakeChapterItem(chapterId);
             var undecided = MakeChapterItem(chapterId);
             _queue.Enqueue([decided, undecided]);
-            var first = await _queue.Reader.ReadAsync();
 
             _resolver.ResolvedId = Guid.NewGuid();
             // First item decides, then the stream throws before the second — only the second fails.
             _attribution.StreamThenThrow((decided, Resolved()), new InvalidOperationException("boom"));
 
-            await _sut.ProcessItemAsync(first, CancellationToken.None);
+            await _sut.ProcessItemAsync(decided, CancellationToken.None);
 
-            AssertCompleted(decided);
-            var failed = _queue.OutcomeOf(undecided.Folder, undecided.ParagraphId);
-            Assert.NotNull(failed);
-            Assert.Equal(ParagraphOutcomeKind.Failed, failed.Kind);
+            DispositionFor<Disposition.Complete>(decided);
+            DispositionFor<Disposition.Failed>(undecided);
+        }
+
+        /// <summary>
+        /// Records what the processor decided; reimplements nothing, so there is nothing to drift.
+        /// Enqueued items are what <see cref="DrainAll"/> hands back, standing in for the channel.
+        /// </summary>
+        private sealed class RecordingQueue : ICharacterQueue
+        {
+            private readonly List<QueuedParagraph> _queued = [];
+
+            public List<(QueuedParagraph Item, Disposition D)> Applied { get; } = [];
+            public List<QueuedParagraph> Processing { get; } = [];
+            public List<QueuedParagraph> Deferred { get; } = [];
+
+            public CancellationToken ItemCancellationToken => CancellationToken.None;
+
+            public void Enqueue(IEnumerable<QueuedParagraph> paragraphs) => _queued.AddRange(paragraphs);
+
+            public IReadOnlyList<QueuedParagraph> DrainAll(QueuedParagraph first)
+            {
+                var all = new List<QueuedParagraph> { first };
+                all.AddRange(_queued.Where(q => !q.Equals(first)));
+                _queued.Clear();
+                return all;
+            }
+
+            public void MarkProcessing(QueuedParagraph item) => Processing.Add(item);
+
+            public void MarkDeferred(QueuedParagraph item) => Deferred.Add(item);
+
+            public void Apply(QueuedParagraph item, Disposition disposition) => Applied.Add((item, disposition));
         }
 
         private class FakeEscalationChain() : AttributionEscalationChain(null!, null!, null!, NullLogger<AttributionEscalationChain>.Instance)

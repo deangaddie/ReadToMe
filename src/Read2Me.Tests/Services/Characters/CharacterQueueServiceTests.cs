@@ -1,5 +1,6 @@
 using Read2Me.Core.Models;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Characters
@@ -165,14 +166,19 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(ParagraphQueueStatus.Queued, svc.StatusOf(Folder, i2.ParagraphId));
         }
 
+        // ── Apply's arms ──────────────────────────────────────────────────────
+        // One entry point per transition, five arms. Execution only: what each Disposition does to
+        // the store and the channel. Which Disposition a given outcome earns is policy, tabled in
+        // QueueDispositionTests (phase 1) and CharacterDispositionTests (phase 2).
+
         [Fact]
-        public void MarkFailed_RecordsOutcome()
+        public void Apply_Failed_RecordsOutcome()
         {
             var svc = new CharacterQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
-            svc.MarkFailed(item, "some error");
+            svc.Apply(item, new Disposition.Failed("some error"));
 
             var outcome = svc.OutcomeOf(Folder, item.ParagraphId);
             Assert.NotNull(outcome);
@@ -182,23 +188,35 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public void MarkUnknown_RecordsOutcome()
+        public void Apply_Unfinished_RecordsOutcome()
         {
             var svc = new CharacterQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
-            svc.MarkUnknown(item, 3.0);
+            svc.Apply(item, new Disposition.Unfinished(null, 3.0));
 
             var outcome = svc.OutcomeOf(Folder, item.ParagraphId);
             Assert.NotNull(outcome);
-            Assert.Equal(ParagraphOutcomeKind.Unknown, outcome.Kind);
+            Assert.Equal(ParagraphOutcomeKind.Unfinished, outcome.Kind);
             Assert.Null(outcome.Reason);
             Assert.Null(svc.StatusOf(Folder, item.ParagraphId));
         }
 
         [Fact]
-        public void MarkComplete_ClearsPriorOutcome()
+        public void Apply_Unfinished_CarriesReasonIntoOutcome()
+        {
+            var svc = new CharacterQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+
+            svc.Apply(item, new Disposition.Unfinished("still unknown", 3.0));
+
+            Assert.Equal("still unknown", svc.OutcomeOf(Folder, item.ParagraphId)!.Reason);
+        }
+
+        [Fact]
+        public void Apply_Complete_ClearsPriorOutcome()
         {
             var svc = new CharacterQueueService();
             var paragraphId = Guid.NewGuid();
@@ -206,15 +224,55 @@ namespace Read2Me.Tests.Services.Characters
 
             // Fail first round
             EnqueueAndProcess(svc, item);
-            svc.MarkFailed(item, "error");
+            svc.Apply(item, new Disposition.Failed("error"));
             Assert.NotNull(svc.OutcomeOf(Folder, paragraphId));
 
             // Re-queue and complete
             var item2 = MakeItem(paragraphId);
             EnqueueAndProcess(svc, item2);
-            svc.MarkComplete(item2, 2.0);
+            svc.Apply(item2, new Disposition.Complete(2.0));
 
             Assert.Null(svc.OutcomeOf(Folder, paragraphId));
+        }
+
+        [Fact]
+        public void Apply_RetryOnce_ReturnsToQueue_SpendingARetry()
+        {
+            var svc = new CharacterQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+            Assert.True(svc.Reader.TryRead(out _));
+
+            svc.Apply(item, new Disposition.RetryOnce());
+
+            Assert.Equal(ParagraphQueueStatus.Queued, svc.StatusOf(Folder, item.ParagraphId));
+            Assert.Null(svc.OutcomeOf(Folder, item.ParagraphId));
+            Assert.True(svc.Reader.TryRead(out var requeued));
+            // The retry arm spends the once-only watchdog budget its own Decide arm reads — and
+            // leaves the independent model-load budget untouched.
+            Assert.Equal(1, requeued.Attempts.Retries);
+            Assert.Equal(0, requeued.Attempts.Busies);
+        }
+
+        [Fact]
+        public async Task Apply_RetryAfter_ReturnsToQueueAfterDelay_SpendingABusy()
+        {
+            var svc = new CharacterQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+            Assert.True(svc.Reader.TryRead(out _));
+
+            svc.Apply(item, new Disposition.RetryAfter(TimeSpan.FromMilliseconds(50)));
+
+            // Queued immediately; the channel write is what waits.
+            Assert.Equal(ParagraphQueueStatus.Queued, svc.StatusOf(Folder, item.ParagraphId));
+            Assert.False(svc.Reader.TryPeek(out _));
+
+            var requeued = await svc.Reader.ReadAsync();
+            // The model-load budget grows so the next backoff does; the once-only budget is never
+            // spent, so a still-loading model retries indefinitely.
+            Assert.Equal(1, requeued.Attempts.Busies);
+            Assert.Equal(0, requeued.Attempts.Retries);
         }
 
         [Fact]
@@ -225,7 +283,7 @@ namespace Read2Me.Tests.Services.Characters
             var item = MakeItem(paragraphId);
 
             EnqueueAndProcess(svc, item);
-            svc.MarkFailed(item, "error");
+            svc.Apply(item, new Disposition.Failed("error"));
             Assert.NotNull(svc.OutcomeOf(Folder, paragraphId));
 
             // Re-queue same paragraph
@@ -249,14 +307,14 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task RequeueForModelLoad_CancelAllDuringBackoff_DoesNotResurrectOnNewChannel()
+        public async Task Apply_RetryAfter_CancelAllDuringBackoff_DoesNotResurrectOnNewChannel()
         {
             var svc = new CharacterQueueService();
             var stale = MakeItem();
             EnqueueAndProcess(svc, stale);
             await svc.Reader.ReadAsync();
 
-            svc.RequeueForModelLoad(stale, TimeSpan.FromMilliseconds(50));
+            svc.Apply(stale, new Disposition.RetryAfter(TimeSpan.FromMilliseconds(50)));
 
             // The channel (and its writer) is replaced while the delayed write is still pending.
             svc.CancelAll();
@@ -280,7 +338,7 @@ namespace Read2Me.Tests.Services.Characters
             var svc = new CharacterQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
-            svc.MarkFailed(item, "error");
+            svc.Apply(item, new Disposition.Failed("error"));
 
             int changeCount = 0;
             svc.Changed += () => changeCount++;
@@ -323,7 +381,7 @@ namespace Read2Me.Tests.Services.Characters
             var svc = new CharacterQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
-            svc.MarkFailed(item, "error");
+            svc.Apply(item, new Disposition.Failed("error"));
             Assert.NotNull(svc.OutcomeOf(Folder, item.ParagraphId));
 
             svc.CancelAll();
@@ -333,21 +391,21 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public void MarkFailed_DoesNotChangeAverage()
+        public void Apply_Failed_DoesNotChangeAverage()
         {
             var svc = new CharacterQueueService();
 
             // Complete one item to set the average
             var item1 = MakeItem();
             EnqueueAndProcess(svc, item1);
-            svc.MarkComplete(item1, 10.0);
+            svc.Apply(item1, new Disposition.Complete(10.0));
             var avgAfterSuccess = svc.Snapshot().AverageSecondsPerParagraph;
             Assert.Equal(10.0, avgAfterSuccess);
 
             // Fail another — average should not change
             var item2 = MakeItem();
             EnqueueAndProcess(svc, item2);
-            svc.MarkFailed(item2, "error");
+            svc.Apply(item2, new Disposition.Failed("error"));
 
             Assert.Equal(10.0, svc.Snapshot().AverageSecondsPerParagraph);
         }
