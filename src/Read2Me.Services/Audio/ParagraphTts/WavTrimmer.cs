@@ -29,13 +29,29 @@ namespace Read2Me.Services.Audio.ParagraphTts
             return new MemoryStream(BuildWav(fmt, pcm), writable: false);
         }
 
+        /// <summary>Cut is pulled back this far from the end of the silence, as a safety margin.</summary>
+        private const double CutGuardSeconds = 0.010;
+
+        /// <summary>A window counts as quiet when its RMS is within this factor of the quietest window.</summary>
+        private const double QuietRmsFactor = 2.0;
+
+        /// <summary>Absolute RMS floor, so digitally silent gaps (quietest RMS 0) still have a band.</summary>
+        private const double QuietRmsFloor = 1.0;
+
         /// <summary>
-        /// Finds the quietest moment between <paramref name="windowStartSec"/> and
-        /// <paramref name="windowEndSec"/> by sliding a ~10 ms RMS window over 16-bit PCM samples,
-        /// returning the window's centre in seconds. Falls back to the window midpoint when the
-        /// audio is not 16-bit PCM or the window is shorter than ~20 ms.
+        /// Finds where to cut between <paramref name="windowStartSec"/> and
+        /// <paramref name="windowEndSec"/>: slides a ~10 ms RMS window over 16-bit PCM, takes the
+        /// longest contiguous run of quiet windows (latest run wins ties) and returns the run's
+        /// <em>end</em> less a small guard.
+        ///
+        /// The bias is deliberately late. The costs are asymmetric — extra leading silence is
+        /// harmless, leftover carrier speech is not — and whisper's word-end timestamps run early,
+        /// so the window typically opens inside the tail of the last carrier word. Cutting at the
+        /// quietest single point would land in that tail; cutting at the end of the silence does not.
+        /// Falls back to <paramref name="windowEndSec"/> less the guard when the audio is not 16-bit
+        /// PCM or the window is too short to scan.
         /// </summary>
-        public static double FindQuietestCut(Stream wav, double windowStartSec, double windowEndSec)
+        public static double FindCarrierCut(Stream wav, double windowStartSec, double windowEndSec)
         {
             var parsed = Parse(ReadAll(wav));
             var fmt = parsed.Format;
@@ -45,23 +61,23 @@ namespace Read2Me.Services.Audio.ParagraphTts
             double end = Math.Clamp(windowEndSec, 0, duration);
             if (end < start)
                 (start, end) = (end, start);
-            double midpoint = (start + end) / 2;
+            double lateFallback = Math.Max(start, end - CutGuardSeconds);
 
             short bitsPerSample = BitConverter.ToInt16(fmt.FmtChunkBody, 14);
             if (bitsPerSample != 16 || end - start < 0.02)
-                return midpoint;
+                return lateFallback;
 
             int channels = fmt.BlockAlign / 2;
             long startFrame = (long)(start * fmt.SampleRate);
             long endFrame = (long)(end * fmt.SampleRate);
             long windowFrames = fmt.SampleRate / 100; // ~10 ms
             if (windowFrames < 1 || endFrame - startFrame < windowFrames)
-                return midpoint;
+                return lateFallback;
 
-            long bestFrame = startFrame;
-            double bestEnergy = double.MaxValue;
             long stepFrames = Math.Max(1, windowFrames / 4);
 
+            var windowFrame = new List<long>();
+            var windowRms = new List<double>();
             for (long frame = startFrame; frame + windowFrames <= endFrame; frame += stepFrames)
             {
                 double energy = 0;
@@ -75,14 +91,44 @@ namespace Read2Me.Services.Audio.ParagraphTts
                     }
                 }
 
-                if (energy < bestEnergy)
+                windowFrame.Add(frame);
+                windowRms.Add(Math.Sqrt(energy / (windowFrames * channels)));
+            }
+
+            if (windowRms.Count == 0)
+                return lateFallback;
+
+            // Quiet band is relative to the quietest window, so a noisy gap still registers.
+            double threshold = Math.Max(windowRms.Min() * QuietRmsFactor, QuietRmsFloor);
+
+            // Longest contiguous quiet run; >= keeps the latest run when lengths tie.
+            int bestEnd = -1;
+            int bestLength = 0;
+            int runStart = -1;
+            for (int i = 0; i < windowRms.Count; i++)
+            {
+                if (windowRms[i] > threshold)
                 {
-                    bestEnergy = energy;
-                    bestFrame = frame;
+                    runStart = -1;
+                    continue;
+                }
+
+                if (runStart < 0)
+                    runStart = i;
+
+                int length = i - runStart + 1;
+                if (length >= bestLength)
+                {
+                    bestLength = length;
+                    bestEnd = i;
                 }
             }
 
-            return (bestFrame + windowFrames / 2.0) / fmt.SampleRate;
+            if (bestEnd < 0)
+                return lateFallback; // unreachable: the quietest window always clears the threshold
+
+            double runEnd = (double)(windowFrame[bestEnd] + windowFrames) / fmt.SampleRate;
+            return Math.Clamp(runEnd - CutGuardSeconds, start, end);
         }
 
         private static byte[] ReadAll(Stream s)

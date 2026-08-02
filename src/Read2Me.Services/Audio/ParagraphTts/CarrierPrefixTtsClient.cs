@@ -126,7 +126,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
                 return null;
             }
 
-            var cut = WavTrimmer.FindQuietestCut(
+            var cut = WavTrimmer.FindCarrierCut(
                 new MemoryStream(wavBytes, writable: false),
                 boundary.Value.CarrierEnd, boundary.Value.TargetStart);
             var trimmed = WavTrimmer.TrimStart(new MemoryStream(wavBytes, writable: false), cut);

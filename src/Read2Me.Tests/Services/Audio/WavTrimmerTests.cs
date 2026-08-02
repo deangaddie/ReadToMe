@@ -177,7 +177,7 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
-        public void FindQuietestCut_ReturnsCentreOfSilentGap()
+        public void FindCarrierCut_ReturnsEndOfSilentGap()
         {
             // Loud 0.5 s, silent 0.1 s, loud 0.5 s. Search across the whole middle area.
             var pcm = Pcm16(
@@ -186,47 +186,95 @@ namespace Read2Me.Tests.Services.Audio
                 ((short)20000, SampleRate / 2));
             var wav = BuildWav(pcm);
 
-            double cut = WavTrimmer.FindQuietestCut(new MemoryStream(wav), 0.3, 0.8);
+            double cut = WavTrimmer.FindCarrierCut(new MemoryStream(wav), 0.3, 0.8);
 
-            Assert.InRange(cut, 0.5, 0.6); // inside the silent gap
+            Assert.InRange(cut, 0.575, 0.6); // late end of the silent gap, not its centre
         }
 
         [Fact]
-        public void FindQuietestCut_WindowShorterThan20Ms_ReturnsMidpoint()
+        public void FindCarrierCut_WindowOpensInsideCarrierTail_CutsPastTheTail()
+        {
+            // Whisper's word-end lands early: 0.05 s of carrier tail still sounds after 0.30 s,
+            // then the real gap, then the target. The cut must clear the tail.
+            var pcm = Pcm16(
+                ((short)20000, (int)(SampleRate * 0.35)), // carrier, tail runs to 0.35 s
+                ((short)0, (int)(SampleRate * 0.10)),     // gap 0.35 - 0.45 s
+                ((short)20000, (int)(SampleRate * 0.35))); // target from 0.45 s
+            var wav = BuildWav(pcm);
+
+            double cut = WavTrimmer.FindCarrierCut(new MemoryStream(wav), 0.30, 0.45);
+
+            Assert.InRange(cut, 0.35, 0.45); // after the carrier tail, before the target
+        }
+
+        [Fact]
+        public void FindCarrierCut_NoisyGap_IsStillFound()
+        {
+            // Gap is a low noise floor rather than digital silence — the quiet band is relative.
+            var pcm = Pcm16(
+                ((short)20000, SampleRate / 2),
+                ((short)40, SampleRate / 10),
+                ((short)20000, SampleRate / 2));
+            var wav = BuildWav(pcm);
+
+            double cut = WavTrimmer.FindCarrierCut(new MemoryStream(wav), 0.3, 0.8);
+
+            Assert.InRange(cut, 0.575, 0.6);
+        }
+
+        [Fact]
+        public void FindCarrierCut_TwoGaps_PrefersTheLongerOne()
+        {
+            // Short gap at 0.20 - 0.23 s, longer gap at 0.40 - 0.50 s.
+            var pcm = Pcm16(
+                ((short)20000, (int)(SampleRate * 0.20)),
+                ((short)0, (int)(SampleRate * 0.03)),
+                ((short)20000, (int)(SampleRate * 0.17)),
+                ((short)0, (int)(SampleRate * 0.10)),
+                ((short)20000, (int)(SampleRate * 0.20)));
+            var wav = BuildWav(pcm);
+
+            double cut = WavTrimmer.FindCarrierCut(new MemoryStream(wav), 0.15, 0.55);
+
+            Assert.InRange(cut, 0.475, 0.50);
+        }
+
+        [Fact]
+        public void FindCarrierCut_WindowShorterThan20Ms_ReturnsLateFallback()
         {
             var pcm = Pcm16(((short)20000, SampleRate));
             var wav = BuildWav(pcm);
 
-            double cut = WavTrimmer.FindQuietestCut(new MemoryStream(wav), 0.400, 0.410);
+            double cut = WavTrimmer.FindCarrierCut(new MemoryStream(wav), 0.400, 0.410);
 
-            Assert.Equal(0.405, cut, precision: 6);
+            Assert.Equal(0.400, cut, precision: 6); // end less the guard, clamped to the window start
         }
 
         [Fact]
-        public void FindQuietestCut_Non16Bit_ReturnsMidpoint()
+        public void FindCarrierCut_Non16Bit_ReturnsLateFallback()
         {
-            // 8-bit PCM: RMS scan unsupported, midpoint fallback.
+            // 8-bit PCM: RMS scan unsupported, late fallback.
             var pcm = new byte[SampleRate]; // 1 second of 8-bit mono
             var wav = BuildWav(pcm, channels: 1, bitsPerSample: 8);
 
-            double cut = WavTrimmer.FindQuietestCut(new MemoryStream(wav), 0.2, 0.6);
+            double cut = WavTrimmer.FindCarrierCut(new MemoryStream(wav), 0.2, 0.6);
 
-            Assert.Equal(0.4, cut, precision: 6);
+            Assert.Equal(0.59, cut, precision: 6);
         }
 
         [Fact]
-        public void FindQuietestCut_ClampsWindowToDuration()
+        public void FindCarrierCut_ClampsWindowToDuration()
         {
             var pcm = Pcm16(((short)20000, SampleRate / 2)); // 0.5 s total
             var wav = BuildWav(pcm);
 
-            double cut = WavTrimmer.FindQuietestCut(new MemoryStream(wav), 0.4, 2.0);
+            double cut = WavTrimmer.FindCarrierCut(new MemoryStream(wav), 0.4, 2.0);
 
             Assert.InRange(cut, 0.4, 0.5);
         }
 
         [Fact]
-        public void FindQuietestCut_Stereo_FindsSilentGap()
+        public void FindCarrierCut_Stereo_FindsSilentGap()
         {
             // Stereo loud/silent/loud.
             using var ms = new MemoryStream();
@@ -245,9 +293,9 @@ namespace Read2Me.Tests.Services.Audio
             w.Flush();
             var wav = BuildWav(ms.ToArray(), channels: 2);
 
-            double cut = WavTrimmer.FindQuietestCut(new MemoryStream(wav), 0.3, 0.8);
+            double cut = WavTrimmer.FindCarrierCut(new MemoryStream(wav), 0.3, 0.8);
 
-            Assert.InRange(cut, 0.5, 0.6);
+            Assert.InRange(cut, 0.575, 0.6);
         }
     }
 }
