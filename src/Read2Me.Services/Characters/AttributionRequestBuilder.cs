@@ -128,7 +128,7 @@ namespace Read2Me.Services.Characters
             var rosterJson = JsonSerializer.Serialize(
                 characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() }));
             var narratorIdentity = narrator.IsLinked
-                ? $"\nThis book is narrated by {narrator.DisplayName}, who is also a character in the story and speaks in scene.\n"
+                ? NarratorPromptText.IdentityParagraph(narrator.DisplayName)
                 : string.Empty;
 
             string RenderPrompt(string template, string contextJson, string responseFormat) =>

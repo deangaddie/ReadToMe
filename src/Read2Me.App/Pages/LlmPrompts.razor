@@ -463,7 +463,7 @@ else
             [PromptTemplates.CharacterName]   = "Gandalf",
             [PromptTemplates.ResponseFormat]  = SegmentAttributionSchema.JsonExample,
             [PromptTemplates.NarratorIdentity] =
-                "\nThis book is narrated by Bilbo, who is also a character in the story and speaks in scene.\n",
+                NarratorPromptText.IdentityParagraph("Bilbo"),
         };
 
     static readonly IReadOnlyDictionary<string, string> _batchSampleValues =
@@ -524,8 +524,7 @@ else
         new Dictionary<string, string>(_sampleValues)
         {
             [PromptTemplates.ResponseFormat] = VoicePlanSchema.JsonExample,
-            [PromptTemplates.AlsoNarrates] =
-                "\nThis character also narrates the entire book — the same voice reads all the prose, not only this character's dialogue. Choose a clear, even delivery that can sustain hours of narration.\n",
+            [PromptTemplates.AlsoNarrates] = NarratorPromptText.AlsoNarratesParagraph,
         };
 
     string RenderVoicePlanPreview() =>
