@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Read2Me.Services;
 using Read2Me.Services.Llm;
 using Xunit;
@@ -52,7 +54,32 @@ namespace Read2Me.Tests.Services
             Assert.Contains("{{" + PromptTemplates.KnownCharacters + "}}", prompt);
             Assert.Contains("{{" + PromptTemplates.ContextJson + "}}", prompt);
             Assert.Contains("{{" + PromptTemplates.ResponseFormat + "}}", prompt);
+            Assert.Contains("{{" + PromptTemplates.NarratorIdentity + "}}", prompt);
         }
+
+        [Fact]
+        public void AttributionDefaults_UnlinkedRenderingMatchesLegacyGoldenBytes()
+        {
+            var values = new Dictionary<string, string>
+            {
+                [PromptTemplates.BookTitle] = "The Book",
+                [PromptTemplates.BookAuthor] = "The Author",
+                [PromptTemplates.KnownCharacters] = "[]",
+                [PromptTemplates.ContextJson] = "{}",
+                [PromptTemplates.ResponseFormat] = "{}",
+                [PromptTemplates.NarratorIdentity] = string.Empty,
+            };
+
+            Assert.Equal(
+                "ED7F390A2550658B98A05AC4FC0C444F30D32C31FC4A763BC8B967CD1AE12D9C",
+                Sha256(PromptTemplates.Render(PromptTemplates.DefaultCharacterPrompt, values)));
+            Assert.Equal(
+                "1320271F37DF01E4007F20A385E625BB50437374AB8A8FB72898D697397FFC25",
+                Sha256(PromptTemplates.Render(PromptTemplates.DefaultBatchCharacterPrompt, values)));
+        }
+
+        private static string Sha256(string value) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
         [Fact]
         public void DefaultVoicePrompt_ContainsCharacterNameToken()
@@ -61,6 +88,15 @@ namespace Read2Me.Tests.Services
             Assert.Contains("{{" + PromptTemplates.CharacterName + "}}", prompt);
             Assert.Contains("{{" + PromptTemplates.BookTitle + "}}", prompt);
             Assert.Contains("{{" + PromptTemplates.BookAuthor + "}}", prompt);
+        }
+
+        [Fact]
+        public void NarratorTokens_AppearOnlyInMeasuredTemplates()
+        {
+            Assert.DoesNotContain("{{" + PromptTemplates.NarratorIdentity + "}}", PromptTemplates.DefaultSimpleCharacterPrompt);
+            Assert.DoesNotContain("{{" + PromptTemplates.NarratorIdentity + "}}", PromptTemplates.DefaultSimpleBatchCharacterPrompt);
+            Assert.Contains("{{" + PromptTemplates.AlsoNarrates + "}}", PromptTemplates.DefaultVoicePlanPrompt);
+            Assert.DoesNotContain("{{" + PromptTemplates.AlsoNarrates + "}}", PromptTemplates.DefaultNarratorVoicePlanPrompt);
         }
 
         [Fact]
@@ -186,6 +222,7 @@ namespace Read2Me.Tests.Services
             Assert.Contains("{{" + PromptTemplates.KnownCharacters + "}}", prompt);
             Assert.Contains("{{" + PromptTemplates.ContextJson + "}}", prompt);
             Assert.Contains("{{" + PromptTemplates.ResponseFormat + "}}", prompt);
+            Assert.Contains("{{" + PromptTemplates.NarratorIdentity + "}}", prompt);
         }
 
         [Fact]

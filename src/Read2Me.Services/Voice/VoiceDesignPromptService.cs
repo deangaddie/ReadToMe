@@ -61,7 +61,8 @@ namespace Read2Me.Services.Voice
             string bookTitle,
             string author,
             string characterName,
-            bool isNarrator = false)
+            bool isNarrator = false,
+            bool alsoNarrates = false)
         {
             string template;
             if (isNarrator)
@@ -74,6 +75,9 @@ namespace Read2Me.Services.Voice
                 [PromptTemplates.BookAuthor]     = author,
                 [PromptTemplates.CharacterName]  = characterName,
                 [PromptTemplates.ResponseFormat] = VoicePlanSchema.JsonExample,
+                [PromptTemplates.AlsoNarrates]   = alsoNarrates
+                    ? "\nThis character also narrates the entire book — the same voice reads all the prose, not only this character's dialogue. Choose a clear, even delivery that can sustain hours of narration.\n"
+                    : string.Empty,
             });
         }
 
@@ -86,6 +90,7 @@ namespace Read2Me.Services.Voice
             string author,
             string characterName,
             bool isNarrator = false,
+            bool alsoNarrates = false,
             CancellationToken ct = default)
         {
             var config = await settings.GetActiveConfigAsync();
@@ -95,7 +100,8 @@ namespace Read2Me.Services.Voice
                 return new PlanResult(GenerateStatus.NoLlmConfigured, null, "No active LLM server configured");
             }
 
-            var rendered = await BuildRenderedPlanPromptAsync(bookTitle, author, characterName, isNarrator);
+            var rendered = await BuildRenderedPlanPromptAsync(
+                bookTitle, author, characterName, isNarrator, alsoNarrates);
 
             var result = await runner.RunAsync<IReadOnlyList<VoicePlanVoice>>(
                 new LlmRunRequest(config, rendered, $"Voice plan: {characterName}",

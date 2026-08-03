@@ -163,6 +163,24 @@ namespace Read2Me.Tests.Services.Voice
             Assert.Equal("Dune by Herbert — Paul", result);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task BuildRenderedPlanPrompt_AlsoNarratesOnlyForLinkedCharacter(bool alsoNarrates)
+        {
+            var sut = Create(new FakeLlmCompletionRunner(), template: "Before\n{{also_narrates}}\nAfter");
+
+            var result = await sut.BuildRenderedPlanPromptAsync(
+                "Dune", "Herbert", "Paul", isNarrator: false, alsoNarrates: alsoNarrates);
+
+            const string sentence =
+                "This character also narrates the entire book — the same voice reads all the prose, not only this character's dialogue. Choose a clear, even delivery that can sustain hours of narration.";
+            if (alsoNarrates)
+                Assert.Equal($"Before\n\n{sentence}\n\nAfter", result);
+            else
+                Assert.Equal("Before\n\nAfter", result);
+        }
+
         [Fact]
         public async Task BuildRenderedPrompt_CachesTemplate_CallsGetOnce()
         {

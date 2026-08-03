@@ -127,6 +127,9 @@ namespace Read2Me.Services.Characters
             var narrator = await reader.GetNarratorAsync(first.Folder);
             var rosterJson = JsonSerializer.Serialize(
                 characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() }));
+            var narratorIdentity = narrator.IsLinked
+                ? $"\nThis book is narrated by {narrator.DisplayName}, who is also a character in the story and speaks in scene.\n"
+                : string.Empty;
 
             string RenderPrompt(string template, string contextJson, string responseFormat) =>
                 PromptTemplates.Render(template, new Dictionary<string, string>
@@ -136,6 +139,7 @@ namespace Read2Me.Services.Characters
                     [PromptTemplates.KnownCharacters] = rosterJson,
                     [PromptTemplates.ContextJson]     = contextJson,
                     [PromptTemplates.ResponseFormat]  = responseFormat,
+                    [PromptTemplates.NarratorIdentity] = narratorIdentity,
                 });
 
             // D2: the budget applies to every ask, any chunk size — a floor over the config, grown to

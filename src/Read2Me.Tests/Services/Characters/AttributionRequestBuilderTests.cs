@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
@@ -63,6 +64,7 @@ namespace Read2Me.Tests.Services.Characters
             public List<IReadOnlyList<Guid>> ReceivedIds { get; } = [];
             public int ReceivedBefore { get; private set; }
             public int ReceivedAfter { get; private set; }
+            public NarratorIdentity Narrator { get; init; } = NarratorIdentity.Unlinked;
 
             public BatchReaderFake(
                 IEnumerable<ParagraphBatchContext?> contexts,
@@ -88,6 +90,10 @@ namespace Read2Me.Tests.Services.Characters
 
             public override Task<Project?> GetProjectAsync(ProjectFolderId folderId) =>
                 Task.FromResult(_project);
+
+            public override Task<NarratorIdentity> GetNarratorAsync(
+                ProjectFolderId folderId, CancellationToken ct = default) =>
+                Task.FromResult(Narrator);
         }
 
         /// <summary>A context whose leading run is exactly <paramref name="targets"/>, no context neighbours.</summary>
@@ -176,6 +182,33 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(SegmentBatchAttributionSchema.JsonSchema, result.Request.JsonSchema);
             Assert.Equal(3, result.Included.Count);
             Assert.Equal(["Text 0", "Text 1", "Text 2"], result.QueryTexts);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(3)]
+        public async Task LinkedNarrator_IdentitySentenceUsesPrimaryNameAtMeasuredPosition(int count)
+        {
+            var ps = Enumerable.Range(0, count).Select(i => Para($"P{i}")).ToList();
+            var reader = new BatchReaderFake(
+                [Ctx([.. ps.Select((p, i) => (p, $"Text {i}"))])],
+                project: Project())
+            {
+                Narrator = new NarratorIdentity(Guid.NewGuid(), "Dr. Watson", true),
+            };
+
+            var result = await NewBuilder(reader).Build(ps, Opts(Config()));
+
+            const string identity =
+                "This book is narrated by Dr. Watson, who is also a character in the story and speaks in scene.";
+            var prompt = result.Request!.Prompt;
+            var responseFormat = prompt.IndexOf("- JSON format:", StringComparison.Ordinal);
+            var identityPosition = prompt.IndexOf(identity, StringComparison.Ordinal);
+            var knownCharacters = prompt.IndexOf("Known characters (", StringComparison.Ordinal);
+
+            Assert.True(responseFormat < identityPosition, "Identity must follow the JSON format line.");
+            Assert.True(identityPosition < knownCharacters, "Identity must precede the character roster.");
+            Assert.Contains($"\n\n{identity}\n\n", prompt);
         }
 
         [Theory]

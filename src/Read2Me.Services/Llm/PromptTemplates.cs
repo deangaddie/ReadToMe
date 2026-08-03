@@ -16,6 +16,8 @@ namespace Read2Me.Services.Llm
     public const string ContextJson = "context_json";
     public const string ResponseFormat = "response_format";
     public const string CharacterName = "character_name";
+    public const string NarratorIdentity = "narrator_identity";
+    public const string AlsoNarrates = "also_narrates";
     public const string Instruction = "instruction";
     public const string BookOutline = "book_outline";
     public const string EditItemsJson = "edit_items_json";
@@ -79,7 +81,7 @@ namespace Read2Me.Services.Llm
               text gives no cue.
             - Return ONLY valid JSON. No markdown fences, no text outside the JSON.
             - JSON format: {{response_format}}
-
+            {{narrator_identity}}
             Known characters (JSON array; each entry has a "name" and optional "aliases" — match either when identifying a speaker): {{known_characters}}
 
             Context (JSON object):
@@ -152,7 +154,7 @@ namespace Read2Me.Services.Llm
             - Return ONLY a valid JSON array with exactly one entry per index. Every index
               must appear. No markdown fences, no text outside the JSON.
             - JSON format: {{response_format}}
-
+            {{narrator_identity}}
             Known characters (JSON array; each entry has a "name" and optional "aliases" — match either when identifying a speaker): {{known_characters}}
 
             Paragraphs (JSON object): "paragraphs" is the passage in reading order. Entries
@@ -315,7 +317,7 @@ namespace Read2Me.Services.Llm
         """
             You are casting speaking voices for the character "{{character_name}}" in the
             audiobook "{{book_title}}" by {{book_author}}.
-
+            {{also_narrates}}
             Decide how many distinct voices this character needs across the whole book.
             Most characters need exactly one voice. Add more only when the character's
             voice genuinely changes during the story — large time skips, ageing from

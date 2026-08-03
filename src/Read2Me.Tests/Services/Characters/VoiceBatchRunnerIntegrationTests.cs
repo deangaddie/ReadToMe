@@ -642,7 +642,8 @@ namespace Read2Me.Tests.Services.Characters
                 Task.FromResult($"[rendered: {characterName}]");
 
             public override async Task<IReadOnlyList<VoicePlanVoice>> GenerateVoicePlanAsync(
-                string bookTitle, string author, string characterName, bool isNarrator = false, CancellationToken ct = default)
+                string bookTitle, string author, string characterName, bool isNarrator = false,
+                bool alsoNarrates = false, CancellationToken ct = default)
             {
                 if (_delayMs > 0)
                     await Task.Delay(_delayMs, ct);
@@ -707,7 +708,8 @@ namespace Read2Me.Tests.Services.Characters
             }
 
             public override Task<IReadOnlyList<VoicePlanVoice>> GenerateVoicePlanAsync(
-                string bookTitle, string author, string characterName, bool isNarrator = false, CancellationToken ct = default)
+                string bookTitle, string author, string characterName, bool isNarrator = false,
+                bool alsoNarrates = false, CancellationToken ct = default)
             {
                 var idx = Interlocked.Increment(ref _callIndex) - 1;
                 if (idx < _shouldThrow.Length && _shouldThrow[idx])

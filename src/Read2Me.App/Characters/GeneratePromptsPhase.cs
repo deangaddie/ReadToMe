@@ -38,18 +38,22 @@ public sealed class GeneratePromptsPhase : ISweepPhase<PromptWorkItem>
         // One work item per character that has no voices yet: the LLM plans the
         // full set of voices for the character in a single call.
         var characters = await deps.Reader.GetCharactersWithAliasesAsync(folder);
+        var narrator = await deps.Reader.GetNarratorAsync(folder, ct);
         var workList = new List<PromptWorkItem>();
         foreach (var character in characters)
         {
             ct.ThrowIfCancellationRequested();
+            var alsoNarrates = narrator.IsLinked && character.Id == narrator.CharacterId;
             if (_regenerateAll)
             {
-                workList.Add(new PromptWorkItem(character.Id, character.Name, character.IsNarrator));
+                workList.Add(new PromptWorkItem(
+                    character.Id, character.Name, character.IsNarrator, alsoNarrates));
                 continue;
             }
             var voices = await deps.Reader.GetCharacterVoicesAsync(folder, character.Id);
             if (voices.Count == 0)
-                workList.Add(new PromptWorkItem(character.Id, character.Name, character.IsNarrator));
+                workList.Add(new PromptWorkItem(
+                    character.Id, character.Name, character.IsNarrator, alsoNarrates));
         }
         return workList;
     }
@@ -68,7 +72,8 @@ public sealed class GeneratePromptsPhase : ISweepPhase<PromptWorkItem>
             }
         }
 
-        var plan = await deps.Orchestrator.GenerateVoicePlanAsync(_bookTitle, _author, item.CharacterName, item.IsNarrator, ct);
+        var plan = await deps.Orchestrator.GenerateVoicePlanAsync(
+            _bookTitle, _author, item.CharacterName, item.IsNarrator, item.AlsoNarrates, ct);
 
         foreach (var voice in plan)
         {

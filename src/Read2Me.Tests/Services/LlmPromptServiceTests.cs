@@ -170,6 +170,31 @@ namespace Read2Me.Tests.Services
             Assert.Equal("batch", await svc.GetBatchCharacterPromptAsync(AttributionPromptStyle.Full));
         }
 
+        [Theory]
+        [InlineData("legacy custom prompt", true)]
+        [InlineData("custom {{narrator_identity}} prompt", false)]
+        public async Task AttributionPromptCompatibility_FlagsStoredPromptMissingNarratorToken(
+            string storedPrompt, bool expectedBadge)
+        {
+            var svc = NewService();
+            await svc.SetCharacterPromptAsync(storedPrompt);
+            await svc.SetBatchCharacterPromptAsync(storedPrompt);
+
+            var result = await svc.GetAttributionPromptCompatibilityAsync();
+
+            Assert.Equal(expectedBadge, result.CharacterPromptMissingNarratorIdentity);
+            Assert.Equal(expectedBadge, result.BatchCharacterPromptMissingNarratorIdentity);
+        }
+
+        [Fact]
+        public async Task AttributionPromptCompatibility_UnsetDefaultsNeedNoBadge()
+        {
+            var result = await NewService().GetAttributionPromptCompatibilityAsync();
+
+            Assert.False(result.CharacterPromptMissingNarratorIdentity);
+            Assert.False(result.BatchCharacterPromptMissingNarratorIdentity);
+        }
+
         [Fact]
         public async Task SetThenSet_OverwritesSameRow_NoSecondRow()
         {

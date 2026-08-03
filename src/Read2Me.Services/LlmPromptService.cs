@@ -6,6 +6,10 @@ using Read2Me.Services.Llm;
 
 namespace Read2Me.Services
 {
+    public sealed record AttributionPromptCompatibility(
+        bool CharacterPromptMissingNarratorIdentity,
+        bool BatchCharacterPromptMissingNarratorIdentity);
+
     public class LlmPromptService
     {
         private readonly IDbContextFactory<Read2MeDbContext> _dbFactory;
@@ -41,6 +45,23 @@ namespace Read2Me.Services
                 : (row?.BatchCharacterPrompt, PromptTemplates.DefaultBatchCharacterPrompt);
             return string.IsNullOrWhiteSpace(stored) ? fallback : stored;
         }
+
+        /// <summary>
+        /// Reports legacy stored Full attribution overrides that cannot receive narrator identity.
+        /// Defaults and Simple-style prompts are deliberately excluded.
+        /// </summary>
+        public virtual async Task<AttributionPromptCompatibility> GetAttributionPromptCompatibilityAsync()
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var row = await db.PromptSettings.SingleOrDefaultAsync();
+            return new AttributionPromptCompatibility(
+                StoredPromptMissesToken(row?.CharacterPrompt, PromptTemplates.NarratorIdentity),
+                StoredPromptMissesToken(row?.BatchCharacterPrompt, PromptTemplates.NarratorIdentity));
+        }
+
+        private static bool StoredPromptMissesToken(string? template, string token) =>
+            !string.IsNullOrWhiteSpace(template)
+            && !template.Contains("{{" + token + "}}", StringComparison.Ordinal);
 
         public virtual async Task<string> GetVoicePromptAsync()
         {
