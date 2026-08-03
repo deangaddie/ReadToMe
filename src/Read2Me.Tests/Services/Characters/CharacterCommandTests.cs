@@ -224,6 +224,42 @@ namespace Read2Me.Tests.Services.Characters
             Assert.True(await verify.Characters.AnyAsync(c => c.Id == otherId.Value));
         }
 
+        /// <summary>
+        /// Merging says "these two are the same person", so the narrator link follows the survivor
+        /// — silently, with no warning.
+        /// </summary>
+        [Fact]
+        public async Task Merge_RepointsNarratorLinkToSurvivor_WhenLinkedCharacterIsMerged()
+        {
+            await InitProjectAsync();
+            var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
+            var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
+            await _svc.ExecuteAsync(new SetNarratorCharacterCommand(_folder, mergedId!.Value));
+
+            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId!.Value, mergedId.Value, false));
+
+            await using var verify = await OpenDbAsync();
+            var narrator = await NarratorIdentity.LoadAsync(verify);
+            Assert.True(narrator.IsLinked);
+            Assert.Equal(survivorId.Value, narrator.CharacterId);
+        }
+
+        [Fact]
+        public async Task Merge_LeavesNarratorLinkAlone_WhenSurvivorIsTheLinkedCharacter()
+        {
+            await InitProjectAsync();
+            var survivorId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Survivor"));
+            var mergedId = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Merged"));
+            await _svc.ExecuteAsync(new SetNarratorCharacterCommand(_folder, survivorId!.Value));
+
+            await _svc.ExecuteAsync(new MergeCharactersCommand(_folder, survivorId.Value, mergedId!.Value, false));
+
+            await using var verify = await OpenDbAsync();
+            var narrator = await NarratorIdentity.LoadAsync(verify);
+            Assert.True(narrator.IsLinked);
+            Assert.Equal(survivorId.Value, narrator.CharacterId);
+        }
+
         [Fact]
         public async Task Merge_IgnoresNarrator_WhenNarratorIsMerged()
         {

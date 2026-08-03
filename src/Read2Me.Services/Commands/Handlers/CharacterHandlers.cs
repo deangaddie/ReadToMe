@@ -185,6 +185,12 @@ public sealed class MergeCharactersHandler(ProjectDbSession session) : ICommandH
             await db.SaveChangesAsync(ct);
         }
 
+        // A merge says the two are the same person, so the narrator link follows the survivor —
+        // silently, no warning. Linked-on-the-survivor-side is a no-op: the Where matches nothing.
+        await db.Projects
+            .Where(p => p.NarratorCharacterId == c.MergedId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.NarratorCharacterId, (Guid?)c.SurvivorId), ct);
+
         await db.Characters
             .Where(ch => ch.Id == c.MergedId)
             .ExecuteDeleteAsync(ct);
@@ -244,6 +250,17 @@ public sealed class DeleteCharacterHandler(ProjectDbSession session) : ICommandH
         await db.Voices
             .Where(v => v.CharacterId == c.CharacterId)
             .ExecuteDeleteAsync(ct);
+
+        // Deleting the character a book narrates with unlinks it, inside this transaction so the
+        // delete and the unlink cannot half-land. Not a rejection: this handler's only error
+        // channel is a silent `return null`, which reads as a delete that didn't happen.
+        // NarratorIdentity would still survive the dangling pointer — that fallback is the
+        // backstop, not the fix. Set-based like the rest of this transaction, so a Project entity
+        // tracked earlier in the same session keeps the old id; harmless while the seam reads
+        // through a projection (ADR-0004), and the reason it must keep doing so.
+        await db.Projects
+            .Where(p => p.NarratorCharacterId == c.CharacterId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.NarratorCharacterId, (Guid?)null), ct);
 
         await db.Characters
             .Where(ch => ch.Id == c.CharacterId)

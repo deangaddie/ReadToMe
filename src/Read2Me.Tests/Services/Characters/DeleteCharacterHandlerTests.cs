@@ -17,21 +17,25 @@ namespace Read2Me.Tests.Services.Characters
     public class DeleteCharacterHandlerTests : ProjectDbTestBase
     {
         private readonly DeleteCharacterHandler _handler;
+        private readonly ProjectDbSession _session;
         private readonly ProjectFolderId _folder;
 
         public DeleteCharacterHandlerTests()
         {
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
-            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _handler = new DeleteCharacterHandler(session);
+            _session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
+            _handler = new DeleteCharacterHandler(_session);
             _folder = new ProjectFolderId(FolderName);
         }
 
-        private async Task<(Guid charId, Guid paraId, Guid itemId)> SeedCharacterWithParagraphAsync()
+        private async Task<(Guid charId, Guid paraId, Guid itemId)> SeedCharacterWithParagraphAsync(
+            Guid? characterId = null,
+            Guid? narratorCharacterId = null)
         {
-            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var character = new Character { Id = characterId ?? Guid.NewGuid(), Name = "Alice" };
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
+            if (narratorCharacterId.HasValue) b.WithNarratorLink(narratorCharacterId.Value);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "\"Hello.\"", character.Id))))
                 .BuildAsync();
@@ -137,6 +141,48 @@ namespace Read2Me.Tests.Services.Characters
             Assert.False(await verify.Voices.AnyAsync(v => v.Id == voiceId));
             Assert.False(await verify.VoiceRules.AnyAsync(r => r.VoiceId == voiceId));
             Assert.True(await verify.Characters.AnyAsync(c => c.Id == otherCharId));
+        }
+
+        /// <summary>
+        /// Deleting the character a book narrates with has to clear the link in the same
+        /// transaction — otherwise the column is left pointing at a row that no longer exists and
+        /// only <see cref="NarratorIdentity"/>'s dangling-link fallback keeps audio alive.
+        /// </summary>
+        [Fact]
+        public async Task DeleteCharacter_Linked_ClearsTheNarratorLink()
+        {
+            var charId = Guid.NewGuid();
+            await SeedCharacterWithParagraphAsync(charId, narratorCharacterId: charId);
+
+            await _handler.HandleAsync(new DeleteCharacterCommand(_folder, charId), CancellationToken.None);
+
+            await using var verify = await OpenDbAsync();
+            // The column, not just the projection: LoadAsync would report Unlinked either way,
+            // because a link to a deleted row falls back. This asserts the fallback is not what
+            // saved us. (Sanctioned raw read — see NarratorCharacterIdAccessRuleTests.)
+            Assert.Null(await verify.Projects.Select(p => p.NarratorCharacterId).FirstAsync());
+            Assert.Equal(NarratorIdentity.Unlinked, await NarratorIdentity.LoadAsync(verify));
+        }
+
+        [Fact]
+        public async Task DeleteCharacter_NotLinked_LeavesTheNarratorLinkAlone()
+        {
+            var linkedId = Guid.NewGuid();
+            var (charId, _, _) = await SeedCharacterWithParagraphAsync();
+            await using (var seed = await OpenDbAsync())
+            {
+                seed.Characters.Add(new Character { Id = linkedId, Name = "Watson" });
+                await seed.SaveChangesAsync();
+            }
+            await new SetNarratorCharacterHandler(_session)
+                .HandleAsync(new SetNarratorCharacterCommand(_folder, linkedId), CancellationToken.None);
+
+            await _handler.HandleAsync(new DeleteCharacterCommand(_folder, charId), CancellationToken.None);
+
+            await using var verify = await OpenDbAsync();
+            var narrator = await NarratorIdentity.LoadAsync(verify);
+            Assert.True(narrator.IsLinked);
+            Assert.Equal(linkedId, narrator.CharacterId);
         }
 
         [Fact]
