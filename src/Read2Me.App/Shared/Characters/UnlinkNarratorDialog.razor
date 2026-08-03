@@ -1,0 +1,22 @@
+<MudDialog>
+    <DialogContent>
+        <MudText>
+            @Warning(LinkedCharacterName)
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(true)))">Unlink</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string LinkedCharacterName { get; set; } = "the linked character";
+
+    internal static string Warning(string linkedCharacterName) =>
+        $"Unlink {linkedCharacterName} as this book's narrator? Narration already rendered in " +
+        $"{linkedCharacterName}'s voice will not match until it is regenerated. Existing audio is " +
+        "kept, and the Narrator voice and rules become active again.";
+}

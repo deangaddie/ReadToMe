@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
@@ -11,6 +12,7 @@ using Read2Me.App.Services.Preflight;
 using Read2Me.App.State;
 using Read2Me.AppData.Entities;
 using Read2Me.Data.Entities;
+using Read2Me.Data;
 using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
@@ -24,6 +26,8 @@ namespace Read2Me.App.Shared.Characters
         [Parameter, EditorRequired] public Character Character { get; set; } = null!;
         [Parameter, EditorRequired] public IReadOnlyList<Read2Me.Core.Models.CharacterLine> Lines { get; set; } = [];
         [Parameter, EditorRequired] public IReadOnlyList<Character> AllCharacters { get; set; } = [];
+        [Parameter] public NarratorIdentity Narrator { get; set; } = NarratorIdentity.Unlinked;
+        [Parameter] public EventCallback<Character> SelectCharacter { get; set; }
         [Parameter, EditorRequired] public string FolderName { get; set; } = "";
 
         [Inject] internal CharacterPresenter Presenter { get; set; } = null!;
@@ -37,6 +41,15 @@ namespace Read2Me.App.Shared.Characters
 
         VoiceDesignServiceConfig? _activeVoiceDesignConfig;
         ParagraphTtsServiceConfig? _activeParagraphTtsConfig;
+
+        bool IsLinkedNarrator => Character.IsNarrator && Narrator.IsLinked;
+
+        async Task GoToLinkedCharacterAsync()
+        {
+            var linked = AllCharacters.FirstOrDefault(c => c.Id == Narrator.CharacterId);
+            if (linked is not null)
+                await SelectCharacter.InvokeAsync(linked);
+        }
 
         protected override async Task OnInitializedAsync()
         {
@@ -414,7 +427,8 @@ namespace Read2Me.App.Shared.Characters
             {
                 { d => d.ItemType, "Character" },
                 { d => d.ItemName, Character.Name },
-                { d => d.HasChildren, false }
+                { d => d.HasChildren, false },
+                { d => d.AdditionalMessage, LinkedNarratorDeleteMessage(Character, Narrator) },
             };
             var dialog = await DialogService.ShowAsync<ConfirmDeleteDialog>("Delete Character", parameters);
             var result = await dialog.Result;
@@ -422,6 +436,11 @@ namespace Read2Me.App.Shared.Characters
 
             await Presenter.DeleteCharacterAsync(Character.Id);
         }
+
+        internal static string? LinkedNarratorDeleteMessage(Character character, NarratorIdentity narrator) =>
+            narrator.IsLinkedTo(character.Id)
+                ? $"{character.Name} narrates this book; deleting will return narration to the Narrator voice."
+                : null;
 
         // ── Voice Rules ───────────────────────────────────────────────────────────
 

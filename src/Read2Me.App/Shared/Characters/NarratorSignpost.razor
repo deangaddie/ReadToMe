@@ -1,0 +1,32 @@
+@using Read2Me.Data.Entities
+@using Read2Me.Data
+
+<MudStack Spacing="3" data-testid="narrator-signpost">
+    <MudText Typo="Typo.h6">Narrator 🔗 @Narrator.DisplayName</MudText>
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        Narration in this book is spoken by @Narrator.DisplayName. Voices and voice rules are edited on @Narrator.DisplayName.
+    </MudAlert>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowForward"
+               OnClick="GoToLinkedCharacter">Go to @Narrator.DisplayName</MudButton>
+
+    @if (UnusedVoices.Count > 0)
+    {
+        <MudExpansionPanels>
+            <MudExpansionPanel Text="@($"{UnusedVoices.Count} unused narrator {(UnusedVoices.Count == 1 ? "voice" : "voices")}")">
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                    These voices are kept safely and return when the narrator link is removed.
+                </MudText>
+                @foreach (var voice in UnusedVoices)
+                {
+                    <MudText Typo="Typo.body2">@voice.Name</MudText>
+                }
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public NarratorIdentity Narrator { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<Voice> UnusedVoices { get; set; } = [];
+    [Parameter] public EventCallback GoToLinkedCharacter { get; set; }
+}

@@ -1,0 +1,39 @@
+@using Read2Me.Data
+@using Read2Me.Data.Entities
+@using Read2Me.App.State
+
+@{
+    var isLinkedCharacter = Narrator.IsLinkedTo(Character.Id);
+    var hasBookIcon = Character.IsNarrator || isLinkedCharacter;
+    var total = Character.Voices?.Count ?? 0;
+    var ready = CharacterPresenter.ReadyVoiceCount(Character);
+}
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+    <span data-book-icon="@(hasBookIcon ? "true" : "false")">
+        <MudIcon Icon="@(hasBookIcon ? Icons.Material.Filled.MenuBook : Icons.Material.Filled.Person)"
+                 Size="Size.Small" Color="@(hasBookIcon ? Color.Secondary : Color.Default)" />
+    </span>
+    <MudText Typo="Typo.body2">@(Character.IsNarrator && Narrator.IsLinked
+        ? $"Narrator → {Narrator.DisplayName}"
+        : Character.Name)</MudText>
+    <MudSpacer />
+    @if (Character.Aliases.Count > 0)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Text">@Character.Aliases.Count</MudChip>
+    }
+    @if (total > 0)
+    {
+        var chipColor = ready == 0 ? Color.Error : ready < total ? Color.Warning : Color.Info;
+        var chipLabel = ready == total ? $"{total}" : $"{ready} / {total}";
+        var tooltip = $"{ready} of {total} {(total == 1 ? "voice" : "voices")} ready for TTS";
+        <MudTooltip Text="@tooltip">
+            <MudChip T="string" Size="Size.Small" Color="@chipColor" Variant="Variant.Text"
+                     Icon="@Icons.Material.Filled.RecordVoiceOver">@chipLabel</MudChip>
+        </MudTooltip>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Character Character { get; set; } = null!;
+    [Parameter, EditorRequired] public NarratorIdentity Narrator { get; set; }
+}

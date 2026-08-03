@@ -9,6 +9,13 @@
 @inject IAiPreflight Preflight
 @implements IDisposable
 
+@if (!Presenter.IsLoading)
+{
+    <NarratorLinkBanner Narrator="Presenter.Narrator"
+                        Characters="Presenter.Characters"
+                        NarratorChanged="SetNarratorAsync" />
+}
+
 @if (Presenter.IsLoading)
 {
     <MudProgressLinear Indeterminate="true" />
@@ -56,35 +63,7 @@ else
                     {
                         var c = character;
                         <MudListItem T="Character" Value="c" OnClick="@(() => SelectAsync(c))">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                @if (c.IsNarrator)
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.MenuBook" Size="Size.Small" Color="Color.Secondary" />
-                                }
-                                else
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
-                                }
-                                <MudText Typo="Typo.body2">@c.Name</MudText>
-                                <MudSpacer />
-                                @if (c.Aliases.Count > 0)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary"
-                                             Variant="Variant.Text">@c.Aliases.Count</MudChip>
-                                }
-                                @if (c.Voices.Count > 0)
-                                {
-                                    var total = c.Voices.Count;
-                                    var ready = Presenter.ReadyVoiceCount(c);
-                                    var chipColor = ready == 0 ? Color.Error : ready < total ? Color.Warning : Color.Info;
-                                    var chipLabel = ready == total ? $"{total}" : $"{ready} / {total}";
-                                    var tooltip = $"{ready} of {total} {(total == 1 ? "voice" : "voices")} ready for TTS";
-                                    <MudTooltip Text="@tooltip">
-                                        <MudChip T="string" Size="Size.Small" Color="@chipColor"
-                                                 Variant="Variant.Text" Icon="@Icons.Material.Filled.RecordVoiceOver">@chipLabel</MudChip>
-                                    </MudTooltip>
-                                }
-                            </MudStack>
+                            <CharacterListRowContent Character="c" Narrator="Presenter.Narrator" />
                         </MudListItem>
                     }
                 </MudList>
@@ -96,6 +75,8 @@ else
                 <CharacterDetailPanel Character="sel"
                                       Lines="Presenter.Lines"
                                       AllCharacters="Presenter.Characters"
+                                      Narrator="Presenter.Narrator"
+                                      SelectCharacter="SelectAsync"
                                       FolderName="@FolderName" />
             }
             else
@@ -128,6 +109,12 @@ else
     {
         _selectedCharacter = c;
         await Presenter.SelectCharacterAsync(c);
+    }
+
+    async Task SetNarratorAsync(Guid? characterId)
+    {
+        await Presenter.SetNarratorCharacterAsync(characterId);
+        _selectedCharacter = Presenter.SelectedCharacter;
     }
 
     async Task AddCharacterAsync()

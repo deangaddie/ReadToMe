@@ -1,6 +1,14 @@
 @using Read2Me.App.State
 
 <MudStack Spacing="3">
+    @if (IsLinkedNarrator)
+    {
+        <NarratorSignpost Narrator="Narrator"
+                          UnusedVoices="Presenter.Voices"
+                          GoToLinkedCharacter="GoToLinkedCharacterAsync" />
+    }
+    else
+    {
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween">
         @if (_renamingCharacter)
         {
@@ -309,6 +317,7 @@
                 }
             </MudExpansionPanels>
         </MudStack>
+    }
 
         @if (Presenter.VoiceRules.Count > 0)
         {
@@ -341,7 +350,7 @@
                                      Title="One or more anchor nodes no longer exist" />
                         }
                         <MudText Typo="Typo.body2" Style="flex:1">@RuleDescription(r)</MudText>
-                        @if (!r.IsDefault)
+                        @if (!IsLinkedNarrator && !r.IsDefault)
                         {
                             <MudTooltip Text="Move up">
                                 <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small"

@@ -17,6 +17,8 @@ namespace Read2Me.Data
         public static NarratorIdentity Unlinked =>
             new(ProjectDbContext.NarratorId, ProjectDbContext.NarratorName, false);
 
+        public bool IsLinkedTo(Guid characterId) => IsLinked && CharacterId == characterId;
+
         /// <summary>
         /// The only reader of <c>Project.NarratorCharacterId</c> outside the command handlers
         /// that write it. A link pointing at no Character resolves to <see cref="Unlinked"/>
