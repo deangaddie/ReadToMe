@@ -22,11 +22,19 @@ namespace Read2Me.Data
         /// that write it. A link pointing at no Character resolves to <see cref="Unlinked"/>
         /// rather than failing — a dangling pointer must never take down audio for a whole book.
         /// </summary>
-        public static async Task<NarratorIdentity> LoadAsync(ProjectDbContext db, CancellationToken ct = default)
+        public static async Task<NarratorIdentity> LoadAsync(ProjectDbContext db, CancellationToken ct = default) =>
+            (await LoadWithNarratorOnlyModeAsync(db, ct)).Narrator;
+
+        /// <summary>
+        /// Both project-level narration settings in <b>one</b> round-trip, for the audio hot
+        /// path (<c>VoiceResolver</c>) which needs the link and <c>NarratorOnlyMode</c> per
+        /// batch and must not pay a second query for the link.
+        /// </summary>
+        public static async Task<(NarratorIdentity Narrator, bool NarratorOnlyMode)> LoadWithNarratorOnlyModeAsync(
+            ProjectDbContext db, CancellationToken ct = default)
         {
-            // One round-trip: the name rides the Projects read as a correlated subquery,
-            // so callers on the audio hot path pay a single query for the link.
-            var link = await db.Projects
+            // The name rides the Projects read as a correlated subquery.
+            var row = await db.Projects
                 .AsNoTracking()
                 .Select(p => new
                 {
@@ -35,12 +43,15 @@ namespace Read2Me.Data
                         .Where(c => c.Id == p.NarratorCharacterId)
                         .Select(c => c.Name)
                         .FirstOrDefault(),
+                    p.NarratorOnlyMode,
                 })
                 .FirstOrDefaultAsync(ct);
 
-            return link is { CharacterId: { } id, Name: { } name }
+            var narrator = row is { CharacterId: { } id, Name: { } name }
                 ? new NarratorIdentity(id, name, true)
                 : Unlinked;
+
+            return (narrator, row?.NarratorOnlyMode ?? false);
         }
     }
 }

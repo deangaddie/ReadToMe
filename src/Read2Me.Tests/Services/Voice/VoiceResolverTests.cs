@@ -1,4 +1,7 @@
+using System.Data.Common;
 using FractionalIndexing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
@@ -36,7 +39,9 @@ public class VoiceResolverTests : ProjectDbTestBase
     private async Task<(BookHierarchyBuilder b, Guid charId, Guid voiceAId, Guid voiceBId)> SeedBaseAsync(
         ParagraphItemType item1Type = ParagraphItemType.Character,
         ParagraphItemType item2Type = ParagraphItemType.Character,
-        bool narratorOnlyMode = false)
+        bool narratorOnlyMode = false,
+        bool linkNarratorToAlice = false,
+        Guid? danglingNarratorLink = null)
     {
         var charId   = Guid.NewGuid();
         var voiceAId = Guid.NewGuid();
@@ -46,6 +51,8 @@ public class VoiceResolverTests : ProjectDbTestBase
         var b = new BookHierarchyBuilder(OpenDbAsync);
         b.WithProject(narratorOnlyMode: narratorOnlyMode);
         b.WithCharacter("alice", alice);
+        if (linkNarratorToAlice) b.WithNarratorLink(charId);
+        else if (danglingNarratorLink is { } dangling) b.WithNarratorLink(dangling);
 
         await b
             .AddVolume("vol", v => v
@@ -217,5 +224,139 @@ public class VoiceResolverTests : ProjectDbTestBase
         var result = await _resolver.ResolveNamesAsync(_folder, [b.ItemId("item1")]);
 
         Assert.Null(result[b.ItemId("item1")]);
+    }
+
+    // ── 9. Narrator link (slice 13) ───────────────────────────────────────────
+
+    [Fact]
+    public async Task Linked_NarrationItem_ResolvesViaLinkedCharactersDefaultVoice()
+    {
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
+            item1Type: ParagraphItemType.Narration, linkNarratorToAlice: true);
+        await SeedDefaultRule(charId, voiceAId);                       // Alice → VoiceA
+        await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);  // seed Narrator → VoiceB (must NOT win)
+
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
+
+        Assert.Equal(voiceAId, result[b.ItemId("item1")]);
+    }
+
+    [Fact]
+    public async Task Linked_NarrationItem_PositionalRuleOnLinkedCharacterWins()
+    {
+        // The linked character's *rules* are genuinely evaluated, not just its default voice.
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
+            item1Type: ParagraphItemType.Narration, linkNarratorToAlice: true);
+        await SeedDefaultRule(charId, voiceBId);                                   // default → VoiceB
+        await SeedChapterRule(charId, voiceAId, FloorRank, b.ChapterId("ch1"));    // ch1 → VoiceA
+
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1"), b.ItemId("item2")]);
+
+        Assert.Equal(voiceAId, result[b.ItemId("item1")]);  // narration in ch1 → positional rule
+        Assert.Equal(voiceBId, result[b.ItemId("item2")]);  // Alice's dialog in ch2 → default
+    }
+
+    [Fact]
+    public async Task Linked_NarratorOnlyMode_EveryItemResolvesToLinkedCharacter()
+    {
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
+            item1Type: ParagraphItemType.Narration, narratorOnlyMode: true, linkNarratorToAlice: true);
+        await SeedDefaultRule(charId, voiceAId);
+        await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);
+
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1"), b.ItemId("item2")]);
+
+        Assert.Equal(voiceAId, result[b.ItemId("item1")]);
+        Assert.Equal(voiceAId, result[b.ItemId("item2")]);
+    }
+
+    [Fact]
+    public async Task Linked_DanglingLink_FallsBackToSeedNarratorRow()
+    {
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
+            item1Type: ParagraphItemType.Narration, danglingNarratorLink: Guid.NewGuid());
+        await SeedDefaultRule(charId, voiceAId);
+        await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);
+
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
+
+        Assert.Equal(voiceBId, result[b.ItemId("item1")]);
+    }
+
+    [Fact]
+    public async Task Linked_PaysNoExtraRoundTrip()
+    {
+        // The link rides the Projects query already made for NarratorOnlyMode. The counts are
+        // absolute, not just equal: an unconditional extra read would keep them equal but move
+        // both off the baseline.
+        var unlinked = await CountResolveCommandsAsync(link: false);
+        var linked   = await CountResolveCommandsAsync(link: true);
+
+        Assert.Equal(ResolveRoundTrips, unlinked);
+        Assert.Equal(ResolveRoundTrips, linked);
+    }
+
+    /// <summary>
+    /// Round-trips one <see cref="IVoiceResolver.ResolveAsync"/> over a single narration item
+    /// costs: items+ancestry, project narration settings, the character's rules.
+    /// </summary>
+    private const int ResolveRoundTrips = 3;
+
+    private async Task<int> CountResolveCommandsAsync(bool link)
+    {
+        var (b, charId, voiceAId, _) = await SeedBaseAsync(
+            item1Type: ParagraphItemType.Narration, linkNarratorToAlice: link);
+        await SeedDefaultRule(charId, voiceAId);
+        await SeedDefaultRule(ProjectDbContext.NarratorId, voiceAId);
+
+        var counter = new CommandCountingInterceptor();
+        var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
+        await using var session = new ProjectDbSession(
+            fs, new CountingDbContextFactory(counter), NullLogger<ProjectDbSession>.Instance);
+        var resolver = new VoiceResolver(session);
+
+        // Warm the session so migration commands do not land in the count.
+        await resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
+        counter.Reset();
+        await resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
+
+        return counter.Count;
+    }
+
+    private sealed class CommandCountingInterceptor : DbCommandInterceptor
+    {
+        private int _count;
+        public int Count => _count;
+        public void Reset() => _count = 0;
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
+        {
+            Interlocked.Increment(ref _count);
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _count);
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class CountingDbContextFactory(DbCommandInterceptor interceptor) : IProjectDbContextFactory
+    {
+        public async Task<ProjectDbContext> CreateAsync(string folderPath)
+        {
+            Directory.CreateDirectory(folderPath);
+            var options = new DbContextOptionsBuilder<ProjectDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(folderPath, "project.db")};Pooling=false")
+                .AddInterceptors(interceptor)
+                .Options;
+            var db = new ProjectDbContext(options);
+            await db.Database.MigrateAsync();
+            return db;
+        }
     }
 }

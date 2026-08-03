@@ -37,20 +37,18 @@ public sealed class VoiceResolver : IVoiceResolver
             })
             .ToListAsync(ct);
 
-        // 2. Read NarratorOnlyMode
-        var narratorOnlyMode = await db.Projects.AsNoTracking()
-            .Select(p => p.NarratorOnlyMode)
-            .FirstOrDefaultAsync(ct);
+        // 2. Read NarratorOnlyMode and the narrator link — one round-trip for both
+        var (narrator, narratorOnlyMode) = await NarratorIdentity.LoadWithNarratorOnlyModeAsync(db, ct);
 
-        // 3. Effective character per item (Narrator substitution)
-        var narratorId = ProjectDbContext.NarratorId;
+        // 3. Effective character per item (Narrator substitution).
+        //    Unlinked, NarratorIdentity.CharacterId *is* the seed Narrator row.
         var itemToCharId = new Dictionary<Guid, Guid>(items.Count);
 
         foreach (var it in items)
         {
             Guid? charId;
             if (narratorOnlyMode || it.ItemType == ParagraphItemType.Narration)
-                charId = narratorId;
+                charId = narrator.CharacterId;
             else if (it.ItemType == ParagraphItemType.Character)
                 charId = it.CharacterId;
             else

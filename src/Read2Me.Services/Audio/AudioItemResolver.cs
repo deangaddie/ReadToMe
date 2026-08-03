@@ -35,8 +35,17 @@ namespace Read2Me.Services.Audio
                 return new ResolutionResult(null, null, null,
                     $"ParagraphItem {itemRef.ParagraphItemId} not found");
 
-            var speaker = row.ItemType == ParagraphItemType.Narration
-                ? "Narrator"
+            // Logs and the ItemStarted label name whoever actually speaks: under a narrator
+            // link that is the linked character, unlinked it is the seed row's "Narrator".
+            // Narration items only — this is the per-item path (one item, then seconds of TTS),
+            // not VoiceResolver's batch path where the link has to ride an existing query.
+            var isNarration = row.ItemType == ParagraphItemType.Narration;
+            var narratorName = isNarration
+                ? (await NarratorIdentity.LoadAsync(db, ct)).DisplayName
+                : null;
+
+            var speaker = isNarration
+                ? narratorName
                 : row.Character?.Name;
 
             var sourceText = row.Text ?? string.Empty;
@@ -51,8 +60,8 @@ namespace Read2Me.Services.Audio
                     return new ResolutionResult(speaker, sourceText, null,
                         "No character assigned to item");
 
-                var charName = row.ItemType == ParagraphItemType.Narration
-                    ? "Narrator"
+                var charName = isNarration
+                    ? narratorName!
                     : (row.Character?.Name ?? row.CharacterId?.ToString() ?? "unknown");
                 return new ResolutionResult(speaker, sourceText, null,
                     $"No default voice for {charName}");
