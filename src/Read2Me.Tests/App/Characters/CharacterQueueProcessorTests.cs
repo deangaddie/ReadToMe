@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Characters;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
@@ -25,6 +26,7 @@ namespace Read2Me.Tests.App.Characters
         private readonly FakeEscalationChain _attribution;
         private readonly FakeResolver _resolver;
         private readonly FakeCharacterReader _reader;
+        private readonly FakeNarratorCatalog _catalog;
         private readonly FakeCommandHandler _commands;
         private readonly CharacterQueueProcessor _sut;
         private readonly QueuedParagraph _item;
@@ -35,12 +37,14 @@ namespace Read2Me.Tests.App.Characters
             _attribution = new FakeEscalationChain();
             _resolver = new FakeResolver();
             _reader = new FakeCharacterReader();
+            _catalog = new FakeNarratorCatalog();
             _commands = new FakeCommandHandler();
             _sut = new CharacterQueueProcessor(
                 _queue,
                 _attribution,
                 _resolver,
                 _reader,
+                _catalog,
                 _commands,
                 NullLogger<CharacterQueueProcessor>.Instance);
 
@@ -187,6 +191,78 @@ namespace Read2Me.Tests.App.Characters
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
             Assert.Empty(_queue.Applied);
+        }
+
+        // ── The narrator token on a dialog segment ────────────────────────────
+
+        /// <summary>
+        /// Linked, "narrator" is a wire alias of the linked character: it stamps that character, and
+        /// never reaches the name resolver (which would create a Character called "narrator").
+        /// </summary>
+        [Fact]
+        public async Task NarratorOnDialog_Linked_StampsTheLinkedCharacter()
+        {
+            var watson = Guid.NewGuid();
+            _catalog.Narrator = new NarratorIdentity(watson, "Dr. Watson", true);
+            _attribution.Outcome = Segments(AttributionStatus.Resolved, null, Dialog("narrator"));
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
+            Assert.Equal(watson, cmd.Segments[0].CharacterId);
+            Assert.Empty(_resolver.Names);
+        }
+
+        /// <summary>
+        /// Unlinked it stamps nobody. Stamping the seed Narrator row would credit a spoken line to
+        /// someone by definition not in the scene, and leave the item looking attributed — invisible
+        /// to the unattributed re-queue filter forever.
+        /// </summary>
+        [Fact]
+        public async Task NarratorOnDialog_Unlinked_StampsNobody()
+        {
+            _attribution.Outcome = Segments(AttributionStatus.Resolved, null, Dialog("narrator"));
+            _reader.Unattributed = 1;
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
+            Assert.Null(cmd.Segments[0].CharacterId);
+            Assert.Empty(_resolver.Names);
+            DispositionFor<Disposition.Unfinished>(_item);
+        }
+
+        /// <summary>Ordinary names are untouched by the link — they still resolve or are created.</summary>
+        [Fact]
+        public async Task OrdinaryName_ResolvesAsBefore_WhenLinked()
+        {
+            var charId = Guid.NewGuid();
+            _catalog.Narrator = new NarratorIdentity(Guid.NewGuid(), "Dr. Watson", true);
+            _resolver.ResolvedId = charId;
+            _attribution.Outcome = Resolved("Bilbo");
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            Assert.Equal("Bilbo", _resolver.Names.Single());
+            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
+            Assert.Equal(charId, cmd.Segments[0].CharacterId);
+        }
+
+        /// <summary>One read per folder per drained batch — never per segment, never per paragraph.</summary>
+        [Fact]
+        public async Task NarratorLink_IsReadOncePerFolderPerDrainedBatch()
+        {
+            var chapterId = Guid.NewGuid();
+            var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
+            _queue.Enqueue(items);
+            _resolver.ResolvedId = Guid.NewGuid();
+            _attribution.Outcome = Segments(AttributionStatus.Resolved, null,
+                Dialog("Bilbo"), Narration(), Dialog("Frodo"));
+
+            await _sut.ProcessItemAsync(items[0], CancellationToken.None);
+
+            Assert.Equal(3, _commands.SentCommands.Count);
+            Assert.Equal(1, _catalog.Reads);
         }
 
         // ── Batch processing ──────────────────────────────────────────────────
@@ -479,6 +555,25 @@ namespace Read2Me.Tests.App.Characters
                 Names.Add(name);
                 return Task.FromResult(ResolvedId);
             }
+        }
+
+        /// <summary>Serves the narrator link, and counts how often the processor asks for it.</summary>
+        private sealed class FakeNarratorCatalog : IProjectCatalogReader
+        {
+            public NarratorIdentity Narrator { get; set; } = NarratorIdentity.Unlinked;
+            public int Reads { get; private set; }
+
+            public Task<NarratorIdentity> GetNarratorAsync(ProjectFolderId folderId, CancellationToken ct = default)
+            {
+                Reads++;
+                return Task.FromResult(Narrator);
+            }
+
+            public IReadOnlyList<string> GetProjects() => [];
+            public Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync() =>
+                Task.FromResult<IReadOnlyList<ProjectSummary>>([]);
+            public Task<Read2Me.Data.Entities.Project?> GetProjectAsync(ProjectFolderId folderId) =>
+                Task.FromResult<Read2Me.Data.Entities.Project?>(null);
         }
 
         /// <summary>Stands in for the post-apply "is this paragraph fully stamped?" read.</summary>

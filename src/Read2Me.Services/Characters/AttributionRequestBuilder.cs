@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Read2Me.AppData.Entities;
+using Read2Me.Data;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
@@ -20,6 +21,9 @@ namespace Read2Me.Services.Characters
     /// <item><see cref="Deferred"/> — trimmed off the leading run by the context reader; re-enqueue.</item>
     /// <item><see cref="Characters"/> — the roster the prompt was built from, so a later reconcile
     /// compares against provably that set (D11: fetched once per chunk).</item>
+    /// <item><see cref="Narrator"/> — who narrates this book, carried beside the roster because every
+    /// site that judges a speaker string needs both: the narrator token is a wire alias of the linked
+    /// character, and means nothing when unlinked.</item>
     /// </list>
     /// </summary>
     internal sealed record ChunkRequest(
@@ -29,6 +33,7 @@ namespace Read2Me.Services.Characters
         IReadOnlyList<QueuedParagraph> Unaskable,
         IReadOnlyList<QueuedParagraph> Deferred,
         IReadOnlyList<Data.Entities.Character> Characters,
+        NarratorIdentity Narrator,
         IReadOnlyList<string> QueryTexts,
         IReadOnlyList<IReadOnlyList<ContextSegment>?> PriorSegments);
 
@@ -116,6 +121,10 @@ namespace Read2Me.Services.Characters
             // and the roster travels back on the result so no later stage refetches it.
             var project = await reader.GetProjectAsync(first.Folder);
             var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
+            // Beside the roster, once per chunk: every judge of a speaker string downstream needs the
+            // link to read the narrator token. It is its own read rather than a field off the Project
+            // above because ADR-0004 makes NarratorIdentity the only reader of the raw column.
+            var narrator = await reader.GetNarratorAsync(first.Folder);
             var rosterJson = JsonSerializer.Serialize(
                 characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() }));
 
@@ -163,13 +172,16 @@ namespace Read2Me.Services.Characters
             }
 
             return new ChunkRequest(
-                request, parser, included, unaskable, deferred, characters, queryTexts, priorSegments);
+                request, parser, included, unaskable, deferred, characters, narrator, queryTexts, priorSegments);
         }
 
-        /// <summary>A chunk with no askable target: no request, no parser, no roster fetch.</summary>
+        /// <summary>
+        /// A chunk with no askable target: no request, no parser, no roster fetch — and so no narrator
+        /// fetch either. Nothing downstream judges a speaker, so <c>Unlinked</c> is never read.
+        /// </summary>
         private static ChunkRequest NothingAskable(
             IReadOnlyList<QueuedParagraph> unaskable, IReadOnlyList<QueuedParagraph> deferred) =>
-            new(null, null, [], unaskable, deferred, [], [], []);
+            new(null, null, [], unaskable, deferred, [], NarratorIdentity.Unlinked, [], []);
 
         /// <summary>
         /// The entries→single-context adapter: rebuilds the flat target-of-one span into the single

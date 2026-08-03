@@ -1,3 +1,4 @@
+using Read2Me.Data;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
@@ -17,10 +18,20 @@ namespace Read2Me.Services.Characters
         /// <see cref="EscalationTrigger.None"/> (unlisted outranks unknown — final accept creates
         /// characters). An all-narration answer is None even for a dialog-queued paragraph: the
         /// re-segmentation overrides the earlier classifier.
+        /// <para>
+        /// The narrator token on a <em>dialog</em> segment is decided by the narrator link, not
+        /// exempted. Linked it is a correct answer and burns no rung (<see cref="CharacterNames"/>
+        /// canonicalizes it to the linked character). Unlinked it is
+        /// <see cref="EscalationTrigger.Unknown"/> — a spoken line credited to someone by definition
+        /// not in the scene, which stamped nobody. Never <see cref="EscalationTrigger.UnlistedName"/>:
+        /// that tier means "a real name we lack", and its final accept would create a character out of
+        /// a reserved token.
+        /// </para>
         /// </summary>
         public static EscalationTrigger DeriveTrigger(
             IReadOnlyList<AttributionSegment> segments,
-            IReadOnlyList<Data.Entities.Character> characters)
+            IReadOnlyList<Data.Entities.Character> characters,
+            NarratorIdentity narrator)
         {
             var anyUnknown = false;
             foreach (var segment in segments)
@@ -29,16 +40,19 @@ namespace Read2Me.Services.Characters
                     continue;
 
                 var speaker = segment.Speaker.Trim();
-                if (SegmentWire.IsUnknownSpeaker(speaker))
+                if (SegmentWire.IsUnknownSpeaker(speaker) || IsUnlinkedNarrator(speaker, narrator))
                     anyUnknown = true;
-                else if (!SegmentWire.IsNarrator(speaker) &&
-                         !CharacterNames.IsKnown(speaker, characters) &&
+                else if (!CharacterNames.IsKnown(speaker, characters, narrator) &&
                          !IsAttestedInNarration(speaker, segments))
                     return EscalationTrigger.UnlistedName;
             }
 
             return anyUnknown ? EscalationTrigger.Unknown : EscalationTrigger.None;
         }
+
+        /// <summary>The narrator token with no link behind it: nobody to stamp, so it means unknown.</summary>
+        private static bool IsUnlinkedNarrator(string speaker, NarratorIdentity narrator) =>
+            SegmentWire.IsNarrator(speaker) && !narrator.IsLinked;
 
         /// <summary>
         /// True when an unlisted speaker's name appears as a whole word in this paragraph's own
@@ -93,12 +107,17 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
-        /// True when ≥1 dialog segment is the wire sentinel <c>"unknown"</c> — the answer leaves part
-        /// of the paragraph unattributed even if the rest of it stamps.
+        /// True when ≥1 dialog segment names nobody the apply can stamp — the wire sentinel
+        /// <c>"unknown"</c>, or the narrator token with no link behind it — so the answer leaves part
+        /// of the paragraph unattributed even if the rest of it stamps. Same two cases
+        /// <see cref="DeriveTrigger"/> counts as unknown, so an answer's status and its trigger
+        /// cannot contradict each other.
         /// </summary>
-        public static bool HasUnknownSpeaker(IReadOnlyList<AttributionSegment> segments) =>
+        public static bool HasUnknownSpeaker(
+            IReadOnlyList<AttributionSegment> segments, NarratorIdentity narrator) =>
             segments.Any(s => s.Type == AttributionSegmentType.Dialog &&
-                              SegmentWire.IsUnknownSpeaker(s.Speaker));
+                              (SegmentWire.IsUnknownSpeaker(s.Speaker) ||
+                               IsUnlinkedNarrator(s.Speaker.Trim(), narrator)));
 
         /// <summary>
         /// True when the paragraph's existing split has dialog and the answer has none: every
@@ -147,10 +166,18 @@ namespace Read2Me.Services.Characters
         /// Self-consistency agreement: identical segment count, and per segment normalized text,
         /// type and canonicalized speaker (alias → owner name, OrdinalIgnoreCase) all match. Any
         /// difference is a disagreement; reasoning and voice instructions are ignored.
+        /// <para>
+        /// Canonicalization is narrator-aware, which is what this check needs most: self-consistency
+        /// resamples at temperature, so under a link one sample can answer <c>narrator</c> and the
+        /// other the linked character's name. Both are correct, and scoring them
+        /// <see cref="EscalationTrigger.Inconsistent"/> would burn a stronger rung on two right
+        /// answers — on exactly the books the narrator link exists for.
+        /// </para>
         /// </summary>
         public static bool AnswersAgree(
             IReadOnlyList<AttributionSegment> a, IReadOnlyList<AttributionSegment> b,
-            IReadOnlyList<Data.Entities.Character> characters)
+            IReadOnlyList<Data.Entities.Character> characters,
+            NarratorIdentity narrator)
         {
             if (a.Count != b.Count)
                 return false;
@@ -164,8 +191,8 @@ namespace Read2Me.Services.Characters
                 if (SegmentTextNormalizer.Normalize(sa.Text) != SegmentTextNormalizer.Normalize(sb.Text))
                     return false;
                 if (!string.Equals(
-                        CharacterNames.Canonicalize(sa.Speaker, characters),
-                        CharacterNames.Canonicalize(sb.Speaker, characters),
+                        CharacterNames.Canonicalize(sa.Speaker, characters, narrator),
+                        CharacterNames.Canonicalize(sb.Speaker, characters, narrator),
                         StringComparison.OrdinalIgnoreCase))
                     return false;
             }

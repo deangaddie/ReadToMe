@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
+using Read2Me.Data;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Queueing;
 
@@ -292,7 +293,7 @@ namespace Read2Me.Services.Characters
 
             var reconciled = sample1.Outcomes
                 .Select(o => byId.TryGetValue(o.Item.ParagraphId, out var step2)
-                    ? (o.Item, Reconcile(o.Step, step2, sample1.Characters))
+                    ? (o.Item, Reconcile(o.Step, step2, sample1.Characters, sample1.Narrator))
                     : o)
                 .ToList();
 
@@ -306,7 +307,8 @@ namespace Read2Me.Services.Characters
         /// unchanged. Disagreement → sample 1 carried with an <c>Inconsistent</c> trigger so it escalates.
         /// </summary>
         private static StepOutcome Reconcile(
-            StepOutcome sample1, StepOutcome sample2, IReadOnlyList<Data.Entities.Character> characters)
+            StepOutcome sample1, StepOutcome sample2, IReadOnlyList<Data.Entities.Character> characters,
+            NarratorIdentity narrator)
         {
             if (sample2.Trigger == EscalationTrigger.ParseFailure || sample2.Outcome.Status.IsInfraFailure())
                 return sample1;
@@ -315,7 +317,7 @@ namespace Read2Me.Services.Characters
             if (sample1.Outcome.Segments is not { } a || sample2.Outcome.Segments is not { } b)
                 return sample1;
 
-            return SegmentEscalation.AnswersAgree(a, b, characters)
+            return SegmentEscalation.AnswersAgree(a, b, characters, narrator)
                 ? sample1
                 : sample1 with { Trigger = EscalationTrigger.Inconsistent };
         }
@@ -366,7 +368,8 @@ namespace Read2Me.Services.Characters
                     for (var i = 0; i < req.Included.Count; i++)
                         steps[req.Included[i].ParagraphId] = Classify(
                             req.Included[i].ParagraphId, req.QueryTexts[i], parsed[i].Segments,
-                            req.Characters, provenance, parsed[i].Reasoning, req.PriorSegments[i]);
+                            req.Characters, req.Narrator, provenance, parsed[i].Reasoning,
+                            req.PriorSegments[i]);
                 }
             }
 
@@ -377,7 +380,7 @@ namespace Read2Me.Services.Characters
                 .Select(i => (i, steps[i.ParagraphId]))
                 .ToList();
 
-            return new ChunkResult(outcomes, req.Deferred, req.Characters, runOutcome);
+            return new ChunkResult(outcomes, req.Deferred, req.Characters, req.Narrator, runOutcome);
         }
 
         /// <summary>
@@ -445,8 +448,8 @@ namespace Read2Me.Services.Characters
         /// </summary>
         private StepOutcome Classify(
             Guid paragraphId, string originalText, IReadOnlyList<AttributionSegment> segments,
-            IReadOnlyList<Data.Entities.Character> characters, AnswerProvenance provenance,
-            string? reasoning, IReadOnlyList<ContextSegment>? priorSegments)
+            IReadOnlyList<Data.Entities.Character> characters, NarratorIdentity narrator,
+            AnswerProvenance provenance, string? reasoning, IReadOnlyList<ContextSegment>? priorSegments)
         {
             if (!SegmentAligner.TryAlign(originalText, segments, out var aligned))
             {
@@ -465,8 +468,8 @@ namespace Read2Me.Services.Characters
                 return ParseFailure("Segment texts did not match the paragraph text.");
             }
 
-            var trigger = SegmentEscalation.DeriveTrigger(aligned, characters);
-            var status = SegmentEscalation.HasUnknownSpeaker(aligned)
+            var trigger = SegmentEscalation.DeriveTrigger(aligned, characters, narrator);
+            var status = SegmentEscalation.HasUnknownSpeaker(aligned, narrator)
                 ? AttributionStatus.Unknown
                 : AttributionStatus.Resolved;
 
@@ -516,13 +519,15 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// One chunk's worth of answers: an outcome per item that was answered (or resolved without
         /// an ask), the items the context trim pushed back to the group's pending queue, the roster
-        /// the prompt was built from — carried so a reconcile never has to refetch it — and how the
-        /// one LLM call went, <c>null</c> when the chunk needed no call at all.
+        /// the prompt was built from — carried so a reconcile never has to refetch it — the narrator
+        /// link that goes with that roster, and how the one LLM call went, <c>null</c> when the chunk
+        /// needed no call at all.
         /// </summary>
         private sealed record ChunkResult(
             IReadOnlyList<(QueuedParagraph Item, StepOutcome Step)> Outcomes,
             IReadOnlyList<QueuedParagraph> Deferred,
             IReadOnlyList<Data.Entities.Character> Characters,
+            NarratorIdentity Narrator,
             LlmRunOutcome? Run)
         {
             /// <summary>
