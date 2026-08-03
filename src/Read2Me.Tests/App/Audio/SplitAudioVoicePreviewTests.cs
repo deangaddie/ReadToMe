@@ -1,7 +1,13 @@
 using FractionalIndexing;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using MudBlazor.Services;
+using Read2Me.App.Shared.BookTree;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
@@ -38,13 +44,17 @@ namespace Read2Me.Tests.App.Audio
 
         private async Task<(
             Guid VolId, Guid PartId, Guid ChId, Guid ParaId,
-            Guid CharId, Guid DefaultVoiceId)> SeedMinimalAsync()
+            Guid CharId, Guid DefaultVoiceId)> SeedMinimalAsync(
+                bool linkNarrator = false,
+                string characterName = "Alice")
         {
             var charId = Guid.NewGuid();
             var voiceId = Guid.NewGuid();
-            var character = new Character { Id = charId, Name = "Alice" };
+            var character = new Character { Id = charId, Name = characterName };
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
+            if (linkNarrator)
+                b.WithNarratorLink(charId);
             await b.AddVolume("vol", v => v.AddPart("part", p => p.AddChapter("ch", c => c.AddParagraph("para"))))
                 .BuildAsync();
 
@@ -152,6 +162,76 @@ namespace Read2Me.Tests.App.Audio
 
             Assert.True(result.ContainsKey(itemId));
             Assert.Equal("Narrator Voice", result[itemId]);
+        }
+
+        [Fact]
+        public async Task LinkedPreview_LabelsNarrationArrowAndDialogPlain_UsingLinkedCharactersRules()
+        {
+            var (_, _, _, paraId, charId, voiceId) = await SeedMinimalAsync(
+                linkNarrator: true,
+                characterName: "Dr. Watson");
+            await AddDefaultRuleAsync(charId, voiceId);
+            var narrationId = await AddNarratorItemAsync(paraId);
+            var dialogId = await AddCharItemAsync(paraId, charId);
+
+            var voices = await _resolver.ResolveNamesAsync(_folder, [narrationId, dialogId]);
+            await using var db = await OpenDbAsync();
+            var narrator = await NarratorIdentity.LoadAsync(db);
+            var narrationHtml = await RenderPreviewAsync(
+                ParagraphItemType.Narration, null, narrator, voices[narrationId]);
+            var dialogHtml = await RenderPreviewAsync(
+                ParagraphItemType.Character, charId, narrator, voices[dialogId]);
+            var unrelatedDialogHtml = await RenderPreviewAsync(
+                ParagraphItemType.Character, Guid.NewGuid(), narrator, voices[dialogId]);
+
+            Assert.Equal("Default Voice", voices[narrationId]);
+            Assert.Equal("Default Voice", voices[dialogId]);
+            Assert.Contains("Narrator → Dr. Watson · Voice: Default Voice", narrationHtml);
+            Assert.Contains("Dr. Watson · Voice: Default Voice", dialogHtml);
+            Assert.DoesNotContain("Narrator →", dialogHtml);
+            Assert.Contains("Voice: Default Voice", unrelatedDialogHtml);
+            Assert.DoesNotContain(" · ", unrelatedDialogHtml);
+        }
+
+        [Fact]
+        public async Task UnlinkedPreview_KeepsExistingVoiceText()
+        {
+            var narrationHtml = await RenderPreviewAsync(
+                ParagraphItemType.Narration, null, NarratorIdentity.Unlinked, "Narrator Voice");
+            var dialogHtml = await RenderPreviewAsync(
+                ParagraphItemType.Character, Guid.NewGuid(), NarratorIdentity.Unlinked, "Default Voice");
+
+            Assert.Contains("Voice: Narrator Voice", narrationHtml);
+            Assert.Contains("Voice: Default Voice", dialogHtml);
+            Assert.DoesNotContain("Narrator ·", narrationHtml);
+            Assert.DoesNotContain("Alice ·", dialogHtml);
+        }
+
+        private static async Task<string> RenderPreviewAsync(
+            ParagraphItemType itemType,
+            Guid? characterId,
+            NarratorIdentity narrator,
+            string? voiceName)
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddMudServices();
+            await using var provider = services.BuildServiceProvider();
+            await using var renderer = new HtmlRenderer(provider, provider.GetRequiredService<ILoggerFactory>());
+
+            return await renderer.Dispatcher.InvokeAsync(async () =>
+            {
+                var output = await renderer.RenderComponentAsync<SplitAudioVoicePreview>(
+                    ParameterView.FromDictionary(new Dictionary<string, object?>
+                    {
+                        [nameof(SplitAudioVoicePreview.ItemType)] = itemType,
+                        [nameof(SplitAudioVoicePreview.CharacterId)] = characterId,
+                        [nameof(SplitAudioVoicePreview.Narrator)] = narrator,
+                        [nameof(SplitAudioVoicePreview.VoiceName)] = voiceName,
+                        [nameof(SplitAudioVoicePreview.TestId)] = "voice-preview-test",
+                    }));
+                return System.Net.WebUtility.HtmlDecode(output.ToHtmlString());
+            });
         }
 
         // ── AC3: positional rule wins over default for covered item ──────────

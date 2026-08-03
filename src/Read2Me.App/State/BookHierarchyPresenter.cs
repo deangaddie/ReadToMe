@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using MudBlazor;
 using Read2Me.App.Shared;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
@@ -85,27 +86,40 @@ namespace Read2Me.App.State
         public bool NarratorOnlyMode { get; private set; }
 
         private readonly Dictionary<Guid, string?> _resolvedVoiceNames = new();
+        private NarratorIdentity _voicePreviewNarrator = NarratorIdentity.Unlinked;
+        private Task<NarratorIdentity>? _voicePreviewNarratorTask;
 
         public string? ResolvedVoiceName(Guid itemId) =>
             _resolvedVoiceNames.TryGetValue(itemId, out var name) ? name : null;
+
+        public NarratorIdentity VoicePreviewNarrator => _voicePreviewNarrator;
 
         // Resolves voice names only for item ids not already cached, then merges
         // (does not replace). Cheap no-op once an item is resolved, so it is safe
         // to call from render — toggles no longer trigger resolver work.
         public async Task EnsureVoicePreviewAsync(ProjectFolderId folderId, IEnumerable<Guid> itemIds)
         {
+            var narratorTask = _voicePreviewNarratorTask ??= reader.GetNarratorAsync(folderId);
             var missing = itemIds.Where(id => !_resolvedVoiceNames.ContainsKey(id)).ToList();
-            if (missing.Count == 0) return;
+            if (missing.Count > 0)
+            {
+                var names = await voiceResolver.ResolveNamesAsync(folderId, missing);
+                foreach (var (id, name) in names)
+                    _resolvedVoiceNames[id] = name;
+            }
 
-            var names = await voiceResolver.ResolveNamesAsync(folderId, missing);
-            foreach (var (id, name) in names)
-                _resolvedVoiceNames[id] = name;
+            _voicePreviewNarrator = await narratorTask;
         }
 
         // Drops cached voice previews so the next render re-resolves. Call when
         // anything affecting voice selection changes (voice rules, attribution,
         // narrator-only mode, reload).
-        public void InvalidateVoicePreview() => _resolvedVoiceNames.Clear();
+        public void InvalidateVoicePreview()
+        {
+            _resolvedVoiceNames.Clear();
+            _voicePreviewNarrator = NarratorIdentity.Unlinked;
+            _voicePreviewNarratorTask = null;
+        }
 
         public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
         public bool IsNodeAudioSelectable(Guid nodeId) => _audioNodeCounts.ContainsKey(nodeId) && _audioNodeCounts[nodeId] > 0;

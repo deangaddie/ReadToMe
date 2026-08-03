@@ -1,0 +1,31 @@
+@using Read2Me.Data
+@using Read2Me.Data.Enums
+
+<MudText Typo="Typo.caption" Style="opacity:0.65;" data-testid="@TestId">
+    @PreviewText
+</MudText>
+
+@code {
+    [Parameter, EditorRequired] public ParagraphItemType ItemType { get; set; }
+    [Parameter] public Guid? CharacterId { get; set; }
+    [Parameter, EditorRequired] public NarratorIdentity Narrator { get; set; }
+    [Parameter] public string? VoiceName { get; set; }
+    [Parameter] public string? TestId { get; set; }
+
+    private string PreviewText
+    {
+        get
+        {
+            var voice = VoiceName is null ? "—" : $"Voice: {VoiceName}";
+            if (!Narrator.IsLinked)
+                return voice;
+
+            if (ItemType == ParagraphItemType.Narration)
+                return $"Narrator → {Narrator.DisplayName} · {voice}";
+
+            return CharacterId == Narrator.CharacterId
+                ? $"{Narrator.DisplayName} · {voice}"
+                : voice;
+        }
+    }
+}
