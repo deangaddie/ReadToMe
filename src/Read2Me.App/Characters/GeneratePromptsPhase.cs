@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Services;
 
 namespace Read2Me.App.Characters;
@@ -43,6 +44,9 @@ public sealed class GeneratePromptsPhase : ISweepPhase<PromptWorkItem>
         foreach (var character in characters)
         {
             ct.ThrowIfCancellationRequested();
+            if (narrator.IsLinked && character.Id == ProjectDbContext.NarratorId)
+                continue;
+
             var alsoNarrates = narrator.IsLinked && character.Id == narrator.CharacterId;
             if (_regenerateAll)
             {
