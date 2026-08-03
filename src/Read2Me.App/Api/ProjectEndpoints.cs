@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.UseCases;
@@ -59,15 +60,17 @@ namespace Read2Me.App.Api
                 : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static async Task<IResult> GetAsync(string folder, IFileSystem fs, IProjectCatalogReader reader)
+        private static async Task<IResult> GetAsync(
+            string folder, IFileSystem fs, IProjectCatalogReader reader, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
             var project = await reader.GetProjectAsync(folderId);
-            return project is null
-                ? Results.NotFound()
-                : Results.Ok(ProjectDetailDto.From(folderId.Value, project));
+            if (project is null) return Results.NotFound();
+
+            var narrator = await reader.GetNarratorAsync(folderId, ct);
+            return Results.Ok(ProjectDetailDto.From(folderId.Value, project, narrator));
         }
 
         private static IResult Delete(string folder, IFileSystem fs, ProjectUseCases useCases)

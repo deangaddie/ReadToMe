@@ -57,6 +57,14 @@ public record MergeCharactersCommand(ProjectFolderId FolderId, Guid SurvivorId, 
 public record DeleteCharacterCommand(ProjectFolderId FolderId, Guid CharacterId) : BookCommand(FolderId);
 public record RenameCharacterCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
 
+// Narrator
+/// <summary>
+/// Points the book's narration at one of its Characters — Sherlock Holmes narrated by
+/// Dr. Watson. <c>null</c> unlinks. The first project-scoped <see cref="BookCommand"/>:
+/// every sibling addresses a node, character or voice.
+/// </summary>
+public record SetNarratorCharacterCommand(ProjectFolderId FolderId, Guid? CharacterId) : BookCommand(FolderId);
+
 // Voice
 public record CreateVoiceCommand(ProjectFolderId FolderId, Guid CharacterId, string Name, bool IsGenerated = false) : BookCommand(FolderId);
 public record SetVoiceDefaultCommand(ProjectFolderId FolderId, Guid VoiceId) : BookCommand(FolderId);

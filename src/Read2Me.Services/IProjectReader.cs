@@ -1,4 +1,5 @@
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
@@ -100,6 +101,12 @@ namespace Read2Me.Services
         IReadOnlyList<string> GetProjects();
         Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync();
         Task<Project?> GetProjectAsync(ProjectFolderId folderId);
+
+        /// <summary>
+        /// Who narrates this project's book — the read-time projection of the narrator link
+        /// (ADR-0004). Rides the context <see cref="GetProjectAsync"/> already opened.
+        /// </summary>
+        Task<NarratorIdentity> GetNarratorAsync(ProjectFolderId folderId, CancellationToken ct = default);
     }
 
     /// <summary>Book structure and text: volumes/parts/chapters/paragraphs and their content.</summary>

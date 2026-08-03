@@ -58,6 +58,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<DeleteCharacterCommand>, DeleteCharacterHandler>();
         services.AddScoped<ICommandHandler<RenameCharacterCommand>, RenameCharacterHandler>();
 
+        // Narrator
+        services.AddScoped<ICommandHandler<SetNarratorCharacterCommand>, SetNarratorCharacterHandler>();
+
         // Voice
         services.AddScoped<ICommandHandler<CreateVoiceCommand>, CreateVoiceHandler>();
         services.AddScoped<ICommandHandler<SetVoiceDefaultCommand>, SetVoiceDefaultHandler>();

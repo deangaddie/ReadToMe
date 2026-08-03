@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Enums;
 using ProjectEntity = Read2Me.Data.Entities.Project;
 
@@ -71,6 +72,12 @@ namespace Read2Me.Services
 
             var db = await _session.OpenAsync(folderId);
             return await db.Projects.SingleOrDefaultAsync();
+        }
+
+        public async Task<NarratorIdentity> GetNarratorAsync(ProjectFolderId folderId, CancellationToken ct = default)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await NarratorIdentity.LoadAsync(db, ct);
         }
     }
 }

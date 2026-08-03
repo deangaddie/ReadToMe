@@ -20,6 +20,7 @@ namespace Read2Me.Tests.Narrator
         {
             [@"Read2Me.Data\Entities\Project.cs"] = "declares the column",
             [@"Read2Me.Data\NarratorIdentity.cs"] = "the seam — the only reader",
+            [@"Read2Me.Services\Commands\Handlers\NarratorHandlers.cs"] = "the sanctioned writer",
             [@"Read2Me.TestUtils\BookHierarchyBuilder.cs"] = "test Object Mother arranges the linked case",
             [@"Read2Me.Tests\Narrator\NarratorIdentityTests.cs"] = "covers the seam and the migration",
             [@"Read2Me.Tests\Narrator\NarratorCharacterIdAccessRuleTests.cs"] = "this test",

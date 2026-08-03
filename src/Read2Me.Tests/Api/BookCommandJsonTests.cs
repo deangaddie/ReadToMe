@@ -91,6 +91,27 @@ namespace Read2Me.Tests.Api
         }
 
         [Fact]
+        public void Project_scoped_command_binds_with_only_its_own_property()
+        {
+            // SetNarratorCharacter is the first BookCommand addressing the project itself.
+            var characterId = Guid.NewGuid();
+            var command = (SetNarratorCharacterCommand)Deserialize(
+                "SetNarratorCharacter", $$"""{ "characterId": "{{characterId}}" }""");
+
+            Assert.Equal(characterId, command.CharacterId);
+            Assert.Equal(Folder, command.FolderId);
+        }
+
+        [Fact]
+        public void Explicit_null_binds_as_the_unlink()
+        {
+            var command = (SetNarratorCharacterCommand)Deserialize(
+                "SetNarratorCharacter", """{ "characterId": null }""");
+
+            Assert.Null(command.CharacterId);
+        }
+
+        [Fact]
         public void Unknown_type_fails_with_error()
         {
             var ok = BookCommandJson.TryDeserialize(
