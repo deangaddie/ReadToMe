@@ -10,16 +10,17 @@ Every book has at least one Volume, Part, and Chapter. Singular nodes are hidden
 
 ### Project
 
-| Column              | Type   | Nullable | Notes                              |
-| ------------------- | ------ | -------- | ---------------------------------- |
-| `Id`                | Guid   | no       | PK                                 |
-| `Title`             | string | no       | max 250 — project label            |
-| `BookTitle`         | string | no       | max 250                            |
-| `Author`            | string | no       | max 250                            |
-| `Filename`          | string | no       | max 526                            |
-| `Type`              | enum   | no       | `BookFileType` (Epub / Text)       |
-| `CoverImage`        | string | yes      | relative jpg path                  |
-| `NarratorOnlyMode`  | bool   | no       | suppress character voices          |
+| Column                | Type   | Nullable | Notes                                                              |
+| --------------------- | ------ | -------- | ------------------------------------------------------------------ |
+| `Id`                  | Guid   | no       | PK                                                                 |
+| `Title`               | string | no       | max 250 — project label                                            |
+| `BookTitle`           | string | no       | max 250                                                            |
+| `Author`              | string | no       | max 250                                                            |
+| `Filename`            | string | no       | max 526                                                            |
+| `Type`                | enum   | no       | `BookFileType` (Epub / Text)                                       |
+| `CoverImage`          | string | yes      | relative jpg path                                                  |
+| `NarratorOnlyMode`    | bool   | no       | suppress character voices                                          |
+| `NarratorCharacterId` | Guid   | yes      | narrator link — no FK; read only via `NarratorIdentity` (ADR-0004) |
 
 ### Volume
 

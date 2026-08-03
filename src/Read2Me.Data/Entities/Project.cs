@@ -12,5 +12,12 @@ namespace Read2Me.Data.Entities
         public BookFileType Type { get; set; }
         public string? CoverImage { get; set; }
         public bool NarratorOnlyMode { get; set; }
+
+        /// <summary>
+        /// The Character who narrates this book, or null for the seed Narrator voice.
+        /// Deliberately no EF relationship and no FK — a dangling link self-heals.
+        /// Read it only through <see cref="NarratorIdentity.LoadAsync"/> (ADR-0004).
+        /// </summary>
+        public Guid? NarratorCharacterId { get; set; }
     }
 }

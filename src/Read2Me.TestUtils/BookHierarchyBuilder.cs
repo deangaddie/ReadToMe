@@ -43,6 +43,7 @@ public sealed class BookHierarchyBuilder
     private bool _narratorOnlyMode;
     private string _projectTitle = "Test Book";
     private string _projectAuthor = "Author";
+    private Guid? _narratorCharacterId;
 
     // ── legacy: context-based ctor for existing callers ───────────────────────
 
@@ -68,6 +69,16 @@ public sealed class BookHierarchyBuilder
         _narratorOnlyMode = narratorOnlyMode;
         _projectTitle = title;
         _projectAuthor = author;
+        return this;
+    }
+
+    /// <summary>
+    /// Links the built project's narrator to a Character — the arranged "linked" case.
+    /// Pass an id with no Character row to arrange the dangling link.
+    /// </summary>
+    public BookHierarchyBuilder WithNarratorLink(Guid characterId)
+    {
+        _narratorCharacterId = characterId;
         return this;
     }
 
@@ -117,6 +128,7 @@ public sealed class BookHierarchyBuilder
             Filename = "book.txt",
             Type = BookFileType.Text,
             NarratorOnlyMode = _narratorOnlyMode,
+            NarratorCharacterId = _narratorCharacterId,
         });
 
         await FlushVolumesAsync(db);

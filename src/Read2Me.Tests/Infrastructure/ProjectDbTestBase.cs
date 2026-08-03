@@ -27,13 +27,20 @@ namespace Read2Me.Tests.Infrastructure
         /// <summary>Opens a new migrated ProjectDbContext each call. Caller owns dispose.</summary>
         protected async Task<ProjectDbContext> OpenDbAsync()
         {
-            var options = new DbContextOptionsBuilder<ProjectDbContext>()
-                .UseSqlite($"Data Source={Path.Combine(FolderPath, "project.db")};Pooling=false")
-                .Options;
-            var db = new ProjectDbContext(options);
+            var db = OpenUnmigratedDb();
             await db.Database.MigrateAsync();
             return db;
         }
+
+        /// <summary>
+        /// Opens the same database without migrating it — for tests that drive the migrator
+        /// themselves (e.g. migrate to an older migration, seed, then migrate up).
+        /// Caller owns dispose.
+        /// </summary>
+        protected ProjectDbContext OpenUnmigratedDb() => new(
+            new DbContextOptionsBuilder<ProjectDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(FolderPath, "project.db")};Pooling=false")
+                .Options);
 
         public ValueTask DisposeAsync()
         {
