@@ -58,7 +58,10 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void AttributionDefaults_UnlinkedRenderingMatchesLegacyGoldenBytes()
+        // Pins the current bytes, not the pre-narrator-link bytes: the hashes were re-cut when the
+        // measured abstention wording landed. What it still guards is ADR-0004's rule — unlinked
+        // renders with no narrator identity spliced in.
+        public void AttributionDefaults_UnlinkedRenderingMatchesGoldenBytes()
         {
             var values = new Dictionary<string, string>
             {
@@ -71,10 +74,10 @@ namespace Read2Me.Tests.Services
             };
 
             Assert.Equal(
-                "ED7F390A2550658B98A05AC4FC0C444F30D32C31FC4A763BC8B967CD1AE12D9C",
+                "F11B34C1CEC96B2FEF29D94C2FAC5CD2D7237D090A3C37A9A4CD12E9B697D8C5",
                 Sha256(PromptTemplates.Render(PromptTemplates.DefaultCharacterPrompt, values)));
             Assert.Equal(
-                "1320271F37DF01E4007F20A385E625BB50437374AB8A8FB72898D697397FFC25",
+                "E86F09C7560FCCC2EE857A2FF624EC8E53DFBCE4C16A095F6E093B0B1B2656FD",
                 Sha256(PromptTemplates.Render(PromptTemplates.DefaultBatchCharacterPrompt, values)));
         }
 
@@ -115,6 +118,21 @@ namespace Read2Me.Tests.Services
             // Fidelity and the narration-speaker convention are what the parser/aligner rely on.
             Assert.Contains("reproduce the query paragraph EXACTLY", prompt);
             Assert.Contains("Narration segments always have speaker \"narrator\"", prompt);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void FullCharacterPrompts_LicenseUnknownForUnidentifiedSpeakers(bool batch)
+        {
+            var prompt = batch
+                ? PromptTemplates.DefaultBatchCharacterPrompt
+                : PromptTemplates.DefaultCharacterPrompt;
+
+            // The measured fix for cold-start confabulation: a roster name is only a candidate once
+            // the visible text places that person here, and abstaining beats guessing.
+            Assert.Contains("Who counts as a candidate speaker", prompt);
+            Assert.Contains("A wrong name is worse than \"unknown\"", prompt);
         }
 
         [Fact]

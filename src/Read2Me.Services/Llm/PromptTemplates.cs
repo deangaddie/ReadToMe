@@ -51,15 +51,32 @@ namespace Read2Me.Services.Llm
             - A paragraph may contain several speakers, one speaker split across several
               dialog segments, or no dialog at all (one narration segment is then correct).
 
+            Who counts as a candidate speaker:
+            - The known characters list is a list of everyone in the WHOLE book, not a list
+              of who is present here. A listed name becomes a candidate for these segments
+              only once the text you can see has actually placed that person in this scene —
+              by naming them, or by a description that can only be that one character (for
+              example "his lady", where her husband is named alongside it).
+            - A speaker the text introduces but has not yet identified — "a man", "a voice",
+              "the stranger", "someone behind him" — is genuinely unidentified HERE, even
+              though the book will name them in a later chapter, and even though that name
+              is sitting in the known characters list. Their lines are "unknown".
+            - Never close that gap by elimination or by plausibility. If the only way to
+              reach a name is "it is probably one of the listed characters, and this one
+              fits best", the answer is "unknown".
+
             How to identify each dialog segment's speaker:
             - Attribution tags in or around the quote ("said X", "X replied") — these often
               appear AFTER the quote, or in a neighbouring paragraph.
             - Vocatives: a character addressed by name inside the quote ("Well, John?") is
               usually NOT the speaker; the character who replies next often is.
             - Two-person conversations normally alternate speakers — use the speakers in
-              the surrounding paragraphs' segments to infer the pattern.
+              the surrounding paragraphs' segments to infer the pattern. This resolves WHICH
+              of the speakers present is talking; it never introduces a candidate who is not
+              present.
             - Match epithets and descriptions ("the old man", "his mother") to the known
-              characters list, including aliases.
+              characters list, including aliases — but only when the description picks out
+              one character unambiguously from what the text has established.
             - Content clues: what is said, who would know it, and each character's manner
               of speaking.
             - When one speaker's quote is interrupted by narration and resumes, both dialog
@@ -73,9 +90,13 @@ namespace Read2Me.Services.Llm
             - Narration segments always have speaker "narrator" and voice_instructions "".
             - Dialog speakers: return the character's "name" from the known characters list
               (the text may use an alias). Never return pronouns (he, she, they) — resolve
-              them to a known character. Return "unknown" only after using ALL of the above
-              and finding that two or more characters remain equally plausible, or the
-              speaker genuinely never appears in the text.
+              them to a known character. Return "unknown" when ANY of these hold: two or
+              more characters remain equally plausible after using ALL of the above; the
+              speaker genuinely never appears in the text; or the speaker has not yet been
+              identified in the text you can see, as described under "Who counts as a
+              candidate speaker".
+            - A wrong name is worse than "unknown". "unknown" is a correct and expected
+              answer — another pass handles those segments.
             - "voice_instructions" for dialog: a few words on how the line is delivered
               (e.g. "angry, shouting", "soft, hesitant"), taken from the text; "" if the
               text gives no cue.
@@ -121,15 +142,32 @@ namespace Read2Me.Services.Llm
             - A paragraph may contain several speakers, one speaker split across several
               dialog segments, or no dialog at all (one narration segment is then correct).
 
+            Who counts as a candidate speaker:
+            - The known characters list is a list of everyone in the WHOLE book, not a list
+              of who is present here. A listed name becomes a candidate for these segments
+              only once the text you can see has actually placed that person in this scene —
+              by naming them, or by a description that can only be that one character (for
+              example "his lady", where her husband is named alongside it).
+            - A speaker the text introduces but has not yet identified — "a man", "a voice",
+              "the stranger", "someone behind him" — is genuinely unidentified HERE, even
+              though the book will name them in a later chapter, and even though that name
+              is sitting in the known characters list. Their lines are "unknown".
+            - Never close that gap by elimination or by plausibility. If the only way to
+              reach a name is "it is probably one of the listed characters, and this one
+              fits best", the answer is "unknown".
+
             How to identify each dialog segment's speaker:
             - Attribution tags in or around the quote ("said X", "X replied") — these often
               appear AFTER the quote, or in a neighbouring paragraph.
             - Vocatives: a character addressed by name inside the quote ("Well, John?") is
               usually NOT the speaker; the character who replies next often is.
             - Two-person conversations normally alternate speakers — use the speakers in
-              the surrounding paragraphs' segments to infer the pattern.
+              the surrounding paragraphs' segments to infer the pattern. This resolves WHICH
+              of the speakers present is talking; it never introduces a candidate who is not
+              present.
             - Match epithets and descriptions ("the old man", "his mother") to the known
-              characters list, including aliases.
+              characters list, including aliases — but only when the description picks out
+              one character unambiguously from what the text has established.
             - Content clues: what is said, who would know it, and each character's manner
               of speaking.
             - When one speaker's quote is interrupted by narration and resumes, both dialog
@@ -143,9 +181,13 @@ namespace Read2Me.Services.Llm
             - Narration segments always have speaker "narrator" and voice_instructions "".
             - Dialog speakers: return the character's "name" from the known characters list
               (the text may use an alias). Never return pronouns (he, she, they) — resolve
-              them to a known character. Return "unknown" only after using ALL of the above
-              and finding that two or more characters remain equally plausible, or the
-              speaker genuinely never appears in the text.
+              them to a known character. Return "unknown" when ANY of these hold: two or
+              more characters remain equally plausible after using ALL of the above; the
+              speaker genuinely never appears in the text; or the speaker has not yet been
+              identified in the text you can see, as described under "Who counts as a
+              candidate speaker".
+            - A wrong name is worse than "unknown". "unknown" is a correct and expected
+              answer — another pass handles those segments.
             - "voice_instructions" for dialog: a few words on how the line is delivered
               (e.g. "angry, shouting", "soft, hesitant"), taken from the text; "" if the
               text gives no cue.
