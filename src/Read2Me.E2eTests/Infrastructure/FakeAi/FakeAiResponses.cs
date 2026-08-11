@@ -26,38 +26,32 @@ public static partial class FakeAiResponses
     public static string WhisperVerboseJson(string text) => JsonSerializer.Serialize(new { text });
 
     /// <summary>
-    /// Segment-list attribution answer for the paragraph(s) the given prompt asks about: one dialog
-    /// segment per paragraph, speaking its whole text. The text has to be echoed back verbatim — the
-    /// service validates that the segments reconstruct the original paragraph — so it is rebuilt
-    /// from the item list the prompt shows for each query paragraph ("query" for single,
-    /// "paragraphs" entries with an "index" for batch), joined the way the reader joined them.
+    /// Per-item attribution answer for the paragraph(s) the given prompt asks about: every item the
+    /// prompt numbered is answered with <paramref name="character"/>. Boundaries are frozen
+    /// (ADR 0005), so the answer echoes no text at all — only the indices lifted from the prompt's
+    /// own item list ("query" for single, "paragraphs" entries with an "index" for batch). Answers
+    /// on narration indices are ignored by the apply, so naming every index is safe and keeps this
+    /// fake free of the prompt's item types.
     /// </summary>
     public static string AttributionReply(string prompt, string character, string voiceInstructions = "calm")
     {
         var batch = BatchTargets().Matches(prompt);
         if (batch.Count > 0)
             return "[" + string.Join(",", batch.Select(m =>
-                $$"""{ "index": {{m.Groups[1].Value}}, "reasoning": "fake", "segments": [ {{Segment(JoinItemTexts(m.Groups[2].Value), character, voiceInstructions)}} ] }""")) + "]";
+                $$"""{ "index": {{m.Groups[1].Value}}, "reasoning": "fake", "items": {{AnsweredItems(m.Groups[2].Value, character, voiceInstructions)}} }""")) + "]";
 
         var query = QueryItems().Match(prompt);
-        var text = query.Success ? JoinItemTexts(query.Groups[1].Value) : "\"\"";
-        return $$"""{ "reasoning": "fake", "segments": [ {{Segment(text, character, voiceInstructions)}} ] }""";
+        var items = query.Success ? query.Groups[1].Value : string.Empty;
+        return $$"""{ "reasoning": "fake", "items": {{AnsweredItems(items, character, voiceInstructions)}} }""";
     }
 
     /// <summary>
-    /// The paragraph text behind an "items" array, as a JSON string literal ready to paste back:
-    /// each item's text in order, space-joined to match how the reader builds a paragraph's text.
+    /// One answer per index in the prompt's "items" array for a query paragraph, all naming the same
+    /// speaker.
     /// </summary>
-    private static string JoinItemTexts(string itemsJson)
-    {
-        var texts = ItemText().Matches(itemsJson)
-            .Select(m => JsonSerializer.Deserialize<string>(m.Groups[1].Value)!);
-        return JsonSerializer.Serialize(string.Join(" ", texts));
-    }
-
-    /// <param name="jsonText">A JSON string literal (quoted, already escaped) lifted from the prompt.</param>
-    private static string Segment(string jsonText, string speaker, string voiceInstructions) =>
-        $$"""{ "text": {{jsonText}}, "type": "dialog", "speaker": "{{speaker}}", "voice_instructions": "{{voiceInstructions}}" }""";
+    private static string AnsweredItems(string itemsJson, string speaker, string voiceInstructions) =>
+        "[" + string.Join(",", ItemIndex().Matches(itemsJson).Select(m =>
+            $$"""{ "index": {{m.Groups[1].Value}}, "speaker": "{{speaker}}", "voice_instructions": "{{voiceInstructions}}" }""")) + "]";
 
     // A batch target paragraph: its "index" followed by its own "items" array. Item objects carry
     // an "index" too, but never one followed by "items", so they cannot match here.
@@ -67,8 +61,8 @@ public static partial class FakeAiResponses
     [GeneratedRegex(@"""query""\s*:\s*\{\s*""items""\s*:\s*\[([^\]]*)\]")]
     private static partial Regex QueryItems();
 
-    [GeneratedRegex(@"""text""\s*:\s*(""(?:[^""\\]|\\.)*"")")]
-    private static partial Regex ItemText();
+    [GeneratedRegex(@"""index""\s*:\s*(\d+)")]
+    private static partial Regex ItemIndex();
 
     /// <summary>
     /// VoxCPM2 /api/stream response: meta frame, one float32 PCM frame (100ms of silence),

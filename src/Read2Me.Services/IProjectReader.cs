@@ -27,7 +27,16 @@ namespace Read2Me.Services
     /// answer, and the id behind each index is what the apply stamps by (never a re-resolved
     /// position).
     /// </summary>
-    public sealed record ContextItem(Guid ItemId, string Text, string Type, string Speaker);
+    public sealed record ContextItem(Guid ItemId, string Text, string Type, string Speaker)
+    {
+        /// <summary>
+        /// A spoken item — the only kind an attribution answer may stamp, and so the only kind whose
+        /// missing speaker is worth escalating. Narration is never attributable: its speaker is the
+        /// narrator by construction.
+        /// </summary>
+        public bool IsDialog =>
+            string.Equals(Type, Llm.AttributionWire.Dialog, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// A paragraph in an attribution context: its raw full text plus its current item split. Both

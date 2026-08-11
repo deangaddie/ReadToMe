@@ -10,14 +10,16 @@ namespace Read2Me.Services.Characters
     public enum AttributionStatus { Resolved, Unknown, NoLlmConfigured, Failed, ServiceUnavailable, ModelLoading }
 
     /// <summary>
-    /// Why a step's answer looks suspect and might be re-asked on a stronger config. Additive
-    /// metadata computed alongside attribution; today's public API discards it (no behavior change
-    /// until the chain loop in a later slice consumes it). <see cref="Inconsistent"/> is produced by
-    /// the self-consistency check (slice 004) when two samples disagree. <see cref="DialogLost"/> is
-    /// produced when the answer drops every dialog segment a paragraph previously had — see
-    /// <see cref="SegmentEscalation.LosesDialog"/>.
+    /// Why a step's answer looks suspect and might be re-asked on a stronger config.
+    /// <see cref="Inconsistent"/> is produced by the self-consistency check when two samples
+    /// disagree; <see cref="Unknown"/> covers every dialog item the answer left unstamped,
+    /// unanswered ones included (see <see cref="ItemAttributionEscalation.DeriveTrigger"/>).
+    /// <para>
+    /// There is no "the answer lost the paragraph's dialog" trigger: per ADR 0005 an answer cannot
+    /// delete an item, so the defect it existed for is unreachable. Do not re-add it.
+    /// </para>
     /// </summary>
-    internal enum EscalationTrigger { None, Unknown, UnlistedName, ParseFailure, Inconsistent, DialogLost }
+    internal enum EscalationTrigger { None, Unknown, UnlistedName, ParseFailure, Inconsistent }
 
     /// <summary>An <see cref="AttributionOutcome"/> plus the quality trigger that classifies it.</summary>
     internal sealed record StepOutcome(AttributionOutcome Outcome, EscalationTrigger Trigger);
@@ -72,17 +74,41 @@ namespace Read2Me.Services.Characters
     }
 
     /// <summary>
-    /// A paragraph's attribution answer: the full segment list the LLM re-segmented it into, with
-    /// every segment's text already sliced from the original paragraph (never LLM text). Segments
-    /// are non-null for <see cref="AttributionStatus.Resolved"/> and for an
-    /// <see cref="AttributionStatus.Unknown"/> that carries an answer with unknown dialog speakers;
-    /// they are null when there is nothing to apply (empty paragraph, infra/parse failure).
-    /// <see cref="AttributionStatus.Unknown"/> means the answer left ≥1 dialog segment unattributed;
-    /// whether the paragraph ends up unattributed is decided on apply, per item.
+    /// One paragraph's attribution answer, ready to apply: who the LLM said speaks each item, by the
+    /// index the prompt gave it, and the map that turns those indices back into items. Boundaries are
+    /// frozen (ADR 0005), so an answer carries no text and can neither add nor remove an item.
+    /// <para>
+    /// The two halves are one value because neither is usable alone: an index means nothing without
+    /// the map, and the map is stale beside any other paragraph's answer. Building them together also
+    /// makes "index-aligned" un-forgettable at the one site that knows both.
+    /// </para>
+    /// </summary>
+    /// <param name="ItemIds">
+    /// The item behind each prompt index, recorded when the prompt was built — <c>null</c> where the
+    /// index names a narration item, which nothing may stamp (spec §2). Recorded rather than
+    /// re-resolved, because the apply happens after the answer leaves the chain and the user may have
+    /// edited the paragraph meanwhile.
+    /// </param>
+    public sealed record AttributionAnswer(
+        IReadOnlyList<AttributedItem> Items,
+        IReadOnlyList<Guid?> ItemIds)
+    {
+        /// <summary>The model's <paramref name="answered"/> indices against the items it was asked about.</summary>
+        public static AttributionAnswer For(
+            IReadOnlyList<AttributedItem> answered, IReadOnlyList<ContextItem> items) =>
+            new(answered, [.. items.Select(i => i.IsDialog ? i.ItemId : (Guid?)null)]);
+    }
+
+    /// <summary>
+    /// A paragraph's attribution result. <see cref="Answer"/> is non-null for
+    /// <see cref="AttributionStatus.Resolved"/> and for an <see cref="AttributionStatus.Unknown"/>
+    /// that carries an answer, and null when there is nothing to apply (empty paragraph, infra/parse
+    /// failure). <see cref="AttributionStatus.Unknown"/> means the answer left ≥1 dialog item
+    /// unstamped; whether the paragraph ends up unattributed is decided on apply, per item.
     /// </summary>
     public sealed record AttributionOutcome(
         AttributionStatus Status,
-        IReadOnlyList<AttributionSegment>? Segments,
+        AttributionAnswer? Answer,
         string? FailureReason)
     {
         /// <summary>
@@ -215,10 +241,8 @@ namespace Read2Me.Services.Characters
         /// <see cref="ChainStepOptions.SelfConsistency"/> is only ever set on a non-final rung and the
         /// fallback only fires on the final one, so there is no ordering question between them.
         /// <para>
-        /// The fallback answers an unparseable <em>run</em> (<see cref="ChunkResult.Run"/>), not a
-        /// per-item <see cref="EscalationTrigger.ParseFailure"/>: an answer that parsed but whose
-        /// segments do not reconstruct their paragraph carries the same trigger, and re-asking that has
-        /// never been this rung's job. It is one level and flag-terminated, for 2 asks per paragraph at
+        /// The fallback answers an unparseable <em>run</em> (<see cref="ChunkResult.Run"/>) — the only
+        /// thing a re-ask can fix. It is one level and flag-terminated, for 2 asks per paragraph at
         /// most. A failed chunk of N re-asks each paragraph on its own with the config as-is — the
         /// template shape changes, which is the point. A failed chunk of 1 has no shape left to change,
         /// so it re-asks off greedy (<see cref="ChainStepOptions.Resampled"/>), an identical prompt at
@@ -265,10 +289,8 @@ namespace Read2Me.Services.Characters
         /// The sample-1 guard is chunk-wide because it tests the <em>run</em>
         /// (<see cref="ChunkResult.Answered"/>), which is chunk-wide by construction: a parse, infra or
         /// still-loading outcome is what the one call returned, and no second call can improve on it.
-        /// A per-item quality trigger — including the parse failure <see cref="Classify"/> raises for
-        /// an answer whose segments do not reconstruct their paragraph — does not suppress sample 2;
-        /// <see cref="Reconcile"/> keeps such an item on sample 1 while the rest of the chunk still
-        /// gets compared.
+        /// A per-item quality trigger does not suppress sample 2; <see cref="Reconcile"/> compares
+        /// each paragraph on its own.
         /// </para>
         /// <para>
         /// Sample 2 is matched by paragraph id, never positionally; an unmatched item degrades to
@@ -303,8 +325,9 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// Compares two samples for a self-consistency step. A sample-2 parse/infra failure is swallowed
         /// (keep sample 1, no escalation from this check — the check must never worsen results).
-        /// Agreement (segment-by-segment, per <see cref="SegmentEscalation.AnswersAgree"/>) → sample 1
-        /// unchanged. Disagreement → sample 1 carried with an <c>Inconsistent</c> trigger so it escalates.
+        /// Agreement (index by index, per <see cref="ItemAttributionEscalation.AnswersAgree"/>) →
+        /// sample 1 unchanged. Disagreement → sample 1 carried with an <c>Inconsistent</c> trigger so
+        /// it escalates.
         /// </summary>
         private static StepOutcome Reconcile(
             StepOutcome sample1, StepOutcome sample2, IReadOnlyList<Data.Entities.Character> characters,
@@ -313,11 +336,11 @@ namespace Read2Me.Services.Characters
             if (sample2.Trigger == EscalationTrigger.ParseFailure || sample2.Outcome.Status.IsInfraFailure())
                 return sample1;
 
-            // An answer with no segments (empty paragraph) has nothing to compare.
-            if (sample1.Outcome.Segments is not { } a || sample2.Outcome.Segments is not { } b)
+            // An answer that never happened (empty paragraph) has nothing to compare.
+            if (sample1.Outcome.Answer is not { } a || sample2.Outcome.Answer is not { } b)
                 return sample1;
 
-            return SegmentEscalation.AnswersAgree(a, b, characters, narrator)
+            return ItemAttributionEscalation.AnswersAgree(a, b, characters, narrator)
                 ? sample1
                 : sample1 with { Trigger = EscalationTrigger.Inconsistent };
         }
@@ -367,9 +390,8 @@ namespace Read2Me.Services.Characters
                     var provenance = AnswerProvenance.From(opts.Config, run.Raw);
                     for (var i = 0; i < req.Included.Count; i++)
                         steps[req.Included[i].ParagraphId] = Classify(
-                            req.Included[i].ParagraphId, req.QueryTexts[i], parsed[i].Segments,
-                            req.Characters, req.Narrator, provenance, parsed[i].Reasoning,
-                            req.PriorSegments[i]);
+                            req.Included[i].ParagraphId, req.QueryItems[i], parsed[i].Items,
+                            req.Characters, req.Narrator, provenance, parsed[i].Reasoning);
                 }
             }
 
@@ -389,7 +411,7 @@ namespace Read2Me.Services.Characters
         /// caller should classify it.
         /// </summary>
         private StepOutcome? RouteRunOutcome(
-            LlmRunResult<IReadOnlyDictionary<int, SegmentAttributionResult>> run, int count, ChainStepOptions opts)
+            LlmRunResult<IReadOnlyDictionary<int, ItemAttributionResult>> run, int count, ChainStepOptions opts)
         {
             switch (run.Outcome)
             {
@@ -432,78 +454,48 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
-        /// Validates one paragraph's answer against the text it was asked about and classifies it:
-        /// fidelity/alignment failure → <see cref="EscalationTrigger.ParseFailure"/>; otherwise the
-        /// segments are re-sliced from the original text and the answer carries the trigger derived
-        /// from its speakers. Status is <see cref="AttributionStatus.Unknown"/> when a dialog segment
-        /// is unattributed (the answer still applies — its known segments stamp), else Resolved.
-        /// <paramref name="reasoning"/> is the model's own one-sentence account of why it split and
-        /// attributed the way it did. It is logged, never stored or acted on: a confident-but-wrong
-        /// attribution is otherwise untraceable, because the raw answer is only logged when parsing
-        /// or alignment fails, and the reasoning exists nowhere else once the answer is classified.
-        /// <paramref name="priorSegments"/> is the paragraph's split as it stood before this answer;
-        /// it is the only evidence that the answer dropped the paragraph's dialog
-        /// (<see cref="SegmentEscalation.LosesDialog"/>), and it costs nothing — the context reader
-        /// already loads it for every paragraph, target or not, and only the prompt builders drop it.
+        /// Classifies one paragraph's answer against the items it was asked about. There is no
+        /// fidelity check left to make: the answer names existing items by index and carries no text,
+        /// so it cannot drift from the paragraph — an index nothing matches is simply dropped on
+        /// apply. The trigger is derived from the answered speakers, and the status is
+        /// <see cref="AttributionStatus.Unknown"/> when the answer leaves a dialog item unstamped —
+        /// unanswered included — else Resolved. The answer still applies either way: the items it
+        /// does name stamp, and the rest stay queue-eligible.
+        /// <paramref name="reasoning"/> is the model's own one-sentence account of why it attributed
+        /// the way it did. It is logged, never stored or acted on: a confident-but-wrong attribution
+        /// is otherwise untraceable, because the raw answer is only logged when parsing fails and the
+        /// reasoning exists nowhere else once the answer is classified.
         /// </summary>
+        /// <param name="items">
+        /// The paragraph's items as the prompt numbered them, so index <c>i</c> of this list is the
+        /// item the answer's index <c>i</c> names.
+        /// </param>
         private StepOutcome Classify(
-            Guid paragraphId, string originalText, IReadOnlyList<AttributionSegment> segments,
+            Guid paragraphId, IReadOnlyList<ContextItem> items, IReadOnlyList<AttributedItem> answer,
             IReadOnlyList<Data.Entities.Character> characters, NarratorIdentity narrator,
-            AnswerProvenance provenance, string? reasoning, IReadOnlyList<ContextItem>? priorSegments)
+            AnswerProvenance provenance, string? reasoning)
         {
-            if (!SegmentAligner.TryAlign(originalText, segments, out var aligned))
-            {
-                // The raw answer and the exact text it was asked about are logged together because
-                // nothing else persists them: the runner abandons the stream once the JSON scanner
-                // completes, so the client's own response log never runs for a structured attribution
-                // run. Without this pair a misalignment is unreadable after the fact — you cannot tell
-                // a near-miss transcription drift from an answer about the wrong paragraph. Matches
-                // the parse-failure site above, which already logs the raw.
-                logger.LogWarning(
-                    "Segment texts do not reconstruct paragraph {ParagraphId} — treating as a parse failure. "
-                    + "Config {ConfigName} (model {Model}), {SegmentCount} segment(s). Reasoning: {Reasoning} "
-                    + "Paragraph: {Original} Answer: {Raw}",
-                    paragraphId, provenance.ConfigName, provenance.Model, segments.Count,
-                    reasoning, originalText, provenance.Raw);
-                return ParseFailure("Segment texts did not match the paragraph text.");
-            }
-
-            var trigger = SegmentEscalation.DeriveTrigger(aligned, characters, narrator);
-            var status = SegmentEscalation.HasUnknownSpeaker(aligned, narrator)
+            var trigger = ItemAttributionEscalation.DeriveTrigger(answer, items, characters, narrator);
+            var status = ItemAttributionEscalation.HasUnknownSpeaker(answer, items, narrator)
                 ? AttributionStatus.Unknown
                 : AttributionStatus.Resolved;
-
-            if (SegmentEscalation.LosesDialog(priorSegments, aligned))
-            {
-                // Logged at warning, unlike the ordinary classification line below: this answer
-                // would otherwise pass as confident and fully resolved, and applying it destroys
-                // the Character item it dropped. Rare enough in practice to be worth one line each.
-                logger.LogWarning(
-                    "Paragraph {ParagraphId} answer folded all dialog into narration — escalating. "
-                    + "Config {ConfigName} (model {Model}). Reasoning: {Reasoning} Paragraph: {Original}",
-                    paragraphId, provenance.ConfigName, provenance.Model, reasoning, originalText);
-                trigger = EscalationTrigger.DialogLost;
-            }
 
             // Speakers and reasoning together: the pair is what makes a wrong-but-confident answer
             // readable after the fact — the names it chose, and the account it gave for choosing them.
             logger.LogInformation(
-                "LLM segmented paragraph {ParagraphId} into {Count} segment(s), status {Status}, trigger {Trigger}, "
-                + "config {ConfigName} (model {Model}). Dialog speakers: {Speakers}. Reasoning: {Reasoning}",
-                paragraphId, aligned.Count, status, trigger, provenance.ConfigName, provenance.Model,
-                DialogSpeakers(aligned), reasoning);
+                "LLM attributed {Count} of paragraph {ParagraphId}'s {ItemCount} item(s), status {Status}, "
+                + "trigger {Trigger}, config {ConfigName} (model {Model}). Speakers: {Speakers}. "
+                + "Reasoning: {Reasoning}",
+                answer.Count, paragraphId, items.Count, status, trigger, provenance.ConfigName,
+                provenance.Model, AnsweredSpeakers(answer), reasoning);
 
-            return new StepOutcome(new AttributionOutcome(status, aligned, null), trigger);
+            return new StepOutcome(
+                new AttributionOutcome(status, AttributionAnswer.For(answer, items), null), trigger);
         }
 
-        /// <summary>
-        /// The answer's dialog speakers in segment order, for the log line. Narration is dropped —
-        /// it is always "narrator" and would bury the names that matter.
-        /// </summary>
-        private static string DialogSpeakers(IReadOnlyList<AttributionSegment> segments) =>
-            string.Join(", ", segments
-                .Where(s => s.Type == AttributionSegmentType.Dialog)
-                .Select(s => s.Speaker));
+        /// <summary>The answer's speakers, index-tagged, for the log line.</summary>
+        private static string AnsweredSpeakers(IReadOnlyList<AttributedItem> answer) =>
+            string.Join(", ", answer.Select(a => $"{a.Index}={a.Speaker}"));
 
         private static StepOutcome ParseFailure(string? error) =>
             new(new AttributionOutcome(AttributionStatus.Failed, null, error), EscalationTrigger.ParseFailure);

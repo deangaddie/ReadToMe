@@ -165,17 +165,17 @@ namespace Read2Me.Tests.Services.Characters
             Assert.NotNull(result.Request);
             Assert.Equal("Preview", result.Request!.Label);
             Assert.Equal(CompletionShape.Object, result.Request.Shape);
-            Assert.Equal(SegmentAttributionSchema.JsonSchema, result.Request.JsonSchema);
+            Assert.Equal(ItemAttributionSchema.JsonSchema, result.Request.JsonSchema);
             Assert.Equal(p, Assert.Single(result.Included));
-            Assert.Equal("Hello world", Assert.Single(result.QueryTexts));
+            Assert.Equal("Hello world", Assert.Single(Assert.Single(result.QueryItems)).Text);
             Assert.Empty(result.Unaskable);
             Assert.Empty(result.Deferred);
 
             // The parser wraps the single answer into the batch-shaped index→result map.
             Assert.True(result.Parser!(
-                """{ "reasoning": "r", "segments": [ { "text": "Hello world", "type": "dialog", "speaker": "Alice", "voice_instructions": "" } ] }""",
+                """{ "reasoning": "r", "items": [ { "index": 0, "speaker": "Alice", "voice_instructions": "" } ] }""",
                 out var parsed, out _));
-            Assert.Equal("Hello world", Assert.Single(parsed![0].Segments).Text);
+            Assert.Equal("Alice", Assert.Single(parsed![0].Items).Speaker);
         }
 
         [Fact]
@@ -191,9 +191,10 @@ namespace Read2Me.Tests.Services.Characters
             Assert.NotNull(result.Request);
             Assert.Equal("3 paragraphs: P0", result.Request!.Label);
             Assert.Equal(CompletionShape.Array, result.Request.Shape);
-            Assert.Equal(SegmentBatchAttributionSchema.JsonSchema, result.Request.JsonSchema);
+            Assert.Equal(ItemBatchAttributionSchema.JsonSchema, result.Request.JsonSchema);
             Assert.Equal(3, result.Included.Count);
-            Assert.Equal(["Text 0", "Text 1", "Text 2"], result.QueryTexts);
+            Assert.Equal(["Text 0", "Text 1", "Text 2"],
+                result.QueryItems.Select(items => Assert.Single(items).Text));
         }
 
         [Theory]
@@ -340,16 +341,16 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("Hello world", items[0].GetProperty("text").GetString());
             Assert.Contains("She spoke.", prompt);
             Assert.Contains("narrator", prompt);
-            // Prior items travel back for the target, index-aligned with Included.
-            Assert.Equal("Hello world", Assert.Single(Assert.Single(result.PriorSegments)!).Text);
+            // The target's items travel back, index-aligned with Included.
+            Assert.Equal("Hello world", Assert.Single(Assert.Single(result.QueryItems)).Text);
         }
 
         // ---------------------------------------------------------------
-        // Query item ids: the index→id map the apply stamps by (spec §1)
+        // Query items: the index→item map the apply stamps by (spec §1)
         // ---------------------------------------------------------------
 
         [Fact]
-        public async Task QueryItemIds_RecordEveryItemInPromptOrder_NarrationIncluded()
+        public async Task QueryItems_RecordEveryItemInPromptOrder_NarrationIncluded()
         {
             var target = Para("target");
             var dialogId = Guid.NewGuid();
@@ -365,7 +366,8 @@ namespace Read2Me.Tests.Services.Characters
             var result = await NewBuilder(reader).Build([target], Opts(Config()));
 
             // Position i of the recorded list is the item the prompt numbered i.
-            Assert.Equal([dialogId, narrationId], Assert.Single(result.QueryItemIds));
+            Assert.Equal([dialogId, narrationId],
+                Assert.Single(result.QueryItems).Select(i => i.ItemId));
 
             var items = ContextJson(result.Request!.Prompt).GetProperty("query").GetProperty("items");
             Assert.Equal([0, 1], items.EnumerateArray().Select(i => i.GetProperty("index").GetInt32()));
@@ -374,7 +376,7 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task QueryItemIds_AlignWithIncluded_AcrossABatch_SkippingUnaskable()
+        public async Task QueryItems_AlignWithIncluded_AcrossABatch_SkippingUnaskable()
         {
             var kept0 = Para("kept0");
             var blank = Para("blank");
@@ -397,7 +399,8 @@ namespace Read2Me.Tests.Services.Characters
             // carries a slot for a paragraph that was not asked about.
             Assert.Equal([kept0, kept1], result.Included);
             Assert.Equal(blank, Assert.Single(result.Unaskable));
-            Assert.Equal([[id0], [id1]], result.QueryItemIds);
+            Assert.Equal([[id0], [id1]],
+                result.QueryItems.Select(items => items.Select(i => i.ItemId)));
         }
 
         /// <summary>

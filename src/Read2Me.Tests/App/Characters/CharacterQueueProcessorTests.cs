@@ -58,20 +58,35 @@ namespace Read2Me.Tests.App.Characters
         }
 
         // ── Outcome builders ──────────────────────────────────────────────────
+        //
+        // An answer names the paragraph's existing items by index; the outcome also carries the
+        // index→id map recorded at ask time, with null where the index is a narration item nothing
+        // may stamp. These fixtures keep the two halves side by side, since the apply is exactly
+        // their join.
 
-        private static AttributionSegment Dialog(string speaker, string text = "\"Hello.\"", string voice = "") =>
-            new(text, AttributionSegmentType.Dialog, speaker, voice);
+        private static AttributedItem Says(int index, string speaker, string? voice = "") =>
+            new(index, speaker, voice);
 
-        private static AttributionSegment Narration(string text = "she said.") =>
-            new(text, AttributionSegmentType.Narration, "narrator", string.Empty);
+        /// <summary>Item ids for a paragraph of <paramref name="dialogCount"/> dialog items.</summary>
+        private static IReadOnlyList<Guid?> DialogIds(int dialogCount = 1) =>
+            [.. Enumerable.Range(0, dialogCount).Select(_ => (Guid?)Guid.NewGuid())];
 
-        /// <summary>A fully attributed answer: one dialog segment for the named speaker.</summary>
+        private static AttributionOutcome Answer(
+            AttributionStatus status, string? reason, IReadOnlyList<Guid?> itemIds,
+            params AttributedItem[] answered) =>
+            new(status, new AttributionAnswer(answered, itemIds), reason);
+
+        /// <summary>A fully attributed answer: the paragraph's one dialog item, for the named speaker.</summary>
         private static AttributionOutcome Resolved(string speaker = "Bilbo", string voice = "") =>
-            new(AttributionStatus.Resolved, [Dialog(speaker, voice: voice)], null);
+            Answer(AttributionStatus.Resolved, null, DialogIds(), Says(0, speaker, voice));
 
-        private static AttributionOutcome Segments(
-            AttributionStatus status, string? reason, params AttributionSegment[] segments) =>
-            new(status, segments, reason);
+        /// <summary>The one attribution the command carried.</summary>
+        private ItemAttribution SingleAttribution()
+        {
+            var cmd = Assert.IsType<AttributeItemsCommand>(Assert.Single(_commands.SentCommands));
+            Assert.Equal(_item.ParagraphId, cmd.ParagraphId);
+            return Assert.Single(cmd.Items);
+        }
 
         /// <summary>The one disposition applied to <paramref name="item"/>.</summary>
         private T DispositionFor<T>(QueuedParagraph item) where T : Disposition =>
@@ -80,34 +95,24 @@ namespace Read2Me.Tests.App.Characters
         // ── Apply ─────────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task Resolved_ResolvesSpeakers_AppliesSegmentation_MarksComplete()
+        public async Task Resolved_ResolvesSpeakers_StampsTheAnsweredItem_MarksComplete()
         {
             var charId = Guid.NewGuid();
-            _attribution.Outcome = Segments(AttributionStatus.Resolved, null,
-                Dialog("Bilbo", "\"Hello.\"", "Whisper"), Narration());
+            // A dialog item at index 0 and a narration item at index 1, both answered.
+            var dialogId = Guid.NewGuid();
+            _attribution.Outcome = Answer(AttributionStatus.Resolved, null, [dialogId, null],
+                Says(0, "Bilbo", "Whisper"), Says(1, "narrator"));
             _resolver.ResolvedId = charId;
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
             Assert.Equal("Bilbo", _resolver.Names.Single());
 
-            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
-            Assert.Equal(_item.ParagraphId, cmd.ParagraphId);
-            Assert.Collection(cmd.Segments,
-                s =>
-                {
-                    Assert.Equal("\"Hello.\"", s.Text);
-                    Assert.Equal(SegmentItemType.Character, s.Type);
-                    Assert.Equal(charId, s.CharacterId);
-                    Assert.Equal("Whisper", s.VoiceInstructions);
-                },
-                s =>
-                {
-                    Assert.Equal(SegmentItemType.Narration, s.Type);
-                    // Narration is stamped with the narrator by the handler, not resolved by name.
-                    Assert.Null(s.CharacterId);
-                    Assert.Null(s.VoiceInstructions);
-                });
+            // Only the dialog item is stamped: the narration index has no id behind it and is dropped.
+            var attribution = SingleAttribution();
+            Assert.Equal(dialogId, attribution.ItemId);
+            Assert.Equal(charId, attribution.CharacterId);
+            Assert.Equal("Whisper", attribution.VoiceInstructions);
 
             DispositionFor<Disposition.Complete>(_item);
         }
@@ -115,36 +120,53 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task UnknownSpeaker_AppliesWithNullStamp_AndMarksUnfinished_WhenItemsStayUnattributed()
         {
-            _attribution.Outcome = Segments(AttributionStatus.Unknown, "still unknown",
-                Dialog("unknown"), Narration());
+            _attribution.Outcome = Answer(
+                AttributionStatus.Unknown, "still unknown", DialogIds(), Says(0, "unknown"));
             _reader.Unattributed = 1;
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
             // The answer still applies — an unknown speaker resolves to no character, never a new one.
             Assert.Empty(_resolver.Names);
-            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
-            Assert.Null(cmd.Segments[0].CharacterId);
+            Assert.Null(SingleAttribution().CharacterId);
 
             Assert.Equal("still unknown", DispositionFor<Disposition.Unfinished>(_item).Reason);
         }
 
         [Fact]
-        public async Task PartialAnswer_StampsKnownSegments_AndStaysUnfinished()
+        public async Task PartialAnswer_StampsTheNamedItems_AndStaysUnfinished()
         {
             var charId = Guid.NewGuid();
             _resolver.ResolvedId = charId;
-            _attribution.Outcome = Segments(AttributionStatus.Unknown, null,
-                Dialog("Bilbo", "\"Hello.\""), Dialog("unknown", "\"Who's there?\""));
+            var ids = DialogIds(2);
+            // Index 1 is a dialog item the answer never mentions: nothing to stamp for it at all.
+            _attribution.Outcome = Answer(AttributionStatus.Unknown, null, ids, Says(0, "Bilbo"));
             _reader.Unattributed = 1;
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
-            Assert.Equal(charId, cmd.Segments[0].CharacterId);
-            Assert.Null(cmd.Segments[1].CharacterId);
+            var attribution = SingleAttribution();
+            Assert.Equal(ids[0], attribution.ItemId);
+            Assert.Equal(charId, attribution.CharacterId);
 
             DispositionFor<Disposition.Unfinished>(_item);
+        }
+
+        /// <summary>
+        /// An index the ask never recorded an id for — the model invented it, or the paragraph has
+        /// fewer items than it thinks — stamps nothing rather than landing on a neighbouring item.
+        /// </summary>
+        [Fact]
+        public async Task IndexWithNoItemBehindIt_IsDropped()
+        {
+            var ids = DialogIds();
+            _resolver.ResolvedId = Guid.NewGuid();
+            _attribution.Outcome = Answer(AttributionStatus.Resolved, null, ids,
+                Says(0, "Bilbo"), Says(7, "Frodo"), Says(-1, "Sam"));
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            Assert.Equal(ids[0], SingleAttribution().ItemId);
         }
 
         /// <summary>
@@ -155,7 +177,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task UnknownAnswer_ButEveryItemStamped_CompletesWithoutOutcome()
         {
-            _attribution.Outcome = Segments(AttributionStatus.Unknown, null, Dialog("unknown"));
+            _attribution.Outcome = Answer(AttributionStatus.Unknown, null, DialogIds(), Says(0, "unknown"));
             _reader.Unattributed = 0;
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
@@ -164,13 +186,13 @@ namespace Read2Me.Tests.App.Characters
         }
 
         /// <summary>
-        /// The orchestration half: a segment-less answer never reaches the apply, and the processor
+        /// The orchestration half: an answer-less outcome never reaches the apply, and the processor
         /// stamps its own elapsed figure on the way past — phase 1 cannot know it, because one
         /// stopwatch spans a whole drained batch here rather than the store measuring per item.
         /// That it settles unfinished at all is the policy table's row in <c>QueueDispositionTests</c>.
         /// </summary>
         [Fact]
-        public async Task EmptyParagraph_NoSegments_MarksUnfinished_WithoutApplying()
+        public async Task EmptyParagraph_NoAnswer_MarksUnfinished_WithoutApplying()
         {
             _attribution.Outcome = new AttributionOutcome(AttributionStatus.Unknown, null, null);
 
@@ -193,7 +215,7 @@ namespace Read2Me.Tests.App.Characters
             Assert.Empty(_queue.Applied);
         }
 
-        // ── The narrator token on a dialog segment ────────────────────────────
+        // ── The narrator token on a dialog item ───────────────────────────────
 
         /// <summary>
         /// Linked, "narrator" is a wire alias of the linked character: it stamps that character, and
@@ -204,12 +226,11 @@ namespace Read2Me.Tests.App.Characters
         {
             var watson = Guid.NewGuid();
             _catalog.Narrator = new NarratorIdentity(watson, "Dr. Watson", true);
-            _attribution.Outcome = Segments(AttributionStatus.Resolved, null, Dialog("narrator"));
+            _attribution.Outcome = Answer(AttributionStatus.Resolved, null, DialogIds(), Says(0, "narrator"));
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
-            Assert.Equal(watson, cmd.Segments[0].CharacterId);
+            Assert.Equal(watson, SingleAttribution().CharacterId);
             Assert.Empty(_resolver.Names);
         }
 
@@ -221,13 +242,12 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task NarratorOnDialog_Unlinked_StampsNobody()
         {
-            _attribution.Outcome = Segments(AttributionStatus.Resolved, null, Dialog("narrator"));
+            _attribution.Outcome = Answer(AttributionStatus.Resolved, null, DialogIds(), Says(0, "narrator"));
             _reader.Unattributed = 1;
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
-            Assert.Null(cmd.Segments[0].CharacterId);
+            Assert.Null(SingleAttribution().CharacterId);
             Assert.Empty(_resolver.Names);
             DispositionFor<Disposition.Unfinished>(_item);
         }
@@ -244,11 +264,10 @@ namespace Read2Me.Tests.App.Characters
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
             Assert.Equal("Bilbo", _resolver.Names.Single());
-            var cmd = Assert.IsType<ApplySegmentationCommand>(Assert.Single(_commands.SentCommands));
-            Assert.Equal(charId, cmd.Segments[0].CharacterId);
+            Assert.Equal(charId, SingleAttribution().CharacterId);
         }
 
-        /// <summary>One read per folder per drained batch — never per segment, never per paragraph.</summary>
+        /// <summary>One read per folder per drained batch — never per item, never per paragraph.</summary>
         [Fact]
         public async Task NarratorLink_IsReadOncePerFolderPerDrainedBatch()
         {
@@ -256,8 +275,8 @@ namespace Read2Me.Tests.App.Characters
             var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
             _queue.Enqueue(items);
             _resolver.ResolvedId = Guid.NewGuid();
-            _attribution.Outcome = Segments(AttributionStatus.Resolved, null,
-                Dialog("Bilbo"), Narration(), Dialog("Frodo"));
+            _attribution.Outcome = Answer(AttributionStatus.Resolved, null, DialogIds(2),
+                Says(0, "Bilbo"), Says(1, "Frodo"));
 
             await _sut.ProcessItemAsync(items[0], CancellationToken.None);
 
@@ -341,7 +360,7 @@ namespace Read2Me.Tests.App.Characters
 
             // Commands applied in stream order.
             Assert.Equal(2, _commands.SentCommands.Count);
-            var cmd0 = Assert.IsType<ApplySegmentationCommand>(_commands.SentCommands[0]);
+            var cmd0 = Assert.IsType<AttributeItemsCommand>(_commands.SentCommands[0]);
             Assert.Equal(early.ParagraphId, cmd0.ParagraphId);
         }
 

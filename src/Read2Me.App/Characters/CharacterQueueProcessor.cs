@@ -24,7 +24,7 @@ namespace Read2Me.App.Characters
     {
         public async Task ProcessItemAsync(QueuedParagraph item, CancellationToken hostCt)
         {
-            // One narrator read per drained batch, per folder — never per segment. A drain spans
+            // One narrator read per drained batch, per folder — never per item. A drain spans
             // folders, so the cache is keyed by folder; it lives no longer than this batch, so a
             // link changed mid-book is picked up by the next one.
             var narrators = new NarratorCache(catalog);
@@ -100,8 +100,10 @@ namespace Read2Me.App.Characters
         {
             // The queue decides from provider behaviour, not from the answer's quality: an Ok answer
             // that left a speaker unidentified is still an answer, and whether the paragraph is
-            // finished is settled after the apply, from the items. See WorkOutcome.
-            var plan = QueueDisposition.Decide(outcome.Work, outcome.Segments is not null, item.Attempts);
+            // finished is settled after the apply, from the items. See WorkOutcome. The second
+            // argument is "the rung produced an answer", not "the answer stamped something" — an
+            // answer that named no item is still an answer, and its trigger decides escalation.
+            var plan = QueueDisposition.Decide(outcome.Work, outcome.Answer is not null, item.Attempts);
 
             var disposition = plan switch
             {
@@ -128,7 +130,7 @@ namespace Read2Me.App.Characters
             QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds,
             NarratorCache narrators, CancellationToken ct)
         {
-            await ApplySegmentsAsync(item, outcome.Segments!, narrators, ct);
+            await ApplyAttributionsAsync(item, outcome.Answer!, narrators, ct);
 
             var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
             if (unattributed > 0)
@@ -170,7 +172,7 @@ namespace Read2Me.App.Characters
         }
 
         /// <summary>
-        /// The one settling disposition phase 1 can reach: an answer with no segments to apply, so
+        /// The one settling disposition phase 1 can reach: an answer with nothing to apply, so
         /// nothing was attributed. Phase 1 cannot know this queue's elapsed figure — one stopwatch
         /// spans a whole drained batch here, rather than the store measuring from
         /// <c>MarkProcessing</c> — so the queue stamps it on the way past.
@@ -183,33 +185,45 @@ namespace Read2Me.App.Characters
         }
 
         /// <summary>
-        /// Resolves each segment's speaker to a character id, then applies the whole list in one
-        /// command. Resolution happens here, not in the handler: an unlisted name that survived the
-        /// escalation chain is the chain's final answer, so it earns a new Character.
+        /// Turns the answer into one stamping command: each answered index becomes the item id it
+        /// was recorded against at ask time, with its speaker resolved to a character id. Resolution
+        /// happens here, not in the handler: an unlisted name that survived the escalation chain is
+        /// the chain's final answer, so it earns a new Character.
+        /// <para>
+        /// An index with no id behind it — out of range, or naming a narration item, which nothing
+        /// may stamp — is dropped without comment. Both mean the model answered about something that
+        /// is not an attributable item, which the answer's own trigger has already accounted for.
+        /// </para>
         /// </summary>
-        private async Task ApplySegmentsAsync(
-            QueuedParagraph item, IReadOnlyList<AttributionSegment> segments,
-            NarratorCache narrators, CancellationToken ct)
+        private async Task ApplyAttributionsAsync(
+            QueuedParagraph item, AttributionAnswer answer, NarratorCache narrators, CancellationToken ct)
         {
+            // The map is the answer's own, recorded when its prompt was built — never re-resolved
+            // positionally here, since the queue is asynchronous and the user may have edited the
+            // paragraph since the ask (spec §1).
+            var itemIds = answer.ItemIds;
             var narrator = await narrators.GetAsync(item.Folder, ct);
-            var specs = new List<SegmentSpec>(segments.Count);
-            foreach (var segment in segments)
+            var attributions = new List<ItemAttribution>(answer.Items.Count);
+            foreach (var attributed in answer.Items)
             {
-                var isNarration = segment.Type == AttributionSegmentType.Narration;
-                specs.Add(new SegmentSpec(
-                    segment.Text,
-                    isNarration ? SegmentItemType.Narration : SegmentItemType.Character,
-                    isNarration ? null : await ResolveSpeakerAsync(item.Folder, segment.Speaker, narrator, ct),
-                    string.IsNullOrWhiteSpace(segment.VoiceInstructions) ? null : segment.VoiceInstructions));
+                if (attributed.Index < 0 || attributed.Index >= itemIds.Count) continue;
+                if (itemIds[attributed.Index] is not { } itemId) continue;
+
+                attributions.Add(new ItemAttribution(
+                    itemId,
+                    await ResolveSpeakerAsync(item.Folder, attributed.Speaker, narrator, ct),
+                    string.IsNullOrWhiteSpace(attributed.VoiceInstructions)
+                        ? null
+                        : attributed.VoiceInstructions));
             }
 
             await commands.ExecuteAsync(
-                new ApplySegmentationCommand(item.Folder, item.ParagraphId, specs), ct);
+                new AttributeItemsCommand(item.Folder, item.ParagraphId, attributions), ct);
         }
 
         /// <summary>
-        /// The one name→id chokepoint in the segment path. Unknown speaker → null (nobody to stamp).
-        /// The narrator token on a dialog segment is a wire alias of the linked character, so it
+        /// The one name→id chokepoint in the attribution path. Unknown speaker → null (nobody to
+        /// stamp). The narrator token on a dialog item is a wire alias of the linked character, so it
         /// stamps that character; unlinked it stamps <b>nobody</b>, rather than crediting a spoken
         /// line to the seed Narrator row — which by definition is not in the scene, and whose stamp
         /// would make the item look attributed and hide it from the re-queue filter forever. Any
@@ -234,7 +248,7 @@ namespace Read2Me.App.Characters
 
         /// <summary>
         /// The drained batch's narrator links, one read per folder. A drain spans folders, so a single
-        /// value would be wrong; a cache per batch keeps the read off the per-segment path without
+        /// value would be wrong; a cache per batch keeps the read off the per-item path without
         /// outliving the work it was loaded for.
         /// </summary>
         private sealed class NarratorCache(IProjectCatalogReader catalog)
