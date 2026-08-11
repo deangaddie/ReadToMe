@@ -449,7 +449,7 @@ namespace Read2Me.Services.Characters
         private StepOutcome Classify(
             Guid paragraphId, string originalText, IReadOnlyList<AttributionSegment> segments,
             IReadOnlyList<Data.Entities.Character> characters, NarratorIdentity narrator,
-            AnswerProvenance provenance, string? reasoning, IReadOnlyList<ContextSegment>? priorSegments)
+            AnswerProvenance provenance, string? reasoning, IReadOnlyList<ContextItem>? priorSegments)
         {
             if (!SegmentAligner.TryAlign(originalText, segments, out var aligned))
             {

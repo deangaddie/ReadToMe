@@ -171,6 +171,10 @@ namespace Read2Me.Tests.Services
             Assert.Equal(4, PromptTemplates.DefaultContextParagraphsAfter);
         }
 
+        /// <summary>An item with a throwaway id — ids never reach the JSON, only the caller's map.</summary>
+        private static ContextItem Item(string text, string type, string speaker) =>
+            new(Guid.NewGuid(), text, type, speaker);
+
         [Fact]
         public void BuildContextJson_ContextParagraphs_EmitSegmentsWithSpeakers()
         {
@@ -178,8 +182,8 @@ namespace Read2Me.Tests.Services
                 new ContextParagraph("Who said this?", []),
                 [new ContextParagraph("\"Hello.\" she said.",
                 [
-                    new ContextSegment("\"Hello.\"", "dialog", "Bob"),
-                    new ContextSegment("she said.", "narration", "narrator"),
+                    Item("\"Hello.\"", "dialog", "Bob"),
+                    Item("she said.", "narration", "narrator"),
                 ])],
                 []);
 
@@ -200,7 +204,7 @@ namespace Read2Me.Tests.Services
             var ctx = new ParagraphContext(
                 new ContextParagraph("Who said this?", []),
                 [new ContextParagraph("\"Something\"",
-                    [new ContextSegment("\"Something\"", "dialog", "unknown")])],
+                    [Item("\"Something\"", "dialog", "unknown")])],
                 []);
 
             var json = PromptTemplates.BuildContextJson(ctx);
@@ -211,21 +215,36 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void BuildContextJson_QueryIsRawTextOnly_NoSegments()
+        public void BuildContextJson_QueryIsIndexedItems_NarrationIncluded_NoSpeakers()
         {
             var ctx = new ParagraphContext(
-                // The query's current split is never fed back — it may be exactly what is wrong.
-                new ContextParagraph("Target.", [new ContextSegment("Target.", "dialog", "unknown")]),
+                // The split is frozen: the query paragraph is asked as its own items, narration
+                // included so the attribution tag stays visible.
+                new ContextParagraph("\"Go.\" she said.",
+                [
+                    Item("\"Go.\"", "dialog", "unknown"),
+                    Item("she said.", "narration", "narrator"),
+                ]),
                 [],
-                [new ContextParagraph("After.", [new ContextSegment("After.", "narration", "narrator")])]);
+                [new ContextParagraph("After.", [Item("After.", "narration", "narrator")])]);
 
             var json = PromptTemplates.BuildContextJson(ctx);
             var doc = JsonDocument.Parse(json);
 
             var query = doc.RootElement.GetProperty("query");
             Assert.Equal(JsonValueKind.Object, query.ValueKind);
-            Assert.Equal("Target.", query.GetProperty("text").GetString());
+            Assert.False(query.TryGetProperty("text", out _));
             Assert.False(query.TryGetProperty("segments", out _));
+
+            var items = query.GetProperty("items");
+            Assert.Equal(2, items.GetArrayLength());
+            Assert.Equal([0, 1], items.EnumerateArray().Select(i => i.GetProperty("index").GetInt32()));
+            Assert.Equal("dialog", items[0].GetProperty("type").GetString());
+            Assert.Equal("\"Go.\"", items[0].GetProperty("text").GetString());
+            Assert.Equal("narration", items[1].GetProperty("type").GetString());
+            Assert.Equal("she said.", items[1].GetProperty("text").GetString());
+            // No speaker on the query: that is the thing being asked for.
+            Assert.False(items[0].TryGetProperty("speaker", out _));
 
             var following = doc.RootElement.GetProperty("following")[0];
             Assert.Equal("narrator", following.GetProperty("segments")[0].GetProperty("speaker").GetString());
@@ -244,17 +263,21 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void BuildBatchContextJson_TargetsGetIndexAndRawText_ContextGetsSegments()
+        public void BuildBatchContextJson_TargetsGetIndexAndItems_ContextGetsSegments()
         {
             var ctx = new ParagraphBatchContext(
                 [
                     new BatchContextEntry("Before.",
-                        [new ContextSegment("Before.", "narration", "narrator")], null),
-                    new BatchContextEntry("\"First target.\"",
-                        [new ContextSegment("\"First target.\"", "dialog", "unknown")], 0),
+                        [Item("Before.", "narration", "narrator")], null),
+                    new BatchContextEntry("\"First target.\" he said.",
+                    [
+                        Item("\"First target.\"", "dialog", "unknown"),
+                        Item("he said.", "narration", "narrator"),
+                    ], 0),
                     new BatchContextEntry("\"Known line.\"",
-                        [new ContextSegment("\"Known line.\"", "dialog", "Alice")], null),
-                    new BatchContextEntry("\"Second target.\"", [], 1),
+                        [Item("\"Known line.\"", "dialog", "Alice")], null),
+                    new BatchContextEntry("\"Second target.\"",
+                        [Item("\"Second target.\"", "dialog", "unknown")], 1),
                 ],
                 [Guid.NewGuid(), Guid.NewGuid()],
                 []);
@@ -267,14 +290,22 @@ namespace Read2Me.Tests.Services
 
             Assert.Equal("narrator", paragraphs[0].GetProperty("segments")[0].GetProperty("speaker").GetString());
             Assert.False(paragraphs[0].TryGetProperty("index", out _));
-            Assert.False(paragraphs[0].TryGetProperty("text", out _));
+            Assert.False(paragraphs[0].TryGetProperty("items", out _));
 
+            // A target: paragraph "index", then its own items numbered 0..n-1, narration included.
             Assert.Equal(0, paragraphs[1].GetProperty("index").GetInt32());
-            Assert.Equal("\"First target.\"", paragraphs[1].GetProperty("text").GetString());
             Assert.False(paragraphs[1].TryGetProperty("segments", out _));
+            Assert.False(paragraphs[1].TryGetProperty("text", out _));
+            var items = paragraphs[1].GetProperty("items");
+            Assert.Equal([0, 1], items.EnumerateArray().Select(i => i.GetProperty("index").GetInt32()));
+            Assert.Equal("\"First target.\"", items[0].GetProperty("text").GetString());
+            Assert.Equal("narration", items[1].GetProperty("type").GetString());
+            Assert.False(items[0].TryGetProperty("speaker", out _));
 
+            // Item indices restart per target paragraph — they are local to the paragraph answered.
             Assert.Equal("Alice", paragraphs[2].GetProperty("segments")[0].GetProperty("speaker").GetString());
             Assert.Equal(1, paragraphs[3].GetProperty("index").GetInt32());
+            Assert.Equal(0, paragraphs[3].GetProperty("items")[0].GetProperty("index").GetInt32());
         }
 
         [Fact]

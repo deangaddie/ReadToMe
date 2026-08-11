@@ -96,12 +96,24 @@ namespace Read2Me.Tests.Services.Characters
                 Task.FromResult(Narrator);
         }
 
-        /// <summary>A context whose leading run is exactly <paramref name="targets"/>, no context neighbours.</summary>
+        /// <summary>
+        /// A context whose leading run is exactly <paramref name="targets"/>, no context neighbours.
+        /// Each target is one unattributed dialog item holding the whole paragraph text — the
+        /// simplest shape the frozen-split prompt can ask about.
+        /// </summary>
         private static ParagraphBatchContext Ctx(params (QueuedParagraph Item, string Text)[] targets)
         {
-            var entries = targets.Select((t, i) => new BatchContextEntry(t.Text, [], i)).ToList();
+            var entries = targets
+                .Select((t, i) => new BatchContextEntry(t.Text, [Dialog(t.Text)], i))
+                .ToList();
             return new ParagraphBatchContext(entries, [.. targets.Select(t => t.Item.ParagraphId)], []);
         }
+
+        private static ContextItem Dialog(string text, Guid? id = null) =>
+            new(id ?? Guid.NewGuid(), text, AttributionWire.Dialog, AttributionWire.Unknown);
+
+        private static ContextItem Narration(string text, Guid? id = null) =>
+            new(id ?? Guid.NewGuid(), text, AttributionWire.Narration, AttributionWire.Narrator);
 
         private AttributionRequestBuilder NewBuilder(IProjectReader reader, LlmPromptService? prompts = null) =>
             new(prompts ?? NewPrompts(), reader);
@@ -307,27 +319,97 @@ namespace Read2Me.Tests.Services.Characters
         // ---------------------------------------------------------------
 
         [Fact]
-        public async Task SingleContextAdapter_QueryIsRaw_NeighboursAreSegments()
+        public async Task SingleContextAdapter_QueryIsIndexedItems_NeighboursAreSegments()
         {
             var target = Para("target");
             // A flat span: one preceding context paragraph, then the lone target.
             var entries = new List<BatchContextEntry>
             {
-                new("She spoke.", [new ContextSegment("She spoke.", "narration", "narrator")], null),
-                new("Hello world", [], 0),
+                new("She spoke.", [Narration("She spoke.")], null),
+                new("Hello world", [Dialog("Hello world")], 0),
             };
             var ctx = new ParagraphBatchContext(entries, [target.ParagraphId], []);
             var reader = new BatchReaderFake([ctx], project: Project());
 
             var result = await NewBuilder(reader).Build([target], Opts(Config()));
 
-            // The single prompt shows the target as raw query text and the neighbour as a segment.
+            // The single prompt shows the target as its numbered items and the neighbour as segments.
             var prompt = result.Request!.Prompt;
-            Assert.Contains("\"text\": \"Hello world\"", prompt);
+            var items = ContextJson(prompt).GetProperty("query").GetProperty("items");
+            Assert.Equal(0, items[0].GetProperty("index").GetInt32());
+            Assert.Equal("Hello world", items[0].GetProperty("text").GetString());
             Assert.Contains("She spoke.", prompt);
             Assert.Contains("narrator", prompt);
-            // Prior segments travel back for the target, index-aligned with Included.
-            Assert.Empty(Assert.Single(result.PriorSegments)!);
+            // Prior items travel back for the target, index-aligned with Included.
+            Assert.Equal("Hello world", Assert.Single(Assert.Single(result.PriorSegments)!).Text);
+        }
+
+        // ---------------------------------------------------------------
+        // Query item ids: the index→id map the apply stamps by (spec §1)
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task QueryItemIds_RecordEveryItemInPromptOrder_NarrationIncluded()
+        {
+            var target = Para("target");
+            var dialogId = Guid.NewGuid();
+            var narrationId = Guid.NewGuid();
+            var entries = new List<BatchContextEntry>
+            {
+                new("\"Go.\" she said.",
+                    [Dialog("\"Go.\"", dialogId), Narration("she said.", narrationId)], 0),
+            };
+            var reader = new BatchReaderFake(
+                [new ParagraphBatchContext(entries, [target.ParagraphId], [])], project: Project());
+
+            var result = await NewBuilder(reader).Build([target], Opts(Config()));
+
+            // Position i of the recorded list is the item the prompt numbered i.
+            Assert.Equal([dialogId, narrationId], Assert.Single(result.QueryItemIds));
+
+            var items = ContextJson(result.Request!.Prompt).GetProperty("query").GetProperty("items");
+            Assert.Equal([0, 1], items.EnumerateArray().Select(i => i.GetProperty("index").GetInt32()));
+            Assert.Equal("\"Go.\"", items[0].GetProperty("text").GetString());
+            Assert.Equal("she said.", items[1].GetProperty("text").GetString());
+        }
+
+        [Fact]
+        public async Task QueryItemIds_AlignWithIncluded_AcrossABatch_SkippingUnaskable()
+        {
+            var kept0 = Para("kept0");
+            var blank = Para("blank");
+            var kept1 = Para("kept1");
+            var id0 = Guid.NewGuid();
+            var id1 = Guid.NewGuid();
+            var entries = new List<BatchContextEntry>
+            {
+                new("Text 0", [Dialog("Text 0", id0)], 0),
+                new("   ", [Dialog("   ")], 1),
+                new("Text 1", [Dialog("Text 1", id1)], 2),
+            };
+            var reader = new BatchReaderFake(
+                [new ParagraphBatchContext(entries, [kept0.ParagraphId, blank.ParagraphId, kept1.ParagraphId], [])],
+                project: Project());
+
+            var result = await NewBuilder(reader).Build([kept0, blank, kept1], Opts(Config()));
+
+            // The blank target is binned Unaskable, and the map renumbers with Included — it never
+            // carries a slot for a paragraph that was not asked about.
+            Assert.Equal([kept0, kept1], result.Included);
+            Assert.Equal(blank, Assert.Single(result.Unaskable));
+            Assert.Equal([[id0], [id1]], result.QueryItemIds);
+        }
+
+        /// <summary>
+        /// The context JSON object of a rendered single prompt, found by the brace opening the
+        /// object that holds "preceding". Read as a single JSON value rather than a substring, so
+        /// prose after the token (a template is free to add some) does not break these tests.
+        /// </summary>
+        private static JsonElement ContextJson(string prompt)
+        {
+            var start = prompt.LastIndexOf('{', prompt.LastIndexOf("\"preceding\"", StringComparison.Ordinal));
+            var reader = new Utf8JsonReader(System.Text.Encoding.UTF8.GetBytes(prompt[start..]));
+            return JsonDocument.ParseValue(ref reader).RootElement;
         }
 
         // ---------------------------------------------------------------

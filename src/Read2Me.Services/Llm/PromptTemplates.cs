@@ -561,37 +561,47 @@ namespace Read2Me.Services.Llm
     };
 
     /// <summary>
-    /// Context for the single-paragraph segment prompt: neighbours as their existing segments,
-    /// the query as raw text only — its current split may be wrong and must not bias the answer.
+    /// Context for the single-paragraph attribution prompt: neighbours as their existing segments,
+    /// the query as its own numbered item list — the split is frozen (ADR-0005), so the model is
+    /// asked who speaks each existing item rather than to re-split the text.
     /// </summary>
     public static string BuildContextJson(ParagraphContext ctx)
     {
       var obj = new ContextJsonDto(
           [.. ctx.Preceding.Select(ToSegmentedEntry)],
-          new QueryEntryDto(ctx.Query.Text),
+          new QueryEntryDto(ToQueryItemDtos(ctx.Query.Items)),
           [.. ctx.Following.Select(ToSegmentedEntry)]
       );
       return JsonSerializer.Serialize(obj, _jsonOptions);
     }
 
     /// <summary>
-    /// Context for the batch segment prompt: one flat "paragraphs" array in reading order.
-    /// Entries to attribute carry an "index" and raw "text"; context entries carry "segments".
+    /// Context for the batch attribution prompt: one flat "paragraphs" array in reading order.
+    /// Entries to attribute carry an "index" and their numbered "items"; context entries carry
+    /// "segments".
     /// </summary>
     public static string BuildBatchContextJson(ParagraphBatchContext ctx)
     {
       var obj = new BatchContextJsonDto(
           [.. ctx.Entries.Select(e => e.TargetIndex is { } index
-              ? new BatchEntryDto(index, e.Text, null)
-              : new BatchEntryDto(null, null, ToSegmentDtos(e.Segments)))]);
+              ? new BatchEntryDto(index, ToQueryItemDtos(e.Items), null)
+              : new BatchEntryDto(null, null, ToSegmentDtos(e.Items)))]);
       return JsonSerializer.Serialize(obj, _jsonOptions);
     }
 
-    private static SegmentedEntryDto ToSegmentedEntry(ContextParagraph p) =>
-        new(ToSegmentDtos(p.Segments));
+    /// <summary>
+    /// The query paragraph's items, numbered 0..n-1 in <c>Order</c> sequence — narration included,
+    /// so the attribution tags stay visible. No speaker: that is what the answer supplies. No id
+    /// either: the index is the whole handle the model gets, and the caller holds the index→id map.
+    /// </summary>
+    private static QueryItemDto[] ToQueryItemDtos(IReadOnlyList<ContextItem> items) =>
+        [.. items.Select((i, index) => new QueryItemDto(index, i.Type, i.Text))];
 
-    private static ContextSegmentDto[] ToSegmentDtos(IReadOnlyList<ContextSegment> segments) =>
-        [.. segments.Select(s => new ContextSegmentDto(s.Text, s.Type, s.Speaker))];
+    private static SegmentedEntryDto ToSegmentedEntry(ContextParagraph p) =>
+        new(ToSegmentDtos(p.Items));
+
+    private static ContextSegmentDto[] ToSegmentDtos(IReadOnlyList<ContextItem> items) =>
+        [.. items.Select(i => new ContextSegmentDto(i.Text, i.Type, i.Speaker))];
 
     /// <summary>
     /// Replaces each "{{key}}" literal with values[key]. Unknown tokens are left intact.
@@ -614,12 +624,17 @@ namespace Read2Me.Services.Llm
     private sealed record SegmentedEntryDto(
         [property: JsonPropertyName("segments")] ContextSegmentDto[] Segments);
 
-    private sealed record QueryEntryDto(
+    private sealed record QueryItemDto(
+        [property: JsonPropertyName("index")] int Index,
+        [property: JsonPropertyName("type")] string Type,
         [property: JsonPropertyName("text")] string Text);
+
+    private sealed record QueryEntryDto(
+        [property: JsonPropertyName("items")] QueryItemDto[] Items);
 
     private sealed record BatchEntryDto(
         [property: JsonPropertyName("index")] int? Index,
-        [property: JsonPropertyName("text")] string? Text,
+        [property: JsonPropertyName("items")] QueryItemDto[]? Items,
         [property: JsonPropertyName("segments")] ContextSegmentDto[]? Segments);
 
     private sealed record BatchContextJsonDto(

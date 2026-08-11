@@ -214,8 +214,8 @@ namespace Read2Me.Tests.Services
             Assert.Empty(ctx.DeferredIds);
             Assert.Equal(["Q1", "Known line", "Q2"], ctx.Entries.Select(e => e.Text).ToArray());
             Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
-            var seg = Assert.Single(ctx.Entries[1].Segments);
-            Assert.Equal(new ContextSegment("Known line", "dialog", "Alice"), seg);
+            var item = Assert.Single(ctx.Entries[1].Items);
+            Assert.Equal(new ContextItem(b.ItemId("i1"), "Known line", "dialog", "Alice"), item);
         }
 
         [Fact]
@@ -234,8 +234,8 @@ namespace Read2Me.Tests.Services
             Assert.NotNull(ctx);
             Assert.Equal([b.ParagraphId("p0"), b.ParagraphId("p2")], ctx.IncludedIds);
             Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
-            var seg = Assert.Single(ctx.Entries[1].Segments);
-            Assert.Equal(new ContextSegment("Narration", "narration", "narrator"), seg);
+            var item = Assert.Single(ctx.Entries[1].Items);
+            Assert.Equal(new ContextItem(b.ItemId("i1"), "Narration", "narration", "narrator"), item);
         }
 
         [Fact]
@@ -263,7 +263,7 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task GetParagraphContext_MultiItemParagraph_ReturnsRawTextAndSegments()
+        public async Task GetParagraphContext_MultiItemParagraph_ReturnsRawTextAndItemsWithIds()
         {
             var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
             var b = new BookHierarchyBuilder(OpenDbAsync);
@@ -282,13 +282,14 @@ namespace Read2Me.Tests.Services
             Assert.NotNull(ctx);
             var preceding = Assert.Single(ctx.Preceding);
             Assert.Equal("\"Hello,\" she said, \"and goodbye.\"", preceding.Text);
+            // Items carry their own ids, in Order sequence — the handles the apply stamps by.
             Assert.Equal(
                 [
-                    new ContextSegment("\"Hello,\"", "dialog", "Alice"),
-                    new ContextSegment("she said,", "narration", "narrator"),
-                    new ContextSegment("\"and goodbye.\"", "dialog", "unknown"),
+                    new ContextItem(b.ItemId("i0a"), "\"Hello,\"", "dialog", "Alice"),
+                    new ContextItem(b.ItemId("i0b"), "she said,", "narration", "narrator"),
+                    new ContextItem(b.ItemId("i0c"), "\"and goodbye.\"", "dialog", "unknown"),
                 ],
-                preceding.Segments);
+                preceding.Items);
         }
 
         [Fact]

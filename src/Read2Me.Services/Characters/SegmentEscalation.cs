@@ -149,7 +149,7 @@ namespace Read2Me.Services.Characters
         /// when unavailable, which yields false — never guess a loss from missing evidence.
         /// </param>
         public static bool LosesDialog(
-            IReadOnlyList<ContextSegment>? prior, IReadOnlyList<AttributionSegment> answer)
+            IReadOnlyList<ContextItem>? prior, IReadOnlyList<AttributionSegment> answer)
         {
             if (prior is null)
                 return false;

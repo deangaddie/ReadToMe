@@ -14,8 +14,12 @@ namespace Read2Me.Services.Characters
     /// <item><see cref="Request"/> / <see cref="Parser"/> are null when nothing is askable
     /// (<see cref="Included"/> empty).</item>
     /// <item><see cref="Included"/> — paragraphs carried in the prompt, index-aligned with
-    /// <see cref="QueryTexts"/> and <see cref="PriorSegments"/>; the parser returns a result per
-    /// index 0..Included.Count-1.</item>
+    /// <see cref="QueryTexts"/>, <see cref="QueryItemIds"/> and <see cref="PriorSegments"/>; the
+    /// parser returns a result per index 0..Included.Count-1.</item>
+    /// <item><see cref="QueryItemIds"/> — for each included paragraph, the item ids behind the item
+    /// indices the prompt numbered, recorded at ask time. This is the only mapping from an answered
+    /// index back to an item: the queue is asynchronous, and re-resolving positionally at apply time
+    /// would stamp the wrong item after a user edit.</item>
     /// <item><see cref="Unaskable"/> — blank/whitespace text or no content item; resolve to Unknown
     /// with no LLM call.</item>
     /// <item><see cref="Deferred"/> — trimmed off the leading run by the context reader; re-enqueue.</item>
@@ -35,7 +39,8 @@ namespace Read2Me.Services.Characters
         IReadOnlyList<Data.Entities.Character> Characters,
         NarratorIdentity Narrator,
         IReadOnlyList<string> QueryTexts,
-        IReadOnlyList<IReadOnlyList<ContextSegment>?> PriorSegments);
+        IReadOnlyList<IReadOnlyList<Guid>> QueryItemIds,
+        IReadOnlyList<IReadOnlyList<ContextItem>?> PriorSegments);
 
     /// <summary>
     /// Builds one attribution <see cref="LlmRunRequest"/> for a chunk of paragraphs — the single seam
@@ -89,7 +94,8 @@ namespace Read2Me.Services.Characters
             // a context entry (its neighbours keep their positions) and binned Unaskable.
             var included = new List<QueuedParagraph>();
             var queryTexts = new List<string>();
-            var priorSegments = new List<IReadOnlyList<ContextSegment>?>();
+            var queryItemIds = new List<IReadOnlyList<Guid>>();
+            var priorSegments = new List<IReadOnlyList<ContextItem>?>();
             var rendered = new List<BatchContextEntry>();
             var nextIndex = 0;
             foreach (var e in ctx.Entries)
@@ -110,7 +116,10 @@ namespace Read2Me.Services.Characters
 
                 included.Add(item);
                 queryTexts.Add(e.Text);
-                priorSegments.Add(e.Segments);
+                // Recorded here and nowhere else: the prompt numbers these same items 0..n-1, so
+                // position i of this list is the id the answer's index i names (spec §1).
+                queryItemIds.Add([.. e.Items.Select(i => i.ItemId)]);
+                priorSegments.Add(e.Items);
                 rendered.Add(e with { TargetIndex = nextIndex++ });
             }
 
@@ -176,7 +185,8 @@ namespace Read2Me.Services.Characters
             }
 
             return new ChunkRequest(
-                request, parser, included, unaskable, deferred, characters, narrator, queryTexts, priorSegments);
+                request, parser, included, unaskable, deferred, characters, narrator,
+                queryTexts, queryItemIds, priorSegments);
         }
 
         /// <summary>
@@ -185,11 +195,11 @@ namespace Read2Me.Services.Characters
         /// </summary>
         private static ChunkRequest NothingAskable(
             IReadOnlyList<QueuedParagraph> unaskable, IReadOnlyList<QueuedParagraph> deferred) =>
-            new(null, null, [], unaskable, deferred, [], NarratorIdentity.Unlinked, [], []);
+            new(null, null, [], unaskable, deferred, [], NarratorIdentity.Unlinked, [], [], []);
 
         /// <summary>
         /// The entries→single-context adapter: rebuilds the flat target-of-one span into the single
-        /// prompt's shape — the target as raw query text, its neighbours as segmented context.
+        /// prompt's shape — the target as the query, its neighbours as segmented context.
         /// </summary>
         private static ParagraphContext ToSingleContext(IReadOnlyList<BatchContextEntry> entries)
         {
@@ -199,10 +209,10 @@ namespace Read2Me.Services.Characters
             var target = entries[pos];
             var preceding = entries.Take(pos).Select(ToContextParagraph).ToList();
             var following = entries.Skip(pos + 1).Select(ToContextParagraph).ToList();
-            return new ParagraphContext(new ContextParagraph(target.Text, target.Segments), preceding, following);
+            return new ParagraphContext(new ContextParagraph(target.Text, target.Items), preceding, following);
         }
 
-        private static ContextParagraph ToContextParagraph(BatchContextEntry e) => new(e.Text, e.Segments);
+        private static ContextParagraph ToContextParagraph(BatchContextEntry e) => new(e.Text, e.Items);
 
         /// <summary>Single answer, wrapped to the batch-shaped index→result map so one classify loop serves both.</summary>
         private static bool ParseSingle(

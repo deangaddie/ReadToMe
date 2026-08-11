@@ -28,30 +28,47 @@ public static partial class FakeAiResponses
     /// <summary>
     /// Segment-list attribution answer for the paragraph(s) the given prompt asks about: one dialog
     /// segment per paragraph, speaking its whole text. The text has to be echoed back verbatim — the
-    /// service validates that the segments reconstruct the original paragraph — so it is lifted
-    /// straight out of the prompt's context JSON ("query" for single, "paragraphs" for batch).
+    /// service validates that the segments reconstruct the original paragraph — so it is rebuilt
+    /// from the item list the prompt shows for each query paragraph ("query" for single,
+    /// "paragraphs" entries with an "index" for batch), joined the way the reader joined them.
     /// </summary>
     public static string AttributionReply(string prompt, string character, string voiceInstructions = "calm")
     {
         var batch = BatchTargets().Matches(prompt);
         if (batch.Count > 0)
             return "[" + string.Join(",", batch.Select(m =>
-                $$"""{ "index": {{m.Groups[1].Value}}, "reasoning": "fake", "segments": [ {{Segment(m.Groups[2].Value, character, voiceInstructions)}} ] }""")) + "]";
+                $$"""{ "index": {{m.Groups[1].Value}}, "reasoning": "fake", "segments": [ {{Segment(JoinItemTexts(m.Groups[2].Value), character, voiceInstructions)}} ] }""")) + "]";
 
-        var query = QueryText().Match(prompt);
-        var text = query.Success ? query.Groups[1].Value : "\"\"";
+        var query = QueryItems().Match(prompt);
+        var text = query.Success ? JoinItemTexts(query.Groups[1].Value) : "\"\"";
         return $$"""{ "reasoning": "fake", "segments": [ {{Segment(text, character, voiceInstructions)}} ] }""";
+    }
+
+    /// <summary>
+    /// The paragraph text behind an "items" array, as a JSON string literal ready to paste back:
+    /// each item's text in order, space-joined to match how the reader builds a paragraph's text.
+    /// </summary>
+    private static string JoinItemTexts(string itemsJson)
+    {
+        var texts = ItemText().Matches(itemsJson)
+            .Select(m => JsonSerializer.Deserialize<string>(m.Groups[1].Value)!);
+        return JsonSerializer.Serialize(string.Join(" ", texts));
     }
 
     /// <param name="jsonText">A JSON string literal (quoted, already escaped) lifted from the prompt.</param>
     private static string Segment(string jsonText, string speaker, string voiceInstructions) =>
         $$"""{ "text": {{jsonText}}, "type": "dialog", "speaker": "{{speaker}}", "voice_instructions": "{{voiceInstructions}}" }""";
 
-    [GeneratedRegex(@"""index""\s*:\s*(\d+)\s*,\s*""text""\s*:\s*(""(?:[^""\\]|\\.)*"")")]
+    // A batch target paragraph: its "index" followed by its own "items" array. Item objects carry
+    // an "index" too, but never one followed by "items", so they cannot match here.
+    [GeneratedRegex(@"""index""\s*:\s*(\d+)\s*,\s*""items""\s*:\s*\[([^\]]*)\]")]
     private static partial Regex BatchTargets();
 
-    [GeneratedRegex(@"""query""\s*:\s*\{\s*""text""\s*:\s*(""(?:[^""\\]|\\.)*"")")]
-    private static partial Regex QueryText();
+    [GeneratedRegex(@"""query""\s*:\s*\{\s*""items""\s*:\s*\[([^\]]*)\]")]
+    private static partial Regex QueryItems();
+
+    [GeneratedRegex(@"""text""\s*:\s*(""(?:[^""\\]|\\.)*"")")]
+    private static partial Regex ItemText();
 
     /// <summary>
     /// VoxCPM2 /api/stream response: meta frame, one float32 PCM frame (100ms of silence),

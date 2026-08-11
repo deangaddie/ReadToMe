@@ -356,11 +356,11 @@ namespace Read2Me.Tests.Services.Characters
 
         // --- LosesDialog ---
 
-        private static ContextSegment PriorDialog(string speaker = "Alice", string text = "“Hi.”") =>
-            new(text, AttributionWire.Dialog, speaker);
+        private static ContextItem PriorDialog(string speaker = "Alice", string text = "“Hi.”") =>
+            new(Guid.NewGuid(), text, AttributionWire.Dialog, speaker);
 
-        private static ContextSegment PriorNarration(string text = "she said.") =>
-            new(text, AttributionWire.Narration, AttributionWire.Narrator);
+        private static ContextItem PriorNarration(string text = "she said.") =>
+            new(Guid.NewGuid(), text, AttributionWire.Narration, AttributionWire.Narrator);
 
         [Fact]
         public void DialogFoldedIntoNarration_LosesDialog()

@@ -247,19 +247,20 @@ namespace Read2Me.Services
         }
 
         private static ContextParagraph ToContextParagraph(ChapterContextRow row) =>
-            new(row.Text, ToSegments(row));
+            new(row.Text, ToItems(row));
 
         private static BatchContextEntry ToContextEntry(ChapterContextRow row, int? targetIndex) =>
-            new(row.Text, ToSegments(row), targetIndex);
+            new(row.Text, ToItems(row), targetIndex);
 
-        // Existing items in the wire shape the LLM answers in. A character item with no stamped
+        // Existing items in the wire shape the LLM answers in, in Order sequence — the order the
+        // query paragraph's item indices are assigned from. A character item with no stamped
         // character is the "unknown" sentinel, not a missing speaker.
-        private static IReadOnlyList<ContextSegment> ToSegments(ChapterContextRow row) =>
+        private static IReadOnlyList<ContextItem> ToItems(ChapterContextRow row) =>
             [.. row.Items.Select(i => i.IsCharacter
-                ? new ContextSegment(i.Text, AttributionWire.Dialog, i.CharacterName ?? AttributionWire.Unknown)
-                : new ContextSegment(i.Text, AttributionWire.Narration, AttributionWire.Narrator))];
+                ? new ContextItem(i.Id, i.Text, AttributionWire.Dialog, i.CharacterName ?? AttributionWire.Unknown)
+                : new ContextItem(i.Id, i.Text, AttributionWire.Narration, AttributionWire.Narrator))];
 
-        private sealed record ChapterContextItemRow(bool IsCharacter, string? CharacterName, string Text);
+        private sealed record ChapterContextItemRow(Guid Id, bool IsCharacter, string? CharacterName, string Text);
 
         private sealed record ChapterContextRow(Guid Id, IReadOnlyList<ChapterContextItemRow> Items)
         {
@@ -284,6 +285,7 @@ namespace Read2Me.Services
                         .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
                         .OrderBy(i => i.Order)
                         .Select(i => new ChapterContextItemRow(
+                            i.Id,
                             i.ItemType == ParagraphItemType.Character,
                             i.Character != null ? i.Character.Name : null,
                             i.Text ?? ""))

@@ -57,13 +57,13 @@
 @code {
     [Parameter, EditorRequired] public CharacterLine Line { get; set; }
 
-    // A paragraph can hold several dialog segments with different speakers; narration is not a
-    // speaker. "?" marks a dialog segment whose character is not yet attributed.
+    // A paragraph can hold several dialog items with different speakers; narration is not a
+    // speaker. "?" marks a dialog item whose character is not yet attributed.
     static string SpeakerLabel(ContextParagraph p)
     {
-        var speakers = p.Segments
-            .Where(s => s.Type == AttributionWire.Dialog)
-            .Select(s => s.Speaker == AttributionWire.Unknown ? "?" : s.Speaker)
+        var speakers = p.Items
+            .Where(i => i.Type == AttributionWire.Dialog)
+            .Select(i => i.Speaker == AttributionWire.Unknown ? "?" : i.Speaker)
             .Distinct()
             .ToList();
         return speakers.Count == 0 ? "—" : string.Join(" / ", speakers);
