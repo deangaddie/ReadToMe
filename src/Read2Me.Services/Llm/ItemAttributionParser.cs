@@ -5,18 +5,18 @@ using System.Text.RegularExpressions;
 namespace Read2Me.Services.Llm
 {
     /// <summary>
-    /// Tolerant parser for the LLM segment-attribution JSON response (single and batch).
+    /// Tolerant parser for the LLM item-attribution JSON response (single and batch).
     /// Handles code fences (```json ... ```) and leading/trailing prose by extracting
     /// the first {...} or [...] block from the raw text.
     /// </summary>
-    public static class SegmentAttributionParser
+    public static class ItemAttributionParser
     {
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNameCaseInsensitive = true,
         };
 
-        public static bool TryParse(string raw, out SegmentAttributionResult result)
+        public static bool TryParse(string raw, out ItemAttributionResult result)
         {
             result = default!;
             if (!TryExtractJson(raw, '{', '}', out var json))
@@ -25,10 +25,10 @@ namespace Read2Me.Services.Llm
             try
             {
                 var dto = JsonSerializer.Deserialize<AnswerDto>(json, JsonOptions);
-                if (dto == null || !TryMapSegments(dto.Segments, out var segments))
+                if (dto == null)
                     return false;
 
-                result = new SegmentAttributionResult(dto.Reasoning ?? string.Empty, segments);
+                result = new ItemAttributionResult(dto.Reasoning ?? string.Empty, MapItems(dto.Items));
                 return true;
             }
             catch (JsonException)
@@ -38,16 +38,17 @@ namespace Read2Me.Services.Llm
         }
 
         /// <summary>
-        /// Parses a batch response. Every index in <paramref name="requestedIndexes"/> must be
-        /// answered with usable segments or the whole parse fails; extra (unrequested) indexes are
-        /// ignored — both trial models also answer for context paragraphs. Duplicate indexes:
-        /// first entry wins. Note the contrast with <see cref="CharacterBatchAttributionParser"/>,
-        /// which tolerantly drops unusable entries: here escalation needs the whole paragraph
-        /// (any unanswered index = ParseFailure), so the parse is all-or-nothing.
+        /// Parses a batch response. Every paragraph index in <paramref name="requestedIndexes"/> must
+        /// be answered or the whole parse fails; extra (unrequested) indexes are ignored — both trial
+        /// models also answer for context paragraphs. Duplicate indexes: first entry wins. Note the
+        /// contrast with <see cref="CharacterBatchAttributionParser"/>, which tolerantly drops
+        /// unusable entries: here escalation needs the whole paragraph (any unanswered paragraph
+        /// index = ParseFailure), so the parse is all-or-nothing at chunk level. Tolerance applies
+        /// only *within* an answered paragraph, where unusable items are dropped.
         /// </summary>
         public static bool TryParseBatch(
             string raw, IReadOnlyCollection<int> requestedIndexes,
-            out IReadOnlyDictionary<int, SegmentAttributionResult> results)
+            out IReadOnlyDictionary<int, ItemAttributionResult> results)
         {
             results = default!;
             if (!TryExtractJson(raw, '[', ']', out var json))
@@ -60,14 +61,12 @@ namespace Read2Me.Services.Llm
                     return false;
 
                 var requested = new HashSet<int>(requestedIndexes);
-                var map = new Dictionary<int, SegmentAttributionResult>();
+                var map = new Dictionary<int, ItemAttributionResult>();
                 foreach (var dto in dtos)
                 {
                     if (dto.Index is not { } index || !requested.Contains(index) || map.ContainsKey(index))
                         continue;
-                    if (!TryMapSegments(dto.Segments, out var segments))
-                        return false;
-                    map[index] = new SegmentAttributionResult(dto.Reasoning ?? string.Empty, segments);
+                    map[index] = new ItemAttributionResult(dto.Reasoning ?? string.Empty, MapItems(dto.Items));
                 }
 
                 if (map.Count != requested.Count)
@@ -112,48 +111,56 @@ namespace Read2Me.Services.Llm
             return true;
         }
 
-        /// <summary>Maps wire segments to <see cref="AttributionSegment"/>s; false when unusable.</summary>
-        private static bool TryMapSegments(List<SegmentDto>? dtos, out IReadOnlyList<AttributionSegment> segments)
+        /// <summary>
+        /// Maps wire items to <see cref="AttributedItem"/>s. Item-level tolerance: an entry with no
+        /// usable index or no speaker is dropped rather than failing the paragraph, and a duplicate
+        /// index keeps the first answer. An absent or empty list maps to zero attributions — a valid
+        /// answer whose unattributed dialog items escalate as unknown.
+        /// </summary>
+        private static IReadOnlyList<AttributedItem> MapItems(List<ItemDto>? dtos)
         {
-            segments = default!;
             if (dtos == null || dtos.Count == 0)
-                return false;
+                return [];
 
-            var mapped = new List<AttributionSegment>(dtos.Count);
+            var mapped = new List<AttributedItem>(dtos.Count);
+            var seen = new HashSet<int>();
             foreach (var dto in dtos)
             {
-                if (dto.Text == null)
-                    return false;
-                var type = dto.Type?.Trim().ToLowerInvariant() switch
-                {
-                    AttributionWire.Narration => AttributionSegmentType.Narration,
-                    AttributionWire.Dialog => AttributionSegmentType.Dialog,
-                    _ => (AttributionSegmentType?)null,
-                };
-                if (type == null)
-                    return false;
-
-                // Narration always speaks as the narrator with no instructions, whatever the model
-                // answered; a dialog segment without a speaker violates the schema → parse failure
-                // (ParseFailure tier, not a silent "unknown" repair).
                 var speaker = dto.Speaker?.Trim();
-                if (type == AttributionSegmentType.Dialog && string.IsNullOrEmpty(speaker))
-                    return false;
-                var isNarration = type == AttributionSegmentType.Narration;
-                mapped.Add(new AttributionSegment(
-                    UnescapeLiteralUnicode(dto.Text),
-                    type.Value,
-                    isNarration ? AttributionWire.Narrator : speaker!,
-                    isNarration ? string.Empty : dto.VoiceInstructions ?? string.Empty));
+                if (string.IsNullOrEmpty(speaker))
+                    continue;
+                if (!TryReadIndex(dto.Index, out var index) || !seen.Add(index))
+                    continue;
+
+                // Instructions pass through as answered, null included: an item the model named but
+                // gave no instructions for is cleared, not left holding a previous run's direction.
+                mapped.Add(new AttributedItem(
+                    index,
+                    UnescapeLiteralUnicode(speaker),
+                    dto.VoiceInstructions));
             }
 
-            segments = mapped;
-            return true;
+            return mapped;
+        }
+
+        /// <summary>
+        /// Reads the item index tolerantly: models answer it as a number, and occasionally as a
+        /// string. Anything else (absent, null, fractional, prose) drops the item.
+        /// </summary>
+        private static bool TryReadIndex(JsonElement raw, out int index)
+        {
+            index = default;
+            return raw.ValueKind switch
+            {
+                JsonValueKind.Number => raw.TryGetInt32(out index),
+                JsonValueKind.String => int.TryParse(raw.GetString(), out index),
+                _ => false,
+            };
         }
 
         /// <summary>
         /// Models sometimes double-escape, leaving literal \uXXXX sequences in the parsed string;
-        /// fold them back to their characters so text comparison sees the real book text.
+        /// fold them back to their characters so the name matches the roster.
         /// </summary>
         private static string UnescapeLiteralUnicode(string text) =>
             text.Contains("\\u", StringComparison.OrdinalIgnoreCase)
@@ -166,8 +173,8 @@ namespace Read2Me.Services.Llm
             [JsonPropertyName("reasoning")]
             public string? Reasoning { get; set; }
 
-            [JsonPropertyName("segments")]
-            public List<SegmentDto>? Segments { get; set; }
+            [JsonPropertyName("items")]
+            public List<ItemDto>? Items { get; set; }
         }
 
         private sealed class BatchEntryDto
@@ -178,17 +185,15 @@ namespace Read2Me.Services.Llm
             [JsonPropertyName("reasoning")]
             public string? Reasoning { get; set; }
 
-            [JsonPropertyName("segments")]
-            public List<SegmentDto>? Segments { get; set; }
+            [JsonPropertyName("items")]
+            public List<ItemDto>? Items { get; set; }
         }
 
-        private sealed class SegmentDto
+        private sealed class ItemDto
         {
-            [JsonPropertyName("text")]
-            public string? Text { get; set; }
-
-            [JsonPropertyName("type")]
-            public string? Type { get; set; }
+            /// <summary>Raw so a malformed index drops one item instead of failing the paragraph.</summary>
+            [JsonPropertyName("index")]
+            public JsonElement Index { get; set; }
 
             [JsonPropertyName("speaker")]
             public string? Speaker { get; set; }

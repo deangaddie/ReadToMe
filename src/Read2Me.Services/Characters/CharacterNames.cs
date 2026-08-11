@@ -5,10 +5,10 @@ namespace Read2Me.Services.Characters
 {
     /// <summary>
     /// Known-character name matching shared by the single-speaker attribution chain and the
-    /// segment-list path: LLM answers are compared trimmed + OrdinalIgnoreCase, with aliases
+    /// per-item attribution path: LLM answers are compared trimmed + OrdinalIgnoreCase, with aliases
     /// resolving to their owner character's name.
     /// <para>
-    /// The reserved <see cref="SegmentWire.Narrator"/> token is judged <b>before</b> the roster walk,
+    /// The reserved <see cref="AttributionWire.Narrator"/> token is judged <b>before</b> the roster walk,
     /// because the roster contains the seed <c>Narrator</c> row and would otherwise make the token
     /// quietly "known" whether or not a narrator link is set. Linked, the token is a wire alias of
     /// the linked character (reader-side tolerance only — it is never advertised in the roster);
@@ -24,7 +24,7 @@ namespace Read2Me.Services.Characters
         /// </summary>
         public static bool IsKnown(
             string name, IReadOnlyList<Data.Entities.Character> characters, NarratorIdentity narrator) =>
-            SegmentWire.IsNarrator(name)
+            AttributionWire.IsNarrator(name)
                 ? narrator.IsLinked
                 : FindOwner(name.Trim(), characters) != null;
 
@@ -38,7 +38,7 @@ namespace Read2Me.Services.Characters
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
             var trimmed = name.Trim();
-            if (SegmentWire.IsNarrator(trimmed))
+            if (AttributionWire.IsNarrator(trimmed))
                 // Unlinked the token owns nobody, so it canonicalizes to itself — deliberately not
                 // null, which is what a blank speaker yields: two samples answering "narrator" and
                 // "" would then compare equal, and today they do not.

@@ -223,10 +223,10 @@ namespace Read2Me.App.Characters
         private async Task<Guid?> ResolveSpeakerAsync(
             ProjectFolderId folder, string speaker, NarratorIdentity narrator, CancellationToken ct)
         {
-            if (SegmentWire.IsUnknownSpeaker(speaker))
+            if (AttributionWire.IsUnknownSpeaker(speaker))
                 return null;
 
-            if (SegmentWire.IsNarrator(speaker))
+            if (AttributionWire.IsNarrator(speaker))
                 return narrator.IsLinked ? narrator.CharacterId : null;
 
             return await resolver.ResolveOrCreateAsync(folder, speaker.Trim(), ct);

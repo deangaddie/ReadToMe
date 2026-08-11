@@ -6,7 +6,7 @@ Domain vocabulary for ReadToMe. Use these terms exactly in code, tests, and disc
 | ---- | ---- | ------ |
 | Book structure, view, selection, status | [context/book-structure.md](context/book-structure.md) | Volume…ParagraphItem hierarchy, Book Hierarchy, Alias, Book View Mode, Folder/Audio Item Selection, Roll-up, Generatable item, Node Status Badge/roll-up |
 | Voice rules | [context/voice-rules.md](context/voice-rules.md) | Voice, Voice Rule, default rule, Position, Anchor, evaluation, effective Character, `VoiceResolver`, `NodeOrderTables`, `AnchorSpanResolver`, dangling anchor, rule editor, resolved preview |
-| Character attribution | [context/attribution.md](context/attribution.md) | Character attribution, processed/unprocessed, Character Queue, segment/chunk, escalation chain, narrator link + linked character + `narrator` wire alias |
+| Character attribution | [context/attribution.md](context/attribution.md) | Character attribution, processed/unprocessed, Character Queue, item attribution/frozen boundaries/chunk, escalation chain, narrator link + linked character + `narrator` wire alias |
 | LLM infrastructure | [context/llm.md](context/llm.md) | Constrained completion, Completion Runner, completion scanner stop, Run outcome, Health streak |
 | Audio pipeline | [context/audio-pipeline.md](context/audio-pipeline.md) | Normalisation, Canonical WAV, Audio Queue, Audio Gen Stream, Audio Retry, pipeline/resolver/recorder seams, outcomes, Sentence Chunking |
 | Queueing (shared) | [context/queueing.md](context/queueing.md) | Work outcome, Disposition, Plan, apply product, Attempt state — the shared queue-disposition vocabulary |

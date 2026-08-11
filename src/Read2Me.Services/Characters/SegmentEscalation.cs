@@ -40,7 +40,7 @@ namespace Read2Me.Services.Characters
                     continue;
 
                 var speaker = segment.Speaker.Trim();
-                if (SegmentWire.IsUnknownSpeaker(speaker) || IsUnlinkedNarrator(speaker, narrator))
+                if (AttributionWire.IsUnknownSpeaker(speaker) || IsUnlinkedNarrator(speaker, narrator))
                     anyUnknown = true;
                 else if (!CharacterNames.IsKnown(speaker, characters, narrator) &&
                          !IsAttestedInNarration(speaker, segments))
@@ -52,7 +52,7 @@ namespace Read2Me.Services.Characters
 
         /// <summary>The narrator token with no link behind it: nobody to stamp, so it means unknown.</summary>
         private static bool IsUnlinkedNarrator(string speaker, NarratorIdentity narrator) =>
-            SegmentWire.IsNarrator(speaker) && !narrator.IsLinked;
+            AttributionWire.IsNarrator(speaker) && !narrator.IsLinked;
 
         /// <summary>
         /// True when an unlisted speaker's name appears as a whole word in this paragraph's own
@@ -116,7 +116,7 @@ namespace Read2Me.Services.Characters
         public static bool HasUnknownSpeaker(
             IReadOnlyList<AttributionSegment> segments, NarratorIdentity narrator) =>
             segments.Any(s => s.Type == AttributionSegmentType.Dialog &&
-                              (SegmentWire.IsUnknownSpeaker(s.Speaker) ||
+                              (AttributionWire.IsUnknownSpeaker(s.Speaker) ||
                                IsUnlinkedNarrator(s.Speaker.Trim(), narrator)));
 
         /// <summary>
@@ -155,7 +155,7 @@ namespace Read2Me.Services.Characters
                 return false;
 
             var priorHasDialog = prior.Any(
-                s => string.Equals(s.Type, SegmentWire.Dialog, StringComparison.OrdinalIgnoreCase));
+                s => string.Equals(s.Type, AttributionWire.Dialog, StringComparison.OrdinalIgnoreCase));
             if (!priorHasDialog)
                 return false;
 

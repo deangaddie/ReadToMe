@@ -256,8 +256,8 @@ namespace Read2Me.Services
         // character is the "unknown" sentinel, not a missing speaker.
         private static IReadOnlyList<ContextSegment> ToSegments(ChapterContextRow row) =>
             [.. row.Items.Select(i => i.IsCharacter
-                ? new ContextSegment(i.Text, SegmentWire.Dialog, i.CharacterName ?? SegmentWire.Unknown)
-                : new ContextSegment(i.Text, SegmentWire.Narration, SegmentWire.Narrator))];
+                ? new ContextSegment(i.Text, AttributionWire.Dialog, i.CharacterName ?? AttributionWire.Unknown)
+                : new ContextSegment(i.Text, AttributionWire.Narration, AttributionWire.Narrator))];
 
         private sealed record ChapterContextItemRow(bool IsCharacter, string? CharacterName, string Text);
 

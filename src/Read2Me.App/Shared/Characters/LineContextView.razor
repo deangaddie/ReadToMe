@@ -62,8 +62,8 @@
     static string SpeakerLabel(ContextParagraph p)
     {
         var speakers = p.Segments
-            .Where(s => s.Type == SegmentWire.Dialog)
-            .Select(s => s.Speaker == SegmentWire.Unknown ? "?" : s.Speaker)
+            .Where(s => s.Type == AttributionWire.Dialog)
+            .Select(s => s.Speaker == AttributionWire.Unknown ? "?" : s.Speaker)
             .Distinct()
             .ToList();
         return speakers.Count == 0 ? "—" : string.Join(" / ", speakers);

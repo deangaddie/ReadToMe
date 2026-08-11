@@ -357,10 +357,10 @@ namespace Read2Me.Tests.Services.Characters
         // --- LosesDialog ---
 
         private static ContextSegment PriorDialog(string speaker = "Alice", string text = "“Hi.”") =>
-            new(text, SegmentWire.Dialog, speaker);
+            new(text, AttributionWire.Dialog, speaker);
 
         private static ContextSegment PriorNarration(string text = "she said.") =>
-            new(text, SegmentWire.Narration, SegmentWire.Narrator);
+            new(text, AttributionWire.Narration, AttributionWire.Narrator);
 
         [Fact]
         public void DialogFoldedIntoNarration_LosesDialog()
@@ -386,7 +386,7 @@ namespace Read2Me.Tests.Services.Characters
         public void PriorUnknownSpeakerDialog_StillCountsAsDialog()
         {
             Assert.True(SegmentEscalation.LosesDialog(
-                [PriorDialog(SegmentWire.Unknown)], Answer(Narration("“Hi.”"))));
+                [PriorDialog(AttributionWire.Unknown)], Answer(Narration("“Hi.”"))));
         }
 
         /// <summary>The reverse direction is the re-segmentation doing its job, not a loss.</summary>
