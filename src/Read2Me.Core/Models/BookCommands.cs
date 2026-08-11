@@ -41,6 +41,26 @@ public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid Paragr
 /// unchanged and keeps its own callers.
 /// </summary>
 public record SetParagraphsCharacterCommand(ProjectFolderId FolderId, IReadOnlyList<Guid> ParagraphIds, Guid? CharacterId) : BookCommand(FolderId);
+
+/// <summary>
+/// One item's attribution, ready to apply: the item is addressed by id, and the speaker is already
+/// resolved to a character id (null = unknown, which never erases an existing stamp).
+/// <para>
+/// Not to be confused with <c>AttributedItem</c>, the wire answer the LLM sends (index + speaker
+/// name); this is the resolved apply-side record.
+/// </para>
+/// </summary>
+public sealed record ItemAttribution(Guid ItemId, Guid? CharacterId, string? VoiceInstructions);
+
+/// <summary>
+/// Stamps speaker and voice instructions onto existing items of one paragraph. Item boundaries are
+/// frozen (ADR 0005): this command never creates, deletes, reorders or retypes an item.
+/// </summary>
+public record AttributeItemsCommand(
+    ProjectFolderId FolderId,
+    Guid ParagraphId,
+    IReadOnlyList<ItemAttribution> Items) : BookCommand(FolderId);
+
 public enum SegmentItemType { Narration, Character }
 
 /// One segment of a re-segmented paragraph, ready to apply: text is a slice of the original
