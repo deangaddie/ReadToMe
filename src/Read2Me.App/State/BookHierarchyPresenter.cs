@@ -244,11 +244,11 @@ namespace Read2Me.App.State
 
         /// <summary>
         /// The single front door behind every character chip. Chips render identically in both modes and
-        /// read <see cref="FolderSelection.BulkMode"/> nowhere — they hand over the row and, for a segment
+        /// read <see cref="FolderSelection.BulkMode"/> nowhere — they hand over the row and, for an item
         /// chip, the item, and this decides. A pick on a selected row with bulk mode armed fans out across
         /// the whole selection, whichever chip fired; anything else is a single assign.
         /// </summary>
-        /// <param name="item">Null for the paragraph chip, the segment for an item chip.</param>
+        /// <param name="item">Null for the paragraph chip, the item for an item chip.</param>
         public Task AssignCharacterAsync(
             ProjectFolderId folderId, Paragraph paragraph, ParagraphItem? item, Guid? characterId)
         {

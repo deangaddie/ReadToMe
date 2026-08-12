@@ -6,7 +6,7 @@ accepted
 
 ## Context
 
-A book may declare that the Narrator *is* one of its Characters — Sherlock Holmes narrated by Dr. Watson. Narration and that character's dialog then share one voice. Narration items already stamp `CharacterId = ProjectDbContext.NarratorId` at write time, from three separate writers (`ApplySegmentationHandler`, `NarrationClassifier` via `BookContentPersister`, `TitleInserter`). We had to choose what setting the link *does* to those rows.
+A book may declare that the Narrator *is* one of its Characters — Sherlock Holmes narrated by Dr. Watson. Narration and that character's dialog then share one voice. Narration items already stamp `CharacterId = ProjectDbContext.NarratorId` at write time, from three separate writers (`ApplySegmentationHandler` — retired by [ADR 0005](0005-frozen-paragraph-item-boundaries.md) — `NarrationClassifier` via `BookContentPersister`, `TitleInserter`). We had to choose what setting the link *does* to those rows.
 
 ## Decision
 

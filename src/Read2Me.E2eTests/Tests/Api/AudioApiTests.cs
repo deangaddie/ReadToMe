@@ -31,16 +31,7 @@ public class AudioApiTests(E2eAppFixture app)
             .RootElement.GetProperty("enqueued").GetInt32();
         Assert.Equal(2, enqueued); // n1 + n2 narration; unattributed character line excluded
 
-        var deadline = DateTime.UtcNow.AddSeconds(60);
-        while (DateTime.UtcNow < deadline)
-        {
-            var snapshot = JsonDocument.Parse(
-                await Http.GetStringAsync($"{app.BaseUrl}/api/audio/queue"));
-            if (snapshot.RootElement.GetProperty("queuedCount").GetInt32() == 0 &&
-                snapshot.RootElement.GetProperty("processingCount").GetInt32() == 0)
-                break;
-            await Task.Delay(200);
-        }
+        await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
 
         Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "audio", $"{itemId}.wav")));
 

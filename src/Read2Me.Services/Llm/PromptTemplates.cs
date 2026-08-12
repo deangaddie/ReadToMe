@@ -560,6 +560,21 @@ namespace Read2Me.Services.Llm
       DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    /// <summary>One roster entry as the prompt sees it: a name and the aliases it also answers to.</summary>
+    public sealed record RosterCharacter(string Name, IReadOnlyList<string> Aliases);
+
+    /// <summary>
+    /// The {{known_characters}} roster: a compact JSON array of {name, aliases}. The one place the
+    /// projection is written, so the prompt-editor sample cannot drift from the real request.
+    /// </summary>
+    public static string BuildKnownCharactersJson(IEnumerable<RosterCharacter> roster) =>
+        JsonSerializer.Serialize(
+            roster.Select(c => new RosterCharacterDto(c.Name, [.. c.Aliases])).ToArray());
+
+    private sealed record RosterCharacterDto(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("aliases")] string[] Aliases);
+
     /// <summary>
     /// Context for the single-paragraph attribution prompt: neighbours as their existing segments,
     /// the query as its own numbered item list — the split is frozen (ADR-0005), so the model is

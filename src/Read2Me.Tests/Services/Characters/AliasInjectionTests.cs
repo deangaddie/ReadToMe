@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Core.Configuration;
@@ -7,6 +6,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Llm;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -68,8 +68,9 @@ namespace Read2Me.Tests.Services.Characters
             await _handler.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Mr. Baggins"));
 
             var characters = await _reader.GetCharactersWithAliasesAsync(_folder);
-            var serialized = JsonSerializer.Serialize(
-                characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() }));
+            var serialized = PromptTemplates.BuildKnownCharactersJson(
+                characters.Select(c => new PromptTemplates.RosterCharacter(
+                    c.Name, [.. c.Aliases.Select(a => a.Name)])));
 
             Assert.Contains("\"name\":\"Bilbo\"", serialized.Replace(" ", ""));
             Assert.Contains("\"Mr. Baggins\"", serialized);

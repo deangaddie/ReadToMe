@@ -220,6 +220,23 @@ namespace Read2Me.Tests.Services
             new(Guid.NewGuid(), text, type, speaker);
 
         [Fact]
+        public void BuildKnownCharactersJson_EmitsNameAndAliasesPerCharacter()
+        {
+            var json = PromptTemplates.BuildKnownCharactersJson([
+                new PromptTemplates.RosterCharacter("Bilbo", ["Mr. Baggins"]),
+                new PromptTemplates.RosterCharacter("Thorin", []),
+            ]);
+
+            var doc = JsonDocument.Parse(json);
+            Assert.Equal(2, doc.RootElement.GetArrayLength());
+            Assert.Equal("Bilbo", doc.RootElement[0].GetProperty("name").GetString());
+            Assert.Equal(["Mr. Baggins"],
+                doc.RootElement[0].GetProperty("aliases").EnumerateArray().Select(a => a.GetString()));
+            Assert.Equal("Thorin", doc.RootElement[1].GetProperty("name").GetString());
+            Assert.Equal(0, doc.RootElement[1].GetProperty("aliases").GetArrayLength());
+        }
+
+        [Fact]
         public void BuildContextJson_ContextParagraphs_EmitSegmentsWithSpeakers()
         {
             var ctx = new ParagraphContext(

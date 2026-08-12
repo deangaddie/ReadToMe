@@ -63,6 +63,8 @@ each carry a different Character.
 
 Items within a paragraph. A paragraph with no mixed content is one item. Mixing narration and dialog splits the paragraph into multiple items.
 
+The split is made once, at import, by `ParagraphSplitter`, and only a user may change it afterwards: attribution stamps `CharacterId` / `VoiceInstructions` on existing rows and never inserts, deletes or rewrites one ([ADR 0005](../../docs/adr/0005-frozen-paragraph-item-boundaries.md)).
+
 | Column              | Type   | Nullable | Notes                                                                                                      |
 | ------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------- |
 | `Id`                | Guid   | no       | PK                                                                                                         |

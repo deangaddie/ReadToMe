@@ -442,6 +442,14 @@ else
         PromptTemplates.ResponseFormat,
     ];
 
+    // Same rule as the context samples below: the roster is serialized by the real projection, so
+    // the preview cannot show a shape the request does not send (a bare name array, as it once did).
+    static readonly string _sampleRoster = PromptTemplates.BuildKnownCharactersJson([
+        new PromptTemplates.RosterCharacter("Bilbo", ["Mr. Baggins", "the hobbit"]),
+        new PromptTemplates.RosterCharacter("Gandalf", ["the wizard"]),
+        new PromptTemplates.RosterCharacter("Thorin", []),
+    ]);
+
     // The {{context_json}} previews are serialized by the same builders the real request uses, so a
     // change to the wire shape cannot leave a stale example on this page. Only the book text here is
     // invented; item ids are irrelevant to the rendering and never reach the model.
@@ -489,7 +497,7 @@ else
         {
             [PromptTemplates.BookTitle]       = "The Hobbit",
             [PromptTemplates.BookAuthor]      = "J.R.R. Tolkien",
-            [PromptTemplates.KnownCharacters] = "[\"Bilbo\", \"Gandalf\", \"Thorin\"]",
+            [PromptTemplates.KnownCharacters] = _sampleRoster,
             [PromptTemplates.ContextJson]     = PromptTemplates.BuildContextJson(_sampleContext),
             [PromptTemplates.CharacterName]   = "Gandalf",
             [PromptTemplates.ResponseFormat]  = ItemAttributionSchema.JsonExample,

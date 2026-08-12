@@ -166,8 +166,8 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// One rung's run over <paramref name="items"/>, with a single same-rung retry for parse
         /// failures. A parse failure is not evidence the model is too weak for the paragraph — the
-        /// observed cause is the model garbling one chunk's answer (dropping an attribution tag from
-        /// a segment, or repeating the previous chunk's answer wholesale), which the very next call
+        /// observed cause is the model garbling one chunk's answer (malformed JSON, or repeating the
+        /// previous chunk's answer wholesale), which the very next call
         /// usually gets right. Escalating instead spends a slower model on a problem a re-ask
         /// solves, so the failures are held back, re-asked once against the same config, and only
         /// then routed by the caller.

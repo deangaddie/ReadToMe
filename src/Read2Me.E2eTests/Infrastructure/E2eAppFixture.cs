@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -77,11 +78,36 @@ public sealed class E2eAppFixture : IAsyncLifetime
         WorkspaceSeeder.SeedThreeDialogParagraphProjectAsync(
             Services, WorkspaceDir, folderName, title, author, characterName);
 
+    public Task<TestUtils.BookHierarchyBuilder> SeedMisSplitParagraphProjectAsync(
+        string folderName, string title, string author, string characterName = "Alice") =>
+        WorkspaceSeeder.SeedMisSplitParagraphProjectAsync(
+            Services, WorkspaceDir, folderName, title, author, characterName);
+
     public Task<Guid> SeedEditableVoiceAsync(string folderName, Guid characterId, string voiceName = "Alice Voice") =>
         WorkspaceSeeder.SeedEditableVoiceAsync(Services, WorkspaceDir, folderName, characterId, voiceName);
 
     public Task SeedNarratorVoiceAsync(string folderName) =>
         WorkspaceSeeder.SeedNarratorVoiceAsync(Services, WorkspaceDir, folderName);
+
+    /// <summary>
+    /// Polls a queue-status endpoint (e.g. <c>/api/attribution/queue</c>) until nothing is queued or
+    /// processing. The app is shared across the collection, so a test that enqueues work must leave
+    /// with it drained — an in-flight paragraph would otherwise run against the next test's fake AI.
+    /// </summary>
+    public async Task WaitForQueueDrainAsync(string queuePath, int timeoutSeconds = 30)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+        while (DateTime.UtcNow < deadline)
+        {
+            var snapshot = JsonDocument.Parse(await _http.GetStringAsync($"{BaseUrl}{queuePath}"));
+            if (snapshot.RootElement.GetProperty("queuedCount").GetInt32() == 0 &&
+                snapshot.RootElement.GetProperty("processingCount").GetInt32() == 0)
+                return;
+            await Task.Delay(200);
+        }
+    }
+
+    private static readonly HttpClient _http = new();
 
     public async ValueTask DisposeAsync()
     {

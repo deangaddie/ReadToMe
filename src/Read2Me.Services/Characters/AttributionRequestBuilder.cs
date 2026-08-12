@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Read2Me.AppData.Entities;
 using Read2Me.Data;
 using Read2Me.Services.Llm;
@@ -124,16 +123,17 @@ namespace Read2Me.Services.Characters
             if (included.Count == 0)
                 return NothingAskable(unaskable, deferred);
 
-            // Roster once per chunk (D11): the anonymous {name, aliases} projection lives here alone,
-            // and the roster travels back on the result so no later stage refetches it.
+            // Roster once per chunk (D11): serialized by PromptTemplates, which owns the {name,
+            // aliases} projection, and travelling back on the result so no later stage refetches it.
             var project = await reader.GetProjectAsync(first.Folder);
             var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
             // Beside the roster, once per chunk: every judge of a speaker string downstream needs the
             // link to read the narrator token. It is its own read rather than a field off the Project
             // above because ADR-0004 makes NarratorIdentity the only reader of the raw column.
             var narrator = await reader.GetNarratorAsync(first.Folder);
-            var rosterJson = JsonSerializer.Serialize(
-                characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() }));
+            var rosterJson = PromptTemplates.BuildKnownCharactersJson(
+                characters.Select(c => new PromptTemplates.RosterCharacter(
+                    c.Name, [.. c.Aliases.Select(a => a.Name)])));
             var narratorIdentity = narrator.IsLinked
                 ? NarratorPromptText.IdentityParagraph(narrator.DisplayName)
                 : string.Empty;

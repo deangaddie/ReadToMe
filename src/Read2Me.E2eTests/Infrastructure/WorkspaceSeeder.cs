@@ -103,6 +103,26 @@ public static class WorkspaceSeeder
                 .AddRawItem("line3", ParagraphItemType.Character,
                     "“Only me,” she answered.", characterId: null)));
 
+    /// <summary>
+    /// Creates a project whose one attributable paragraph ("p2") is deliberately mis-split: an
+    /// opening narration item, then a Character item holding <em>two</em> speakers (the quote scan
+    /// missed the boundary), then a clean Character item. Boundaries are frozen (ADR 0005), so this
+    /// is the shape attribution must leave exactly as it found it.
+    /// Returns the builder for named-id lookups ("mixed", "clean", "lead").
+    /// </summary>
+    public static Task<BookHierarchyBuilder> SeedMisSplitParagraphProjectAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string title, string author, string characterName = "Alice") =>
+        SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c => c
+            .AddParagraph("p1", p => p
+                .AddNarration("n1", "It was a dark and stormy night."))
+            .AddParagraph("p2", p => p
+                .AddNarration("lead", "The door swung open.")
+                .AddRawItem("mixed", ParagraphItemType.Character,
+                    "“Hello there,” she said. “And who might you be?” he answered.", characterId: null)
+                .AddRawItem("clean", ParagraphItemType.Character,
+                    "“Only me,” came the reply.", characterId: null)));
+
     /// One volume, one chapter named "ch1", one known character; the caller fills the chapter.
     private static async Task<BookHierarchyBuilder> SeedBookAsync(
         IServiceProvider services, string workspaceDir, string folderName,
