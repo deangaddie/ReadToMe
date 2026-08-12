@@ -539,9 +539,9 @@ namespace Read2Me.App.State
             items?.Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null) ?? 0;
 
         /// <summary>
-        /// A paragraph's items were rewritten (attribution applied a segment list, or an item was
-        /// stamped by hand). Segmentation can add and remove items, so the whole item list is
-        /// reloaded rather than a single stamp patched.
+        /// A paragraph's items changed (attribution stamped speakers, or an item was stamped by
+        /// hand). Any number of items can change in one event, so the whole item list is reloaded
+        /// rather than a single stamp patched.
         /// </summary>
         private async void OnParagraphItemsChanged(ParagraphItemsChanged e)
         {

@@ -40,8 +40,8 @@ namespace Read2Me.App.State
             var charItems = para.Items.Where(i => i.ItemType == ParagraphItemType.Character).ToList();
             bool isCharPara = charItems.Count > 0;
 
-            // Segmented attribution can stamp some items and leave others unknown, so stamped and
-            // unstamped items are counted apart: the mix of the two is its own state (Partial).
+            // Attribution answers per item, so it can stamp some and leave others unknown. Stamped
+            // and unstamped items are counted apart: the mix of the two is its own state (Partial).
             var stamped = charItems.Where(i => i.Character is not null)
                                    .Select(i => i.Character!)
                                    .DistinctBy(c => c.Id)

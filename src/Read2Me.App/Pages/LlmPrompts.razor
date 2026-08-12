@@ -16,7 +16,7 @@ else
     <MudPaper Class="pa-5 mb-6" Outlined="true">
         <MudText Typo="Typo.h6" Class="mb-1">Book Character Prompt</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            Sent to the LLM to identify which character is speaking a paragraph, and how the line should be voiced.
+            Sent to the LLM to identify which character speaks each item of a paragraph, and how the line should be voiced.
         </MudText>
 
         @if (_attributionCompatibility.CharacterPromptMissingNarratorIdentity)
@@ -442,24 +442,55 @@ else
         PromptTemplates.ResponseFormat,
     ];
 
+    // The {{context_json}} previews are serialized by the same builders the real request uses, so a
+    // change to the wire shape cannot leave a stale example on this page. Only the book text here is
+    // invented; item ids are irrelevant to the rendering and never reach the model.
+    static ContextItem Narration(string text) =>
+        new(Guid.Empty, text, AttributionWire.Narration, AttributionWire.Narrator);
+
+    static ContextItem Dialog(string text, string speaker) =>
+        new(Guid.Empty, text, AttributionWire.Dialog, speaker);
+
+    static ContextParagraph Paragraph(params ContextItem[] items) =>
+        new(string.Concat(items.Select(i => i.Text)), items);
+
+    static readonly ContextParagraph _sampleRoad =
+        Paragraph(Narration("The road goes ever on and on, down from the door where it began."));
+
+    static readonly ContextParagraph _sampleGandalf =
+        Paragraph(Dialog("\"You are a very fine person, Mr. Baggins,\"", "Gandalf"),
+                  Narration(" said Gandalf."));
+
+    static readonly ContextParagraph _sampleQuery =
+        Paragraph(Dialog("\"I'm going on an adventure!\"", AttributionWire.Unknown),
+                  Narration(" he cried."));
+
+    static readonly ContextParagraph _sampleWestering =
+        Paragraph(Narration("He paused and looked back. The sun was already westering."));
+
+    static readonly ContextParagraph _sampleSettled =
+        Paragraph(Dialog("\"Then it is settled,\"", AttributionWire.Unknown),
+                  Narration(" said the dwarf."));
+
+    static readonly ParagraphContext _sampleContext =
+        new(_sampleQuery, [_sampleRoad, _sampleGandalf], [_sampleWestering]);
+
+    static readonly ParagraphBatchContext _sampleBatchContext =
+        new([
+            new BatchContextEntry(_sampleRoad.Text, _sampleRoad.Items, null),
+            new BatchContextEntry(_sampleGandalf.Text, _sampleGandalf.Items, null),
+            new BatchContextEntry(_sampleQuery.Text, _sampleQuery.Items, 0),
+            new BatchContextEntry(_sampleWestering.Text, _sampleWestering.Items, null),
+            new BatchContextEntry(_sampleSettled.Text, _sampleSettled.Items, 1),
+        ], [], []);
+
     static readonly IReadOnlyDictionary<string, string> _sampleValues =
         new Dictionary<string, string>
         {
             [PromptTemplates.BookTitle]       = "The Hobbit",
             [PromptTemplates.BookAuthor]      = "J.R.R. Tolkien",
             [PromptTemplates.KnownCharacters] = "[\"Bilbo\", \"Gandalf\", \"Thorin\"]",
-            [PromptTemplates.ContextJson]     = """
-                {
-                  "preceding": [
-                    { "paragraph": "The road goes ever on and on, down from the door where it began.", "speaker": "Narrator" },
-                    { "paragraph": "\"You are a very fine person, Mr. Baggins,\" said Gandalf.", "speaker": "Gandalf" }
-                  ],
-                  "query": { "paragraph": "\"I'm going on an adventure!\" he cried." },
-                  "following": [
-                    { "paragraph": "He paused and looked back. The sun was already westering." }
-                  ]
-                }
-                """,
+            [PromptTemplates.ContextJson]     = PromptTemplates.BuildContextJson(_sampleContext),
             [PromptTemplates.CharacterName]   = "Gandalf",
             [PromptTemplates.ResponseFormat]  = ItemAttributionSchema.JsonExample,
             [PromptTemplates.NarratorIdentity] =
@@ -469,17 +500,7 @@ else
     static readonly IReadOnlyDictionary<string, string> _batchSampleValues =
         new Dictionary<string, string>(_sampleValues)
         {
-            [PromptTemplates.ContextJson]     = """
-                {
-                  "paragraphs": [
-                    { "paragraph": "The road goes ever on and on, down from the door where it began.", "speaker": "Narrator" },
-                    { "paragraph": "\"You are a very fine person, Mr. Baggins,\" said Gandalf.", "speaker": "Gandalf" },
-                    { "index": 0, "paragraph": "\"I'm going on an adventure!\" he cried." },
-                    { "paragraph": "He paused and looked back. The sun was already westering.", "speaker": "Narrator" },
-                    { "index": 1, "paragraph": "\"Then it is settled,\" said the dwarf." }
-                  ]
-                }
-                """,
+            [PromptTemplates.ContextJson]     = PromptTemplates.BuildBatchContextJson(_sampleBatchContext),
             [PromptTemplates.ResponseFormat]  = ItemBatchAttributionSchema.JsonExample,
         };
 
