@@ -170,7 +170,7 @@ namespace Read2Me.Tests.Services.Characters
         private const string FullMarker = "Vocatives:";
 
         /// <summary>Phrase present only in the batch (array-shaped) attribution prompt.</summary>
-        private const string BatchMarker = "Return one entry per index";
+        private const string BatchMarker = "Return one entry per paragraph \"index\"";
 
         [Theory]
         [InlineData(1)]

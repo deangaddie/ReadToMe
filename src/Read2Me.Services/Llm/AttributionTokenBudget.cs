@@ -1,12 +1,16 @@
 namespace Read2Me.Services.Llm
 {
     /// <summary>
-    /// Output-token floor for a segment-attribution request. The segment contract makes the answer
-    /// grow with the passage: every indexed paragraph is copied back verbatim, split across
-    /// segments, each carrying JSON keys, a speaker and voice instructions, plus one reasoning
-    /// sentence. A fixed config max_tokens that comfortably fitted the old one-name answer truncates
-    /// the segment list of a large batch — a truncated answer is unparseable, so the whole chunk
-    /// escalates for no reason (trial finding, ticket 05).
+    /// Output-token floor for an attribution request. The answer grows with the passage: one entry
+    /// per item, each carrying JSON keys, a speaker and voice instructions, plus one reasoning
+    /// sentence per paragraph. A fixed config max_tokens that comfortably fitted the old one-name
+    /// answer truncates the item list of a large batch — a truncated answer is unparseable, so the
+    /// whole chunk escalates for no reason (trial finding, ticket 05).
+    /// <para>
+    /// Sized from the passage's characters, which since ADR-0005 over-estimates: the answer names
+    /// items by index and no longer copies text back. Left generous on purpose — the failure it
+    /// guards (truncation) costs a whole chunk, while over-budgeting costs nothing.
+    /// </para>
     /// </summary>
     public static class AttributionTokenBudget
     {

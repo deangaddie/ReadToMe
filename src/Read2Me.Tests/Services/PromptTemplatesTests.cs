@@ -59,8 +59,9 @@ namespace Read2Me.Tests.Services
 
         [Fact]
         // Pins the current bytes, not the pre-narrator-link bytes: the hashes were re-cut when the
-        // measured abstention wording landed. What it still guards is ADR-0004's rule — unlinked
-        // renders with no narrator identity spliced in.
+        // measured abstention wording landed, and again when ADR-0005 froze item boundaries and the
+        // ask became per-item. What it still guards is ADR-0004's rule — unlinked renders with no
+        // narrator identity spliced in.
         public void AttributionDefaults_UnlinkedRenderingMatchesGoldenBytes()
         {
             var values = new Dictionary<string, string>
@@ -74,10 +75,10 @@ namespace Read2Me.Tests.Services
             };
 
             Assert.Equal(
-                "F11B34C1CEC96B2FEF29D94C2FAC5CD2D7237D090A3C37A9A4CD12E9B697D8C5",
+                "7DB89568A966802571565E33F651AEC6DB653232A032E14884F2E169490376BB",
                 Sha256(PromptTemplates.Render(PromptTemplates.DefaultCharacterPrompt, values)));
             Assert.Equal(
-                "E86F09C7560FCCC2EE857A2FF624EC8E53DFBCE4C16A095F6E093B0B1B2656FD",
+                "E2FABF2BFF0BDFD82E3CA0E5242CA339664F946098558CC81A72E9E787BB31A0",
                 Sha256(PromptTemplates.Render(PromptTemplates.DefaultBatchCharacterPrompt, values)));
         }
 
@@ -109,16 +110,61 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void DefaultCharacterPrompt_ContainsSegmentContractInstructions()
+        public void DefaultCharacterPrompt_ContainsItemContractInstructions()
         {
             var prompt = PromptTemplates.DefaultCharacterPrompt;
             Assert.Contains("\"reasoning\"", prompt);
-            Assert.Contains("How to identify each dialog segment's speaker", prompt);
+            Assert.Contains("How to identify each dialog item's speaker", prompt);
             Assert.Contains("Vocatives", prompt);
-            // Fidelity and the narration-speaker convention are what the parser/aligner rely on.
-            Assert.Contains("reproduce the query paragraph EXACTLY", prompt);
-            Assert.Contains("Narration segments always have speaker \"narrator\"", prompt);
         }
+
+        /// <summary>
+        /// ADR-0005: the model never re-splits. All four templates move together — the request
+        /// builder picks by chunk size and style, so a template left on the old ask would fail-parse
+        /// exactly the paragraphs it was chosen for.
+        /// </summary>
+        [Theory]
+        [MemberData(nameof(AttributionPrompts))]
+        public void AttributionPrompts_AskPerItem_NeverToReSplit(string prompt)
+        {
+            var flat = CollapseWhitespace(prompt);
+            // The ask: answer existing numbered items by index.
+            Assert.Contains("arrives already split into numbered items", flat);
+            Assert.Contains("The split is fixed. Never merge, split, re-order or restate items", flat);
+            Assert.Contains("an item's \"index\" is the whole handle you have on it", flat);
+            // The frozen-boundary rules: multi-speaker items abstain, narration is never answered.
+            Assert.Contains("An item containing more than one speaker is \"unknown\"", flat);
+            Assert.Contains("never return an entry for one", flat);
+            // The retired ask, in every form it was worded — a template left on it fail-parses.
+            Assert.DoesNotContain("segmenter", flat);
+            Assert.DoesNotContain("Segmentation rules", flat);
+            Assert.DoesNotContain("must reproduce", flat);
+            Assert.DoesNotContain("Copy the text verbatim", flat);
+            Assert.DoesNotContain("Narration segments always have speaker", flat);
+        }
+
+        /// <summary>
+        /// The measured Simple phrasing, now in all four (spec §2) — reasoning is about speakers,
+        /// not about how the paragraph was cut up.
+        /// </summary>
+        [Theory]
+        [MemberData(nameof(AttributionPrompts))]
+        public void AttributionPrompts_TargetReasoningAtSpeakers(string prompt) =>
+            Assert.Contains(
+                "quoting the attribution tag(s) you found, or stating that there are none",
+                CollapseWhitespace(prompt));
+
+        /// <summary>Collapses every whitespace run to one space so asserts can read whole sentences across the templates hard line wrapping.</summary>
+        private static string CollapseWhitespace(string prompt) =>
+            string.Join(' ', prompt.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        public static TheoryData<string> AttributionPrompts() =>
+        [
+            PromptTemplates.DefaultCharacterPrompt,
+            PromptTemplates.DefaultBatchCharacterPrompt,
+            PromptTemplates.DefaultSimpleCharacterPrompt,
+            PromptTemplates.DefaultSimpleBatchCharacterPrompt,
+        ];
 
         [Theory]
         [InlineData(false)]
@@ -136,14 +182,12 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public void DefaultBatchCharacterPrompt_ContainsSegmentContractInstructions()
+        public void DefaultBatchCharacterPrompt_ContainsItemContractInstructions()
         {
             var prompt = PromptTemplates.DefaultBatchCharacterPrompt;
             Assert.Contains("\"reasoning\"", prompt);
-            Assert.Contains("How to identify each dialog segment's speaker", prompt);
+            Assert.Contains("How to identify each dialog item's speaker", prompt);
             Assert.Contains("Vocatives", prompt);
-            Assert.Contains("paragraph EXACTLY", prompt);
-            Assert.Contains("Narration segments always have speaker \"narrator\"", prompt);
             // Both trial models answered for context paragraphs unless told not to.
             Assert.Contains("Output entries ONLY for the paragraphs that have an \"index\"", prompt);
         }
@@ -159,8 +203,8 @@ namespace Read2Me.Tests.Services
 
             Assert.Contains("The ONLY acceptable evidence is an attribution tag", prompt);
             Assert.Contains("Do NOT infer a speaker any other way", prompt);
-            // Simple shares the segment contract with standard — only the evidence policy differs.
-            Assert.Contains("Narration segments always have speaker \"narrator\"", prompt);
+            // Simple shares the item contract with standard — only the evidence policy differs.
+            Assert.Contains("already split", prompt);
             Assert.Contains("{{" + PromptTemplates.ContextJson + "}}", prompt);
         }
 
