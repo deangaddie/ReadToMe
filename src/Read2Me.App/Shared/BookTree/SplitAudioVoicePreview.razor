@@ -1,12 +1,10 @@
 @using Read2Me.Data
-@using Read2Me.Data.Enums
 
 <MudText Typo="Typo.caption" Style="opacity:0.65;" data-testid="@TestId">
     @PreviewText
 </MudText>
 
 @code {
-    [Parameter, EditorRequired] public ParagraphItemType ItemType { get; set; }
     [Parameter] public Guid? CharacterId { get; set; }
     [Parameter, EditorRequired] public NarratorIdentity Narrator { get; set; }
     [Parameter] public string? VoiceName { get; set; }
@@ -20,7 +18,9 @@
             if (!Narrator.IsLinked)
                 return voice;
 
-            if (ItemType == ParagraphItemType.Narration)
+            // Narration is the speaker, not the item type (ADR-0006), and under a link
+            // "Narrator (Alice)" stays a different choice from "Alice" — so the two read apart.
+            if (NarrationRule.IsNarration(CharacterId))
                 return $"Narrator → {Narrator.DisplayName} · {voice}";
 
             return CharacterId == Narrator.CharacterId

@@ -1,4 +1,5 @@
 using Read2Me.App.State;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Characters;
@@ -12,7 +13,7 @@ namespace Read2Me.Tests.State
             new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Character = c, CharacterId = c?.Id };
 
         private static ParagraphItem Narration() =>
-            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration };
+            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, CharacterId = ProjectDbContext.NarratorId };
 
         private static Paragraph Para(params ParagraphItem[] items)
         {

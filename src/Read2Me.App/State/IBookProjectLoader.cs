@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
@@ -22,7 +23,9 @@ namespace Read2Me.App.State
         bool NarratorOnlyMode,
         IReadOnlyDictionary<Guid, int> AudioNodeCounts,
         List<(Guid ParagraphItemId, AudioReviewInfo Info)> AudioReviews,
-        IReadOnlyList<ParagraphStatusSeedRow> NodeStatusSeed
+        IReadOnlyList<ParagraphStatusSeedRow> NodeStatusSeed,
+        // Who narrates the book, for the picker label. Null only in fixtures that predate it.
+        NarratorIdentity? Narrator = null
     );
 
     public interface IBookProjectLoader

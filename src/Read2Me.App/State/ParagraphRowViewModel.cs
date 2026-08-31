@@ -1,5 +1,6 @@
 using System.Linq;
 using Read2Me.Data.Entities;
+using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Characters;
 
@@ -37,7 +38,11 @@ namespace Read2Me.App.State
             ParagraphQueueStatus? queueStatus,
             bool hasOutcome)
         {
-            var charItems = para.Items.Where(i => i.ItemType == ParagraphItemType.Character).ToList();
+            // A Character paragraph is one with at least one non-narrator speech item — the speaker
+            // decides, not the item type (ADR-0006).
+            var charItems = para.Items
+                .Where(i => !ParagraphItemKinds.IsPause(i.ItemType) && !NarrationRule.IsNarration(i))
+                .ToList();
             bool isCharPara = charItems.Count > 0;
 
             // Attribution answers per item, so it can stamp some and leave others unknown. Stamped

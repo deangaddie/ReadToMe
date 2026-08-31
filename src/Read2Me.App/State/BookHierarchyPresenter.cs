@@ -85,6 +85,13 @@ namespace Read2Me.App.State
 
         public bool NarratorOnlyMode { get; private set; }
 
+        /// <summary>
+        /// Who narrates this book — read-time projection of the narrator link (ADR-0004). The
+        /// character picker names it on the pinned narrator entry so "Narrator (Alice)" is visibly
+        /// a different choice from "Alice".
+        /// </summary>
+        public NarratorIdentity Narrator { get; private set; } = NarratorIdentity.Unlinked;
+
         private readonly Dictionary<Guid, string?> _resolvedVoiceNames = new();
         private NarratorIdentity _voicePreviewNarrator = NarratorIdentity.Unlinked;
         private Task<NarratorIdentity>? _voicePreviewNarratorTask;
@@ -176,6 +183,7 @@ namespace Read2Me.App.State
             TotalParts = snapshot.TotalParts;
             TotalChapters = snapshot.TotalChapters;
             NarratorOnlyMode = snapshot.NarratorOnlyMode;
+            Narrator = snapshot.Narrator ?? NarratorIdentity.Unlinked;
             _selectableNodes = snapshot.SelectableNodeIds;
             _nodeCounts = snapshot.NodeCharacterParagraphCounts;
             Selection.SetCounts(_nodeCounts);

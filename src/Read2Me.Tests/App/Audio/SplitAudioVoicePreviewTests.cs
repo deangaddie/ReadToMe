@@ -178,11 +178,11 @@ namespace Read2Me.Tests.App.Audio
             await using var db = await OpenDbAsync();
             var narrator = await NarratorIdentity.LoadAsync(db);
             var narrationHtml = await RenderPreviewAsync(
-                ParagraphItemType.Narration, null, narrator, voices[narrationId]);
+                ProjectDbContext.NarratorId, narrator, voices[narrationId]);
             var dialogHtml = await RenderPreviewAsync(
-                ParagraphItemType.Character, charId, narrator, voices[dialogId]);
+                charId, narrator, voices[dialogId]);
             var unrelatedDialogHtml = await RenderPreviewAsync(
-                ParagraphItemType.Character, Guid.NewGuid(), narrator, voices[dialogId]);
+                Guid.NewGuid(), narrator, voices[dialogId]);
 
             Assert.Equal("Default Voice", voices[narrationId]);
             Assert.Equal("Default Voice", voices[dialogId]);
@@ -197,9 +197,9 @@ namespace Read2Me.Tests.App.Audio
         public async Task UnlinkedPreview_KeepsExistingVoiceText()
         {
             var narrationHtml = await RenderPreviewAsync(
-                ParagraphItemType.Narration, null, NarratorIdentity.Unlinked, "Narrator Voice");
+                ProjectDbContext.NarratorId, NarratorIdentity.Unlinked, "Narrator Voice");
             var dialogHtml = await RenderPreviewAsync(
-                ParagraphItemType.Character, Guid.NewGuid(), NarratorIdentity.Unlinked, "Default Voice");
+                Guid.NewGuid(), NarratorIdentity.Unlinked, "Default Voice");
 
             Assert.Contains("Voice: Narrator Voice", narrationHtml);
             Assert.Contains("Voice: Default Voice", dialogHtml);
@@ -208,7 +208,6 @@ namespace Read2Me.Tests.App.Audio
         }
 
         private static async Task<string> RenderPreviewAsync(
-            ParagraphItemType itemType,
             Guid? characterId,
             NarratorIdentity narrator,
             string? voiceName)
@@ -224,7 +223,6 @@ namespace Read2Me.Tests.App.Audio
                 var output = await renderer.RenderComponentAsync<SplitAudioVoicePreview>(
                     ParameterView.FromDictionary(new Dictionary<string, object?>
                     {
-                        [nameof(SplitAudioVoicePreview.ItemType)] = itemType,
                         [nameof(SplitAudioVoicePreview.CharacterId)] = characterId,
                         [nameof(SplitAudioVoicePreview.Narrator)] = narrator,
                         [nameof(SplitAudioVoicePreview.VoiceName)] = voiceName,

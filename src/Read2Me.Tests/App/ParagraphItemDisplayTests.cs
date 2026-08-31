@@ -1,4 +1,6 @@
 using Read2Me.App.Shared;
+using MudBlazor;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Xunit;
@@ -36,6 +38,58 @@ namespace Read2Me.Tests.App
         {
             var p = ParagraphWith(type);
             Assert.Equal(expected, ParagraphItemDisplay.IsPauseParagraph(p));
+        }
+
+        [Fact]
+        public void GetSpeechDisplay_NarratorStampedItem_ShowsTheNarrationPresentation()
+        {
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), Order = "a",
+                ItemType = ParagraphItemType.Character,   // the type says nothing any more
+                CharacterId = ProjectDbContext.NarratorId,
+            };
+
+            var (icon, color, label) = ParagraphItemDisplay.GetSpeechDisplay(item);
+
+            Assert.Equal("Narration", label);
+            Assert.Equal(Color.Info, color);
+            Assert.False(string.IsNullOrEmpty(icon));
+        }
+
+        [Fact]
+        public void GetSpeechDisplay_CharacterStampedItem_ShowsThatCharactersChip()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), Order = "a",
+                ItemType = ParagraphItemType.Narration,   // the type says nothing any more
+                CharacterId = alice.Id,
+                Character = alice,
+            };
+
+            var (icon, color, label) = ParagraphItemDisplay.GetSpeechDisplay(item);
+
+            Assert.Equal("Alice", label);
+            Assert.Equal(Color.Primary, color);
+            Assert.Equal("", icon);
+        }
+
+        [Fact]
+        public void GetSpeechDisplay_UnattributedItem_StaysVisiblyDistinct()
+        {
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), Order = "a",
+                ItemType = ParagraphItemType.Character,
+                CharacterId = null,
+            };
+
+            var (_, color, label) = ParagraphItemDisplay.GetSpeechDisplay(item);
+
+            Assert.Equal("Unknown", label);
+            Assert.Equal(Color.Warning, color);
         }
 
         [Fact]
