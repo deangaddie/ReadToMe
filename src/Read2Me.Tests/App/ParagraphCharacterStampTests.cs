@@ -58,6 +58,47 @@ namespace Read2Me.Tests.App
         }
 
         [Fact]
+        public void Apply_AllNarrationParagraph_TakesTheNarration_OnlyWhenAsked()
+        {
+            var charId = Guid.NewGuid();
+            List<ParagraphItem> Narrated() =>
+            [
+                Narration(),
+                Item(ParagraphItemType.Pause),
+            ];
+
+            // The bulk fan-out's rule: narration survives, whatever the paragraph looks like.
+            var bulk = Narrated();
+            Assert.False(ParagraphCharacterStamp.Apply(bulk, charId, Char(charId)));
+            Assert.Equal(ProjectDbContext.NarratorId, bulk[0].CharacterId);
+
+            // The single-paragraph gesture's rule: with no dialog left, the narration is the
+            // paragraph, so it moves — and the pause still does not.
+            var single = Narrated();
+            Assert.True(ParagraphCharacterStamp.Apply(
+                single, charId, Char(charId), sweepAllNarrationParagraph: true));
+            Assert.Equal(charId, single[0].CharacterId);
+            Assert.Null(single[1].CharacterId);
+        }
+
+        [Fact]
+        public void Apply_MixedParagraph_LeavesNarrationAlone_EvenWhenSweepIsAsked()
+        {
+            var charId = Guid.NewGuid();
+            var items = new List<ParagraphItem>
+            {
+                Narration(),
+                Item(ParagraphItemType.Speech),   // unattributed dialog
+            };
+
+            Assert.True(ParagraphCharacterStamp.Apply(
+                items, charId, Char(charId), sweepAllNarrationParagraph: true));
+
+            Assert.Equal(ProjectDbContext.NarratorId, items[0].CharacterId);
+            Assert.Equal(charId, items[1].CharacterId);
+        }
+
+        [Fact]
         public void Apply_IsIdempotent()
         {
             var charId = Guid.NewGuid();

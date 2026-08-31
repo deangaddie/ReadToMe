@@ -93,6 +93,14 @@ general "manually set" bit.
   deletions: in between, the user could create items that show a speaker nothing would read.
 - **The retired guards' "audio-inert" doc-comments go with them**, replaced by this decision.
   Reading them without this ADR would invite reintroducing the trap.
+- **A paragraph-level assign sweeps non-narrator items, except when there are none.** Preserving
+  narration is what stops a one-gesture speaker fix destroying a paragraph's narration/dialog
+  split — but applied literally it also makes "assign this paragraph to the narrator" a one-way
+  door, because afterwards the paragraph has nothing left to sweep. So a paragraph whose every
+  speech item is narration sweeps its narration instead: there is no split left to protect, and
+  the combined view offers no per-item picker to repair it with. The bulk sibling deliberately
+  keeps the strict rule — a blind fan-out across a large selection must never be able to turn a
+  chapter's narration into dialog, which is the failure the rule exists for.
 - **Derived state can flip.** "Character paragraph" — the unit of attribution selection, roll-up
   denominators and node status badges — becomes "paragraph with at least one non-narrator speech
   item", which one assignment can switch on or off. A speaker change therefore clears selection and

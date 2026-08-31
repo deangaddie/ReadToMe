@@ -720,6 +720,73 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task SetParagraphCharacterCommand_AllNarrationParagraph_TakesTheNarration()
+        {
+            // The undo for "make this paragraph narration". With no dialog left there is no
+            // narration/dialog split to protect, and without this the assign is a one-way door.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("n1", "N1")
+                    .AddNarration("n2", "N2")
+                    .AddPause("pause", ParagraphItemType.ParagraphPause))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), alice.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(alice.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("n1")))!.CharacterId);
+            Assert.Equal(alice.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("n2")))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("pause")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_RoundTrip_NarratorAndBack()
+        {
+            // Both directions at paragraph level, which is what the combined view offers.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p.AddCharacterLine("line", "\"Hi,\"", speaker: "alice"))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+            await using (var mid = await OpenDbAsync())
+                Assert.Equal(ProjectDbContext.NarratorId, (await mid.ParagraphItems.FindAsync(b.ItemId("line")))!.CharacterId);
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), alice.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(alice.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("line")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_MixedParagraph_StillLeavesNarrationAlone()
+        {
+            // The exception is only for a paragraph with no dialog left — a mixed paragraph keeps
+            // its split, so a wrong-speaker fix cannot destroy it.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var bob = new Character { Id = Guid.NewGuid(), Name = "Bob" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            b.WithCharacter("bob", bob);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("narration", "N")
+                    .AddCharacterLine("dialog", "\"Hi,\"", speaker: "alice"))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("narration")))!.CharacterId);
+            Assert.Equal(bob.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("dialog")))!.CharacterId);
+        }
+
+        [Fact]
         public async Task SetParagraphCharacterCommand_WithNullId_ClearsAllCharacterItems()
         {
             var existingChar = new Character { Id = Guid.NewGuid(), Name = "Alice" };

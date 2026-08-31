@@ -62,16 +62,27 @@ public sealed class CreateCharacterHandler(ProjectDbSession session) : ICommandH
 /// speaker (ADR-0006). Preserving narration is what stops a one-gesture speaker fix destroying
 /// the paragraph's narration/dialog split. Assigning the narrator is allowed and means "make
 /// this paragraph narration"; under the same sweep rule it is idempotent.
+/// <para>
+/// One exception, and it is what makes that gesture reversible: a paragraph with <em>no</em>
+/// dialog left — every speech item narration, usually because the user just assigned the whole
+/// paragraph to the narrator — sweeps its narration instead. There is no narration/dialog split
+/// left to protect, and without this the assign is a one-way door at paragraph level. The bulk
+/// sibling deliberately does not do this: a blind fan-out across a selection must never be able
+/// to turn a chapter's narration into dialog.
+/// </para>
 /// </summary>
 public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(SetParagraphCharacterCommand c, CancellationToken ct)
     {
         var db = await session.OpenAsync(c.FolderId);
-        var items = await db.ParagraphItems
+        var speech = await db.ParagraphItems
             .Where(i => i.ParagraphId == c.ParagraphId)
-            .Where(NarrationRule.IsDialogExpression)
+            .Where(ParagraphItemKinds.IsSpeechExpression)
             .ToListAsync();
+
+        var dialog = speech.Where(NarrationRule.IsDialog).ToList();
+        var items = dialog.Count > 0 ? dialog : speech;
         foreach (var item in items)
         {
             // Only an item this gesture actually moves loses its audio; one already on the target

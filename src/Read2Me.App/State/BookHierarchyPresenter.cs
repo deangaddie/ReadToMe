@@ -292,7 +292,7 @@ namespace Read2Me.App.State
             var character = characterId.HasValue ? Characters.Find(c => c.Id == characterId.Value) : null;
 
             await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
-            ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character);
+            ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character, sweepAllNarrationParagraph: true);
 
             await ReseedAfterSpeakerChangeAsync(folderId);
 
