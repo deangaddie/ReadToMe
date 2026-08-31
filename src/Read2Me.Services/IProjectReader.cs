@@ -31,8 +31,9 @@ namespace Read2Me.Services
     {
         /// <summary>
         /// A spoken item — the only kind an attribution answer may stamp, and so the only kind whose
-        /// missing speaker is worth escalating. Narration is never attributable: its speaker is the
-        /// narrator by construction.
+        /// missing speaker is worth escalating. Narration is never attributable: its speaker is
+        /// already the narrator, whether the splitter decided that at import or the user did by hand
+        /// (ADR-0006), and assigning the narrator is therefore also the re-attribution lock.
         /// </summary>
         public bool IsDialog =>
             string.Equals(Type, Llm.AttributionWire.Dialog, StringComparison.OrdinalIgnoreCase);

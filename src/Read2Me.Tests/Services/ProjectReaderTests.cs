@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
@@ -236,6 +237,37 @@ namespace Read2Me.Tests.Services
             Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
             var item = Assert.Single(ctx.Entries[1].Items);
             Assert.Equal(new ContextItem(b.ItemId("i1"), "Narration", "narration", "narrator"), item);
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_MixedParagraph_CarriesKindAndSpeakerFromTheSpeaker()
+        {
+            // The wire shape the LLM sees is unchanged by the collapse: narration named as the
+            // narrator, attributed dialog by its speaker, unattributed dialog as the unknown
+            // sentinel — and an item the *user* narrated is indistinguishable from one the
+            // splitter narrated.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p
+                    .AddNarration("split-narration", "She waited.")
+                    .AddRawItem("user-narration", ParagraphItemType.Character, "\"Quietly.\"", ProjectDbContext.NarratorId)
+                    .AddCharacterLine("attributed", "\"Hi,\"", speaker: "alice")
+                    .AddRawItem("unattributed", ParagraphItemType.Character, "\"Who's there?\""))))
+                .BuildAsync();
+
+            var ctx = await _reader.GetParagraphBatchContextAsync(
+                _folder, b.ChapterId("ch"), [b.ParagraphId("p0")], 0, 0);
+
+            Assert.NotNull(ctx);
+            Assert.Equal(
+            [
+                new ContextItem(b.ItemId("split-narration"), "She waited.", "narration", "narrator"),
+                new ContextItem(b.ItemId("user-narration"), "\"Quietly.\"", "narration", "narrator"),
+                new ContextItem(b.ItemId("attributed"), "\"Hi,\"", "dialog", "Alice"),
+                new ContextItem(b.ItemId("unattributed"), "\"Who's there?\"", "dialog", "unknown"),
+            ], ctx.Entries[0].Items);
         }
 
         [Fact]

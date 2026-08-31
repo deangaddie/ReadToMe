@@ -19,10 +19,10 @@ namespace Read2Me.Services.Commands.Handlers;
 /// it names should be read.
 /// </para>
 /// <para>
-/// Only Character items are stamped. Pause items carry no speech at all, and spec §2 has the caller
-/// drop answers on narration indices — enforced again here so a stray narration id cannot leave a
-/// narration item pointing at a character, the audio-inert state
-/// <see cref="SetItemCharacterHandler"/> warns about.
+/// Only non-narrator speech items are stamped. A pause carries no speech at all, and a
+/// narrator-stamped item is one the user (or the splitter) has already settled: assigning an item
+/// to the narrator is also the gesture that locks it out of re-attribution (ADR-0006). Everything
+/// else — attributed dialog included — is re-asked, exactly as before this change.
 /// </para>
 /// </summary>
 public sealed class AttributeItemsHandler(
@@ -44,7 +44,8 @@ public sealed class AttributeItemsHandler(
         foreach (var attribution in c.Items)
         {
             if (!items.TryGetValue(attribution.ItemId, out var item)) continue;
-            if (item.ItemType != ParagraphItemType.Character) continue;
+            if (ParagraphItemKinds.IsPause(item.ItemType)) continue;
+            if (NarrationRule.IsNarration(item)) continue;
 
             if (attribution.CharacterId.HasValue) item.CharacterId = attribution.CharacterId;
             item.VoiceInstructions = attribution.VoiceInstructions;

@@ -224,6 +224,47 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
+        public async Task An_item_the_user_narrated_survives_a_rerun_untouched()
+        {
+            // Assigning an item to the narrator is also the gesture that locks it out of
+            // re-attribution (ADR-0006) — the queue may not undo a decision made by hand.
+            var b = Builder();
+            await b.AddVolume("v", v => v.AddChapter(configure: c => c.AddParagraph("p", p => p
+                .AddRawItem("narrated", ParagraphItemType.Character, "\"Hello,\" ", ProjectDbContext.NarratorId)
+                .AddRawItem("dialog", ParagraphItemType.Character, "\"Hi,\"", null)))).BuildAsync();
+
+            await _svc.ExecuteAsync(new AttributeItemsCommand(_folder, b.ParagraphId("p"),
+            [
+                new ItemAttribution(b.ItemId("narrated"), CarolId, "breathless"),
+                new ItemAttribution(b.ItemId("dialog"), CarolId, null),
+            ]));
+
+            var items = await ItemsAsync(b.ParagraphId("p"));
+            var narrated = items.Single(i => i.Id == b.ItemId("narrated"));
+            Assert.Equal(ProjectDbContext.NarratorId, narrated.CharacterId);
+            Assert.Null(narrated.VoiceInstructions);
+            // Its non-narrator neighbour is still asked and stamped.
+            Assert.Equal(CarolId, items.Single(i => i.Id == b.ItemId("dialog")).CharacterId);
+        }
+
+        [Fact]
+        public async Task A_rerun_restamps_an_already_attributed_item()
+        {
+            // Pre-change behaviour: requesting a re-run re-asks every non-narrator item, whether
+            // or not it already carries a speaker.
+            var b = Builder();
+            await b.AddVolume("v", v => v.AddChapter(configure: c => c.AddParagraph("p", p => p
+                .AddCharacterLine("i1", "\"Hello,\"", "alice")))).BuildAsync();
+
+            await _svc.ExecuteAsync(new AttributeItemsCommand(_folder, b.ParagraphId("p"),
+            [
+                new ItemAttribution(b.ItemId("i1"), CarolId, null),
+            ]));
+
+            Assert.Equal(CarolId, (await ItemsAsync(b.ParagraphId("p")))[0].CharacterId);
+        }
+
+        [Fact]
         public async Task Item_count_is_invariant_even_when_nothing_matches()
         {
             var b = Builder();
