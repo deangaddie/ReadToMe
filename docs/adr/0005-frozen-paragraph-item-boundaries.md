@@ -46,3 +46,4 @@ import) is the sole authority on item boundaries for the life of the project.
   already-re-split items are left exactly as they are — no migration re-splits stored books.
 - **`ParagraphItemType` survives in the database and app** even though the LLM no longer answers a
   type. A user-driven narration↔dialog switch is expected later; the model does not get one.
+- **Amended 2026-08-31**: the retype clause above is retired — the user-driven narration↔dialog switch it anticipated arrived as a speaker assignment, not a type change, and `ParagraphItemType` no longer distinguishes the two (see [ADR 0006](0006-narration-is-a-speaker-not-an-item-type.md)); everything else here still binds, in particular that attribution may never insert, delete, reorder or retext an item.
