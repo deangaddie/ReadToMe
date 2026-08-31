@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Enums;
-using Read2Me.Services.Audio;
+
 
 namespace Read2Me.Services.Voice;
 
@@ -51,7 +51,7 @@ public sealed class VoiceResolver : IVoiceResolver
         foreach (var it in items)
         {
             Guid? charId;
-            if (AudiobookAssemblyPlanner.IsPause(it.ItemType))
+            if (ParagraphItemKinds.IsPause(it.ItemType))
                 charId = null;
             else if (narratorOnlyMode || NarrationRule.IsNarration(it.CharacterId))
                 charId = narrator.CharacterId;

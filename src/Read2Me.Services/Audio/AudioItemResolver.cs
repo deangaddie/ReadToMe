@@ -57,7 +57,7 @@ namespace Read2Me.Services.Audio
             if (selectedVoiceId is null)
             {
                 // No speaker on a speech item → unattributed, not a missing-voice issue
-                if (row.CharacterId is null && !AudiobookAssemblyPlanner.IsPause(row.ItemType))
+                if (row.CharacterId is null && !ParagraphItemKinds.IsPause(row.ItemType))
                     return new ResolutionResult(speaker, sourceText, null,
                         "No character assigned to item");
 

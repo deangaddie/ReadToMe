@@ -45,13 +45,22 @@ public sealed class CreateCharacterHandler(ProjectDbSession session) : ICommandH
     }
 }
 
+/// <summary>
+/// Stamps a speaker across a paragraph, sweeping its speech items *except* the narration —
+/// the same line the old <c>ItemType == Character</c> filter drew, now expressed against the
+/// speaker (ADR-0006). Preserving narration is what stops a one-gesture speaker fix destroying
+/// the paragraph's narration/dialog split. Assigning the narrator is allowed and means "make
+/// this paragraph narration"; under the same sweep rule it is idempotent.
+/// </summary>
 public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(SetParagraphCharacterCommand c, CancellationToken ct)
     {
         var db = await session.OpenAsync(c.FolderId);
         var items = await db.ParagraphItems
-            .Where(i => i.ParagraphId == c.ParagraphId && i.ItemType == ParagraphItemType.Character)
+            .Where(i => i.ParagraphId == c.ParagraphId)
+            .Where(ParagraphItemKinds.IsSpeechExpression)
+            .Where(NarrationRule.IsNotNarrationExpression)
             .ToListAsync();
         foreach (var item in items)
         {
@@ -69,7 +78,8 @@ public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICo
 /// entities loaded, so a thousand-paragraph selection costs no change-tracker time. The id list
 /// is not chunked — EF translates <c>Contains</c> to <c>IN (SELECT value FROM json_each(@ids))</c>,
 /// a single parameter at any length. <c>VoiceInstructions</c> is left alone: there is no
-/// per-line instruction to spread across a selection.
+/// per-line instruction to spread across a selection. It sweeps the same non-narrator speech
+/// items its sibling does, so narration survives a thousand-paragraph correction.
 /// </summary>
 public sealed class SetParagraphsCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphsCharacterCommand>
 {
@@ -77,7 +87,9 @@ public sealed class SetParagraphsCharacterHandler(ProjectDbSession session) : IC
     {
         var db = await session.OpenAsync(c.FolderId);
         await db.ParagraphItems
-            .Where(i => c.ParagraphIds.Contains(i.ParagraphId) && i.ItemType == ParagraphItemType.Character)
+            .Where(i => c.ParagraphIds.Contains(i.ParagraphId))
+            .Where(ParagraphItemKinds.IsSpeechExpression)
+            .Where(NarrationRule.IsNotNarrationExpression)
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.CharacterId, c.CharacterId), ct);
         return null;
     }

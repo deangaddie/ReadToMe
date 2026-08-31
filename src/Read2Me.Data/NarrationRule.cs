@@ -26,6 +26,14 @@ namespace Read2Me.Data
         public static readonly Expression<Func<ParagraphItem, bool>> IsNarrationExpression =
             item => item.CharacterId == ProjectDbContext.NarratorId;
 
+        /// <summary>
+        /// The EF-translatable negation, for readers and writers that sweep everything *except*
+        /// narration. Kept here rather than negated at each call site so both directions of the
+        /// rule move together.
+        /// </summary>
+        public static readonly Expression<Func<ParagraphItem, bool>> IsNotNarrationExpression =
+            item => item.CharacterId != ProjectDbContext.NarratorId;
+
         private static readonly Func<ParagraphItem, bool> Predicate = IsNarrationExpression.Compile();
 
         /// <summary>The in-memory form, for an item already loaded.</summary>

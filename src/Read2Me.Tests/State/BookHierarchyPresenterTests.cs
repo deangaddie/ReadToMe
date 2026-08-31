@@ -2,6 +2,7 @@ using MudBlazor;
 using NSubstitute;
 using Read2Me.App.State;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
@@ -925,7 +926,7 @@ namespace Read2Me.Tests.State
                 Items =
                 [
                     new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a", CharacterId = charId },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b", CharacterId = ProjectDbContext.NarratorId },
                 ]
             };
             reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, queued.ChapterId)
@@ -1066,7 +1067,7 @@ namespace Read2Me.Tests.State
                 Items =
                 [
                     new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a", CharacterId = stamped },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b", CharacterId = ProjectDbContext.NarratorId },
                     new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "c", CharacterId = stamped },
                 ]
             };
@@ -1552,7 +1553,7 @@ namespace Read2Me.Tests.State
                     Items =
                     [
                         new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a" },
-                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b" },
+                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b", CharacterId = ProjectDbContext.NarratorId },
                     ],
                 };
 
@@ -1638,7 +1639,7 @@ namespace Read2Me.Tests.State
             Assert.Equal(charId, selected.Items.First().CharacterId);
             Assert.Equal("Zelda", selected.Items.First().Character?.Name);
             // Narration is never stamped, and a loaded paragraph outside the selection is untouched.
-            Assert.Null(selected.Items.Last().CharacterId);
+            Assert.Equal(ProjectDbContext.NarratorId, selected.Items.Last().CharacterId);
             Assert.Null(unselected.Items.First().CharacterId);
         }
 

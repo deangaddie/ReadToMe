@@ -469,7 +469,7 @@ namespace Read2Me.Tests.Services
                 .AddParagraph("para", p => p
                     .AddRawItem("charItem1", ParagraphItemType.Character, "Hello")
                     .AddRawItem("charItem2", ParagraphItemType.Character, "World")
-                    .AddRawItem("narrationItem", ParagraphItemType.Narration, "Narration"))))
+                    .AddNarration("narrationItem", "Narration"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
@@ -477,7 +477,7 @@ namespace Read2Me.Tests.Services
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("charItem1")))!.CharacterId);
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("charItem2")))!.CharacterId);
-            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("narrationItem")))!.CharacterId);
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("narrationItem")))!.CharacterId);
         }
 
         [Fact]
@@ -535,7 +535,7 @@ namespace Read2Me.Tests.Services
                 .AddParagraph("para", p => p
                     .AddRawItem("ci1", ParagraphItemType.Character, "A")
                     .AddRawItem("ci2", ParagraphItemType.Character, "B")
-                    .AddRawItem("ni", ParagraphItemType.Narration, "N"))))
+                    .AddNarration("ni", "N"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
@@ -543,7 +543,54 @@ namespace Read2Me.Tests.Services
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("ci1")))!.CharacterId);
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("ci2")))!.CharacterId);
-            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("ni")))!.CharacterId);
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("ni")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_MixedParagraph_SweepsOnlyNonNarratorItems()
+        {
+            // Narration + attributed dialog + unattributed dialog. The sweep is the old
+            // "dialog only" rule expressed against the speaker (ADR-0006).
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var bob = new Character { Id = Guid.NewGuid(), Name = "Bob" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            b.WithCharacter("bob", bob);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("narration", "N")
+                    .AddCharacterLine("attributed", "A", speaker: "alice")
+                    .AddRawItem("unattributed", ParagraphItemType.Character, "U"))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("narration")))!.CharacterId);
+            Assert.Equal(bob.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("attributed")))!.CharacterId);
+            Assert.Equal(bob.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("unattributed")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_ToNarrator_MakesParagraphNarrationAndIsIdempotent()
+        {
+            // The one-gesture repair for a paragraph the LLM swallowed into a character.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("narration", "N")
+                    .AddCharacterLine("attributed", "A", speaker: "alice")
+                    .AddRawItem("unattributed", ParagraphItemType.Character, "U"))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+
+            await using var verify = await OpenDbAsync();
+            foreach (var name in new[] { "narration", "attributed", "unattributed" })
+                Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId(name)))!.CharacterId);
         }
 
         [Fact]

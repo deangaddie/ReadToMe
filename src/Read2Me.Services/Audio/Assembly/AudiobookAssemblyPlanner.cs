@@ -1,4 +1,5 @@
 using System.Text;
+using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio.Assembly;
 
@@ -6,17 +7,7 @@ namespace Read2Me.Services.Audio
 {
     public static class AudiobookAssemblyPlanner
     {
-        private static readonly ParagraphItemType[] PauseKinds =
-        [
-            ParagraphItemType.VolumePause,
-            ParagraphItemType.PartPause,
-            ParagraphItemType.ChapterPause,
-            ParagraphItemType.ParagraphPause,
-            ParagraphItemType.Pause,
-        ];
-
-        public static bool IsPause(ParagraphItemType kind) =>
-            Array.IndexOf(PauseKinds, kind) >= 0;
+        public static bool IsPause(ParagraphItemType kind) => ParagraphItemKinds.IsPause(kind);
 
         // ── 1. Pause kind → milliseconds ────────────────────────────────────
 
@@ -58,10 +49,10 @@ namespace Read2Me.Services.Audio
 
                 // Keep the highest-level pause in the run (lowest index in PauseKinds = highest level)
                 var best = filtered[runStart];
-                int bestRank = Array.IndexOf(PauseKinds, best.ItemType);
+                int bestRank = ParagraphItemKinds.PauseRank(best.ItemType);
                 for (int j = runStart + 1; j <= runEnd; j++)
                 {
-                    int rank = Array.IndexOf(PauseKinds, filtered[j].ItemType);
+                    int rank = ParagraphItemKinds.PauseRank(filtered[j].ItemType);
                     if (rank < bestRank)
                     {
                         bestRank = rank;

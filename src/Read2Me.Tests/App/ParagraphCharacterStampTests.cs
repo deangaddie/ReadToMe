@@ -1,4 +1,5 @@
 using Read2Me.App.State;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Xunit;
@@ -9,6 +10,10 @@ namespace Read2Me.Tests.App
     {
         private static ParagraphItem Item(ParagraphItemType type, Guid? charId = null) =>
             new() { Id = Guid.NewGuid(), ParagraphId = Guid.NewGuid(), Order = "a", ItemType = type, CharacterId = charId };
+
+        // Narration is the narrator as speaker, not a type (ADR-0006).
+        private static ParagraphItem Narration() =>
+            Item(ParagraphItemType.Narration, ProjectDbContext.NarratorId);
 
         private static Character Char(Guid id, string name = "Alice") =>
             new() { Id = id, Name = name };
@@ -22,7 +27,7 @@ namespace Read2Me.Tests.App
             {
                 Item(ParagraphItemType.Character),
                 Item(ParagraphItemType.Character),
-                Item(ParagraphItemType.Narration),
+                Narration(),
             };
 
             var changed = ParagraphCharacterStamp.Apply(items, charId, character);
@@ -32,7 +37,24 @@ namespace Read2Me.Tests.App
             Assert.Equal(charId, items[1].CharacterId);
             Assert.Same(character, items[0].Character);
             Assert.Same(character, items[1].Character);
-            Assert.Null(items[2].CharacterId);
+            Assert.Equal(ProjectDbContext.NarratorId, items[2].CharacterId);
+        }
+
+        [Fact]
+        public void Apply_ToNarrator_MakesTheParagraphNarrationAndIsIdempotent()
+        {
+            var existingId = Guid.NewGuid();
+            var items = new List<ParagraphItem>
+            {
+                Item(ParagraphItemType.Character, existingId),
+                Item(ParagraphItemType.Character),   // unattributed dialog
+                Narration(),
+            };
+
+            Assert.True(ParagraphCharacterStamp.Apply(items, ProjectDbContext.NarratorId, null));
+            Assert.All(items, i => Assert.Equal(ProjectDbContext.NarratorId, i.CharacterId));
+
+            Assert.False(ParagraphCharacterStamp.Apply(items, ProjectDbContext.NarratorId, null));
         }
 
         [Fact]

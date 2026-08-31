@@ -118,6 +118,54 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(AliceId, await CharacterIdOfAsync(b.ItemId("p3-dialog")));
         }
 
+        [Fact]
+        public async Task SetParagraphsCharacter_LargeSelection_NarrationSurvivesEverywhere()
+        {
+            // The failure this rule exists to prevent: one gesture turning a chapter's narration
+            // into dialog. Fifty paragraphs, each narration + dialog, all selected at once.
+            const int paragraphCount = 50;
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", new Character { Id = AliceId, Name = "Alice" });
+            b.WithCharacter("bob", new Character { Id = BobId, Name = "Bob" });
+            await b.AddVolume("vol", v => v.AddChapter(configure: c =>
+            {
+                for (var i = 0; i < paragraphCount; i++)
+                {
+                    var n = i;
+                    c.AddParagraph($"p{n}", p => p
+                        .AddNarration($"n{n}", "he said.")
+                        .AddRawItem($"d{n}", ParagraphItemType.Character, "\"Line.\"", AliceId));
+                }
+            })).BuildAsync();
+
+            var paragraphIds = Enumerable.Range(0, paragraphCount).Select(i => b.ParagraphId($"p{i}")).ToList();
+            await _handler.HandleAsync(
+                new SetParagraphsCharacterCommand(_folder, paragraphIds, BobId),
+                CancellationToken.None);
+
+            for (var i = 0; i < paragraphCount; i++)
+            {
+                Assert.Equal(BobId, await CharacterIdOfAsync(b.ItemId($"d{i}")));
+                Assert.Equal(ProjectDbContext.NarratorId, await CharacterIdOfAsync(b.ItemId($"n{i}")));
+            }
+        }
+
+        [Fact]
+        public async Task SetParagraphsCharacter_ToNarrator_MakesTheSelectionNarration()
+        {
+            var b = await SeedAsync();
+
+            await _handler.HandleAsync(
+                new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1"), b.ParagraphId("p2")], ProjectDbContext.NarratorId),
+                CancellationToken.None);
+
+            Assert.Equal(ProjectDbContext.NarratorId, await CharacterIdOfAsync(b.ItemId("p1-dialog")));
+            Assert.Equal(ProjectDbContext.NarratorId, await CharacterIdOfAsync(b.ItemId("p2-dialog")));
+            Assert.Null(await CharacterIdOfAsync(b.ItemId("p1-pause")));
+            // Outside the selection, unchanged.
+            Assert.Equal(AliceId, await CharacterIdOfAsync(b.ItemId("p3-dialog")));
+        }
+
         /// <summary>A bulk assign creates nothing, so the bus gets no new id to hand back.</summary>
         [Fact]
         public async Task SetParagraphsCharacter_ReturnsNull_NoNewIdIsCreated()
