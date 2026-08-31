@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Read2Me.Data;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
@@ -44,7 +45,7 @@ namespace Read2Me.App.Api
             {
                 var manifest = await reader.GetAssemblyManifestAsync(folderId, ct);
                 var remaining = manifest.Count(e =>
-                    !AudiobookAssemblyPlanner.IsPause(e.ItemType) && e.AudioRelativePath == null);
+                    !ParagraphItemKinds.IsPause(e.ItemType) && e.AudioRelativePath == null);
                 if (remaining > 0)
                     return Results.Problem(
                         $"{remaining} items still need audio. Generate audio first or pass allowPartial.",

@@ -27,6 +27,9 @@ public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommand
         var db = await session.OpenAsync(c.FolderId);
         var item = await db.ParagraphItems.Include(i => i.Character).FirstOrDefaultAsync(i => i.Id == c.ItemId);
         if (item == null) return null;
+        // Any speaker on any *speech* item. A pause is nobody's: nothing reads a stamped pause and
+        // every reader filters it out, so the stamp would sit there invisible and untrue.
+        if (ParagraphItemKinds.IsPause(item.ItemType)) return null;
         if (item.CharacterId == c.CharacterId) return null;
         item.CharacterId = c.CharacterId;
         item.AudioFileName = null;
@@ -67,8 +70,7 @@ public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICo
         var db = await session.OpenAsync(c.FolderId);
         var items = await db.ParagraphItems
             .Where(i => i.ParagraphId == c.ParagraphId)
-            .Where(ParagraphItemKinds.IsSpeechExpression)
-            .Where(NarrationRule.IsNotNarrationExpression)
+            .Where(NarrationRule.IsDialogExpression)
             .ToListAsync();
         foreach (var item in items)
         {
@@ -102,8 +104,7 @@ public sealed class SetParagraphsCharacterHandler(ProjectDbSession session) : IC
         var db = await session.OpenAsync(c.FolderId);
         await db.ParagraphItems
             .Where(i => c.ParagraphIds.Contains(i.ParagraphId))
-            .Where(ParagraphItemKinds.IsSpeechExpression)
-            .Where(NarrationRule.IsNotNarrationExpression)
+            .Where(NarrationRule.IsDialogExpression)
             .Where(i => i.CharacterId != c.CharacterId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(i => i.CharacterId, c.CharacterId)

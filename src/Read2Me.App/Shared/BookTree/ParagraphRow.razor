@@ -183,7 +183,7 @@
                 }
                 else
                 {
-                    var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetItemDisplay(it.ItemType);
+                    var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetPauseDisplay(it.ItemType);
                     <div class="paragraph-item-hover-row" style="@($"display:grid; grid-template-columns:{(isAudioMode ? "32px " : "")}120px 1fr auto; align-items:center; gap:8px; opacity:0.6; font-style:italic;")">
                         @if (isAudioMode)
                         {
@@ -249,15 +249,16 @@ else
             {
                 <span style="display:inline-block; width:38px; flex-shrink:0;"></span>
             }
-            @if (isCharPara && !isBusy)
+            @if (vm.Chip != ParaCharacterChip.None && !isBusy)
             {
                 var (chipColor, chipLabel) = vm.Chip switch
                 {
-                    ParaCharacterChip.Mixed   => (Color.Default, "Mixed"),
-                    ParaCharacterChip.Unknown => (Color.Warning, "Unknown"),
-                    ParaCharacterChip.Partial => (Color.Warning, $"{vm.SingleCharacterName ?? "Mixed"} +?"),
-                    ParaCharacterChip.Single  => (Color.Primary, vm.SingleCharacterName!),
-                    _                         => (Color.Default, "")
+                    ParaCharacterChip.Mixed     => (Color.Default, "Mixed"),
+                    ParaCharacterChip.Unknown   => (Color.Warning, "Unknown"),
+                    ParaCharacterChip.Partial   => (Color.Warning, $"{vm.SingleCharacterName ?? "Mixed"} +?"),
+                    ParaCharacterChip.Single    => (Color.Primary, vm.SingleCharacterName!),
+                    ParaCharacterChip.Narration => (Color.Info, "Narration"),
+                    _                           => (Color.Default, "")
                 };
                 <CharacterChipMenu Label="@chipLabel"
                                    FolderId="@FolderId"
@@ -304,7 +305,7 @@ else
         if (Presenter.ViewMode == BookViewMode.SplitAudio)
         {
             var itemIds = Para.Items
-                .Where(i => i.ItemType == ParagraphItemType.Speech || i.ItemType == ParagraphItemType.Speech)
+                .Where(i => !ParagraphItemKinds.IsPause(i.ItemType))
                 .Select(i => i.Id);
             await Presenter.EnsureVoicePreviewAsync(FolderId, itemIds);
         }

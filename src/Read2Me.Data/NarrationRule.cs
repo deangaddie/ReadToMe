@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 
 namespace Read2Me.Data
 {
@@ -33,6 +34,21 @@ namespace Read2Me.Data
         /// </summary>
         public static readonly Expression<Func<ParagraphItem, bool>> IsNotNarrationExpression =
             item => item.CharacterId != ProjectDbContext.NarratorId;
+
+        /// <summary>
+        /// A dialog item: a speech item whose speaker is not the narrator, attributed or not.
+        /// This is the unit the glossary calls a <em>Character paragraph</em>'s content — the thing
+        /// attribution asks about, selection counts and a paragraph-level assign sweeps — so the
+        /// rule lives here once rather than being spelled "speech and not narration" per call site.
+        /// </summary>
+        public static readonly Expression<Func<ParagraphItem, bool>> IsDialogExpression =
+            item => item.ItemType == ParagraphItemType.Speech
+                 && item.CharacterId != ProjectDbContext.NarratorId;
+
+        private static readonly Func<ParagraphItem, bool> DialogPredicate = IsDialogExpression.Compile();
+
+        /// <summary>The in-memory form of <see cref="IsDialogExpression"/>.</summary>
+        public static bool IsDialog(ParagraphItem item) => DialogPredicate(item);
 
         private static readonly Func<ParagraphItem, bool> Predicate = IsNarrationExpression.Compile();
 

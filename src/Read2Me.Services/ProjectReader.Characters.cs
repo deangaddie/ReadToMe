@@ -219,8 +219,7 @@ namespace Read2Me.Services
             var db = await _session.OpenAsync(folderId);
 
             IQueryable<Data.Entities.ParagraphItem> q = db.ParagraphItems
-                .Where(ParagraphItemKinds.IsSpeechExpression)
-                .Where(NarrationRule.IsNotNarrationExpression);
+                .Where(NarrationRule.IsDialogExpression);
 
             q = level switch
             {
@@ -263,8 +262,7 @@ namespace Read2Me.Services
             // EF renders Contains as IN (SELECT value FROM json_each(@ids)) — one parameter at any length.
             var perParagraph = await db.ParagraphItems
                 .Where(i => paragraphIds.Contains(i.ParagraphId))
-                .Where(ParagraphItemKinds.IsSpeechExpression)
-                .Where(NarrationRule.IsNotNarrationExpression)
+                .Where(NarrationRule.IsDialogExpression)
                 .GroupBy(i => i.ParagraphId)
                 .Select(g => g.Count())
                 .ToListAsync(ct);
@@ -278,8 +276,7 @@ namespace Read2Me.Services
 
             // Chapter/Part/Volume ids of every character-bearing paragraph, in one round trip.
             var rows = await db.ParagraphItems
-                .Where(ParagraphItemKinds.IsSpeechExpression)
-                .Where(NarrationRule.IsNotNarrationExpression)
+                .Where(NarrationRule.IsDialogExpression)
                 .Select(i => new
                 {
                     ChapterId = i.Paragraph.ChapterId,

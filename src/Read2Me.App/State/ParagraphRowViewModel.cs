@@ -6,7 +6,7 @@ using Read2Me.Services.Characters;
 
 namespace Read2Me.App.State
 {
-    public enum ParaCharacterChip { None, Single, Mixed, Unknown, Partial }
+    public enum ParaCharacterChip { None, Single, Mixed, Unknown, Partial, Narration }
 
     /// <summary>
     /// Pure presentation decisions for one paragraph row — no MudBlazor, no async.
@@ -40,9 +40,7 @@ namespace Read2Me.App.State
         {
             // A Character paragraph is one with at least one non-narrator speech item — the speaker
             // decides, not the item type (ADR-0006).
-            var charItems = para.Items
-                .Where(i => !ParagraphItemKinds.IsPause(i.ItemType) && !NarrationRule.IsNarration(i))
-                .ToList();
+            var charItems = para.Items.Where(NarrationRule.IsDialog).ToList();
             bool isCharPara = charItems.Count > 0;
 
             // Attribution answers per item, so it can stamp some and leave others unknown. Stamped
@@ -55,7 +53,12 @@ namespace Read2Me.App.State
 
             ParaCharacterChip chip;
             string? name = null;
-            if (!isCharPara) chip = ParaCharacterChip.None;
+            // An all-narration paragraph still gets a chip, so assigning a paragraph to the
+            // narrator (ADR-0006, D10) is undoable at paragraph level rather than item by item.
+            if (!isCharPara)
+                chip = para.Items.Any(NarrationRule.IsNarration)
+                    ? ParaCharacterChip.Narration
+                    : ParaCharacterChip.None;
             else if (stamped.Count == 0) chip = ParaCharacterChip.Unknown;
             else
             {

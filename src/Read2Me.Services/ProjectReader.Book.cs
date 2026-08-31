@@ -31,8 +31,7 @@ namespace Read2Me.Services
             // One query: distinct character-paragraph refs for counting and selectable-node set.
             // A Character paragraph is one with at least one non-narrator speech item (ADR-0006).
             var refs = await db.ParagraphItems
-                .Where(ParagraphItemKinds.IsSpeechExpression)
-                .Where(NarrationRule.IsNotNarrationExpression)
+                .Where(NarrationRule.IsDialogExpression)
                 .Select(i => new
                 {
                     ParagraphId = i.ParagraphId,

@@ -7,8 +7,6 @@ namespace Read2Me.Services.Audio
 {
     public static class AudiobookAssemblyPlanner
     {
-        public static bool IsPause(ParagraphItemType kind) => ParagraphItemKinds.IsPause(kind);
-
         // ── 1. Pause kind → milliseconds ────────────────────────────────────
 
         public static int PauseMs(ParagraphItemType kind, AudioProcessingSettings settings) =>
@@ -28,14 +26,14 @@ namespace Read2Me.Services.Audio
             IReadOnlyList<AssemblyManifestEntry> manifest)
         {
             var filtered = manifest
-                .Where(e => IsPause(e.ItemType) || e.AudioRelativePath != null)
+                .Where(e => ParagraphItemKinds.IsPause(e.ItemType) || e.AudioRelativePath != null)
                 .ToList();
 
             var result = new List<AssemblyManifestEntry>(filtered.Count);
             for (int i = 0; i < filtered.Count; i++)
             {
                 var entry = filtered[i];
-                if (!IsPause(entry.ItemType))
+                if (!ParagraphItemKinds.IsPause(entry.ItemType))
                 {
                     result.Add(entry);
                     continue;
@@ -44,7 +42,7 @@ namespace Read2Me.Services.Audio
                 // Start of a pause run — find how far it extends
                 int runStart = i;
                 int runEnd = i;
-                while (runEnd + 1 < filtered.Count && IsPause(filtered[runEnd + 1].ItemType))
+                while (runEnd + 1 < filtered.Count && ParagraphItemKinds.IsPause(filtered[runEnd + 1].ItemType))
                     runEnd++;
 
                 // Keep the highest-level pause in the run (lowest index in PauseKinds = highest level)
@@ -76,7 +74,7 @@ namespace Read2Me.Services.Audio
             var result = new List<ConcatEntry>(manifest.Count);
             foreach (var entry in manifest)
             {
-                if (IsPause(entry.ItemType))
+                if (ParagraphItemKinds.IsPause(entry.ItemType))
                 {
                     result.Add(new ConcatEntry.Silence(PauseMs(entry.ItemType, settings)));
                 }
@@ -127,7 +125,7 @@ namespace Read2Me.Services.Audio
 
                 bool isBoundary = prevVolId == null || volChanged || partChanged || chapChanged;
 
-                if (isBoundary && !IsPause(entry.ItemType))
+                if (isBoundary && !ParagraphItemKinds.IsPause(entry.ItemType))
                 {
                     // Advance level indexes
                     if (prevVolId == null || volChanged)
@@ -158,7 +156,7 @@ namespace Read2Me.Services.Audio
                     prevPartId = entry.PartId;
                     prevChapId = entry.ChapterId;
                 }
-                else if (isBoundary && IsPause(entry.ItemType))
+                else if (isBoundary && ParagraphItemKinds.IsPause(entry.ItemType))
                 {
                     // Pause at a section boundary: advance prevIds so the next audio item
                     // triggers the boundary correctly, but don't emit a marker yet.
@@ -168,7 +166,7 @@ namespace Read2Me.Services.Audio
                 }
 
                 // Advance offset
-                if (IsPause(entry.ItemType))
+                if (ParagraphItemKinds.IsPause(entry.ItemType))
                     offset += TimeSpan.FromMilliseconds(PauseMs(entry.ItemType, settings));
                 else if (audioDurations.TryGetValue(entry.ParagraphItemId, out var dur))
                     offset += dur;

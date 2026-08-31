@@ -116,12 +116,11 @@ namespace Read2Me.Tests.App
         }
 
         [Theory]
-        [InlineData(ParagraphItemType.Speech)]
         [InlineData(ParagraphItemType.VolumePause)]
         [InlineData(ParagraphItemType.ChapterPause)]
-        public void GetItemDisplay_ReturnsNonEmptyIconAndLabel(ParagraphItemType type)
+        public void GetPauseDisplay_ReturnsNonEmptyIconAndLabel(ParagraphItemType type)
         {
-            var (icon, _, label) = ParagraphItemDisplay.GetItemDisplay(type);
+            var (icon, _, label) = ParagraphItemDisplay.GetPauseDisplay(type);
             Assert.False(string.IsNullOrWhiteSpace(icon));
             Assert.False(string.IsNullOrWhiteSpace(label));
         }

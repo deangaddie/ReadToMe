@@ -26,9 +26,20 @@ namespace Read2Me.Tests.State
         private static readonly Character Bob   = new() { Id = Guid.NewGuid(), Name = "Bob" };
 
         [Fact]
-        public void NarrationOnly_IsNotCharacterParagraph_ChipNone()
+        public void NarrationOnly_IsNotCharacterParagraph_ButStillOffersItsChip()
         {
+            // Not attributable, so no checkbox and no roll-up — but it keeps a chip, which is how
+            // "make this paragraph narration" is undone at paragraph level (ADR-0006).
             var vm = ParagraphRowViewModel.For(Para(Narration()), false, null, false);
+            Assert.False(vm.IsCharacterParagraph);
+            Assert.Equal(ParaCharacterChip.Narration, vm.Chip);
+        }
+
+        [Fact]
+        public void PauseOnly_HasNoChipAtAll()
+        {
+            var pause = new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.ChapterPause };
+            var vm = ParagraphRowViewModel.For(Para(pause), false, null, false);
             Assert.False(vm.IsCharacterParagraph);
             Assert.Equal(ParaCharacterChip.None, vm.Chip);
         }

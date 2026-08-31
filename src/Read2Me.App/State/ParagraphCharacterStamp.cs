@@ -18,8 +18,7 @@ public static class ParagraphCharacterStamp
         var changed = false;
         foreach (var item in items)
         {
-            if (ParagraphItemKinds.IsPause(item.ItemType)) continue;
-            if (NarrationRule.IsNarration(item)) continue;
+            if (!NarrationRule.IsDialog(item)) continue;
             if (item.CharacterId == characterId) continue;
             item.CharacterId = characterId;
             // A hand-flip discards the item's audio; mirror that here so the row shows it back in

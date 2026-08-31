@@ -219,6 +219,23 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task SetItemCharacterCommand_LeavesPauseItemsAlone()
+        {
+            // Any speaker on any *speech* item — a pause is nobody's. Nothing would read a stamped
+            // pause and every reader filters it out, so the stamp would sit there invisible.
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddPause("pause", ParagraphItemType.ChapterPause)))).BuildAsync();
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("pause"), character.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("pause")))!.CharacterId);
+        }
+
+        [Fact]
         public async Task SetItemCharacterCommand_ClearsSpeakerOnNarrationItem()
         {
             // Clearing is the repair path for a narration item that already carries a character,

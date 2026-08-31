@@ -19,7 +19,11 @@ namespace Read2Me.App.Shared
             _                                => type.ToString()!,
         };
 
-        public static (string icon, Color color, string label) GetItemDisplay(ParagraphItemType type) => type switch
+        /// <summary>
+        /// How a pause row presents. Speech items do not come through here — what one of those is
+        /// comes from its speaker, so <see cref="GetSpeechDisplay"/> answers for them (ADR-0006).
+        /// </summary>
+        public static (string icon, Color color, string label) GetPauseDisplay(ParagraphItemType type) => type switch
         {
             ParagraphItemType.VolumePause    => (Icons.Material.Filled.Pause, Color.Secondary, "Volume Pause"),
             ParagraphItemType.PartPause      => (Icons.Material.Filled.Pause, Color.Secondary, "Part Pause"),
