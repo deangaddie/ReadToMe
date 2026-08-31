@@ -99,6 +99,14 @@ namespace Read2Me.Tests.State
             reader.GetCharactersAsync(Arg.Any<ProjectFolderId>())
                 .Returns(new List<Character>());
 
+            // A speaker change reseeds the derived counts from here (ADR-0006). Default to the same
+            // counts the snapshot carries, so nothing "moves" unless a test says so.
+            reader.GetBookOverviewAsync(Arg.Any<ProjectFolderId>())
+                .Returns(_ => new BookOverview(
+                    null, true, [], [], 0, 0,
+                    [.. (nodeCounts ?? new Dictionary<Guid, int>()).Keys],
+                    nodeCounts ?? new Dictionary<Guid, int>()));
+
             var hierarchyLoader = new BookHierarchyLoader(reader);
             var treeState = new BookTreeState(hierarchyLoader);
             var selectionState = new BookSelectionState();
@@ -957,6 +965,138 @@ namespace Read2Me.Tests.State
             Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int unattributed) =>
             new(paragraphId, chapterId, partId, volumeId, unattributed, MissingAudio: 0, Review: 0);
 
+        // ---------------------------------------------------------------
+        // A flip reseeds derived counts and clears selection (ADR-0006)
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task SetItemCharacterAsync_FlipIntoDialog_MakesTheParagraphSelectableAndCounted()
+        {
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+            // A chapter of pure narration: nothing attributable, so nothing selectable.
+            var ctx = Create(nodeCounts: new Dictionary<Guid, int>());
+            await ctx.Presenter.LoadAsync(Folder);
+            Assert.False(ctx.Presenter.IsNodeSelectable(ch));
+
+            var para = new Paragraph { Id = paraId, ChapterId = ch };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
+                ItemType = ParagraphItemType.Narration,
+                CharacterId = ProjectDbContext.NarratorId,
+                Paragraph = para,
+            };
+            para.Items.Add(item);
+
+            // Giving it a character makes its paragraph a Character paragraph.
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(_ => new BookOverview(
+                null, true, [], [], 0, 0,
+                [ch, part, vol],
+                new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 }));
+
+            await ctx.Presenter.SetItemCharacterAsync(Folder, item, Guid.NewGuid());
+
+            Assert.True(ctx.Presenter.IsNodeSelectable(ch));
+            Assert.True(ctx.Presenter.IsNodeSelectable(part));
+            Assert.True(ctx.Presenter.IsNodeSelectable(vol));
+        }
+
+        [Fact]
+        public async Task SetItemCharacterAsync_FlipToNarrator_DropsTheParagraphOutOfTheCounts()
+        {
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+            var ctx = Create(nodeCounts: new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 });
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(EmptySnapshot(
+                    nodeCounts: new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 },
+                    selectableNodes: [ch, part, vol]));
+            await ctx.Presenter.LoadAsync(Folder);
+            Assert.True(ctx.Presenter.IsNodeSelectable(ch));
+
+            var para = new Paragraph { Id = paraId, ChapterId = ch };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
+                ItemType = ParagraphItemType.Character,
+                CharacterId = Guid.NewGuid(),
+                Paragraph = para,
+            };
+            para.Items.Add(item);
+
+            // Its last dialog item becomes narration, so the paragraph stops being attributable.
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(_ => new BookOverview(
+                null, true, [], [], 0, 0, [], new Dictionary<Guid, int>()));
+
+            await ctx.Presenter.SetItemCharacterAsync(Folder, item, ProjectDbContext.NarratorId);
+
+            Assert.False(ctx.Presenter.IsNodeSelectable(ch));
+            Assert.False(ctx.Presenter.IsNodeSelectable(part));
+            Assert.False(ctx.Presenter.IsNodeSelectable(vol));
+        }
+
+        [Fact]
+        public async Task SetItemCharacterAsync_WhenTheCountsMove_SelectionIsCleared()
+        {
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+            var ctx = Create(nodeCounts: new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 });
+            await ctx.Presenter.LoadAsync(Folder);
+            ctx.Presenter.Selection.AddParagraph(paraId, new ParagraphSelection(vol, part, ch));
+            Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
+
+            var para = new Paragraph { Id = paraId, ChapterId = ch };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
+                ItemType = ParagraphItemType.Character,
+                CharacterId = Guid.NewGuid(),
+                Paragraph = para,
+            };
+            para.Items.Add(item);
+
+            ctx.Reader.GetBookOverviewAsync(Folder).Returns(_ => new BookOverview(
+                null, true, [], [], 0, 0, [], new Dictionary<Guid, int>()));
+
+            await ctx.Presenter.SetItemCharacterAsync(Folder, item, ProjectDbContext.NarratorId);
+
+            Assert.Equal(0, ctx.Presenter.Selection.SelectedParagraphCount);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterAsync_WhenTheCountsHold_SelectionSurvives()
+        {
+            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
+            var ctx = Create(nodeCounts: new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 });
+            await ctx.Presenter.LoadAsync(Folder);
+            ctx.Presenter.Selection.AddParagraph(paraId, new ParagraphSelection(vol, part, ch));
+
+            var para = new Paragraph { Id = paraId, ChapterId = ch };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
+                ItemType = ParagraphItemType.Character,
+                CharacterId = Guid.NewGuid(),
+                Paragraph = para,
+            };
+            para.Items.Add(item);
+
+            // Swapping one character for another moves no denominator, so the dock bar stays up.
+            await ctx.Presenter.SetItemCharacterAsync(Folder, item, Guid.NewGuid());
+
+            Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
+        }
+
+        [Fact]
+        public async Task AssignCharacterToSelection_ReseedsOnceForTheWholeBatch()
+        {
+            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 2));
+
+            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
+
+            // One reseed for the batch, not one per item — two items were stamped.
+            await ctx.Reader.Received(1).GetNodeStatusSeedAsync(Folder);
+            Assert.NotEmpty(selected.Items);
+        }
+
         [Fact]
         public async Task SetItemCharacterAsync_LastUnattributedItem_DecrementsChapterBadge()
         {
@@ -1011,6 +1151,10 @@ namespace Read2Me.Tests.State
             };
             para.Items.Add(item1);
             para.Items.Add(item2);
+
+            ctx.Reader.GetNodeStatusSeedAsync(Folder)
+                .Returns(_ => (IReadOnlyList<ParagraphStatusSeedRow>)
+                    [MakeSeedRow(paraId, ch, part, vol, unattributed: 1)]);
 
             // Assign only item1; item2 remains unattributed
             await ctx.Presenter.SetItemCharacterAsync(Folder, item1, Guid.NewGuid());
@@ -1071,6 +1215,10 @@ namespace Read2Me.Tests.State
                     new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "c", CharacterId = stamped },
                 ]
             };
+
+            ctx.Reader.GetNodeStatusSeedAsync(Folder)
+                .Returns(_ => (IReadOnlyList<ParagraphStatusSeedRow>)
+                    [MakeSeedRow(paraId, ch, part, vol, unattributed: 2)]);
 
             await ctx.Presenter.SetParagraphCharacterAsync(Folder, para, null);
 
@@ -1263,6 +1411,11 @@ namespace Read2Me.Tests.State
                 Paragraph = para,
             };
             para.Items.Add(item);
+
+            // A flip reseeds the badges from the reader rather than patching a counter (ADR-0006).
+            ctx.Reader.GetNodeStatusSeedAsync(Folder)
+                .Returns(_ => (IReadOnlyList<ParagraphStatusSeedRow>)
+                    [MakeSeedRow(paraId, ch, part, vol, unattributed: 1)]);
 
             // Clear the character — item becomes unattributed, badge rises to 1
             await ctx.Presenter.SetItemCharacterAsync(Folder, item, null);

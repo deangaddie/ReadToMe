@@ -269,9 +269,9 @@ namespace Read2Me.App.State
 
             item.CharacterId = characterId;
             item.Character = character;
+            item.AudioFileName = null;   // a hand-flip discards the item's audio (ADR-0006)
 
-            nodeStatus.OnCharacterAttributed(folderId, item.ParagraphId,
-                CountUnattributed(item.Paragraph?.Items));
+            await ReseedAfterSpeakerChangeAsync(folderId);
 
             InvalidateVoicePreview();
             NotifyStateChanged();
@@ -286,8 +286,7 @@ namespace Read2Me.App.State
             await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
             ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character);
 
-            // Clearing the stamp leaves every character item unattributed — count, never assume 0.
-            nodeStatus.OnCharacterAttributed(folderId, paragraph.Id, CountUnattributed(paragraph.Items));
+            await ReseedAfterSpeakerChangeAsync(folderId);
 
             InvalidateVoicePreview();
             NotifyStateChanged();
@@ -334,19 +333,19 @@ namespace Read2Me.App.State
 
             await commandHandler.ExecuteAsync(new SetParagraphsCharacterCommand(folderId, ids, characterId));
 
-            // Folder-wide re-seed rather than per-paragraph patching: uniform for assign and clear, and
-            // correct for selected paragraphs whose chapters were never expanded. Fires Changed once,
-            // and does so before the stamp so it cannot land mid-walk.
-            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
-
             // Walk the loaded paragraphs testing membership, never the selection looking ids up — the
             // selection can dwarf what is in memory. Unloaded paragraphs need nothing: their chapter
-            // reads the committed write when it expands.
+            // reads the committed write when it expands. Done before the reseed, so the reseed's
+            // Changed event cannot land mid-walk — and before the selection is cleared, since the
+            // walk reads it.
             foreach (var p in Tree.AllParagraphs())
             {
                 if (Selection.IsParagraphSelected(p.Id))
                     ParagraphCharacterStamp.Apply(p.Items, characterId, character);
             }
+
+            // One reseed for the whole batch, not one per item.
+            await ReseedAfterSpeakerChangeAsync(folderId);
 
             InvalidateVoicePreview();
             NotifyStateChanged();
@@ -356,6 +355,40 @@ namespace Read2Me.App.State
                     ? $"Cleared speakers on {items} lines in {paras} paragraphs."
                     : $"Assigned {name} to {items} lines in {paras} paragraphs.",
                 Severity.Success);
+        }
+
+        /// <summary>
+        /// A speaker change can flip whether a paragraph is a Character paragraph at all — assign its
+        /// last dialog item to the narrator and it stops being one; give a narration item to a
+        /// character and it starts (ADR-0006). Selectable nodes, roll-up denominators and the status
+        /// badges are all derived from that, so they are reseeded from the reader rather than patched
+        /// incrementally: mixed-structure denominators have been a bug source before, and there is no
+        /// precedent for patching "paragraph becomes / stops being attributable".
+        /// <para>
+        /// Selection is cleared only when the denominators actually moved, so a roll-up checkbox can
+        /// never mix totals from before and after the edit — while an ordinary bulk assign, which
+        /// changes no membership, keeps its selection and leaves the dock bar up.
+        /// </para>
+        /// <para>
+        /// Called once per gesture, never once per item. Two reads on a flip measured cheap enough at
+        /// book scale to need no debouncing; revisit with a measurement, not a guess.
+        /// </para>
+        /// </summary>
+        private async Task ReseedAfterSpeakerChangeAsync(ProjectFolderId folderId)
+        {
+            var overview = await reader.GetBookOverviewAsync(folderId);
+
+            var moved = overview.NodeCharacterParagraphCounts.Count != _nodeCounts.Count
+                || overview.NodeCharacterParagraphCounts.Any(kv =>
+                    !_nodeCounts.TryGetValue(kv.Key, out var was) || was != kv.Value);
+
+            _selectableNodes = overview.SelectableNodeIds;
+            _nodeCounts = overview.NodeCharacterParagraphCounts;
+
+            if (moved) Selection.Clear();
+            Selection.SetCounts(_nodeCounts);
+
+            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
         }
 
         /// <summary>
@@ -534,9 +567,9 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
-        /// <summary>The node-status counter unit: character items still without a stamp.</summary>
+        /// <summary>The node-status counter unit: speech items still without a speaker (ADR-0006).</summary>
         private static int CountUnattributed(IEnumerable<ParagraphItem>? items) =>
-            items?.Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null) ?? 0;
+            items?.Count(i => !ParagraphItemKinds.IsPause(i.ItemType) && i.CharacterId is null) ?? 0;
 
         /// <summary>
         /// A paragraph's items changed (attribution stamped speakers, or an item was stamped by
