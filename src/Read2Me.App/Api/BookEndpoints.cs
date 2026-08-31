@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 
@@ -81,6 +82,18 @@ namespace Read2Me.App.Api
         private static ParagraphDto ToParagraphDto(Paragraph p) => new(
             p.Id,
             p.Items.Select(i => new ParagraphItemDto(
-                i.Id, i.ItemType.ToString(), i.Text, i.CharacterId, i.AudioFileName)).ToList());
+                i.Id, ItemTypeWord(i), i.Text, i.CharacterId, i.AudioFileName)).ToList());
+
+        /// <summary>
+        /// The word an API client sees for an item's kind. Storage no longer distinguishes narration
+        /// from dialog — the speaker does (ADR-0006) — so the word is computed: narration when the
+        /// speaker is the narrator sentinel, dialog otherwise (an unattributed item included), pause
+        /// kinds by name. The spelling is the one the API has always emitted, so no client changes
+        /// and <c>FrozenItemBoundaryTests</c> passes unmodified.
+        /// </summary>
+        private static string ItemTypeWord(ParagraphItem item) =>
+            ParagraphItemKinds.IsPause(item.ItemType) ? item.ItemType.ToString()
+            : NarrationRule.IsNarration(item) ? "Narration"
+            : "Character";
     }
 }
