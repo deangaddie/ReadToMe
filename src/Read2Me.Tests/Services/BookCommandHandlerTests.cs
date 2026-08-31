@@ -236,6 +236,115 @@ namespace Read2Me.Tests.Services
         }
 
         // ---------------------------------------------------------------
+        // A manual flip clears the item's generated audio (ADR-0006)
+        // ---------------------------------------------------------------
+
+        private async Task SeedAudioAsync(params Guid[] itemIds)
+        {
+            await using var db = await OpenDbAsync();
+            foreach (var id in itemIds)
+                (await db.ParagraphItems.FindAsync(id))!.AudioFileName = $"audio/{id}.wav";
+            await db.SaveChangesAsync();
+        }
+
+        private async Task<string?> AudioFileNameOfAsync(Guid itemId)
+        {
+            await using var db = await OpenDbAsync();
+            return (await db.ParagraphItems.FindAsync(itemId))!.AudioFileName;
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_ChangingSpeaker_DropsGeneratedAudio()
+        {
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddNarration("item", "Hello world")))).BuildAsync();
+            await SeedAudioAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+
+            Assert.Null(await AudioFileNameOfAsync(b.ItemId("item")));
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_ClearingSpeaker_DropsGeneratedAudio()
+        {
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
+            await SeedAudioAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
+
+            Assert.Null(await AudioFileNameOfAsync(b.ItemId("item")));
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_SameSpeaker_KeepsGeneratedAudio()
+        {
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
+            await SeedAudioAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+
+            Assert.NotNull(await AudioFileNameOfAsync(b.ItemId("item")));
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_DropsAudioOnlyFromItemsItMoves()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var bob = new Character { Id = Guid.NewGuid(), Name = "Bob" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            b.WithCharacter("bob", bob);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("narration", "N")
+                    .AddCharacterLine("moved", "A", speaker: "alice")
+                    .AddCharacterLine("alreadyBob", "B", speaker: "bob"))))
+                .BuildAsync();
+            await SeedAudioAsync(b.ItemId("narration"), b.ItemId("moved"), b.ItemId("alreadyBob"));
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+
+            Assert.Null(await AudioFileNameOfAsync(b.ItemId("moved")));
+            Assert.NotNull(await AudioFileNameOfAsync(b.ItemId("narration")));    // never swept
+            Assert.NotNull(await AudioFileNameOfAsync(b.ItemId("alreadyBob")));   // swept, unmoved
+        }
+
+        [Fact]
+        public async Task AttributeItemsCommand_LeavesGeneratedAudioAlone()
+        {
+            // The deliberate asymmetry: an LLM stamp must not invalidate audio across a whole
+            // book on the next queue run. Recorded as a known gap in ADR-0006.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddRawItem("item", ParagraphItemType.Character, "\"Hello.\""))))
+                .BuildAsync();
+            await SeedAudioAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new AttributeItemsCommand(_folder, b.ParagraphId("para"),
+                [new ItemAttribution(b.ItemId("item"), alice.Id, null)]));
+
+            await using var verify = await OpenDbAsync();
+            var item = await verify.ParagraphItems.FindAsync(b.ItemId("item"));
+            Assert.Equal(alice.Id, item!.CharacterId);
+            Assert.NotNull(item.AudioFileName);
+        }
+
+        // ---------------------------------------------------------------
         // ClearBookContentCommand
         // ---------------------------------------------------------------
 

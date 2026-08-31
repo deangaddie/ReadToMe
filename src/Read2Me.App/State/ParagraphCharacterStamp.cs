@@ -22,6 +22,9 @@ public static class ParagraphCharacterStamp
             if (NarrationRule.IsNarration(item)) continue;
             if (item.CharacterId == characterId) continue;
             item.CharacterId = characterId;
+            // A hand-flip discards the item's audio; mirror that here so the row shows it back in
+            // the audio queue without waiting for a reload (ADR-0006).
+            item.AudioFileName = null;
             item.Character = character;
             changed = true;
         }

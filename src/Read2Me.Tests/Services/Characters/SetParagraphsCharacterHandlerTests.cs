@@ -166,6 +166,27 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(AliceId, await CharacterIdOfAsync(b.ItemId("p3-dialog")));
         }
 
+        [Fact]
+        public async Task SetParagraphsCharacter_DropsAudioOnlyFromItemsItMoves()
+        {
+            var b = await SeedAsync();
+            await using (var seed = await OpenDbAsync())
+            {
+                foreach (var name in new[] { "p1-dialog", "p1-narration", "p3-dialog" })
+                    (await seed.ParagraphItems.FindAsync(b.ItemId(name)))!.AudioFileName = $"audio/{name}.wav";
+                await seed.SaveChangesAsync();
+            }
+
+            await _handler.HandleAsync(
+                new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1")], BobId),
+                CancellationToken.None);
+
+            await using var verify = await OpenDbAsync();
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("p1-dialog")))!.AudioFileName);
+            Assert.NotNull((await verify.ParagraphItems.FindAsync(b.ItemId("p1-narration")))!.AudioFileName);
+            Assert.NotNull((await verify.ParagraphItems.FindAsync(b.ItemId("p3-dialog")))!.AudioFileName);
+        }
+
         /// <summary>A bulk assign creates nothing, so the bus gets no new id to hand back.</summary>
         [Fact]
         public async Task SetParagraphsCharacter_ReturnsNull_NoNewIdIsCreated()

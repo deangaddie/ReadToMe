@@ -13,6 +13,12 @@ namespace Read2Me.Services.Commands.Handlers;
 /// character makes it that character's line, and clearing it hands the item back to the
 /// attribution queue as unattributed dialog. <c>VoiceResolver</c> honours whatever is
 /// stamped, so the flip is heard rather than merely displayed.
+/// <para>
+/// A hand-flip is an explicit "this is the wrong voice", so it discards the item's generated
+/// audio and returns it to the audio queue — otherwise the old voice survives into the exported
+/// m4b while the item still counts as complete. <c>AttributeItemsHandler</c> deliberately does
+/// not do this; see ADR-0006 for why that asymmetry is left standing.
+/// </para>
 /// </summary>
 public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommandHandler<SetItemCharacterCommand>
 {
@@ -21,7 +27,9 @@ public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommand
         var db = await session.OpenAsync(c.FolderId);
         var item = await db.ParagraphItems.Include(i => i.Character).FirstOrDefaultAsync(i => i.Id == c.ItemId);
         if (item == null) return null;
+        if (item.CharacterId == c.CharacterId) return null;
         item.CharacterId = c.CharacterId;
+        item.AudioFileName = null;
         item.Character = c.CharacterId.HasValue
             ? await db.Characters.FindAsync(c.CharacterId.Value)
             : null;
@@ -64,7 +72,13 @@ public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICo
             .ToListAsync();
         foreach (var item in items)
         {
-            item.CharacterId = c.CharacterId;
+            // Only an item this gesture actually moves loses its audio; one already on the target
+            // speaker keeps what it has, which is what makes assigning the narrator idempotent.
+            if (item.CharacterId != c.CharacterId)
+            {
+                item.CharacterId = c.CharacterId;
+                item.AudioFileName = null;
+            }
             if (c.CharacterId.HasValue && c.VoiceInstructions != null)
                 item.VoiceInstructions = c.VoiceInstructions;
         }
@@ -90,7 +104,10 @@ public sealed class SetParagraphsCharacterHandler(ProjectDbSession session) : IC
             .Where(i => c.ParagraphIds.Contains(i.ParagraphId))
             .Where(ParagraphItemKinds.IsSpeechExpression)
             .Where(NarrationRule.IsNotNarrationExpression)
-            .ExecuteUpdateAsync(s => s.SetProperty(i => i.CharacterId, c.CharacterId), ct);
+            .Where(i => i.CharacterId != c.CharacterId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(i => i.CharacterId, c.CharacterId)
+                .SetProperty(i => i.AudioFileName, (string?)null), ct);
         return null;
     }
 }
