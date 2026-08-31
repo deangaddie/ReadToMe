@@ -185,11 +185,10 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task SetItemCharacterCommand_LeavesNarrationItemAlone()
+        public async Task SetItemCharacterCommand_AssignsCharacterToNarrationItem()
         {
-            // Only Character items carry a speaker. A narration item stamped with a character is
-            // audio-inert (the voice resolver keys off the item type), so it would sit in the book
-            // showing a speaker nothing ever reads in.
+            // Narration is a speaker, not an item type (ADR-0006): a line the splitter misread as
+            // narration is repaired by stamping the character, and the voice resolver honours it.
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
@@ -199,7 +198,24 @@ namespace Read2Me.Tests.Services
             await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
             await using var verify = await OpenDbAsync();
-            Assert.NotEqual(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_AssignsNarratorToDialogItem()
+        {
+            // The reverse gesture: a narrative aside the splitter mistook for dialog becomes
+            // narration by stamping the narrator sentinel.
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), ProjectDbContext.NarratorId));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
         }
 
         [Fact]

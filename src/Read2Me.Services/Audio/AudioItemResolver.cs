@@ -39,7 +39,8 @@ namespace Read2Me.Services.Audio
             // link that is the linked character, unlinked it is the seed row's "Narrator".
             // Narration items only — this is the per-item path (one item, then seconds of TTS),
             // not VoiceResolver's batch path where the link has to ride an existing query.
-            var isNarration = row.ItemType == ParagraphItemType.Narration;
+            // Narration is the speaker, never the item type (ADR-0006).
+            var isNarration = NarrationRule.IsNarration(row);
             var narratorName = isNarration
                 ? (await NarratorIdentity.LoadAsync(db, ct)).DisplayName
                 : null;
@@ -55,8 +56,8 @@ namespace Read2Me.Services.Audio
 
             if (selectedVoiceId is null)
             {
-                // No CharacterId on a Character item → unattributed, not a missing-voice issue
-                if (row.ItemType == ParagraphItemType.Character && row.CharacterId is null)
+                // No speaker on a speech item → unattributed, not a missing-voice issue
+                if (row.CharacterId is null && !AudiobookAssemblyPlanner.IsPause(row.ItemType))
                     return new ResolutionResult(speaker, sourceText, null,
                         "No character assigned to item");
 

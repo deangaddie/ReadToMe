@@ -30,5 +30,11 @@ namespace Read2Me.Data
 
         /// <summary>The in-memory form, for an item already loaded.</summary>
         public static bool IsNarration(ParagraphItem item) => Predicate(item);
+
+        /// <summary>
+        /// The in-memory form for a speaker read on its own — a projection row that carries the
+        /// speaker without the whole entity, for instance.
+        /// </summary>
+        public static bool IsNarration(Guid? characterId) => characterId == ProjectDbContext.NarratorId;
     }
 }

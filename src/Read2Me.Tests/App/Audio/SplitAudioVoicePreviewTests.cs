@@ -100,7 +100,7 @@ namespace Read2Me.Tests.App.Audio
                 Order = FloorRank,
                 ItemType = ParagraphItemType.Narration,
                 Text = text,
-                CharacterId = null
+                CharacterId = narratorId
             };
             db.ParagraphItems.Add(item);
             await db.SaveChangesAsync();

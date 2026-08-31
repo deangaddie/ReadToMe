@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Enums;
+using Read2Me.Services.Audio;
 
 namespace Read2Me.Services.Voice;
 
@@ -40,19 +41,22 @@ public sealed class VoiceResolver : IVoiceResolver
         // 2. Read NarratorOnlyMode and the narrator link — one round-trip for both
         var (narrator, narratorOnlyMode) = await NarratorIdentity.LoadWithNarratorOnlyModeAsync(db, ct);
 
-        // 3. Effective character per item (Narrator substitution).
-        //    Unlinked, NarratorIdentity.CharacterId *is* the seed Narrator row.
+        // 3. Effective character per item. The speaker decides, not the item type: narration is
+        //    a speaker (ADR-0006), so a sentinel-stamped item resolves through the narrator and a
+        //    character-stamped one through that character's own rules — including when that
+        //    character is the linked narrator, which stays a distinct choice. Unlinked,
+        //    NarratorIdentity.CharacterId *is* the seed Narrator row. A pause speaks for nobody.
         var itemToCharId = new Dictionary<Guid, Guid>(items.Count);
 
         foreach (var it in items)
         {
             Guid? charId;
-            if (narratorOnlyMode || it.ItemType == ParagraphItemType.Narration)
-                charId = narrator.CharacterId;
-            else if (it.ItemType == ParagraphItemType.Character)
-                charId = it.CharacterId;
-            else
+            if (AudiobookAssemblyPlanner.IsPause(it.ItemType))
                 charId = null;
+            else if (narratorOnlyMode || NarrationRule.IsNarration(it.CharacterId))
+                charId = narrator.CharacterId;
+            else
+                charId = it.CharacterId;
 
             if (charId.HasValue)
                 itemToCharId[it.Id] = charId.Value;

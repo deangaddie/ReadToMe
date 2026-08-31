@@ -9,7 +9,9 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
+using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Services;
+using Read2Me.Services.Books;
 using Read2Me.Services.IO;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Infrastructure;
@@ -281,6 +283,67 @@ public class VoiceResolverTests : ProjectDbTestBase
         var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
 
         Assert.Equal(voiceBId, result[b.ItemId("item1")]);
+    }
+
+    // ── 10. The speaker decides, not the item type (ADR-0006) ────────────────
+
+    [Fact]
+    public async Task Flip_NarrationItemToCharacterAndBack_ResolvedVoiceFollows()
+    {
+        // The whole point of the collapse, at the seam a user actually reaches: stamp a speaker
+        // on a narration item and it is read in that speaker's voice; stamp the narrator back and
+        // narration's own voice returns.
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item1Type: ParagraphItemType.Narration);
+        await SeedDefaultRule(charId, voiceAId);                       // Alice → Voice A
+        await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);  // Narrator → Voice B
+        var commands = NewCommandHandler();
+        var itemId = b.ItemId("item1");
+
+        Assert.Equal(voiceBId, (await _resolver.ResolveAsync(_folder, [itemId]))[itemId]);
+
+        await commands.ExecuteAsync(new SetItemCharacterCommand(_folder, itemId, charId));
+        Assert.Equal(voiceAId, (await _resolver.ResolveAsync(_folder, [itemId]))[itemId]);
+
+        await commands.ExecuteAsync(new SetItemCharacterCommand(_folder, itemId, ProjectDbContext.NarratorId));
+        Assert.Equal(voiceBId, (await _resolver.ResolveAsync(_folder, [itemId]))[itemId]);
+    }
+
+    [Fact]
+    public async Task Linked_ItemStampedWithLinkedCharacter_ResolvesViaThatCharactersOwnRules()
+    {
+        // Under a narrator link, "Narrator (Alice)" and "Alice" are different stored speakers.
+        // Alice's dialog runs through Alice's rules; the seed Narrator's rules never reach it.
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
+            item1Type: ParagraphItemType.Narration, linkNarratorToAlice: true);
+        await SeedChapterRule(charId, voiceAId, FloorRank, b.ChapterId("ch2"));  // Alice: ch2 → Voice A
+        await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);            // seed Narrator → Voice B
+
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item2")]);
+
+        Assert.Equal(voiceAId, result[b.ItemId("item2")]);
+    }
+
+    [Fact]
+    public async Task NarratorOnlyMode_StampedCharacterIsOverriddenButNotChanged()
+    {
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(narratorOnlyMode: true);
+        await SeedDefaultRule(charId, voiceAId);
+        await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);
+
+        var result = await _resolver.ResolveAsync(_folder, [b.ItemId("item1")]);
+
+        Assert.Equal(voiceBId, result[b.ItemId("item1")]);
+        await using var verify = await OpenDbAsync();
+        Assert.Equal(charId, (await verify.ParagraphItems.FindAsync(b.ItemId("item1")))!.CharacterId);
+    }
+
+    private BookCommandHandler NewCommandHandler()
+    {
+        var services = new ServiceCollection();
+        services.AddBookCommandHandlers();
+        services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+        services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+        return services.BuildServiceProvider().GetRequiredService<BookCommandHandler>();
     }
 
     [Fact]
