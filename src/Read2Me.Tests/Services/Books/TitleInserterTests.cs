@@ -76,6 +76,36 @@ namespace Read2Me.Tests.Services.Books
             Assert.Equal("Hello", items[0].Text);
         }
 
+        // An inserted title is narration, so it carries the narrator like any other narration item —
+        // otherwise it would need backfilling again the moment it is inserted.
+        [Fact]
+        public async Task AddTitleParagraph_StampsTheNarrator()
+        {
+            await using var db = await OpenDbAsync();
+            var chapterId = await SeedChapterAsync(db);
+
+            var result = TitleInserter.AddTitleParagraph(db, chapterId, "Chapter One", null);
+            await db.SaveChangesAsync();
+
+            var item = await db.ParagraphItems.SingleAsync(i => i.ParagraphId == result.Id);
+            Assert.Equal(ProjectDbContext.NarratorId, item.CharacterId);
+        }
+
+        [Fact]
+        public async Task AddTitleParagraphAfter_StampsTheNarrator()
+        {
+            await using var db = await OpenDbAsync();
+            var chapterId = await SeedChapterAsync(db);
+            var first = TitleInserter.AddTitleParagraph(db, chapterId, "First", null);
+            await db.SaveChangesAsync();
+
+            var second = TitleInserter.AddTitleParagraphAfter(db, chapterId, "Second", first.Order);
+            await db.SaveChangesAsync();
+
+            var item = await db.ParagraphItems.SingleAsync(i => i.ParagraphId == second.Id);
+            Assert.Equal(ProjectDbContext.NarratorId, item.CharacterId);
+        }
+
         [Fact]
         public async Task AddTitleParagraph_WhenChapterEmpty_StillCreatesParagraph()
         {

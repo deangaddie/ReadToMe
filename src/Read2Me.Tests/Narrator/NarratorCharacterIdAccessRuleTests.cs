@@ -25,6 +25,7 @@ namespace Read2Me.Tests.Narrator
             [@"Read2Me.Tests\Services\Characters\DeleteCharacterHandlerTests.cs"] = "asserts delete cleared the column, not the fallback",
             [@"Read2Me.TestUtils\BookHierarchyBuilder.cs"] = "test Object Mother arranges the linked case",
             [@"Read2Me.Tests\Narrator\NarratorIdentityTests.cs"] = "covers the seam and the migration",
+            [@"Read2Me.Tests\Narrator\NarrationSpeakerBackfillTests.cs"] = "names the AddNarratorCharacterId migration id, not the column",
             [@"Read2Me.Tests\Narrator\NarratorCharacterIdAccessRuleTests.cs"] = "this test",
         };
 
