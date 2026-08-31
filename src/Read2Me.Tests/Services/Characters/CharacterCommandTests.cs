@@ -38,7 +38,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
-                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "\"Hello.\"", characterId))))
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Speech, "\"Hello.\"", characterId))))
                 .AddHierarchyAsync();
 
             return b.ItemId("item");

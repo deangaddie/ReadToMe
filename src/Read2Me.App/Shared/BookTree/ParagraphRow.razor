@@ -304,7 +304,7 @@ else
         if (Presenter.ViewMode == BookViewMode.SplitAudio)
         {
             var itemIds = Para.Items
-                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                .Where(i => i.ItemType == ParagraphItemType.Speech || i.ItemType == ParagraphItemType.Speech)
                 .Select(i => i.Id);
             await Presenter.EnsureVoicePreviewAsync(FolderId, itemIds);
         }

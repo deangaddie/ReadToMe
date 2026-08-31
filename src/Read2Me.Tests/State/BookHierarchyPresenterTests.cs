@@ -764,7 +764,7 @@ namespace Read2Me.Tests.State
                 Id = paraId,
                 Items =
                 [
-                    new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Character, Order = "a" },
+                    new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Speech, Order = "a" },
                 ]
             };
 
@@ -848,8 +848,8 @@ namespace Read2Me.Tests.State
                 Id = Guid.NewGuid(),
                 Items =
                 [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a", CharacterId = Guid.NewGuid() },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "b", CharacterId = Guid.NewGuid() },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a", CharacterId = Guid.NewGuid() },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b", CharacterId = Guid.NewGuid() },
                 ]
             };
 
@@ -875,7 +875,7 @@ namespace Read2Me.Tests.State
                 ChapterId = chapterId,
                 Items =
                 [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a" },
                 ]
             };
 
@@ -933,8 +933,8 @@ namespace Read2Me.Tests.State
                 ChapterId = queued.ChapterId,
                 Items =
                 [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a", CharacterId = charId },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b", CharacterId = ProjectDbContext.NarratorId },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a", CharacterId = charId },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b", CharacterId = ProjectDbContext.NarratorId },
                 ]
             };
             reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, queued.ChapterId)
@@ -982,7 +982,7 @@ namespace Read2Me.Tests.State
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Narration,
+                ItemType = ParagraphItemType.Speech,
                 CharacterId = ProjectDbContext.NarratorId,
                 Paragraph = para,
             };
@@ -1017,7 +1017,7 @@ namespace Read2Me.Tests.State
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 CharacterId = Guid.NewGuid(),
                 Paragraph = para,
             };
@@ -1047,7 +1047,7 @@ namespace Read2Me.Tests.State
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 CharacterId = Guid.NewGuid(),
                 Paragraph = para,
             };
@@ -1073,7 +1073,7 @@ namespace Read2Me.Tests.State
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 CharacterId = Guid.NewGuid(),
                 Paragraph = para,
             };
@@ -1113,7 +1113,7 @@ namespace Read2Me.Tests.State
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 Paragraph = para,
             };
             para.Items.Add(item);
@@ -1140,13 +1140,13 @@ namespace Read2Me.Tests.State
             var item1 = new ParagraphItem
             {
                 Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 Paragraph = para,
             };
             var item2 = new ParagraphItem
             {
                 Id = Guid.NewGuid(), ParagraphId = paraId, Order = "b",
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 Paragraph = para,
             };
             para.Items.Add(item1);
@@ -1179,9 +1179,9 @@ namespace Read2Me.Tests.State
                 Id = paraId,
                 Items =
                 [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a" },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "b" },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "c" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b" },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "c" },
                 ]
             };
 
@@ -1210,9 +1210,9 @@ namespace Read2Me.Tests.State
                 Id = paraId,
                 Items =
                 [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a", CharacterId = stamped },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b", CharacterId = ProjectDbContext.NarratorId },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "c", CharacterId = stamped },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a", CharacterId = stamped },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b", CharacterId = ProjectDbContext.NarratorId },
+                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "c", CharacterId = stamped },
                 ]
             };
 
@@ -1314,7 +1314,7 @@ namespace Read2Me.Tests.State
                 Id = paraId,
                 Items =
                 [
-                    new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Character, Order = "a" },
+                    new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Speech, Order = "a" },
                 ]
             };
 
@@ -1406,7 +1406,7 @@ namespace Read2Me.Tests.State
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 CharacterId = Guid.NewGuid(),
                 Paragraph = para,
             };
@@ -1705,8 +1705,8 @@ namespace Read2Me.Tests.State
                     ChapterId = chapter,
                     Items =
                     [
-                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Order = "a" },
-                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, Order = "b", CharacterId = ProjectDbContext.NarratorId },
+                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a" },
+                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b", CharacterId = ProjectDbContext.NarratorId },
                     ],
                 };
 

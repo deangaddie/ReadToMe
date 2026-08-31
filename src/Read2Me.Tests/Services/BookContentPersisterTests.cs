@@ -49,13 +49,12 @@ public class BookContentPersisterTests : IAsyncDisposable
 
         await _sut.PersistAsync(_db, content);
 
+        // Import records the splitter's decision on the speaker, not on a type: narration gets the
+        // narrator, dialog is left for the attribution queue (ADR-0006). Both are Speech items.
         var items = await _db.ParagraphItems.AsNoTracking().ToListAsync();
-        var narration = items.Where(i => i.ItemType == ParagraphItemType.Narration).ToList();
-        var dialog = items.Where(i => i.ItemType == ParagraphItemType.Character).ToList();
-        Assert.NotEmpty(narration);
-        Assert.NotEmpty(dialog);
-        Assert.All(narration, i => Assert.Equal(ProjectDbContext.NarratorId, i.CharacterId));
-        Assert.All(dialog, i => Assert.Null(i.CharacterId));
+        Assert.All(items, i => Assert.Equal(ParagraphItemType.Speech, i.ItemType));
+        Assert.Contains(items, i => i.CharacterId == ProjectDbContext.NarratorId);
+        Assert.Contains(items, i => i.CharacterId is null);
     }
 
     // ---------------------------------------------------------------

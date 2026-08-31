@@ -176,7 +176,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
-                p.AddRawItem("item", ParagraphItemType.Character, "Hello world")))).BuildAsync();
+                p.AddRawItem("item", ParagraphItemType.Speech, "Hello world")))).BuildAsync();
 
             await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
@@ -227,7 +227,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
-                p.AddRawItem("item", ParagraphItemType.Narration, "Hello world", character.Id)))).BuildAsync();
+                p.AddRawItem("item", ParagraphItemType.Speech, "Hello world", character.Id)))).BuildAsync();
 
             await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
 
@@ -331,7 +331,7 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", alice);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("item", ParagraphItemType.Character, "\"Hello.\""))))
+                    .AddRawItem("item", ParagraphItemType.Speech, "\"Hello.\""))))
                 .BuildAsync();
             await SeedAudioAsync(b.ItemId("item"));
 
@@ -576,8 +576,8 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("charItem1", ParagraphItemType.Character, "Hello")
-                    .AddRawItem("charItem2", ParagraphItemType.Character, "World")
+                    .AddRawItem("charItem1", ParagraphItemType.Speech, "Hello")
+                    .AddRawItem("charItem2", ParagraphItemType.Speech, "World")
                     .AddNarration("narrationItem", "Narration"))))
                 .BuildAsync();
 
@@ -597,7 +597,7 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("charItem", ParagraphItemType.Character, "Hello"))))
+                    .AddRawItem("charItem", ParagraphItemType.Speech, "Hello"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id, "whispering, tense"));
@@ -616,7 +616,7 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("bob", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("charItem", ParagraphItemType.Character, "Hello"))))
+                    .AddRawItem("charItem", ParagraphItemType.Speech, "Hello"))))
                 .BuildAsync();
 
             // Seed voice instructions directly after build
@@ -642,8 +642,8 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("ci1", ParagraphItemType.Character, "A")
-                    .AddRawItem("ci2", ParagraphItemType.Character, "B")
+                    .AddRawItem("ci1", ParagraphItemType.Speech, "A")
+                    .AddRawItem("ci2", ParagraphItemType.Speech, "B")
                     .AddNarration("ni", "N"))))
                 .BuildAsync();
 
@@ -669,7 +669,7 @@ namespace Read2Me.Tests.Services
                 .AddParagraph("para", p => p
                     .AddNarration("narration", "N")
                     .AddCharacterLine("attributed", "A", speaker: "alice")
-                    .AddRawItem("unattributed", ParagraphItemType.Character, "U"))))
+                    .AddRawItem("unattributed", ParagraphItemType.Speech, "U"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
@@ -691,7 +691,7 @@ namespace Read2Me.Tests.Services
                 .AddParagraph("para", p => p
                     .AddNarration("narration", "N")
                     .AddCharacterLine("attributed", "A", speaker: "alice")
-                    .AddRawItem("unattributed", ParagraphItemType.Character, "U"))))
+                    .AddRawItem("unattributed", ParagraphItemType.Speech, "U"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
@@ -710,8 +710,8 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", existingChar);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("ci1", ParagraphItemType.Character, "A", existingChar.Id)
-                    .AddRawItem("ci2", ParagraphItemType.Character, "B", existingChar.Id))))
+                    .AddRawItem("ci1", ParagraphItemType.Speech, "A", existingChar.Id)
+                    .AddRawItem("ci2", ParagraphItemType.Speech, "B", existingChar.Id))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), null));
@@ -729,9 +729,9 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para1", p => p
-                    .AddRawItem("target", ParagraphItemType.Character, "T"))
+                    .AddRawItem("target", ParagraphItemType.Speech, "T"))
                 .AddParagraph("para2", p => p
-                    .AddRawItem("other", ParagraphItemType.Character, "O"))))
+                    .AddRawItem("other", ParagraphItemType.Speech, "O"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para1"), character.Id));

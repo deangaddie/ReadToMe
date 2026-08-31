@@ -39,8 +39,8 @@ public class VoiceResolverTests : ProjectDbTestBase
     // Also seeds Alice character + VoiceA + VoiceB.
     // Returns the builder (for named id lookup) + the seeded voice ids.
     private async Task<(BookHierarchyBuilder b, Guid charId, Guid voiceAId, Guid voiceBId)> SeedBaseAsync(
-        ParagraphItemType item1Type = ParagraphItemType.Character,
-        ParagraphItemType item2Type = ParagraphItemType.Character,
+        bool item1Narration = false,
+        bool item2Narration = false,
         bool narratorOnlyMode = false,
         bool linkNarratorToAlice = false,
         Guid? danglingNarratorLink = null)
@@ -61,13 +61,13 @@ public class VoiceResolverTests : ProjectDbTestBase
                 .AddChapter("ch1", c => c
                     .AddParagraph(configure: p =>
                     {
-                        if (item1Type == ParagraphItemType.Narration) p.AddNarration("item1", "Line 1");
+                        if (item1Narration) p.AddNarration("item1", "Line 1");
                         else p.AddCharacterLine("item1", "Line 1", speaker: "alice");
                     }))
                 .AddChapter("ch2", c => c
                     .AddParagraph(configure: p =>
                     {
-                        if (item2Type == ParagraphItemType.Narration) p.AddNarration("item2", "Line 2");
+                        if (item2Narration) p.AddNarration("item2", "Line 2");
                         else p.AddCharacterLine("item2", "Line 2", speaker: "alice");
                     })))
             .BuildAsync();
@@ -148,7 +148,7 @@ public class VoiceResolverTests : ProjectDbTestBase
     public async Task ManyCharacters_EachItemResolvesAgainstItsOwnCharactersRules()
     {
         // item1 → Alice (Character), item2 → Narrator
-        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item2Type: ParagraphItemType.Narration);
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item2Narration: true);
         var narratorId = ProjectDbContext.NarratorId;
 
         await SeedDefaultRule(charId, voiceAId);     // Alice default → VoiceA
@@ -181,7 +181,7 @@ public class VoiceResolverTests : ProjectDbTestBase
     [Fact]
     public async Task NarrationItem_AlwaysResolvesViaNarrator()
     {
-        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item1Type: ParagraphItemType.Narration);
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item1Narration: true);
         var narratorId = ProjectDbContext.NarratorId;
 
         await SeedDefaultRule(charId, voiceAId);
@@ -234,7 +234,7 @@ public class VoiceResolverTests : ProjectDbTestBase
     public async Task Linked_NarrationItem_ResolvesViaLinkedCharactersDefaultVoice()
     {
         var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
-            item1Type: ParagraphItemType.Narration, linkNarratorToAlice: true);
+            item1Narration: true, linkNarratorToAlice: true);
         await SeedDefaultRule(charId, voiceAId);                       // Alice → VoiceA
         await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);  // seed Narrator → VoiceB (must NOT win)
 
@@ -248,7 +248,7 @@ public class VoiceResolverTests : ProjectDbTestBase
     {
         // The linked character's *rules* are genuinely evaluated, not just its default voice.
         var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
-            item1Type: ParagraphItemType.Narration, linkNarratorToAlice: true);
+            item1Narration: true, linkNarratorToAlice: true);
         await SeedDefaultRule(charId, voiceBId);                                   // default → VoiceB
         await SeedChapterRule(charId, voiceAId, FloorRank, b.ChapterId("ch1"));    // ch1 → VoiceA
 
@@ -262,7 +262,7 @@ public class VoiceResolverTests : ProjectDbTestBase
     public async Task Linked_NarratorOnlyMode_EveryItemResolvesToLinkedCharacter()
     {
         var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
-            item1Type: ParagraphItemType.Narration, narratorOnlyMode: true, linkNarratorToAlice: true);
+            item1Narration: true, narratorOnlyMode: true, linkNarratorToAlice: true);
         await SeedDefaultRule(charId, voiceAId);
         await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);
 
@@ -276,7 +276,7 @@ public class VoiceResolverTests : ProjectDbTestBase
     public async Task Linked_DanglingLink_FallsBackToSeedNarratorRow()
     {
         var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
-            item1Type: ParagraphItemType.Narration, danglingNarratorLink: Guid.NewGuid());
+            item1Narration: true, danglingNarratorLink: Guid.NewGuid());
         await SeedDefaultRule(charId, voiceAId);
         await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);
 
@@ -293,7 +293,7 @@ public class VoiceResolverTests : ProjectDbTestBase
         // The whole point of the collapse, at the seam a user actually reaches: stamp a speaker
         // on a narration item and it is read in that speaker's voice; stamp the narrator back and
         // narration's own voice returns.
-        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item1Type: ParagraphItemType.Narration);
+        var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item1Narration: true);
         await SeedDefaultRule(charId, voiceAId);                       // Alice → Voice A
         await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);  // Narrator → Voice B
         var commands = NewCommandHandler();
@@ -314,7 +314,7 @@ public class VoiceResolverTests : ProjectDbTestBase
         // Under a narrator link, "Narrator (Alice)" and "Alice" are different stored speakers.
         // Alice's dialog runs through Alice's rules; the seed Narrator's rules never reach it.
         var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(
-            item1Type: ParagraphItemType.Narration, linkNarratorToAlice: true);
+            item1Narration: true, linkNarratorToAlice: true);
         await SeedChapterRule(charId, voiceAId, FloorRank, b.ChapterId("ch2"));  // Alice: ch2 → Voice A
         await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);            // seed Narrator → Voice B
 
@@ -368,7 +368,7 @@ public class VoiceResolverTests : ProjectDbTestBase
     private async Task<int> CountResolveCommandsAsync(bool link)
     {
         var (b, charId, voiceAId, _) = await SeedBaseAsync(
-            item1Type: ParagraphItemType.Narration, linkNarratorToAlice: link);
+            item1Narration: true, linkNarratorToAlice: link);
         await SeedDefaultRule(charId, voiceAId);
         await SeedDefaultRule(ProjectDbContext.NarratorId, voiceAId);
 

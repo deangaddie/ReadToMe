@@ -13,7 +13,7 @@ namespace Read2Me.Tests.App
 
         // Narration is the narrator as speaker, not a type (ADR-0006).
         private static ParagraphItem Narration() =>
-            Item(ParagraphItemType.Narration, ProjectDbContext.NarratorId);
+            Item(ParagraphItemType.Speech, ProjectDbContext.NarratorId);
 
         private static Character Char(Guid id, string name = "Alice") =>
             new() { Id = id, Name = name };
@@ -25,8 +25,8 @@ namespace Read2Me.Tests.App
             var character = Char(charId);
             var items = new List<ParagraphItem>
             {
-                Item(ParagraphItemType.Character),
-                Item(ParagraphItemType.Character),
+                Item(ParagraphItemType.Speech),
+                Item(ParagraphItemType.Speech),
                 Narration(),
             };
 
@@ -46,8 +46,8 @@ namespace Read2Me.Tests.App
             var existingId = Guid.NewGuid();
             var items = new List<ParagraphItem>
             {
-                Item(ParagraphItemType.Character, existingId),
-                Item(ParagraphItemType.Character),   // unattributed dialog
+                Item(ParagraphItemType.Speech, existingId),
+                Item(ParagraphItemType.Speech),   // unattributed dialog
                 Narration(),
             };
 
@@ -64,7 +64,7 @@ namespace Read2Me.Tests.App
             var character = Char(charId);
             var items = new List<ParagraphItem>
             {
-                Item(ParagraphItemType.Character, charId),
+                Item(ParagraphItemType.Speech, charId),
             };
             items[0].Character = character;
 
@@ -80,8 +80,8 @@ namespace Read2Me.Tests.App
             var existingId = Guid.NewGuid();
             var items = new List<ParagraphItem>
             {
-                Item(ParagraphItemType.Character, existingId),
-                Item(ParagraphItemType.Character, existingId),
+                Item(ParagraphItemType.Speech, existingId),
+                Item(ParagraphItemType.Speech, existingId),
             };
 
             var changed = ParagraphCharacterStamp.Apply(items, null, null);

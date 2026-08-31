@@ -73,7 +73,7 @@ namespace Read2Me.Tests.App.Audio
                 Id = Guid.NewGuid(),
                 ParagraphId = paraId,
                 Order = FloorRank,
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 Text = text,
                 CharacterId = charId
             };
@@ -98,7 +98,7 @@ namespace Read2Me.Tests.App.Audio
                 Id = Guid.NewGuid(),
                 ParagraphId = paraId,
                 Order = FloorRank,
-                ItemType = ParagraphItemType.Narration,
+                ItemType = ParagraphItemType.Speech,
                 Text = text,
                 CharacterId = narratorId
             };

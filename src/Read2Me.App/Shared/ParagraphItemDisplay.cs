@@ -26,7 +26,6 @@ namespace Read2Me.App.Shared
             ParagraphItemType.ChapterPause   => (Icons.Material.Filled.Pause, Color.Secondary, "Chapter Pause"),
             ParagraphItemType.ParagraphPause => (Icons.Material.Filled.PauseCircle, Color.Default, "Paragraph Pause"),
             ParagraphItemType.Pause          => (Icons.Material.Filled.PauseCircleOutline, Color.Default, "Pause"),
-            ParagraphItemType.Narration      => (Icons.Material.Filled.RecordVoiceOver, Color.Info, "Narration"),
             _                                => (Icons.Material.Filled.HelpOutline, Color.Default, type.ToString()),
         };
 

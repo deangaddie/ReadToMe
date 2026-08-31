@@ -37,7 +37,7 @@ namespace Read2Me.Tests.Services.Characters
             b.WithCharacter("alice", character);
             if (narratorCharacterId.HasValue) b.WithNarratorLink(narratorCharacterId.Value);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
-                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "\"Hello.\"", character.Id))))
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Speech, "\"Hello.\"", character.Id))))
                 .BuildAsync();
 
             // CharacterAlias needs post-build seeding

@@ -230,8 +230,8 @@ namespace Read2Me.Tests.Services.Characters
             // re-attribution (ADR-0006) — the queue may not undo a decision made by hand.
             var b = Builder();
             await b.AddVolume("v", v => v.AddChapter(configure: c => c.AddParagraph("p", p => p
-                .AddRawItem("narrated", ParagraphItemType.Character, "\"Hello,\" ", ProjectDbContext.NarratorId)
-                .AddRawItem("dialog", ParagraphItemType.Character, "\"Hi,\"", null)))).BuildAsync();
+                .AddRawItem("narrated", ParagraphItemType.Speech, "\"Hello,\" ", ProjectDbContext.NarratorId)
+                .AddRawItem("dialog", ParagraphItemType.Speech, "\"Hi,\"", null)))).BuildAsync();
 
             await _svc.ExecuteAsync(new AttributeItemsCommand(_folder, b.ParagraphId("p"),
             [

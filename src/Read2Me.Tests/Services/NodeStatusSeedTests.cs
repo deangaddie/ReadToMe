@@ -48,7 +48,7 @@ namespace Read2Me.Tests.Services
                 {
                     Id = Guid.NewGuid(),
                     ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
+                    ItemType = ParagraphItemType.Speech,
                     CharacterId = null,
                     Order = Key(),
                 };
@@ -84,7 +84,7 @@ namespace Read2Me.Tests.Services
                 {
                     Id = Guid.NewGuid(),
                     ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
+                    ItemType = ParagraphItemType.Speech,
                     CharacterId = characterId,
                     Order = Key(),
                 };
@@ -140,7 +140,7 @@ namespace Read2Me.Tests.Services
                 db.ParagraphItems.Add(new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para1.Id,
-                    ItemType = ParagraphItemType.Character, CharacterId = null, Order = Key(),
+                    ItemType = ParagraphItemType.Speech, CharacterId = null, Order = Key(),
                 });
 
                 var para2 = new Paragraph { Id = Guid.NewGuid(), ChapterId = b.ChapterId("ch"), Order = Key() };
@@ -148,7 +148,7 @@ namespace Read2Me.Tests.Services
                 db.ParagraphItems.Add(new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para2.Id,
-                    ItemType = ParagraphItemType.Character, CharacterId = characterId, Order = Key(),
+                    ItemType = ParagraphItemType.Speech, CharacterId = characterId, Order = Key(),
                 });
 
                 await db.SaveChangesAsync();
@@ -175,7 +175,7 @@ namespace Read2Me.Tests.Services
                 {
                     Id = Guid.NewGuid(),
                     ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Narration,
+                    ItemType = ParagraphItemType.Speech,
                     CharacterId = ProjectDbContext.NarratorId,
                     Order = Key(),
                 };
@@ -205,7 +205,7 @@ namespace Read2Me.Tests.Services
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
+                    ItemType = ParagraphItemType.Speech,
                     AudioFileName = null,
                     Order = Key(),
                 };
@@ -231,7 +231,7 @@ namespace Read2Me.Tests.Services
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
+                    ItemType = ParagraphItemType.Speech,
                     AudioFileName = "audio/item.wav",
                     Order = Key(),
                 };
@@ -265,7 +265,7 @@ namespace Read2Me.Tests.Services
                 db.ParagraphItems.Add(new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
+                    ItemType = ParagraphItemType.Speech,
                     AudioFileName = null,
                     Order = Key(),
                 });
@@ -290,14 +290,14 @@ namespace Read2Me.Tests.Services
                 db.ParagraphItems.Add(new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
+                    ItemType = ParagraphItemType.Speech,
                     AudioFileName = "audio/has.wav",
                     Order = Key(),
                 });
                 db.ParagraphItems.Add(new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Narration,
+                    ItemType = ParagraphItemType.Speech,
                     AudioFileName = null,
                     Order = Key(),
                 });
@@ -326,7 +326,7 @@ namespace Read2Me.Tests.Services
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
+                    ItemType = ParagraphItemType.Speech,
                     AudioFileName = "audio/item.wav",
                     Order = Key(),
                 };
@@ -360,7 +360,7 @@ namespace Read2Me.Tests.Services
                 var item = new ParagraphItem
                 {
                     Id = Guid.NewGuid(), ParagraphId = para.Id,
-                    ItemType = ParagraphItemType.Character,
+                    ItemType = ParagraphItemType.Speech,
                     AudioFileName = "audio/item.wav",
                     Order = Key(),
                 };

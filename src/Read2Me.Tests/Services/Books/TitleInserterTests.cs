@@ -72,7 +72,7 @@ namespace Read2Me.Tests.Services.Books
 
             var items = await db.ParagraphItems.Where(i => i.ParagraphId == result.Id).ToListAsync();
             Assert.Single(items);
-            Assert.Equal(ParagraphItemType.Narration, items[0].ItemType);
+            Assert.Equal(ParagraphItemType.Speech, items[0].ItemType);
             Assert.Equal("Hello", items[0].Text);
         }
 

@@ -10,10 +10,10 @@ namespace Read2Me.Tests.State
     public class ParagraphRowViewModelTests
     {
         private static ParagraphItem Char(Character? c) =>
-            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Character = c, CharacterId = c?.Id };
+            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Character = c, CharacterId = c?.Id };
 
         private static ParagraphItem Narration() =>
-            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration, CharacterId = ProjectDbContext.NarratorId };
+            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, CharacterId = ProjectDbContext.NarratorId };
 
         private static Paragraph Para(params ParagraphItem[] items)
         {

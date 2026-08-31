@@ -153,11 +153,10 @@ namespace Read2Me.Services
                 .Select(p => ValueTuple.Create(
                     p.Id,
                     p.Items
-                        // NarrationRule's rule, spelled out — a nested collection projection
-                        // cannot compose the seam's expression. Keep the two in step.
-                        .Where(i => i.CharacterId != ProjectDbContext.NarratorId
-                                 && (i.ItemType == ParagraphItemType.Character
-                                  || i.ItemType == ParagraphItemType.Narration))
+                        // NarrationRule's rule, spelled out — a nested collection projection cannot
+                        // compose the seam's expression. Keep the two in step.
+                        .Where(i => i.ItemType == ParagraphItemType.Speech
+                                 && i.CharacterId != ProjectDbContext.NarratorId)
                         .OrderBy(i => i.Order)
                         .Select(i => i.Text ?? "")
                         .FirstOrDefault() ?? ""))
@@ -289,7 +288,7 @@ namespace Read2Me.Services
                 .Select(p => new ChapterContextRow(
                     p.Id,
                     p.Items
-                        .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                        .Where(i => i.ItemType == ParagraphItemType.Speech)
                         .OrderBy(i => i.Order)
                         .Select(i => new ChapterContextItemRow(
                             i.Id,

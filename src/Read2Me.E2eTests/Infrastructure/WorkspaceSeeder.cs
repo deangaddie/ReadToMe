@@ -77,7 +77,7 @@ public static class WorkspaceSeeder
             .AddParagraph("p1", p => p
                 .AddNarration("n1", "It was a dark and stormy night."))
             .AddParagraph("p2", p => p
-                .AddRawItem("line1", ParagraphItemType.Character,
+                .AddRawItem("line1", ParagraphItemType.Speech,
                     "“Hello there,” she said.", characterId: null))
             .AddParagraph("p3", p => p
                 .AddNarration("n2", "The rain kept falling.")));
@@ -94,13 +94,13 @@ public static class WorkspaceSeeder
             .AddParagraph("p1", p => p
                 .AddNarration("n1", "It was a dark and stormy night."))
             .AddParagraph("p2", p => p
-                .AddRawItem("line1", ParagraphItemType.Character,
+                .AddRawItem("line1", ParagraphItemType.Speech,
                     "“Hello there,” she said.", characterId: null))
             .AddParagraph("p3", p => p
-                .AddRawItem("line2", ParagraphItemType.Character,
+                .AddRawItem("line2", ParagraphItemType.Speech,
                     "“Who goes there?” came the reply.", characterId: null))
             .AddParagraph("p4", p => p
-                .AddRawItem("line3", ParagraphItemType.Character,
+                .AddRawItem("line3", ParagraphItemType.Speech,
                     "“Only me,” she answered.", characterId: null)));
 
     /// <summary>
@@ -118,9 +118,9 @@ public static class WorkspaceSeeder
                 .AddNarration("n1", "It was a dark and stormy night."))
             .AddParagraph("p2", p => p
                 .AddNarration("lead", "The door swung open.")
-                .AddRawItem("mixed", ParagraphItemType.Character,
+                .AddRawItem("mixed", ParagraphItemType.Speech,
                     "“Hello there,” she said. “And who might you be?” he answered.", characterId: null)
-                .AddRawItem("clean", ParagraphItemType.Character,
+                .AddRawItem("clean", ParagraphItemType.Speech,
                     "“Only me,” came the reply.", characterId: null)));
 
     /// One volume, one chapter named "ch1", one known character; the caller fills the chapter.

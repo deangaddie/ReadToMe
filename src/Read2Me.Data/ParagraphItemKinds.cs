@@ -35,7 +35,6 @@ namespace Read2Me.Data
         /// Compose it with <c>Where(ParagraphItemKinds.IsSpeechExpression)</c>.
         /// </summary>
         public static readonly Expression<Func<ParagraphItem, bool>> IsSpeechExpression =
-            item => item.ItemType == ParagraphItemType.Narration
-                 || item.ItemType == ParagraphItemType.Character;
+            item => item.ItemType == ParagraphItemType.Speech;
     }
 }

@@ -92,6 +92,19 @@ namespace Read2Me.Tests.Narrator
 #pragma warning restore EF1002
         }
 
+        /// <summary>
+        /// Speakers only, projected rather than materialised — a pre-collapse database still holds
+        /// the retired kind names, which no longer map onto the enum.
+        /// </summary>
+        private async Task<Dictionary<Guid, Guid?>> ReadSpeakersAsync(string folder)
+        {
+            await using var db = OpenUnmigratedAt(folder);
+            return await db.ParagraphItems
+                .AsNoTracking()
+                .Select(i => new { i.Id, i.CharacterId })
+                .ToDictionaryAsync(i => i.Id, i => i.CharacterId);
+        }
+
         private async Task<Dictionary<Guid, (ParagraphItemType Type, Guid? Speaker)>> ReadItemsAsync(string folder)
         {
             await using var db = OpenUnmigratedAt(folder);
@@ -132,19 +145,47 @@ namespace Read2Me.Tests.Narrator
             Assert.Null(items[DialogUnattributed].Speaker);
             Assert.Null(items[PauseItem].Speaker);
             Assert.Equal(ParagraphItemType.ChapterPause, items[PauseItem].Type);
-            Assert.Equal(ParagraphItemType.Character, items[DialogAttributed].Type);
-            Assert.Equal(ParagraphItemType.Narration, items[NarrationWithoutSpeaker].Type);
+            Assert.Equal(ParagraphItemType.Speech, items[DialogAttributed].Type);
+            Assert.Equal(ParagraphItemType.Speech, items[NarrationWithoutSpeaker].Type);
+        }
+
+        /// <summary>
+        /// The collapse of the two speech kinds into one (ADR-0006), over a real book's worth of
+        /// rows: every speech row ends up Speech whichever kind it started as, the pause keeps its
+        /// own kind, and no speaker moves — the backfill has already put the narrator where the
+        /// word 'Narration' used to be, which is what makes losing the word safe.
+        /// </summary>
+        [Fact]
+        public async Task Migration_CollapsesBothSpeechKinds_AndKeepsPausesAndSpeakers()
+        {
+            await SeedAtPriorMigrationAsync(FolderName);
+
+            await MigrateUpAsync(FolderName);
+            await MigrateUpAsync(FolderName);   // idempotent: a second run matches nothing
+
+            var items = await ReadItemsAsync(FolderName);
+            foreach (var id in new[]
+                     {
+                         NarrationWithSpeaker, NarrationWithoutSpeaker, InsertedTitle,
+                         DialogAttributed, DialogUnattributed,
+                     })
+                Assert.Equal(ParagraphItemType.Speech, items[id].Type);
+
+            Assert.Equal(ParagraphItemType.ChapterPause, items[PauseItem].Type);
+            Assert.Equal(ProjectDbContext.NarratorId, items[NarrationWithSpeaker].Speaker);
+            Assert.Equal(AliceId, items[DialogAttributed].Speaker);
+            Assert.Null(items[DialogUnattributed].Speaker);
         }
 
         [Fact]
-        public async Task Migration_ChangesNothing_OnADatabaseThatAlreadySatisfiesTheInvariant()
+        public async Task Migration_ChangesNoSpeaker_OnADatabaseThatAlreadySatisfiesTheInvariant()
         {
             await SeedAtPriorMigrationAsync(FolderName, conforming: true);
-            var before = await ReadItemsAsync(FolderName);
+            var before = await ReadSpeakersAsync(FolderName);
 
             await MigrateUpAsync(FolderName);
 
-            Assert.Equal(before, await ReadItemsAsync(FolderName));
+            Assert.Equal(before, await ReadSpeakersAsync(FolderName));
         }
 
         /// <summary>

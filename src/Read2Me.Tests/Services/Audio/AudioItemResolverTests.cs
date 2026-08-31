@@ -70,7 +70,7 @@ namespace Read2Me.Tests.Services.Audio
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("bilbo", character);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character,
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Speech,
                     text, hasCharacter ? charId : null))))
                 .BuildAsync();
 
@@ -267,7 +267,7 @@ namespace Read2Me.Tests.Services.Audio
 
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "He said something", null))))
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Speech, "He said something", null))))
                 .BuildAsync();
 
             Guid narratorVoiceId;

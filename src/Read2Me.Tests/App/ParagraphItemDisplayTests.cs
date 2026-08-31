@@ -32,8 +32,7 @@ namespace Read2Me.Tests.App
         [InlineData(ParagraphItemType.ChapterPause, true)]
         [InlineData(ParagraphItemType.ParagraphPause, true)]
         [InlineData(ParagraphItemType.Pause, true)]
-        [InlineData(ParagraphItemType.Narration, false)]
-        [InlineData(ParagraphItemType.Character, false)]
+        [InlineData(ParagraphItemType.Speech, false)]
         public void IsPauseParagraph_ClassifiesPauseTypes(ParagraphItemType type, bool expected)
         {
             var p = ParagraphWith(type);
@@ -46,7 +45,7 @@ namespace Read2Me.Tests.App
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), Order = "a",
-                ItemType = ParagraphItemType.Character,   // the type says nothing any more
+                ItemType = ParagraphItemType.Speech,   // the type says nothing any more
                 CharacterId = ProjectDbContext.NarratorId,
             };
 
@@ -64,7 +63,7 @@ namespace Read2Me.Tests.App
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), Order = "a",
-                ItemType = ParagraphItemType.Narration,   // the type says nothing any more
+                ItemType = ParagraphItemType.Speech,   // the type says nothing any more
                 CharacterId = alice.Id,
                 Character = alice,
             };
@@ -82,7 +81,7 @@ namespace Read2Me.Tests.App
             var item = new ParagraphItem
             {
                 Id = Guid.NewGuid(), Order = "a",
-                ItemType = ParagraphItemType.Character,
+                ItemType = ParagraphItemType.Speech,
                 CharacterId = null,
             };
 
@@ -117,7 +116,7 @@ namespace Read2Me.Tests.App
         }
 
         [Theory]
-        [InlineData(ParagraphItemType.Narration)]
+        [InlineData(ParagraphItemType.Speech)]
         [InlineData(ParagraphItemType.VolumePause)]
         [InlineData(ParagraphItemType.ChapterPause)]
         public void GetItemDisplay_ReturnsNonEmptyIconAndLabel(ParagraphItemType type)

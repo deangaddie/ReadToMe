@@ -61,7 +61,7 @@ public class BookHierarchyBuilderTests : ProjectDbTestBase
         var item = await db.ParagraphItems.FindAsync(b.ItemId("n1"));
 
         Assert.NotNull(item);
-        Assert.Equal(ParagraphItemType.Narration, item.ItemType);
+        Assert.Equal(ParagraphItemType.Speech, item.ItemType);
         Assert.Equal(ProjectDbContext.NarratorId, item.CharacterId);
         Assert.Equal("Hello world", item.Text);
     }
@@ -84,7 +84,7 @@ public class BookHierarchyBuilderTests : ProjectDbTestBase
         var item = await db.ParagraphItems.FindAsync(b.ItemId("l1"));
 
         Assert.NotNull(item);
-        Assert.Equal(ParagraphItemType.Character, item.ItemType);
+        Assert.Equal(ParagraphItemType.Speech, item.ItemType);
         Assert.Equal(alice.Id, item.CharacterId);
         Assert.Equal("Hi there", item.Text);
     }

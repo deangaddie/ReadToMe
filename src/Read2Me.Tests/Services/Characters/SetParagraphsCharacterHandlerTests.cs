@@ -41,14 +41,14 @@ namespace Read2Me.Tests.Services.Characters
             b.WithCharacter("bob", new Character { Id = BobId, Name = "Bob" });
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                     .AddParagraph("p1", p => p
-                        .AddRawItem("p1-dialog", ParagraphItemType.Character, "\"One.\"", AliceId)
-                        .AddRawItem("p1-narration", ParagraphItemType.Narration, "he said.", ProjectDbContext.NarratorId)
+                        .AddRawItem("p1-dialog", ParagraphItemType.Speech, "\"One.\"", AliceId)
+                        .AddRawItem("p1-narration", ParagraphItemType.Speech, "he said.", ProjectDbContext.NarratorId)
                         .AddRawItem("p1-pause", ParagraphItemType.Pause, null))
                     .AddParagraph("p2", p => p
-                        .AddRawItem("p2-dialog", ParagraphItemType.Character, "\"Two.\"", null)
-                        .AddRawItem("p2-narration", ParagraphItemType.Narration, "she said.", ProjectDbContext.NarratorId))
+                        .AddRawItem("p2-dialog", ParagraphItemType.Speech, "\"Two.\"", null)
+                        .AddRawItem("p2-narration", ParagraphItemType.Speech, "she said.", ProjectDbContext.NarratorId))
                     .AddParagraph("p3", p => p
-                        .AddRawItem("p3-dialog", ParagraphItemType.Character, "\"Three.\"", AliceId))))
+                        .AddRawItem("p3-dialog", ParagraphItemType.Speech, "\"Three.\"", AliceId))))
                 .BuildAsync();
             return b;
         }
@@ -134,7 +134,7 @@ namespace Read2Me.Tests.Services.Characters
                     var n = i;
                     c.AddParagraph($"p{n}", p => p
                         .AddNarration($"n{n}", "he said.")
-                        .AddRawItem($"d{n}", ParagraphItemType.Character, "\"Line.\"", AliceId));
+                        .AddRawItem($"d{n}", ParagraphItemType.Speech, "\"Line.\"", AliceId));
                 }
             })).BuildAsync();
 
