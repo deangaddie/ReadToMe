@@ -41,21 +41,39 @@ public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid Paragr
 /// unchanged and keeps its own callers.
 /// </summary>
 public record SetParagraphsCharacterCommand(ProjectFolderId FolderId, IReadOnlyList<Guid> ParagraphIds, Guid? CharacterId) : BookCommand(FolderId);
-public enum SegmentItemType { Narration, Character }
 
-/// One segment of a re-segmented paragraph, ready to apply: text is a slice of the original
-/// paragraph, and the speaker is already resolved to an id (null = unknown).
-public sealed record SegmentSpec(string Text, SegmentItemType Type, Guid? CharacterId, string? VoiceInstructions);
+/// <summary>
+/// One item's attribution, ready to apply: the item is addressed by id, and the speaker is already
+/// resolved to a character id (null = unknown, which never erases an existing stamp).
+/// <para>
+/// Not to be confused with <c>AttributedItem</c>, the wire answer the LLM sends (index + speaker
+/// name); this is the resolved apply-side record.
+/// </para>
+/// </summary>
+public sealed record ItemAttribution(Guid ItemId, Guid? CharacterId, string? VoiceInstructions);
 
-/// Reconciles a paragraph's items against the segment list the LLM answered with: matching items
-/// (same normalized text + type) keep their id and audio, the rest are replaced.
-public record ApplySegmentationCommand(ProjectFolderId FolderId, Guid ParagraphId, IReadOnlyList<SegmentSpec> Segments) : BookCommand(FolderId);
+/// <summary>
+/// Stamps speaker and voice instructions onto existing items of one paragraph. Item boundaries are
+/// frozen (ADR 0005): this command never creates, deletes, reorders or retypes an item.
+/// </summary>
+public record AttributeItemsCommand(
+    ProjectFolderId FolderId,
+    Guid ParagraphId,
+    IReadOnlyList<ItemAttribution> Items) : BookCommand(FolderId);
 
 public record AddCharacterAliasCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
 public record RemoveCharacterAliasCommand(ProjectFolderId FolderId, Guid AliasId) : BookCommand(FolderId);
 public record MergeCharactersCommand(ProjectFolderId FolderId, Guid SurvivorId, Guid MergedId, bool AddNameAsAlias) : BookCommand(FolderId);
 public record DeleteCharacterCommand(ProjectFolderId FolderId, Guid CharacterId) : BookCommand(FolderId);
 public record RenameCharacterCommand(ProjectFolderId FolderId, Guid CharacterId, string Name) : BookCommand(FolderId);
+
+// Narrator
+/// <summary>
+/// Points the book's narration at one of its Characters — Sherlock Holmes narrated by
+/// Dr. Watson. <c>null</c> unlinks. The first project-scoped <see cref="BookCommand"/>:
+/// every sibling addresses a node, character or voice.
+/// </summary>
+public record SetNarratorCharacterCommand(ProjectFolderId FolderId, Guid? CharacterId) : BookCommand(FolderId);
 
 // Voice
 public record CreateVoiceCommand(ProjectFolderId FolderId, Guid CharacterId, string Name, bool IsGenerated = false) : BookCommand(FolderId);

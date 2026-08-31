@@ -34,8 +34,7 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Theory]
-        [InlineData(ParagraphItemType.Narration)]
-        [InlineData(ParagraphItemType.Character)]
+        [InlineData(ParagraphItemType.Speech)]
         public void PauseMs_NonPauseKind_Throws(ParagraphItemType kind)
         {
             Assert.Throws<ArgumentException>(() =>
@@ -46,7 +45,7 @@ namespace Read2Me.Tests.Services.Audio
 
         private static AssemblyManifestEntry AudioEntry(Guid id, string path,
             Guid? volId = null, Guid? partId = null, Guid? chapId = null) =>
-            new(id, ParagraphItemType.Narration, path,
+            new(id, ParagraphItemType.Speech, path,
                 volId ?? Guid.NewGuid(), null,
                 partId ?? Guid.NewGuid(), null,
                 chapId ?? Guid.NewGuid(), null);
@@ -101,7 +100,7 @@ namespace Read2Me.Tests.Services.Audio
         public void BuildConcatEntries_NullAudioPath_Throws()
         {
             var bad = new AssemblyManifestEntry(
-                Guid.NewGuid(), ParagraphItemType.Narration, null,
+                Guid.NewGuid(), ParagraphItemType.Speech, null,
                 Guid.NewGuid(), null, Guid.NewGuid(), null, Guid.NewGuid(), null);
 
             var manifest = new List<AssemblyManifestEntry> { bad };
@@ -122,7 +121,7 @@ namespace Read2Me.Tests.Services.Audio
 
             var manifest = new List<AssemblyManifestEntry>
             {
-                new(itemId, ParagraphItemType.Narration, "a.wav",
+                new(itemId, ParagraphItemType.Speech, "a.wav",
                     volId, "Vol 1", partId, "Part 1", chapId, "Chapter One"),
             };
             var durations = new Dictionary<Guid, TimeSpan>
@@ -153,11 +152,11 @@ namespace Read2Me.Tests.Services.Audio
 
             var manifest = new List<AssemblyManifestEntry>
             {
-                new(item1Id, ParagraphItemType.Narration, "a.wav",
+                new(item1Id, ParagraphItemType.Speech, "a.wav",
                     volId, "Vol 1", partId, "Part 1", chap1Id, "Chapter One"),
                 new(pause1Id, ParagraphItemType.ChapterPause, null,
                     volId, "Vol 1", partId, "Part 1", chap1Id, "Chapter One"),
-                new(item2Id, ParagraphItemType.Narration, "b.wav",
+                new(item2Id, ParagraphItemType.Speech, "b.wav",
                     volId, "Vol 1", partId, "Part 1", chap2Id, "Chapter Two"),
             };
             var durations = new Dictionary<Guid, TimeSpan>
@@ -187,7 +186,7 @@ namespace Read2Me.Tests.Services.Audio
 
             var manifest = new List<AssemblyManifestEntry>
             {
-                new(itemId, ParagraphItemType.Narration, "a.wav",
+                new(itemId, ParagraphItemType.Speech, "a.wav",
                     volId, null, partId, null, chapId, null),
             };
             var durations = new Dictionary<Guid, TimeSpan> { [itemId] = TimeSpan.FromSeconds(1) };
@@ -210,7 +209,7 @@ namespace Read2Me.Tests.Services.Audio
             var manifest = new List<AssemblyManifestEntry>
             {
                 AudioEntry(presentId, "audio/a.wav", vol, part, chap),
-                new(Guid.NewGuid(), ParagraphItemType.Narration, null,
+                new(Guid.NewGuid(), ParagraphItemType.Speech, null,
                     vol, null, part, null, chap, null),                 // missing — remove
                 PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap),
             };
@@ -277,7 +276,7 @@ namespace Read2Me.Tests.Services.Audio
             {
                 AudioEntry(presentId, "audio/a.wav", vol, part1, chap1),
                 PauseEntry(ParagraphItemType.ChapterPause, vol, part1, chap1),
-                new(Guid.NewGuid(), ParagraphItemType.Narration, null,
+                new(Guid.NewGuid(), ParagraphItemType.Speech, null,
                     vol, null, part1, null, chap2, null),                   // missing
                 new(partPauseId, ParagraphItemType.PartPause, null,
                     vol, null, part1, null, chap2, null),
@@ -306,8 +305,8 @@ namespace Read2Me.Tests.Services.Audio
             {
                 AudioEntry(id1, "audio/a.wav", vol, part, chap1),
                 PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap1),
-                new(Guid.NewGuid(), ParagraphItemType.Narration, null, vol, null, part, null, chap2, null),
-                new(Guid.NewGuid(), ParagraphItemType.Narration, null, vol, null, part, null, chap2, null),
+                new(Guid.NewGuid(), ParagraphItemType.Speech, null, vol, null, part, null, chap2, null),
+                new(Guid.NewGuid(), ParagraphItemType.Speech, null, vol, null, part, null, chap2, null),
                 PauseEntry(ParagraphItemType.ChapterPause, vol, part, chap2),
                 AudioEntry(id3, "audio/c.wav", vol, part, chap3),
             };

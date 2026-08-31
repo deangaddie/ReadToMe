@@ -15,12 +15,21 @@
         </MudChip>
     </ActivatorContent>
     <ChildContent>
-        <MudMenuItem OnClick="@(() => Select(null))">Unknown</MudMenuItem>
+        @* Narration is a speaker, not an item type (ADR-0006): the narrator is one entry in this
+           list like any character, pinned at the top because the roster sorts IsNarrator first.
+           Under a narrator link the entry names the linked character, so "Narrator (Alice)" reads
+           apart from "Alice" — they are different stored speakers with different voice rules. *@
         @foreach (var ch in Presenter.Characters)
         {
             var c = ch;
-            <MudMenuItem OnClick="@(() => Select(c.Id))">@c.Name</MudMenuItem>
+            <MudMenuItem OnClick="@(() => Select(c.Id))" data-testid="@($"pick-{(c.IsNarrator ? "narrator" : c.Id.ToString())}")">
+                @(c.IsNarrator ? NarratorLabel : c.Name)
+            </MudMenuItem>
         }
+        <MudDivider />
+        <MudMenuItem OnClick="@(() => Select(null))" data-testid="pick-requeue">
+            Clear speaker — re-queue as unattributed dialog
+        </MudMenuItem>
         <MudDivider />
         <MudMenuItem Icon="@Icons.Material.Filled.Add" OnClick="AddCharacter">Add new character...</MudMenuItem>
     </ChildContent>
@@ -36,6 +45,9 @@
     [Parameter, EditorRequired] public EventCallback<Guid?> OnSelected { get; set; }
 
     private bool _open;
+
+    private string NarratorLabel =>
+        Presenter.Narrator.IsLinked ? $"Narrator ({Presenter.Narrator.DisplayName})" : "Narrator";
 
     private async Task Select(Guid? characterId)
     {

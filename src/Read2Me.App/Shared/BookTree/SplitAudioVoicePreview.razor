@@ -1,0 +1,31 @@
+@using Read2Me.Data
+
+<MudText Typo="Typo.caption" Style="opacity:0.65;" data-testid="@TestId">
+    @PreviewText
+</MudText>
+
+@code {
+    [Parameter] public Guid? CharacterId { get; set; }
+    [Parameter, EditorRequired] public NarratorIdentity Narrator { get; set; }
+    [Parameter] public string? VoiceName { get; set; }
+    [Parameter] public string? TestId { get; set; }
+
+    private string PreviewText
+    {
+        get
+        {
+            var voice = VoiceName is null ? "—" : $"Voice: {VoiceName}";
+            if (!Narrator.IsLinked)
+                return voice;
+
+            // Narration is the speaker, not the item type (ADR-0006), and under a link
+            // "Narrator (Alice)" stays a different choice from "Alice" — so the two read apart.
+            if (NarrationRule.IsNarration(CharacterId))
+                return $"Narrator → {Narrator.DisplayName} · {voice}";
+
+            return CharacterId == Narrator.CharacterId
+                ? $"{Narrator.DisplayName} · {voice}"
+                : voice;
+        }
+    }
+}

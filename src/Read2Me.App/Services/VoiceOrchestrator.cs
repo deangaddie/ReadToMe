@@ -65,9 +65,11 @@ namespace Read2Me.App.Services
             string author,
             string characterName,
             bool isNarrator = false,
+            bool alsoNarrates = false,
             CancellationToken ct = default)
         {
-            var result = await voiceDesignPromptService.GeneratePlanAsync(bookTitle, author, characterName, isNarrator, ct);
+            var result = await voiceDesignPromptService.GeneratePlanAsync(
+                bookTitle, author, characterName, isNarrator, alsoNarrates, ct);
             if (result.Status == VoiceDesignPromptService.GenerateStatus.Success && result.Voices is not null)
                 return result.Voices;
             throw new InvalidOperationException(result.FailureReason ?? "Failed to generate voice plan.");

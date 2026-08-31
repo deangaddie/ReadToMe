@@ -15,7 +15,7 @@ namespace Read2Me.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
             modelBuilder.Entity("Read2Me.Data.Entities.AudioReview", b =>
                 {
@@ -256,6 +256,9 @@ namespace Read2Me.Data.Migrations
                     b.Property<string>("Filename")
                         .IsRequired()
                         .HasMaxLength(526)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("NarratorCharacterId")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("NarratorOnlyMode")

@@ -41,19 +41,19 @@ namespace Read2Me.Tests.Services.Characters
             b.WithCharacter("alice", new Character { Id = AliceId, Name = "Alice" });
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                     .AddParagraph("p1", p => p
-                        .AddRawItem("p1-dialog-a", ParagraphItemType.Character, "\"One.\"", AliceId)
-                        .AddRawItem("p1-dialog-b", ParagraphItemType.Character, "\"Still one.\"", null)
-                        .AddRawItem("p1-narration", ParagraphItemType.Narration, "he said.", ProjectDbContext.NarratorId)
+                        .AddRawItem("p1-dialog-a", ParagraphItemType.Speech, "\"One.\"", AliceId)
+                        .AddRawItem("p1-dialog-b", ParagraphItemType.Speech, "\"Still one.\"", null)
+                        .AddRawItem("p1-narration", ParagraphItemType.Speech, "he said.", ProjectDbContext.NarratorId)
                         .AddRawItem("p1-pause", ParagraphItemType.Pause, null))
                     .AddParagraph("p2", p => p
-                        .AddRawItem("p2-dialog", ParagraphItemType.Character, "\"Two.\"", null)
-                        .AddRawItem("p2-narration", ParagraphItemType.Narration, "she said.", ProjectDbContext.NarratorId))
+                        .AddRawItem("p2-dialog", ParagraphItemType.Speech, "\"Two.\"", null)
+                        .AddRawItem("p2-narration", ParagraphItemType.Speech, "she said.", ProjectDbContext.NarratorId))
                     .AddParagraph("p3", p => p
-                        .AddRawItem("p3-narration", ParagraphItemType.Narration, "Nobody spoke.", ProjectDbContext.NarratorId))
+                        .AddRawItem("p3-narration", ParagraphItemType.Speech, "Nobody spoke.", ProjectDbContext.NarratorId))
                     .AddParagraph("p4", p => p
                         .AddRawItem("p4-pause", ParagraphItemType.Pause, null))
                     .AddParagraph("p5", p => p
-                        .AddRawItem("p5-dialog", ParagraphItemType.Character, "\"Five.\"", AliceId))))
+                        .AddRawItem("p5-dialog", ParagraphItemType.Speech, "\"Five.\"", AliceId))))
                 .BuildAsync();
             return b;
         }

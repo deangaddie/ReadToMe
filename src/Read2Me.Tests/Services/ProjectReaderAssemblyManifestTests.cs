@@ -72,7 +72,7 @@ namespace Read2Me.Tests.Services
             db.ParagraphItems.Add(new ParagraphItem
             {
                 Id = item1Id, ParagraphId = b.ParagraphId("para1"), Order = order = Key(order),
-                ItemType = ParagraphItemType.Narration, Text = "Narrate this",
+                ItemType = ParagraphItemType.Speech, Text = "Narrate this",
                 AudioFileName = "audio/narration.wav"
             });
             item2Id = Guid.NewGuid();
@@ -86,7 +86,7 @@ namespace Read2Me.Tests.Services
             db.ParagraphItems.Add(new ParagraphItem
             {
                 Id = item3Id, ParagraphId = b.ParagraphId("para1"), Order = order = Key(order),
-                ItemType = ParagraphItemType.Character, Text = "Dialog line"
+                ItemType = ParagraphItemType.Speech, Text = "Dialog line"
             });
 
             string? order2 = null;
@@ -94,7 +94,7 @@ namespace Read2Me.Tests.Services
             db.ParagraphItems.Add(new ParagraphItem
             {
                 Id = item4Id, ParagraphId = b.ParagraphId("para2"), Order = order2 = Key(order2),
-                ItemType = ParagraphItemType.Character, Text = "Vol2 dialog",
+                ItemType = ParagraphItemType.Speech, Text = "Vol2 dialog",
                 AudioFileName = "audio/character.wav"
             });
             item5Id = Guid.NewGuid();

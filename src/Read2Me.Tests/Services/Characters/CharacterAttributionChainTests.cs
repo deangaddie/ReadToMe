@@ -102,24 +102,23 @@ namespace Read2Me.Tests.Services.Characters
             new() { Id = Guid.NewGuid(), Title = "Book", BookTitle = "The Book", Author = "Author", Filename = "b.epub" };
 
         /// <summary>
-        /// Every paragraph in these tests reads "Hello world" (single and batch alike), so an answer
-        /// is one dialog segment covering it — segment texts have to reconstruct the paragraph they
-        /// answer or the aligner rejects them, which is a different test's job.
+        /// Every paragraph in these tests is a single dialog item reading "Hello world" (single and
+        /// batch alike), so an answer names index 0 and nothing else.
         /// </summary>
         private const string QueryText = "Hello world";
 
-        private static string Segment(string speaker) =>
-            $$"""{ "text": "{{QueryText}}", "type": "dialog", "speaker": "{{speaker}}", "voice_instructions": "" }""";
+        private static string Item(string speaker) =>
+            $$"""{ "index": 0, "speaker": "{{speaker}}", "voice_instructions": "" }""";
 
         private static string Resolved(string name) =>
-            $$"""{ "reasoning": "r", "segments": [ {{Segment(name)}} ] }""";
+            $$"""{ "reasoning": "r", "items": [ {{Item(name)}} ] }""";
 
         private static readonly string Unknown = Resolved("unknown");
 
-        /// <summary>Batch answer: one segment per requested index, each with the given speaker.</summary>
+        /// <summary>Batch answer: one entry per requested paragraph index, each naming its item 0.</summary>
         private static string BatchJson(params (int Index, string Speaker)[] entries) =>
             "[" + string.Join(",", entries.Select(e =>
-                $$"""{ "index": {{e.Index}}, "reasoning": "r", "segments": [ {{Segment(e.Speaker)}} ] }""")) + "]";
+                $$"""{ "index": {{e.Index}}, "reasoning": "r", "items": [ {{Item(e.Speaker)}} ] }""")) + "]";
 
         /// <summary>
         /// One answer per included index, all naming <paramref name="speaker"/>: the object shape for
@@ -129,9 +128,9 @@ namespace Read2Me.Tests.Services.Characters
         private static string AnswerFor(int count, string speaker) =>
             count == 1 ? Resolved(speaker) : BatchJson([.. Enumerable.Range(0, count).Select(i => (i, speaker))]);
 
-        /// <summary>The speaker of a single-segment answer.</summary>
+        /// <summary>The speaker of a single-item answer.</summary>
         private static string? Speaker(AttributionOutcome outcome) =>
-            outcome.Segments is { Count: > 0 } s ? s[0].Speaker : null;
+            outcome.Answer is { Items.Count: > 0 } a ? a.Items[0].Speaker : null;
 
         // Known-character list: only "Alice" is listed, so any other resolved name is UnlistedName.
         private static List<Character> KnownAlice() =>
@@ -149,7 +148,10 @@ namespace Read2Me.Tests.Services.Characters
             public override Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
                 ProjectFolderId f, Guid c, IReadOnlyList<Guid> ids, int b, int a)
             {
-                var entries = ids.Select((_, i) => new BatchContextEntry(QueryText, [], i)).ToList();
+                var entries = ids.Select((_, i) => new BatchContextEntry(
+                    QueryText,
+                    [new ContextItem(Guid.NewGuid(), QueryText, AttributionWire.Dialog, AttributionWire.Unknown)],
+                    i)).ToList();
                 return Task.FromResult<ParagraphBatchContext?>(new ParagraphBatchContext(entries, [.. ids], []));
             }
 
@@ -168,7 +170,7 @@ namespace Read2Me.Tests.Services.Characters
         private const string FullMarker = "Vocatives:";
 
         /// <summary>Phrase present only in the batch (array-shaped) attribution prompt.</summary>
-        private const string BatchMarker = "Return one entry per index";
+        private const string BatchMarker = "Return one entry per paragraph \"index\"";
 
         [Theory]
         [InlineData(1)]

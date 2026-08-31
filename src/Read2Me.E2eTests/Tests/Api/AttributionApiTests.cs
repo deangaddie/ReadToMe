@@ -33,16 +33,7 @@ public class AttributionApiTests(E2eAppFixture app)
         Assert.Equal(1, enqueued);
 
         // Poll until the queue drains (fake LLM answers instantly; generous ceiling).
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
-        {
-            var snapshot = JsonDocument.Parse(
-                await Http.GetStringAsync($"{app.BaseUrl}/api/attribution/queue"));
-            if (snapshot.RootElement.GetProperty("queuedCount").GetInt32() == 0 &&
-                snapshot.RootElement.GetProperty("processingCount").GetInt32() == 0)
-                break;
-            await Task.Delay(200);
-        }
+        await app.WaitForQueueDrainAsync("/api/attribution/queue");
 
         // Queue state is done and carries no outcome; the attribution itself is on the items.
         var status = JsonDocument.Parse(await Http.GetStringAsync(

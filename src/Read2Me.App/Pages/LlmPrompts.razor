@@ -6,7 +6,7 @@
 
 <MudText Typo="Typo.h4" Class="mb-6">LLM Prompts</MudText>
 
-@if (_characterPrompt == null || _batchCharacterPrompt == null || _simpleCharacterPrompt == null || _simpleBatchCharacterPrompt == null || _voicePrompt == null || _voicePlanPrompt == null || _narratorVoicePlanPrompt == null || _discoverCharactersPrompt == null)
+@if (_characterPrompt == null || _batchCharacterPrompt == null || _simpleCharacterPrompt == null || _simpleBatchCharacterPrompt == null || _voicePrompt == null || _voicePlanPrompt == null || _narratorVoicePlanPrompt == null || _discoverCharactersPrompt == null || _attributionCompatibility == null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
@@ -16,12 +16,20 @@ else
     <MudPaper Class="pa-5 mb-6" Outlined="true">
         <MudText Typo="Typo.h6" Class="mb-1">Book Character Prompt</MudText>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            Sent to the LLM to identify which character is speaking a paragraph, and how the line should be voiced.
+            Sent to the LLM to identify which character speaks each item of a paragraph, and how the line should be voiced.
         </MudText>
+
+        @if (_attributionCompatibility.CharacterPromptMissingNarratorIdentity)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                     Icon="@Icons.Material.Filled.Warning" Class="mb-3">
+                @("Stored override missing {{" + PromptTemplates.NarratorIdentity + "}}")
+            </MudChip>
+        }
 
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
         <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
-            @foreach (var token in _characterTokens)
+            @foreach (var token in _fullCharacterTokens)
             {
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@("{{" + token + "}}")</MudChip>
             }
@@ -29,10 +37,13 @@ else
 
         <MudTextField @bind-Value="_characterPrompt" Label="Prompt template" Variant="Variant.Outlined"
                       Lines="14" Class="mb-3" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+            <code>{{narrator_identity}}</code> renders empty unless the book has a narrator link.
+        </MudText>
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
-            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@SegmentAttributionSchema.JsonExample</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@ItemAttributionSchema.JsonExample</MudText>
         </MudPaper>
 
         <MudExpansionPanels Elevation="0" Class="mb-3">
@@ -63,9 +74,17 @@ else
             Attributes several indexed paragraphs in one request.
         </MudText>
 
+        @if (_attributionCompatibility.BatchCharacterPromptMissingNarratorIdentity)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                     Icon="@Icons.Material.Filled.Warning" Class="mb-3">
+                @("Stored override missing {{" + PromptTemplates.NarratorIdentity + "}}")
+            </MudChip>
+        }
+
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
         <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
-            @foreach (var token in _characterTokens)
+            @foreach (var token in _fullCharacterTokens)
             {
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@("{{" + token + "}}")</MudChip>
             }
@@ -73,10 +92,13 @@ else
 
         <MudTextField @bind-Value="_batchCharacterPrompt" Label="Prompt template" Variant="Variant.Outlined"
                       Lines="14" Class="mb-3" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+            <code>{{narrator_identity}}</code> renders empty unless the book has a narrator link.
+        </MudText>
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
-            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@SegmentBatchAttributionSchema.JsonExample</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@ItemBatchAttributionSchema.JsonExample</MudText>
         </MudPaper>
 
         <MudExpansionPanels Elevation="0" Class="mb-3">
@@ -121,7 +143,7 @@ else
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
-            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@SegmentAttributionSchema.JsonExample</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@ItemAttributionSchema.JsonExample</MudText>
         </MudPaper>
 
         <MudExpansionPanels Elevation="0" Class="mb-3">
@@ -165,7 +187,7 @@ else
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
-            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@SegmentBatchAttributionSchema.JsonExample</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;font-family:monospace;">@ItemBatchAttributionSchema.JsonExample</MudText>
         </MudPaper>
 
         <MudExpansionPanels Elevation="0" Class="mb-3">
@@ -199,7 +221,7 @@ else
 
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Available tokens:</MudText>
         <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
-            @foreach (var token in _voicePlanTokens)
+            @foreach (var token in _characterVoicePlanTokens)
             {
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@("{{" + token + "}}")</MudChip>
             }
@@ -207,6 +229,9 @@ else
 
         <MudTextField @bind-Value="_voicePlanPrompt" Label="Prompt template" Variant="Variant.Outlined"
                       Lines="14" Class="mb-3" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+            <code>{{also_narrates}}</code> renders empty unless this character has the book's narrator link.
+        </MudText>
 
         <MudPaper Class="pa-3 mb-3" Outlined="true" Style="background: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Expected response (JSON) — displayed for reference, not editable:</MudText>
@@ -370,6 +395,7 @@ else
     string? _voicePlanPrompt;
     string? _narratorVoicePlanPrompt;
     string? _discoverCharactersPrompt;
+    AttributionPromptCompatibility? _attributionCompatibility;
 
     static readonly string[] _characterTokens =
     [
@@ -378,6 +404,12 @@ else
         PromptTemplates.KnownCharacters,
         PromptTemplates.ContextJson,
         PromptTemplates.ResponseFormat,
+    ];
+
+    static readonly string[] _fullCharacterTokens =
+    [
+        .. _characterTokens,
+        PromptTemplates.NarratorIdentity,
     ];
 
     static readonly string[] _voiceTokens =
@@ -395,6 +427,12 @@ else
         PromptTemplates.ResponseFormat,
     ];
 
+    static readonly string[] _characterVoicePlanTokens =
+    [
+        .. _voicePlanTokens,
+        PromptTemplates.AlsoNarrates,
+    ];
+
     static readonly string[] _discoverCharactersTokens =
     [
         PromptTemplates.BookTitle,
@@ -404,43 +442,74 @@ else
         PromptTemplates.ResponseFormat,
     ];
 
+    // Same rule as the context samples below: the roster is serialized by the real projection, so
+    // the preview cannot show a shape the request does not send (a bare name array, as it once did).
+    static readonly string _sampleRoster = PromptTemplates.BuildKnownCharactersJson([
+        new PromptTemplates.RosterCharacter("Bilbo", ["Mr. Baggins", "the hobbit"]),
+        new PromptTemplates.RosterCharacter("Gandalf", ["the wizard"]),
+        new PromptTemplates.RosterCharacter("Thorin", []),
+    ]);
+
+    // The {{context_json}} previews are serialized by the same builders the real request uses, so a
+    // change to the wire shape cannot leave a stale example on this page. Only the book text here is
+    // invented; item ids are irrelevant to the rendering and never reach the model.
+    static ContextItem Narration(string text) =>
+        new(Guid.Empty, text, AttributionWire.Narration, AttributionWire.Narrator);
+
+    static ContextItem Dialog(string text, string speaker) =>
+        new(Guid.Empty, text, AttributionWire.Dialog, speaker);
+
+    static ContextParagraph Paragraph(params ContextItem[] items) =>
+        new(string.Concat(items.Select(i => i.Text)), items);
+
+    static readonly ContextParagraph _sampleRoad =
+        Paragraph(Narration("The road goes ever on and on, down from the door where it began."));
+
+    static readonly ContextParagraph _sampleGandalf =
+        Paragraph(Dialog("\"You are a very fine person, Mr. Baggins,\"", "Gandalf"),
+                  Narration(" said Gandalf."));
+
+    static readonly ContextParagraph _sampleQuery =
+        Paragraph(Dialog("\"I'm going on an adventure!\"", AttributionWire.Unknown),
+                  Narration(" he cried."));
+
+    static readonly ContextParagraph _sampleWestering =
+        Paragraph(Narration("He paused and looked back. The sun was already westering."));
+
+    static readonly ContextParagraph _sampleSettled =
+        Paragraph(Dialog("\"Then it is settled,\"", AttributionWire.Unknown),
+                  Narration(" said the dwarf."));
+
+    static readonly ParagraphContext _sampleContext =
+        new(_sampleQuery, [_sampleRoad, _sampleGandalf], [_sampleWestering]);
+
+    static readonly ParagraphBatchContext _sampleBatchContext =
+        new([
+            new BatchContextEntry(_sampleRoad.Text, _sampleRoad.Items, null),
+            new BatchContextEntry(_sampleGandalf.Text, _sampleGandalf.Items, null),
+            new BatchContextEntry(_sampleQuery.Text, _sampleQuery.Items, 0),
+            new BatchContextEntry(_sampleWestering.Text, _sampleWestering.Items, null),
+            new BatchContextEntry(_sampleSettled.Text, _sampleSettled.Items, 1),
+        ], [], []);
+
     static readonly IReadOnlyDictionary<string, string> _sampleValues =
         new Dictionary<string, string>
         {
             [PromptTemplates.BookTitle]       = "The Hobbit",
             [PromptTemplates.BookAuthor]      = "J.R.R. Tolkien",
-            [PromptTemplates.KnownCharacters] = "[\"Bilbo\", \"Gandalf\", \"Thorin\"]",
-            [PromptTemplates.ContextJson]     = """
-                {
-                  "preceding": [
-                    { "paragraph": "The road goes ever on and on, down from the door where it began.", "speaker": "Narrator" },
-                    { "paragraph": "\"You are a very fine person, Mr. Baggins,\" said Gandalf.", "speaker": "Gandalf" }
-                  ],
-                  "query": { "paragraph": "\"I'm going on an adventure!\" he cried." },
-                  "following": [
-                    { "paragraph": "He paused and looked back. The sun was already westering." }
-                  ]
-                }
-                """,
+            [PromptTemplates.KnownCharacters] = _sampleRoster,
+            [PromptTemplates.ContextJson]     = PromptTemplates.BuildContextJson(_sampleContext),
             [PromptTemplates.CharacterName]   = "Gandalf",
-            [PromptTemplates.ResponseFormat]  = SegmentAttributionSchema.JsonExample,
+            [PromptTemplates.ResponseFormat]  = ItemAttributionSchema.JsonExample,
+            [PromptTemplates.NarratorIdentity] =
+                NarratorPromptText.IdentityParagraph("Bilbo"),
         };
 
     static readonly IReadOnlyDictionary<string, string> _batchSampleValues =
         new Dictionary<string, string>(_sampleValues)
         {
-            [PromptTemplates.ContextJson]     = """
-                {
-                  "paragraphs": [
-                    { "paragraph": "The road goes ever on and on, down from the door where it began.", "speaker": "Narrator" },
-                    { "paragraph": "\"You are a very fine person, Mr. Baggins,\" said Gandalf.", "speaker": "Gandalf" },
-                    { "index": 0, "paragraph": "\"I'm going on an adventure!\" he cried." },
-                    { "paragraph": "He paused and looked back. The sun was already westering.", "speaker": "Narrator" },
-                    { "index": 1, "paragraph": "\"Then it is settled,\" said the dwarf." }
-                  ]
-                }
-                """,
-            [PromptTemplates.ResponseFormat]  = SegmentBatchAttributionSchema.JsonExample,
+            [PromptTemplates.ContextJson]     = PromptTemplates.BuildBatchContextJson(_sampleBatchContext),
+            [PromptTemplates.ResponseFormat]  = ItemBatchAttributionSchema.JsonExample,
         };
 
     protected override async Task OnInitializedAsync()
@@ -461,6 +530,7 @@ else
         _voicePlanPrompt = await PromptService.GetVoicePlanPromptAsync();
         _narratorVoicePlanPrompt = await PromptService.GetNarratorVoicePlanPromptAsync();
         _discoverCharactersPrompt = await PromptService.GetDiscoverCharactersPromptAsync();
+        _attributionCompatibility = await PromptService.GetAttributionPromptCompatibilityAsync();
         StateHasChanged();
     }
 
@@ -483,6 +553,7 @@ else
         new Dictionary<string, string>(_sampleValues)
         {
             [PromptTemplates.ResponseFormat] = VoicePlanSchema.JsonExample,
+            [PromptTemplates.AlsoNarrates] = NarratorPromptText.AlsoNarratesParagraph,
         };
 
     string RenderVoicePlanPreview() =>

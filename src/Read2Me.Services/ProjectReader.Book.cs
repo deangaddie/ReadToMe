@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Read2Me.Data;
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
@@ -28,8 +29,9 @@ namespace Read2Me.Services
             var totalChapters = await db.Chapters.CountAsync();
 
             // One query: distinct character-paragraph refs for counting and selectable-node set.
+            // A Character paragraph is one with at least one non-narrator speech item (ADR-0006).
             var refs = await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character)
+                .Where(NarrationRule.IsDialogExpression)
                 .Select(i => new
                 {
                     ParagraphId = i.ParagraphId,
@@ -150,7 +152,10 @@ namespace Read2Me.Services
                 .Select(p => ValueTuple.Create(
                     p.Id,
                     p.Items
-                        .Where(i => i.ItemType == ParagraphItemType.Character)
+                        // NarrationRule's rule, spelled out — a nested collection projection cannot
+                        // compose the seam's expression. Keep the two in step.
+                        .Where(i => i.ItemType == ParagraphItemType.Speech
+                                 && i.CharacterId != ProjectDbContext.NarratorId)
                         .OrderBy(i => i.Order)
                         .Select(i => i.Text ?? "")
                         .FirstOrDefault() ?? ""))
@@ -247,26 +252,27 @@ namespace Read2Me.Services
         }
 
         private static ContextParagraph ToContextParagraph(ChapterContextRow row) =>
-            new(row.Text, ToSegments(row));
+            new(row.Text, ToItems(row));
 
         private static BatchContextEntry ToContextEntry(ChapterContextRow row, int? targetIndex) =>
-            new(row.Text, ToSegments(row), targetIndex);
+            new(row.Text, ToItems(row), targetIndex);
 
-        // Existing items in the wire shape the LLM answers in. A character item with no stamped
+        // Existing items in the wire shape the LLM answers in, in Order sequence — the order the
+        // query paragraph's item indices are assigned from. A character item with no stamped
         // character is the "unknown" sentinel, not a missing speaker.
-        private static IReadOnlyList<ContextSegment> ToSegments(ChapterContextRow row) =>
-            [.. row.Items.Select(i => i.IsCharacter
-                ? new ContextSegment(i.Text, SegmentWire.Dialog, i.CharacterName ?? SegmentWire.Unknown)
-                : new ContextSegment(i.Text, SegmentWire.Narration, SegmentWire.Narrator))];
+        private static IReadOnlyList<ContextItem> ToItems(ChapterContextRow row) =>
+            [.. row.Items.Select(i => i.IsDialog
+                ? new ContextItem(i.Id, i.Text, AttributionWire.Dialog, i.CharacterName ?? AttributionWire.Unknown)
+                : new ContextItem(i.Id, i.Text, AttributionWire.Narration, AttributionWire.Narrator))];
 
-        private sealed record ChapterContextItemRow(bool IsCharacter, string? CharacterName, string Text);
+        private sealed record ChapterContextItemRow(Guid Id, bool IsDialog, string? CharacterName, string Text);
 
         private sealed record ChapterContextRow(Guid Id, IReadOnlyList<ChapterContextItemRow> Items)
         {
             public bool HasContentItem => Items.Count > 0;
 
             /// <summary>Any dialog item still without a character — the paragraph is not fully attributed.</summary>
-            public bool HasUnattributedItem => Items.Any(i => i.IsCharacter && i.CharacterName == null);
+            public bool HasUnattributedItem => Items.Any(i => i.IsDialog && i.CharacterName == null);
 
             public string Text => string.Join(" ", Items.Select(i => i.Text));
         }
@@ -281,10 +287,13 @@ namespace Read2Me.Services
                 .Select(p => new ChapterContextRow(
                     p.Id,
                     p.Items
-                        .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                        .Where(i => i.ItemType == ParagraphItemType.Speech)
                         .OrderBy(i => i.Order)
                         .Select(i => new ChapterContextItemRow(
-                            i.ItemType == ParagraphItemType.Character,
+                            i.Id,
+                            // NarrationRule's rule, spelled out: a nested collection projection
+                            // cannot compose the seam's expression. Keep the two in step.
+                            i.CharacterId != ProjectDbContext.NarratorId,
                             i.Character != null ? i.Character.Name : null,
                             i.Text ?? ""))
                         .ToList()))

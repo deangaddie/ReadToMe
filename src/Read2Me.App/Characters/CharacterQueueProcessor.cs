@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
@@ -17,11 +18,17 @@ namespace Read2Me.App.Characters
         AttributionEscalationChain chain,
         CharacterResolver resolver,
         IUnattributedItemCounter reader,
+        IProjectCatalogReader catalog,
         IBookCommandHandler commands,
         ILogger<CharacterQueueProcessor> logger) : ICharacterQueueProcessor
     {
         public async Task ProcessItemAsync(QueuedParagraph item, CancellationToken hostCt)
         {
+            // One narrator read per drained batch, per folder — never per item. A drain spans
+            // folders, so the cache is keyed by folder; it lives no longer than this batch, so a
+            // link changed mid-book is picked up by the next one.
+            var narrators = new NarratorCache(catalog);
+
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(hostCt, queue.ItemCancellationToken);
             var ct = linked.Token;
 
@@ -60,7 +67,7 @@ namespace Read2Me.App.Characters
                 {
                     var elapsed = sw.Elapsed.TotalSeconds;
                     sw.Restart();
-                    await ApplyOutcomeAsync(streamItem, outcome, elapsed, ct);
+                    await ApplyOutcomeAsync(streamItem, outcome, elapsed, narrators, ct);
                     pending.Remove(streamItem);
                 }
             }
@@ -88,16 +95,19 @@ namespace Read2Me.App.Characters
         /// stays is the apply and the probe, which need this processor's collaborators.
         /// </summary>
         private async Task ApplyOutcomeAsync(
-            QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds, CancellationToken ct)
+            QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds,
+            NarratorCache narrators, CancellationToken ct)
         {
             // The queue decides from provider behaviour, not from the answer's quality: an Ok answer
             // that left a speaker unidentified is still an answer, and whether the paragraph is
-            // finished is settled after the apply, from the items. See WorkOutcome.
-            var plan = QueueDisposition.Decide(outcome.Work, outcome.Segments is not null, item.Attempts);
+            // finished is settled after the apply, from the items. See WorkOutcome. The second
+            // argument is "the rung produced an answer", not "the answer stamped something" — an
+            // answer that named no item is still an answer, and its trigger decides escalation.
+            var plan = QueueDisposition.Decide(outcome.Work, outcome.Answer is not null, item.Attempts);
 
             var disposition = plan switch
             {
-                Plan.ApplyFirst => await ApplyAndDecideAsync(item, outcome, elapsedSeconds, ct),
+                Plan.ApplyFirst => await ApplyAndDecideAsync(item, outcome, elapsedSeconds, narrators, ct),
 
                 // Phase 1's one settling arm is the empty paragraph.
                 Plan.Now { D: Disposition.Unfinished unfinished } => EmptyParagraph(item, unfinished, elapsedSeconds),
@@ -117,9 +127,10 @@ namespace Read2Me.App.Characters
         /// apply — which is why the decision that gates the apply runs first.
         /// </summary>
         private async Task<Disposition> ApplyAndDecideAsync(
-            QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds, CancellationToken ct)
+            QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds,
+            NarratorCache narrators, CancellationToken ct)
         {
-            await ApplySegmentsAsync(item, outcome.Segments!, ct);
+            await ApplyAttributionsAsync(item, outcome.Answer!, narrators, ct);
 
             var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
             if (unattributed > 0)
@@ -161,7 +172,7 @@ namespace Read2Me.App.Characters
         }
 
         /// <summary>
-        /// The one settling disposition phase 1 can reach: an answer with no segments to apply, so
+        /// The one settling disposition phase 1 can reach: an answer with nothing to apply, so
         /// nothing was attributed. Phase 1 cannot know this queue's elapsed figure — one stopwatch
         /// spans a whole drained batch here, rather than the store measuring from
         /// <c>MarkProcessing</c> — so the queue stamps it on the way past.
@@ -174,32 +185,85 @@ namespace Read2Me.App.Characters
         }
 
         /// <summary>
-        /// Resolves each segment's speaker to a character id, then applies the whole list in one
-        /// command. Resolution happens here, not in the handler: an unlisted name that survived the
-        /// escalation chain is the chain's final answer, so it earns a new Character.
+        /// Turns the answer into one stamping command: each answered index becomes the item id it
+        /// was recorded against at ask time, with its speaker resolved to a character id. Resolution
+        /// happens here, not in the handler: an unlisted name that survived the escalation chain is
+        /// the chain's final answer, so it earns a new Character.
+        /// <para>
+        /// An index with no id behind it — out of range, or naming a narration item, which nothing
+        /// may stamp — is dropped without comment. Both mean the model answered about something that
+        /// is not an attributable item, which the answer's own trigger has already accounted for.
+        /// </para>
         /// </summary>
-        private async Task ApplySegmentsAsync(
-            QueuedParagraph item, IReadOnlyList<AttributionSegment> segments, CancellationToken ct)
+        private async Task ApplyAttributionsAsync(
+            QueuedParagraph item, AttributionAnswer answer, NarratorCache narrators, CancellationToken ct)
         {
-            var specs = new List<SegmentSpec>(segments.Count);
-            foreach (var segment in segments)
+            // The map is the answer's own, recorded when its prompt was built — never re-resolved
+            // positionally here, since the queue is asynchronous and the user may have edited the
+            // paragraph since the ask (spec §1).
+            var itemIds = answer.ItemIds;
+            var narrator = await narrators.GetAsync(item.Folder, ct);
+            var attributions = new List<ItemAttribution>(answer.Items.Count);
+            foreach (var attributed in answer.Items)
             {
-                var isNarration = segment.Type == AttributionSegmentType.Narration;
-                specs.Add(new SegmentSpec(
-                    segment.Text,
-                    isNarration ? SegmentItemType.Narration : SegmentItemType.Character,
-                    isNarration ? null : await ResolveSpeakerAsync(item.Folder, segment.Speaker, ct),
-                    string.IsNullOrWhiteSpace(segment.VoiceInstructions) ? null : segment.VoiceInstructions));
+                if (attributed.Index < 0 || attributed.Index >= itemIds.Count) continue;
+                if (itemIds[attributed.Index] is not { } itemId) continue;
+
+                attributions.Add(new ItemAttribution(
+                    itemId,
+                    await ResolveSpeakerAsync(item.Folder, attributed.Speaker, narrator, ct),
+                    string.IsNullOrWhiteSpace(attributed.VoiceInstructions)
+                        ? null
+                        : attributed.VoiceInstructions));
             }
 
             await commands.ExecuteAsync(
-                new ApplySegmentationCommand(item.Folder, item.ParagraphId, specs), ct);
+                new AttributeItemsCommand(item.Folder, item.ParagraphId, attributions), ct);
         }
 
-        /// <summary>Unknown speaker → null (nobody to stamp); any other name resolves or is created.</summary>
-        private async Task<Guid?> ResolveSpeakerAsync(ProjectFolderId folder, string speaker, CancellationToken ct) =>
-            SegmentWire.IsUnknownSpeaker(speaker)
-                ? null
-                : await resolver.ResolveOrCreateAsync(folder, speaker.Trim(), ct);
+        /// <summary>
+        /// The one name→id chokepoint in the attribution path. Unknown speaker → null (nobody to
+        /// stamp). The narrator token on a dialog item is a wire alias of the linked character, so it
+        /// stamps that character; unlinked it stamps <b>nobody</b>, rather than crediting a spoken
+        /// line to the seed Narrator row — which by definition is not in the scene, and whose stamp
+        /// would make the item look attributed and hide it from the re-queue filter forever. Any
+        /// other name resolves or is created.
+        /// <para>
+        /// Unlinked this is not a behaviour change for ordinary names: <c>Unlinked.CharacterId</c>
+        /// <em>is</em> the seed id that <c>ResolveOrCreateAsync("narrator")</c> already lands on by
+        /// name — only the narrator token's own answer moves.
+        /// </para>
+        /// </summary>
+        private async Task<Guid?> ResolveSpeakerAsync(
+            ProjectFolderId folder, string speaker, NarratorIdentity narrator, CancellationToken ct)
+        {
+            if (AttributionWire.IsUnknownSpeaker(speaker))
+                return null;
+
+            if (AttributionWire.IsNarrator(speaker))
+                return narrator.IsLinked ? narrator.CharacterId : null;
+
+            return await resolver.ResolveOrCreateAsync(folder, speaker.Trim(), ct);
+        }
+
+        /// <summary>
+        /// The drained batch's narrator links, one read per folder. A drain spans folders, so a single
+        /// value would be wrong; a cache per batch keeps the read off the per-item path without
+        /// outliving the work it was loaded for.
+        /// </summary>
+        private sealed class NarratorCache(IProjectCatalogReader catalog)
+        {
+            private readonly Dictionary<ProjectFolderId, NarratorIdentity> _byFolder = [];
+
+            public async Task<NarratorIdentity> GetAsync(ProjectFolderId folder, CancellationToken ct)
+            {
+                if (_byFolder.TryGetValue(folder, out var known))
+                    return known;
+
+                var narrator = await catalog.GetNarratorAsync(folder, ct);
+                _byFolder[folder] = narrator;
+                return narrator;
+            }
+        }
     }
 }

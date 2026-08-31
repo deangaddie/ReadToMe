@@ -65,6 +65,12 @@ Inspect the result: `GET /api/projects/{folder}/book` (overview), then walk
 `GET /api/projects/{folder}/nodes/{level}/{id}/children` (volume → part → chapter;
 chapter children carry the paragraphs with their items).
 
+`GET /api/projects/{folder}` returns the project metadata, including
+`narrator: { characterId, displayName, isLinked }` — who narrates the book.
+`isLinked: false` is the normal case: nobody in the cast narrates, `characterId` is
+the seed Narrator row and `displayName` is `"Narrator"`. There is no null case. Set
+or clear the link with `SetNarratorCharacter` (section 5).
+
 ## 2. Discover characters, attribute dialog
 
 ```bash
@@ -135,6 +141,20 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
 error for an unknown type lists every valid one. The project folder always comes
 from the URL — a `folderId` in the body is ignored. Split/create commands return
 `{ "newEntityId": "<guid>" }`.
+
+`SetNarratorCharacter` is the one project-scoped command — it names the Character who
+narrates the book (Sherlock Holmes narrated by Dr. Watson), so narration and that
+character's dialog share one voice:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' \
+  -d '{ "type": "SetNarratorCharacter", "characterId": "<id>" }'   # null unlinks
+```
+
+Unlike its siblings it rejects rather than no-ops: a `characterId` naming no character
+in this project, or the seed Narrator row itself (a self-link *is* the unlinked state),
+comes back **422** with the reason.
 
 ## 6. Assemble the m4b
 

@@ -43,6 +43,7 @@ public sealed class BookHierarchyBuilder
     private bool _narratorOnlyMode;
     private string _projectTitle = "Test Book";
     private string _projectAuthor = "Author";
+    private Guid? _narratorCharacterId;
 
     // ── legacy: context-based ctor for existing callers ───────────────────────
 
@@ -68,6 +69,16 @@ public sealed class BookHierarchyBuilder
         _narratorOnlyMode = narratorOnlyMode;
         _projectTitle = title;
         _projectAuthor = author;
+        return this;
+    }
+
+    /// <summary>
+    /// Links the built project's narrator to a Character — the arranged "linked" case.
+    /// Pass an id with no Character row to arrange the dangling link.
+    /// </summary>
+    public BookHierarchyBuilder WithNarratorLink(Guid characterId)
+    {
+        _narratorCharacterId = characterId;
         return this;
     }
 
@@ -117,6 +128,7 @@ public sealed class BookHierarchyBuilder
             Filename = "book.txt",
             Type = BookFileType.Text,
             NarratorOnlyMode = _narratorOnlyMode,
+            NarratorCharacterId = _narratorCharacterId,
         });
 
         await FlushVolumesAsync(db);
@@ -333,15 +345,18 @@ public sealed class BookHierarchyBuilder
             _db = db;
         }
 
+        /// Seeds narration the way narration is now recorded: a speech item stamped with the
+        /// narrator (ADR-0006). There is no narration item type to set.
         public ParagraphScope AddNarration(string name, string text = "narration text")
         {
-            _items.Add(new ItemSpec(name, ParagraphItemType.Narration, text, SpeakerName: null));
+            _items.Add(new ItemSpec(name, ParagraphItemType.Speech, text, SpeakerName: null,
+                CharacterIdOverride: ProjectDbContext.NarratorId, HasCharacterIdOverride: true));
             return this;
         }
 
         public ParagraphScope AddCharacterLine(string name, string text, string speaker)
         {
-            _items.Add(new ItemSpec(name, ParagraphItemType.Character, text, SpeakerName: speaker));
+            _items.Add(new ItemSpec(name, ParagraphItemType.Speech, text, SpeakerName: speaker));
             return this;
         }
 
@@ -365,14 +380,12 @@ public sealed class BookHierarchyBuilder
             {
                 _lastItemOrder = OrderKeyGenerator.GenerateKeyBetween(_lastItemOrder, null);
 
-                Guid? characterId = iSpec.HasCharacterIdOverride ? iSpec.CharacterIdOverride : iSpec.ItemType switch
-                {
-                    ParagraphItemType.Narration => ProjectDbContext.NarratorId,
-                    ParagraphItemType.Character => iSpec.SpeakerName is { } sn
-                        ? _root._characters[sn].Id
-                        : throw new InvalidOperationException($"AddCharacterLine '{iSpec.Name}' has no speaker"),
-                    _ => null,
-                };
+                Guid? characterId = iSpec.HasCharacterIdOverride ? iSpec.CharacterIdOverride
+                    : iSpec.ItemType == ParagraphItemType.Speech
+                        ? iSpec.SpeakerName is { } sn
+                            ? _root._characters[sn].Id
+                            : throw new InvalidOperationException($"AddCharacterLine '{iSpec.Name}' has no speaker")
+                        : null;
 
                 var item = new ParagraphItem
                 {
@@ -466,7 +479,7 @@ public sealed class BookHierarchyBuilder
                 Id = Guid.NewGuid(),
                 ParagraphId = para.Id,
                 Order = LegacyKey(),
-                ItemType = ParagraphItemType.Narration,
+                ItemType = ParagraphItemType.Speech,
                 Text = $"Paragraph {i + 1}",
                 CharacterId = ProjectDbContext.NarratorId,
             };

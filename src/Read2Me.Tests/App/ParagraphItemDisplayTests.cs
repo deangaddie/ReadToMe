@@ -1,4 +1,6 @@
 using Read2Me.App.Shared;
+using MudBlazor;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Xunit;
@@ -30,12 +32,63 @@ namespace Read2Me.Tests.App
         [InlineData(ParagraphItemType.ChapterPause, true)]
         [InlineData(ParagraphItemType.ParagraphPause, true)]
         [InlineData(ParagraphItemType.Pause, true)]
-        [InlineData(ParagraphItemType.Narration, false)]
-        [InlineData(ParagraphItemType.Character, false)]
+        [InlineData(ParagraphItemType.Speech, false)]
         public void IsPauseParagraph_ClassifiesPauseTypes(ParagraphItemType type, bool expected)
         {
             var p = ParagraphWith(type);
             Assert.Equal(expected, ParagraphItemDisplay.IsPauseParagraph(p));
+        }
+
+        [Fact]
+        public void GetSpeechDisplay_NarratorStampedItem_ShowsTheNarrationPresentation()
+        {
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), Order = "a",
+                ItemType = ParagraphItemType.Speech,   // the type says nothing any more
+                CharacterId = ProjectDbContext.NarratorId,
+            };
+
+            var (icon, color, label) = ParagraphItemDisplay.GetSpeechDisplay(item);
+
+            Assert.Equal("Narration", label);
+            Assert.Equal(Color.Info, color);
+            Assert.False(string.IsNullOrEmpty(icon));
+        }
+
+        [Fact]
+        public void GetSpeechDisplay_CharacterStampedItem_ShowsThatCharactersChip()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), Order = "a",
+                ItemType = ParagraphItemType.Speech,   // the type says nothing any more
+                CharacterId = alice.Id,
+                Character = alice,
+            };
+
+            var (icon, color, label) = ParagraphItemDisplay.GetSpeechDisplay(item);
+
+            Assert.Equal("Alice", label);
+            Assert.Equal(Color.Primary, color);
+            Assert.Equal("", icon);
+        }
+
+        [Fact]
+        public void GetSpeechDisplay_UnattributedItem_StaysVisiblyDistinct()
+        {
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(), Order = "a",
+                ItemType = ParagraphItemType.Speech,
+                CharacterId = null,
+            };
+
+            var (_, color, label) = ParagraphItemDisplay.GetSpeechDisplay(item);
+
+            Assert.Equal("Unknown", label);
+            Assert.Equal(Color.Warning, color);
         }
 
         [Fact]
@@ -63,12 +116,11 @@ namespace Read2Me.Tests.App
         }
 
         [Theory]
-        [InlineData(ParagraphItemType.Narration)]
         [InlineData(ParagraphItemType.VolumePause)]
         [InlineData(ParagraphItemType.ChapterPause)]
-        public void GetItemDisplay_ReturnsNonEmptyIconAndLabel(ParagraphItemType type)
+        public void GetPauseDisplay_ReturnsNonEmptyIconAndLabel(ParagraphItemType type)
         {
-            var (icon, _, label) = ParagraphItemDisplay.GetItemDisplay(type);
+            var (icon, _, label) = ParagraphItemDisplay.GetPauseDisplay(type);
             Assert.False(string.IsNullOrWhiteSpace(icon));
             Assert.False(string.IsNullOrWhiteSpace(label));
         }

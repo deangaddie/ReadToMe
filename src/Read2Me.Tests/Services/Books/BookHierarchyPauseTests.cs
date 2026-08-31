@@ -12,7 +12,7 @@ namespace Read2Me.Tests.Services.Books
             OrderKeyGenerator.GenerateKeyBetween(after, before);
 
         private static ParagraphItem NarrationItem(Guid paragraphId, string order) =>
-            new() { Id = Guid.NewGuid(), ParagraphId = paragraphId, ItemType = ParagraphItemType.Narration, Order = order };
+            new() { Id = Guid.NewGuid(), ParagraphId = paragraphId, ItemType = ParagraphItemType.Speech, Order = order };
 
         private static ParagraphItem PauseItem(Guid paragraphId, ParagraphItemType type, string order) =>
             new() { Id = Guid.NewGuid(), ParagraphId = paragraphId, ItemType = type, Order = order };

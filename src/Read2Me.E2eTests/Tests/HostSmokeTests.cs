@@ -22,6 +22,24 @@ public class HostSmokeTests(E2eAppFixture app)
         Assert.Contains("Smokey Author", html);
     }
 
+    /// <summary>
+    /// The prompt editor builds its {{context_json}} previews from the real request serializers, so
+    /// a broken sample surfaces as a component initializer throw rather than a wrong string. A plain
+    /// prerender is enough to run those initializers.
+    /// </summary>
+    [Fact]
+    public async Task Llm_prompts_page_prerenders()
+    {
+        using var http = new HttpClient();
+        var response = await http.GetAsync(app.BaseUrl + "/llm-prompts");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode, $"/llm-prompts: {response.StatusCode}");
+        Assert.Contains("LLM Prompts", html);
+        Assert.Contains("&quot;items&quot;", html);
+        Assert.DoesNotContain("&quot;paragraph&quot;", html);
+    }
+
     [Fact]
     public async Task Static_assets_are_served()
     {

@@ -31,7 +31,9 @@ internal static class TitleInserter
         {
             Id = Guid.NewGuid(),
             ParagraphId = para.Id,
-            ItemType = ParagraphItemType.Narration,
+            ItemType = ParagraphItemType.Speech,
+            // Narration means the speaker is the narrator; an inserted title is no exception.
+            CharacterId = ProjectDbContext.NarratorId,
             Text = text,
             Order = OrderHelper.GetBetween(null, null),
         });

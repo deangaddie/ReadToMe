@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
+using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Xunit;
 
@@ -26,6 +27,34 @@ public class BookContentPersisterTests : IAsyncDisposable
     {
         await _db.DisposeAsync();
         if (File.Exists(_dbPath)) File.Delete(_dbPath);
+    }
+
+    // ---------------------------------------------------------------
+    // Import stamps the narrator on narration items — the invariant the
+    // backfill migration extends to every already-imported book.
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public async Task Persist_StampsTheNarrator_OnNarrationItemsAndLeavesDialogUnattributed()
+    {
+        var content = new BookContent([
+            new VolumeContent("Vol 1", [
+                new PartContent("Part 1", [
+                    new ChapterContent("Ch 1", [
+                        new ParagraphContent("He walked on. “Hello,” she said."),
+                    ])
+                ])
+            ])
+        ]);
+
+        await _sut.PersistAsync(_db, content);
+
+        // Import records the splitter's decision on the speaker, not on a type: narration gets the
+        // narrator, dialog is left for the attribution queue (ADR-0006). Both are Speech items.
+        var items = await _db.ParagraphItems.AsNoTracking().ToListAsync();
+        Assert.All(items, i => Assert.Equal(ParagraphItemType.Speech, i.ItemType));
+        Assert.Contains(items, i => i.CharacterId == ProjectDbContext.NarratorId);
+        Assert.Contains(items, i => i.CharacterId is null);
     }
 
     // ---------------------------------------------------------------

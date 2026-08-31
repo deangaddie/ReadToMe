@@ -50,13 +50,16 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<CreateCharacterCommand>, CreateCharacterHandler>();
         services.AddScoped<ICommandHandler<SetParagraphCharacterCommand>, SetParagraphCharacterHandler>();
         services.AddScoped<ICommandHandler<SetParagraphsCharacterCommand>, SetParagraphsCharacterHandler>();
-        services.AddScoped<ICommandHandler<ApplySegmentationCommand>, ApplySegmentationHandler>();
+        services.AddScoped<ICommandHandler<AttributeItemsCommand>, AttributeItemsHandler>();
         services.TryAddSingleton<Events.EventBroadcaster<Events.ParagraphItemsChanged>>();
         services.AddScoped<ICommandHandler<AddCharacterAliasCommand>, AddCharacterAliasHandler>();
         services.AddScoped<ICommandHandler<RemoveCharacterAliasCommand>, RemoveCharacterAliasHandler>();
         services.AddScoped<ICommandHandler<MergeCharactersCommand>, MergeCharactersHandler>();
         services.AddScoped<ICommandHandler<DeleteCharacterCommand>, DeleteCharacterHandler>();
         services.AddScoped<ICommandHandler<RenameCharacterCommand>, RenameCharacterHandler>();
+
+        // Narrator
+        services.AddScoped<ICommandHandler<SetNarratorCharacterCommand>, SetNarratorCharacterHandler>();
 
         // Voice
         services.AddScoped<ICommandHandler<CreateVoiceCommand>, CreateVoiceHandler>();

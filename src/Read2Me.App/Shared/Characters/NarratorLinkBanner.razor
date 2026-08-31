@@ -1,0 +1,90 @@
+@using Read2Me.Data
+@using Read2Me.Data.Entities
+@using Read2Me.App.State
+@inject IDialogService DialogService
+
+<MudPaper Outlined="true" Class="ma-4 mb-0 pa-3" data-testid="narrator-link-banner">
+    @if (!Narrator.IsLinked)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Justify="Justify.SpaceBetween">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.subtitle1">Narrated by its own Narrator voice</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">First-person book? Say who tells it</MudText>
+            </MudStack>
+            @NarratorPicker()
+        </MudStack>
+    }
+    else if (_changing)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            @NarratorPicker()
+            <MudButton Variant="Variant.Text" OnClick="CancelChange">Cancel</MudButton>
+        </MudStack>
+    }
+    else
+    {
+        var linked = Characters.FirstOrDefault(c => c.Id == Narrator.CharacterId);
+        var ready = linked is null ? 0 : CharacterPresenter.ReadyVoiceCount(linked);
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudText Typo="Typo.subtitle1">Narrated by <strong>@Narrator.DisplayName</strong></MudText>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                     Color="@(ready == 0 ? Color.Warning : Color.Info)"
+                     data-warning="@(ready == 0 ? "true" : "false")">
+                @ready ready @(ready == 1 ? "voice" : "voices")
+            </MudChip>
+            <MudSpacer />
+            <MudButton Variant="Variant.Text" OnClick="BeginChange">Change</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="UnlinkAsync">Unlink</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public NarratorIdentity Narrator { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<Character> Characters { get; set; } = [];
+    [Parameter] public EventCallback<Guid?> NarratorChanged { get; set; }
+
+    bool _changing;
+    internal bool IsChanging => _changing;
+
+    internal void BeginChange() => _changing = true;
+    internal void CancelChange() => _changing = false;
+
+    RenderFragment NarratorPicker() => @<MudSelect T="Guid?" Label="Narrated by" Dense="true"
+        Variant="Variant.Outlined" Style="min-width:220px" ValueChanged="SetAsync">
+        @foreach (var character in EligibleCharacters(Characters))
+        {
+            <MudSelectItem T="Guid?" Value="@((Guid?)character.Id)">@character.Name</MudSelectItem>
+        }
+    </MudSelect>;
+
+    internal async Task SetAsync(Guid? characterId)
+    {
+        if (characterId is null) return;
+        await NarratorChanged.InvokeAsync(characterId);
+        _changing = false;
+    }
+
+    internal static IEnumerable<Character> EligibleCharacters(IEnumerable<Character> characters) =>
+        characters.Where(c => !c.IsNarrator);
+
+    async Task UnlinkAsync()
+    {
+        await UnlinkCoreAsync(async () =>
+        {
+            var parameters = new DialogParameters<UnlinkNarratorDialog>
+            {
+                { d => d.LinkedCharacterName, Narrator.DisplayName },
+            };
+            var dialog = await DialogService.ShowAsync<UnlinkNarratorDialog>("Unlink Narrator", parameters);
+            var result = await dialog.Result;
+            return result?.Canceled == false;
+        });
+    }
+
+    internal async Task UnlinkCoreAsync(Func<Task<bool>> confirm)
+    {
+        if (!await confirm()) return;
+        await NarratorChanged.InvokeAsync(null);
+    }
+}

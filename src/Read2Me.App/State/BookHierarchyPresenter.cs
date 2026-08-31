@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using MudBlazor;
 using Read2Me.App.Shared;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
@@ -84,28 +85,48 @@ namespace Read2Me.App.State
 
         public bool NarratorOnlyMode { get; private set; }
 
+        /// <summary>
+        /// Who narrates this book — read-time projection of the narrator link (ADR-0004). The
+        /// character picker names it on the pinned narrator entry so "Narrator (Alice)" is visibly
+        /// a different choice from "Alice".
+        /// </summary>
+        public NarratorIdentity Narrator { get; private set; } = NarratorIdentity.Unlinked;
+
         private readonly Dictionary<Guid, string?> _resolvedVoiceNames = new();
+        private NarratorIdentity _voicePreviewNarrator = NarratorIdentity.Unlinked;
+        private Task<NarratorIdentity>? _voicePreviewNarratorTask;
 
         public string? ResolvedVoiceName(Guid itemId) =>
             _resolvedVoiceNames.TryGetValue(itemId, out var name) ? name : null;
+
+        public NarratorIdentity VoicePreviewNarrator => _voicePreviewNarrator;
 
         // Resolves voice names only for item ids not already cached, then merges
         // (does not replace). Cheap no-op once an item is resolved, so it is safe
         // to call from render — toggles no longer trigger resolver work.
         public async Task EnsureVoicePreviewAsync(ProjectFolderId folderId, IEnumerable<Guid> itemIds)
         {
+            var narratorTask = _voicePreviewNarratorTask ??= reader.GetNarratorAsync(folderId);
             var missing = itemIds.Where(id => !_resolvedVoiceNames.ContainsKey(id)).ToList();
-            if (missing.Count == 0) return;
+            if (missing.Count > 0)
+            {
+                var names = await voiceResolver.ResolveNamesAsync(folderId, missing);
+                foreach (var (id, name) in names)
+                    _resolvedVoiceNames[id] = name;
+            }
 
-            var names = await voiceResolver.ResolveNamesAsync(folderId, missing);
-            foreach (var (id, name) in names)
-                _resolvedVoiceNames[id] = name;
+            _voicePreviewNarrator = await narratorTask;
         }
 
         // Drops cached voice previews so the next render re-resolves. Call when
         // anything affecting voice selection changes (voice rules, attribution,
         // narrator-only mode, reload).
-        public void InvalidateVoicePreview() => _resolvedVoiceNames.Clear();
+        public void InvalidateVoicePreview()
+        {
+            _resolvedVoiceNames.Clear();
+            _voicePreviewNarrator = NarratorIdentity.Unlinked;
+            _voicePreviewNarratorTask = null;
+        }
 
         public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
         public bool IsNodeAudioSelectable(Guid nodeId) => _audioNodeCounts.ContainsKey(nodeId) && _audioNodeCounts[nodeId] > 0;
@@ -162,6 +183,7 @@ namespace Read2Me.App.State
             TotalParts = snapshot.TotalParts;
             TotalChapters = snapshot.TotalChapters;
             NarratorOnlyMode = snapshot.NarratorOnlyMode;
+            Narrator = snapshot.Narrator ?? NarratorIdentity.Unlinked;
             _selectableNodes = snapshot.SelectableNodeIds;
             _nodeCounts = snapshot.NodeCharacterParagraphCounts;
             Selection.SetCounts(_nodeCounts);
@@ -230,11 +252,11 @@ namespace Read2Me.App.State
 
         /// <summary>
         /// The single front door behind every character chip. Chips render identically in both modes and
-        /// read <see cref="FolderSelection.BulkMode"/> nowhere — they hand over the row and, for a segment
+        /// read <see cref="FolderSelection.BulkMode"/> nowhere — they hand over the row and, for an item
         /// chip, the item, and this decides. A pick on a selected row with bulk mode armed fans out across
         /// the whole selection, whichever chip fired; anything else is a single assign.
         /// </summary>
-        /// <param name="item">Null for the paragraph chip, the segment for an item chip.</param>
+        /// <param name="item">Null for the paragraph chip, the item for an item chip.</param>
         public Task AssignCharacterAsync(
             ProjectFolderId folderId, Paragraph paragraph, ParagraphItem? item, Guid? characterId)
         {
@@ -255,9 +277,9 @@ namespace Read2Me.App.State
 
             item.CharacterId = characterId;
             item.Character = character;
+            item.AudioFileName = null;   // a hand-flip discards the item's audio (ADR-0006)
 
-            nodeStatus.OnCharacterAttributed(folderId, item.ParagraphId,
-                CountUnattributed(item.Paragraph?.Items));
+            await ReseedAfterSpeakerChangeAsync(folderId);
 
             InvalidateVoicePreview();
             NotifyStateChanged();
@@ -270,10 +292,9 @@ namespace Read2Me.App.State
             var character = characterId.HasValue ? Characters.Find(c => c.Id == characterId.Value) : null;
 
             await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
-            ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character);
+            ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character, sweepAllNarrationParagraph: true);
 
-            // Clearing the stamp leaves every character item unattributed — count, never assume 0.
-            nodeStatus.OnCharacterAttributed(folderId, paragraph.Id, CountUnattributed(paragraph.Items));
+            await ReseedAfterSpeakerChangeAsync(folderId);
 
             InvalidateVoicePreview();
             NotifyStateChanged();
@@ -320,19 +341,19 @@ namespace Read2Me.App.State
 
             await commandHandler.ExecuteAsync(new SetParagraphsCharacterCommand(folderId, ids, characterId));
 
-            // Folder-wide re-seed rather than per-paragraph patching: uniform for assign and clear, and
-            // correct for selected paragraphs whose chapters were never expanded. Fires Changed once,
-            // and does so before the stamp so it cannot land mid-walk.
-            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
-
             // Walk the loaded paragraphs testing membership, never the selection looking ids up — the
             // selection can dwarf what is in memory. Unloaded paragraphs need nothing: their chapter
-            // reads the committed write when it expands.
+            // reads the committed write when it expands. Done before the reseed, so the reseed's
+            // Changed event cannot land mid-walk — and before the selection is cleared, since the
+            // walk reads it.
             foreach (var p in Tree.AllParagraphs())
             {
                 if (Selection.IsParagraphSelected(p.Id))
                     ParagraphCharacterStamp.Apply(p.Items, characterId, character);
             }
+
+            // One reseed for the whole batch, not one per item.
+            await ReseedAfterSpeakerChangeAsync(folderId);
 
             InvalidateVoicePreview();
             NotifyStateChanged();
@@ -342,6 +363,40 @@ namespace Read2Me.App.State
                     ? $"Cleared speakers on {items} lines in {paras} paragraphs."
                     : $"Assigned {name} to {items} lines in {paras} paragraphs.",
                 Severity.Success);
+        }
+
+        /// <summary>
+        /// A speaker change can flip whether a paragraph is a Character paragraph at all — assign its
+        /// last dialog item to the narrator and it stops being one; give a narration item to a
+        /// character and it starts (ADR-0006). Selectable nodes, roll-up denominators and the status
+        /// badges are all derived from that, so they are reseeded from the reader rather than patched
+        /// incrementally: mixed-structure denominators have been a bug source before, and there is no
+        /// precedent for patching "paragraph becomes / stops being attributable".
+        /// <para>
+        /// Selection is cleared only when the denominators actually moved, so a roll-up checkbox can
+        /// never mix totals from before and after the edit — while an ordinary bulk assign, which
+        /// changes no membership, keeps its selection and leaves the dock bar up.
+        /// </para>
+        /// <para>
+        /// Called once per gesture, never once per item. Two reads on a flip measured cheap enough at
+        /// book scale to need no debouncing; revisit with a measurement, not a guess.
+        /// </para>
+        /// </summary>
+        private async Task ReseedAfterSpeakerChangeAsync(ProjectFolderId folderId)
+        {
+            var overview = await reader.GetBookOverviewAsync(folderId);
+
+            var moved = overview.NodeCharacterParagraphCounts.Count != _nodeCounts.Count
+                || overview.NodeCharacterParagraphCounts.Any(kv =>
+                    !_nodeCounts.TryGetValue(kv.Key, out var was) || was != kv.Value);
+
+            _selectableNodes = overview.SelectableNodeIds;
+            _nodeCounts = overview.NodeCharacterParagraphCounts;
+
+            if (moved) Selection.Clear();
+            Selection.SetCounts(_nodeCounts);
+
+            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
         }
 
         /// <summary>
@@ -520,14 +575,14 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
-        /// <summary>The node-status counter unit: character items still without a stamp.</summary>
+        /// <summary>The node-status counter unit: speech items still without a speaker (ADR-0006).</summary>
         private static int CountUnattributed(IEnumerable<ParagraphItem>? items) =>
-            items?.Count(i => i.ItemType == Data.Enums.ParagraphItemType.Character && i.CharacterId is null) ?? 0;
+            items?.Count(i => !ParagraphItemKinds.IsPause(i.ItemType) && i.CharacterId is null) ?? 0;
 
         /// <summary>
-        /// A paragraph's items were rewritten (attribution applied a segment list, or an item was
-        /// stamped by hand). Segmentation can add and remove items, so the whole item list is
-        /// reloaded rather than a single stamp patched.
+        /// A paragraph's items changed (attribution stamped speakers, or an item was stamped by
+        /// hand). Any number of items can change in one event, so the whole item list is reloaded
+        /// rather than a single stamp patched.
         /// </summary>
         private async void OnParagraphItemsChanged(ParagraphItemsChanged e)
         {

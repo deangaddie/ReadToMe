@@ -166,8 +166,8 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// One rung's run over <paramref name="items"/>, with a single same-rung retry for parse
         /// failures. A parse failure is not evidence the model is too weak for the paragraph — the
-        /// observed cause is the model garbling one chunk's answer (dropping an attribution tag from
-        /// a segment, or repeating the previous chunk's answer wholesale), which the very next call
+        /// observed cause is the model garbling one chunk's answer (malformed JSON, or repeating the
+        /// previous chunk's answer wholesale), which the very next call
         /// usually gets right. Escalating instead spends a slower model on a problem a re-ask
         /// solves, so the failures are held back, re-asked once against the same config, and only
         /// then routed by the caller.
@@ -231,24 +231,15 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// Answer quality, high to low: a confident answer beats one naming an unlisted character
         /// (still a full attribution — the final accept creates the character), which beats a
-        /// self-inconsistent one, which beats one leaving a speaker unattributed, which beats one
-        /// that lost the paragraph's dialog altogether. Only usable statuses reach this, so
-        /// parse/infra failures rank below everything by never being held.
-        /// <para>
-        /// <see cref="EscalationTrigger.DialogLost"/> ranks last among usable answers on purpose: it
-        /// is a *successful*-status answer, so it is held as a best-prior candidate, but it discards
-        /// a segment every other answer kept. It must lose every tie-break, including to an answer
-        /// that merely left the speaker unknown — an unattributed line still gets read in a
-        /// character's voice slot and stays re-queueable; a lost one does not.
-        /// </para>
+        /// self-inconsistent one, which beats one leaving a speaker unattributed. Only usable
+        /// statuses reach this, so parse/infra failures rank below everything by never being held.
         /// </summary>
         private static int Rank(StepOutcome step) => step.Trigger switch
         {
-            EscalationTrigger.None => 5,
-            EscalationTrigger.UnlistedName => 4,
-            EscalationTrigger.Inconsistent => 3,
-            EscalationTrigger.Unknown => 2,
-            EscalationTrigger.DialogLost => 1,
+            EscalationTrigger.None => 4,
+            EscalationTrigger.UnlistedName => 3,
+            EscalationTrigger.Inconsistent => 2,
+            EscalationTrigger.Unknown => 1,
             _ => 0,
         };
 

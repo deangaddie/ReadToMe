@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Audio.VoiceDesign;
@@ -24,11 +25,15 @@ public sealed class GenerateAudioPhase : ISweepPhase<AudioWorkItem>
     {
         _folder = folder;
         var characters = await deps.Reader.GetCharactersWithAliasesAsync(folder);
+        var narrator = await deps.Reader.GetNarratorAsync(folder, ct);
 
         var workList = new List<AudioWorkItem>();
         foreach (var character in characters)
         {
             ct.ThrowIfCancellationRequested();
+            if (narrator.IsLinked && character.Id == ProjectDbContext.NarratorId)
+                continue;
+
             var voices = await deps.Reader.GetCharacterVoicesAsync(folder, character.Id);
             foreach (var voice in voices)
             {

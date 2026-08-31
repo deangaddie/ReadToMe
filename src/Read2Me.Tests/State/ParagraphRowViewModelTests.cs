@@ -1,4 +1,5 @@
 using Read2Me.App.State;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Characters;
@@ -9,10 +10,10 @@ namespace Read2Me.Tests.State
     public class ParagraphRowViewModelTests
     {
         private static ParagraphItem Char(Character? c) =>
-            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Character, Character = c, CharacterId = c?.Id };
+            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Character = c, CharacterId = c?.Id };
 
         private static ParagraphItem Narration() =>
-            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Narration };
+            new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, CharacterId = ProjectDbContext.NarratorId };
 
         private static Paragraph Para(params ParagraphItem[] items)
         {
@@ -25,9 +26,20 @@ namespace Read2Me.Tests.State
         private static readonly Character Bob   = new() { Id = Guid.NewGuid(), Name = "Bob" };
 
         [Fact]
-        public void NarrationOnly_IsNotCharacterParagraph_ChipNone()
+        public void NarrationOnly_IsNotCharacterParagraph_ButStillOffersItsChip()
         {
+            // Not attributable, so no checkbox and no roll-up — but it keeps a chip, which is how
+            // "make this paragraph narration" is undone at paragraph level (ADR-0006).
             var vm = ParagraphRowViewModel.For(Para(Narration()), false, null, false);
+            Assert.False(vm.IsCharacterParagraph);
+            Assert.Equal(ParaCharacterChip.Narration, vm.Chip);
+        }
+
+        [Fact]
+        public void PauseOnly_HasNoChipAtAll()
+        {
+            var pause = new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.ChapterPause };
+            var vm = ParagraphRowViewModel.For(Para(pause), false, null, false);
             Assert.False(vm.IsCharacterParagraph);
             Assert.Equal(ParaCharacterChip.None, vm.Chip);
         }

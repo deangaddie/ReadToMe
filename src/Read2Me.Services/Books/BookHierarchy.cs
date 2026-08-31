@@ -1,5 +1,6 @@
 using Read2Me.Core.Utils;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 
@@ -496,8 +497,7 @@ namespace Read2Me.Services.Books
             var items = Items.TryGetValue(p.Id, out var list) ? list : [];
             if (items.Count == 0) return true;
             if (items.Count != 1) return false;
-            var t = items[0].ItemType;
-            return t != ParagraphItemType.Character && t != ParagraphItemType.Narration;
+            return ParagraphItemKinds.IsPause(items[0].ItemType);
         }
 
         // ---------------------------------------------------------------

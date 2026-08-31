@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Read2Me.Data;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Events;
@@ -88,7 +89,7 @@ namespace Read2Me.Services.Audio.Assembly
                 var rawManifest = await reader.GetAssemblyManifestAsync(folder, ct);
 
                 var remaining = rawManifest.Count(e =>
-                    !AudiobookAssemblyPlanner.IsPause(e.ItemType) && e.AudioRelativePath == null);
+                    !ParagraphItemKinds.IsPause(e.ItemType) && e.AudioRelativePath == null);
 
                 if (remaining > 0 && !allowPartial)
                 {
@@ -118,7 +119,7 @@ namespace Read2Me.Services.Audio.Assembly
                 ct.ThrowIfCancellationRequested();
 
                 var distinctPauseMs = manifest
-                    .Where(e => AudiobookAssemblyPlanner.IsPause(e.ItemType))
+                    .Where(e => ParagraphItemKinds.IsPause(e.ItemType))
                     .Select(e => AudiobookAssemblyPlanner.PauseMs(e.ItemType, audioSettings))
                     .Distinct()
                     .ToList();
@@ -142,7 +143,7 @@ namespace Read2Me.Services.Audio.Assembly
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    if (AudiobookAssemblyPlanner.IsPause(entry.ItemType))
+                    if (ParagraphItemKinds.IsPause(entry.ItemType))
                     {
                         audioDurations[entry.ParagraphItemId] =
                             TimeSpan.FromMilliseconds(AudiobookAssemblyPlanner.PauseMs(entry.ItemType, audioSettings));

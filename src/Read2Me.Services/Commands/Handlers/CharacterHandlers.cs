@@ -8,13 +8,17 @@ using Read2Me.Services.Characters;
 namespace Read2Me.Services.Commands.Handlers;
 
 /// <summary>
-/// Stamps one item's speaker. Only <see cref="ParagraphItemType.Character"/> items can carry a
-/// speaker: narration is always the narrator's, and a pause is nobody's. Its two siblings already
-/// hold that line — <see cref="SetParagraphCharacterHandler"/> filters its query to Character items,
-/// and <c>ParagraphCharacterStamp.Apply</c> skips the rest — so without the same guard here a
-/// per-item edit is the one way to produce a narration item pointing at a character. That state is
-/// audio-inert (the voice resolver keys off the item type and ignores the id), which is why it can
-/// persist unnoticed: it shows a speaker in the UI that nothing will ever read in.
+/// Stamps one item's speaker — any speaker, on any speech item. Narration is a speaker, not an
+/// item type (ADR-0006): stamping the narrator sentinel makes the item narration, stamping a
+/// character makes it that character's line, and clearing it hands the item back to the
+/// attribution queue as unattributed dialog. <c>VoiceResolver</c> honours whatever is
+/// stamped, so the flip is heard rather than merely displayed.
+/// <para>
+/// A hand-flip is an explicit "this is the wrong voice", so it discards the item's generated
+/// audio and returns it to the audio queue — otherwise the old voice survives into the exported
+/// m4b while the item still counts as complete. <c>AttributeItemsHandler</c> deliberately does
+/// not do this; see ADR-0006 for why that asymmetry is left standing.
+/// </para>
 /// </summary>
 public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommandHandler<SetItemCharacterCommand>
 {
@@ -23,10 +27,12 @@ public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommand
         var db = await session.OpenAsync(c.FolderId);
         var item = await db.ParagraphItems.Include(i => i.Character).FirstOrDefaultAsync(i => i.Id == c.ItemId);
         if (item == null) return null;
-        // Clearing a speaker stays allowed whatever the type — it can only ever repair the state
-        // this guard exists to prevent.
-        if (c.CharacterId.HasValue && item.ItemType != ParagraphItemType.Character) return null;
+        // Any speaker on any *speech* item. A pause is nobody's: nothing reads a stamped pause and
+        // every reader filters it out, so the stamp would sit there invisible and untrue.
+        if (ParagraphItemKinds.IsPause(item.ItemType)) return null;
+        if (item.CharacterId == c.CharacterId) return null;
         item.CharacterId = c.CharacterId;
+        item.AudioFileName = null;
         item.Character = c.CharacterId.HasValue
             ? await db.Characters.FindAsync(c.CharacterId.Value)
             : null;
@@ -50,17 +56,42 @@ public sealed class CreateCharacterHandler(ProjectDbSession session) : ICommandH
     }
 }
 
+/// <summary>
+/// Stamps a speaker across a paragraph, sweeping its speech items *except* the narration —
+/// the same line the old <c>ItemType == Character</c> filter drew, now expressed against the
+/// speaker (ADR-0006). Preserving narration is what stops a one-gesture speaker fix destroying
+/// the paragraph's narration/dialog split. Assigning the narrator is allowed and means "make
+/// this paragraph narration"; under the same sweep rule it is idempotent.
+/// <para>
+/// One exception, and it is what makes that gesture reversible: a paragraph with <em>no</em>
+/// dialog left — every speech item narration, usually because the user just assigned the whole
+/// paragraph to the narrator — sweeps its narration instead. There is no narration/dialog split
+/// left to protect, and without this the assign is a one-way door at paragraph level. The bulk
+/// sibling deliberately does not do this: a blind fan-out across a selection must never be able
+/// to turn a chapter's narration into dialog.
+/// </para>
+/// </summary>
 public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphCharacterCommand>
 {
     public async Task<Guid?> HandleAsync(SetParagraphCharacterCommand c, CancellationToken ct)
     {
         var db = await session.OpenAsync(c.FolderId);
-        var items = await db.ParagraphItems
-            .Where(i => i.ParagraphId == c.ParagraphId && i.ItemType == ParagraphItemType.Character)
+        var speech = await db.ParagraphItems
+            .Where(i => i.ParagraphId == c.ParagraphId)
+            .Where(ParagraphItemKinds.IsSpeechExpression)
             .ToListAsync();
+
+        var dialog = speech.Where(NarrationRule.IsDialog).ToList();
+        var items = dialog.Count > 0 ? dialog : speech;
         foreach (var item in items)
         {
-            item.CharacterId = c.CharacterId;
+            // Only an item this gesture actually moves loses its audio; one already on the target
+            // speaker keeps what it has, which is what makes assigning the narrator idempotent.
+            if (item.CharacterId != c.CharacterId)
+            {
+                item.CharacterId = c.CharacterId;
+                item.AudioFileName = null;
+            }
             if (c.CharacterId.HasValue && c.VoiceInstructions != null)
                 item.VoiceInstructions = c.VoiceInstructions;
         }
@@ -74,7 +105,8 @@ public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICo
 /// entities loaded, so a thousand-paragraph selection costs no change-tracker time. The id list
 /// is not chunked — EF translates <c>Contains</c> to <c>IN (SELECT value FROM json_each(@ids))</c>,
 /// a single parameter at any length. <c>VoiceInstructions</c> is left alone: there is no
-/// per-line instruction to spread across a selection.
+/// per-line instruction to spread across a selection. It sweeps the same non-narrator speech
+/// items its sibling does, so narration survives a thousand-paragraph correction.
 /// </summary>
 public sealed class SetParagraphsCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphsCharacterCommand>
 {
@@ -82,8 +114,12 @@ public sealed class SetParagraphsCharacterHandler(ProjectDbSession session) : IC
     {
         var db = await session.OpenAsync(c.FolderId);
         await db.ParagraphItems
-            .Where(i => c.ParagraphIds.Contains(i.ParagraphId) && i.ItemType == ParagraphItemType.Character)
-            .ExecuteUpdateAsync(s => s.SetProperty(i => i.CharacterId, c.CharacterId), ct);
+            .Where(i => c.ParagraphIds.Contains(i.ParagraphId))
+            .Where(NarrationRule.IsDialogExpression)
+            .Where(i => i.CharacterId != c.CharacterId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(i => i.CharacterId, c.CharacterId)
+                .SetProperty(i => i.AudioFileName, (string?)null), ct);
         return null;
     }
 }
@@ -185,6 +221,12 @@ public sealed class MergeCharactersHandler(ProjectDbSession session) : ICommandH
             await db.SaveChangesAsync(ct);
         }
 
+        // A merge says the two are the same person, so the narrator link follows the survivor —
+        // silently, no warning. Linked-on-the-survivor-side is a no-op: the Where matches nothing.
+        await db.Projects
+            .Where(p => p.NarratorCharacterId == c.MergedId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.NarratorCharacterId, (Guid?)c.SurvivorId), ct);
+
         await db.Characters
             .Where(ch => ch.Id == c.MergedId)
             .ExecuteDeleteAsync(ct);
@@ -244,6 +286,17 @@ public sealed class DeleteCharacterHandler(ProjectDbSession session) : ICommandH
         await db.Voices
             .Where(v => v.CharacterId == c.CharacterId)
             .ExecuteDeleteAsync(ct);
+
+        // Deleting the character a book narrates with unlinks it, inside this transaction so the
+        // delete and the unlink cannot half-land. Not a rejection: this handler's only error
+        // channel is a silent `return null`, which reads as a delete that didn't happen.
+        // NarratorIdentity would still survive the dangling pointer — that fallback is the
+        // backstop, not the fix. Set-based like the rest of this transaction, so a Project entity
+        // tracked earlier in the same session keeps the old id; harmless while the seam reads
+        // through a projection (ADR-0004), and the reason it must keep doing so.
+        await db.Projects
+            .Where(p => p.NarratorCharacterId == c.CharacterId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.NarratorCharacterId, (Guid?)null), ct);
 
         await db.Characters
             .Where(ch => ch.Id == c.CharacterId)

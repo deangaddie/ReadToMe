@@ -16,6 +16,8 @@ namespace Read2Me.Services.Llm
     public const string ContextJson = "context_json";
     public const string ResponseFormat = "response_format";
     public const string CharacterName = "character_name";
+    public const string NarratorIdentity = "narrator_identity";
+    public const string AlsoNarrates = "also_narrates";
     public const string Instruction = "instruction";
     public const string BookOutline = "book_outline";
     public const string EditItemsJson = "edit_items_json";
@@ -25,68 +27,88 @@ namespace Read2Me.Services.Llm
 
     public const string DefaultCharacterPrompt =
         """
-            You are an audiobook script segmenter for the book "{{book_title}}" by {{book_author}}.
+            You are an audiobook dialog attributor for the book "{{book_title}}" by {{book_author}}.
 
-            Split the query paragraph into segments of narration and dialog, and name the
-            character who speaks each dialog segment.
+            The query paragraph arrives already split into numbered items. Name the
+            character who speaks each dialog item, by its index.
 
-            Segmentation rules:
-            - Together, the segment texts must reproduce the query paragraph EXACTLY —
-              every character, in order, nothing added, nothing dropped. Copy the text
-              verbatim; never paraphrase, correct or normalise it.
-            - "dialog" = words a character says aloud (usually quoted). "narration" =
-              everything else, including attribution tags ("said X"), stage directions
-              and interruptions between quoted parts (e.g. an aside set off by dashes).
-            - Quote marks belong to the dialog segment; the tag around them to narration.
-              The tag stays narration even when it sits between two quoted parts of the
-              same sentence.
-            - Every character of the paragraph appears in exactly one segment: a dash or
-              comma between a quote and its neighbour belongs to the narration side;
-              never drop or repeat it.
+            Attribution rules:
+            - The split is fixed. Never merge, split, re-order or restate items, and never
+              return item text — an item's "index" is the whole handle you have on it.
+            - Answer "dialog" items only. "narration" items — attribution tags ("said X"),
+              stage directions, asides between quoted parts — are shown so you can read the
+              clues in them; never return an entry for one.
+            - Answer every dialog item: name the ones you can, and answer "unknown" for the
+              rest. An item you leave out counts as "unknown" and costs another pass.
+            - An item containing more than one speaker is "unknown". The boundary cannot be
+              corrected from here, and "unknown" is the signal a human acts on.
             - Beware badly imported text: quote marks may be missing or mismatched, and
-              dialog may be interrupted by dashes. Segment by what is actually speech,
-              not only by the punctuation.
-            - A paragraph may contain several speakers, one speaker split across several
-              dialog segments, or no dialog at all (one narration segment is then correct).
+              dialog may be interrupted by dashes, so an item may not hold exactly one
+              speaker's words. Attribute by what is actually speech, not only by the
+              punctuation.
+            - A paragraph may contain several speakers, one speaker across several dialog
+              items, or no dialog at all — then there is nothing to answer.
 
-            How to identify each dialog segment's speaker:
+            Who counts as a candidate speaker:
+            - The known characters list is a list of everyone in the WHOLE book, not a list
+              of who is present here. A listed name becomes a candidate for these items
+              only once the text you can see has actually placed that person in this scene —
+              by naming them, or by a description that can only be that one character (for
+              example "his lady", where her husband is named alongside it).
+            - A speaker the text introduces but has not yet identified — "a man", "a voice",
+              "the stranger", "someone behind him" — is genuinely unidentified HERE, even
+              though the book will name them in a later chapter, and even though that name
+              is sitting in the known characters list. Their lines are "unknown".
+            - Never close that gap by elimination or by plausibility. If the only way to
+              reach a name is "it is probably one of the listed characters, and this one
+              fits best", the answer is "unknown".
+
+            How to identify each dialog item's speaker:
             - Attribution tags in or around the quote ("said X", "X replied") — these often
-              appear AFTER the quote, or in a neighbouring paragraph.
+              appear AFTER the quote, in a neighbouring item or a neighbouring paragraph.
             - Vocatives: a character addressed by name inside the quote ("Well, John?") is
               usually NOT the speaker; the character who replies next often is.
             - Two-person conversations normally alternate speakers — use the speakers in
-              the surrounding paragraphs' segments to infer the pattern.
+              the surrounding paragraphs' segments to infer the pattern. This resolves WHICH
+              of the speakers present is talking; it never introduces a candidate who is not
+              present.
             - Match epithets and descriptions ("the old man", "his mother") to the known
-              characters list, including aliases.
+              characters list, including aliases — but only when the description picks out
+              one character unambiguously from what the text has established.
             - Content clues: what is said, who would know it, and each character's manner
               of speaking.
             - When one speaker's quote is interrupted by narration and resumes, both dialog
-              segments have the same speaker.
+              items have the same speaker.
 
             Answer rules:
-            - First write one very short sentence in "reasoning" explaining how you split
-              the paragraph and who speaks, then give the segments.
-            - Every segment has a "type" ("narration" or "dialog"), its exact "text", a
-              "speaker" and "voice_instructions".
-            - Narration segments always have speaker "narrator" and voice_instructions "".
+            - First write one very short sentence in "reasoning" quoting the attribution
+              tag(s) you found, or stating that there are none, then give the items.
+            - Every entry has the item's "index", a "speaker" and "voice_instructions".
+              Return the index exactly as it appears in the query — it is how the answer
+              reaches the right item.
             - Dialog speakers: return the character's "name" from the known characters list
               (the text may use an alias). Never return pronouns (he, she, they) — resolve
-              them to a known character. Return "unknown" only after using ALL of the above
-              and finding that two or more characters remain equally plausible, or the
-              speaker genuinely never appears in the text.
+              them to a known character. Return "unknown" when ANY of these hold: two or
+              more characters remain equally plausible after using ALL of the above; the
+              speaker genuinely never appears in the text; or the speaker has not yet been
+              identified in the text you can see, as described under "Who counts as a
+              candidate speaker".
+            - A wrong name is worse than "unknown". "unknown" is a correct and expected
+              answer — another pass handles those items.
             - "voice_instructions" for dialog: a few words on how the line is delivered
               (e.g. "angry, shouting", "soft, hesitant"), taken from the text; "" if the
               text gives no cue.
             - Return ONLY valid JSON. No markdown fences, no text outside the JSON.
             - JSON format: {{response_format}}
-
+            {{narrator_identity}}
             Known characters (JSON array; each entry has a "name" and optional "aliases" — match either when identifying a speaker): {{known_characters}}
 
             Context (JSON object):
             - "preceding": paragraphs before the query, in order, already split into
               segments; a segment's "speaker" is its known speaker ("unknown" if not yet
               attributed).
-            - "query": the paragraph to split and attribute — its raw "text" only.
+            - "query": the paragraph to attribute, as its "items" — each with an "index",
+              a "type" ("narration" or "dialog") and its "text". Answer by "index".
             - "following": paragraphs after the query, same segment form as "preceding".
 
             {{context_json}}
@@ -94,56 +116,78 @@ namespace Read2Me.Services.Llm
 
     public const string DefaultBatchCharacterPrompt =
         """
-            You are an audiobook script segmenter for the book "{{book_title}}" by {{book_author}}.
+            You are an audiobook dialog attributor for the book "{{book_title}}" by {{book_author}}.
 
-            Several paragraphs need splitting into segments of narration and dialog, with
-            the speaking character named for each dialog segment. Each paragraph to process
-            is marked with an "index"; the paragraphs around them are context.
+            Several paragraphs need their speakers named. Each paragraph to process is
+            marked with an "index" and arrives already split into numbered items; name the
+            character who speaks each of its dialog items, by that item's index. The
+            paragraphs around them are context.
 
-            Segmentation rules:
-            - For each indexed paragraph, together the segment texts must reproduce that
-              paragraph EXACTLY — every character, in order, nothing added, nothing
-              dropped. Copy the text verbatim; never paraphrase, correct or normalise it.
-            - "dialog" = words a character says aloud (usually quoted). "narration" =
-              everything else, including attribution tags ("said X"), stage directions
-              and interruptions between quoted parts (e.g. an aside set off by dashes).
-            - Quote marks belong to the dialog segment; the tag around them to narration.
-              The tag stays narration even when it sits between two quoted parts of the
-              same sentence.
-            - Every character of the paragraph appears in exactly one segment: a dash or
-              comma between a quote and its neighbour belongs to the narration side;
-              never drop or repeat it.
+            Attribution rules:
+            - The split is fixed. Never merge, split, re-order or restate items, and never
+              return item text — an item's "index" is the whole handle you have on it.
+            - Answer "dialog" items only. "narration" items — attribution tags ("said X"),
+              stage directions, asides between quoted parts — are shown so you can read the
+              clues in them; never return an entry for one.
+            - Answer every dialog item: name the ones you can, and answer "unknown" for the
+              rest. An item you leave out counts as "unknown" and costs another pass.
+            - An item containing more than one speaker is "unknown". The boundary cannot be
+              corrected from here, and "unknown" is the signal a human acts on.
             - Beware badly imported text: quote marks may be missing or mismatched, and
-              dialog may be interrupted by dashes. Segment by what is actually speech,
-              not only by the punctuation.
-            - A paragraph may contain several speakers, one speaker split across several
-              dialog segments, or no dialog at all (one narration segment is then correct).
+              dialog may be interrupted by dashes, so an item may not hold exactly one
+              speaker's words. Attribute by what is actually speech, not only by the
+              punctuation.
+            - A paragraph may contain several speakers, one speaker across several dialog
+              items, or no dialog at all — then there is nothing to answer.
 
-            How to identify each dialog segment's speaker:
+            Who counts as a candidate speaker:
+            - The known characters list is a list of everyone in the WHOLE book, not a list
+              of who is present here. A listed name becomes a candidate for these items
+              only once the text you can see has actually placed that person in this scene —
+              by naming them, or by a description that can only be that one character (for
+              example "his lady", where her husband is named alongside it).
+            - A speaker the text introduces but has not yet identified — "a man", "a voice",
+              "the stranger", "someone behind him" — is genuinely unidentified HERE, even
+              though the book will name them in a later chapter, and even though that name
+              is sitting in the known characters list. Their lines are "unknown".
+            - Never close that gap by elimination or by plausibility. If the only way to
+              reach a name is "it is probably one of the listed characters, and this one
+              fits best", the answer is "unknown".
+
+            How to identify each dialog item's speaker:
             - Attribution tags in or around the quote ("said X", "X replied") — these often
-              appear AFTER the quote, or in a neighbouring paragraph.
+              appear AFTER the quote, in a neighbouring item or a neighbouring paragraph.
             - Vocatives: a character addressed by name inside the quote ("Well, John?") is
               usually NOT the speaker; the character who replies next often is.
             - Two-person conversations normally alternate speakers — use the speakers in
-              the surrounding paragraphs' segments to infer the pattern.
+              the surrounding paragraphs' segments to infer the pattern. This resolves WHICH
+              of the speakers present is talking; it never introduces a candidate who is not
+              present.
             - Match epithets and descriptions ("the old man", "his mother") to the known
-              characters list, including aliases.
+              characters list, including aliases — but only when the description picks out
+              one character unambiguously from what the text has established.
             - Content clues: what is said, who would know it, and each character's manner
               of speaking.
             - When one speaker's quote is interrupted by narration and resumes, both dialog
-              segments have the same speaker.
+              items have the same speaker.
 
             Answer rules:
-            - Return one entry per index. For each, first write one very short sentence in
-              "reasoning" explaining the split and speakers, then give the segments.
-            - Every segment has a "type" ("narration" or "dialog"), its exact "text", a
-              "speaker" and "voice_instructions".
-            - Narration segments always have speaker "narrator" and voice_instructions "".
+            - Return one entry per paragraph "index". For each, first write one very short
+              sentence in "reasoning" quoting the attribution tag(s) you found, or stating
+              that there are none, then give the items.
+            - Inside an entry, every item has the item's "index", a "speaker" and
+              "voice_instructions". Item indices are local to their paragraph: they start
+              at 0 in each indexed paragraph. Return them exactly as they appear in that
+              paragraph — they are how the answer reaches the right item.
             - Dialog speakers: return the character's "name" from the known characters list
               (the text may use an alias). Never return pronouns (he, she, they) — resolve
-              them to a known character. Return "unknown" only after using ALL of the above
-              and finding that two or more characters remain equally plausible, or the
-              speaker genuinely never appears in the text.
+              them to a known character. Return "unknown" when ANY of these hold: two or
+              more characters remain equally plausible after using ALL of the above; the
+              speaker genuinely never appears in the text; or the speaker has not yet been
+              identified in the text you can see, as described under "Who counts as a
+              candidate speaker".
+            - A wrong name is worse than "unknown". "unknown" is a correct and expected
+              answer — another pass handles those items.
             - "voice_instructions" for dialog: a few words on how the line is delivered
               (e.g. "angry, shouting", "soft, hesitant"), taken from the text; "" if the
               text gives no cue.
@@ -152,12 +196,13 @@ namespace Read2Me.Services.Llm
             - Return ONLY a valid JSON array with exactly one entry per index. Every index
               must appear. No markdown fences, no text outside the JSON.
             - JSON format: {{response_format}}
-
+            {{narrator_identity}}
             Known characters (JSON array; each entry has a "name" and optional "aliases" — match either when identifying a speaker): {{known_characters}}
 
             Paragraphs (JSON object): "paragraphs" is the passage in reading order. Entries
-            with an "index" carry raw "text" — split and attribute these. Entries with
-            "segments" are context, already split; a segment's "speaker" is its known
+            with an "index" carry their numbered "items" — each with its own "index", a
+            "type" ("narration" or "dialog") and its "text"; attribute these. Entries with
+            "segments" are context, already attributed; a segment's "speaker" is its known
             speaker ("unknown" if not yet attributed).
 
             {{context_json}}
@@ -165,25 +210,23 @@ namespace Read2Me.Services.Llm
 
     public const string DefaultSimpleCharacterPrompt =
         """
-            You are an audiobook script segmenter for the book "{{book_title}}" by {{book_author}}.
+            You are an audiobook dialog attributor for the book "{{book_title}}" by {{book_author}}.
 
-            Split the query paragraph into segments of narration and dialog. Name the
-            character who speaks a dialog segment ONLY if the text explicitly states who
-            speaks; otherwise the speaker is "unknown".
+            The query paragraph arrives already split into numbered items. Name the
+            character who speaks a dialog item, by its index, ONLY if the text explicitly
+            states who speaks; otherwise the speaker is "unknown".
 
-            Segmentation rules:
-            - Together, the segment texts must reproduce the query paragraph EXACTLY —
-              every character, in order, nothing added, nothing dropped. Copy the text
-              verbatim; never paraphrase, correct or normalise it.
-            - "dialog" = words a character says aloud (usually quoted). "narration" =
-              everything else, including attribution tags ("said X") and text between
-              quoted parts.
-            - Quote marks belong to the dialog segment; the tag around them to narration.
-            - Every character of the paragraph appears in exactly one segment: a dash or
-              comma between a quote and its neighbour belongs to the narration side;
-              never drop or repeat it.
-            - A paragraph may contain several speakers, one speaker split across several
-              dialog segments, or no dialog at all (one narration segment is then correct).
+            Attribution rules:
+            - The split is fixed. Never merge, split, re-order or restate items, and never
+              return item text — an item's "index" is the whole handle you have on it.
+            - Answer "dialog" items only. "narration" items — attribution tags ("said X"),
+              text between quoted parts — are shown so you can read the tags in them;
+              never return an entry for one.
+            - Answer every dialog item: name the ones the text names, and answer "unknown"
+              for the rest. An item you leave out counts as "unknown" and costs another pass.
+            - An item containing more than one speaker is "unknown".
+            - A paragraph may contain several speakers, one speaker across several dialog
+              items, or no dialog at all — then there is nothing to answer.
 
             Speaker rules:
             - The ONLY acceptable evidence is an attribution tag that names the speaker:
@@ -199,16 +242,16 @@ namespace Read2Me.Services.Llm
             - When a tag names a speaker, return that character's "name" from the known
               characters list (the tag may use an alias).
             - "unknown" is a correct and expected answer — another system handles those
-              segments.
+              items.
             - When one speaker's quote is interrupted by narration and resumes, and the tag
-              names the speaker, both dialog segments have that speaker.
+              names the speaker, both dialog items have that speaker.
 
             Answer rules:
             - First write one very short sentence in "reasoning" quoting the attribution
-              tag(s) you found, or stating that there are none, then give the segments.
-            - Every segment has a "type" ("narration" or "dialog"), its exact "text", a
-              "speaker" and "voice_instructions".
-            - Narration segments always have speaker "narrator" and voice_instructions "".
+              tag(s) you found, or stating that there are none, then give the items.
+            - Every entry has the item's "index", a "speaker" and "voice_instructions".
+              Return the index exactly as it appears in the query — it is how the answer
+              reaches the right item.
             - "voice_instructions" for dialog: a few words on delivery taken from the text
               (e.g. "shouting"); "" if the text gives no cue.
             - Return ONLY valid JSON. No markdown fences, no text outside the JSON.
@@ -220,7 +263,8 @@ namespace Read2Me.Services.Llm
             - "preceding": paragraphs before the query, in order, already split into
               segments; a segment's "speaker" is its known speaker ("unknown" if not yet
               attributed).
-            - "query": the paragraph to split and attribute — its raw "text" only.
+            - "query": the paragraph to attribute, as its "items" — each with an "index",
+              a "type" ("narration" or "dialog") and its "text". Answer by "index".
             - "following": paragraphs after the query, same segment form as "preceding".
 
             {{context_json}}
@@ -228,26 +272,24 @@ namespace Read2Me.Services.Llm
 
     public const string DefaultSimpleBatchCharacterPrompt =
         """
-            You are an audiobook script segmenter for the book "{{book_title}}" by {{book_author}}.
+            You are an audiobook dialog attributor for the book "{{book_title}}" by {{book_author}}.
 
-            Several paragraphs need splitting into segments of narration and dialog. Each
-            paragraph to process is marked with an "index". Name the character who speaks
-            a dialog segment ONLY if the text explicitly states who speaks; otherwise the
-            speaker is "unknown".
+            Several paragraphs need their speakers named. Each paragraph to process is
+            marked with an "index" and arrives already split into numbered items. Name the
+            character who speaks a dialog item, by that item's index, ONLY if the text
+            explicitly states who speaks; otherwise the speaker is "unknown".
 
-            Segmentation rules:
-            - For each indexed paragraph, together the segment texts must reproduce that
-              paragraph EXACTLY — every character, in order, nothing added, nothing
-              dropped. Copy the text verbatim; never paraphrase, correct or normalise it.
-            - "dialog" = words a character says aloud (usually quoted). "narration" =
-              everything else, including attribution tags ("said X") and text between
-              quoted parts.
-            - Quote marks belong to the dialog segment; the tag around them to narration.
-            - Every character of the paragraph appears in exactly one segment: a dash or
-              comma between a quote and its neighbour belongs to the narration side;
-              never drop or repeat it.
-            - A paragraph may contain several speakers, one speaker split across several
-              dialog segments, or no dialog at all (one narration segment is then correct).
+            Attribution rules:
+            - The split is fixed. Never merge, split, re-order or restate items, and never
+              return item text — an item's "index" is the whole handle you have on it.
+            - Answer "dialog" items only. "narration" items — attribution tags ("said X"),
+              text between quoted parts — are shown so you can read the tags in them;
+              never return an entry for one.
+            - Answer every dialog item: name the ones the text names, and answer "unknown"
+              for the rest. An item you leave out counts as "unknown" and costs another pass.
+            - An item containing more than one speaker is "unknown".
+            - A paragraph may contain several speakers, one speaker across several dialog
+              items, or no dialog at all — then there is nothing to answer.
 
             Speaker rules:
             - The ONLY acceptable evidence is an attribution tag that names the speaker:
@@ -263,17 +305,18 @@ namespace Read2Me.Services.Llm
             - When a tag names a speaker, return that character's "name" from the known
               characters list (the tag may use an alias).
             - "unknown" is a correct and expected answer — another system handles those
-              segments.
+              items.
             - When one speaker's quote is interrupted by narration and resumes, and the tag
-              names the speaker, both dialog segments have that speaker.
+              names the speaker, both dialog items have that speaker.
 
             Answer rules:
-            - Return one entry per index. For each, first write one very short sentence in
-              "reasoning" quoting the attribution tag(s) you found, or stating that there
-              are none, then give the segments.
-            - Every segment has a "type" ("narration" or "dialog"), its exact "text", a
-              "speaker" and "voice_instructions".
-            - Narration segments always have speaker "narrator" and voice_instructions "".
+            - Return one entry per paragraph "index". For each, first write one very short
+              sentence in "reasoning" quoting the attribution tag(s) you found, or stating
+              that there are none, then give the items.
+            - Inside an entry, every item has the item's "index", a "speaker" and
+              "voice_instructions". Item indices are local to their paragraph: they start
+              at 0 in each indexed paragraph. Return them exactly as they appear in that
+              paragraph — they are how the answer reaches the right item.
             - "voice_instructions" for dialog: a few words on delivery taken from the text
               (e.g. "shouting"); "" if the text gives no cue.
             - Output entries ONLY for the paragraphs that have an "index". Never output an
@@ -285,8 +328,9 @@ namespace Read2Me.Services.Llm
             Known characters (JSON array; each entry has a "name" and optional "aliases" — match either when identifying a speaker): {{known_characters}}
 
             Paragraphs (JSON object): "paragraphs" is the passage in reading order. Entries
-            with an "index" carry raw "text" — split and attribute these. Entries with
-            "segments" are context, already split; a segment's "speaker" is its known
+            with an "index" carry their numbered "items" — each with its own "index", a
+            "type" ("narration" or "dialog") and its "text"; attribute these. Entries with
+            "segments" are context, already attributed; a segment's "speaker" is its known
             speaker ("unknown" if not yet attributed).
 
             {{context_json}}
@@ -315,7 +359,7 @@ namespace Read2Me.Services.Llm
         """
             You are casting speaking voices for the character "{{character_name}}" in the
             audiobook "{{book_title}}" by {{book_author}}.
-
+            {{also_narrates}}
             Decide how many distinct voices this character needs across the whole book.
             Most characters need exactly one voice. Add more only when the character's
             voice genuinely changes during the story — large time skips, ageing from
@@ -516,38 +560,63 @@ namespace Read2Me.Services.Llm
       DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    /// <summary>One roster entry as the prompt sees it: a name and the aliases it also answers to.</summary>
+    public sealed record RosterCharacter(string Name, IReadOnlyList<string> Aliases);
+
     /// <summary>
-    /// Context for the single-paragraph segment prompt: neighbours as their existing segments,
-    /// the query as raw text only — its current split may be wrong and must not bias the answer.
+    /// The {{known_characters}} roster: a compact JSON array of {name, aliases}. The one place the
+    /// projection is written, so the prompt-editor sample cannot drift from the real request.
+    /// </summary>
+    public static string BuildKnownCharactersJson(IEnumerable<RosterCharacter> roster) =>
+        JsonSerializer.Serialize(
+            roster.Select(c => new RosterCharacterDto(c.Name, [.. c.Aliases])).ToArray());
+
+    private sealed record RosterCharacterDto(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("aliases")] string[] Aliases);
+
+    /// <summary>
+    /// Context for the single-paragraph attribution prompt: neighbours as their existing segments,
+    /// the query as its own numbered item list — the split is frozen (ADR-0005), so the model is
+    /// asked who speaks each existing item rather than to re-split the text.
     /// </summary>
     public static string BuildContextJson(ParagraphContext ctx)
     {
       var obj = new ContextJsonDto(
           [.. ctx.Preceding.Select(ToSegmentedEntry)],
-          new QueryEntryDto(ctx.Query.Text),
+          new QueryEntryDto(ToQueryItemDtos(ctx.Query.Items)),
           [.. ctx.Following.Select(ToSegmentedEntry)]
       );
       return JsonSerializer.Serialize(obj, _jsonOptions);
     }
 
     /// <summary>
-    /// Context for the batch segment prompt: one flat "paragraphs" array in reading order.
-    /// Entries to attribute carry an "index" and raw "text"; context entries carry "segments".
+    /// Context for the batch attribution prompt: one flat "paragraphs" array in reading order.
+    /// Entries to attribute carry an "index" and their numbered "items"; context entries carry
+    /// "segments".
     /// </summary>
     public static string BuildBatchContextJson(ParagraphBatchContext ctx)
     {
       var obj = new BatchContextJsonDto(
           [.. ctx.Entries.Select(e => e.TargetIndex is { } index
-              ? new BatchEntryDto(index, e.Text, null)
-              : new BatchEntryDto(null, null, ToSegmentDtos(e.Segments)))]);
+              ? new BatchEntryDto(index, ToQueryItemDtos(e.Items), null)
+              : new BatchEntryDto(null, null, ToSegmentDtos(e.Items)))]);
       return JsonSerializer.Serialize(obj, _jsonOptions);
     }
 
-    private static SegmentedEntryDto ToSegmentedEntry(ContextParagraph p) =>
-        new(ToSegmentDtos(p.Segments));
+    /// <summary>
+    /// The query paragraph's items, numbered 0..n-1 in <c>Order</c> sequence — narration included,
+    /// so the attribution tags stay visible. No speaker: that is what the answer supplies. No id
+    /// either: the index is the whole handle the model gets, and the caller holds the index→id map.
+    /// </summary>
+    private static QueryItemDto[] ToQueryItemDtos(IReadOnlyList<ContextItem> items) =>
+        [.. items.Select((i, index) => new QueryItemDto(index, i.Type, i.Text))];
 
-    private static ContextSegmentDto[] ToSegmentDtos(IReadOnlyList<ContextSegment> segments) =>
-        [.. segments.Select(s => new ContextSegmentDto(s.Text, s.Type, s.Speaker))];
+    private static SegmentedEntryDto ToSegmentedEntry(ContextParagraph p) =>
+        new(ToSegmentDtos(p.Items));
+
+    private static ContextSegmentDto[] ToSegmentDtos(IReadOnlyList<ContextItem> items) =>
+        [.. items.Select(i => new ContextSegmentDto(i.Text, i.Type, i.Speaker))];
 
     /// <summary>
     /// Replaces each "{{key}}" literal with values[key]. Unknown tokens are left intact.
@@ -570,12 +639,17 @@ namespace Read2Me.Services.Llm
     private sealed record SegmentedEntryDto(
         [property: JsonPropertyName("segments")] ContextSegmentDto[] Segments);
 
-    private sealed record QueryEntryDto(
+    private sealed record QueryItemDto(
+        [property: JsonPropertyName("index")] int Index,
+        [property: JsonPropertyName("type")] string Type,
         [property: JsonPropertyName("text")] string Text);
+
+    private sealed record QueryEntryDto(
+        [property: JsonPropertyName("items")] QueryItemDto[] Items);
 
     private sealed record BatchEntryDto(
         [property: JsonPropertyName("index")] int? Index,
-        [property: JsonPropertyName("text")] string? Text,
+        [property: JsonPropertyName("items")] QueryItemDto[]? Items,
         [property: JsonPropertyName("segments")] ContextSegmentDto[]? Segments);
 
     private sealed record BatchContextJsonDto(

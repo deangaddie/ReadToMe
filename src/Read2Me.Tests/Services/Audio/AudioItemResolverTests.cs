@@ -70,7 +70,7 @@ namespace Read2Me.Tests.Services.Audio
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("bilbo", character);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character,
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Speech,
                     text, hasCharacter ? charId : null))))
                 .BuildAsync();
 
@@ -267,7 +267,7 @@ namespace Read2Me.Tests.Services.Audio
 
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "He said something", null))))
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Speech, "He said something", null))))
                 .BuildAsync();
 
             Guid narratorVoiceId;
@@ -337,6 +337,86 @@ namespace Read2Me.Tests.Services.Audio
 
             Assert.True(result.Succeeded);
             Assert.Equal("the voice's own transcript", result.Request!.ReferenceTranscript);
+        }
+
+        // ── narrator link (slice 13) ───────────────────────────────────────────
+
+        /// <summary>Narration item in a book whose narrator is linked to "Dr. Watson".</summary>
+        private async Task<(QueuedAudioItem queued, Guid watsonId)> SeedLinkedNarrationItemAsync(
+            bool hasVoice = true)
+        {
+            const string voiceFile = "voices/watson/voice.wav";
+            var watson = new Data.Entities.Character { Id = Guid.NewGuid(), Name = "Dr. Watson" };
+
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("watson", watson);
+            b.WithNarratorLink(watson.Id);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddNarration("item", "The narrator spoke"))))
+                .BuildAsync();
+
+            await using var db = await OpenDbAsync();
+
+            if (hasVoice)
+            {
+                var voice = new VoiceEntity
+                {
+                    Id = Guid.NewGuid(),
+                    CharacterId = watson.Id,
+                    Name = "Watson Voice",
+                    Source = VoiceSource.Uploaded,
+                    AudioFileName = voiceFile
+                };
+                db.Voices.Add(voice);
+                await db.SaveChangesAsync();
+
+                _fs.SeedFile(
+                    Path.Combine(_fs.GetProjectFolderPath(FolderName), voiceFile.Replace('/', Path.DirectorySeparatorChar)),
+                    [0x52, 0x49, 0x46, 0x46]);
+                _voiceResolver.SetVoice(b.ItemId("item"), voice.Id);
+            }
+            else
+            {
+                _voiceResolver.SetVoice(b.ItemId("item"), null);
+            }
+
+            var partId = (await db.Chapters.FindAsync(b.ChapterId("ch")))!.PartId;
+            var itemRef = new AudioItemRef(b.ItemId("item"), b.ParagraphId("para"), b.ChapterId("ch"), partId, b.VolumeId("vol"));
+            return (new QueuedAudioItem(_folder, itemRef), watson.Id);
+        }
+
+        [Fact]
+        public async Task LinkedNarrator_NarrationItem_SpeakerIsLinkedCharacterName()
+        {
+            var (queued, _) = await SeedLinkedNarrationItemAsync();
+
+            var result = await _sut.ResolveAsync(queued, CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("Dr. Watson", result.Speaker);
+            Assert.Equal("Dr. Watson", result.Request!.Speaker);
+        }
+
+        [Fact]
+        public async Task LinkedNarrator_NarrationItem_NoVoice_FailureNamesLinkedCharacter()
+        {
+            var (queued, _) = await SeedLinkedNarrationItemAsync(hasVoice: false);
+
+            var result = await _sut.ResolveAsync(queued, CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("No default voice for Dr. Watson", result.FailureReason);
+        }
+
+        [Fact]
+        public async Task Unlinked_NarrationItem_NoVoice_FailureStillNamesNarrator()
+        {
+            var (queued, _) = await SeedNarrationItemAsync(hasNarratorVoice: false, resolverReturnsVoice: false);
+
+            var result = await _sut.ResolveAsync(queued, CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("No default voice for Narrator", result.FailureReason);
         }
 
         // ── fakes ──────────────────────────────────────────────────────────────

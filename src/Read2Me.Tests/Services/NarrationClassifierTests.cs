@@ -22,9 +22,9 @@ namespace Read2Me.Tests.Services
 
             Assert.Equal(2, result.Count);
             Assert.Equal(TestNarratorId, result[0].CharacterId);
-            Assert.Equal(ParagraphItemType.Narration, result[0].ItemType);
+            Assert.Equal(ParagraphItemType.Speech, result[0].ItemType);
             Assert.Null(result[1].CharacterId);
-            Assert.Equal(ParagraphItemType.Character, result[1].ItemType);
+            Assert.Equal(ParagraphItemType.Speech, result[1].ItemType);
         }
 
         [Fact]

@@ -13,6 +13,9 @@ public class CommandApiTests(E2eAppFixture app)
 {
     private static readonly HttpClient Http = new();
 
+    /// <summary>ProjectDbContext.NarratorId — the seed row an unlinked project reports.</summary>
+    private static readonly Guid SeedNarratorId = new("00000000-0000-0000-0000-000000000001");
+
     private async Task<HttpResponseMessage> PostCommandAsync(string folder, string json) =>
         await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
             new StringContent(json, Encoding.UTF8, "application/json"));
@@ -53,6 +56,48 @@ public class CommandApiTests(E2eAppFixture app)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [Fact]
+    public async Task SetNarratorCharacter_links_unlinks_and_rejects()
+    {
+        var folder = $"api-narr-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Narrator Book", "Author", characterName: "Watson");
+        var characterId = JsonDocument.Parse(
+                await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/characters"))
+            .RootElement.EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "Watson")
+            .GetProperty("id").GetGuid();
+
+        // Unlinked reads as NarratorIdentity.Unlinked — never null.
+        var before = await NarratorAsync(folder);
+        Assert.False(before.GetProperty("isLinked").GetBoolean());
+        Assert.Equal("Narrator", before.GetProperty("displayName").GetString());
+        Assert.Equal(SeedNarratorId, before.GetProperty("characterId").GetGuid());
+
+        var link = await PostCommandAsync(folder,
+            $$"""{ "type": "SetNarratorCharacter", "characterId": "{{characterId}}" }""");
+        Assert.Equal(HttpStatusCode.OK, link.StatusCode);
+
+        var linked = await NarratorAsync(folder);
+        Assert.True(linked.GetProperty("isLinked").GetBoolean());
+        Assert.Equal(characterId, linked.GetProperty("characterId").GetGuid());
+        Assert.Equal("Watson", linked.GetProperty("displayName").GetString());
+
+        // A bad target must surface as 422, not as 200 with a null id.
+        var rejected = await PostCommandAsync(folder,
+            $$"""{ "type": "SetNarratorCharacter", "characterId": "{{Guid.NewGuid()}}" }""");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, rejected.StatusCode);
+        Assert.True((await NarratorAsync(folder)).GetProperty("isLinked").GetBoolean());
+
+        var unlink = await PostCommandAsync(folder,
+            """{ "type": "SetNarratorCharacter", "characterId": null }""");
+        Assert.Equal(HttpStatusCode.OK, unlink.StatusCode);
+        Assert.False((await NarratorAsync(folder)).GetProperty("isLinked").GetBoolean());
+    }
+
+    private async Task<JsonElement> NarratorAsync(string folder) =>
+        JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}"))
+            .RootElement.GetProperty("narrator").Clone();
 
     [Fact]
     public async Task Unknown_command_type_is_400()

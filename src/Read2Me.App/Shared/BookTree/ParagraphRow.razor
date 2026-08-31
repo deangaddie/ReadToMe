@@ -69,13 +69,11 @@
             @foreach (var item in items)
             {
                 var it = item;
-                @if (it.ItemType == ParagraphItemType.Character || it.ItemType == ParagraphItemType.Narration)
+                @if (!ParagraphItemKinds.IsPause(it.ItemType))
                 {
-                    var isCharItem = it.ItemType == ParagraphItemType.Character;
-                    var resolvedName = it.Character?.Name;
-                    var (chipIcon, chipColor, chipLabel) = isCharItem
-                        ? ("", resolvedName == null ? Color.Warning : Color.Primary, resolvedName ?? "Unknown")
-                        : ParagraphItemDisplay.GetItemDisplay(it.ItemType) switch { var d => (d.icon, d.color, d.label) };
+                    // What an item is comes from its speaker, never its type (ADR-0006).
+                    var isNarration = NarrationRule.IsNarration(it);
+                    var (chipIcon, chipColor, chipLabel) = ParagraphItemDisplay.GetSpeechDisplay(it);
                     var audioRef = new AudioItemRef(it.Id, Para.Id, ChapterId, PartId, VolumeId);
                     var audioStatus = isAudioMode ? AudioQueue.StatusOf(FolderId, it.Id) : null;
                     var audioOutcome = isAudioMode && audioStatus is null ? AudioQueue.OutcomeOf(FolderId, it.Id) : null;
@@ -91,7 +89,7 @@
                             else
                             {
                                 <MudCheckBox T="bool" Value="@isAudioSelected"
-                                             Disabled="@(isCharItem && it.Character == null && !Presenter.NarratorOnlyMode)"
+                                             Disabled="@(it.CharacterId == null && !Presenter.NarratorOnlyMode)"
                                              ValueChanged="@((bool v) => Presenter.ToggleAudioItemAsync(audioRef, v))"
                                              Size="Size.Small" Class="pa-0 ma-0" />
                             }
@@ -99,23 +97,22 @@
                         <CharacterChipMenu Label="@chipLabel"
                                            FolderId="@FolderId"
                                            Color="@chipColor"
-                                           Variant="@(isCharItem ? Variant.Filled : Variant.Outlined)"
-                                           Icon="@(isCharItem ? null : chipIcon)"
+                                           Variant="@(isNarration ? Variant.Outlined : Variant.Filled)"
+                                           Icon="@(isNarration ? chipIcon : null)"
                                            Style="width:100%; justify-content:center;"
                                            OnSelected="@(id => Presenter.AssignCharacterAsync(FolderId, Para, it, id))" />
                         @if (!string.IsNullOrWhiteSpace(it.Text))
                         {
                             <div>
-                                <MudText Typo="Typo.body2" Style="@(isCharItem ? "" : "font-style:italic;")">@it.Text</MudText>
+                                <MudText Typo="Typo.body2" Style="@(isNarration ? "font-style:italic;" : "")">@it.Text</MudText>
                                 @if (isAudioMode)
                                 {
-                                    var voiceName = Presenter.ResolvedVoiceName(it.Id);
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1"
                                               Style="flex-wrap:wrap;">
-                                        <MudText Typo="Typo.caption" Style="opacity:0.65;"
-                                                 data-testid="@($"voice-preview-{it.Id}")">
-                                            @(voiceName != null ? $"Voice: {voiceName}" : "—")
-                                        </MudText>
+                                        <SplitAudioVoicePreview CharacterId="@it.CharacterId"
+                                                                Narrator="@Presenter.VoicePreviewNarrator"
+                                                                VoiceName="@Presenter.ResolvedVoiceName(it.Id)"
+                                                                TestId="@($"voice-preview-{it.Id}")" />
                                         @if (!string.IsNullOrWhiteSpace(it.VoiceInstructions))
                                         {
                                             <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small"
@@ -186,7 +183,7 @@
                 }
                 else
                 {
-                    var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetItemDisplay(it.ItemType);
+                    var (pauseIcon, pauseColor, pauseLabel2) = ParagraphItemDisplay.GetPauseDisplay(it.ItemType);
                     <div class="paragraph-item-hover-row" style="@($"display:grid; grid-template-columns:{(isAudioMode ? "32px " : "")}120px 1fr auto; align-items:center; gap:8px; opacity:0.6; font-style:italic;")">
                         @if (isAudioMode)
                         {
@@ -252,15 +249,16 @@ else
             {
                 <span style="display:inline-block; width:38px; flex-shrink:0;"></span>
             }
-            @if (isCharPara && !isBusy)
+            @if (vm.Chip != ParaCharacterChip.None && !isBusy)
             {
                 var (chipColor, chipLabel) = vm.Chip switch
                 {
-                    ParaCharacterChip.Mixed   => (Color.Default, "Mixed"),
-                    ParaCharacterChip.Unknown => (Color.Warning, "Unknown"),
-                    ParaCharacterChip.Partial => (Color.Warning, $"{vm.SingleCharacterName ?? "Mixed"} +?"),
-                    ParaCharacterChip.Single  => (Color.Primary, vm.SingleCharacterName!),
-                    _                         => (Color.Default, "")
+                    ParaCharacterChip.Mixed     => (Color.Default, "Mixed"),
+                    ParaCharacterChip.Unknown   => (Color.Warning, "Unknown"),
+                    ParaCharacterChip.Partial   => (Color.Warning, $"{vm.SingleCharacterName ?? "Mixed"} +?"),
+                    ParaCharacterChip.Single    => (Color.Primary, vm.SingleCharacterName!),
+                    ParaCharacterChip.Narration => (Color.Info, "Narration"),
+                    _                           => (Color.Default, "")
                 };
                 <CharacterChipMenu Label="@chipLabel"
                                    FolderId="@FolderId"
@@ -307,7 +305,7 @@ else
         if (Presenter.ViewMode == BookViewMode.SplitAudio)
         {
             var itemIds = Para.Items
-                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                .Where(i => !ParagraphItemKinds.IsPause(i.ItemType))
                 .Select(i => i.Id);
             await Presenter.EnsureVoicePreviewAsync(FolderId, itemIds);
         }

@@ -37,7 +37,7 @@ namespace Read2Me.Tests.State
             b.WithProject(narratorOnlyMode: narratorOnlyMode)
              .WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
-                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Character, "Hello world", character.Id))))
+                .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Speech, "Hello world", character.Id))))
                 .BuildAsync();
 
             return (b.VolumeId("vol"), character.Id);

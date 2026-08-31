@@ -1,4 +1,5 @@
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
@@ -14,6 +15,8 @@ namespace Read2Me.Tests.Fakes
         public virtual IReadOnlyList<string> GetProjects() => [];
         public virtual Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync() => Task.FromResult<IReadOnlyList<ProjectSummary>>([]);
         public virtual Task<Project?> GetProjectAsync(ProjectFolderId folderId) => Task.FromResult<Project?>(null);
+        public virtual Task<NarratorIdentity> GetNarratorAsync(ProjectFolderId folderId, CancellationToken ct = default) =>
+            Task.FromResult(NarratorIdentity.Unlinked);
         public virtual Task<bool> HasBookContentAsync(ProjectFolderId folderId) => Task.FromResult(false);
         public virtual Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId) =>
             Task.FromResult(new BookOverview(null, false, [], [], 0, 0, [], new Dictionary<Guid, int>()));

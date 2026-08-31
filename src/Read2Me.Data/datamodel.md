@@ -10,16 +10,17 @@ Every book has at least one Volume, Part, and Chapter. Singular nodes are hidden
 
 ### Project
 
-| Column              | Type   | Nullable | Notes                              |
-| ------------------- | ------ | -------- | ---------------------------------- |
-| `Id`                | Guid   | no       | PK                                 |
-| `Title`             | string | no       | max 250 — project label            |
-| `BookTitle`         | string | no       | max 250                            |
-| `Author`            | string | no       | max 250                            |
-| `Filename`          | string | no       | max 526                            |
-| `Type`              | enum   | no       | `BookFileType` (Epub / Text)       |
-| `CoverImage`        | string | yes      | relative jpg path                  |
-| `NarratorOnlyMode`  | bool   | no       | suppress character voices          |
+| Column                | Type   | Nullable | Notes                                                              |
+| --------------------- | ------ | -------- | ------------------------------------------------------------------ |
+| `Id`                  | Guid   | no       | PK                                                                 |
+| `Title`               | string | no       | max 250 — project label                                            |
+| `BookTitle`           | string | no       | max 250                                                            |
+| `Author`              | string | no       | max 250                                                            |
+| `Filename`            | string | no       | max 526                                                            |
+| `Type`                | enum   | no       | `BookFileType` (Epub / Text)                                       |
+| `CoverImage`          | string | yes      | relative jpg path                                                  |
+| `NarratorOnlyMode`    | bool   | no       | suppress character voices                                          |
+| `NarratorCharacterId` | Guid   | yes      | narrator link — no FK; read only via `NarratorIdentity` (ADR-0004) |
 
 ### Volume
 
@@ -62,14 +63,16 @@ each carry a different Character.
 
 Items within a paragraph. A paragraph with no mixed content is one item. Mixing narration and dialog splits the paragraph into multiple items.
 
+The split is made once, at import, by `ParagraphSplitter`, and only a user may change it afterwards: attribution stamps `CharacterId` / `VoiceInstructions` on existing rows and never inserts, deletes or rewrites one ([ADR 0005](../../docs/adr/0005-frozen-paragraph-item-boundaries.md)).
+
 | Column              | Type   | Nullable | Notes                                                                                                      |
 | ------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------- |
 | `Id`                | Guid   | no       | PK                                                                                                         |
 | `ParagraphId`       | Guid   | no       | FK → Paragraph                                                                                             |
 | `Order`             | string | no       | fractional key                                                                                             |
-| `ItemType`          | enum   | no       | `ParagraphItemType` — Narration, Character, VolumePause, PartPause, ChapterPause, ParagraphPause, Pause    |
+| `ItemType`          | enum   | no       | `ParagraphItemType` — Speech, VolumePause, PartPause, ChapterPause, ParagraphPause, Pause; stored as text. Narration vs dialog comes from `CharacterId` (ADR 0006)  |
 | `Text`              | string | yes      | spoken / narration text                                                                                    |
-| `CharacterId`       | Guid   | yes      | FK → Character — null until attributed; Narration items use Narrator                                       |
+| `CharacterId`       | Guid   | yes      | FK → Character — what the item is: null = unattributed dialog, Narrator sentinel = narration, else that character's line |
 | `VoiceInstructions` | string | yes      | max 3000, JSON expression hints                                                                            |
 | `AudioFileName`     | string | yes      | relative path to generated WAV                                                                             |
 

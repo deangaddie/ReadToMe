@@ -6,6 +6,7 @@ using Read2Me.App.Services;
 using Read2Me.Core.Audio;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
@@ -30,6 +31,13 @@ namespace Read2Me.Tests.Services.Characters
         private static Character MakeCharacter(string name, bool isNarrator = false) =>
             new() { Id = Guid.NewGuid(), Name = name, IsNarrator = isNarrator };
 
+        private static Character MakeSeedNarrator() => new()
+        {
+            Id = ProjectDbContext.NarratorId,
+            Name = ProjectDbContext.NarratorName,
+            IsNarrator = true,
+        };
+
         private static VoiceEntity MakeGeneratedVoice(Guid characterId, string? designPrompt = null) =>
             new() { Id = Guid.NewGuid(), CharacterId = characterId, Name = "Default", Source = VoiceSource.Generated, DesignPrompt = designPrompt };
 
@@ -53,13 +61,15 @@ namespace Read2Me.Tests.Services.Characters
             bool audioGenerationFails = false,
             bool audioGenerationThrows = false,
             string cannedAudioFileName = "voices/voice.wav",
-            string cannedTranscript = "sample text")
+            string cannedTranscript = "sample text",
+            NarratorIdentity? narrator = null)
         {
             var chars = characters ?? Array.Empty<Character>();
             var voicesMap = voicesByCharacter ?? new Dictionary<Guid, List<VoiceEntity>>();
 
-            var fakeReader = new FakeProjectReader2(chars, voicesMap, "Test Book", "Test Author");
-            var fakeCommandHandler = new FakeCommandHandler();
+            var fakeReader = new FakeProjectReader2(
+                chars, voicesMap, "Test Book", "Test Author", narrator ?? NarratorIdentity.Unlinked);
+            var fakeCommandHandler = new FakeCommandHandler(voicesMap);
             var events = new List<VoiceBatchEvent>();
 
             var fakeOrchestrator = new FakeVoiceOrchestrator(
@@ -127,7 +137,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task GeneratePrompts_NarratorWithNoVoice_CreatesDefaultVoice()
         {
-            var narrator = MakeCharacter("Narrator", isNarrator: true);
+            var narrator = MakeSeedNarrator();
             var h = BuildHarness(
                 characters: new[] { narrator },
                 voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
@@ -144,6 +154,70 @@ namespace Read2Me.Tests.Services.Characters
                 .ToList();
 
             Assert.Single(createCommands);
+        }
+
+        [Fact]
+        public async Task RegenerateAllPrompts_UnlinkedSeedNarrator_IsReplanned()
+        {
+            var narrator = MakeSeedNarrator();
+            var existingVoice = MakeGeneratedVoice(narrator.Id, "existing narrator prompt");
+            var voices = new Dictionary<Guid, List<VoiceEntity>>
+            {
+                [narrator.Id] = [existingVoice],
+            };
+            var h = BuildHarness(characters: [narrator], voicesByCharacter: voices);
+
+            h.Sut.StartGeneratePrompts(Folder, regenerateAll: true);
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.DoesNotContain(existingVoice, voices[narrator.Id]);
+            Assert.Contains(h.CommandHandler.Issued,
+                command => command is CreateVoiceCommand create && create.CharacterId == narrator.Id);
+        }
+
+        [Fact]
+        public async Task GeneratePrompts_LinkedSeedNarratorWithoutVoices_IsNotPlanned()
+        {
+            var narrator = MakeSeedNarrator();
+            var watson = MakeCharacter("Dr. Watson");
+            var h = BuildHarness(
+                characters: [narrator, watson],
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
+                {
+                    [narrator.Id] = [],
+                    [watson.Id] = [],
+                },
+                narrator: new NarratorIdentity(watson.Id, watson.Name, true));
+
+            h.Sut.StartGeneratePrompts(Folder);
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.DoesNotContain(h.CommandHandler.Issued,
+                command => command is CreateVoiceCommand create && create.CharacterId == narrator.Id);
+            Assert.Contains(h.CommandHandler.Issued,
+                command => command is CreateVoiceCommand create && create.CharacterId == watson.Id);
+        }
+
+        [Fact]
+        public async Task RegenerateAllPrompts_LinkedSeedNarrator_PreservesItsExistingVoices()
+        {
+            var narrator = MakeSeedNarrator();
+            var watson = MakeCharacter("Dr. Watson");
+            var narratorVoice = MakeGeneratedVoice(narrator.Id, "existing narrator prompt");
+            var voices = new Dictionary<Guid, List<VoiceEntity>>
+            {
+                [narrator.Id] = [narratorVoice],
+                [watson.Id] = [],
+            };
+            var h = BuildHarness(
+                characters: [narrator, watson],
+                voicesByCharacter: voices,
+                narrator: new NarratorIdentity(watson.Id, watson.Name, true));
+
+            h.Sut.StartGeneratePrompts(Folder, regenerateAll: true);
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.Contains(narratorVoice, voices[narrator.Id]);
         }
 
         [Fact]
@@ -358,6 +432,50 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
+        public async Task GenerateAudio_UnlinkedSeedNarrator_IsPlanned()
+        {
+            var narrator = MakeSeedNarrator();
+            var voice = MakeGeneratedVoiceWithPrompt(narrator.Id);
+            var h = BuildHarness(
+                characters: [narrator],
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
+                {
+                    [narrator.Id] = [voice],
+                });
+
+            h.Sut.StartGenerateAudio(Folder);
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.Contains(h.Events,
+                e => e is VoiceUpdated update && update.VoiceId == voice.Id);
+        }
+
+        [Fact]
+        public async Task GenerateAudio_LinkedSeedNarrator_IsNotPlanned()
+        {
+            var narrator = MakeSeedNarrator();
+            var watson = MakeCharacter("Dr. Watson");
+            var narratorVoice = MakeGeneratedVoiceWithPrompt(narrator.Id);
+            var watsonVoice = MakeGeneratedVoiceWithPrompt(watson.Id);
+            var h = BuildHarness(
+                characters: [narrator, watson],
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
+                {
+                    [narrator.Id] = [narratorVoice],
+                    [watson.Id] = [watsonVoice],
+                },
+                narrator: new NarratorIdentity(watson.Id, watson.Name, true));
+
+            h.Sut.StartGenerateAudio(Folder);
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.DoesNotContain(h.Events,
+                e => e is VoiceUpdated update && update.VoiceId == narratorVoice.Id);
+            Assert.Contains(h.Events,
+                e => e is VoiceUpdated update && update.VoiceId == watsonVoice.Id);
+        }
+
+        [Fact]
         public async Task GenerateAudio_UploadedVoice_NotInvoked()
         {
             var character = MakeCharacter("Bob");
@@ -564,17 +682,20 @@ namespace Read2Me.Tests.Services.Characters
             private readonly Dictionary<Guid, List<VoiceEntity>> _voicesByCharacter;
             private readonly string _bookTitle;
             private readonly string _author;
+            private readonly NarratorIdentity _narrator;
 
             public FakeProjectReader2(
                 IEnumerable<Character> characters,
                 Dictionary<Guid, List<VoiceEntity>> voicesByCharacter,
                 string bookTitle,
-                string author)
+                string author,
+                NarratorIdentity? narrator = null)
             {
                 _characters = characters.ToList();
                 _voicesByCharacter = voicesByCharacter;
                 _bookTitle = bookTitle;
                 _author = author;
+                _narrator = narrator ?? NarratorIdentity.Unlinked;
             }
 
             public override Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) =>
@@ -583,20 +704,34 @@ namespace Read2Me.Tests.Services.Characters
             public override Task<List<VoiceEntity>> GetCharacterVoicesAsync(ProjectFolderId folderId, Guid characterId)
             {
                 _voicesByCharacter.TryGetValue(characterId, out var voices);
-                return Task.FromResult(voices ?? new List<VoiceEntity>());
+                return Task.FromResult(voices?.ToList() ?? []);
             }
 
             public override Task<Project?> GetProjectAsync(ProjectFolderId folderId) =>
                 Task.FromResult<Project?>(new Project { BookTitle = _bookTitle, Author = _author });
+
+            public override Task<NarratorIdentity> GetNarratorAsync(
+                ProjectFolderId folderId, CancellationToken ct = default) =>
+                Task.FromResult(_narrator);
         }
 
         private sealed class FakeCommandHandler : IBookCommandHandler
         {
+            private readonly Dictionary<Guid, List<VoiceEntity>>? _voicesByCharacter;
+
+            public FakeCommandHandler(Dictionary<Guid, List<VoiceEntity>>? voicesByCharacter = null) =>
+                _voicesByCharacter = voicesByCharacter;
+
             public List<BookCommand> Issued { get; } = new();
 
             public Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
             {
                 lock (Issued) Issued.Add(command);
+                if (command is DeleteVoiceCommand delete && _voicesByCharacter is not null)
+                {
+                    foreach (var voices in _voicesByCharacter.Values)
+                        voices.RemoveAll(voice => voice.Id == delete.VoiceId);
+                }
                 // Return a new Guid for CreateVoiceCommand so the service can use the id
                 if (command is CreateVoiceCommand)
                     return Task.FromResult<Guid?>(Guid.NewGuid());
@@ -642,7 +777,8 @@ namespace Read2Me.Tests.Services.Characters
                 Task.FromResult($"[rendered: {characterName}]");
 
             public override async Task<IReadOnlyList<VoicePlanVoice>> GenerateVoicePlanAsync(
-                string bookTitle, string author, string characterName, bool isNarrator = false, CancellationToken ct = default)
+                string bookTitle, string author, string characterName, bool isNarrator = false,
+                bool alsoNarrates = false, CancellationToken ct = default)
             {
                 if (_delayMs > 0)
                     await Task.Delay(_delayMs, ct);
@@ -707,7 +843,8 @@ namespace Read2Me.Tests.Services.Characters
             }
 
             public override Task<IReadOnlyList<VoicePlanVoice>> GenerateVoicePlanAsync(
-                string bookTitle, string author, string characterName, bool isNarrator = false, CancellationToken ct = default)
+                string bookTitle, string author, string characterName, bool isNarrator = false,
+                bool alsoNarrates = false, CancellationToken ct = default)
             {
                 var idx = Interlocked.Increment(ref _callIndex) - 1;
                 if (idx < _shouldThrow.Length && _shouldThrow[idx])

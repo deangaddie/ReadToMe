@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Read2Me.App.Services;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
@@ -21,6 +22,7 @@ namespace Read2Me.App.State
         public bool IsBusy { get; private set; }
         public string? Error { get; private set; }
         public List<Character> Characters { get; private set; } = [];
+        public NarratorIdentity Narrator { get; private set; } = NarratorIdentity.Unlinked;
         public Character? SelectedCharacter { get; private set; }
         public List<CharacterLine> Lines { get; private set; } = [];
         public List<VoiceEntity> Voices { get; private set; } = [];
@@ -54,6 +56,9 @@ namespace Read2Me.App.State
             _folderId = folderId;
             IsLoading = true;
             NotifyStateChanged();
+            Narrator = await reader.GetNarratorAsync(folderId);
+            if (string.IsNullOrEmpty(Narrator.DisplayName))
+                Narrator = NarratorIdentity.Unlinked;
             Characters = await reader.GetCharactersWithAliasesAsync(folderId);
             if (SelectedCharacter is not null)
             {
@@ -105,6 +110,9 @@ namespace Read2Me.App.State
 
         public Task DeleteCharacterAsync(Guid characterId) =>
             ExecuteAndReloadAsync(new DeleteCharacterCommand(_folderId!.Value, characterId));
+
+        public Task SetNarratorCharacterAsync(Guid? characterId) =>
+            ExecuteAndReloadAsync(new SetNarratorCharacterCommand(_folderId!.Value, characterId));
 
         public Task RenameCharacterAsync(Guid characterId, string name) =>
             ExecuteAndReloadAsync(new RenameCharacterCommand(_folderId!.Value, characterId, name));
@@ -323,7 +331,7 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
-        public int ReadyVoiceCount(Character character) =>
+        public static int ReadyVoiceCount(Character character) =>
             character.Voices?.Count(v => !string.IsNullOrEmpty(v.AudioFileName)) ?? 0;
 
         /// <summary>

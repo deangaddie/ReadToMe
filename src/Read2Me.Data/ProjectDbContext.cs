@@ -7,6 +7,9 @@ namespace Read2Me.Data
     {
         public static readonly Guid NarratorId = new("00000000-0000-0000-0000-000000000001");
 
+        /// <summary>The seed Narrator row's name. <see cref="NarratorIdentity.Unlinked"/> displays it.</summary>
+        public const string NarratorName = "Narrator";
+
         public ProjectDbContext(DbContextOptions<ProjectDbContext> options) : base(options) { }
 
         public DbSet<Project> Projects => Set<Project>();
@@ -37,7 +40,7 @@ namespace Read2Me.Data
             {
                 e.HasKey(c => c.Id);
                 e.Property(c => c.Name).HasMaxLength(250).IsRequired();
-                e.HasData(new Character { Id = NarratorId, Name = "Narrator", IsNarrator = true });
+                e.HasData(new Character { Id = NarratorId, Name = NarratorName, IsNarrator = true });
             });
 
             modelBuilder.Entity<Volume>(e =>

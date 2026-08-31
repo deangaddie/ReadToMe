@@ -38,7 +38,8 @@ namespace Read2Me.App.State
                 NarratorOnlyMode: project?.NarratorOnlyMode ?? false,
                 AudioNodeCounts: audioNodeCounts,
                 AudioReviews: audioReviews,
-                NodeStatusSeed: nodeStatusSeed
+                NodeStatusSeed: nodeStatusSeed,
+                Narrator: await reader.GetNarratorAsync(folderId)
             );
         }
     }

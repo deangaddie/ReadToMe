@@ -4,6 +4,10 @@
     </TitleContent>
     <DialogContent>
         <MudText>Delete <strong>@ItemName</strong>?@(HasChildren ? " This will also delete all contents it contains." : "") This cannot be undone.</MudText>
+        @if (!string.IsNullOrWhiteSpace(AdditionalMessage))
+        {
+            <MudText Class="mt-2">@AdditionalMessage</MudText>
+        }
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
@@ -17,4 +21,5 @@
     [Parameter] public string ItemType { get; set; } = "Item";
     [Parameter] public string ItemName { get; set; } = "";
     [Parameter] public bool HasChildren { get; set; }
+    [Parameter] public string? AdditionalMessage { get; set; }
 }

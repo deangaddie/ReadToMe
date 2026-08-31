@@ -1,4 +1,5 @@
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
@@ -19,18 +20,31 @@ namespace Read2Me.Services
         IReadOnlyDictionary<Guid, int> NodeCharacterParagraphCounts);
 
     /// <summary>
-    /// One existing item of a context paragraph, in the wire shape the LLM answers in:
-    /// <see cref="Type"/> is "narration" or "dialog"; <see cref="Speaker"/> is the attributed
+    /// One existing <c>ParagraphItem</c> of a context paragraph, in the wire shape the LLM answers
+    /// in: <see cref="Type"/> is "narration" or "dialog"; <see cref="Speaker"/> is the attributed
     /// character name, "narrator" for narration, or "unknown" for an unattributed dialog item.
+    /// <see cref="ItemId"/> is the item's own id — the query paragraph's items are numbered for the
+    /// answer, and the id behind each index is what the apply stamps by (never a re-resolved
+    /// position).
     /// </summary>
-    public sealed record ContextSegment(string Text, string Type, string Speaker);
+    public sealed record ContextItem(Guid ItemId, string Text, string Type, string Speaker)
+    {
+        /// <summary>
+        /// A spoken item — the only kind an attribution answer may stamp, and so the only kind whose
+        /// missing speaker is worth escalating. Narration is never attributable: its speaker is
+        /// already the narrator, whether the splitter decided that at import or the user did by hand
+        /// (ADR-0006), and assigning the narrator is therefore also the re-attribution lock.
+        /// </summary>
+        public bool IsDialog =>
+            string.Equals(Type, Llm.AttributionWire.Dialog, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
-    /// A paragraph in an attribution context: its raw full text plus its current item split as
-    /// segments. A query paragraph is fed to the LLM as raw text only (its current split may be
-    /// wrong and must not bias re-segmentation); context paragraphs are fed as segments.
+    /// A paragraph in an attribution context: its raw full text plus its current item split. Both
+    /// query and context paragraphs are fed to the LLM as their items — the split is frozen
+    /// (ADR-0005), so the model answers a speaker per existing item rather than re-splitting text.
     /// </summary>
-    public sealed record ContextParagraph(string Text, IReadOnlyList<ContextSegment> Segments);
+    public sealed record ContextParagraph(string Text, IReadOnlyList<ContextItem> Items);
 
     /// <summary>Text of a target paragraph plus its nearest neighbours within the same chapter.</summary>
     public sealed record ParagraphContext(
@@ -40,9 +54,10 @@ namespace Read2Me.Services
 
     /// <summary>
     /// One paragraph in a batch attribution context. <see cref="TargetIndex"/> is set only on
-    /// the paragraphs to attribute (0-based, in order); context paragraphs carry segments instead.
+    /// the paragraphs to attribute (0-based, in order); context paragraphs carry their known
+    /// speakers instead.
     /// </summary>
-    public sealed record BatchContextEntry(string Text, IReadOnlyList<ContextSegment> Segments, int? TargetIndex);
+    public sealed record BatchContextEntry(string Text, IReadOnlyList<ContextItem> Items, int? TargetIndex);
 
     /// <summary>
     /// Context for a multi-paragraph attribution request: a flat ordered span of paragraphs
@@ -100,6 +115,12 @@ namespace Read2Me.Services
         IReadOnlyList<string> GetProjects();
         Task<IReadOnlyList<ProjectSummary>> GetProjectSummariesAsync();
         Task<Project?> GetProjectAsync(ProjectFolderId folderId);
+
+        /// <summary>
+        /// Who narrates this project's book — the read-time projection of the narrator link
+        /// (ADR-0004). Rides the context <see cref="GetProjectAsync"/> already opened.
+        /// </summary>
+        Task<NarratorIdentity> GetNarratorAsync(ProjectFolderId folderId, CancellationToken ct = default);
     }
 
     /// <summary>Book structure and text: volumes/parts/chapters/paragraphs and their content.</summary>

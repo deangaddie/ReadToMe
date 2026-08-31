@@ -1,5 +1,5 @@
-using System.Text.Json;
 using Read2Me.AppData.Entities;
+using Read2Me.Data;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
@@ -13,24 +13,33 @@ namespace Read2Me.Services.Characters
     /// <item><see cref="Request"/> / <see cref="Parser"/> are null when nothing is askable
     /// (<see cref="Included"/> empty).</item>
     /// <item><see cref="Included"/> — paragraphs carried in the prompt, index-aligned with
-    /// <see cref="QueryTexts"/> and <see cref="PriorSegments"/>; the parser returns a result per
-    /// index 0..Included.Count-1.</item>
+    /// <see cref="QueryItems"/>; the parser returns a result per index
+    /// 0..Included.Count-1.</item>
+    /// <item><see cref="QueryItems"/> — for each included paragraph, the items behind the indices the
+    /// prompt numbered, in the same order, recorded at ask time. This is the only mapping from an
+    /// answered index back to an item: the queue is asynchronous, and re-resolving positionally at
+    /// apply time would stamp the wrong item after a user edit. Classification reads the same list
+    /// for which indices are answerable and for the narration text an unlisted name is attested
+    /// against.</item>
     /// <item><see cref="Unaskable"/> — blank/whitespace text or no content item; resolve to Unknown
     /// with no LLM call.</item>
     /// <item><see cref="Deferred"/> — trimmed off the leading run by the context reader; re-enqueue.</item>
     /// <item><see cref="Characters"/> — the roster the prompt was built from, so a later reconcile
     /// compares against provably that set (D11: fetched once per chunk).</item>
+    /// <item><see cref="Narrator"/> — who narrates this book, carried beside the roster because every
+    /// site that judges a speaker string needs both: the narrator token is a wire alias of the linked
+    /// character, and means nothing when unlinked.</item>
     /// </list>
     /// </summary>
     internal sealed record ChunkRequest(
         LlmRunRequest? Request,
-        TryParse<IReadOnlyDictionary<int, SegmentAttributionResult>>? Parser,
+        TryParse<IReadOnlyDictionary<int, ItemAttributionResult>>? Parser,
         IReadOnlyList<QueuedParagraph> Included,
         IReadOnlyList<QueuedParagraph> Unaskable,
         IReadOnlyList<QueuedParagraph> Deferred,
         IReadOnlyList<Data.Entities.Character> Characters,
-        IReadOnlyList<string> QueryTexts,
-        IReadOnlyList<IReadOnlyList<ContextSegment>?> PriorSegments);
+        NarratorIdentity Narrator,
+        IReadOnlyList<IReadOnlyList<ContextItem>> QueryItems);
 
     /// <summary>
     /// Builds one attribution <see cref="LlmRunRequest"/> for a chunk of paragraphs — the single seam
@@ -84,7 +93,7 @@ namespace Read2Me.Services.Characters
             // a context entry (its neighbours keep their positions) and binned Unaskable.
             var included = new List<QueuedParagraph>();
             var queryTexts = new List<string>();
-            var priorSegments = new List<IReadOnlyList<ContextSegment>?>();
+            var queryItems = new List<IReadOnlyList<ContextItem>>();
             var rendered = new List<BatchContextEntry>();
             var nextIndex = 0;
             foreach (var e in ctx.Entries)
@@ -105,19 +114,29 @@ namespace Read2Me.Services.Characters
 
                 included.Add(item);
                 queryTexts.Add(e.Text);
-                priorSegments.Add(e.Segments);
+                // Recorded here and nowhere else: the prompt numbers these same items 0..n-1, so
+                // position i of this list is the item the answer's index i names (spec §1).
+                queryItems.Add(e.Items);
                 rendered.Add(e with { TargetIndex = nextIndex++ });
             }
 
             if (included.Count == 0)
                 return NothingAskable(unaskable, deferred);
 
-            // Roster once per chunk (D11): the anonymous {name, aliases} projection lives here alone,
-            // and the roster travels back on the result so no later stage refetches it.
+            // Roster once per chunk (D11): serialized by PromptTemplates, which owns the {name,
+            // aliases} projection, and travelling back on the result so no later stage refetches it.
             var project = await reader.GetProjectAsync(first.Folder);
             var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
-            var rosterJson = JsonSerializer.Serialize(
-                characters.Select(c => new { name = c.Name, aliases = c.Aliases.Select(a => a.Name).ToArray() }));
+            // Beside the roster, once per chunk: every judge of a speaker string downstream needs the
+            // link to read the narrator token. It is its own read rather than a field off the Project
+            // above because ADR-0004 makes NarratorIdentity the only reader of the raw column.
+            var narrator = await reader.GetNarratorAsync(first.Folder);
+            var rosterJson = PromptTemplates.BuildKnownCharactersJson(
+                characters.Select(c => new PromptTemplates.RosterCharacter(
+                    c.Name, [.. c.Aliases.Select(a => a.Name)])));
+            var narratorIdentity = narrator.IsLinked
+                ? NarratorPromptText.IdentityParagraph(narrator.DisplayName)
+                : string.Empty;
 
             string RenderPrompt(string template, string contextJson, string responseFormat) =>
                 PromptTemplates.Render(template, new Dictionary<string, string>
@@ -127,6 +146,7 @@ namespace Read2Me.Services.Characters
                     [PromptTemplates.KnownCharacters] = rosterJson,
                     [PromptTemplates.ContextJson]     = contextJson,
                     [PromptTemplates.ResponseFormat]  = responseFormat,
+                    [PromptTemplates.NarratorIdentity] = narratorIdentity,
                 });
 
             // D2: the budget applies to every ask, any chunk size — a floor over the config, grown to
@@ -135,15 +155,15 @@ namespace Read2Me.Services.Characters
             var overrides = new LlmRunOverrides(MaxTokens: maxTokens, Temperature: opts.TemperatureOverride);
 
             LlmRunRequest request;
-            TryParse<IReadOnlyDictionary<int, SegmentAttributionResult>> parser;
+            TryParse<IReadOnlyDictionary<int, ItemAttributionResult>> parser;
             if (included.Count == 1)
             {
                 var template = await prompts.GetCharacterPromptAsync(opts.EffectiveStyle);
                 var prompt = RenderPrompt(template,
                     PromptTemplates.BuildContextJson(ToSingleContext(rendered)),
-                    SegmentAttributionSchema.JsonExample);
+                    ItemAttributionSchema.JsonExample);
                 request = new LlmRunRequest(opts.Config, prompt, included[0].Preview,
-                    SegmentAttributionSchema.JsonSchema, CompletionShape.Object,
+                    ItemAttributionSchema.JsonSchema, CompletionShape.Object,
                     DisableThinking: !opts.Thinking, Overrides: overrides);
                 parser = ParseSingle;
             }
@@ -154,26 +174,30 @@ namespace Read2Me.Services.Characters
                 var template = await prompts.GetBatchCharacterPromptAsync(opts.EffectiveStyle);
                 var prompt = RenderPrompt(template,
                     PromptTemplates.BuildBatchContextJson(renderedCtx),
-                    SegmentBatchAttributionSchema.JsonExample);
+                    ItemBatchAttributionSchema.JsonExample);
                 request = new LlmRunRequest(opts.Config,
                     prompt, $"{included.Count} paragraphs: {included[0].Preview}",
-                    SegmentBatchAttributionSchema.JsonSchema, CompletionShape.Array,
+                    ItemBatchAttributionSchema.JsonSchema, CompletionShape.Array,
                     DisableThinking: !opts.Thinking, Overrides: overrides);
                 parser = ParseBatch(included.Count);
             }
 
             return new ChunkRequest(
-                request, parser, included, unaskable, deferred, characters, queryTexts, priorSegments);
+                request, parser, included, unaskable, deferred, characters, narrator,
+                queryItems);
         }
 
-        /// <summary>A chunk with no askable target: no request, no parser, no roster fetch.</summary>
+        /// <summary>
+        /// A chunk with no askable target: no request, no parser, no roster fetch — and so no narrator
+        /// fetch either. Nothing downstream judges a speaker, so <c>Unlinked</c> is never read.
+        /// </summary>
         private static ChunkRequest NothingAskable(
             IReadOnlyList<QueuedParagraph> unaskable, IReadOnlyList<QueuedParagraph> deferred) =>
-            new(null, null, [], unaskable, deferred, [], [], []);
+            new(null, null, [], unaskable, deferred, [], NarratorIdentity.Unlinked, []);
 
         /// <summary>
         /// The entries→single-context adapter: rebuilds the flat target-of-one span into the single
-        /// prompt's shape — the target as raw query text, its neighbours as segmented context.
+        /// prompt's shape — the target as the query, its neighbours as segmented context.
         /// </summary>
         private static ParagraphContext ToSingleContext(IReadOnlyList<BatchContextEntry> entries)
         {
@@ -183,18 +207,18 @@ namespace Read2Me.Services.Characters
             var target = entries[pos];
             var preceding = entries.Take(pos).Select(ToContextParagraph).ToList();
             var following = entries.Skip(pos + 1).Select(ToContextParagraph).ToList();
-            return new ParagraphContext(new ContextParagraph(target.Text, target.Segments), preceding, following);
+            return new ParagraphContext(new ContextParagraph(target.Text, target.Items), preceding, following);
         }
 
-        private static ContextParagraph ToContextParagraph(BatchContextEntry e) => new(e.Text, e.Segments);
+        private static ContextParagraph ToContextParagraph(BatchContextEntry e) => new(e.Text, e.Items);
 
         /// <summary>Single answer, wrapped to the batch-shaped index→result map so one classify loop serves both.</summary>
         private static bool ParseSingle(
-            string raw, out IReadOnlyDictionary<int, SegmentAttributionResult>? parsed, out string? error)
+            string raw, out IReadOnlyDictionary<int, ItemAttributionResult>? parsed, out string? error)
         {
-            if (SegmentAttributionParser.TryParse(raw, out var p))
+            if (ItemAttributionParser.TryParse(raw, out var p))
             {
-                parsed = new Dictionary<int, SegmentAttributionResult> { [0] = p };
+                parsed = new Dictionary<int, ItemAttributionResult> { [0] = p };
                 error = null;
                 return true;
             }
@@ -207,12 +231,12 @@ namespace Read2Me.Services.Characters
         /// Batch parser over the contiguous requested indices; a missing one rejects the whole answer
         /// (escalation's unit is the paragraph, and a half-answered batch is not one).
         /// </summary>
-        private static TryParse<IReadOnlyDictionary<int, SegmentAttributionResult>> ParseBatch(int count)
+        private static TryParse<IReadOnlyDictionary<int, ItemAttributionResult>> ParseBatch(int count)
         {
             var requested = Enumerable.Range(0, count).ToList();
-            return (string raw, out IReadOnlyDictionary<int, SegmentAttributionResult>? parsed, out string? error) =>
+            return (string raw, out IReadOnlyDictionary<int, ItemAttributionResult>? parsed, out string? error) =>
             {
-                if (SegmentAttributionParser.TryParseBatch(raw, requested, out var p))
+                if (ItemAttributionParser.TryParseBatch(raw, requested, out var p))
                 {
                     parsed = p;
                     error = null;

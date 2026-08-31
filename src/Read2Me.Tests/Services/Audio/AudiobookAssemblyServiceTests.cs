@@ -38,7 +38,7 @@ namespace Read2Me.Tests.Services.Audio
             Guid id, string path,
             Guid? volId = null, Guid? partId = null, Guid? chapId = null,
             string? volTitle = null, string? chapTitle = null) =>
-            new(id, ParagraphItemType.Narration, path,
+            new(id, ParagraphItemType.Speech, path,
                 volId ?? Guid.NewGuid(), volTitle,
                 partId ?? Guid.NewGuid(), null,
                 chapId ?? Guid.NewGuid(), chapTitle);
@@ -53,7 +53,7 @@ namespace Read2Me.Tests.Services.Audio
 
         private static AssemblyManifestEntry MissingAudioEntry(
             Guid? volId = null, Guid? partId = null, Guid? chapId = null) =>
-            new(Guid.NewGuid(), ParagraphItemType.Narration, null,
+            new(Guid.NewGuid(), ParagraphItemType.Speech, null,
                 volId ?? Guid.NewGuid(), null,
                 partId ?? Guid.NewGuid(), null,
                 chapId ?? Guid.NewGuid(), null);
@@ -473,7 +473,7 @@ namespace Read2Me.Tests.Services.Audio
                 AudioEntry(item1, "audio/a.wav", vol, part, chap1),
                 new(Guid.NewGuid(), ParagraphItemType.ParagraphPause, null,
                     vol, null, part, null, chap1, null),
-                new(Guid.NewGuid(), ParagraphItemType.Narration, null,           // missing
+                new(Guid.NewGuid(), ParagraphItemType.Speech, null,           // missing
                     vol, null, part, null, chap2, null),
                 new(Guid.NewGuid(), ParagraphItemType.ChapterPause, null,
                     vol, null, part, null, chap2, null),

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
@@ -71,6 +72,11 @@ namespace Read2Me.Tests.Services.Characters
         /// null if it is the <em>first</em> id, and otherwise ends the leading contiguous run there
         /// and defers the remainder. <see cref="Defer"/> forces that same break for an id that does
         /// have text, modelling an intervening unattributed paragraph.
+        /// <para>
+        /// Each paragraph is one unattributed dialog item holding its whole text, so index 0 is the
+        /// only answerable index — the shape most of these tests want. Paragraphs with a richer item
+        /// list are built directly where a test needs them.
+        /// </para>
         /// </summary>
         private sealed class FakeProjectReader(
             IReadOnlyDictionary<Guid, string?> texts,
@@ -83,6 +89,19 @@ namespace Read2Me.Tests.Services.Characters
             public HashSet<Guid> Defer { get; init; } = [];
 
             private string? TextOf(Guid id) => texts.TryGetValue(id, out var t) ? t : null;
+
+            /// <summary>
+            /// The paragraph's items: <see cref="Items"/> when a test pinned them, else one dialog
+            /// item holding the whole paragraph. Ids are stable per paragraph so an id asserted on an
+            /// applied answer is the id the prompt was built from.
+            /// </summary>
+            private IReadOnlyList<ContextItem> ItemsFor(Guid id) =>
+                Items.TryGetValue(id, out var items)
+                    ? items
+                    : [new ContextItem(ItemId(id), TextOf(id)!, AttributionWire.Dialog, AttributionWire.Unknown)];
+
+            /// <summary>Per-paragraph item lists, for the tests that need more than one item.</summary>
+            public Dictionary<Guid, IReadOnlyList<ContextItem>> Items { get; init; } = [];
 
             public override Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
                 ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after)
@@ -100,7 +119,9 @@ namespace Read2Me.Tests.Services.Characters
                     next++;
                 }
 
-                var entries = included.Select((id, i) => new BatchContextEntry(TextOf(id)!, [], i)).ToList();
+                var entries = included
+                    .Select((id, i) => new BatchContextEntry(TextOf(id)!, ItemsFor(id), i))
+                    .ToList();
                 return Task.FromResult<ParagraphBatchContext?>(
                     new ParagraphBatchContext(entries, included, [.. paragraphIds.Skip(next)]));
             }
@@ -109,6 +130,14 @@ namespace Read2Me.Tests.Services.Characters
             public override Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId) => Task.FromResult(_characters);
             public override Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) => Task.FromResult(_characters);
         }
+
+        private static readonly ConcurrentDictionary<Guid, Guid> _itemIds = new();
+
+        /// <summary>
+        /// The id the fake reader gives a paragraph's single item — stable per paragraph, so a test
+        /// can assert that an applied answer names the item the prompt was built from.
+        /// </summary>
+        private static Guid ItemId(Guid paragraphId) => _itemIds.GetOrAdd(paragraphId, _ => Guid.NewGuid());
 
         private static Dictionary<Guid, string?> TextsFor(
             IReadOnlyList<QueuedParagraph> items, Func<int, string?> textFor) =>
@@ -137,29 +166,29 @@ namespace Read2Me.Tests.Services.Characters
             new() { Id = Guid.NewGuid(), Name = name, Aliases = [] };
 
         // ---------------------------------------------------------------
-        // Segment answers. Segment texts must reconstruct the paragraph they answer
-        // ("Hello world" for a chunk of 1, "Text N" for index N) — an answer that
-        // does not is a fidelity failure, which is what ParseFailure means here.
+        // Item answers. Each paragraph is one dialog item at index 0 unless a test
+        // says otherwise, so an answer names index 0 — no text on the wire, so an
+        // answer can no longer drift from the paragraph it is about.
         // ---------------------------------------------------------------
 
-        private static string Segment(string text, string speaker, string type = "dialog", string voice = "") =>
-            $$"""{ "text": {{JsonSerializer.Serialize(text)}}, "type": "{{type}}", "speaker": "{{speaker}}", "voice_instructions": "{{voice}}" }""";
+        private static string Item(int index, string speaker, string voice = "") =>
+            $$"""{ "index": {{index}}, "speaker": {{JsonSerializer.Serialize(speaker)}}, "voice_instructions": "{{voice}}" }""";
 
-        /// <summary>Object-shaped answer covering the whole of "Hello world".</summary>
-        private static string Answer(string speaker, string voice = "", string text = "Hello world") =>
-            $$"""{ "reasoning": "r", "segments": [ {{Segment(text, speaker, voice: voice)}} ] }""";
+        /// <summary>Object-shaped answer naming the query paragraph's item(s).</summary>
+        private static string Answer(string speaker, string voice = "", int index = 0) =>
+            $$"""{ "reasoning": "r", "items": [ {{Item(index, speaker, voice)}} ] }""";
 
-        /// <summary>Array-shaped answer: index i speaks the whole of its own paragraph text.</summary>
+        /// <summary>Array-shaped answer: paragraph index i, its item 0 spoken by the named speaker.</summary>
         private static string BatchAnswer(params (int Index, string Speaker)[] entries) =>
             "[" + string.Join(",", entries.Select(e =>
-                $$"""{ "index": {{e.Index}}, "reasoning": "r", "segments": [ {{Segment($"Text {e.Index}", e.Speaker)}} ] }""")) + "]";
+                $$"""{ "index": {{e.Index}}, "reasoning": "r", "items": [ {{Item(0, e.Speaker)}} ] }""")) + "]";
 
         // ---------------------------------------------------------------
         // Chunk of 1 (object-shaped ask)
         // ---------------------------------------------------------------
 
         [Fact]
-        public async Task ValidSegmentResponse_ReturnsResolved_WithSegments()
+        public async Task ValidItemResponse_ReturnsResolved_WithTheAnswerAndItsItemIds()
         {
             var items = Paras(1);
             var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice", "calm"));
@@ -168,41 +197,87 @@ namespace Read2Me.Tests.Services.Characters
             var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            var segment = Assert.Single(result.Segments!);
-            Assert.Equal("Hello world", segment.Text);
-            Assert.Equal(AttributionSegmentType.Dialog, segment.Type);
-            Assert.Equal("Alice", segment.Speaker);
-            Assert.Equal("calm", segment.VoiceInstructions);
+            var attributed = Assert.Single(result.Answer!.Items);
+            Assert.Equal(0, attributed.Index);
+            Assert.Equal("Alice", attributed.Speaker);
+            Assert.Equal("calm", attributed.VoiceInstructions);
+            // The index→id map the apply stamps by is the one the prompt was built from.
+            Assert.Equal([ItemId(items[0].ParagraphId)], result.Answer!.ItemIds);
 
             // One ask for the chunk. What that ask looks like (label, schema, shape, thinking) is
             // pinned directly in AttributionRequestBuilderTests.
             Assert.Single(runner.Requests);
         }
 
+        /// <summary>
+        /// A multi-item paragraph: every dialog item gets its own answer, and the narration item
+        /// between them is unanswerable — its id slot is null so nothing can stamp it.
+        /// </summary>
         [Fact]
-        public async Task MultiSpeakerAnswer_ReturnsEverySegment_SlicedFromTheOriginal()
+        public async Task MultiItemParagraph_AnswersEachIndex_NarrationIsNotStampable()
         {
-            const string text = "\"Hello,\" she said. \"Goodbye.\"";
             var items = Paras(1);
+            var dialog1 = Guid.NewGuid();
+            var narration = Guid.NewGuid();
+            var dialog2 = Guid.NewGuid();
+            var reader = new FakeProjectReader(
+                TextsFor(items, _ => "\"Hello,\" she said. \"Goodbye.\""),
+                DefaultProject(),
+                [Character("Alice"), Character("Bob")])
+            {
+                Items =
+                {
+                    [items[0].ParagraphId] =
+                    [
+                        new ContextItem(dialog1, "\"Hello,\"", AttributionWire.Dialog, AttributionWire.Unknown),
+                        new ContextItem(narration, "she said.", AttributionWire.Narration, AttributionWire.Narrator),
+                        new ContextItem(dialog2, "\"Goodbye.\"", AttributionWire.Dialog, AttributionWire.Unknown),
+                    ],
+                },
+            };
             var runner = new FakeLlmCompletionRunner().Completes($$"""
-                { "reasoning": "r", "segments": [
-                    {{Segment("\"Hello,\"", "Alice")}},
-                    {{Segment("she said.", "narrator", type: "narration")}},
-                    {{Segment("\"Goodbye.\"", "Bob")}} ] }
+                { "reasoning": "r", "items": [ {{Item(0, "Alice")}}, {{Item(2, "Bob")}} ] }
                 """);
-            var svc = NewService(runner, Reader(items, _ => text, [Character("Alice"), Character("Bob")]));
+            var svc = NewService(runner, reader);
 
             var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Resolved, result.Status);
-            Assert.Equal(3, result.Segments!.Count);
-            // The slices concatenate back to the original text, verbatim.
-            Assert.Equal(text, string.Concat(result.Segments.Select(s => s.Text)));
-            Assert.Equal(AttributionSegmentType.Narration, result.Segments[1].Type);
+            Assert.Equal(["Alice", "Bob"], result.Answer!.Items.Select(a => a.Speaker));
+            Assert.Equal([dialog1, null, dialog2], result.Answer!.ItemIds);
+        }
+
+        /// <summary>
+        /// The frozen-boundary case: an answer that names only some of the paragraph's dialog items
+        /// still applies, and the untouched one keeps the paragraph unknown.
+        /// </summary>
+        [Fact]
+        public async Task PartialAnswer_IsUnknown_ButStillCarriesTheAnswer()
+        {
+            var items = Paras(1);
+            var reader = new FakeProjectReader(TextsFor(items, _ => "\"Hi.\" \"Who's there?\""), DefaultProject(),
+                [Character("Alice")])
+            {
+                Items =
+                {
+                    [items[0].ParagraphId] =
+                    [
+                        new ContextItem(Guid.NewGuid(), "\"Hi.\"", AttributionWire.Dialog, AttributionWire.Unknown),
+                        new ContextItem(Guid.NewGuid(), "\"Who's there?\"", AttributionWire.Dialog, AttributionWire.Unknown),
+                    ],
+                },
+            };
+            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice"));
+            var svc = NewService(runner, reader);
+
+            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
+
+            Assert.Equal(AttributionStatus.Unknown, result.Status);
+            Assert.Single(result.Answer!.Items);
         }
 
         [Fact]
-        public async Task LlmReturnsUnknownSpeaker_ReturnsUnknownStatus_StillCarryingSegments()
+        public async Task LlmReturnsUnknownSpeaker_ReturnsUnknownStatus_StillCarryingTheAnswer()
         {
             var items = Paras(1);
             var runner = new FakeLlmCompletionRunner().Completes(Answer("unknown"));
@@ -211,25 +286,8 @@ namespace Read2Me.Tests.Services.Characters
             var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
 
             Assert.Equal(AttributionStatus.Unknown, result.Status);
-            // The answer still applies: the segmentation is real even when the speaker is not known.
-            Assert.Single(result.Segments!);
-        }
-
-        [Fact]
-        public async Task SegmentsDoNotReconstructParagraph_ReturnsFailed_WithoutAReAsk()
-        {
-            // The model dropped a word — a fidelity failure, which escalates like a parse failure.
-            // The final-rung fallback answers an unparseable *run*, not this, so the answer stands
-            // on one ask even on the final rung.
-            var items = Paras(1);
-            var runner = new FakeLlmCompletionRunner().Completes(Answer("Alice", text: "Hello"));
-            var svc = NewService(runner, Reader(items));
-
-            var result = Assert.Single(await RunConfigAsync(svc, Config(), items)).Outcome;
-
-            Assert.Equal(AttributionStatus.Failed, result.Status);
-            Assert.Null(result.Segments);
-            Assert.Single(runner.Requests);
+            // The answer still applies: naming the item is real even when the speaker is not known.
+            Assert.Single(result.Answer!.Items);
         }
 
         [Theory]
@@ -339,7 +397,7 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(items.Select(i => i.ParagraphId), results.Select(r => r.Item.ParagraphId));
             Assert.Equal(AttributionStatus.Resolved, results[0].Outcome.Status);
             Assert.Equal(AttributionStatus.Unknown, results[1].Outcome.Status);
-            Assert.Null(results[1].Outcome.Segments);
+            Assert.Null(results[1].Outcome.Answer);
             Assert.Equal(AttributionStatus.Resolved, results[2].Outcome.Status);
         }
 
@@ -377,12 +435,12 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(3, result.Count);
             Assert.Equal(items[0], result[0].Item);
             Assert.Equal(AttributionStatus.Resolved, result[0].Outcome.Status);
-            // Each index's segments are sliced from that index's own paragraph text.
-            Assert.Equal("Text 0", Assert.Single(result[0].Outcome.Segments!).Text);
-            Assert.Equal("Alice", result[0].Outcome.Segments![0].Speaker);
+            // Each paragraph carries its own answer, and its own paragraph's item ids.
+            Assert.Equal("Alice", Assert.Single(result[0].Outcome.Answer!.Items).Speaker);
+            Assert.Equal([ItemId(items[0].ParagraphId)], result[0].Outcome.Answer!.ItemIds);
             Assert.Equal(AttributionStatus.Unknown, result[1].Outcome.Status);
             Assert.Equal(AttributionStatus.Resolved, result[2].Outcome.Status);
-            Assert.Equal("Text 2", Assert.Single(result[2].Outcome.Segments!).Text);
+            Assert.Equal("Bob", Assert.Single(result[2].Outcome.Answer!.Items).Speaker);
 
             // One run for the whole chunk — the batch size covers all 3, so they are not re-chunked.
             Assert.Single(runner.Requests);
@@ -409,8 +467,8 @@ namespace Read2Me.Tests.Services.Characters
         {
             var items = Paras(2);
             var runner = new FakeLlmCompletionRunner()
-                .Completes(Answer("Alice", text: "Text 0"))
-                .Completes(Answer("Alice", text: "Text 1"));
+                .Completes(Answer("Alice"))
+                .Completes(Answer("Alice"));
             var reader = new FakeProjectReader(
                 TextsFor(items, i => $"Text {i}"), DefaultProject())
             {
@@ -437,8 +495,8 @@ namespace Read2Me.Tests.Services.Characters
             var items = Paras(2);
             var runner = new FakeLlmCompletionRunner()
                 .Completes("not json at all")
-                .Completes(Answer("Alice", text: "Text 0"))
-                .Completes(Answer("Alice", text: "Text 1"));
+                .Completes(Answer("Alice"))
+                .Completes(Answer("Alice"));
             var svc = NewService(runner, IndexedReader(items));
 
             var result = await RunConfigAsync(svc, Config(), items);
@@ -460,9 +518,9 @@ namespace Read2Me.Tests.Services.Characters
             var items = Paras(3);
             var runner = new FakeLlmCompletionRunner()
                 .Completes(BatchAnswer((0, "Alice"), (2, "Bob")))
-                .Completes(Answer("Fallback", text: "Text 0"))
-                .Completes(Answer("Fallback", text: "Text 1"))
-                .Completes(Answer("Fallback", text: "Text 2"));
+                .Completes(Answer("Fallback"))
+                .Completes(Answer("Fallback"))
+                .Completes(Answer("Fallback"));
             var svc = NewService(runner, IndexedReader(items));
 
             var result = await RunConfigAsync(svc, Config(), items);
@@ -470,7 +528,7 @@ namespace Read2Me.Tests.Services.Characters
             // 1 chunk run + 3 single re-asks.
             Assert.Equal(4, runner.Requests.Count);
             Assert.All(result, o =>
-                Assert.Equal("Fallback", Assert.Single(o.Outcome.Segments!).Speaker));
+                Assert.Equal("Fallback", Assert.Single(o.Outcome.Answer!.Items).Speaker));
         }
 
         [Fact]
@@ -524,27 +582,24 @@ namespace Read2Me.Tests.Services.Characters
         // ---------------------------------------------------------------
 
         [Fact]
-        public async Task SelfConsistency_OneMisalignedItem_StillTakesSample2_ForTheRest()
+        public async Task SelfConsistency_OneUnknownItem_StillTakesSample2_ForTheRest()
         {
-            // Index 1's segments do not reconstruct its paragraph — a per-item fidelity failure, not
-            // an unparseable run. The chunk-wide guard must not read it as one and skip sample 2,
-            // which would silently drop the check for every other paragraph in the chunk.
+            // Index 1 came back unknown — a per-item quality trigger, not an unparseable run. The
+            // chunk-wide guard must not read it as one and skip sample 2, which would silently drop
+            // the check for every other paragraph in the chunk.
             var items = Paras(2);
             var runner = new FakeLlmCompletionRunner()
-                .Completes("""
-                    [ { "index": 0, "reasoning": "r", "segments": [
-                          { "text": "Text 0", "type": "dialog", "speaker": "Alice", "voice_instructions": "" } ] },
-                      { "index": 1, "reasoning": "r", "segments": [
-                          { "text": "Something else", "type": "dialog", "speaker": "Bob", "voice_instructions": "" } ] } ]
-                    """)
-                .Completes(BatchAnswer((0, "Alice"), (1, "Bob")));
+                .Completes(BatchAnswer((0, "Alice"), (1, "unknown")))
+                .Completes(BatchAnswer((0, "Bob"), (1, "unknown")));
             var svc = NewService(runner, IndexedReader(items, [Character("Alice"), Character("Bob")]));
 
             var results = await RunConfigAsync(svc, Config(), items, isFinal: false, selfConsistency: true);
 
+            // Two calls: the unknown item did not suppress the second sample.
             Assert.Equal(2, runner.Requests.Count);
-            Assert.Equal(AttributionStatus.Resolved, results[0].Outcome.Status);
-            Assert.Equal(AttributionStatus.Failed, results[1].Outcome.Status);   // sample 1 stands
+            // Sample 1 is always what is carried — the check may add a trigger, never change an answer.
+            Assert.Equal("Alice", Assert.Single(results[0].Outcome.Answer!.Items).Speaker);
+            Assert.Equal(AttributionStatus.Unknown, results[1].Outcome.Status);
         }
 
         [Fact]

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
@@ -43,7 +44,7 @@ namespace Read2Me.Tests.Services
                     var pname = paraNames[i];
                     var iname = itemNames[i];
                     var text = paragraphTexts[i];
-                    c.AddParagraph(pname, p => p.AddRawItem(iname, ParagraphItemType.Character, text));
+                    c.AddParagraph(pname, p => p.AddRawItem(iname, ParagraphItemType.Speech, text));
                 }
             }));
             await builder.BuildAsync();
@@ -58,10 +59,10 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
             var builder = b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("p", p =>
             {
-                p.AddRawItem("stamped", ParagraphItemType.Character, "\"Hi,\"", alice.Id);
-                p.AddRawItem("unstamped", ParagraphItemType.Character, "\"Who's there?\"", null);
+                p.AddRawItem("stamped", ParagraphItemType.Speech, "\"Hi,\"", alice.Id);
+                p.AddRawItem("unstamped", ParagraphItemType.Speech, "\"Who's there?\"", null);
                 // Narration is stamped with the narrator and never counts as unattributed.
-                p.AddRawItem("narration", ParagraphItemType.Narration, "she said.");
+                p.AddNarration("narration", "she said.");
             })));
             await builder.BuildAsync();
 
@@ -71,12 +72,42 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task CharacterParagraphs_DeriveFromTheSpeaker_NotTheItemType()
+        {
+            // "Character paragraph" is now "has at least one non-narrator speech item" (ADR-0006):
+            // an all-narration paragraph is not one, a paragraph with a single unattributed dialog
+            // item is, and a narration item the user gave to a character makes its paragraph one.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("allNarration", p => p
+                    .AddNarration("n1", "He walked on.")
+                    .AddNarration("n2", "The room was cold."))
+                .AddParagraph("onlyUnattributed", p => p
+                    .AddRawItem("u1", ParagraphItemType.Speech, "\"Who's there?\""))
+                .AddParagraph("userFlipped", p => p
+                    .AddRawItem("f1", ParagraphItemType.Speech, "\"Quietly,\"", alice.Id))
+                .AddParagraph("allPause", p => p.AddPause("pause"))))
+                .BuildAsync();
+
+            var refs = await _reader.GetCharacterParagraphsAsync(_folder, BookNodeLevel.Chapter, b.ChapterId("ch"));
+
+            Assert.Equal(
+                new HashSet<Guid> { b.ParagraphId("onlyUnattributed"), b.ParagraphId("userFlipped") },
+                refs.Select(r => r.ParagraphId).ToHashSet());
+            // Only the unattributed one is outstanding work.
+            var unprocessed = await _reader.GetCharacterParagraphsAsync(
+                _folder, BookNodeLevel.Chapter, b.ChapterId("ch"), unprocessedOnly: true);
+            Assert.Equal(b.ParagraphId("onlyUnattributed"), Assert.Single(unprocessed).ParagraphId);
+        }
+
+        [Fact]
         public async Task CountUnattributedCharacterItems_FullyStampedParagraph_IsZero()
         {
             var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
             var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
             var builder = b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("p", p =>
-                p.AddRawItem("stamped", ParagraphItemType.Character, "\"Hi,\"", alice.Id))));
+                p.AddRawItem("stamped", ParagraphItemType.Speech, "\"Hi,\"", alice.Id))));
             await builder.BuildAsync();
 
             Assert.Equal(0, await _reader.CountUnattributedCharacterItemsAsync(_folder, b.ParagraphId("p")));
@@ -152,9 +183,9 @@ namespace Read2Me.Tests.Services
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("para_p1", p => p.AddRawItem("i_p1", ParagraphItemType.Character, "P1"))
+                .AddParagraph("para_p1", p => p.AddRawItem("i_p1", ParagraphItemType.Speech, "P1"))
                 .AddParagraph("para_pause1", p => p.AddPause("pause1", ParagraphItemType.ParagraphPause))
-                .AddParagraph("para_query", p => p.AddRawItem("i_query", ParagraphItemType.Character, "P2"))
+                .AddParagraph("para_query", p => p.AddRawItem("i_query", ParagraphItemType.Speech, "P2"))
                 .AddParagraph("para_pause2", p => p.AddPause("pause2", ParagraphItemType.ChapterPause))
                 .AddParagraph("para_p3", p => p.AddNarration("i_p3", "P3"))))
                 .BuildAsync();
@@ -201,9 +232,9 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", alice);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Character, "Q1"))
+                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Speech, "Q1"))
                 .AddParagraph("p1", p => p.AddCharacterLine("i1", "Known line", speaker: "alice"))
-                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Character, "Q2"))))
+                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Speech, "Q2"))))
                 .BuildAsync();
 
             var ctx = await _reader.GetParagraphBatchContextAsync(
@@ -214,8 +245,8 @@ namespace Read2Me.Tests.Services
             Assert.Empty(ctx.DeferredIds);
             Assert.Equal(["Q1", "Known line", "Q2"], ctx.Entries.Select(e => e.Text).ToArray());
             Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
-            var seg = Assert.Single(ctx.Entries[1].Segments);
-            Assert.Equal(new ContextSegment("Known line", "dialog", "Alice"), seg);
+            var item = Assert.Single(ctx.Entries[1].Items);
+            Assert.Equal(new ContextItem(b.ItemId("i1"), "Known line", "dialog", "Alice"), item);
         }
 
         [Fact]
@@ -223,9 +254,9 @@ namespace Read2Me.Tests.Services
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Character, "Q1"))
+                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Speech, "Q1"))
                 .AddParagraph("p1", p => p.AddNarration("i1", "Narration"))
-                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Character, "Q2"))))
+                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Speech, "Q2"))))
                 .BuildAsync();
 
             var ctx = await _reader.GetParagraphBatchContextAsync(
@@ -234,8 +265,39 @@ namespace Read2Me.Tests.Services
             Assert.NotNull(ctx);
             Assert.Equal([b.ParagraphId("p0"), b.ParagraphId("p2")], ctx.IncludedIds);
             Assert.Equal([0, null, 1], ctx.Entries.Select(e => e.TargetIndex).ToArray());
-            var seg = Assert.Single(ctx.Entries[1].Segments);
-            Assert.Equal(new ContextSegment("Narration", "narration", "narrator"), seg);
+            var item = Assert.Single(ctx.Entries[1].Items);
+            Assert.Equal(new ContextItem(b.ItemId("i1"), "Narration", "narration", "narrator"), item);
+        }
+
+        [Fact]
+        public async Task GetParagraphBatchContext_MixedParagraph_CarriesKindAndSpeakerFromTheSpeaker()
+        {
+            // The wire shape the LLM sees is unchanged by the collapse: narration named as the
+            // narrator, attributed dialog by its speaker, unattributed dialog as the unknown
+            // sentinel — and an item the *user* narrated is indistinguishable from one the
+            // splitter narrated.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p
+                    .AddNarration("split-narration", "She waited.")
+                    .AddRawItem("user-narration", ParagraphItemType.Speech, "\"Quietly.\"", ProjectDbContext.NarratorId)
+                    .AddCharacterLine("attributed", "\"Hi,\"", speaker: "alice")
+                    .AddRawItem("unattributed", ParagraphItemType.Speech, "\"Who's there?\""))))
+                .BuildAsync();
+
+            var ctx = await _reader.GetParagraphBatchContextAsync(
+                _folder, b.ChapterId("ch"), [b.ParagraphId("p0")], 0, 0);
+
+            Assert.NotNull(ctx);
+            Assert.Equal(
+            [
+                new ContextItem(b.ItemId("split-narration"), "She waited.", "narration", "narrator"),
+                new ContextItem(b.ItemId("user-narration"), "\"Quietly.\"", "narration", "narrator"),
+                new ContextItem(b.ItemId("attributed"), "\"Hi,\"", "dialog", "Alice"),
+                new ContextItem(b.ItemId("unattributed"), "\"Who's there?\"", "dialog", "unknown"),
+            ], ctx.Entries[0].Items);
         }
 
         [Fact]
@@ -247,11 +309,11 @@ namespace Read2Me.Tests.Services
             // p1 is a multi-speaker paragraph with one stamped and one unstamped dialog item — its
             // unknown segment would poison context, so it is not eligible as context and ends the run.
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Character, "Q1"))
+                .AddParagraph("p0", p => p.AddRawItem("i0", ParagraphItemType.Speech, "Q1"))
                 .AddParagraph("p1", p => p
                     .AddCharacterLine("i1a", "Known line", speaker: "alice")
-                    .AddRawItem("i1b", ParagraphItemType.Character, "Unstamped line"))
-                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Character, "Q2"))))
+                    .AddRawItem("i1b", ParagraphItemType.Speech, "Unstamped line"))
+                .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Speech, "Q2"))))
                 .BuildAsync();
 
             var ctx = await _reader.GetParagraphBatchContextAsync(
@@ -263,7 +325,7 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task GetParagraphContext_MultiItemParagraph_ReturnsRawTextAndSegments()
+        public async Task GetParagraphContext_MultiItemParagraph_ReturnsRawTextAndItemsWithIds()
         {
             var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
             var b = new BookHierarchyBuilder(OpenDbAsync);
@@ -272,8 +334,8 @@ namespace Read2Me.Tests.Services
                 .AddParagraph("p0", p => p
                     .AddCharacterLine("i0a", "\"Hello,\"", speaker: "alice")
                     .AddNarration("i0b", "she said,")
-                    .AddRawItem("i0c", ParagraphItemType.Character, "\"and goodbye.\""))
-                .AddParagraph("p1", p => p.AddRawItem("i1", ParagraphItemType.Character, "Q"))))
+                    .AddRawItem("i0c", ParagraphItemType.Speech, "\"and goodbye.\""))
+                .AddParagraph("p1", p => p.AddRawItem("i1", ParagraphItemType.Speech, "Q"))))
                 .BuildAsync();
 
             var ctx = await _reader.GetParagraphContextAsync(
@@ -282,13 +344,14 @@ namespace Read2Me.Tests.Services
             Assert.NotNull(ctx);
             var preceding = Assert.Single(ctx.Preceding);
             Assert.Equal("\"Hello,\" she said, \"and goodbye.\"", preceding.Text);
+            // Items carry their own ids, in Order sequence — the handles the apply stamps by.
             Assert.Equal(
                 [
-                    new ContextSegment("\"Hello,\"", "dialog", "Alice"),
-                    new ContextSegment("she said,", "narration", "narrator"),
-                    new ContextSegment("\"and goodbye.\"", "dialog", "unknown"),
+                    new ContextItem(b.ItemId("i0a"), "\"Hello,\"", "dialog", "Alice"),
+                    new ContextItem(b.ItemId("i0b"), "she said,", "narration", "narrator"),
+                    new ContextItem(b.ItemId("i0c"), "\"and goodbye.\"", "dialog", "unknown"),
                 ],
-                preceding.Segments);
+                preceding.Items);
         }
 
         [Fact]
@@ -342,11 +405,11 @@ namespace Read2Me.Tests.Services
 
             await using var db = await OpenDbAsync();
             db.ParagraphItems.AddRange(
-                new ParagraphItem { Id = narrationNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = null },
-                new ParagraphItem { Id = charAttributedNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = null },
-                new ParagraphItem { Id = charUnattributedId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = null, Order = Key(), AudioFileName = null },
-                new ParagraphItem { Id = charWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = "audio/item.wav" },
-                new ParagraphItem { Id = narrationWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = "audio/narr.wav" },
+                new ParagraphItem { Id = narrationNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Speech, CharacterId = ProjectDbContext.NarratorId, Order = Key(), AudioFileName = null },
+                new ParagraphItem { Id = charAttributedNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Speech, CharacterId = character.Id, Order = Key(), AudioFileName = null },
+                new ParagraphItem { Id = charUnattributedId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Speech, CharacterId = null, Order = Key(), AudioFileName = null },
+                new ParagraphItem { Id = charWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Speech, CharacterId = character.Id, Order = Key(), AudioFileName = "audio/item.wav" },
+                new ParagraphItem { Id = narrationWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Speech, CharacterId = ProjectDbContext.NarratorId, Order = Key(), AudioFileName = "audio/narr.wav" },
                 new ParagraphItem { Id = pauseId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.ParagraphPause, Order = Key() }
             );
             await db.SaveChangesAsync();
@@ -416,7 +479,7 @@ namespace Read2Me.Tests.Services
             db.ParagraphItems.Add(new ParagraphItem
             {
                 Id = itemId, ParagraphId = b.ParagraphId("para"),
-                ItemType = ParagraphItemType.Character, CharacterId = null,
+                ItemType = ParagraphItemType.Speech, CharacterId = null,
                 Order = Key(), AudioFileName = "audio/existing.wav"
             });
             await db.SaveChangesAsync();

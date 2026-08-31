@@ -5,6 +5,7 @@ using Read2Me.App.State;
 using Read2Me.Core.Audio;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio.Transcription;
@@ -36,9 +37,10 @@ namespace Read2Me.Tests.State
         private static CharacterPresenter CreatePresenter(
             IAudioPipeline? audioPipeline = null,
             IBookCommandHandler? commandHandler = null,
-            EventBroadcaster<LlmStreamEvent>? llmEvents = null)
+            EventBroadcaster<LlmStreamEvent>? llmEvents = null,
+            IProjectReader? projectReader = null)
         {
-            var reader = Substitute.For<IProjectReader>();
+            var reader = projectReader ?? Substitute.For<IProjectReader>();
             reader.GetCharactersWithAliasesAsync(Folder)
                 .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Character>());
 
@@ -55,6 +57,25 @@ namespace Read2Me.Tests.State
 
             return new CharacterPresenter(reader, cmd, orchestrator,
                 llmEvents ?? new EventBroadcaster<LlmStreamEvent>());
+        }
+
+        [Fact]
+        public async Task NarratorLink_LoadsIdentityAndWritesThroughSetNarratorCommand()
+        {
+            var watsonId = Guid.NewGuid();
+            var identity = new NarratorIdentity(watsonId, "Dr. Watson", true);
+            var reader = Substitute.For<IProjectReader>();
+            reader.GetNarratorAsync(Folder, Arg.Any<CancellationToken>()).Returns(identity);
+            var commands = Substitute.For<IBookCommandHandler>();
+            var presenter = CreatePresenter(commandHandler: commands, projectReader: reader);
+
+            await presenter.LoadAsync(Folder);
+            await presenter.SetNarratorCharacterAsync(watsonId);
+
+            Assert.Equal(identity, presenter.Narrator);
+            await commands.Received(1).ExecuteAsync(
+                Arg.Is<SetNarratorCharacterCommand>(c => c != null && c.FolderId == Folder && c.CharacterId == watsonId),
+                Arg.Any<CancellationToken>());
         }
 
         [Fact]
@@ -318,7 +339,7 @@ namespace Read2Me.Tests.State
                     new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = "voices/b.wav" },
                 ]
             };
-            Assert.Equal(2, presenter.ReadyVoiceCount(character));
+            Assert.Equal(2, CharacterPresenter.ReadyVoiceCount(character));
         }
 
         [Fact]
@@ -334,7 +355,7 @@ namespace Read2Me.Tests.State
                     new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = string.Empty },
                 ]
             };
-            Assert.Equal(0, presenter.ReadyVoiceCount(character));
+            Assert.Equal(0, CharacterPresenter.ReadyVoiceCount(character));
         }
 
         [Fact]
@@ -351,7 +372,7 @@ namespace Read2Me.Tests.State
                     new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = string.Empty },
                 ]
             };
-            Assert.Equal(1, presenter.ReadyVoiceCount(character));
+            Assert.Equal(1, CharacterPresenter.ReadyVoiceCount(character));
         }
 
         [Fact]
@@ -359,7 +380,7 @@ namespace Read2Me.Tests.State
         {
             var presenter = CreatePresenter();
             var character = new Read2Me.Data.Entities.Character { Id = Guid.NewGuid(), Name = "Dan", Voices = [] };
-            Assert.Equal(0, presenter.ReadyVoiceCount(character));
+            Assert.Equal(0, CharacterPresenter.ReadyVoiceCount(character));
         }
 
         // ── UpdateVoiceInPlace patches non-selected character voices ──────────

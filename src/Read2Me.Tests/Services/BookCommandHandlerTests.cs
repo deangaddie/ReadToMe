@@ -176,7 +176,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
-                p.AddRawItem("item", ParagraphItemType.Character, "Hello world")))).BuildAsync();
+                p.AddRawItem("item", ParagraphItemType.Speech, "Hello world")))).BuildAsync();
 
             await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
@@ -185,11 +185,10 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task SetItemCharacterCommand_LeavesNarrationItemAlone()
+        public async Task SetItemCharacterCommand_AssignsCharacterToNarrationItem()
         {
-            // Only Character items carry a speaker. A narration item stamped with a character is
-            // audio-inert (the voice resolver keys off the item type), so it would sit in the book
-            // showing a speaker nothing ever reads in.
+            // Narration is a speaker, not an item type (ADR-0006): a line the splitter misread as
+            // narration is repaired by stamping the character, and the voice resolver honours it.
             var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
@@ -199,7 +198,41 @@ namespace Read2Me.Tests.Services
             await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
             await using var verify = await OpenDbAsync();
-            Assert.NotEqual(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
+            Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_AssignsNarratorToDialogItem()
+        {
+            // The reverse gesture: a narrative aside the splitter mistook for dialog becomes
+            // narration by stamping the narrator sentinel.
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), ProjectDbContext.NarratorId));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_LeavesPauseItemsAlone()
+        {
+            // Any speaker on any *speech* item — a pause is nobody's. Nothing would read a stamped
+            // pause and every reader filters it out, so the stamp would sit there invisible.
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", IsNarrator = false };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddPause("pause", ParagraphItemType.ChapterPause)))).BuildAsync();
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("pause"), character.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("pause")))!.CharacterId);
         }
 
         [Fact]
@@ -211,12 +244,121 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
-                p.AddRawItem("item", ParagraphItemType.Narration, "Hello world", character.Id)))).BuildAsync();
+                p.AddRawItem("item", ParagraphItemType.Speech, "Hello world", character.Id)))).BuildAsync();
 
             await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
 
             await using var verify = await OpenDbAsync();
             Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
+        }
+
+        // ---------------------------------------------------------------
+        // A manual flip clears the item's generated audio (ADR-0006)
+        // ---------------------------------------------------------------
+
+        private async Task SeedAudioAsync(params Guid[] itemIds)
+        {
+            await using var db = await OpenDbAsync();
+            foreach (var id in itemIds)
+                (await db.ParagraphItems.FindAsync(id))!.AudioFileName = $"audio/{id}.wav";
+            await db.SaveChangesAsync();
+        }
+
+        private async Task<string?> AudioFileNameOfAsync(Guid itemId)
+        {
+            await using var db = await OpenDbAsync();
+            return (await db.ParagraphItems.FindAsync(itemId))!.AudioFileName;
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_ChangingSpeaker_DropsGeneratedAudio()
+        {
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddNarration("item", "Hello world")))).BuildAsync();
+            await SeedAudioAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+
+            Assert.Null(await AudioFileNameOfAsync(b.ItemId("item")));
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_ClearingSpeaker_DropsGeneratedAudio()
+        {
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
+            await SeedAudioAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
+
+            Assert.Null(await AudioFileNameOfAsync(b.ItemId("item")));
+        }
+
+        [Fact]
+        public async Task SetItemCharacterCommand_SameSpeaker_KeepsGeneratedAudio()
+        {
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
+                p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
+            await SeedAudioAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+
+            Assert.NotNull(await AudioFileNameOfAsync(b.ItemId("item")));
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_DropsAudioOnlyFromItemsItMoves()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var bob = new Character { Id = Guid.NewGuid(), Name = "Bob" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            b.WithCharacter("bob", bob);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("narration", "N")
+                    .AddCharacterLine("moved", "A", speaker: "alice")
+                    .AddCharacterLine("alreadyBob", "B", speaker: "bob"))))
+                .BuildAsync();
+            await SeedAudioAsync(b.ItemId("narration"), b.ItemId("moved"), b.ItemId("alreadyBob"));
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+
+            Assert.Null(await AudioFileNameOfAsync(b.ItemId("moved")));
+            Assert.NotNull(await AudioFileNameOfAsync(b.ItemId("narration")));    // never swept
+            Assert.NotNull(await AudioFileNameOfAsync(b.ItemId("alreadyBob")));   // swept, unmoved
+        }
+
+        [Fact]
+        public async Task AttributeItemsCommand_LeavesGeneratedAudioAlone()
+        {
+            // The deliberate asymmetry: an LLM stamp must not invalidate audio across a whole
+            // book on the next queue run. Recorded as a known gap in ADR-0006.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddRawItem("item", ParagraphItemType.Speech, "\"Hello.\""))))
+                .BuildAsync();
+            await SeedAudioAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new AttributeItemsCommand(_folder, b.ParagraphId("para"),
+                [new ItemAttribution(b.ItemId("item"), alice.Id, null)]));
+
+            await using var verify = await OpenDbAsync();
+            var item = await verify.ParagraphItems.FindAsync(b.ItemId("item"));
+            Assert.Equal(alice.Id, item!.CharacterId);
+            Assert.NotNull(item.AudioFileName);
         }
 
         // ---------------------------------------------------------------
@@ -451,9 +593,9 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("charItem1", ParagraphItemType.Character, "Hello")
-                    .AddRawItem("charItem2", ParagraphItemType.Character, "World")
-                    .AddRawItem("narrationItem", ParagraphItemType.Narration, "Narration"))))
+                    .AddRawItem("charItem1", ParagraphItemType.Speech, "Hello")
+                    .AddRawItem("charItem2", ParagraphItemType.Speech, "World")
+                    .AddNarration("narrationItem", "Narration"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
@@ -461,7 +603,7 @@ namespace Read2Me.Tests.Services
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("charItem1")))!.CharacterId);
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("charItem2")))!.CharacterId);
-            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("narrationItem")))!.CharacterId);
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("narrationItem")))!.CharacterId);
         }
 
         [Fact]
@@ -472,7 +614,7 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("charItem", ParagraphItemType.Character, "Hello"))))
+                    .AddRawItem("charItem", ParagraphItemType.Speech, "Hello"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id, "whispering, tense"));
@@ -491,7 +633,7 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("bob", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("charItem", ParagraphItemType.Character, "Hello"))))
+                    .AddRawItem("charItem", ParagraphItemType.Speech, "Hello"))))
                 .BuildAsync();
 
             // Seed voice instructions directly after build
@@ -517,9 +659,9 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("ci1", ParagraphItemType.Character, "A")
-                    .AddRawItem("ci2", ParagraphItemType.Character, "B")
-                    .AddRawItem("ni", ParagraphItemType.Narration, "N"))))
+                    .AddRawItem("ci1", ParagraphItemType.Speech, "A")
+                    .AddRawItem("ci2", ParagraphItemType.Speech, "B")
+                    .AddNarration("ni", "N"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
@@ -527,7 +669,121 @@ namespace Read2Me.Tests.Services
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("ci1")))!.CharacterId);
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("ci2")))!.CharacterId);
-            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("ni")))!.CharacterId);
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("ni")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_MixedParagraph_SweepsOnlyNonNarratorItems()
+        {
+            // Narration + attributed dialog + unattributed dialog. The sweep is the old
+            // "dialog only" rule expressed against the speaker (ADR-0006).
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var bob = new Character { Id = Guid.NewGuid(), Name = "Bob" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            b.WithCharacter("bob", bob);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("narration", "N")
+                    .AddCharacterLine("attributed", "A", speaker: "alice")
+                    .AddRawItem("unattributed", ParagraphItemType.Speech, "U"))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("narration")))!.CharacterId);
+            Assert.Equal(bob.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("attributed")))!.CharacterId);
+            Assert.Equal(bob.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("unattributed")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_ToNarrator_MakesParagraphNarrationAndIsIdempotent()
+        {
+            // The one-gesture repair for a paragraph the LLM swallowed into a character.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("narration", "N")
+                    .AddCharacterLine("attributed", "A", speaker: "alice")
+                    .AddRawItem("unattributed", ParagraphItemType.Speech, "U"))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+
+            await using var verify = await OpenDbAsync();
+            foreach (var name in new[] { "narration", "attributed", "unattributed" })
+                Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId(name)))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_AllNarrationParagraph_TakesTheNarration()
+        {
+            // The undo for "make this paragraph narration". With no dialog left there is no
+            // narration/dialog split to protect, and without this the assign is a one-way door.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("n1", "N1")
+                    .AddNarration("n2", "N2")
+                    .AddPause("pause", ParagraphItemType.ParagraphPause))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), alice.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(alice.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("n1")))!.CharacterId);
+            Assert.Equal(alice.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("n2")))!.CharacterId);
+            Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("pause")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_RoundTrip_NarratorAndBack()
+        {
+            // Both directions at paragraph level, which is what the combined view offers.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p.AddCharacterLine("line", "\"Hi,\"", speaker: "alice"))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+            await using (var mid = await OpenDbAsync())
+                Assert.Equal(ProjectDbContext.NarratorId, (await mid.ParagraphItems.FindAsync(b.ItemId("line")))!.CharacterId);
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), alice.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(alice.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("line")))!.CharacterId);
+        }
+
+        [Fact]
+        public async Task SetParagraphCharacterCommand_MixedParagraph_StillLeavesNarrationAlone()
+        {
+            // The exception is only for a paragraph with no dialog left — a mixed paragraph keeps
+            // its split, so a wrong-speaker fix cannot destroy it.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var bob = new Character { Id = Guid.NewGuid(), Name = "Bob" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            b.WithCharacter("bob", bob);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                .AddParagraph("para", p => p
+                    .AddNarration("narration", "N")
+                    .AddCharacterLine("dialog", "\"Hi,\"", speaker: "alice"))))
+                .BuildAsync();
+
+            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("narration")))!.CharacterId);
+            Assert.Equal(bob.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("dialog")))!.CharacterId);
         }
 
         [Fact]
@@ -538,8 +794,8 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", existingChar);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para", p => p
-                    .AddRawItem("ci1", ParagraphItemType.Character, "A", existingChar.Id)
-                    .AddRawItem("ci2", ParagraphItemType.Character, "B", existingChar.Id))))
+                    .AddRawItem("ci1", ParagraphItemType.Speech, "A", existingChar.Id)
+                    .AddRawItem("ci2", ParagraphItemType.Speech, "B", existingChar.Id))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), null));
@@ -557,9 +813,9 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", character);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
                 .AddParagraph("para1", p => p
-                    .AddRawItem("target", ParagraphItemType.Character, "T"))
+                    .AddRawItem("target", ParagraphItemType.Speech, "T"))
                 .AddParagraph("para2", p => p
-                    .AddRawItem("other", ParagraphItemType.Character, "O"))))
+                    .AddRawItem("other", ParagraphItemType.Speech, "O"))))
                 .BuildAsync();
 
             await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para1"), character.Id));

@@ -77,7 +77,7 @@ public static class WorkspaceSeeder
             .AddParagraph("p1", p => p
                 .AddNarration("n1", "It was a dark and stormy night."))
             .AddParagraph("p2", p => p
-                .AddRawItem("line1", ParagraphItemType.Character,
+                .AddRawItem("line1", ParagraphItemType.Speech,
                     "“Hello there,” she said.", characterId: null))
             .AddParagraph("p3", p => p
                 .AddNarration("n2", "The rain kept falling.")));
@@ -94,14 +94,34 @@ public static class WorkspaceSeeder
             .AddParagraph("p1", p => p
                 .AddNarration("n1", "It was a dark and stormy night."))
             .AddParagraph("p2", p => p
-                .AddRawItem("line1", ParagraphItemType.Character,
+                .AddRawItem("line1", ParagraphItemType.Speech,
                     "“Hello there,” she said.", characterId: null))
             .AddParagraph("p3", p => p
-                .AddRawItem("line2", ParagraphItemType.Character,
+                .AddRawItem("line2", ParagraphItemType.Speech,
                     "“Who goes there?” came the reply.", characterId: null))
             .AddParagraph("p4", p => p
-                .AddRawItem("line3", ParagraphItemType.Character,
+                .AddRawItem("line3", ParagraphItemType.Speech,
                     "“Only me,” she answered.", characterId: null)));
+
+    /// <summary>
+    /// Creates a project whose one attributable paragraph ("p2") is deliberately mis-split: an
+    /// opening narration item, then a Character item holding <em>two</em> speakers (the quote scan
+    /// missed the boundary), then a clean Character item. Boundaries are frozen (ADR 0005), so this
+    /// is the shape attribution must leave exactly as it found it.
+    /// Returns the builder for named-id lookups ("mixed", "clean", "lead").
+    /// </summary>
+    public static Task<BookHierarchyBuilder> SeedMisSplitParagraphProjectAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string title, string author, string characterName = "Alice") =>
+        SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c => c
+            .AddParagraph("p1", p => p
+                .AddNarration("n1", "It was a dark and stormy night."))
+            .AddParagraph("p2", p => p
+                .AddNarration("lead", "The door swung open.")
+                .AddRawItem("mixed", ParagraphItemType.Speech,
+                    "“Hello there,” she said. “And who might you be?” he answered.", characterId: null)
+                .AddRawItem("clean", ParagraphItemType.Speech,
+                    "“Only me,” came the reply.", characterId: null)));
 
     /// One volume, one chapter named "ch1", one known character; the caller fills the chapter.
     private static async Task<BookHierarchyBuilder> SeedBookAsync(
