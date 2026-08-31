@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Voice;
@@ -200,7 +201,9 @@ namespace Read2Me.Services
         {
             var db = await _session.OpenAsync(folderId);
             return await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character && i.CharacterId == characterId)
+                // The speaker alone says whose line this is; a narration item the user gave to a
+                // character is that character's line now (ADR-0006).
+                .Where(i => i.CharacterId == characterId)
                 .OrderBy(i => i.Paragraph.Chapter.Part.Volume.Order)
                 .ThenBy(i => i.Paragraph.Chapter.Part.Order)
                 .ThenBy(i => i.Paragraph.Chapter.Order)
@@ -216,7 +219,8 @@ namespace Read2Me.Services
             var db = await _session.OpenAsync(folderId);
 
             IQueryable<Data.Entities.ParagraphItem> q = db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character);
+                .Where(ParagraphItemKinds.IsSpeechExpression)
+                .Where(NarrationRule.IsNotNarrationExpression);
 
             q = level switch
             {
@@ -241,10 +245,11 @@ namespace Read2Me.Services
         public async Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId)
         {
             var db = await _session.OpenAsync(folderId);
-            return await db.ParagraphItems.CountAsync(i =>
-                i.ParagraphId == paragraphId &&
-                i.ItemType == ParagraphItemType.Character &&
-                i.CharacterId == null);
+            // Unattributed is "no speaker at all", with no type qualifier left — but a pause has no
+            // speaker either and is not work, so the speech filter stays.
+            return await db.ParagraphItems
+                .Where(ParagraphItemKinds.IsSpeechExpression)
+                .CountAsync(i => i.ParagraphId == paragraphId && i.CharacterId == null);
         }
 
         public async Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
@@ -257,7 +262,9 @@ namespace Read2Me.Services
             // One round trip: item count per paragraph that has at least one Character item.
             // EF renders Contains as IN (SELECT value FROM json_each(@ids)) — one parameter at any length.
             var perParagraph = await db.ParagraphItems
-                .Where(i => paragraphIds.Contains(i.ParagraphId) && i.ItemType == ParagraphItemType.Character)
+                .Where(i => paragraphIds.Contains(i.ParagraphId))
+                .Where(ParagraphItemKinds.IsSpeechExpression)
+                .Where(NarrationRule.IsNotNarrationExpression)
                 .GroupBy(i => i.ParagraphId)
                 .Select(g => g.Count())
                 .ToListAsync(ct);
@@ -271,7 +278,8 @@ namespace Read2Me.Services
 
             // Chapter/Part/Volume ids of every character-bearing paragraph, in one round trip.
             var rows = await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character)
+                .Where(ParagraphItemKinds.IsSpeechExpression)
+                .Where(NarrationRule.IsNotNarrationExpression)
                 .Select(i => new
                 {
                     ChapterId = i.Paragraph.ChapterId,

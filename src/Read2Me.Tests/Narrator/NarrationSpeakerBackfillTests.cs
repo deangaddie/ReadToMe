@@ -10,6 +10,7 @@ using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.IO;
+using Read2Me.Services.NodeStatus;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -146,50 +147,43 @@ namespace Read2Me.Tests.Narrator
             Assert.Equal(before, await ReadItemsAsync(FolderName));
         }
 
+        /// <summary>
+        /// What a producer sees after opening an old book is what they saw before: the same one
+        /// unattributed item, the same Character paragraph, the same badges. The readers now derive
+        /// all of that from the speaker (ADR-0006), which is exactly why the backfill has to have
+        /// run first — a narration row still carrying a null speaker would read as unattributed
+        /// dialog and land in the attribution queue.
+        /// </summary>
         [Fact]
         public async Task Migration_LeavesAttributionCountsQueueAndBadgesUnchanged()
         {
-            // The same book twice: one folder migrated (so backfilled), one left in the pre-backfill
-            // state. Both are on the current schema, so the readers answer over each of them.
-            const string backfilled = "backfilled";
-            const string preBackfill = "pre-backfill";
-            await SeedAtPriorMigrationAsync(backfilled);
-            await SeedAtPriorMigrationAsync(preBackfill);
-
-            await MigrateUpAsync(backfilled);
-            await using (var db = OpenUnmigratedAt(preBackfill))
-            {
-                await db.Database.MigrateAsync();
-#pragma warning disable EF1002 // Test-owned constants, not user input.
-                await db.Database.ExecuteSqlRawAsync(
-                    $"UPDATE ParagraphItems SET CharacterId = NULL WHERE Id IN ('{NarrationWithoutSpeaker}', '{InsertedTitle}')");
-#pragma warning restore EF1002
-            }
+            await SeedAtPriorMigrationAsync(FolderName);
+            await MigrateUpAsync(FolderName);
 
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
             await using var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
             var reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
-            var after = new ProjectFolderId(backfilled);
-            var before = new ProjectFolderId(preBackfill);
+            var folder = new ProjectFolderId(FolderName);
 
+            // Only DialogUnattributed has no speaker; the three narration items carry the narrator.
+            Assert.Equal(1, await reader.CountUnattributedCharacterItemsAsync(folder, ParagraphId));
+
+            // The paragraph has dialog in it, so it is a Character paragraph at every level.
+            var overview = await reader.GetBookOverviewAsync(folder);
             Assert.Equal(
-                (await reader.GetBookOverviewAsync(before)).NodeCharacterParagraphCounts,
-                (await reader.GetBookOverviewAsync(after)).NodeCharacterParagraphCounts);
-            Assert.Equal(
-                (await reader.GetBookOverviewAsync(before)).SelectableNodeIds,
-                (await reader.GetBookOverviewAsync(after)).SelectableNodeIds);
-            Assert.Equal(
-                await reader.GetNodeStatusSeedAsync(before),
-                await reader.GetNodeStatusSeedAsync(after));
-            Assert.Equal(
-                await reader.GetCharacterParagraphsAsync(before, BookNodeLevel.Chapter, ChapterId, unprocessedOnly: true),
-                await reader.GetCharacterParagraphsAsync(after, BookNodeLevel.Chapter, ChapterId, unprocessedOnly: true));
-            Assert.Equal(
-                await reader.CountUnattributedCharacterItemsAsync(before, ParagraphId),
-                await reader.CountUnattributedCharacterItemsAsync(after, ParagraphId));
-            Assert.Equal(
-                await reader.GetNodesWithCharacterParagraphsAsync(before),
-                await reader.GetNodesWithCharacterParagraphsAsync(after));
+                new Dictionary<Guid, int> { [ChapterId] = 1, [PartId] = 1, [VolumeId] = 1 },
+                overview.NodeCharacterParagraphCounts);
+            Assert.Equal([ChapterId, VolumeId, PartId], overview.SelectableNodeIds.Order());
+            Assert.Equal([ChapterId, VolumeId, PartId], (await reader.GetNodesWithCharacterParagraphsAsync(folder)).Order());
+
+            // It still has attribution work outstanding, so it is in the queue.
+            var unprocessed = await reader.GetCharacterParagraphsAsync(
+                folder, BookNodeLevel.Chapter, ChapterId, unprocessedOnly: true);
+            Assert.Equal(ParagraphId, Assert.Single(unprocessed).ParagraphId);
+
+            // The badge seed counts the five speech items as missing audio, one of them unattributed.
+            var seed = Assert.Single(await reader.GetNodeStatusSeedAsync(folder));
+            Assert.Equal(new ParagraphStatusSeedRow(ParagraphId, ChapterId, PartId, VolumeId, 1, 5, 0), seed);
         }
     }
 }

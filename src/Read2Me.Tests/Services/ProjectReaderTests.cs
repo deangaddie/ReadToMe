@@ -62,13 +62,43 @@ namespace Read2Me.Tests.Services
                 p.AddRawItem("stamped", ParagraphItemType.Character, "\"Hi,\"", alice.Id);
                 p.AddRawItem("unstamped", ParagraphItemType.Character, "\"Who's there?\"", null);
                 // Narration is stamped with the narrator and never counts as unattributed.
-                p.AddRawItem("narration", ParagraphItemType.Narration, "she said.");
+                p.AddNarration("narration", "she said.");
             })));
             await builder.BuildAsync();
 
             var count = await _reader.CountUnattributedCharacterItemsAsync(_folder, b.ParagraphId("p"));
 
             Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public async Task CharacterParagraphs_DeriveFromTheSpeaker_NotTheItemType()
+        {
+            // "Character paragraph" is now "has at least one non-narrator speech item" (ADR-0006):
+            // an all-narration paragraph is not one, a paragraph with a single unattributed dialog
+            // item is, and a narration item the user gave to a character makes its paragraph one.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("allNarration", p => p
+                    .AddNarration("n1", "He walked on.")
+                    .AddNarration("n2", "The room was cold."))
+                .AddParagraph("onlyUnattributed", p => p
+                    .AddRawItem("u1", ParagraphItemType.Character, "\"Who's there?\""))
+                .AddParagraph("userFlipped", p => p
+                    .AddRawItem("f1", ParagraphItemType.Narration, "\"Quietly,\"", alice.Id))
+                .AddParagraph("allPause", p => p.AddPause("pause"))))
+                .BuildAsync();
+
+            var refs = await _reader.GetCharacterParagraphsAsync(_folder, BookNodeLevel.Chapter, b.ChapterId("ch"));
+
+            Assert.Equal(
+                new HashSet<Guid> { b.ParagraphId("onlyUnattributed"), b.ParagraphId("userFlipped") },
+                refs.Select(r => r.ParagraphId).ToHashSet());
+            // Only the unattributed one is outstanding work.
+            var unprocessed = await _reader.GetCharacterParagraphsAsync(
+                _folder, BookNodeLevel.Chapter, b.ChapterId("ch"), unprocessedOnly: true);
+            Assert.Equal(b.ParagraphId("onlyUnattributed"), Assert.Single(unprocessed).ParagraphId);
         }
 
         [Fact]
@@ -375,11 +405,11 @@ namespace Read2Me.Tests.Services
 
             await using var db = await OpenDbAsync();
             db.ParagraphItems.AddRange(
-                new ParagraphItem { Id = narrationNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = null },
+                new ParagraphItem { Id = narrationNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Narration, CharacterId = ProjectDbContext.NarratorId, Order = Key(), AudioFileName = null },
                 new ParagraphItem { Id = charAttributedNoWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = null },
                 new ParagraphItem { Id = charUnattributedId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = null, Order = Key(), AudioFileName = null },
                 new ParagraphItem { Id = charWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Character, CharacterId = character.Id, Order = Key(), AudioFileName = "audio/item.wav" },
-                new ParagraphItem { Id = narrationWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Narration, Order = Key(), AudioFileName = "audio/narr.wav" },
+                new ParagraphItem { Id = narrationWithWavId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.Narration, CharacterId = ProjectDbContext.NarratorId, Order = Key(), AudioFileName = "audio/narr.wav" },
                 new ParagraphItem { Id = pauseId, ParagraphId = b.ParagraphId("para"), ItemType = ParagraphItemType.ParagraphPause, Order = Key() }
             );
             await db.SaveChangesAsync();

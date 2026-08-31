@@ -45,7 +45,7 @@ namespace Read2Me.Services
 
                 var db = await _session.OpenAsync(folder);
                 var counts = await db.ParagraphItems
-                    .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                    .Where(ParagraphItemKinds.IsSpeechExpression)
                     .GroupBy(_ => 1)
                     .Select(g => new { Total = g.Count(), Done = g.Count(i => i.AudioFileName != null) })
                     .SingleOrDefaultAsync();

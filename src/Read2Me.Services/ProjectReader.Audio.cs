@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
 using Read2Me.Services.NodeStatus;
@@ -15,7 +16,7 @@ namespace Read2Me.Services
             var db = await _session.OpenAsync(folderId);
 
             IQueryable<Data.Entities.ParagraphItem> q = db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration);
+                .Where(ParagraphItemKinds.IsSpeechExpression);
 
             q = level switch
             {
@@ -24,11 +25,13 @@ namespace Read2Me.Services
                 _                     => q.Where(i => i.Paragraph.ChapterId == nodeId),
             };
 
+            // Generatable = missing audio and some speaker to read it. Narration qualifies because
+            // it carries the narrator; only an unattributed item has nobody (ADR-0006). Narrator-only
+            // mode reads everything in the narrator's voice, so a missing speaker is no obstacle.
             if (needsAudioOnly)
                 q = narratorOnlyMode
                     ? q.Where(i => i.AudioFileName == null)
-                    : q.Where(i => i.AudioFileName == null
-                                   && (i.ItemType == ParagraphItemType.Narration || i.CharacterId != null));
+                    : q.Where(i => i.AudioFileName == null && i.CharacterId != null);
 
             return await q
                 .Select(i => new AudioItemRef(
@@ -121,7 +124,7 @@ namespace Read2Me.Services
 
             // One row per paragraph that has at least one non-Pause item.
             var rows = await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                .Where(ParagraphItemKinds.IsSpeechExpression)
                 .GroupBy(i => new
                 {
                     ParagraphId = i.ParagraphId,
@@ -135,7 +138,7 @@ namespace Read2Me.Services
                     g.Key.ChapterId,
                     g.Key.PartId,
                     g.Key.VolumeId,
-                    Unattributed = g.Count(i => i.ItemType == ParagraphItemType.Character && i.CharacterId == null),
+                    Unattributed = g.Count(i => i.CharacterId == null),
                     MissingAudio = g.Count(i => i.AudioFileName == null),
                 })
                 .ToListAsync();
@@ -163,7 +166,7 @@ namespace Read2Me.Services
             var db = await _session.OpenAsync(folderId);
 
             var rows = await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character || i.ItemType == ParagraphItemType.Narration)
+                .Where(ParagraphItemKinds.IsSpeechExpression)
                 .Select(i => new
                 {
                     ItemId = i.Id,

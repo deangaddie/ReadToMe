@@ -29,8 +29,10 @@ namespace Read2Me.Services
             var totalChapters = await db.Chapters.CountAsync();
 
             // One query: distinct character-paragraph refs for counting and selectable-node set.
+            // A Character paragraph is one with at least one non-narrator speech item (ADR-0006).
             var refs = await db.ParagraphItems
-                .Where(i => i.ItemType == ParagraphItemType.Character)
+                .Where(ParagraphItemKinds.IsSpeechExpression)
+                .Where(NarrationRule.IsNotNarrationExpression)
                 .Select(i => new
                 {
                     ParagraphId = i.ParagraphId,
@@ -151,7 +153,11 @@ namespace Read2Me.Services
                 .Select(p => ValueTuple.Create(
                     p.Id,
                     p.Items
-                        .Where(i => i.ItemType == ParagraphItemType.Character)
+                        // NarrationRule's rule, spelled out — a nested collection projection
+                        // cannot compose the seam's expression. Keep the two in step.
+                        .Where(i => i.CharacterId != ProjectDbContext.NarratorId
+                                 && (i.ItemType == ParagraphItemType.Character
+                                  || i.ItemType == ParagraphItemType.Narration))
                         .OrderBy(i => i.Order)
                         .Select(i => i.Text ?? "")
                         .FirstOrDefault() ?? ""))

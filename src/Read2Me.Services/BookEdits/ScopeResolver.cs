@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 
@@ -159,7 +160,7 @@ namespace Read2Me.Services.BookEdits
 
         private static List<ParagraphItem> ContentItems(Paragraph paragraph) =>
             paragraph.Items
-                .Where(i => i.ItemType is ParagraphItemType.Narration or ParagraphItemType.Character
+                .Where(i => !ParagraphItemKinds.IsPause(i.ItemType)
                             && !string.IsNullOrWhiteSpace(i.Text))
                 .OrderBy(i => i.Order, StringComparer.Ordinal)
                 .ToList();
