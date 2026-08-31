@@ -56,23 +56,34 @@ After `dotnet run`, open <https://localhost:5001>. Configure the AI services fro
 
 | Nav page | Configure | Needs container |
 | -------- | --------- | --------------- |
-| **LLM Settings** | LLM server URL + model preset for character attribution | `read2me-llama` |
+| **LLM** | LLM server URL + model preset for character attribution | `read2me-llama` |
 | **LLM Prompts** | Prompt templates for extraction / attribution | — |
-| **Transcription Settings** | Whisper endpoint for accuracy scoring | `read2me-whisper` |
+| **Transcription** | Whisper endpoint for accuracy scoring | `read2me-whisper` |
 | **Semantic Similarity** | Embedding endpoint + pass threshold for Semantic Rescue | `read2me-minilm-l6` / `read2me-mpnet-base-v2` |
-| **Voice Design Settings** | Service for generating voices from a text description | `read2me-qwen3-tts` |
-| **Paragraph TTS Settings** | TTS service(s) used to synthesise paragraph audio | a TTS container (Chatterbox / VoxCPM2 / Qwen3 Base) |
-| **Audio Processing** | WER threshold, retry attempts, pause durations, sentence chunking, **ffmpeg path** | — |
+| **Voice Design** | Service for generating voices from a text description | `read2me-qwen3-tts` |
+| **Paragraph TTS** | TTS service(s) used to synthesise paragraph audio | a TTS container (Chatterbox / VoxCPM2 / Qwen3 Base) |
+| **Audio Processing** | WER threshold, retry attempts, pause durations, sentence chunking, post-processing (consonant softening, silence trim), **ffmpeg path** | — |
 
 Set the **ffmpeg path** on the Audio Processing page — audio normalisation and m4b assembly fail without it.
 
 ## Using the app
 
 1. **Create a project** — Home → add a project, then import an `.epub` or `.txt`. The book is parsed into the Volume → Part → Chapter → Paragraph → ParagraphItem hierarchy and shown on the project's **Book** tab.
-2. **Attribute characters** — on the **Book** tab, switch the view-mode dropdown to **Split (attribution)**. Select Character paragraphs (per node or whole chapters) and queue them. The Character Queue drains in the background, asking the LLM who speaks each line. Review/correct assignments on the **Characters** tab; add aliases there so alternate names resolve to one Character.
-3. **Give each Character a voice** — on the **Characters** tab, add a voice per Character: upload a reference WAV, design one from a text description (Qwen3 TTS), or clone from a reference clip. Optionally add **Voice Rules** to switch voice over a position range. The batch buttons generate prompts/audio for all Characters at once.
-4. **Generate audio** — back on the **Book** tab, switch to **Split (audio)**. Select items needing audio and queue them. Each item is synthesised, loudness-normalised, transcribed by Whisper, and verified (WER, with Semantic Rescue as fallback). The status bar streams per-item progress; failures surface as review items on the node badges.
+2. **Attribute characters** — on the **Book** tab, switch the view mode to **Split: Attribution**. Select Character paragraphs (per node or whole chapters) and queue them. The Character Queue drains in the background, asking the LLM who speaks each line. Review/correct assignments on the **Characters** tab; add aliases there so alternate names resolve to one Character, and use **Discover characters** to build the roster up front.
+
+   Every speaker is set from the same picker, on the item chip or the paragraph chip. The narrator is pinned at the top of that list, so a line the splitter misread as narration can be given to a character — and a narrative aside it mistook for dialog can be handed back to the narrator. Assigning to the narrator also stops the queue re-asking that item; clearing a speaker puts it back in the queue as unattributed dialog. Arm **Bulk assign** in the dock bar to apply one pick across a whole selection; narration is never swept up by it.
+3. **Give each Character a voice** — on the **Characters** tab, add a voice per Character: upload a reference WAV, design one from a text description (Qwen3 TTS), or clone from a reference clip. Optionally add **Voice Rules** to switch voice over a position range. The batch buttons generate prompts/audio for all Characters at once. If a character in the book narrates it, link them to the narrator there — narration then reads in that character's voice while staying a distinct speaker from their dialog.
+4. **Generate audio** — back on the **Book** tab, switch to **Split: Audio**. Select items needing audio and queue them. Each item is synthesised, loudness-normalised, transcribed by Whisper, and verified (WER, with Semantic Rescue as fallback). The status bar streams per-item progress; failures surface as review items on the node badges.
 5. **Assemble the audiobook** — once every non-Pause item has audio, click **Assemble**. The app concatenates all clips (with per-kind pauses), adds chapter markers and cover art, and writes `{projectFolder}/output/{BookTitle}.m4b`.
+
+## Driving it without the UI
+
+The whole production cycle is also an HTTP API, served from the running app on `http://localhost:5000/api/...` — localhost only, no auth. Create a project, import, attribute, generate voices and audio, and assemble, all without opening a browser.
+
+- **Workflow guide**: [docs/agents/api.md](docs/agents/api.md) — endpoints in the order you call them.
+- **Schemas**: `GET /openapi/v1.json` is the source of truth for request/response shapes.
+
+The four long operations (attribution, audio, voice batch, assembly) return `202 Accepted` and run in the background; poll their status endpoint until the queue is idle, then read per-item outcomes. Errors are RFC 7807 ProblemDetails.
 
 ## AI services and when to use them
 
@@ -116,6 +127,12 @@ One database per project, stored at `{Workspace.FolderPath}/{project-folder}/pro
 - Audio review outcomes (WER, Whisper transcript, normalisation result)
 
 Audio files (WAV per ParagraphItem, reference voice WAVs) are stored in the same project folder alongside the database.
+
+## Digging deeper
+
+- [CONTEXT.md](CONTEXT.md) — the domain glossary: what a Character paragraph, a Generatable item or an unattributed item actually means, split by area under `context/`.
+- [docs/adr/](docs/adr/) — the decisions behind the model, including why item boundaries are frozen after import ([ADR 0005](docs/adr/0005-frozen-paragraph-item-boundaries.md)) and why narration is a speaker rather than an item type ([ADR 0006](docs/adr/0006-narration-is-a-speaker-not-an-item-type.md)).
+- [Infra/README.md](Infra/README.md) — service details, ports, and container API reference.
 
 ## Known issues
 
