@@ -17,6 +17,9 @@ Use these terms exactly in code, tests, and discussion.
 
 ## Book view
 
+- **Book mutation** — one committed user/domain operation that can alter the Book View projection, including structure, text, speakers, audio, reviews, roster identity or Book-wide policy; it remains one mutation when it changes several persisted records. Broader than `HierarchyMutation`, which is only the Book Hierarchy planning value for structural edits.
+- **Book View projection** — the active, rebuildable representation of a project's persisted Book, together with its derived roll-ups, transient selections, review state and voice previews. The persisted Book is authoritative; a projection is coherent only when all of those views agree with every committed Book mutation affecting the project.
+- **Stale Book View projection** — an open Book View projection known not to include the latest committed Book mutation because both reconciliation and its rebuild fallback failed. It cannot be treated as coherent until a later rebuild succeeds.
 - **Book View Mode** (`BookViewMode { Combined, SplitAttribution, SplitAudio }`) — three mutually exclusive book-tab display states, selected via one dropdown. `Combined`: original paragraphs with attribution checkboxes. `SplitAttribution`: split ParagraphItems with Character-paragraph checkboxes for the attribution queue. `SplitAudio`: split ParagraphItems with per-item checkboxes for the audio queue plus play buttons. Replaces the old `bool SplitView`.
 
 ## Selection
