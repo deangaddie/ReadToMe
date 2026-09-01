@@ -6,48 +6,131 @@ accepted
 
 ## Context
 
-The persisted Book is authoritative, but an open Book View currently becomes coherent through caller-specific combinations of local entity patches, selection clearing, Node Status reseeding, cache invalidation, targeted reloads and full reloads. Those rules are spread across the presenter, Razor modules, mutation handlers and queue events. As a result, the same committed change can reconcile the initiating view while leaving another circuit or a command-endpoint caller's open view stale.
+The Book View is the app's only editing surface for a Book, and every producer that changes a Book
+reaches it differently. `BookHierarchyPresenter` (678 lines, ~40 public members) holds mutable
+copies of the hierarchy, the roster, both selections, Node Status inputs, voice previews, the view
+mode and playback state — and, next to them, the follow-up rules for each gesture:
+`NoteItemTextEditedAsync`, `InvalidateVoicePreview`, `ResetAndLoadAsync`, per-gesture reseeds of the
+selection denominators. Each caller knows a different subset of that follow-up work. Getting a new
+gesture right means rediscovering the full list, and a fix applied in one caller protects no other.
+
+Three structural facts make that fragile rather than merely verbose.
+
+**There is no single commit point.** `BookCommandHandler` dispatches to `ICommandHandler<T>`
+implementations that each save for themselves — `SaveChangesAsync` appears 13× in `VoiceHandlers`,
+7× in `CharacterHandlers`, 6× in `TitlePauseHandlers`. One user operation that touches several
+records can therefore half-commit, and no caller can name the state the Book ended in. The handler's
+own `finally` block evicts the tracking session with a comment explaining a stale-read bug that
+eviction only papers over.
+
+**Reconciliation is a broadcast of guesses.** `ParagraphItemsChanged` and `AudioFileAssigned` are
+published by some writers and consumed in ten files. They say *something under here moved*; each
+subscriber decides for itself what to reread. A subscriber that guesses too narrowly renders state
+assembled from two different revisions of the Book — a count from before the change beside content
+from after it.
+
+**Not every producer even passes through the seam.** The Character Queue, the Audio Queue, imports
+and rereads, AI book edits and the voice pipeline write directly. So a change made in one circuit,
+or by a background worker, or through the generic command endpoint, can leave another open Book
+View silently stale until the user navigates away and back.
 
 ## Decision
 
-A **Book mutation** is one user/domain operation, even when it changes several persisted records. Every mutation producer—including Book View gestures, the command endpoint, attribution and audio queues, imports, AI edits, Character lifecycle changes and Book-wide policy changes—crosses one concrete write-side module named `BookMutations`.
+The persisted Book is authoritative. A Book View holds a **projection** of it, which is always
+rebuildable and never a second source of truth.
 
-`BookMutations` owns per-project write serialization, the database transaction, commit, tracking-session eviction, an in-process monotonic revision, receipt creation and best-effort publication. Mutation implementations apply changes inside the supplied transaction and return their actual effects; they do not save or publish independently. A valid operation that changes nothing returns `NoChange`, allocates no revision and publishes no receipt.
+Two concrete deep modules carry that rule.
 
-Every commit produces one `BookMutationReceipt`. A receipt carries facts rather than entity patches or reconciliation instructions: project identity, mutation identity and revision, affected facets and domain ids, structural relationships needed to preserve expansion continuity, and explicit proofs that Folder Selection or Audio Item Selection remains safe. A missing proof clears that selection. Unknown effects degrade to a whole-project rebuild and selection clearing.
+**`BookMutations`** is the single write-side entry point: `CommitAsync(BookMutation)`. It owns
+per-project write serialization, the database transaction, the one commit point, tracking-session
+eviction, monotonic in-process revision allocation, receipt creation, and best-effort publication
+*after* commit. Mutation implementations apply inside the supplied transaction and return the
+effects they actually applied; they neither save nor publish on their own.
 
-Each Blazor circuit owns one concrete scoped `BookViewProjection`, bound to one project at a time. It publishes one immutable `BookViewSnapshot` containing the overview, currently loaded hierarchy branches and expansion intent, Folder Selection, Audio Item Selection, Node Status, reviews, roster/narrator state and voice previews. Razor never observes a partially reconciled candidate or mutable projection internals.
+**`BookViewProjection`** is circuit-scoped and owns the read side: `OpenAsync`, `ApplyAsync`
+(transient intent), `MutateAsync`, `RetryRebuildAsync`. It consumes receipts, performs its own
+authoritative reads, and atomically publishes one immutable `BookViewSnapshot`. Candidate state
+stays private until every read and derived calculation succeeds, so Razor can never render a
+half-reconciled mixture.
 
-The projection interface is:
+A committed mutation returns a **receipt** stating project and mutation identity, the revision, any
+created identity, the facets and domain identifiers actually affected, and structural split/merge
+relationships. Receipts carry **facts, not instructions**: the projection decides what to reread.
+Exact item-level effects permit targeted reads; structural, Book-wide and unknown effects rebuild
+the overview and the expanded lazy branches. Unknown effects are safe by default — whole-project
+scope.
 
-- `OpenAsync(ProjectFolderId)` — bind or switch project and build a coherent snapshot;
-- `ApplyAsync(BookViewIntent)` — apply transient view gestures such as expansion, selection, Book View Mode and playback;
-- `MutateAsync(BookMutation)` — commit through `BookMutations` and await the initiating projection's reconciliation;
-- `RetryRebuildAsync()` — recover a Stale Book View projection.
+The initiating projection reconciles before its gesture reports success. Other open projections
+converge asynchronously through a bounded, coalescing in-process mailbox, which can never make the
+writer's commit fail.
 
-Committed receipts enter other open projections through bounded in-process mailboxes. Each projection serializes and coalesces reconciliation, preventing an older read from replacing newer state. Mailbox pressure collapses pending detail into a safe whole-project rebuild marker. Structure, Book-wide policy, whole-project scope and unknown effects rebuild; exact paragraph, item, audio, review, roster, Node Status and voice-preview effects may use targeted authoritative reads. Rebuild restores only the overview and expanded hierarchy branches, preserving lazy loading.
+### Selection safety is recomputed, not proven by the writer
 
-The initiating projection reconciles before success is reported. Other projections converge asynchronously and cannot make the committing request fail. Targeted reconciliation failure falls back to a rebuild. If both fail, the last coherent snapshot remains visible as a **Stale Book View projection**, further Book mutation gestures are blocked, and the outcome says that the change committed but the view could not refresh.
+A mutation can invalidate a Folder Selection or an Audio Item Selection — by deleting a selected
+Paragraph, by changing a roll-up denominator, or by making a selected item ineligible. The
+projection **recomputes** both selections against the new revision during reconciliation, using the
+same authoritative eligibility and count reads it already performs, and clears what no longer holds.
+Mutation implementations report effects only.
 
-Expected outcomes remain distinct: `NoChange`, uncommitted validation/not-found/conflict/stale/cancellation, committed-and-coherent, and committed-but-stale. Cancellation is honoured before commit; after commit, reconciliation continues under the circuit lifetime so cancellation cannot disguise a committed mutation as uncommitted. Unexpected implementation defects still throw.
+### Revisions are process-local
 
-The presenter becomes a thin MudBlazor adapter over the projection interface. It renders snapshots, routes gestures and translates outcomes into user feedback; it owns no reconciliation rules and does not receive the raw `BookMutations` module. Routine external attribution and audio progress reconciles silently; external structure changes or selection clearing surface a small “Book updated elsewhere” notice.
-
-External artifacts are staged outside the database transaction. The producing adapter owns best-effort cleanup when its Book mutation is uncommitted or unchanged; the persisted Book is never pointed at an incomplete artifact.
+Revisions are monotonic per project and live in memory. They are not persisted, not an
+optimistic-concurrency column, and require no schema change. They exist to order reads against
+snapshots so an older read cannot replace a newer one.
 
 ## Considered options
 
-- **Caller-owned reconciliation** was rejected because it is the current low-locality design: every caller must know which patches, reseeds and reloads follow its write.
-- **Mutation-handler publication** was rejected because commit and publication rules would remain spread across every implementation.
-- **Always rebuild** was rejected because attribution and audio progress are frequent and precisely scoped. **Always patch** was rejected because structural and denominator invariants are too broad to reproduce safely in each path.
-- **A durable journal or persisted Book revision** was rejected for the current single-process application. Notifications are live invalidations for open projections; a fresh open rebuilds from the authoritative database after process restart.
-- **One singleton projection for all circuits** was rejected because projection state and failure belong to one circuit, while mutation execution serves all callers.
-- **A generic, extensible mutation protocol** and a projection-bound delegate were considered. The chosen interface keeps the common path small without generics or unusual caller syntax; receipts retain the useful affected-scope and safety-proof ideas.
+- **Deepen `BookCommandHandler` in place (rejected, and the closest call).** The generic command
+  seam already exists, already dispatches by command type, and already owns tracking-session
+  eviction; transaction ownership, serialization and receipts could have been added to it. Rejected
+  because its contract — `Task<Guid?> ExecuteAsync(BookCommand, CancellationToken)` — is the whole
+  problem in miniature: a nullable Guid cannot express `NoChange`, cannot distinguish a committed
+  change from an expected validation failure, and carries no effects for a reader to reconcile from.
+  Widening it means changing every handler signature and every call site anyway, and doing that
+  *while* the old contract is still live is what a separate module makes safe. `BookMutations`
+  therefore subsumes the command seam rather than sitting beside it permanently: the registry and
+  the `ICommandHandler<T>` implementations become mutation implementations, and the legacy façade is
+  deleted once no caller remains.
+- **Writer-supplied selection-safety proofs (rejected).** Each mutation would return proof that the
+  selected Paragraphs and their denominators survived. Rejected because it pushes read-side
+  selection semantics into a dozen write-side handler families — the exact coupling this decision
+  removes — and because "no proof ⇒ clear the selection" makes omission the cheapest option for
+  every handler author, which degrades to losing the user's selection on every mutation.
+- **Durable receipts / outbox (rejected for now).** Correct for multi-process deployment, and
+  unnecessary at one process: a newly opened projection rebuilds from persisted data, so restart
+  needs no journal. Revisit only if deployment changes.
+- **Leave reconciliation in the presenter, fix bugs as found (rejected).** This is the status quo.
+  Each fix protects one caller.
 
 ## Consequences
 
-- Migration is staged: route every producer through `BookMutations`; introduce the scoped projection; switch the presenter and Razor adapter; then remove `ParagraphItemsChanged`, `AudioFileAssigned` reconciliation, mutable projection state and obsolete orchestration tests.
-- The generic command endpoint keeps its existing request and response contract; its adapter maps new outcomes internally.
-- Tests move to the two deep module interfaces. Mutation cases assert actual-effects receipts; projection cases cover initiating and remote reconciliation, coalescing, stale-read rejection, selection safety, rebuild fallback, stale recovery and lazy branch restoration. Focused Razor interaction tests remain.
-- Architecture tests require every Book mutation implementation to be registered, prevent the UI adapter from receiving raw `BookMutations`, and reject legacy reconciliation subscribers after cutover.
-- Commits serialize per project but different projects remain independent. If deployment later becomes multi-process, durable revisions and publication become a new decision rather than an accidental promise of this interface.
+- **Every mutation producer migrates**: Book View gestures, the generic command endpoint, Character
+  Queue attribution, Audio Queue result recording, imports and rereads, AI book edits, Character and
+  Alias lifecycle, narrator changes, Voice and Voice Rule lifecycle, and Book-wide policy changes.
+  Until the last one lands, two consistency models run side by side — which is why migration is
+  sliced per producer family, each slice retiring its own legacy path rather than deferring all
+  cleanup to the end.
+- **Expected outcomes become a taxonomy, not exceptions**: `NoChange`; uncommitted (validation,
+  not-found, conflict, stale projection, pre-commit cancellation); committed-and-coherent; and
+  committed-but-stale. Unexpected implementation defects still throw. A valid operation that changes
+  nothing consumes no revision, publishes no receipt, and produces no user-visible refresh.
+- **Cancellation cannot lie.** It is observed before commit. Once commit begins, publication and the
+  initiating reconciliation run under their owning lifetimes, so a committed change is never
+  reported as uncommitted.
+- **A user gesture can now queue behind a background write** for the same project, because writes
+  serialize per project (different projects stay concurrent) and the initiating gesture waits for
+  its own reconciliation. This is a deliberate latency cost paid for coherence; it is bounded and
+  measured rather than assumed.
+- **Reconciliation failure degrades, it does not blank the page.** A failed targeted refresh retries
+  as a rebuild; if that also fails the last coherent snapshot stays visible, health becomes stale,
+  further mutation gestures are refused, and `RetryRebuildAsync` is the recovery path.
+- **`ParagraphItemsChanged` and `AudioFileAssigned` are retired** as persisted-state reconciliation
+  once every producer and the presenter have moved. Queue status, Audio Gen Stream and attribution
+  progress events stay — they describe live work, not persisted state.
+- **The MudBlazor presenter becomes a thin adapter**: it renders snapshots, submits intents and
+  mutations, and maps typed outcomes to dialogs, snackbars and the "Book updated elsewhere" notice.
+  It never receives raw `BookMutations` and owns no refresh, patch, reseed or selection rule.
+  Architecture tests enforce both halves of that.
+- **Not changed, deliberately**: the generic command endpoint's public JSON contract; Book hierarchy,
+  attribution, Voice Rule, audio-generation and assembly domain behaviour; lazy branch loading; and
+  the one-process deployment assumption.
