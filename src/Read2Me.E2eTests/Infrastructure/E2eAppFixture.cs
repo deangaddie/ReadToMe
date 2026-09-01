@@ -83,6 +83,9 @@ public sealed class E2eAppFixture : IAsyncLifetime
         WorkspaceSeeder.SeedMisSplitParagraphProjectAsync(
             Services, WorkspaceDir, folderName, title, author, characterName);
 
+    public Task SeedItemAudioAsync(string folderName, Guid itemId, Guid characterId) =>
+        WorkspaceSeeder.SeedItemAudioAsync(Services, WorkspaceDir, folderName, itemId, characterId);
+
     public Task<Guid> SeedEditableVoiceAsync(string folderName, Guid characterId, string voiceName = "Alice Voice") =>
         WorkspaceSeeder.SeedEditableVoiceAsync(Services, WorkspaceDir, folderName, characterId, voiceName);
 

@@ -268,6 +268,30 @@ namespace Read2Me.App.State
                 : SetItemCharacterAsync(folderId, item, characterId);
         }
 
+        /// <summary>
+        /// Mirrors, in the loaded tree, what <c>UpdateParagraphItemTextCommand</c> has just written:
+        /// the edited item's audio is gone and any verdict on it deleted. Called only after the
+        /// command executed and only when the text actually changed, so an edit that changed nothing
+        /// leaves good audio and its review alone.
+        /// <para>
+        /// Without this the row keeps rendering a WAV the database no longer records — the audio
+        /// checkbox stays disabled, a "select needs audio" pass keeps skipping the item, and the
+        /// chapter's audio-remaining badge stays a count too low until the next full load.
+        /// </para>
+        /// </summary>
+        public async Task NoteItemTextEditedAsync(ProjectFolderId folderId, ParagraphItem item)
+        {
+            item.AudioFileName = null;
+            audioReviews.Clear(folderId, item.Id);
+            RecomputeParagraphReview(folderId, item.Id);
+
+            // One read, same as a speaker flip: the audio denominator moves and there is no
+            // increment-side patch on NodeStatusService to move it with.
+            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
+
+            NotifyStateChanged();
+        }
+
         public async Task SetItemCharacterAsync(ProjectFolderId folderId, ParagraphItem item, Guid? characterId)
         {
             await commandHandler.ExecuteAsync(new SetItemCharacterCommand(folderId, item.Id, characterId));

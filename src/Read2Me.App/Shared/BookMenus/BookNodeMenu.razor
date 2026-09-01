@@ -35,6 +35,17 @@
                          OnClick="MergeWithNextAsync">Merge with Next</MudMenuItem>
         }
     }
+    @if (Spec.InsertItems.Count > 0)
+    {
+        <MudDivider />
+        @foreach (var ins in Spec.InsertItems)
+        {
+            var i = ins;
+            <MudMenuItem Icon="@(i.Position == InsertPosition.Before ? Icons.Material.Filled.VerticalAlignTop : Icons.Material.Filled.VerticalAlignBottom)"
+                         IconColor="Color.Success"
+                         OnClick="@(() => InsertItemAsync(i))">@i.Label</MudMenuItem>
+        }
+    }
     @if (Spec.InsertPausesBefore.Count > 0)
     {
         <MudDivider />
@@ -42,7 +53,7 @@
         {
             var ps = p;
             <MudMenuItem Icon="@Icons.Material.Filled.VerticalAlignTop" IconColor="Color.Tertiary"
-                         OnClick="@(() => InsertPauseAsync(ps, PauseInsertPosition.Before))">Insert @ps.Label Before</MudMenuItem>
+                         OnClick="@(() => InsertPauseAsync(ps, InsertPosition.Before))">Insert @ps.Label Before</MudMenuItem>
         }
     }
     @if (Spec.InsertPausesAfter.Count > 0)
@@ -52,7 +63,7 @@
         {
             var ps = p;
             <MudMenuItem Icon="@Icons.Material.Filled.VerticalAlignBottom" IconColor="Color.Tertiary"
-                         OnClick="@(() => InsertPauseAsync(ps, PauseInsertPosition.After))">Insert @ps.Label After</MudMenuItem>
+                         OnClick="@(() => InsertPauseAsync(ps, InsertPosition.After))">Insert @ps.Label After</MudMenuItem>
         }
     }
     <MudDivider />
@@ -77,7 +88,7 @@
         var (command, updateLocal) = await Spec.EditAction(Menu);
         if (command == null) return;
         await Menu.ExecuteAsync(command);
-        updateLocal?.Invoke();
+        if (updateLocal != null) await updateLocal();
         await OnChanged.InvokeAsync();
     }
 
@@ -131,7 +142,17 @@
             await OnReset.InvokeAsync();
     }
 
-    async Task InsertPauseAsync(InsertPauseSpec spec, PauseInsertPosition position)
+    // A new item raises the chapter's audio denominator and its attribution-remaining count, and
+    // can flip the paragraph into a character paragraph — so it reloads rather than patching.
+    async Task InsertItemAsync(InsertItemSpec spec)
+    {
+        var command = await spec.Build(Menu);
+        if (command == null) return;
+        await Menu.ExecuteAsync(command);
+        await OnReset.InvokeAsync();
+    }
+
+    async Task InsertPauseAsync(InsertPauseSpec spec, InsertPosition position)
     {
         await Menu.ExecuteAsync(new InsertPauseParagraphCommand(Spec.FolderId, Spec.EntityId, position, spec.PauseKind));
         await OnReset.InvokeAsync();

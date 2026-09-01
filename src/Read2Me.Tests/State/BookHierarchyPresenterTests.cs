@@ -834,6 +834,40 @@ namespace Read2Me.Tests.State
         }
 
         // ---------------------------------------------------------------
+        // NoteItemTextEditedAsync — a text edit returns the item to pre-generation state
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// The row has to go back to Generatable without a reload: while it still shows a WAV its
+        /// audio checkbox stays disabled, a "select needs audio" pass keeps skipping it, and the
+        /// chapter's audio-remaining badge reads one too low.
+        /// </summary>
+        [Fact]
+        public async Task NoteItemTextEditedAsync_ClearsAudio_DropsTheReview_AndRaisesTheAudioBadge()
+        {
+            var (ctx, itemId, chapterId, partId, volumeId) = await CreateWithReviewSeedRow();
+            var item = ctx.Presenter.Tree.TryGetOwner(itemId)!.Items.Single(i => i.Id == itemId);
+            item.AudioFileName = "item.wav";
+
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).Review);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+
+            // The handler has already cleared the WAV and deleted the verdict; the reseed reads that back.
+            ctx.Reader.GetNodeStatusSeedAsync(Folder).Returns<IReadOnlyList<ParagraphStatusSeedRow>>(
+            [
+                new(item.ParagraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 1, Review: 0),
+            ]);
+
+            await ctx.Presenter.NoteItemTextEditedAsync(Folder, item);
+
+            Assert.Null(item.AudioFileName);
+            Assert.Null(ctx.AudioReviews.ReviewOf(Folder, itemId));
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, volumeId).AudioRemaining);
+            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).Review);
+        }
+
+        // ---------------------------------------------------------------
         // SetParagraphCharacterAsync — single command regardless of null/non-null id
         // ---------------------------------------------------------------
 

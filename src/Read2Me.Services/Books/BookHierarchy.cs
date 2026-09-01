@@ -161,6 +161,61 @@ namespace Read2Me.Services.Books
         }
 
         // ---------------------------------------------------------------
+        // PlanInsertParagraphItem: create one Speech item beside an anchor item,
+        // inside the anchor's own Paragraph. Insertion never crosses a Paragraph
+        // boundary — "Before" on the first item lands first in that same Paragraph.
+        //
+        // The new item is born unattributed: no CharacterId, no VoiceInstructions,
+        // no AudioFileName. The anchor held two speakers by construction, so
+        // inheriting its speaker would stamp a confident wrong answer that looks
+        // attributed and never reaches the attribution queue (spec D5).
+        //
+        // Returns null when the anchor is unknown, is a pause, or the text is blank.
+        // ---------------------------------------------------------------
+        public HierarchyMutation? PlanInsertParagraphItem(Guid anchorItemId, InsertPosition position, string text)
+        {
+            var trimmed = text?.Trim();
+            if (string.IsNullOrEmpty(trimmed)) return null;
+
+            var (paragraphId, siblings) = FindParentAndSiblings(Items, anchorItemId, i => i.Id);
+            if (paragraphId == null) return null;
+
+            var idx = siblings.FindIndex(i => i.Id == anchorItemId);
+            if (idx < 0) return null;
+
+            var anchor = siblings[idx];
+            // A Speech item inside a pause paragraph is a structure the readers assume cannot
+            // exist, so the refusal lives here rather than only in the menu (spec D7).
+            if (ParagraphItemKinds.IsPause(anchor.ItemType)) return null;
+
+            string? prevOrder, nextOrder;
+            if (position == InsertPosition.Before)
+            {
+                prevOrder = idx > 0 ? siblings[idx - 1].Order : null;
+                nextOrder = anchor.Order;
+            }
+            else
+            {
+                prevOrder = anchor.Order;
+                nextOrder = idx < siblings.Count - 1 ? siblings[idx + 1].Order : null;
+            }
+
+            var newItem = new ParagraphItem
+            {
+                Id = Guid.NewGuid(),
+                ParagraphId = paragraphId.Value,
+                ItemType = ParagraphItemType.Speech,
+                Text = trimmed,
+                CharacterId = null,
+                VoiceInstructions = null,
+                AudioFileName = null,
+                Order = OrderHelper.GetBetween(prevOrder, nextOrder),
+            };
+
+            return new HierarchyMutation(ToAdd: [newItem], ToDelete: [], ToUpdate: []);
+        }
+
+        // ---------------------------------------------------------------
         // PlanMerge* — pure merge planning, no DB access.
         // Returns null when the operation is a no-op.
         // ---------------------------------------------------------------

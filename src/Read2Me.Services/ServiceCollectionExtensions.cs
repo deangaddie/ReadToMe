@@ -83,6 +83,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<AddPartTitlesCommand>, AddPartTitlesHandler>();
         services.AddScoped<ICommandHandler<AddChapterTitlesCommand>, AddChapterTitlesHandler>();
 
+        // Item insertion
+        services.AddScoped<ICommandHandler<InsertParagraphItemCommand>, InsertParagraphItemHandler>();
+
         // Pause
         services.AddScoped<ICommandHandler<AddPausesCommand>, AddPausesHandler>();
         services.AddScoped<ICommandHandler<InsertPauseParagraphCommand>, InsertPauseParagraphHandler>();

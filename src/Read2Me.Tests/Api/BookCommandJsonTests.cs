@@ -71,15 +71,21 @@ namespace Read2Me.Tests.Api
             Assert.Equal(Folder, command.FolderId);
         }
 
-        [Fact]
-        public void Enums_bind_from_strings()
+        [Theory]
+        [InlineData("Before", InsertPosition.Before)]
+        [InlineData("After", InsertPosition.After)]
+        public void Enums_bind_from_strings(string position, InsertPosition expected)
         {
+            // Pins the wire contract: "position" keeps binding by these names even though the
+            // C# enum was renamed PauseInsertPosition -> InsertPosition.
             var anchorId = Guid.NewGuid();
             var command = (InsertPauseParagraphCommand)Deserialize(
                 "InsertPauseParagraph",
-                $$"""{ "anchorItemId": "{{anchorId}}", "position": "Before", "pauseKind": "{{PauseKind.ParagraphPause}}" }""");
+                $$"""{ "anchorItemId": "{{anchorId}}", "position": "{{position}}", "pauseKind": "{{PauseKind.ParagraphPause}}" }""");
 
             Assert.Equal(anchorId, command.AnchorItemId);
+            Assert.Equal(expected, command.Position);
+            Assert.Equal(PauseKind.ParagraphPause, command.PauseKind);
         }
 
         [Fact]

@@ -142,6 +142,29 @@ public static class WorkspaceSeeder
     }
 
     /// <summary>
+    /// Stamps a speaker and a generated WAV onto one already-seeded item, so the audio view shows it
+    /// attributed and playable — the state a mutation beside it has to leave alone.
+    /// </summary>
+    public static async Task SeedItemAudioAsync(
+        IServiceProvider services, string workspaceDir, string folderName, Guid itemId, Guid characterId)
+    {
+        var folderPath = Path.Combine(workspaceDir, folderName);
+        var relativePath = $"audio/{itemId}.wav";
+
+        var fullPath = Path.Combine(folderPath, "audio", $"{itemId}.wav");
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        await File.WriteAllBytesAsync(fullPath, FakeAiResponses.SilentWav());
+
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        await using var db = await factory.CreateAsync(folderPath);
+
+        var item = db.ParagraphItems.First(i => i.Id == itemId);
+        item.CharacterId = characterId;
+        item.AudioFileName = relativePath;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
     /// Gives a character an uploaded voice whose reference audio is a real, editable Canonical WAV —
     /// dead air, a tone, dead air — so the voice audio editor has something a filter can visibly change.
     /// Returns the voice's id.
