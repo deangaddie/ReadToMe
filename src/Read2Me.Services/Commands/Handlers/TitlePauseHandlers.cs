@@ -113,7 +113,7 @@ public sealed class InsertPauseParagraphHandler(ProjectDbSession session) : ICom
         if (idx < 0) return null;
 
         string? afterOrder, beforeOrder;
-        if (c.Position == PauseInsertPosition.Before)
+        if (c.Position == InsertPosition.Before)
         {
             afterOrder  = idx > 0 ? siblings[idx - 1].Order : null;
             beforeOrder = paragraph.Order;

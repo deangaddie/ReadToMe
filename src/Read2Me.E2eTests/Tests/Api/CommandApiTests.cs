@@ -118,4 +118,52 @@ public class CommandApiTests(E2eAppFixture app)
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+
+    /// <summary>
+    /// The repair ADR 0005 deferred, driven straight through the API: the two-speaker item keeps its
+    /// text and a new sibling arrives beside it, unattributed, so the attribution queue still owns
+    /// the question of who speaks it. Whitespace is refused here and not only in the dialog — this
+    /// endpoint is the agent path, and has no dialog in front of it.
+    /// </summary>
+    [Fact]
+    public async Task InsertParagraphItem_adds_an_unattributed_sibling_and_refuses_blank_text()
+    {
+        var folder = $"api-insert-{Guid.NewGuid():N}";
+        var builder = await app.SeedMisSplitParagraphProjectAsync(
+            folder, "Insert Item Book", "Author", characterName: "Alice");
+        var chapterId = builder.ChapterId("ch1");
+        var paragraphId = builder.ParagraphId("p2");
+
+        var response = await PostCommandAsync(folder,
+            $$"""{ "type": "InsertParagraphItem", "anchorItemId": "{{builder.ItemId("mixed")}}", "position": "After", "text": "  “And who might you be?” he answered.  " }""");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var newId = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.GetProperty("newEntityId").GetGuid();
+        Assert.NotEqual(Guid.Empty, newId);
+
+        var items = await ReadItemsAsync(folder, chapterId, paragraphId);
+        Assert.Equal(
+            [builder.ItemId("lead"), builder.ItemId("mixed"), newId, builder.ItemId("clean")],
+            items.Select(i => i.GetProperty("id").GetGuid()));
+
+        var inserted = items.Single(i => i.GetProperty("id").GetGuid() == newId);
+        Assert.Equal("“And who might you be?” he answered.", inserted.GetProperty("text").GetString());
+        Assert.Equal(JsonValueKind.Null, inserted.GetProperty("characterId").ValueKind);
+
+        var blank = await PostCommandAsync(folder,
+            $$"""{ "type": "InsertParagraphItem", "anchorItemId": "{{builder.ItemId("mixed")}}", "position": "After", "text": "   " }""");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, blank.StatusCode);
+        Assert.Equal(4, (await ReadItemsAsync(folder, chapterId, paragraphId)).Count);
+    }
+
+    private async Task<List<JsonElement>> ReadItemsAsync(string folder, Guid chapterId, Guid paragraphId)
+    {
+        var children = JsonDocument.Parse(await Http.GetStringAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/nodes/chapter/{chapterId}/children"));
+        return [.. children.RootElement.GetProperty("paragraphs").EnumerateArray()
+            .Single(p => p.GetProperty("id").GetGuid() == paragraphId)
+            .GetProperty("items").EnumerateArray().Select(i => i.Clone())];
+    }
 }

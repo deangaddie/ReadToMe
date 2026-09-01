@@ -2,6 +2,12 @@ namespace Read2Me.Core.Models;
 
 public enum MergeDirection { Previous, Next }
 
+/// <summary>
+/// Where a new node lands relative to the anchor node it is inserted against.
+/// Shared by every insertion command; the member names are also the JSON wire values.
+/// </summary>
+public enum InsertPosition { Before, After }
+
 public abstract record BookCommand(ProjectFolderId FolderId);
 
 // Delete
@@ -107,11 +113,19 @@ public record AddVolumeTitlesCommand(ProjectFolderId FolderId) : BookCommand(Fol
 public record AddPartTitlesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 public record AddChapterTitlesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 
+// Item insertion
+/// <summary>
+/// Creates one Speech ParagraphItem next to <c>AnchorItemId</c>, inside the anchor's own Paragraph.
+/// The new item is born unattributed — no speaker, no voice instructions, no audio: by construction
+/// the anchor held two speakers, so inheriting its speaker would stamp a confident wrong answer that
+/// looks attributed and never reaches the attribution queue.
+/// </summary>
+public record InsertParagraphItemCommand(ProjectFolderId FolderId, Guid AnchorItemId, InsertPosition Position, string Text) : BookCommand(FolderId);
+
 // Pause insertion
 public record AddPausesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
-public record InsertPauseParagraphCommand(ProjectFolderId FolderId, Guid AnchorItemId, PauseInsertPosition Position, PauseKind PauseKind) : BookCommand(FolderId);
+public record InsertPauseParagraphCommand(ProjectFolderId FolderId, Guid AnchorItemId, InsertPosition Position, PauseKind PauseKind) : BookCommand(FolderId);
 
-public enum PauseInsertPosition { Before, After }
 public enum PauseKind { Pause, ParagraphPause, ChapterPause, PartPause, VolumePause }
 
 // Clear

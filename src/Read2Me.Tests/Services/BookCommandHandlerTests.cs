@@ -1,5 +1,7 @@
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Read2Me.App.Api;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
@@ -119,6 +121,66 @@ namespace Read2Me.Tests.Services
 
             await using var verify = await OpenDbAsync();
             Assert.Equal("Updated text", (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.Text);
+        }
+
+        /// <summary>
+        /// A changed text invalidates the audio: the WAV speaks words the item no longer has, and an
+        /// item that still *has* audio is not Generatable, so it would be skipped by a "select needs
+        /// audio" pass and assemble into the m4b unchanged.
+        /// </summary>
+        [Fact]
+        public async Task UpdateParagraphItemTextCommand_TextChanged_ClearsAudioAndDeletesReview()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
+            await GiveItemAudioAndReviewAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new UpdateParagraphItemTextCommand(_folder, b.ItemId("item"), "Updated text"));
+
+            await using var verify = await OpenDbAsync();
+            var item = await verify.ParagraphItems.AsNoTracking().SingleAsync(i => i.Id == b.ItemId("item"));
+            Assert.Equal("Updated text", item.Text);
+            Assert.Null(item.AudioFileName);
+            Assert.False(await verify.AudioReviews.AnyAsync(r => r.ParagraphItemId == b.ItemId("item")));
+        }
+
+        /// <summary>
+        /// Saving without editing anything must not cost a regeneration — and the review row is a
+        /// verdict on audio that is still current, so it stays too.
+        /// </summary>
+        [Fact]
+        public async Task UpdateParagraphItemTextCommand_TextUnchanged_KeepsAudioAndReview()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
+            await GiveItemAudioAndReviewAsync(b.ItemId("item"));
+
+            await _svc.ExecuteAsync(new UpdateParagraphItemTextCommand(_folder, b.ItemId("item"), "Hello world"));
+
+            await using var verify = await OpenDbAsync();
+            var item = await verify.ParagraphItems.AsNoTracking().SingleAsync(i => i.Id == b.ItemId("item"));
+            Assert.Equal("Hello world", item.Text);
+            Assert.Equal("item.wav", item.AudioFileName);
+            Assert.True(await verify.AudioReviews.AnyAsync(r => r.ParagraphItemId == b.ItemId("item")));
+        }
+
+        /// <summary>Arranges a generated, reviewed item: it has a WAV and a NeedsReview verdict.</summary>
+        private async Task GiveItemAudioAndReviewAsync(Guid itemId)
+        {
+            await using var db = await OpenDbAsync();
+            (await db.ParagraphItems.FindAsync(itemId))!.AudioFileName = "item.wav";
+            db.AudioReviews.Add(new AudioReview
+            {
+                Id = Guid.NewGuid(),
+                ParagraphItemId = itemId,
+                State = Read2Me.Data.Enums.AudioReviewState.NeedsReview,
+                NormalizeOk = true,
+                VerifyOk = false,
+                Wer = 0.4,
+                CreatedUtc = DateTime.UtcNow,
+                UpdatedUtc = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
         }
 
         // ---------------------------------------------------------------
@@ -461,7 +523,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), PauseInsertPosition.Before, kind));
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.Before, kind));
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
@@ -477,12 +539,38 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task InsertPauseParagraphCommand_FromJsonPayload_BehavesTheSameAsTheTypedCommand()
+        {
+            // The commands endpoint is a generic dispatcher, so the wire contract is the
+            // JSON name "position": "Before" — renaming the C# enum must not disturb it.
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
+
+            var body = JsonNode.Parse(
+                $$"""{ "type": "InsertPauseParagraph", "anchorItemId": "{{b.ItemId("item")}}", "position": "Before", "pauseKind": "ChapterPause" }""")!.AsObject();
+            var ok = BookCommandJson.TryDeserialize("InsertPauseParagraph", body, _folder, out var command, out var error);
+            Assert.True(ok, error);
+
+            await _svc.ExecuteAsync(command!);
+
+            await using var verify = await OpenDbAsync();
+            var paragraphs = await verify.Paragraphs
+                .Where(p => p.ChapterId == b.ChapterId("ch"))
+                .OrderBy(p => p.Order)
+                .ToListAsync();
+            Assert.Equal(2, paragraphs.Count);
+            Assert.Equal(b.ParagraphId("para"), paragraphs[1].Id);
+            var pauseItem = await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == paragraphs[0].Id);
+            Assert.Equal(ParagraphItemType.ChapterPause, pauseItem.ItemType);
+        }
+
+        [Fact]
         public async Task InsertPauseParagraphCommand_After_InsertsPauseAfterParagraph()
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), PauseInsertPosition.After, PauseKind.ParagraphPause));
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.After, PauseKind.ParagraphPause));
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
@@ -505,7 +593,7 @@ namespace Read2Me.Tests.Services
                     .AddParagraph("para2", p => p.AddNarration("item2", "Second"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), PauseInsertPosition.After, PauseKind.ChapterPause));
+            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.After, PauseKind.ChapterPause));
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
@@ -519,6 +607,128 @@ namespace Read2Me.Tests.Services
             Assert.Equal(ParagraphItemType.ChapterPause, pauseItem.ItemType);
             Assert.True(string.Compare(paragraphs[0].Order, paragraphs[1].Order, StringComparison.Ordinal) < 0);
             Assert.True(string.Compare(paragraphs[1].Order, paragraphs[2].Order, StringComparison.Ordinal) < 0);
+        }
+
+        // ---------------------------------------------------------------
+        // InsertParagraphItemCommand
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task InsertParagraphItemCommand_After_PersistsAnUnattributedItemInReadOrder()
+        {
+            // The anchor is fully attributed and voiced — precisely the case where inheriting
+            // would look right and be wrong. The new item must arrive with none of it.
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", character);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p
+                    .AddRawItem("anchor", ParagraphItemType.Speech, "“Hello there,” she said.", character.Id)
+                    .AddRawItem("tail",   ParagraphItemType.Speech, "“Only me,” came the reply.", character.Id))))
+                .BuildAsync();
+
+            var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
+                _folder, b.ItemId("anchor"), InsertPosition.After, "  “And who might you be?” he answered.  "));
+
+            Assert.NotNull(newId);
+            await using var verify = await OpenDbAsync();
+            var items = await verify.ParagraphItems
+                .Where(i => i.ParagraphId == b.ParagraphId("para"))
+                .OrderBy(i => i.Order)
+                .ToListAsync();
+
+            Assert.Equal([b.ItemId("anchor"), newId!.Value, b.ItemId("tail")], items.Select(i => i.Id));
+
+            var inserted = items[1];
+            Assert.Equal(ParagraphItemType.Speech, inserted.ItemType);
+            Assert.Equal("“And who might you be?” he answered.", inserted.Text);
+            Assert.Null(inserted.CharacterId);
+            Assert.Null(inserted.VoiceInstructions);
+            Assert.Null(inserted.AudioFileName);
+
+            // The anchor keeps everything it had — insertion is a sibling, not an edit.
+            Assert.Equal(character.Id, items[0].CharacterId);
+        }
+
+        [Fact]
+        public async Task InsertParagraphItemCommand_Before_FirstItem_StaysInsideTheAnchorsParagraph()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para1", p => p.AddNarration("first", "The door swung open."))
+                .AddParagraph("para2", p => p.AddNarration("second", "Second paragraph."))))
+                .BuildAsync();
+
+            var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
+                _folder, b.ItemId("second"), InsertPosition.Before, "A restored line."));
+
+            await using var verify = await OpenDbAsync();
+            var inserted = await verify.ParagraphItems.FindAsync(newId!.Value);
+            Assert.Equal(b.ParagraphId("para2"), inserted!.ParagraphId);
+
+            var items = await verify.ParagraphItems
+                .Where(i => i.ParagraphId == b.ParagraphId("para2"))
+                .OrderBy(i => i.Order)
+                .ToListAsync();
+            Assert.Equal([newId.Value, b.ItemId("second")], items.Select(i => i.Id));
+            Assert.Single(await verify.ParagraphItems.Where(i => i.ParagraphId == b.ParagraphId("para1")).ToListAsync());
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task InsertParagraphItemCommand_WhitespaceOnlyText_Throws(string text)
+        {
+            // The only guard on the agent path: the commands endpoint dispatches any BookCommand
+            // by name, with no dialog in front of it, and turns this throw into a 422.
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddNarration("item", "Hello world"))))
+                .BuildAsync();
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _svc.ExecuteAsync(
+                new InsertParagraphItemCommand(_folder, b.ItemId("item"), InsertPosition.After, text)));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
+        }
+
+        [Fact]
+        public async Task InsertParagraphItemCommand_PauseAnchor_InsertsNothing()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddPause("pause", ParagraphItemType.ParagraphPause))))
+                .BuildAsync();
+
+            var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
+                _folder, b.ItemId("pause"), InsertPosition.After, "Text."));
+
+            Assert.Null(newId);
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
+        }
+
+        [Fact]
+        public async Task InsertParagraphItemCommand_FromJsonPayload_BehavesTheSameAsTheTypedCommand()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddNarration("item", "Hello world"))))
+                .BuildAsync();
+
+            var body = JsonNode.Parse(
+                $$"""{ "type": "InsertParagraphItem", "anchorItemId": "{{b.ItemId("item")}}", "position": "After", "text": "Agent line." }""")!.AsObject();
+            var ok = BookCommandJson.TryDeserialize("InsertParagraphItem", body, _folder, out var command, out var error);
+            Assert.True(ok, error);
+
+            var newId = await _svc.ExecuteAsync(command!);
+
+            Assert.NotNull(newId);
+            await using var verify = await OpenDbAsync();
+            var inserted = await verify.ParagraphItems.FindAsync(newId!.Value);
+            Assert.Equal("Agent line.", inserted!.Text);
+            Assert.Null(inserted.CharacterId);
         }
 
         // ---------------------------------------------------------------

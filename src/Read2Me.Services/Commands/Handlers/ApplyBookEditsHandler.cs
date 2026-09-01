@@ -2,6 +2,12 @@ using Read2Me.Core.Models;
 
 namespace Read2Me.Services.Commands.Handlers;
 
+/// <summary>
+/// Applies an approved AI edit program. Titles are set directly; item text goes through
+/// <see cref="ParagraphItemTextEdit"/> rather than a bare assignment, because this handler reaches
+/// item text by its own path and would otherwise leave the stale-audio hole open on the AI route
+/// while the item menu had it closed.
+/// </summary>
 public sealed class ApplyBookEditsHandler(ProjectDbSession session) : ICommandHandler<ApplyBookEditsCommand>
 {
     public async Task<Guid?> HandleAsync(ApplyBookEditsCommand c, CancellationToken ct)
@@ -25,7 +31,9 @@ public sealed class ApplyBookEditsHandler(ProjectDbSession session) : ICommandHa
                     break;
                 case BookEditTargetKind.ParagraphItemText:
                     var item = await db.ParagraphItems.FindAsync([edit.Id], ct);
-                    if (item != null) item.Text = edit.NewValue;
+                    // A rewritten item's WAV speaks words it no longer has, so the edit discards
+                    // the audio and any verdict on it — same rule as the item menu.
+                    if (item != null) await ParagraphItemTextEdit.ApplyAsync(db, item, edit.NewValue, ct);
                     break;
             }
         }
