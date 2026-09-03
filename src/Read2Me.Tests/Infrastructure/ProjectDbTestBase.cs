@@ -42,7 +42,7 @@ namespace Read2Me.Tests.Infrastructure
                 .UseSqlite($"Data Source={Path.Combine(FolderPath, "project.db")};Pooling=false")
                 .Options);
 
-        public ValueTask DisposeAsync()
+        public virtual ValueTask DisposeAsync()
         {
             try { if (Directory.Exists(TempDir)) Directory.Delete(TempDir, recursive: true); }
             catch { /* best effort */ }

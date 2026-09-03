@@ -610,69 +610,13 @@ namespace Read2Me.Tests.Services
         }
 
         // ---------------------------------------------------------------
-        // InsertParagraphItemCommand
+        // InsertParagraphItemCommand — the legacy façade over BookMutations
+        //
+        // Insertion has migrated to BookMutations (ADR 0007), so what it actually does to the
+        // Book is asserted in BookMutationsTests. What is left here is the only thing this seam
+        // still owns: the flattening of a typed outcome back into the Guid?-or-throw contract that
+        // POST /commands answers with. It goes when the façade goes.
         // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task InsertParagraphItemCommand_After_PersistsAnUnattributedItemInReadOrder()
-        {
-            // The anchor is fully attributed and voiced — precisely the case where inheriting
-            // would look right and be wrong. The new item must arrive with none of it.
-            var character = new Character { Id = Guid.NewGuid(), Name = "Alice" };
-            var b = new BookHierarchyBuilder(OpenDbAsync);
-            b.WithCharacter("alice", character);
-            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("para", p => p
-                    .AddRawItem("anchor", ParagraphItemType.Speech, "“Hello there,” she said.", character.Id)
-                    .AddRawItem("tail",   ParagraphItemType.Speech, "“Only me,” came the reply.", character.Id))))
-                .BuildAsync();
-
-            var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
-                _folder, b.ItemId("anchor"), InsertPosition.After, "  “And who might you be?” he answered.  "));
-
-            Assert.NotNull(newId);
-            await using var verify = await OpenDbAsync();
-            var items = await verify.ParagraphItems
-                .Where(i => i.ParagraphId == b.ParagraphId("para"))
-                .OrderBy(i => i.Order)
-                .ToListAsync();
-
-            Assert.Equal([b.ItemId("anchor"), newId!.Value, b.ItemId("tail")], items.Select(i => i.Id));
-
-            var inserted = items[1];
-            Assert.Equal(ParagraphItemType.Speech, inserted.ItemType);
-            Assert.Equal("“And who might you be?” he answered.", inserted.Text);
-            Assert.Null(inserted.CharacterId);
-            Assert.Null(inserted.VoiceInstructions);
-            Assert.Null(inserted.AudioFileName);
-
-            // The anchor keeps everything it had — insertion is a sibling, not an edit.
-            Assert.Equal(character.Id, items[0].CharacterId);
-        }
-
-        [Fact]
-        public async Task InsertParagraphItemCommand_Before_FirstItem_StaysInsideTheAnchorsParagraph()
-        {
-            var b = new BookHierarchyBuilder(OpenDbAsync);
-            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("para1", p => p.AddNarration("first", "The door swung open."))
-                .AddParagraph("para2", p => p.AddNarration("second", "Second paragraph."))))
-                .BuildAsync();
-
-            var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
-                _folder, b.ItemId("second"), InsertPosition.Before, "A restored line."));
-
-            await using var verify = await OpenDbAsync();
-            var inserted = await verify.ParagraphItems.FindAsync(newId!.Value);
-            Assert.Equal(b.ParagraphId("para2"), inserted!.ParagraphId);
-
-            var items = await verify.ParagraphItems
-                .Where(i => i.ParagraphId == b.ParagraphId("para2"))
-                .OrderBy(i => i.Order)
-                .ToListAsync();
-            Assert.Equal([newId.Value, b.ItemId("second")], items.Select(i => i.Id));
-            Assert.Single(await verify.ParagraphItems.Where(i => i.ParagraphId == b.ParagraphId("para1")).ToListAsync());
-        }
 
         [Theory]
         [InlineData("")]
@@ -703,6 +647,26 @@ namespace Read2Me.Tests.Services
 
             var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
                 _folder, b.ItemId("pause"), InsertPosition.After, "Text."));
+
+            Assert.Null(newId);
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
+        }
+
+        [Fact]
+        public async Task InsertParagraphItemCommand_UnknownAnchor_NoOpsRatherThanRejecting()
+        {
+            // BookMutations tells an unknown anchor apart from a legal no-op, but this seam does
+            // not: every command bar SetNarratorCharacter no-ops on a node the Book does not
+            // contain (docs/agents/api.md), and the endpoint keeps that answer through the
+            // migration rather than starting to 422 on it.
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddNarration("item", "Hello world"))))
+                .BuildAsync();
+
+            var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
+                _folder, Guid.NewGuid(), InsertPosition.After, "Nowhere."));
 
             Assert.Null(newId);
             await using var verify = await OpenDbAsync();

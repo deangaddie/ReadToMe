@@ -108,6 +108,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICharacterReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IUnattributedItemCounter>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IAudioItemReader>(sp => sp.GetRequiredService<ProjectReader>());
+
+        // ── Book mutations (ADR 0007) ────────────────────────────────────────
+        // The write-side spine. Singletons because serialization and revision order are
+        // process-wide facts about a project, not per-circuit ones.
+        services.TryAddSingleton<Mutations.ProjectWriteLocks>();
+        services.TryAddSingleton<Mutations.BookRevisionSequence>();
+        services.TryAddSingleton<Mutations.BookMutationOptions>();
+        services.TryAddSingleton<Events.EventBroadcaster<Mutations.BookMutationReceipt>>();
+        services.AddScoped<Mutations.BookMutations>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.InsertParagraphItemMutation>,
+            Mutations.Implementations.InsertParagraphItemMutationImplementation>();
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 
