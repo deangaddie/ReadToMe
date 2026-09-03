@@ -15,6 +15,7 @@ using Read2Me.App.Shared.BookMenus;
 using Read2Me.AppData;
 using Read2Me.Data;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Audio.ParagraphTts;
@@ -53,6 +54,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAudioItemReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IVoiceResolver, VoiceResolver>();
         services.AddBookCommandHandlers();
+        services.Configure<BookMutationOptions>(configuration.GetSection(BookMutationOptions.SectionName));
         
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());

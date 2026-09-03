@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
@@ -41,7 +42,7 @@ public class BookMutationsTests : ProjectDbTestBase
 
         _folder = new ProjectFolderId(FolderName);
         _receipts = _root.GetRequiredService<EventBroadcaster<BookMutationReceipt>>();
-        _options = _root.GetRequiredService<BookMutationOptions>();
+        _options = _root.GetRequiredService<IOptions<BookMutationOptions>>().Value;
     }
 
     // ── committed insertion ──────────────────────────────────────────────────
@@ -199,7 +200,8 @@ public class BookMutationsTests : ProjectDbTestBase
         // structure every reader assumes cannot exist.
         var b = new BookHierarchyBuilder(OpenDbAsync);
         await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-            .AddParagraph("para", p => p.AddPause("pause", ParagraphItemType.ParagraphPause))))
+            .AddParagraph("para", p => p.AddPause("pause", ParagraphItemType.ParagraphPause))
+            .AddParagraph("speech", p => p.AddNarration("item", "Real content."))))
             .BuildAsync();
         await using var circuit = NewCircuit();
         var published = new List<BookMutationReceipt>();
@@ -216,9 +218,12 @@ public class BookMutationsTests : ProjectDbTestBase
 
         Assert.IsType<BookMutationOutcome.NoChange>(outcome);
         Assert.Empty(published);
-        Assert.Equal(0L, _root.GetRequiredService<BookRevisionSequence>().Current(_folder));
         await using var verify = await OpenDbAsync();
         Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
+
+        // No revision was consumed: the project's first *committed* mutation is still revision 1.
+        var committed = await CommitInsertAsync(circuit, _folder, b.ItemId("item"), "First real write.");
+        Assert.Equal(1L, committed.Revision);
     }
 
     // ── expected uncommitted outcomes ────────────────────────────────────────

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Read2Me.Data;
 using Read2Me.Services.Events;
 
@@ -27,10 +28,12 @@ public sealed class BookMutations(
     ProjectDbSession session,
     ProjectWriteLocks writeLocks,
     BookRevisionSequence revisions,
-    BookMutationOptions options,
+    IOptions<BookMutationOptions> options,
     EventBroadcaster<BookMutationReceipt> receipts,
     ILogger<BookMutations> logger)
 {
+    private BookMutationOptions Options => options.Value;
+
     public async Task<BookMutationOutcome> CommitAsync(BookMutation mutation, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(mutation);
@@ -44,7 +47,7 @@ public sealed class BookMutations(
         IDisposable? writeLock;
         try
         {
-            writeLock = await writeLocks.AcquireAsync(mutation.FolderId, options.LockWaitBudget, ct);
+            writeLock = await writeLocks.AcquireAsync(mutation.FolderId, Options.LockWaitBudget, ct);
         }
         catch (OperationCanceledException)
         {
@@ -57,7 +60,7 @@ public sealed class BookMutations(
         {
             logger.LogWarning(
                 "Book mutation {Mutation} for {Folder} gave up waiting {Budget} for the project write lock.",
-                mutation.Name, mutation.FolderId.Value, options.LockWaitBudget);
+                mutation.Name, mutation.FolderId.Value, Options.LockWaitBudget);
             return new BookMutationOutcome.Rejected(
                 BookMutationRejection.Conflict,
                 $"Another write to '{mutation.FolderId.Value}' is still in progress.");

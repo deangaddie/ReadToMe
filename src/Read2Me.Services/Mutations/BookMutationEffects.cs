@@ -67,9 +67,11 @@ public sealed record BookMutationEffects
     /// <summary>The identity created by this mutation, when it created exactly one thing.</summary>
     public Guid? CreatedId { get; init; }
 
+    // One list per kind of identifier a migrated family actually reports. Each producer family adds
+    // the list it needs as it lands; an empty list means "this mutation touched none", which is why
+    // a family that cannot enumerate its effects says so through Scope instead of leaving them bare.
     public IReadOnlyList<Guid> ParagraphIds { get; init; } = [];
     public IReadOnlyList<Guid> ParagraphItemIds { get; init; } = [];
-    public IReadOnlyList<Guid> CharacterIds { get; init; } = [];
     public IReadOnlyList<BookStructuralRelation> Structural { get; init; } = [];
 
     /// <summary>A valid operation that applied no change: no revision, no receipt, no commit.</summary>

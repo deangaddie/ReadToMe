@@ -19,8 +19,4 @@ public sealed class BookRevisionSequence
 
     public long Next(ProjectFolderId folderId) =>
         _revisions.AddOrUpdate(folderId.Value, 1, static (_, current) => current + 1);
-
-    /// <summary>The last revision handed out for a project, or 0 if it has never been written.</summary>
-    public long Current(ProjectFolderId folderId) =>
-        _revisions.TryGetValue(folderId.Value, out var revision) ? revision : 0;
 }

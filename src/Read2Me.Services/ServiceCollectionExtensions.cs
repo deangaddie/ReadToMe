@@ -114,7 +114,7 @@ public static class ServiceCollectionExtensions
         // process-wide facts about a project, not per-circuit ones.
         services.TryAddSingleton<Mutations.ProjectWriteLocks>();
         services.TryAddSingleton<Mutations.BookRevisionSequence>();
-        services.TryAddSingleton<Mutations.BookMutationOptions>();
+        services.AddOptions<Mutations.BookMutationOptions>();
         services.TryAddSingleton<Events.EventBroadcaster<Mutations.BookMutationReceipt>>();
         services.AddScoped<Mutations.BookMutations>();
         services.AddScoped<
