@@ -8,6 +8,7 @@ using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
 using Read2Me.App.Services.Preflight;
 using Read2Me.App.State;
+using Read2Me.App.State.Projection;
 using Read2Me.Services.Queueing;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
@@ -68,7 +69,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBookProjectLoader, BookProjectLoader>();
         services.AddScoped<ISelectionCoordinator, BookSelectionCoordinator>();
         services.AddScoped<BookHierarchyPresenter>();
-        
+        // One per circuit: a Book View projection is one reader's view of one Book (ADR 0007).
+        services.AddScoped<BookViewProjection>();
+
         services.AddSingleton<EpubFileReader>();
         services.AddSingleton<TextFileReader>();
 
