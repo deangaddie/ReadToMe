@@ -12,6 +12,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.UseCases;
 
@@ -25,7 +26,7 @@ namespace Read2Me.App.State
     /// <para>
     /// What is still the adapter's own: the busy and error flags of a running command, the seeding of
     /// the two singletons that mix persisted counts with live queue progress, and the Book mutations
-    /// that tickets 04 and after move onto receipts.
+    /// that the families still on the legacy command path own until their own slice lands.
     /// </para>
     /// </summary>
     public class BookHierarchyPresenter(
@@ -252,20 +253,38 @@ namespace Read2Me.App.State
                 () => bookUseCases.ImportManuallyAsync(folderId, options), reset: true);
         }
 
-        public enum SplitLevel { Volume, Part, Chapter, Paragraph }
-
-        public async Task SplitAndReloadAsync(
-            ProjectFolderId folderId, BookCommand command, SplitLevel level, Guid sourceParentId)
+        /// <summary>
+        /// Commits one Book mutation. The Book View is already coherent by the time this returns —
+        /// the projection rebuilt it from the receipt — so there is nothing here to refresh, reseed
+        /// or re-select afterwards (ADR 0007).
+        /// <para>
+        /// Only a refusal is worth telling the producer about, as a message. A coherent success
+        /// needs no announcement, because the Book View in front of them already shows it, and a
+        /// gesture that changed nothing has nothing to announce.
+        /// </para>
+        /// </summary>
+        public async Task MutateAsync(BookMutation mutation)
         {
-            var newId = await commandHandler.ExecuteAsync(command);
-            if (newId is Guid created)
-                treeState.For(folderId).MarkSplitExpansion(level switch
+            IsBusy = true;
+            Error = null;
+            NotifyStateChanged();
+            try
+            {
+                switch (await projection.MutateAsync(mutation))
                 {
-                    SplitLevel.Volume => BookNodeLevel.Volume,
-                    SplitLevel.Part => BookNodeLevel.Part,
-                    _ => BookNodeLevel.Chapter,
-                }, sourceParentId, created);
-            await ResetAndLoadAsync(folderId);
+                    case BookViewMutationOutcome.Coherent coherent:
+                        SeedDerivedServices(coherent.Snapshot.Folder, coherent.Snapshot);
+                        break;
+                    case BookViewMutationOutcome.Uncommitted uncommitted:
+                        snackbar.Add(uncommitted.Message, Severity.Warning);
+                        break;
+                }
+            }
+            finally
+            {
+                IsBusy = false;
+                NotifyStateChanged();
+            }
         }
 
         /// <summary>
@@ -277,7 +296,7 @@ namespace Read2Me.App.State
             treeState.For(folderId).FixMergeExpansion(survivorId, deletedId);
 
         // ---------------------------------------------------------------
-        // Book mutations — tickets 04 and after move these onto receipts
+        // Book mutations — the families still on the legacy command path
         // ---------------------------------------------------------------
 
         /// <summary>
@@ -494,19 +513,19 @@ namespace Read2Me.App.State
         }
 
         public Task AddBookTitleAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddBookTitleCommand(folderId));
+            MutateAsync(new AddBookTitleMutation(folderId));
 
         public Task AddVolumeTitlesAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddVolumeTitlesCommand(folderId));
+            MutateAsync(new AddVolumeTitlesMutation(folderId));
 
         public Task AddPartTitlesAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddPartTitlesCommand(folderId));
+            MutateAsync(new AddPartTitlesMutation(folderId));
 
         public Task AddChapterTitlesAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddChapterTitlesCommand(folderId));
+            MutateAsync(new AddChapterTitlesMutation(folderId));
 
         public Task AddPausesAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddPausesCommand(folderId));
+            MutateAsync(new AddPausesMutation(folderId));
 
         public void RequestConfirmReread()
         {
@@ -564,13 +583,6 @@ namespace Read2Me.App.State
             IsBusy = false;
             NotifyStateChanged();
         }
-
-        private Task ExecuteCommandAndReloadAsync(ProjectFolderId folderId, BookCommand command) =>
-            ExecuteAndReloadAsync(folderId, async () =>
-            {
-                await commandHandler.ExecuteAsync(command);
-                return Result.Ok();
-            }, reset: true);
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 

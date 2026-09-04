@@ -135,9 +135,12 @@ namespace Read2Me.Tests.State
             var audioQueue = new AudioQueueService();
             var events = new EventBroadcaster<ParagraphItemsChanged>();
             var coordinator = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
+            // No BookMutations: every mutation this file still covers goes through the legacy command
+            // handler. The migrated families are proved on BookViewProjection, where a real write side
+            // is the point.
             var projection = new BookViewProjection(
-                loader, reader, treeState, selectionState, audioSelectionState, coordinator, voiceResolver,
-                new BookRevisionSequence());
+                loader, reader, reader, reader, mutations: null!, treeState, selectionState,
+                audioSelectionState, coordinator, voiceResolver, new BookRevisionSequence());
             var presenter = new BookHierarchyPresenter(reader, projection, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, events);
             return new Context(presenter, projection, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue, audioQueue, events, roster, seed, dialogService, snackbar);
         }
@@ -333,66 +336,6 @@ namespace Read2Me.Tests.State
 
             Assert.Equal(charId, item.CharacterId);
             Assert.Equal("Alice", item.Character?.Name);
-        }
-
-        // ---------------------------------------------------------------
-        // SplitAndReloadAsync — new panel expansion
-        // ---------------------------------------------------------------
-
-        /// <summary>A volume of exactly two parts, the halves a split leaves behind.</summary>
-        private static void StubSplitVolume(Context ctx, Guid volumeId, Guid sourcePartId, Guid newPartId)
-        {
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(_ => EmptySnapshot(hasContent: true, volumes: [new Volume { Id = volumeId, Order = "a" }]));
-            ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Volume, volumeId)
-                .Returns(new HierarchyChildren(
-                    [new Part { Id = sourcePartId, Order = "a" }, new Part { Id = newPartId, Order = "b" }], null, null));
-            ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Part, Arg.Any<Guid>())
-                .Returns(new HierarchyChildren(null, new List<Chapter>(), null));
-        }
-
-        [Fact]
-        public async Task SplitAndReload_SourceExpanded_ExpandsNewParent()
-        {
-            var ctx = Create();
-            var volumeId = Guid.NewGuid();
-            var sourcePartId = Guid.NewGuid();
-            var newPartId = Guid.NewGuid();
-            StubSplitVolume(ctx, volumeId, sourcePartId, newPartId);
-
-            await ctx.Presenter.LoadAsync(Folder);
-            await ctx.Presenter.SetNodeExpandedAsync(BookNodeLevel.Part, sourcePartId, expanded: true);
-            ctx.CommandHandler.ExecuteAsync(Arg.Any<SplitAtChapterCommand>()).Returns(newPartId);
-
-            await ctx.Presenter.SplitAndReloadAsync(
-                Folder,
-                new SplitAtChapterCommand(Folder, Guid.NewGuid(), null),
-                BookHierarchyPresenter.SplitLevel.Part,
-                sourcePartId);
-
-            Assert.True(ctx.Presenter.IsExpanded(BookNodeLevel.Part, sourcePartId));
-            Assert.True(ctx.Presenter.IsExpanded(BookNodeLevel.Part, newPartId));
-        }
-
-        [Fact]
-        public async Task SplitAndReload_SourceCollapsed_DoesNotExpandNewParent()
-        {
-            var ctx = Create();
-            var volumeId = Guid.NewGuid();
-            var sourcePartId = Guid.NewGuid();
-            var newPartId = Guid.NewGuid();
-            StubSplitVolume(ctx, volumeId, sourcePartId, newPartId);
-
-            await ctx.Presenter.LoadAsync(Folder);
-            ctx.CommandHandler.ExecuteAsync(Arg.Any<SplitAtChapterCommand>()).Returns(newPartId);
-
-            await ctx.Presenter.SplitAndReloadAsync(
-                Folder,
-                new SplitAtChapterCommand(Folder, Guid.NewGuid(), null),
-                BookHierarchyPresenter.SplitLevel.Part,
-                sourcePartId);
-
-            Assert.False(ctx.Presenter.IsExpanded(BookNodeLevel.Part, newPartId));
         }
 
         [Fact]

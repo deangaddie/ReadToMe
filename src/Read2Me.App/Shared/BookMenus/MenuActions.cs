@@ -50,6 +50,7 @@ public sealed class MenuActions(IDialogService dialogs, IBookCommandHandler hand
         return result?.Canceled == false;
     }
 
+    /// <summary>The legacy path, for the menu gestures whose family has not migrated yet.</summary>
     public Task<Guid?> ExecuteAsync(BookCommand command) => handler.ExecuteAsync(command);
 
     // ── Command factories ────────────────────────────────────────────────────

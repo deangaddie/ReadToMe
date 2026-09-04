@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.App.State;
@@ -36,18 +37,29 @@ namespace Read2Me.Tests.State.Projection
         private readonly AudioItemSelectionState _audioSelectionState = new();
         private readonly FakeVoiceResolver _voices = new();
         private readonly FakeSelections _selections;
-        private readonly BookRevisionSequence _revisions = new();
+        private readonly BookRevisionSequence _revisions;
+        private readonly ServiceProvider _root;
+        private readonly AsyncServiceScope _circuit;
+        private readonly BookMutations _mutations;
 
         public BookViewProjectionTests()
         {
             _folder = new ProjectFolderId(FolderName);
             _otherFolder = new ProjectFolderId(OtherFolderName);
 
-            var fileSystem = new FileSystemService(
-                Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
-            var session = new ProjectDbSession(
-                fileSystem, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
+            // One circuit's scope, wired the way the app wires it: the write side and the reads it
+            // reconciles share a ProjectDbSession, which is the only way eviction after a commit can
+            // actually be observed by a rebuild.
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            _root = services.BuildServiceProvider();
+            _circuit = _root.CreateAsyncScope();
+
+            _reader = _circuit.ServiceProvider.GetRequiredService<ProjectReader>();
+            _mutations = _circuit.ServiceProvider.GetRequiredService<BookMutations>();
+            _revisions = _root.GetRequiredService<BookRevisionSequence>();
             _treeState = new BookTreeState();
             _selections = new FakeSelections(_selectionState, _audioSelectionState);
         }
@@ -55,6 +67,9 @@ namespace Read2Me.Tests.State.Projection
         private BookViewProjection CreateSut(IBookProjectLoader? loader = null) =>
             new(loader ?? new BookProjectLoader(_reader),
                 _reader,
+                _reader,
+                _reader,
+                _mutations,
                 _treeState,
                 _selectionState,
                 _audioSelectionState,
@@ -634,6 +649,248 @@ namespace Read2Me.Tests.State.Projection
         }
 
 
+        // ── committed mutations ──────────────────────────────────────────────
+
+        [Fact]
+        public async Task MutateAsync_Committed_ReturnsOnlyOnceTheBookViewShowsTheChange()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            var opened = await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+
+            var outcome = await sut.MutateAsync(
+                new InsertPauseParagraphMutation(_folder, b.ItemId("i1"), InsertPosition.After, PauseKind.ChapterPause));
+
+            var coherent = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome);
+            Assert.Same(sut.Snapshot, coherent.Snapshot);
+            Assert.Equal(coherent.Receipt.Revision, coherent.Snapshot.Revision);
+            Assert.True(coherent.Snapshot.Revision > opened.Revision);
+
+            // The loaded branch was reread, not patched: the new pause Paragraph is in it.
+            var paragraphs = coherent.Snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")];
+            Assert.Contains(paragraphs, p => p.Id == coherent.Receipt.Effects.CreatedId);
+        }
+
+        [Fact]
+        public async Task MutateAsync_Committed_RereadsTheOverviewAndOnlyTheExpandedBranches()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+
+            var outcome = await sut.MutateAsync(new AddChapterTitlesMutation(_folder));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            // Both chapters gained a title paragraph, but only the open one was read back: lazy
+            // loading survives a whole-project rebuild (ADR 0007).
+            Assert.Equal(2, snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")].Count);
+            Assert.DoesNotContain(b.ChapterId("ch2"), snapshot.Branches.ParagraphsByChapter.Keys);
+            // The overview did move: the counts the roll-ups divide by came from the same read.
+            Assert.Equal(2, snapshot.AudioNodeCounts[b.ChapterId("ch1")]);
+        }
+
+        [Fact]
+        public async Task MutateAsync_NoChange_PublishesNothing()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.MutateAsync(new AddPausesMutation(_folder));
+
+            var before = sut.Snapshot;
+            var published = 0;
+            sut.SnapshotPublished += () => published++;
+
+            // Nothing left to insert. No revision, so no new Book to show and nothing to announce.
+            Assert.IsType<BookViewMutationOutcome.NoChange>(await sut.MutateAsync(new AddPausesMutation(_folder)));
+            Assert.Same(before, sut.Snapshot);
+            Assert.Equal(0, published);
+        }
+
+        [Fact]
+        public async Task MutateAsync_ExpectedRefusal_LeavesTheBookViewExactlyAsItWas()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            var opened = await sut.OpenAsync(_folder);
+            var published = 0;
+            sut.SnapshotPublished += () => published++;
+
+            var outcome = await sut.MutateAsync(new SplitAtItemMutation(_folder, Guid.NewGuid()));
+
+            var uncommitted = Assert.IsType<BookViewMutationOutcome.Uncommitted>(outcome);
+            Assert.Equal(BookMutationRejection.NotFound, uncommitted.Reason);
+            Assert.Same(opened, sut.Snapshot);
+            Assert.Equal(0, published);
+        }
+
+        [Fact]
+        public async Task MutateAsync_ForABookThisProjectionIsNotOpenOn_Throws()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                sut.MutateAsync(new AddPausesMutation(_otherFolder)));
+        }
+
+        // ── split expansion continuity ───────────────────────────────────────
+
+        /// <summary>
+        /// A two-chapter Part with a second Part beside it. The sibling matters: a lone Part is not a
+        /// choice, so the tree opens it unconditionally and "the source was closed" cannot arise.
+        /// </summary>
+        private async Task<BookHierarchyBuilder> SeedTwoChapterPartAsync()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v
+                    .AddPart("part", p => p
+                        .AddChapter("ch1", c => c.AddParagraph("p1", g => g.AddNarration("i1", "First")))
+                        .AddChapter("ch2", c => c.AddParagraph("p2", g => g.AddNarration("i2", "Second"))))
+                    .AddPart("other", p => p
+                        .AddChapter("ch3", c => c.AddParagraph("p3", g => g.AddNarration("i3", "Third")))))
+                .BuildAsync();
+            return b;
+        }
+
+        [Fact]
+        public async Task MutateAsync_Split_OpensTheNewSiblingWhenTheSourceWasOpen()
+        {
+            var b = await SeedTwoChapterPartAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Part, b.PartId("part"), true));
+
+            var outcome = await sut.MutateAsync(new SplitAtChapterMutation(_folder, b.ChapterId("ch2"), "Part Two"));
+
+            var coherent = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome);
+            var newPartId = coherent.Receipt.Effects.CreatedId!.Value;
+            // Both halves of what the reader was looking at stay in view.
+            Assert.Contains(b.PartId("part"), coherent.Snapshot.Expansion.PartIds);
+            Assert.Contains(newPartId, coherent.Snapshot.Expansion.PartIds);
+            Assert.Equal(b.ChapterId("ch2"), Assert.Single(coherent.Snapshot.Branches.ChaptersByPart[newPartId]).Id);
+        }
+
+        [Fact]
+        public async Task MutateAsync_Split_LeavesTheNewSiblingClosedWhenTheSourceWasClosed()
+        {
+            var b = await SeedTwoChapterPartAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Part, b.PartId("part"), false));
+
+            var outcome = await sut.MutateAsync(new SplitAtChapterMutation(_folder, b.ChapterId("ch2"), "Part Two"));
+
+            var coherent = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome);
+            Assert.DoesNotContain(coherent.Receipt.Effects.CreatedId!.Value, coherent.Snapshot.Expansion.PartIds);
+        }
+
+        // ── selection recomputation ──────────────────────────────────────────
+
+        [Fact]
+        public async Task MutateAsync_ChapterSplit_KeepsTheFolderSelectionAndRestampsItsAncestry()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                    .AddParagraph("p1", p => p.AddRawItem("i1", ParagraphItemType.Speech, "One", alice.Id))
+                    .AddParagraph("p2", p => p.AddRawItem("i2", ParagraphItemType.Speech, "Two", alice.Id))))
+                .BuildAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var selection = _selectionState.For(_folder);
+            selection.AddParagraph(b.ParagraphId("p2"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch")));
+
+            var outcome = await sut.MutateAsync(
+                new SplitAtParagraphMutation(_folder, b.ParagraphId("p2"), "Chapter Two"));
+
+            var coherent = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome);
+            var newChapterId = coherent.Receipt.Effects.CreatedId!.Value;
+            // Still selected — it exists and is still eligible — but under the chapter it moved to,
+            // so its roll-up counts against the right denominator.
+            Assert.Equal([b.ParagraphId("p2")], coherent.Snapshot.Selections.ParagraphIds);
+            Assert.Equal(newChapterId, selection.GetAncestry(b.ParagraphId("p2"))!.ChapterId);
+            Assert.Equal(TriState.Checked, selection.NodeState(BookNodeLevel.Chapter, newChapterId));
+            Assert.Equal(TriState.Unchecked, selection.NodeState(BookNodeLevel.Chapter, b.ChapterId("ch")));
+        }
+
+        [Fact]
+        public async Task MutateAsync_ChapterSplit_KeepsTheAudioItemSelectionAndRestampsItsAncestry()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                    .AddParagraph("p1", p => p.AddNarration("i1", "One"))
+                    .AddParagraph("p2", p => p.AddNarration("i2", "Two"))))
+                .BuildAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var audioSelection = _audioSelectionState.For(_folder);
+            audioSelection.AddItem(new AudioItemRef(
+                b.ItemId("i2"), b.ParagraphId("p2"), b.ChapterId("ch"), Guid.NewGuid(), b.VolumeId("vol")));
+
+            var outcome = await sut.MutateAsync(
+                new SplitAtParagraphMutation(_folder, b.ParagraphId("p2"), "Chapter Two"));
+
+            var coherent = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome);
+            var newChapterId = coherent.Receipt.Effects.CreatedId!.Value;
+            Assert.Equal([b.ItemId("i2")], coherent.Snapshot.Selections.AudioItemIds);
+            Assert.Equal(TriState.Checked, audioSelection.NodeState(BookNodeLevel.Chapter, newChapterId));
+        }
+
+        [Fact]
+        public async Task MutateAsync_ClearsSelectedRowsThePersistedBookNoLongerHas()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            // A row selected against an older revision that the Book no longer contains — the
+            // selection the reconciliation has to drop rather than carry into a bulk write.
+            var gone = Guid.NewGuid();
+            var selection = _selectionState.For(_folder);
+            selection.AddParagraph(gone, new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")));
+            var goneItem = Guid.NewGuid();
+            _audioSelectionState.For(_folder).AddItem(new AudioItemRef(
+                goneItem, gone, b.ChapterId("ch1"), Guid.NewGuid(), b.VolumeId("vol")));
+
+            var outcome = await sut.MutateAsync(
+                new InsertPauseParagraphMutation(_folder, b.ItemId("i1"), InsertPosition.After, PauseKind.Pause));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            // Cleared in the same publication as the content it no longer matches.
+            Assert.Empty(snapshot.Selections.ParagraphIds);
+            Assert.Empty(snapshot.Selections.AudioItemIds);
+        }
+
+        [Fact]
+        public async Task MutateAsync_LeavesAnUnaffectedSelectionAlone()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v
+                    .AddChapter("ch1", c => c.AddParagraph("p1", p =>
+                        p.AddRawItem("i1", ParagraphItemType.Speech, "One", alice.Id)))
+                    .AddChapter("ch2", c => c.AddParagraph("p2", p =>
+                        p.AddRawItem("i2", ParagraphItemType.Speech, "Two", alice.Id))))
+                .BuildAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            _selectionState.For(_folder).AddParagraph(b.ParagraphId("p2"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch2")));
+
+            var outcome = await sut.MutateAsync(
+                new InsertPauseParagraphMutation(_folder, b.ItemId("i1"), InsertPosition.After, PauseKind.Pause));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal([b.ParagraphId("p2")], snapshot.Selections.ParagraphIds);
+        }
+
         // ── test doubles ─────────────────────────────────────────────────────
         /// <summary>
         /// The circuit's selection writer. The real one is <c>BookSelectionCoordinator</c>, which
@@ -769,6 +1026,13 @@ namespace Read2Me.Tests.State.Projection
 
                 return await inner.LoadSnapshotAsync(folderId, ct);
             }
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _circuit.DisposeAsync();
+            await _root.DisposeAsync();
+            await base.DisposeAsync();
         }
     }
 }

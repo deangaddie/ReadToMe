@@ -274,7 +274,6 @@ else
                                IsFirst="IsFirst"
                                IsLast="IsLast"
                                OnChanged="@(async () => { await Presenter.RefreshAsync(); await OnChanged.InvokeAsync(); })"
-                               OnSplit="OnSplit"
                                OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
             }
         </MudStack>
@@ -290,7 +289,6 @@ else
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     protected override void OnInitialized()
     {

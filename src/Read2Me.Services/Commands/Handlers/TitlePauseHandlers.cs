@@ -1,135 +1,64 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
-using Read2Me.Data.Enums;
-using Read2Me.Services.Books;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-public sealed class AddBookTitleHandler(ProjectDbSession session) : ICommandHandler<AddBookTitleCommand>
+/// <summary>
+/// The structural title and pause additions, migrated to <see cref="BookMutations"/> (ADR 0007).
+/// Each handler is a translation only; the sweeps themselves live in the mutation implementations,
+/// where a sweep that finds nothing to add can finally say so rather than committing an empty
+/// transaction and reporting success.
+/// </summary>
+public sealed class AddBookTitleHandler(BookMutations mutations) : ICommandHandler<AddBookTitleCommand>
 {
-    public async Task<Guid?> HandleAsync(AddBookTitleCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var project = await db.Projects.SingleOrDefaultAsync(ct);
-        if (project == null) return null;
-        var h = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        var plan = h.PlanFrontMatterInsert();
-        if (plan == null) return null;
-        var (mutation, chapterId, _) = plan.Value;
-        await BookMutationApplier.ApplyMutationAsync(db, mutation);
-        var titlePara = TitleInserter.AddTitleParagraph(db, chapterId, project.BookTitle, null);
-        TitleInserter.AddTitleParagraphAfter(db, chapterId, $"By {project.Author}", titlePara.Order);
-        await db.SaveChangesAsync(ct);
-        return null;
-    }
+    public Task<Guid?> HandleAsync(AddBookTitleCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(new AddBookTitleMutation(c.FolderId), ct);
 }
 
-public sealed class AddVolumeTitlesHandler(ProjectDbSession session) : ICommandHandler<AddVolumeTitlesCommand>
+public sealed class AddVolumeTitlesHandler(BookMutations mutations) : ICommandHandler<AddVolumeTitlesCommand>
 {
-    public async Task<Guid?> HandleAsync(AddVolumeTitlesCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var h = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        foreach (var (_, title, newChapter, _) in h.PlanVolumeTitleChapters())
-        {
-            db.Chapters.Add(newChapter);
-            TitleInserter.AddTitleParagraph(db, newChapter.Id, title, null);
-        }
-        await db.SaveChangesAsync(ct);
-        return null;
-    }
+    public Task<Guid?> HandleAsync(AddVolumeTitlesCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(new AddVolumeTitlesMutation(c.FolderId), ct);
 }
 
-public sealed class AddPartTitlesHandler(ProjectDbSession session) : ICommandHandler<AddPartTitlesCommand>
+public sealed class AddPartTitlesHandler(BookMutations mutations) : ICommandHandler<AddPartTitlesCommand>
 {
-    public async Task<Guid?> HandleAsync(AddPartTitlesCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var h = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        foreach (var (_, title, newChapter, _) in h.PlanPartTitleChapters())
-        {
-            db.Chapters.Add(newChapter);
-            TitleInserter.AddTitleParagraph(db, newChapter.Id, title, null);
-        }
-        await db.SaveChangesAsync(ct);
-        return null;
-    }
+    public Task<Guid?> HandleAsync(AddPartTitlesCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(new AddPartTitlesMutation(c.FolderId), ct);
 }
 
-public sealed class AddChapterTitlesHandler(ProjectDbSession session) : ICommandHandler<AddChapterTitlesCommand>
+public sealed class AddChapterTitlesHandler(BookMutations mutations) : ICommandHandler<AddChapterTitlesCommand>
 {
-    public async Task<Guid?> HandleAsync(AddChapterTitlesCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var h = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        foreach (var (chapterId, title, firstParagraphOrder) in h.PlanChapterTitleInsertions())
-            TitleInserter.AddTitleParagraph(db, chapterId, title, firstParagraphOrder);
-        await db.SaveChangesAsync(ct);
-        return null;
-    }
+    public Task<Guid?> HandleAsync(AddChapterTitlesCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(new AddChapterTitlesMutation(c.FolderId), ct);
 }
 
-public sealed class AddPausesHandler(ProjectDbSession session) : ICommandHandler<AddPausesCommand>
+public sealed class AddPausesHandler(BookMutations mutations) : ICommandHandler<AddPausesCommand>
 {
-    public async Task<Guid?> HandleAsync(AddPausesCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var h = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        foreach (var p in h.PlanPauseInsertions())
-            PauseInserter.AddPauseParagraph(db, p.ChapterId, p.PauseType, p.AfterOrder, p.BeforeOrder);
-        await db.SaveChangesAsync(ct);
-        return null;
-    }
+    public Task<Guid?> HandleAsync(AddPausesCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(new AddPausesMutation(c.FolderId), ct);
 }
 
-public sealed class InsertPauseParagraphHandler(ProjectDbSession session) : ICommandHandler<InsertPauseParagraphCommand>
+public sealed class InsertPauseParagraphHandler(BookMutations mutations)
+    : ICommandHandler<InsertPauseParagraphCommand>
 {
-    private static ParagraphItemType MapPauseKind(PauseKind kind) => kind switch
-    {
-        PauseKind.Pause          => ParagraphItemType.Pause,
-        PauseKind.ParagraphPause => ParagraphItemType.ParagraphPause,
-        PauseKind.ChapterPause   => ParagraphItemType.ChapterPause,
-        PauseKind.PartPause      => ParagraphItemType.PartPause,
-        PauseKind.VolumePause    => ParagraphItemType.VolumePause,
-        _                        => ParagraphItemType.Pause,
-    };
-
     public async Task<Guid?> HandleAsync(InsertPauseParagraphCommand c, CancellationToken ct)
     {
-        var db = await session.OpenAsync(c.FolderId);
-        var item = await db.ParagraphItems.FindAsync(c.AnchorItemId);
-        if (item == null) return null;
-        var paragraph = await db.Paragraphs
-            .Include(p => p.Items)
-            .FirstOrDefaultAsync(p => p.Id == item.ParagraphId, ct);
-        if (paragraph == null) return null;
+        await mutations.ExecuteLegacyAsync(
+            new InsertPauseParagraphMutation(c.FolderId, c.AnchorItemId, c.Position, c.PauseKind), ct);
 
-        var siblings = await db.Paragraphs
-            .Where(p => p.ChapterId == paragraph.ChapterId)
-            .OrderBy(p => p.Order)
-            .ToListAsync(ct);
-
-        var idx = siblings.FindIndex(p => p.Id == paragraph.Id);
-        if (idx < 0) return null;
-
-        string? afterOrder, beforeOrder;
-        if (c.Position == InsertPosition.Before)
-        {
-            afterOrder  = idx > 0 ? siblings[idx - 1].Order : null;
-            beforeOrder = paragraph.Order;
-        }
-        else
-        {
-            afterOrder  = paragraph.Order;
-            beforeOrder = idx < siblings.Count - 1 ? siblings[idx + 1].Order : null;
-        }
-
-        PauseInserter.AddPauseParagraph(db, paragraph.ChapterId, MapPauseKind(c.PauseKind), afterOrder, beforeOrder);
-        await db.SaveChangesAsync(ct);
+        // The mutation reports the Paragraph it created, because a reader reconciling from the
+        // receipt needs it. This command never answered with one, and ADR 0007 keeps the commands
+        // endpoint's JSON contract fixed through the migration, so the id stops here.
         return null;
     }
 }
 
+/// <summary>
+/// Clearing the Book is destructive, so it stays on the legacy path until the slice that migrates
+/// deletion — it owns its own transaction and commit point in the meantime.
+/// </summary>
 public sealed class ClearBookContentHandler(ProjectDbSession session) : ICommandHandler<ClearBookContentCommand>
 {
     public async Task<Guid?> HandleAsync(ClearBookContentCommand c, CancellationToken ct)

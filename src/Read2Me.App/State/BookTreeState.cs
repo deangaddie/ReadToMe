@@ -53,12 +53,16 @@ namespace Read2Me.App.State
         /// <summary>
         /// After a split: if the source node was open, open the newly created sibling too, so both
         /// halves of what the reader was looking at stay in view.
+        /// <para>
+        /// Level-agnostic, like its merge sibling. A node id is unique across the hierarchy, so
+        /// "wherever the source was open" is enough — and a writer reporting a split has no business
+        /// knowing which level of a view its two nodes sit at.
+        /// </para>
         /// </summary>
-        public void MarkSplitExpansion(BookNodeLevel level, Guid sourceId, Guid newId)
+        public void CarrySplitExpansion(Guid sourceId, Guid newId)
         {
-            var ids = At(level);
-            if (ids.Contains(sourceId))
-                ids.Add(newId);
+            foreach (var ids in _open.Values)
+                if (ids.Contains(sourceId)) ids.Add(newId);
         }
     }
 }

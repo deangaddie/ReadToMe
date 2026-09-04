@@ -120,6 +120,37 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.InsertParagraphItemMutation>,
             Mutations.Implementations.InsertParagraphItemMutationImplementation>();
+        // Additive structural mutations
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SplitAtPartMutation>,
+            Mutations.Implementations.SplitAtPartMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SplitAtChapterMutation>,
+            Mutations.Implementations.SplitAtChapterMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SplitAtParagraphMutation>,
+            Mutations.Implementations.SplitAtParagraphMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SplitAtItemMutation>,
+            Mutations.Implementations.SplitAtItemMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.AddBookTitleMutation>,
+            Mutations.Implementations.AddBookTitleMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.AddVolumeTitlesMutation>,
+            Mutations.Implementations.AddVolumeTitlesMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.AddPartTitlesMutation>,
+            Mutations.Implementations.AddPartTitlesMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.AddChapterTitlesMutation>,
+            Mutations.Implementations.AddChapterTitlesMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.AddPausesMutation>,
+            Mutations.Implementations.AddPausesMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.InsertPauseParagraphMutation>,
+            Mutations.Implementations.InsertPauseParagraphMutationImplementation>();
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 

@@ -23,13 +23,17 @@ namespace Read2Me.App.State.Projection
     /// </para>
     /// <para>
     /// Opening binds; <see cref="ApplyAsync"/> is the one way transient Book View state moves
-    /// afterwards. Committing mutations and reconciling from receipts arrive with the tickets that
-    /// follow.
+    /// afterwards; <see cref="MutateAsync"/> is the one way the Book itself does, and it returns only
+    /// once this circuit's view of the change is coherent. Converging on <em>other</em> circuits'
+    /// receipts arrives with the ticket that follows.
     /// </para>
     /// </summary>
     public sealed class BookViewProjection(
         IBookProjectLoader loader,
         IBookContentReader content,
+        ICharacterReader characters,
+        IAudioItemReader audioItems,
+        BookMutations mutations,
         BookTreeState treeState,
         BookSelectionState selectionState,
         AudioItemSelectionState audioSelectionState,
@@ -113,11 +117,83 @@ namespace Read2Me.App.State.Projection
         }
 
         /// <summary>
-        /// Rebuilds the bound Book from authoritative reads and republishes it.
+        /// Commits one Book mutation and returns only once this circuit's Book View shows it. The
+        /// gesture's caller therefore never has to remember a follow-up refresh, and success never
+        /// means "committed, look again in a moment" (ADR 0007).
         /// <para>
-        /// The interim seam for callers that have just written to the Book: from ticket 04 on, those
-        /// writes arrive as receipts and reconcile themselves, and this stops being called by hand.
+        /// Reconciliation runs under this projection's own lifetime rather than the caller's token.
+        /// Past the commit point the change is real, and a cancelled reconciliation must not be able
+        /// to make a committed mutation look uncommitted.
         /// </para>
+        /// <para>
+        /// A mutation that changes nothing publishes nothing: no revision was consumed, so there is
+        /// no new Book to show. An expected refusal leaves the Book View exactly as it was.
+        /// </para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        /// The projection is not open on this mutation's Book.
+        /// </exception>
+        public async Task<BookViewMutationOutcome> MutateAsync(
+            BookMutation mutation, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(mutation);
+
+            if (Folder != mutation.FolderId)
+                throw new InvalidOperationException(
+                    $"A Book mutation for '{mutation.FolderId.Value}' needs a projection open on that Book.");
+
+            var outcome = await mutations.CommitAsync(mutation, ct);
+            return outcome switch
+            {
+                BookMutationOutcome.Committed committed =>
+                    new BookViewMutationOutcome.Coherent(
+                        committed.Receipt, await ReconcileAsync(committed.Receipt)),
+                BookMutationOutcome.NoChange => new BookViewMutationOutcome.NoChange(),
+                BookMutationOutcome.Rejected rejected =>
+                    new BookViewMutationOutcome.Uncommitted(rejected.Reason, rejected.Message),
+                // Unreachable — the hierarchy is closed by a private constructor — but C# cannot prove it.
+                _ => throw new NotSupportedException($"Unhandled mutation outcome {outcome.GetType().Name}."),
+            };
+        }
+
+        /// <summary>
+        /// Brings the published snapshot up to a committed receipt.
+        /// <para>
+        /// This family's effects are structural, so the answer is always an authoritative rebuild:
+        /// structure moves counts and roll-up denominators that no single node's data carries.
+        /// Targeted refresh for the precise item-level families arrives with their own slices.
+        /// </para>
+        /// </summary>
+        private async Task<BookViewSnapshot> ReconcileAsync(BookMutationReceipt receipt)
+        {
+            // Not the caller's token: see MutateAsync.
+            await _builds.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (Folder is not { } folder || folder != receipt.FolderId || Snapshot is not { } current)
+                    // The mutation committed; only this circuit's view of it is lost, because the
+                    // reader switched projects underneath it. Reporting that as a stale projection
+                    // rather than a throw is the recovery ticket's job.
+                    throw new InvalidOperationException(
+                        $"{receipt.MutationName} committed on '{receipt.FolderId.Value}', but the " +
+                        "projection had already moved off that Book and cannot show it.");
+
+                // A snapshot at or past this revision already reflects the write — an open that
+                // raced the commit, say. Rebuilding again would only cost a Book View of reads.
+                if (current.Revision >= receipt.Revision) return current;
+
+                CarryExpansionAcross(folder, receipt.Effects);
+                return await BuildAndPublishAsync(folder, CancellationToken.None, receipt.Effects);
+            }
+            finally
+            {
+                _builds.Release();
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds the bound Book from authoritative reads and republishes it — the recovery and
+        /// legacy-caller seam, for the families that still write outside <see cref="MutateAsync"/>.
         /// </summary>
         public async Task<BookViewSnapshot> RebuildAsync(CancellationToken ct = default)
         {
@@ -228,7 +304,132 @@ namespace Read2Me.App.State.Projection
                 audioSelectionState.For(folder).SelectedItems().Select(i => i.ParagraphItemId).ToHashSet());
         }
 
-        private async Task<BookViewSnapshot> BuildAndPublishAsync(ProjectFolderId folderId, CancellationToken ct)
+        /// <summary>
+        /// Keeps the reader's place across a structural change, from the relationships the receipt
+        /// states: a split opens the new sibling if the source was open, and a merge moves what was
+        /// open on the node that went away onto its survivor.
+        /// <para>
+        /// Level-agnostic on purpose. Node ids are unique across the hierarchy, so "wherever the
+        /// source was open" needs no level from the writer, and a writer that had to name one would
+        /// be reasoning about the view.
+        /// </para>
+        /// </summary>
+        private void CarryExpansionAcross(ProjectFolderId folderId, BookMutationEffects effects)
+        {
+            var expansion = treeState.For(folderId);
+            foreach (var relation in effects.Structural)
+            {
+                switch (relation.Kind)
+                {
+                    case BookStructuralRelationKind.Split:
+                        expansion.CarrySplitExpansion(relation.SourceId, relation.ResultId);
+                        break;
+                    case BookStructuralRelationKind.Merge:
+                        expansion.FixMergeExpansion(relation.ResultId, relation.SourceId);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Both selections re-evaluated against the persisted Book, keyed by chapter because that is
+        /// the unit both eligibility reads take.
+        /// <para>
+        /// A selection survives only while its rows are still present and still eligible, and the
+        /// ancestry comes back from the read rather than from what the row was selected under — a
+        /// split moves Paragraphs between Chapters and Chapters between Parts, so a preserved
+        /// selection with stale ancestry would roll up under a node it is no longer in.
+        /// </para>
+        /// </summary>
+        private readonly record struct SurvivingSelections(
+            IReadOnlyList<CharacterParagraphRef> Paragraphs,
+            IReadOnlyList<Guid> LostParagraphIds,
+            IReadOnlyList<AudioItemRef> AudioItems,
+            IReadOnlyList<Guid> LostAudioItemIds)
+        {
+            public bool ClearedAnything => LostParagraphIds.Count > 0 || LostAudioItemIds.Count > 0;
+        }
+
+        private async Task<SurvivingSelections> RecheckSelectionsAsync(
+            ProjectFolderId folderId, BookMutationEffects effects, bool narratorOnlyMode, CancellationToken ct)
+        {
+            var selection = selectionState.For(folderId);
+            var audioSelection = audioSelectionState.For(folderId);
+            var selectedParagraphIds = selection.SelectedParagraphIds().ToHashSet();
+            var selectedItems = audioSelection.SelectedItems().ToList();
+
+            if (selectedParagraphIds.Count == 0 && selectedItems.Count == 0)
+                return new SurvivingSelections([], [], [], []);
+
+            // Where to look: the chapters the rows were selected under, plus both ends of every
+            // structural relationship — a chapter split moves rows into a chapter nothing was
+            // selected under yet, and looking only at the old one would clear rows that survived.
+            var chapterIds = new HashSet<Guid>();
+            foreach (var id in selectedParagraphIds)
+                if (selection.GetAncestry(id) is { } ancestry) chapterIds.Add(ancestry.ChapterId);
+            foreach (var item in selectedItems)
+                chapterIds.Add(item.ChapterId);
+            foreach (var relation in effects.Structural)
+            {
+                chapterIds.Add(relation.SourceId);
+                chapterIds.Add(relation.ResultId);
+            }
+
+            var eligibleParagraphs = new Dictionary<Guid, CharacterParagraphRef>();
+            var eligibleItems = new Dictionary<Guid, AudioItemRef>();
+            foreach (var chapterId in chapterIds)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                if (selectedParagraphIds.Count > 0)
+                {
+                    // A node id that is not a chapter — the far end of a volume or part split —
+                    // simply reads back empty, so no caller has to know which level it names.
+                    foreach (var reference in await characters.GetCharacterParagraphsAsync(
+                                 folderId, BookNodeLevel.Chapter, chapterId))
+                        eligibleParagraphs[reference.ParagraphId] = reference;
+                }
+
+                if (selectedItems.Count > 0)
+                {
+                    foreach (var reference in await audioItems.GetAudioItemRefsAsync(
+                                 folderId, BookNodeLevel.Chapter, chapterId,
+                                 needsAudioOnly: false, narratorOnlyMode))
+                        eligibleItems[reference.ParagraphItemId] = reference;
+                }
+            }
+
+            return new SurvivingSelections(
+                [.. selectedParagraphIds.Where(eligibleParagraphs.ContainsKey).Select(id => eligibleParagraphs[id])],
+                [.. selectedParagraphIds.Where(id => !eligibleParagraphs.ContainsKey(id))],
+                [.. selectedItems.Where(i => eligibleItems.ContainsKey(i.ParagraphItemId))
+                    .Select(i => eligibleItems[i.ParagraphItemId])],
+                [.. selectedItems.Where(i => !eligibleItems.ContainsKey(i.ParagraphItemId))
+                    .Select(i => i.ParagraphItemId)]);
+        }
+
+        /// <summary>
+        /// Drops what no longer holds and restamps what does, so the selections the snapshot is
+        /// about to carry were computed against the same revision as its content.
+        /// </summary>
+        private void ApplySurvivingSelections(ProjectFolderId folderId, SurvivingSelections surviving)
+        {
+            var selection = selectionState.For(folderId);
+            selection.RemoveParagraphs(surviving.LostParagraphIds);
+            selection.AddParagraphs(surviving.Paragraphs);
+
+            var audioSelection = audioSelectionState.For(folderId);
+            audioSelection.RemoveItems(surviving.LostAudioItemIds);
+            audioSelection.AddItems(surviving.AudioItems);
+        }
+
+        /// <param name="reconciling">
+        /// The effects being reconciled, when this build answers a committed mutation. Its presence
+        /// is what makes the build recheck both selections against the new revision — an ordinary
+        /// open or expansion has not moved the Book, so there is nothing for them to have lost.
+        /// </param>
+        private async Task<BookViewSnapshot> BuildAndPublishAsync(
+            ProjectFolderId folderId, CancellationToken ct, BookMutationEffects? reconciling = null)
         {
             // Read before the reads below, never after: a mutation committing while this build is in
             // flight then carries a higher revision than the snapshot it raced, so its receipt still
@@ -239,6 +440,9 @@ namespace Read2Me.App.State.Projection
             var requested = RequestedExpansion(folderId, book.Volumes);
             var loaded = await LoadExpandedBranchesAsync(folderId, book.Volumes, requested, ct);
             var previews = await ResolveVoicePreviewsAsync(folderId, loaded.Branches, ct);
+            var surviving = reconciling is { } effects
+                ? await RecheckSelectionsAsync(folderId, effects, book.NarratorOnlyMode, ct)
+                : (SurvivingSelections?)null;
 
             // Everything above is a read into locals. Only past this line does the projection — or
             // any state it shares with the rest of the circuit — actually change.
@@ -253,6 +457,12 @@ namespace Read2Me.App.State.Projection
             var audioSelection = audioSelectionState.For(folderId);
             selection.SetCounts(book.NodeCharacterParagraphCounts);
             audioSelection.SetCounts(book.AudioNodeCounts);
+
+            // Before CurrentSelections below, so what the snapshot carries is what survived — a
+            // cleared selection and the content it no longer matches are published together, never
+            // as two updates a reader could see between.
+            if (surviving is { } recomputed)
+                ApplySurvivingSelections(folderId, recomputed);
 
             return Publish(new BookViewSnapshot
             {

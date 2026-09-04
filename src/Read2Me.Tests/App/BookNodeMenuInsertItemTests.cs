@@ -6,6 +6,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 using Xunit;
 
 namespace Read2Me.Tests.App;
@@ -14,7 +15,7 @@ namespace Read2Me.Tests.App;
 /// The producer's insert gesture on the ParagraphItem menu: which anchors offer it, and what the
 /// entries build. The dialog itself is <see cref="EditTextDialog"/>, whose Save button is already
 /// disabled while the field is whitespace-only; the whitespace tests here cover the second guard —
-/// even a confirm carrying blank text builds no command.
+/// even a confirm carrying blank text builds no mutation.
 /// </summary>
 public class BookNodeMenuInsertItemTests
 {
@@ -97,9 +98,9 @@ public class BookNodeMenuInsertItemTests
         var anchor = Speech();
         var (actions, _) = PromptingWith("And who might you be?");
 
-        var command = await SpecFor(anchor).InsertItems[index].Build(actions);
+        var mutation = await SpecFor(anchor).InsertItems[index].Build(actions);
 
-        var insert = Assert.IsType<InsertParagraphItemCommand>(command);
+        var insert = Assert.IsType<InsertParagraphItemMutation>(mutation);
         Assert.Equal(Folder, insert.FolderId);
         Assert.Equal(anchor.Id, insert.AnchorItemId);
         Assert.Equal(expected, insert.Position);
@@ -111,9 +112,9 @@ public class BookNodeMenuInsertItemTests
     {
         var (actions, _) = PromptingWith("   Padded line.\n  ");
 
-        var command = await SpecFor(Speech()).InsertItems[1].Build(actions);
+        var mutation = await SpecFor(Speech()).InsertItems[1].Build(actions);
 
-        Assert.Equal("Padded line.", Assert.IsType<InsertParagraphItemCommand>(command).Text);
+        Assert.Equal("Padded line.", Assert.IsType<InsertParagraphItemMutation>(mutation).Text);
     }
 
     [Fact]

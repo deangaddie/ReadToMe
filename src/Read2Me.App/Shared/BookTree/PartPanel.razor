@@ -35,7 +35,6 @@ else
                                   NextSiblingId="@(idx < Parts.Count - 1 ? Parts[idx + 1].Id : null)"
                                   OnChanged="OnChanged"
                                   OnMerged="OnMerged"
-                                  OnSplit="OnSplit"
                                   OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
                 </TitleContent>
                 <ChildContent>
@@ -59,7 +58,6 @@ else
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     EventCallback<bool> PartExpandCb(Part p) =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Part, p.Id, b));
@@ -79,8 +77,7 @@ else
                               PreviousSiblingId="@(idx > 0 ? chapters[idx - 1].Id : null)"
                               NextSiblingId="@(idx < chapters.Count - 1 ? chapters[idx + 1].Id : null)"
                               OnChanged="OnChanged"
-                              OnMerged="OnMerged"
-                              OnSplit="OnSplit" />
+                              OnMerged="OnMerged" />
             }
         </MudExpansionPanels>;
 

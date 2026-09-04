@@ -167,8 +167,7 @@ else
                          IsFirst="true"
                          IsLast="true"
                          OnChanged="StateHasChanged"
-                         OnMerged="MergeAndResetAsync"
-                         OnSplit="HandleSplitAsync" />
+                         OnMerged="MergeAndResetAsync" />
         }
         else
         {
@@ -185,8 +184,7 @@ else
                                  PreviousSiblingId="@(idx > 0 ? Presenter.Volumes[idx - 1].Id : null)"
                                  NextSiblingId="@(idx < Presenter.Volumes.Count - 1 ? Presenter.Volumes[idx + 1].Id : null)"
                                  OnChanged="StateHasChanged"
-                                 OnMerged="MergeAndResetAsync"
-                                 OnSplit="HandleSplitAsync" />
+                                 OnMerged="MergeAndResetAsync" />
                 }
             </MudExpansionPanels>
         }
@@ -250,10 +248,6 @@ else
         Presenter.NoteMerged(_folderId, merge.survivorId, merge.deletedId);
         await Presenter.ResetAndLoadAsync(_folderId);
     }
-
-    Task HandleSplitAsync(BookSplit s) =>
-        Presenter.SplitAndReloadAsync(_folderId, s.Command, s.Level, s.SourceParentId);
-
     async Task ReadBookAsync()
     {
         await Presenter.ReadBookAsync(_folderId);

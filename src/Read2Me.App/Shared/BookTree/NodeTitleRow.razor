@@ -80,7 +80,6 @@
                  NextSiblingId="NextSiblingId"
                  OnChanged="OnChanged"
                  OnMerged="OnMerged"
-                 OnSplit="OnSplit"
                  OnReset="OnReset" />
 </MudStack>
 
@@ -96,7 +95,6 @@
     [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
 
     protected override void OnInitialized()

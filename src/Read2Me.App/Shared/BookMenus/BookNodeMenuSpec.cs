@@ -6,13 +6,9 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.App.State;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.App.Shared.BookMenus;
-
-public readonly record struct BookSplit(
-    BookCommand Command,
-    BookHierarchyPresenter.SplitLevel Level,
-    Guid SourceParentId);
 
 public sealed record BookNodeMenuSpec(
     ProjectFolderId FolderId,
@@ -38,42 +34,27 @@ public sealed record BookNodeMenuSpec(
 }
 
 /// <summary>
-/// Describes a split action for a node menu item.
+/// One split entry on a node menu. <see cref="Build"/> prompts for whatever the split needs and
+/// returns the mutation, or null when the producer cancelled.
 /// <para>
-/// When <see cref="BuildHierarchySplit"/> is non-null the split creates a new parent node;
-/// the component fires <c>OnSplit</c> with a fully-formed <see cref="BookSplit"/>.
-/// When <see cref="BuildDirectCommand"/> is non-null the command is executed directly and
-/// <c>OnReset</c> is fired instead (used for ParagraphItem splits).
+/// Every split is now the same shape. The old two-flavoured version existed because a split that
+/// created a parent node had to hand the tree the source and the new sibling so expansion could
+/// follow; the receipt states that relationship itself now, so the menu no longer carries it
+/// (ADR 0007).
 /// </para>
 /// </summary>
-public sealed record SplitSpec(
-    string Label,
-    BookHierarchyPresenter.SplitLevel Level,
-    Func<MenuActions, Task<(BookCommand? command, Guid parentId)>>? BuildHierarchySplit,
-    Func<MenuActions, Task<BookCommand?>>? BuildDirectCommand
-)
-{
-    public static SplitSpec Hierarchy(
-        string label,
-        BookHierarchyPresenter.SplitLevel level,
-        Func<MenuActions, Task<(BookCommand?, Guid)>> build) =>
-        new(label, level, build, null);
-
-    public static SplitSpec Direct(string label, Func<MenuActions, Task<BookCommand?>> build) =>
-        new(label, default, null, build);
-}
+public sealed record SplitSpec(string Label, Func<MenuActions, Task<BookMutation?>> Build);
 
 public sealed record InsertPauseSpec(string Label, PauseKind PauseKind);
 
 /// <summary>
 /// One "Insert Item Before/After" entry. <see cref="Build"/> prompts for the text and returns the
-/// command, or null when the producer cancelled or left the field blank — the menu executes it
-/// directly and fires <c>OnReset</c>, because a new item is a structural change.
+/// mutation, or null when the producer cancelled or left the field blank.
 /// </summary>
 public sealed record InsertItemSpec(
     string Label,
     InsertPosition Position,
-    Func<MenuActions, Task<BookCommand?>> Build);
+    Func<MenuActions, Task<BookMutation?>> Build);
 
 public static class BookNodeMenuSpecs
 {
@@ -110,11 +91,11 @@ public static class BookNodeMenuSpecs
             },
             Splits:
             [
-                SplitSpec.Hierarchy("Split Volume", BookHierarchyPresenter.SplitLevel.Volume, async menu =>
+                new SplitSpec("Split Volume", async menu =>
                 {
                     var title = await menu.PromptTitleAsync("New Volume Title", "");
-                    if (title == null) return (null, default);
-                    return (new SplitAtPartCommand(folderId, part.Id, string.IsNullOrWhiteSpace(title) ? null : title), part.VolumeId);
+                    if (title == null) return null;
+                    return new SplitAtPartMutation(folderId, part.Id, string.IsNullOrWhiteSpace(title) ? null : title);
                 })
             ],
             DeleteLabel: "Delete Part",
@@ -137,11 +118,11 @@ public static class BookNodeMenuSpecs
             },
             Splits:
             [
-                SplitSpec.Hierarchy("Split Part", BookHierarchyPresenter.SplitLevel.Part, async menu =>
+                new SplitSpec("Split Part", async menu =>
                 {
                     var title = await menu.PromptTitleAsync("New Part Title", "");
-                    if (title == null) return (null, default);
-                    return (new SplitAtChapterCommand(folderId, chapter.Id, string.IsNullOrWhiteSpace(title) ? null : title), chapter.PartId);
+                    if (title == null) return null;
+                    return new SplitAtChapterMutation(folderId, chapter.Id, string.IsNullOrWhiteSpace(title) ? null : title);
                 })
             ],
             DeleteLabel: "Delete Chapter",
@@ -159,11 +140,11 @@ public static class BookNodeMenuSpecs
             EditAction: null,
             Splits:
             [
-                SplitSpec.Hierarchy("Split Chapter", BookHierarchyPresenter.SplitLevel.Chapter, async menu =>
+                new SplitSpec("Split Chapter", async menu =>
                 {
                     var title = await menu.PromptTitleAsync("New Chapter Title", "");
-                    if (title == null) return (null, default);
-                    return (new SplitAtParagraphCommand(folderId, paragraph.Id, string.IsNullOrWhiteSpace(title) ? null : title), paragraph.ChapterId);
+                    if (title == null) return null;
+                    return new SplitAtParagraphMutation(folderId, paragraph.Id, string.IsNullOrWhiteSpace(title) ? null : title);
                 })
             ],
             DeleteLabel: "Delete Paragraph",
@@ -231,8 +212,8 @@ public static class BookNodeMenuSpecs
             },
             Splits:
             [
-                SplitSpec.Direct("Split Paragraph", _ =>
-                    Task.FromResult<BookCommand?>(new SplitAtItemCommand(folderId, item.Id)))
+                new SplitSpec("Split Paragraph", _ =>
+                    Task.FromResult<BookMutation?>(new SplitAtItemMutation(folderId, item.Id)))
             ],
             DeleteLabel: "Delete Item",
             DeleteCallsChanged: false,
@@ -261,6 +242,6 @@ public static class BookNodeMenuSpecs
             // Cancelling and a whitespace-only confirm both create nothing: the dialog disables
             // confirm on whitespace, and the handler refuses it again on the API path.
             if (string.IsNullOrWhiteSpace(text)) return null;
-            return new InsertParagraphItemCommand(folderId, item.Id, position, text.Trim());
+            return new InsertParagraphItemMutation(folderId, item.Id, position, text.Trim());
         });
 }

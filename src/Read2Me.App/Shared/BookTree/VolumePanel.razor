@@ -22,7 +22,6 @@ else
                           NextSiblingId="NextSiblingId"
                           OnChanged="OnChanged"
                           OnMerged="OnMerged"
-                          OnSplit="OnSplit"
                           OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
         </TitleContent>
         <ChildContent>
@@ -41,7 +40,6 @@ else
     [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     EventCallback<bool> VolumeExpandCb =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Volume, Volume.Id, b));
@@ -58,8 +56,7 @@ else
                            FolderId="@FolderId"
                            VolumeId="@vol.Id"
                            OnChanged="OnChanged"
-                           OnMerged="OnMerged"
-                           OnSplit="OnSplit" />
+                           OnMerged="OnMerged" />
             }
         </text>;
 

@@ -523,7 +523,13 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.Before, kind));
+            var newEntityId = await _svc.ExecuteAsync(
+                new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.Before, kind));
+
+            // The mutation behind this command does report the Paragraph it created, but this
+            // command has never answered with one and ADR 0007 pins the commands endpoint's JSON
+            // contract through the migration — so `newEntityId` must stay absent.
+            Assert.Null(newEntityId);
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs

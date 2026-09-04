@@ -1,4 +1,5 @@
 @inject MenuActions Menu
+@inject BookHierarchyPresenter Presenter
 
 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
          AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
@@ -80,7 +81,6 @@
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     async Task EditAsync()
     {
@@ -92,21 +92,14 @@
         await OnChanged.InvokeAsync();
     }
 
+    // Splits, item insertion and pause insertion all cross BookMutations: the Book View is coherent
+    // again — expansion carried onto the new sibling included — before these return, so none of them
+    // fires a reload of its own (ADR 0007).
     async Task SplitAsync(SplitSpec split)
     {
-        if (split.BuildHierarchySplit != null)
-        {
-            var (command, parentId) = await split.BuildHierarchySplit(Menu);
-            if (command == null) return;
-            await OnSplit.InvokeAsync(new BookSplit(command, split.Level, parentId));
-        }
-        else if (split.BuildDirectCommand != null)
-        {
-            var command = await split.BuildDirectCommand(Menu);
-            if (command == null) return;
-            await Menu.ExecuteAsync(command);
-            await OnReset.InvokeAsync();
-        }
+        var mutation = await split.Build(Menu);
+        if (mutation == null) return;
+        await Presenter.MutateAsync(mutation);
     }
 
     async Task MergeWithPreviousAsync()
@@ -142,19 +135,13 @@
             await OnReset.InvokeAsync();
     }
 
-    // A new item raises the chapter's audio denominator and its attribution-remaining count, and
-    // can flip the paragraph into a character paragraph — so it reloads rather than patching.
     async Task InsertItemAsync(InsertItemSpec spec)
     {
-        var command = await spec.Build(Menu);
-        if (command == null) return;
-        await Menu.ExecuteAsync(command);
-        await OnReset.InvokeAsync();
+        var mutation = await spec.Build(Menu);
+        if (mutation == null) return;
+        await Presenter.MutateAsync(mutation);
     }
 
-    async Task InsertPauseAsync(InsertPauseSpec spec, InsertPosition position)
-    {
-        await Menu.ExecuteAsync(new InsertPauseParagraphCommand(Spec.FolderId, Spec.EntityId, position, spec.PauseKind));
-        await OnReset.InvokeAsync();
-    }
+    Task InsertPauseAsync(InsertPauseSpec spec, InsertPosition position) =>
+        Presenter.MutateAsync(new InsertPauseParagraphMutation(Spec.FolderId, Spec.EntityId, position, spec.PauseKind));
 }

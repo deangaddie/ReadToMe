@@ -4,6 +4,7 @@ using Read2Me.App.Shared;
 using Read2Me.App.Shared.BookMenus;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 using Xunit;
 using static Read2Me.App.Shared.BookMenus.MenuActions;
 
@@ -132,28 +133,54 @@ namespace Read2Me.Tests.App
         }
 
         // ---------------------------------------------------------------
-        // BookNodeMenuSpecs split levels
+        // BookNodeMenuSpecs splits — which mutation each node's entry builds
         // ---------------------------------------------------------------
 
-        [Fact]
-        public void ForPart_Split_HasVolumeLevel()
+        /// <summary>A MenuActions whose title prompt always answers "New Title".</summary>
+        private static MenuActions PromptingWithATitle()
         {
-            var spec = BookNodeMenuSpecs.ForPart(new ProjectFolderId("f"), new Read2Me.Data.Entities.Part { Id = Guid.NewGuid() });
-            Assert.Equal(Read2Me.App.State.BookHierarchyPresenter.SplitLevel.Volume, spec.Splits[0].Level);
+            var (actions, dialogs, _) = Create();
+            var dialogRef = FakeDialog(DialogResult.Ok("New Title"));
+            dialogs.ShowAsync<EditTextDialog>(
+                       Arg.Any<string>(), Arg.Any<DialogParameters<EditTextDialog>>(), Arg.Any<DialogOptions>())
+                   .Returns(Task.FromResult(dialogRef));
+            return actions;
         }
 
         [Fact]
-        public void ForChapter_Split_HasPartLevel()
+        public async Task ForPart_Split_BuildsAVolumeSplitAtThatPart()
         {
-            var spec = BookNodeMenuSpecs.ForChapter(new ProjectFolderId("f"), new Read2Me.Data.Entities.Chapter { Id = Guid.NewGuid() });
-            Assert.Equal(Read2Me.App.State.BookHierarchyPresenter.SplitLevel.Part, spec.Splits[0].Level);
+            var partId = Guid.NewGuid();
+            var spec = BookNodeMenuSpecs.ForPart(new ProjectFolderId("f"), new Read2Me.Data.Entities.Part { Id = partId });
+
+            var mutation = await spec.Splits[0].Build(PromptingWithATitle());
+
+            var split = Assert.IsType<SplitAtPartMutation>(mutation);
+            Assert.Equal(partId, split.PartId);
+            Assert.Equal("New Title", split.NewVolumeTitle);
         }
 
         [Fact]
-        public void ForParagraph_Split_HasChapterLevel()
+        public async Task ForChapter_Split_BuildsAPartSplitAtThatChapter()
         {
-            var spec = BookNodeMenuSpecs.ForParagraph(new ProjectFolderId("f"), new Read2Me.Data.Entities.Paragraph { Id = Guid.NewGuid() });
-            Assert.Equal(Read2Me.App.State.BookHierarchyPresenter.SplitLevel.Chapter, spec.Splits[0].Level);
+            var chapterId = Guid.NewGuid();
+            var spec = BookNodeMenuSpecs.ForChapter(new ProjectFolderId("f"), new Read2Me.Data.Entities.Chapter { Id = chapterId });
+
+            var mutation = await spec.Splits[0].Build(PromptingWithATitle());
+
+            Assert.Equal(chapterId, Assert.IsType<SplitAtChapterMutation>(mutation).ChapterId);
+        }
+
+        [Fact]
+        public async Task ForParagraph_Split_BuildsAChapterSplitAtThatParagraph()
+        {
+            var paragraphId = Guid.NewGuid();
+            var spec = BookNodeMenuSpecs.ForParagraph(
+                new ProjectFolderId("f"), new Read2Me.Data.Entities.Paragraph { Id = paragraphId });
+
+            var mutation = await spec.Splits[0].Build(PromptingWithATitle());
+
+            Assert.Equal(paragraphId, Assert.IsType<SplitAtParagraphMutation>(mutation).ParagraphId);
         }
 
         // ---------------------------------------------------------------

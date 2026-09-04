@@ -16,7 +16,6 @@
                       NextSiblingId="NextSiblingId"
                       OnChanged="OnChanged"
                       OnMerged="OnMerged"
-                      OnSplit="OnSplit"
                       OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
     </TitleContent>
     <ChildContent>
@@ -39,8 +38,7 @@
                                   VolumeId="@VolumeId"
                                   IsFirst="@isFirst"
                                   IsLast="@isLast"
-                                  OnChanged="OnChanged"
-                                  OnSplit="OnSplit" />
+                                  OnChanged="OnChanged" />
                 }
             </MudStack>
         }
@@ -58,7 +56,6 @@
     [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     EventCallback<bool> ChapterExpandCb =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, Chapter.Id, b));
