@@ -151,6 +151,40 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.InsertPauseParagraphMutation>,
             Mutations.Implementations.InsertPauseParagraphMutationImplementation>();
+        // Destructive structural mutations
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.MergeVolumeMutation>,
+            Mutations.Implementations.MergeVolumeMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.MergePartMutation>,
+            Mutations.Implementations.MergePartMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.MergeChapterMutation>,
+            Mutations.Implementations.MergeChapterMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.MergeParagraphMutation>,
+            Mutations.Implementations.MergeParagraphMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.MergeParagraphItemMutation>,
+            Mutations.Implementations.MergeParagraphItemMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DeleteVolumeMutation>,
+            Mutations.Implementations.DeleteVolumeMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DeletePartMutation>,
+            Mutations.Implementations.DeletePartMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DeleteChapterMutation>,
+            Mutations.Implementations.DeleteChapterMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DeleteParagraphMutation>,
+            Mutations.Implementations.DeleteParagraphMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DeleteParagraphItemMutation>,
+            Mutations.Implementations.DeleteParagraphItemMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.ClearBookContentMutation>,
+            Mutations.Implementations.ClearBookContentMutationImplementation>();
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 

@@ -34,7 +34,6 @@ namespace Read2Me.App.State
         BookViewProjection projection,
         IBookCommandHandler commandHandler,
         BookUseCases bookUseCases,
-        BookTreeState treeState,
         BookSelectionState selectionState,
         AudioItemSelectionState audioSelectionState,
         IDialogService dialogService,
@@ -286,14 +285,6 @@ namespace Read2Me.App.State
                 NotifyStateChanged();
             }
         }
-
-        /// <summary>
-        /// Keeps the reader's place across a merge: whatever was open on the node that went away is
-        /// open on the survivor. Structural continuity of expansion intent rather than a gesture,
-        /// which is why it is not an intent — the reader expanded nothing.
-        /// </summary>
-        public void NoteMerged(ProjectFolderId folderId, Guid survivorId, Guid deletedId) =>
-            treeState.For(folderId).FixMergeExpansion(survivorId, deletedId);
 
         // ---------------------------------------------------------------
         // Book mutations — the families still on the legacy command path

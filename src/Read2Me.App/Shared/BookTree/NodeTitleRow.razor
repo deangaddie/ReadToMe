@@ -76,11 +76,7 @@
     <BookNodeMenu Spec="@Spec"
                  IsFirst="IsFirst"
                  IsLast="IsLast"
-                 PreviousSiblingId="PreviousSiblingId"
-                 NextSiblingId="NextSiblingId"
-                 OnChanged="OnChanged"
-                 OnMerged="OnMerged"
-                 OnReset="OnReset" />
+                 OnChanged="OnChanged" />
 </MudStack>
 
 @code {
@@ -91,11 +87,7 @@
     [Parameter, EditorRequired] public BookNodeMenuSpec Spec { get; set; } = null!;
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public Guid? PreviousSiblingId { get; set; }
-    [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback OnReset { get; set; }
 
     protected override void OnInitialized()
     {

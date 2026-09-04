@@ -141,7 +141,7 @@ namespace Read2Me.Tests.State
             var projection = new BookViewProjection(
                 loader, reader, reader, reader, mutations: null!, treeState, selectionState,
                 audioSelectionState, coordinator, voiceResolver, new BookRevisionSequence());
-            var presenter = new BookHierarchyPresenter(reader, projection, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, events);
+            var presenter = new BookHierarchyPresenter(reader, projection, commandHandler, bookUseCases, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, events);
             return new Context(presenter, projection, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue, audioQueue, events, roster, seed, dialogService, snackbar);
         }
 

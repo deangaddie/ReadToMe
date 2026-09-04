@@ -31,11 +31,7 @@ else
                                   Spec="@BookNodeMenuSpecs.ForPart(FolderId, p)"
                                   IsFirst="@(idx == 0)"
                                   IsLast="@(idx == Parts.Count - 1)"
-                                  PreviousSiblingId="@(idx > 0 ? Parts[idx - 1].Id : null)"
-                                  NextSiblingId="@(idx < Parts.Count - 1 ? Parts[idx + 1].Id : null)"
-                                  OnChanged="OnChanged"
-                                  OnMerged="OnMerged"
-                                  OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                                  OnChanged="OnChanged" />
                 </TitleContent>
                 <ChildContent>
                     @if (Presenter.IsExpanding(p.Id))
@@ -57,7 +53,6 @@ else
     [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
 
     EventCallback<bool> PartExpandCb(Part p) =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Part, p.Id, b));
@@ -74,10 +69,7 @@ else
                               VolumeId="@VolumeId"
                               IsFirst="@(idx == 0)"
                               IsLast="@(idx == chapters.Count - 1)"
-                              PreviousSiblingId="@(idx > 0 ? chapters[idx - 1].Id : null)"
-                              NextSiblingId="@(idx < chapters.Count - 1 ? chapters[idx + 1].Id : null)"
-                              OnChanged="OnChanged"
-                              OnMerged="OnMerged" />
+                              OnChanged="OnChanged" />
             }
         </MudExpansionPanels>;
 

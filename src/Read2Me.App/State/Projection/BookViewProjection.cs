@@ -363,7 +363,8 @@ namespace Read2Me.App.State.Projection
 
             // Where to look: the chapters the rows were selected under, plus both ends of every
             // structural relationship — a chapter split moves rows into a chapter nothing was
-            // selected under yet, and looking only at the old one would clear rows that survived.
+            // selected under yet, and a chapter merge moves them into the survivor, so looking only
+            // at the chapter they were selected under would clear rows that in fact survived.
             var chapterIds = new HashSet<Guid>();
             foreach (var id in selectedParagraphIds)
                 if (selection.GetAncestry(id) is { } ancestry) chapterIds.Add(ancestry.ChapterId);

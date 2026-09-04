@@ -12,11 +12,7 @@
                       Spec="@BookNodeMenuSpecs.ForChapter(FolderId, Chapter)"
                       IsFirst="IsFirst"
                       IsLast="IsLast"
-                      PreviousSiblingId="PreviousSiblingId"
-                      NextSiblingId="NextSiblingId"
-                      OnChanged="OnChanged"
-                      OnMerged="OnMerged"
-                      OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                      OnChanged="OnChanged" />
     </TitleContent>
     <ChildContent>
         @if (Presenter.IsExpanding(Chapter.Id))
@@ -52,10 +48,7 @@
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public Guid? PreviousSiblingId { get; set; }
-    [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
 
     EventCallback<bool> ChapterExpandCb =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, Chapter.Id, b));

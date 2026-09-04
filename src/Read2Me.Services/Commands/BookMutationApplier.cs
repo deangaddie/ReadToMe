@@ -66,15 +66,4 @@ internal static class BookMutationApplier
         StageMutation(db, mutation);
         await db.SaveChangesAsync();
     }
-
-    internal static async Task<HierarchyMutation?> PlanAndApplyAsync(
-        ProjectDbContext db,
-        Func<BookHierarchy, HierarchyMutation?> planner)
-    {
-        var h = await LoadBookHierarchyAsync(db);
-        var mutation = planner(h);
-        if (mutation != null)
-            await ApplyMutationAsync(db, mutation);
-        return mutation;
-    }
 }

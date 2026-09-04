@@ -23,21 +23,6 @@ internal static class SplitEffects
         Structural = [new BookStructuralRelation(BookStructuralRelationKind.Split, sourceId, createdId)],
     };
 
-    /// <summary>
-    /// The node a child currently hangs off, or null when the Book does not contain the child.
-    /// <para>
-    /// Read before planning, never after: the planner reassigns the moved children, so afterwards
-    /// the child no longer knows where it came from. <see cref="Books.BookHierarchy"/> groups
-    /// children by parent id, so the parent is simply the key the child is found under.
-    /// </para>
-    /// </summary>
-    public static Guid? OwnerOf<T>(Dictionary<Guid, List<T>> childrenByParent, Guid childId, Func<T, Guid> idOf)
-    {
-        foreach (var (parentId, children) in childrenByParent)
-            if (children.Any(child => idOf(child) == childId)) return parentId;
-        return null;
-    }
-
     /// <summary>The node named by a split that the Book does not contain.</summary>
     public static BookMutationRejectedException NotFound(string what, Guid id) =>
         new(BookMutationRejection.NotFound, $"No {what} {id} to split at.");
@@ -49,7 +34,7 @@ public sealed class SplitAtPartMutationImplementation : IBookMutationImplementat
         SplitAtPartMutation mutation, ProjectDbContext db, CancellationToken ct)
     {
         var hierarchy = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        if (SplitEffects.OwnerOf(hierarchy.Parts, mutation.PartId, p => p.Id) is not { } source)
+        if (HierarchyLookup.OwnerOf(hierarchy.Parts, mutation.PartId, p => p.Id) is not { } source)
             throw SplitEffects.NotFound("part", mutation.PartId);
 
         // The part exists, so a planner that declines has found nothing to move: a legal gesture
@@ -68,7 +53,7 @@ public sealed class SplitAtChapterMutationImplementation : IBookMutationImplemen
         SplitAtChapterMutation mutation, ProjectDbContext db, CancellationToken ct)
     {
         var hierarchy = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        if (SplitEffects.OwnerOf(hierarchy.Chapters, mutation.ChapterId, c => c.Id) is not { } source)
+        if (HierarchyLookup.OwnerOf(hierarchy.Chapters, mutation.ChapterId, c => c.Id) is not { } source)
             throw SplitEffects.NotFound("chapter", mutation.ChapterId);
 
         var planned = hierarchy.PlanSplitPart(mutation.ChapterId, mutation.NewPartTitle);
@@ -85,7 +70,7 @@ public sealed class SplitAtParagraphMutationImplementation : IBookMutationImplem
         SplitAtParagraphMutation mutation, ProjectDbContext db, CancellationToken ct)
     {
         var hierarchy = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        if (SplitEffects.OwnerOf(hierarchy.Paragraphs, mutation.ParagraphId, p => p.Id) is not { } source)
+        if (HierarchyLookup.OwnerOf(hierarchy.Paragraphs, mutation.ParagraphId, p => p.Id) is not { } source)
             throw SplitEffects.NotFound("paragraph", mutation.ParagraphId);
 
         var planned = hierarchy.PlanSplitChapter(mutation.ParagraphId, mutation.NewChapterTitle);
@@ -102,7 +87,7 @@ public sealed class SplitAtItemMutationImplementation : IBookMutationImplementat
         SplitAtItemMutation mutation, ProjectDbContext db, CancellationToken ct)
     {
         var hierarchy = await BookMutationApplier.LoadBookHierarchyAsync(db);
-        if (SplitEffects.OwnerOf(hierarchy.Items, mutation.ItemId, i => i.Id) is not { } source)
+        if (HierarchyLookup.OwnerOf(hierarchy.Items, mutation.ItemId, i => i.Id) is not { } source)
             throw SplitEffects.NotFound("item", mutation.ItemId);
 
         var planned = hierarchy.PlanSplitParagraph(mutation.ItemId);

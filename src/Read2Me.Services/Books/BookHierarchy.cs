@@ -218,9 +218,13 @@ namespace Read2Me.Services.Books
         // ---------------------------------------------------------------
         // PlanMerge* — pure merge planning, no DB access.
         // Returns null when the operation is a no-op.
+        //
+        // A plan names the survivor as well as the writes, because a merge is the one structural
+        // change whose two nodes a reader has to relate: whatever was open on the node that goes
+        // away belongs on the one that took its place (ADR 0007).
         // ---------------------------------------------------------------
 
-        public HierarchyMutation? PlanMergeVolume(Guid volumeId, MergeDirection dir)
+        public BookMergePlan? PlanMergeVolume(Guid volumeId, MergeDirection dir)
         {
             var idx = Volumes.FindIndex(v => v.Id == volumeId);
             if (idx < 0) return null;
@@ -233,7 +237,7 @@ namespace Read2Me.Services.Books
                     (child, winnerId) => ((Part)child).VolumeId = winnerId);
         }
 
-        public HierarchyMutation? PlanMergePart(Guid partId, MergeDirection dir)
+        public BookMergePlan? PlanMergePart(Guid partId, MergeDirection dir)
         {
             var (_, siblings) = FindParentAndSiblings(Parts, partId, p => p.Id);
             var idx = siblings.FindIndex(p => p.Id == partId);
@@ -247,7 +251,7 @@ namespace Read2Me.Services.Books
                     (child, winnerId) => ((Chapter)child).PartId = winnerId);
         }
 
-        public HierarchyMutation? PlanMergeChapter(Guid chapterId, MergeDirection dir)
+        public BookMergePlan? PlanMergeChapter(Guid chapterId, MergeDirection dir)
         {
             var (_, siblings) = FindParentAndSiblings(Chapters, chapterId, c => c.Id);
             var idx = siblings.FindIndex(c => c.Id == chapterId);
@@ -261,7 +265,7 @@ namespace Read2Me.Services.Books
                     (child, winnerId) => ((Paragraph)child).ChapterId = winnerId);
         }
 
-        public HierarchyMutation? PlanMergeParagraph(Guid paragraphId, MergeDirection dir)
+        public BookMergePlan? PlanMergeParagraph(Guid paragraphId, MergeDirection dir)
         {
             var (_, siblings) = FindParentAndSiblings(Paragraphs, paragraphId, p => p.Id);
             var idx = siblings.FindIndex(p => p.Id == paragraphId);
@@ -275,7 +279,7 @@ namespace Read2Me.Services.Books
                     (child, winnerId) => ((ParagraphItem)child).ParagraphId = winnerId);
         }
 
-        public HierarchyMutation? PlanMergeParagraphItem(Guid itemId, MergeDirection dir)
+        public BookMergePlan? PlanMergeParagraphItem(Guid itemId, MergeDirection dir)
         {
             var (_, siblings) = FindParentAndSiblings(Items, itemId, i => i.Id);
             var idx = siblings.FindIndex(i => i.Id == itemId);
@@ -302,10 +306,13 @@ namespace Read2Me.Services.Books
                 ? loser.Text
                 : string.IsNullOrWhiteSpace(loser.Text) ? winner.Text : winner.Text + " " + loser.Text;
 
-            return new HierarchyMutation(ToAdd: [], ToDelete: [loser], ToUpdate: [winner]);
+            return new BookMergePlan(
+                new HierarchyMutation(ToAdd: [], ToDelete: [loser], ToUpdate: [winner]),
+                SurvivorId: winner.Id,
+                DeletedId: loser.Id);
         }
 
-        private static HierarchyMutation? MergeSiblings<TEntity>(
+        private static BookMergePlan? MergeSiblings<TEntity>(
             List<TEntity> siblings,
             int winnerIdx,
             int loserIdx,
@@ -319,7 +326,10 @@ namespace Read2Me.Services.Books
             var loser = siblings[loserIdx];
             var children = getChildren(getId(loser));
             foreach (var child in children) reassign(child, getId(winner));
-            return new HierarchyMutation(ToAdd: [], ToDelete: [loser!], ToUpdate: children);
+            return new BookMergePlan(
+                new HierarchyMutation(ToAdd: [], ToDelete: [loser!], ToUpdate: children),
+                SurvivorId: getId(winner),
+                DeletedId: getId(loser));
         }
 
         // ---------------------------------------------------------------
@@ -577,6 +587,13 @@ namespace Read2Me.Services.Books
         IReadOnlyList<IBookEntity> ToAdd,
         IReadOnlyList<IBookEntity> ToDelete,
         IReadOnlyList<IBookEntity> ToUpdate);
+
+    /// <summary>
+    /// A planned merge: the writes it needs, plus which of the two nodes survived and which was
+    /// deleted. The pair is what lets a Book View carry expansion onto the survivor without
+    /// re-deriving the sibling order the planner already walked.
+    /// </summary>
+    public record BookMergePlan(HierarchyMutation Mutation, Guid SurvivorId, Guid DeletedId);
 
     public record PlannedPause(Guid ChapterId, ParagraphItemType PauseType, string? AfterOrder, string? BeforeOrder);
 }

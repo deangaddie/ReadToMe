@@ -18,11 +18,7 @@ else
                           Spec="@BookNodeMenuSpecs.ForVolume(FolderId, Volume)"
                           IsFirst="IsFirst"
                           IsLast="IsLast"
-                          PreviousSiblingId="PreviousSiblingId"
-                          NextSiblingId="NextSiblingId"
-                          OnChanged="OnChanged"
-                          OnMerged="OnMerged"
-                          OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                          OnChanged="OnChanged" />
         </TitleContent>
         <ChildContent>
             @RenderVolumeBody(Volume)
@@ -36,10 +32,7 @@ else
     [Parameter, EditorRequired] public bool IsSingleVolume { get; set; }
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public Guid? PreviousSiblingId { get; set; }
-    [Parameter] public Guid? NextSiblingId { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
 
     EventCallback<bool> VolumeExpandCb =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Volume, Volume.Id, b));
@@ -55,8 +48,7 @@ else
                 <PartPanel Parts="@parts"
                            FolderId="@FolderId"
                            VolumeId="@vol.Id"
-                           OnChanged="OnChanged"
-                           OnMerged="OnMerged" />
+                           OnChanged="OnChanged" />
             }
         </text>;
 

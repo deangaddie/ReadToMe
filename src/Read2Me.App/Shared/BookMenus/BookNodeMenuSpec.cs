@@ -18,8 +18,6 @@ public sealed record BookNodeMenuSpec(
     Func<MenuActions, Task<(BookCommand? command, Func<Task>? updateLocal)>>? EditAction,
     IReadOnlyList<SplitSpec> Splits,
     string DeleteLabel,
-    bool DeleteCallsChanged,
-    bool MergeResetsTree,
     Func<(string itemType, string itemName, bool hasChildren)> GetDeleteConfirmArgs
 )
 {
@@ -72,8 +70,6 @@ public static class BookNodeMenuSpecs
             },
             Splits: [],
             DeleteLabel: "Delete Volume",
-            DeleteCallsChanged: false,
-            MergeResetsTree: false,
             GetDeleteConfirmArgs: () => ("Volume", volume.Title ?? "Volume", true)
         );
 
@@ -99,8 +95,6 @@ public static class BookNodeMenuSpecs
                 })
             ],
             DeleteLabel: "Delete Part",
-            DeleteCallsChanged: false,
-            MergeResetsTree: false,
             GetDeleteConfirmArgs: () => ("Part", part.Title ?? "Part", true)
         );
 
@@ -126,8 +120,6 @@ public static class BookNodeMenuSpecs
                 })
             ],
             DeleteLabel: "Delete Chapter",
-            DeleteCallsChanged: false,
-            MergeResetsTree: false,
             GetDeleteConfirmArgs: () => ("Chapter", chapter.Title ?? "Chapter", true)
         );
 
@@ -148,8 +140,6 @@ public static class BookNodeMenuSpecs
                 })
             ],
             DeleteLabel: "Delete Paragraph",
-            DeleteCallsChanged: true,
-            MergeResetsTree: true,
             GetDeleteConfirmArgs: () =>
             {
                 var t = string.Join(" ", System.Linq.Enumerable.Select(paragraph.Items, i => i.Text));
@@ -168,8 +158,6 @@ public static class BookNodeMenuSpecs
             EditAction: null,
             Splits: [],
             DeleteLabel: "Delete Pause",
-            DeleteCallsChanged: true,
-            MergeResetsTree: false,
             GetDeleteConfirmArgs: () =>
             {
                 var label = ParagraphItemDisplay.GetPauseLabel(paragraph.Items.FirstOrDefault()?.ItemType);
@@ -216,8 +204,6 @@ public static class BookNodeMenuSpecs
                     Task.FromResult<BookMutation?>(new SplitAtItemMutation(folderId, item.Id)))
             ],
             DeleteLabel: "Delete Item",
-            DeleteCallsChanged: false,
-            MergeResetsTree: true,
             GetDeleteConfirmArgs: () =>
             {
                 var label = item.Text?.Length > 60 ? item.Text[..60] + "…" : item.Text ?? "this item";

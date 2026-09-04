@@ -56,21 +56,11 @@ public sealed class InsertPauseParagraphHandler(BookMutations mutations)
 }
 
 /// <summary>
-/// Clearing the Book is destructive, so it stays on the legacy path until the slice that migrates
-/// deletion — it owns its own transaction and commit point in the meantime.
+/// Clearing the Book's whole content, migrated with the rest of the destructive family
+/// (ADR 0007). The transaction and commit point it used to own are now <see cref="BookMutations"/>'s.
 /// </summary>
-public sealed class ClearBookContentHandler(ProjectDbSession session) : ICommandHandler<ClearBookContentCommand>
+public sealed class ClearBookContentHandler(BookMutations mutations) : ICommandHandler<ClearBookContentCommand>
 {
-    public async Task<Guid?> HandleAsync(ClearBookContentCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await db.ParagraphItems.ExecuteDeleteAsync(ct);
-        await db.Paragraphs.ExecuteDeleteAsync(ct);
-        await db.Chapters.ExecuteDeleteAsync(ct);
-        await db.Parts.ExecuteDeleteAsync(ct);
-        await db.Volumes.ExecuteDeleteAsync(ct);
-        await tx.CommitAsync(ct);
-        return null;
-    }
+    public Task<Guid?> HandleAsync(ClearBookContentCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(new ClearBookContentMutation(c.FolderId), ct);
 }

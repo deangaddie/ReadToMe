@@ -33,8 +33,7 @@
             {
                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPauseParagraph(FolderId, Para)"
                              IsFirst="false" IsLast="false"
-                             OnChanged="@(async () => { await Presenter.RefreshAsync(); await OnChanged.InvokeAsync(); })"
-                             OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                             OnChanged="@(async () => { await Presenter.RefreshAsync(); await OnChanged.InvokeAsync(); })" />
             }
         </MudStack>
     }
@@ -163,8 +162,7 @@
                                     <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it, Presenter)"
                                                  IsFirst="@(items[0].Id == it.Id)"
                                                  IsLast="@(items[^1].Id == it.Id)"
-                                                 OnChanged="OnChanged"
-                                                 OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                                                 OnChanged="OnChanged" />
                                 }
                             </MudStack>
                         }
@@ -207,8 +205,7 @@
                             <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it, Presenter)"
                                                IsFirst="@(items[0].Id == it.Id)"
                                                IsLast="@(items[^1].Id == it.Id)"
-                                               OnChanged="OnChanged"
-                                               OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                                               OnChanged="OnChanged" />
                         }
                         else
                         {
@@ -273,8 +270,7 @@ else
                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraph(FolderId, Para)"
                                IsFirst="IsFirst"
                                IsLast="IsLast"
-                               OnChanged="@(async () => { await Presenter.RefreshAsync(); await OnChanged.InvokeAsync(); })"
-                               OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                               OnChanged="@(async () => { await Presenter.RefreshAsync(); await OnChanged.InvokeAsync(); })" />
             }
         </MudStack>
     }

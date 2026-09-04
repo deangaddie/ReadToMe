@@ -33,12 +33,15 @@ namespace Read2Me.Tests.Services.Books
             var (h, v1, v2) = TwoVolumeHierarchy();
             var loserPart = h.Parts[v2.Id][0];
 
-            var mutation = h.PlanMergeVolume(v2.Id, MergeDirection.Previous);
+            var plan = h.PlanMergeVolume(v2.Id, MergeDirection.Previous);
 
-            Assert.NotNull(mutation);
-            Assert.Contains(v2, mutation!.ToDelete);
-            Assert.Contains(loserPart, mutation.ToUpdate);
+            Assert.NotNull(plan);
+            Assert.Contains(v2, plan!.Mutation.ToDelete);
+            Assert.Contains(loserPart, plan.Mutation.ToUpdate);
             Assert.Equal(v1.Id, loserPart.VolumeId);
+            // The pair a Book View carries expansion by: what went, and what took its place.
+            Assert.Equal(v1.Id, plan.SurvivorId);
+            Assert.Equal(v2.Id, plan.DeletedId);
         }
 
         [Fact]
@@ -80,12 +83,14 @@ namespace Read2Me.Tests.Services.Books
             var (h, p1, p2) = TwoPartHierarchy();
             var loserChapter = h.Chapters[p2.Id][0];
 
-            var mutation = h.PlanMergePart(p2.Id, MergeDirection.Previous);
+            var plan = h.PlanMergePart(p2.Id, MergeDirection.Previous);
 
-            Assert.NotNull(mutation);
-            Assert.Contains(p2, mutation!.ToDelete);
-            Assert.Contains(loserChapter, mutation.ToUpdate);
+            Assert.NotNull(plan);
+            Assert.Contains(p2, plan!.Mutation.ToDelete);
+            Assert.Contains(loserChapter, plan.Mutation.ToUpdate);
             Assert.Equal(p1.Id, loserChapter.PartId);
+            Assert.Equal(p1.Id, plan.SurvivorId);
+            Assert.Equal(p2.Id, plan.DeletedId);
         }
 
         [Fact]
@@ -129,12 +134,14 @@ namespace Read2Me.Tests.Services.Books
             var (h, c1, c2) = TwoChapterHierarchy();
             var loserPara = h.Paragraphs[c2.Id][0];
 
-            var mutation = h.PlanMergeChapter(c2.Id, MergeDirection.Previous);
+            var plan = h.PlanMergeChapter(c2.Id, MergeDirection.Previous);
 
-            Assert.NotNull(mutation);
-            Assert.Contains(c2, mutation!.ToDelete);
-            Assert.Contains(loserPara, mutation.ToUpdate);
+            Assert.NotNull(plan);
+            Assert.Contains(c2, plan!.Mutation.ToDelete);
+            Assert.Contains(loserPara, plan.Mutation.ToUpdate);
             Assert.Equal(c1.Id, loserPara.ChapterId);
+            Assert.Equal(c1.Id, plan.SurvivorId);
+            Assert.Equal(c2.Id, plan.DeletedId);
         }
 
         [Fact]
@@ -179,12 +186,14 @@ namespace Read2Me.Tests.Services.Books
             var (h, pg1, pg2) = TwoParagraphHierarchy();
             var loserItem = h.Items[pg2.Id][0];
 
-            var mutation = h.PlanMergeParagraph(pg2.Id, MergeDirection.Previous);
+            var plan = h.PlanMergeParagraph(pg2.Id, MergeDirection.Previous);
 
-            Assert.NotNull(mutation);
-            Assert.Contains(pg2, mutation!.ToDelete);
-            Assert.Contains(loserItem, mutation.ToUpdate);
+            Assert.NotNull(plan);
+            Assert.Contains(pg2, plan!.Mutation.ToDelete);
+            Assert.Contains(loserItem, plan.Mutation.ToUpdate);
             Assert.Equal(pg1.Id, loserItem.ParagraphId);
+            Assert.Equal(pg1.Id, plan.SurvivorId);
+            Assert.Equal(pg2.Id, plan.DeletedId);
         }
 
         [Fact]
@@ -226,21 +235,23 @@ namespace Read2Me.Tests.Services.Books
         public void PlanMergeParagraphItem_Next_ConcatenatesTextWithSingleSpace()
         {
             var (h, i1, i2) = TwoItemHierarchy("Hello", "world");
-            var mutation = h.PlanMergeParagraphItem(i1.Id, MergeDirection.Next);
+            var plan = h.PlanMergeParagraphItem(i1.Id, MergeDirection.Next);
 
-            Assert.NotNull(mutation);
-            Assert.Contains(i2, mutation!.ToDelete);
-            Assert.Contains(i1, mutation.ToUpdate);
+            Assert.NotNull(plan);
+            Assert.Contains(i2, plan!.Mutation.ToDelete);
+            Assert.Contains(i1, plan.Mutation.ToUpdate);
             Assert.Equal("Hello world", i1.Text);
+            Assert.Equal(i1.Id, plan.SurvivorId);
+            Assert.Equal(i2.Id, plan.DeletedId);
         }
 
         [Fact]
         public void PlanMergeParagraphItem_Previous_BlankSurvivor_TakesLoserText()
         {
             var (h, i1, i2) = TwoItemHierarchy("  ", "loser text");
-            var mutation = h.PlanMergeParagraphItem(i2.Id, MergeDirection.Previous);
+            var plan = h.PlanMergeParagraphItem(i2.Id, MergeDirection.Previous);
 
-            Assert.NotNull(mutation);
+            Assert.NotNull(plan);
             Assert.Equal("loser text", i1.Text);
         }
 

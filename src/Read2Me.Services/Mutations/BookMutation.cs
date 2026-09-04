@@ -33,7 +33,7 @@ public sealed record InsertParagraphItemMutation(
 // ── additive structural mutations ────────────────────────────────────────────
 // Every one of these creates nodes: a split makes a new parent beside the source, and the title
 // and pause additions make new Paragraphs. None of them deletes anything, which is what makes them
-// one family — the destructive half (delete, merge, clear) migrates separately.
+// one family — the destructive half is below.
 
 /// <summary>Splits the Volume holding <c>PartId</c> so that Part and every later sibling start a new one.</summary>
 public sealed record SplitAtPartMutation(
@@ -71,3 +71,51 @@ public sealed record InsertPauseParagraphMutation(
     Guid AnchorItemId,
     InsertPosition Position,
     PauseKind PauseKind) : BookMutation(FolderId);
+
+// ── destructive structural mutations ─────────────────────────────────────────
+// The other half of the structural family: every one of these removes nodes. A merge folds a node
+// into a sibling and deletes it, a delete removes a subtree, and clearing removes the Book's whole
+// content. What makes them one family is that a reader can be looking at something that is about to
+// stop existing — so reconciliation has to drop selections and expansion, not just recount.
+
+/// <summary>Folds a Volume into the sibling in <c>Direction</c>, which keeps the Volume's Parts.</summary>
+public sealed record MergeVolumeMutation(
+    ProjectFolderId FolderId, Guid VolumeId, MergeDirection Direction) : BookMutation(FolderId);
+
+/// <summary>Folds a Part into the sibling in <c>Direction</c>, which keeps the Part's Chapters.</summary>
+public sealed record MergePartMutation(
+    ProjectFolderId FolderId, Guid PartId, MergeDirection Direction) : BookMutation(FolderId);
+
+/// <summary>Folds a Chapter into the sibling in <c>Direction</c>, which keeps the Chapter's Paragraphs.</summary>
+public sealed record MergeChapterMutation(
+    ProjectFolderId FolderId, Guid ChapterId, MergeDirection Direction) : BookMutation(FolderId);
+
+/// <summary>Folds a Paragraph into the sibling in <c>Direction</c>, which keeps the Paragraph's items.</summary>
+public sealed record MergeParagraphMutation(
+    ProjectFolderId FolderId, Guid ParagraphId, MergeDirection Direction) : BookMutation(FolderId);
+
+/// <summary>Joins a ParagraphItem's text onto the sibling in <c>Direction</c> and deletes it.</summary>
+public sealed record MergeParagraphItemMutation(
+    ProjectFolderId FolderId, Guid ItemId, MergeDirection Direction) : BookMutation(FolderId);
+
+/// <summary>Deletes a Volume and everything under it.</summary>
+public sealed record DeleteVolumeMutation(ProjectFolderId FolderId, Guid VolumeId) : BookMutation(FolderId);
+
+/// <summary>Deletes a Part and everything under it.</summary>
+public sealed record DeletePartMutation(ProjectFolderId FolderId, Guid PartId) : BookMutation(FolderId);
+
+/// <summary>Deletes a Chapter and everything under it.</summary>
+public sealed record DeleteChapterMutation(ProjectFolderId FolderId, Guid ChapterId) : BookMutation(FolderId);
+
+/// <summary>Deletes a Paragraph and its items.</summary>
+public sealed record DeleteParagraphMutation(ProjectFolderId FolderId, Guid ParagraphId) : BookMutation(FolderId);
+
+/// <summary>Deletes one ParagraphItem.</summary>
+public sealed record DeleteParagraphItemMutation(ProjectFolderId FolderId, Guid ItemId) : BookMutation(FolderId);
+
+/// <summary>
+/// Removes the Book's entire content — every Volume, Part, Chapter, Paragraph and item — leaving
+/// the project, its Characters and its Voices. The reread and manual-reread imports clear before
+/// they rebuild.
+/// </summary>
+public sealed record ClearBookContentMutation(ProjectFolderId FolderId) : BookMutation(FolderId);

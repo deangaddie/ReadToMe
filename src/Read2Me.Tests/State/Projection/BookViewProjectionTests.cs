@@ -788,6 +788,63 @@ namespace Read2Me.Tests.State.Projection
             Assert.DoesNotContain(coherent.Receipt.Effects.CreatedId!.Value, coherent.Snapshot.Expansion.PartIds);
         }
 
+        // ── merge and deletion continuity ────────────────────────────────────
+
+        [Fact]
+        public async Task MutateAsync_Merge_MovesExpansionFromTheDeletedNodeOntoItsSurvivor()
+        {
+            var b = await SeedTwoChapterPartAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Part, b.PartId("part"), true));
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch2"), true));
+
+            var outcome = await sut.MutateAsync(
+                new MergeChapterMutation(_folder, b.ChapterId("ch2"), MergeDirection.Previous));
+
+            var coherent = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome);
+            // The surviving content does not collapse: what was open on the node that went away is
+            // open on the one that took its place, and the deleted id is gone from the intent.
+            Assert.Contains(b.ChapterId("ch1"), coherent.Snapshot.Expansion.ChapterIds);
+            Assert.DoesNotContain(b.ChapterId("ch2"), coherent.Snapshot.Expansion.ChapterIds);
+            Assert.Equal(2, coherent.Snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")].Count);
+        }
+
+        [Fact]
+        public async Task MutateAsync_Delete_DropsTheDeletedBranchFromExpansionAndTheOverview()
+        {
+            var b = await SeedTwoChapterPartAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Part, b.PartId("part"), true));
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch2"), true));
+
+            var outcome = await sut.MutateAsync(new DeleteChapterMutation(_folder, b.ChapterId("ch2")));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.DoesNotContain(b.ChapterId("ch2"), snapshot.Expansion.ChapterIds);
+            Assert.DoesNotContain(b.ChapterId("ch2"), snapshot.Branches.ParagraphsByChapter.Keys);
+            Assert.DoesNotContain(snapshot.Branches.ChaptersByPart[b.PartId("part")], c => c.Id == b.ChapterId("ch2"));
+        }
+
+        [Fact]
+        public async Task MutateAsync_ClearBookContent_LeavesNoPreClearBranchRendered()
+        {
+            var b = await SeedTwoChapterPartAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+
+            var outcome = await sut.MutateAsync(new ClearBookContentMutation(_folder));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.False(snapshot.HasContent);
+            Assert.Empty(snapshot.Volumes);
+            Assert.Empty(snapshot.Expansion.VolumeIds);
+            Assert.Empty(snapshot.Expansion.ChapterIds);
+            Assert.Empty(snapshot.Branches.ParagraphsByChapter);
+        }
+
         // ── selection recomputation ──────────────────────────────────────────
 
         [Fact]
@@ -889,6 +946,57 @@ namespace Read2Me.Tests.State.Projection
 
             var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
             Assert.Equal([b.ParagraphId("p2")], snapshot.Selections.ParagraphIds);
+        }
+
+        [Fact]
+        public async Task MutateAsync_Deletion_ClearsTheSelectedRowsItRemoved()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v
+                    .AddChapter("ch1", c => c.AddParagraph("p1", p =>
+                        p.AddRawItem("i1", ParagraphItemType.Speech, "One", alice.Id)))
+                    .AddChapter("ch2", c => c.AddParagraph("p2", p =>
+                        p.AddRawItem("i2", ParagraphItemType.Speech, "Two", alice.Id))))
+                .BuildAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            _selectionState.For(_folder).AddParagraph(b.ParagraphId("p2"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch2")));
+            _audioSelectionState.For(_folder).AddItem(new AudioItemRef(
+                b.ItemId("i2"), b.ParagraphId("p2"), b.ChapterId("ch2"), Guid.NewGuid(), b.VolumeId("vol")));
+
+            var outcome = await sut.MutateAsync(new DeleteChapterMutation(_folder, b.ChapterId("ch2")));
+
+            // Neither selection can survive content the Book no longer has, and both are dropped in
+            // the publication that removes it — never one paint later.
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Empty(snapshot.Selections.ParagraphIds);
+            Assert.Empty(snapshot.Selections.AudioItemIds);
+        }
+
+        [Fact]
+        public async Task MutateAsync_ClearBookContent_ClearsBothSelections()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("p1", p =>
+                    p.AddRawItem("i1", ParagraphItemType.Speech, "One", alice.Id))))
+                .BuildAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            _selectionState.For(_folder).AddParagraph(b.ParagraphId("p1"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch")));
+            _audioSelectionState.For(_folder).AddItem(new AudioItemRef(
+                b.ItemId("i1"), b.ParagraphId("p1"), b.ChapterId("ch"), Guid.NewGuid(), b.VolumeId("vol")));
+
+            var outcome = await sut.MutateAsync(new ClearBookContentMutation(_folder));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Empty(snapshot.Selections.ParagraphIds);
+            Assert.Empty(snapshot.Selections.AudioItemIds);
         }
 
         // ── test doubles ─────────────────────────────────────────────────────

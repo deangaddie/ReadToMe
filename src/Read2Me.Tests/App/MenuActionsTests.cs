@@ -114,22 +114,31 @@ namespace Read2Me.Tests.App
         [InlineData(NodeKind.Chapter,       MergeDirection.Next)]
         [InlineData(NodeKind.Paragraph,     MergeDirection.Previous)]
         [InlineData(NodeKind.ParagraphItem, MergeDirection.Next)]
-        public void BuildMerge_ReturnsCorrectCommandType(NodeKind kind, MergeDirection dir)
+        public void BuildMerge_ReturnsCorrectMutationType(NodeKind kind, MergeDirection dir)
         {
             var folderId = new ProjectFolderId("f");
             var id = Guid.NewGuid();
 
-            var cmd = BuildMerge(folderId, kind, id, dir);
+            var mutation = BuildMerge(folderId, kind, id, dir);
 
-            Assert.Equal(folderId, cmd.FolderId);
+            Assert.Equal(folderId, mutation.FolderId);
             switch (kind)
             {
-                case NodeKind.Volume:        Assert.IsType<MergeVolumeCommand>(cmd);        Assert.Equal(id, ((MergeVolumeCommand)cmd).VolumeId);               break;
-                case NodeKind.Part:          Assert.IsType<MergePartCommand>(cmd);          Assert.Equal(id, ((MergePartCommand)cmd).PartId);                   break;
-                case NodeKind.Chapter:       Assert.IsType<MergeChapterCommand>(cmd);       Assert.Equal(id, ((MergeChapterCommand)cmd).ChapterId);             break;
-                case NodeKind.Paragraph:     Assert.IsType<MergeParagraphCommand>(cmd);     Assert.Equal(id, ((MergeParagraphCommand)cmd).ParagraphId);         break;
-                case NodeKind.ParagraphItem: Assert.IsType<MergeParagraphItemCommand>(cmd); Assert.Equal(id, ((MergeParagraphItemCommand)cmd).ItemId);          break;
+                case NodeKind.Volume:        Assert.Equal(id, Assert.IsType<MergeVolumeMutation>(mutation).VolumeId);              break;
+                case NodeKind.Part:          Assert.Equal(id, Assert.IsType<MergePartMutation>(mutation).PartId);                  break;
+                case NodeKind.Chapter:       Assert.Equal(id, Assert.IsType<MergeChapterMutation>(mutation).ChapterId);            break;
+                case NodeKind.Paragraph:     Assert.Equal(id, Assert.IsType<MergeParagraphMutation>(mutation).ParagraphId);        break;
+                case NodeKind.ParagraphItem: Assert.Equal(id, Assert.IsType<MergeParagraphItemMutation>(mutation).ItemId);         break;
             }
+            Assert.Equal(dir, mutation switch
+            {
+                MergeVolumeMutation m => m.Direction,
+                MergePartMutation m => m.Direction,
+                MergeChapterMutation m => m.Direction,
+                MergeParagraphMutation m => m.Direction,
+                MergeParagraphItemMutation m => m.Direction,
+                _ => throw new InvalidOperationException($"Not a merge: {mutation.Name}"),
+            });
         }
 
         // ---------------------------------------------------------------
@@ -193,21 +202,21 @@ namespace Read2Me.Tests.App
         [InlineData(NodeKind.Chapter)]
         [InlineData(NodeKind.Paragraph)]
         [InlineData(NodeKind.ParagraphItem)]
-        public void BuildDelete_ReturnsCorrectCommandType(NodeKind kind)
+        public void BuildDelete_ReturnsCorrectMutationType(NodeKind kind)
         {
             var folderId = new ProjectFolderId("f");
             var id = Guid.NewGuid();
 
-            var cmd = BuildDelete(folderId, kind, id);
+            var mutation = BuildDelete(folderId, kind, id);
 
-            Assert.Equal(folderId, cmd.FolderId);
+            Assert.Equal(folderId, mutation.FolderId);
             switch (kind)
             {
-                case NodeKind.Volume:        Assert.IsType<DeleteVolumeCommand>(cmd);        Assert.Equal(id, ((DeleteVolumeCommand)cmd).VolumeId);               break;
-                case NodeKind.Part:          Assert.IsType<DeletePartCommand>(cmd);          Assert.Equal(id, ((DeletePartCommand)cmd).PartId);                   break;
-                case NodeKind.Chapter:       Assert.IsType<DeleteChapterCommand>(cmd);       Assert.Equal(id, ((DeleteChapterCommand)cmd).ChapterId);             break;
-                case NodeKind.Paragraph:     Assert.IsType<DeleteParagraphCommand>(cmd);     Assert.Equal(id, ((DeleteParagraphCommand)cmd).ParagraphId);         break;
-                case NodeKind.ParagraphItem: Assert.IsType<DeleteParagraphItemCommand>(cmd); Assert.Equal(id, ((DeleteParagraphItemCommand)cmd).ItemId);          break;
+                case NodeKind.Volume:        Assert.Equal(id, Assert.IsType<DeleteVolumeMutation>(mutation).VolumeId);             break;
+                case NodeKind.Part:          Assert.Equal(id, Assert.IsType<DeletePartMutation>(mutation).PartId);                 break;
+                case NodeKind.Chapter:       Assert.Equal(id, Assert.IsType<DeleteChapterMutation>(mutation).ChapterId);           break;
+                case NodeKind.Paragraph:     Assert.Equal(id, Assert.IsType<DeleteParagraphMutation>(mutation).ParagraphId);       break;
+                case NodeKind.ParagraphItem: Assert.Equal(id, Assert.IsType<DeleteParagraphItemMutation>(mutation).ItemId);        break;
             }
         }
     }
