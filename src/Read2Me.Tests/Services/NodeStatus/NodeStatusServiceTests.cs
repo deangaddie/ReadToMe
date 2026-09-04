@@ -122,68 +122,6 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         // ---------------------------------------------------------------
-        // OnCharacterAttributed
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public void OnCharacterAttributed_NonLastItem_NodeCountStillOne()
-        {
-            var svc = new NodeStatusService(new FakeParagraphQueueProbe());
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 2)]);
-
-            // Assign one of two items: 1 remaining
-            svc.OnCharacterAttributed(Folder, para, remainingUnattributed: 1);
-
-            Assert.Equal(1, svc.StatusForNode(Folder, ch).AttributionRemaining);
-            Assert.Equal(1, svc.StatusForNode(Folder, part).AttributionRemaining);
-            Assert.Equal(1, svc.StatusForNode(Folder, vol).AttributionRemaining);
-        }
-
-        [Fact]
-        public void OnCharacterAttributed_LastItem_NodeCountDropsToZero()
-        {
-            var svc = new NodeStatusService(new FakeParagraphQueueProbe());
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 2)]);
-
-            // Assign all items: 0 remaining
-            svc.OnCharacterAttributed(Folder, para, remainingUnattributed: 0);
-
-            Assert.Equal(0, svc.StatusForNode(Folder, ch).AttributionRemaining);
-            Assert.Equal(0, svc.StatusForNode(Folder, part).AttributionRemaining);
-            Assert.Equal(0, svc.StatusForNode(Folder, vol).AttributionRemaining);
-        }
-
-        [Fact]
-        public void OnCharacterAttributed_RemainingIncreases_RaisesBadge()
-        {
-            // Option X: assignment semantics allow the badge to rise (e.g. un-assigning a character)
-            var svc = new NodeStatusService(new FakeParagraphQueueProbe());
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 0)]);
-
-            svc.OnCharacterAttributed(Folder, para, remainingUnattributed: 1);
-
-            Assert.Equal(1, svc.StatusForNode(Folder, ch).AttributionRemaining);
-        }
-
-        [Fact]
-        public void OnCharacterAttributed_FiresChanged()
-        {
-            var svc = new NodeStatusService(new FakeParagraphQueueProbe());
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [MakeRow(para, ch, part, vol, unattributed: 2)]);
-
-            int fired = 0;
-            svc.Changed += () => fired++;
-
-            svc.OnCharacterAttributed(Folder, para, remainingUnattributed: 1);
-
-            Assert.Equal(1, fired);
-        }
-
-        // ---------------------------------------------------------------
         // OnAudioAssigned
         // ---------------------------------------------------------------
 

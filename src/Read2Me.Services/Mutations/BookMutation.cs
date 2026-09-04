@@ -132,3 +132,42 @@ public sealed record DeleteParagraphItemMutation(ProjectFolderId FolderId, Guid 
 /// they rebuild.
 /// </summary>
 public sealed record ClearBookContentMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+
+// ── speaker attribution ──────────────────────────────────────────────────────
+// The high-frequency family: nothing here creates, deletes, reorders or retypes an item — item
+// boundaries are frozen (ADR 0005) — so every one of these can name exactly which Paragraphs and
+// ParagraphItems it restamped. That exactness is the point: a queue attributing a chapter must be
+// able to refresh the rows it touched without every open Book View rereading its expanded branches.
+
+/// <summary>
+/// Stamps one item's speaker by hand — any speaker on any speech item (ADR-0006). A hand-flip is an
+/// explicit "this is the wrong voice", so it also discards the item's generated audio.
+/// </summary>
+public sealed record SetItemSpeakerMutation(
+    ProjectFolderId FolderId, Guid ItemId, Guid? CharacterId) : BookMutation(FolderId);
+
+/// <summary>
+/// Stamps a speaker across one Paragraph's dialog, leaving its narration alone — unless there is no
+/// dialog left, which is what makes assigning a whole Paragraph to the narrator reversible.
+/// </summary>
+public sealed record SetParagraphSpeakerMutation(
+    ProjectFolderId FolderId,
+    Guid ParagraphId,
+    Guid? CharacterId,
+    string? VoiceInstructions = null) : BookMutation(FolderId);
+
+/// <summary>
+/// The bulk sibling: one speaker across the dialog of every listed Paragraph. Narration is never
+/// swept — a blind fan-out across a selection must not turn a chapter's narration into dialog.
+/// </summary>
+public sealed record SetParagraphsSpeakerMutation(
+    ProjectFolderId FolderId, IReadOnlyList<Guid> ParagraphIds, Guid? CharacterId) : BookMutation(FolderId);
+
+/// <summary>
+/// The Character Queue's answer applied to one Paragraph's existing items. Unlike a hand-flip this
+/// keeps generated audio: see ADR-0006 for why that asymmetry stands.
+/// </summary>
+public sealed record AttributeParagraphItemsMutation(
+    ProjectFolderId FolderId,
+    Guid ParagraphId,
+    IReadOnlyList<ItemAttribution> Items) : BookMutation(FolderId);

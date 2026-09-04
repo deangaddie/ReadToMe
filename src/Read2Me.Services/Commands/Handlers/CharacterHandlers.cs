@@ -2,43 +2,28 @@ using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
-using Read2Me.Data.Enums;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Commands.Handlers;
 
 /// <summary>
-/// Stamps one item's speaker — any speaker, on any speech item. Narration is a speaker, not an
-/// item type (ADR-0006): stamping the narrator sentinel makes the item narration, stamping a
-/// character makes it that character's line, and clearing it hands the item back to the
-/// attribution queue as unattributed dialog. <c>VoiceResolver</c> honours whatever is
-/// stamped, so the flip is heard rather than merely displayed.
+/// The three by-hand speaker gestures, migrated to <see cref="BookMutations"/> (ADR 0007). Each
+/// handler is now only a translation: the writes, their transaction, and the exact Paragraphs and
+/// ParagraphItems a Book View refreshes from all live in the mutation implementations. They stay
+/// registered so <c>POST /api/projects/{folder}/commands</c> keeps its existing request and
+/// response shape.
 /// <para>
-/// A hand-flip is an explicit "this is the wrong voice", so it discards the item's generated
-/// audio and returns it to the audio queue — otherwise the old voice survives into the exported
-/// m4b while the item still counts as complete. <c>AttributeItemsHandler</c> deliberately does
-/// not do this; see ADR-0006 for why that asymmetry is left standing.
+/// The commands keep saying "character" and the mutations say "speaker" because the wire names are
+/// fixed and the domain's word is not: narration is a speaker too (ADR-0006), so a gesture that can
+/// stamp the narrator is not a "set character". The two vocabularies meet here, in one line each,
+/// until the wire contract is free to move.
 /// </para>
 /// </summary>
-public sealed class SetItemCharacterHandler(ProjectDbSession session) : ICommandHandler<SetItemCharacterCommand>
+public sealed class SetItemCharacterHandler(BookMutations mutations) : ICommandHandler<SetItemCharacterCommand>
 {
-    public async Task<Guid?> HandleAsync(SetItemCharacterCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var item = await db.ParagraphItems.Include(i => i.Character).FirstOrDefaultAsync(i => i.Id == c.ItemId);
-        if (item == null) return null;
-        // Any speaker on any *speech* item. A pause is nobody's: nothing reads a stamped pause and
-        // every reader filters it out, so the stamp would sit there invisible and untrue.
-        if (ParagraphItemKinds.IsPause(item.ItemType)) return null;
-        if (item.CharacterId == c.CharacterId) return null;
-        item.CharacterId = c.CharacterId;
-        item.AudioFileName = null;
-        item.Character = c.CharacterId.HasValue
-            ? await db.Characters.FindAsync(c.CharacterId.Value)
-            : null;
-        await db.SaveChangesAsync();
-        return null;
-    }
+    public Task<Guid?> HandleAsync(SetItemCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(new SetItemSpeakerMutation(c.FolderId, c.ItemId, c.CharacterId), ct);
 }
 
 public sealed class CreateCharacterHandler(ProjectDbSession session) : ICommandHandler<CreateCharacterCommand>
@@ -56,72 +41,20 @@ public sealed class CreateCharacterHandler(ProjectDbSession session) : ICommandH
     }
 }
 
-/// <summary>
-/// Stamps a speaker across a paragraph, sweeping its speech items *except* the narration —
-/// the same line the old <c>ItemType == Character</c> filter drew, now expressed against the
-/// speaker (ADR-0006). Preserving narration is what stops a one-gesture speaker fix destroying
-/// the paragraph's narration/dialog split. Assigning the narrator is allowed and means "make
-/// this paragraph narration"; under the same sweep rule it is idempotent.
-/// <para>
-/// One exception, and it is what makes that gesture reversible: a paragraph with <em>no</em>
-/// dialog left — every speech item narration, usually because the user just assigned the whole
-/// paragraph to the narrator — sweeps its narration instead. There is no narration/dialog split
-/// left to protect, and without this the assign is a one-way door at paragraph level. The bulk
-/// sibling deliberately does not do this: a blind fan-out across a selection must never be able
-/// to turn a chapter's narration into dialog.
-/// </para>
-/// </summary>
-public sealed class SetParagraphCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphCharacterCommand>
+public sealed class SetParagraphCharacterHandler(BookMutations mutations)
+    : ICommandHandler<SetParagraphCharacterCommand>
 {
-    public async Task<Guid?> HandleAsync(SetParagraphCharacterCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var speech = await db.ParagraphItems
-            .Where(i => i.ParagraphId == c.ParagraphId)
-            .Where(ParagraphItemKinds.IsSpeechExpression)
-            .ToListAsync();
-
-        var dialog = speech.Where(NarrationRule.IsDialog).ToList();
-        var items = dialog.Count > 0 ? dialog : speech;
-        foreach (var item in items)
-        {
-            // Only an item this gesture actually moves loses its audio; one already on the target
-            // speaker keeps what it has, which is what makes assigning the narrator idempotent.
-            if (item.CharacterId != c.CharacterId)
-            {
-                item.CharacterId = c.CharacterId;
-                item.AudioFileName = null;
-            }
-            if (c.CharacterId.HasValue && c.VoiceInstructions != null)
-                item.VoiceInstructions = c.VoiceInstructions;
-        }
-        await db.SaveChangesAsync();
-        return null;
-    }
+    public Task<Guid?> HandleAsync(SetParagraphCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(
+            new SetParagraphSpeakerMutation(c.FolderId, c.ParagraphId, c.CharacterId, c.VoiceInstructions), ct);
 }
 
-/// <summary>
-/// The bulk sibling of <see cref="SetParagraphCharacterHandler"/>: one set-based update, no
-/// entities loaded, so a thousand-paragraph selection costs no change-tracker time. The id list
-/// is not chunked — EF translates <c>Contains</c> to <c>IN (SELECT value FROM json_each(@ids))</c>,
-/// a single parameter at any length. <c>VoiceInstructions</c> is left alone: there is no
-/// per-line instruction to spread across a selection. It sweeps the same non-narrator speech
-/// items its sibling does, so narration survives a thousand-paragraph correction.
-/// </summary>
-public sealed class SetParagraphsCharacterHandler(ProjectDbSession session) : ICommandHandler<SetParagraphsCharacterCommand>
+public sealed class SetParagraphsCharacterHandler(BookMutations mutations)
+    : ICommandHandler<SetParagraphsCharacterCommand>
 {
-    public async Task<Guid?> HandleAsync(SetParagraphsCharacterCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        await db.ParagraphItems
-            .Where(i => c.ParagraphIds.Contains(i.ParagraphId))
-            .Where(NarrationRule.IsDialogExpression)
-            .Where(i => i.CharacterId != c.CharacterId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(i => i.CharacterId, c.CharacterId)
-                .SetProperty(i => i.AudioFileName, (string?)null), ct);
-        return null;
-    }
+    public Task<Guid?> HandleAsync(SetParagraphsCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(
+            new SetParagraphsSpeakerMutation(c.FolderId, c.ParagraphIds, c.CharacterId), ct);
 }
 
 public sealed class AddCharacterAliasHandler(ProjectDbSession session) : ICommandHandler<AddCharacterAliasCommand>

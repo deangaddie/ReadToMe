@@ -41,8 +41,7 @@ namespace Read2Me.App.State
         CharacterQueueService characterQueue,
         AudioQueueService audioQueue,
         AudioReviewService audioReviews,
-        NodeStatusService nodeStatus,
-        EventBroadcaster<ParagraphItemsChanged> paragraphItemsChanged) : IDisposable
+        NodeStatusService nodeStatus) : IDisposable
     {
         public bool IsLoading { get; private set; }
         public bool IsBusy { get; private set; }
@@ -179,7 +178,6 @@ namespace Read2Me.App.State
         // ---------------------------------------------------------------
 
         private bool _audioQueueSubscribed;
-        private bool _itemsChangedSubscribed;
         private bool _characterQueueSubscribed;
         private bool _snapshotSubscribed;
 
@@ -289,14 +287,19 @@ namespace Read2Me.App.State
         /// gesture that changed nothing has nothing to announce.
         /// </para>
         /// </summary>
-        public async Task MutateAsync(BookMutation mutation)
+        /// <returns>
+        /// The outcome, for the few gestures that report their own success — a bulk assign says how
+        /// much it moved. Most callers ignore it: the Book View is the report.
+        /// </returns>
+        public async Task<BookViewMutationOutcome> MutateAsync(BookMutation mutation)
         {
             IsBusy = true;
             Error = null;
             NotifyStateChanged();
             try
             {
-                switch (await projection.MutateAsync(mutation))
+                var outcome = await projection.MutateAsync(mutation);
+                switch (outcome)
                 {
                     case BookViewMutationOutcome.Coherent coherent:
                         SeedDerivedServices(coherent.Snapshot.Folder, coherent.Snapshot);
@@ -305,6 +308,7 @@ namespace Read2Me.App.State
                         snackbar.Add(uncommitted.Message, Severity.Warning);
                         break;
                 }
+                return outcome;
             }
             finally
             {
@@ -359,40 +363,31 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
-        public async Task SetItemCharacterAsync(ProjectFolderId folderId, ParagraphItem item, Guid? characterId)
+        public Task SetItemCharacterAsync(ProjectFolderId folderId, ParagraphItem item, Guid? characterId)
         {
-            await commandHandler.ExecuteAsync(new SetItemCharacterCommand(folderId, item.Id, characterId));
+            // Queue state, not Book data: the paragraph's last outcome describes an attempt the user
+            // has just answered by hand, so it stops being worth showing.
             characterQueue.ClearOutcome(folderId, item.ParagraphId);
 
-            var character = await ResolveCharacterAsync(folderId, characterId);
-
-            item.CharacterId = characterId;
-            item.Character = character;
-            item.AudioFileName = null;   // a hand-flip discards the item's audio (ADR-0006)
-
-            // The reseed ends in a rebuild, and every published snapshot repaints the view.
-            await ReseedAfterSpeakerChangeAsync(folderId);
+            return MutateAsync(new SetItemSpeakerMutation(folderId, item.Id, characterId));
         }
 
-        public async Task SetParagraphCharacterAsync(ProjectFolderId folderId, Paragraph paragraph, Guid? characterId)
+        public Task SetParagraphCharacterAsync(ProjectFolderId folderId, Paragraph paragraph, Guid? characterId)
         {
             characterQueue.ClearOutcome(folderId, paragraph.Id);
 
-            var character = characterId.HasValue
-                ? Characters.FirstOrDefault(c => c.Id == characterId.Value)
-                : null;
-
-            await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
-            ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character, sweepAllNarrationParagraph: true);
-
-            // The reseed ends in a rebuild, and every published snapshot repaints the view.
-            await ReseedAfterSpeakerChangeAsync(folderId);
+            return MutateAsync(new SetParagraphSpeakerMutation(folderId, paragraph.Id, characterId));
         }
 
         /// <summary>
         /// Bulk apply: one character — or a clear, when <paramref name="characterId"/> is null — across
-        /// every Character item in every selected paragraph, behind one confirm. The selection is kept,
-        /// so the dock bar stays up and bulk mode stays armed.
+        /// every Character item in every selected paragraph, behind one confirm.
+        /// <para>
+        /// What becomes of the selection afterwards is not decided here: the projection recomputes it
+        /// against the new revision (ADR 0007), so an ordinary fan-out — which moves no denominator —
+        /// keeps it and leaves the dock bar up, while a paragraph the assign turned all-narration
+        /// drops out of it with the roll-up it was counted in.
+        /// </para>
         /// </summary>
         public async Task AssignCharacterToSelectionAsync(ProjectFolderId folderId, Guid? characterId)
         {
@@ -428,59 +423,19 @@ namespace Read2Me.App.State
             foreach (var id in ids)
                 characterQueue.ClearOutcome(folderId, id);
 
-            await commandHandler.ExecuteAsync(new SetParagraphsCharacterCommand(folderId, ids, characterId));
-
-            // Walk the loaded paragraphs testing membership, never the selection looking ids up — the
-            // selection can dwarf what is in memory. Unloaded paragraphs need nothing: their chapter
-            // reads the committed write when it expands. Done before the reseed, so the reseed's
-            // republish cannot land mid-walk — and before the selection is cleared, since the walk
-            // reads it.
-            foreach (var p in LoadedParagraphs())
-            {
-                if (Selection.IsParagraphSelected(p.Id))
-                    ParagraphCharacterStamp.Apply(p.Items, characterId, character);
-            }
-
-            // One reseed for the whole batch, not one per item.
-            // The reseed ends in a rebuild, and every published snapshot repaints the view.
-            await ReseedAfterSpeakerChangeAsync(folderId);
+            // One mutation for the whole batch, not one per paragraph. Nothing is patched afterwards:
+            // the projection republishes the affected rows, the counts they roll up into, and the
+            // Folder Selection recomputed against the new revision — a paragraph that has stopped
+            // being a Character paragraph drops out of the selection with its denominator (ADR 0007).
+            if (await MutateAsync(new SetParagraphsSpeakerMutation(folderId, ids, characterId))
+                is not BookViewMutationOutcome.Coherent)
+                return;
 
             snackbar.Add(
                 name is null
                     ? $"Cleared speakers on {items} lines in {paras} paragraphs."
                     : $"Assigned {name} to {items} lines in {paras} paragraphs.",
                 Severity.Success);
-        }
-
-        /// <summary>
-        /// A speaker change can flip whether a paragraph is a Character paragraph at all — assign its
-        /// last dialog item to the narrator and it stops being one; give a narration item to a
-        /// character and it starts (ADR-0006). Selectable nodes, roll-up denominators and the status
-        /// badges are all derived from that, so they are reseeded from the reader rather than patched
-        /// incrementally: mixed-structure denominators have been a bug source before, and there is no
-        /// precedent for patching "paragraph becomes / stops being attributable".
-        /// <para>
-        /// Selection is cleared only when the denominators actually moved, so a roll-up checkbox can
-        /// never mix totals from before and after the edit — while an ordinary bulk assign, which
-        /// changes no membership, keeps its selection and leaves the dock bar up. Recomputing
-        /// selection safety is reconciliation work the projection takes over from ticket 04 on; until
-        /// a receipt carries this write, the presenter still asks.
-        /// </para>
-        /// </summary>
-        private async Task ReseedAfterSpeakerChangeAsync(ProjectFolderId folderId)
-        {
-            var was = Snapshot?.NodeCharacterParagraphCounts ?? new Dictionary<Guid, int>();
-            var overview = await reader.GetBookOverviewAsync(folderId);
-
-            var moved = overview.NodeCharacterParagraphCounts.Count != was.Count
-                || overview.NodeCharacterParagraphCounts.Any(kv =>
-                    !was.TryGetValue(kv.Key, out var before) || before != kv.Value);
-
-            if (moved) Selection.Clear();
-
-            // The counts, the selectable nodes, the badges and the voice previews all moved with the
-            // write: one rebuild reads them together rather than four copies being patched apart.
-            SeedDerivedServices(folderId, await projection.RebuildAsync());
         }
 
         /// <summary>
@@ -604,35 +559,6 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
-        /// <summary>The node-status counter unit: speech items still without a speaker (ADR-0006).</summary>
-        private static int CountUnattributed(IEnumerable<ParagraphItem>? items) =>
-            items?.Count(i => !ParagraphItemKinds.IsPause(i.ItemType) && i.CharacterId is null) ?? 0;
-
-        /// <summary>
-        /// A paragraph's items changed (attribution stamped speakers, or an item was stamped by
-        /// hand). Any number of items can change in one event, so the whole item list is reloaded
-        /// rather than a single stamp patched.
-        /// </summary>
-        private async void OnParagraphItemsChanged(ParagraphItemsChanged e)
-        {
-            if (CurrentFolder is not { } current || current != e.FolderId) return;
-
-            var para = LoadedParagraphs().FirstOrDefault(p => p.Id == e.ParagraphId);
-            if (para is null) return;
-
-            var children = await reader.GetChildrenAsync(e.FolderId, BookNodeLevel.Chapter, para.ChapterId);
-            var reloaded = children?.Paragraphs?.FirstOrDefault(p => p.Id == e.ParagraphId);
-            if (reloaded is null) return;
-
-            para.Items = reloaded.Items;
-
-            nodeStatus.OnCharacterAttributed(e.FolderId, e.ParagraphId, CountUnattributed(para.Items));
-
-            // Attribution can create characters, and it moves the Voice each stamped line would be
-            // spoken in, so the roster and the previews are republished rather than patched.
-            await projection.RebuildAsync();
-        }
-
         private void OnAudioFileAssigned(ProjectFolderId folder, Guid paragraphItemId, string relativePath)
         {
             if (CurrentFolder is not { } current || current != folder) return;
@@ -666,12 +592,6 @@ namespace Read2Me.App.State
                 _audioQueueSubscribed = true;
             }
 
-            if (!_itemsChangedSubscribed)
-            {
-                paragraphItemsChanged.Event += OnParagraphItemsChanged;
-                _itemsChangedSubscribed = true;
-            }
-
             if (!_characterQueueSubscribed)
             {
                 characterQueue.Changed += DisarmBulkIfQueueBusy;
@@ -699,12 +619,6 @@ namespace Read2Me.App.State
             {
                 audioQueue.AudioFileAssigned -= OnAudioFileAssigned;
                 _audioQueueSubscribed = false;
-            }
-
-            if (_itemsChangedSubscribed)
-            {
-                paragraphItemsChanged.Event -= OnParagraphItemsChanged;
-                _itemsChangedSubscribed = false;
             }
 
             if (_snapshotSubscribed)

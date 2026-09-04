@@ -97,17 +97,6 @@ namespace Read2Me.Services.NodeStatus
             Changed?.Invoke();
         }
 
-        public void OnCharacterAttributed(ProjectFolderId folder, Guid paragraphId, int remainingUnattributed)
-        {
-            var key = new ParagraphKey(folder, paragraphId);
-            if (_entries.TryGetValue(key, out var status))
-            {
-                lock (status)
-                    status.Unattributed = remainingUnattributed;
-            }
-            Changed?.Invoke();
-        }
-
         public void OnAudioAssigned(ProjectFolderId folder, Guid paragraphId)
         {
             var key = new ParagraphKey(folder, paragraphId);

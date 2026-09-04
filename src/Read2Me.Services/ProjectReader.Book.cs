@@ -97,6 +97,31 @@ namespace Read2Me.Services
         }
 
         /// <summary>
+        /// Reads exactly the named paragraphs, items included — the targeted read behind an exact
+        /// receipt (ADR 0007). Untracked for the same reason <see cref="GetChildrenAsync"/> is: it
+        /// exists to see a write made through another scope.
+        /// <para>
+        /// Ordered by position within each chapter, but not across them: a caller refreshing loaded
+        /// rows already knows where each paragraph sits, and ordering the whole set would need the
+        /// hierarchy walk this read exists to avoid.
+        /// </para>
+        /// </summary>
+        public async Task<List<Paragraph>> GetParagraphsAsync(
+            ProjectFolderId folderId, IReadOnlyCollection<Guid> paragraphIds)
+        {
+            if (paragraphIds.Count == 0) return [];
+
+            var db = await _session.OpenAsync(folderId);
+            return await db.Paragraphs
+                .AsNoTracking()
+                .Where(p => paragraphIds.Contains(p.Id))
+                .OrderBy(p => p.Order)
+                .Include(p => p.Items.OrderBy(i => i.Order))
+                    .ThenInclude(i => i.Character)
+                .ToListAsync();
+        }
+
+        /// <summary>
         /// Reads are untracked: the session's context is long-lived, so a tracked entity would be
         /// served from the identity map on re-read and hide a write made through another scope —
         /// exactly what re-reading a paragraph after attribution rewrote its items is for.

@@ -69,9 +69,10 @@ namespace Read2Me.Tests.State.Projection
             _selections = new FakeSelections(_selectionState, _audioSelectionState);
         }
 
-        private BookViewProjection CreateSut(IBookProjectLoader? loader = null) =>
+        private BookViewProjection CreateSut(
+            IBookProjectLoader? loader = null, IBookContentReader? content = null) =>
             new(loader ?? new BookProjectLoader(_reader),
-                _reader,
+                content ?? _reader,
                 _reader,
                 _reader,
                 _mutations,
@@ -1014,6 +1015,156 @@ namespace Read2Me.Tests.State.Projection
         /// <see cref="BookMutations"/>, sharing only the singletons the app shares — the revision
         /// sequence and the receipt broadcast.
         /// </summary>
+        // ── exact speaker attribution ────────────────────────────────────────
+
+        /// <summary>
+        /// One volume, two chapters, each with a paragraph of dialog plus narration — enough for a
+        /// speaker change in one chapter to be provably not a reread of the other.
+        /// </summary>
+        private async Task<BookHierarchyBuilder> SeedTwoAttributableChaptersAsync()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", new Character { Id = Guid.NewGuid(), Name = "Alice" })
+                .WithCharacter("bob", new Character { Id = Guid.NewGuid(), Name = "Bob" });
+            await b.AddVolume("vol", v => v
+                    .AddChapter("ch1", c => c.AddParagraph("p1", p => p
+                        .AddCharacterLine("i1", "\"Hello,\" ", "alice")
+                        .AddNarration("n1", "she said.")))
+                    .AddChapter("ch2", c => c.AddParagraph("p2", p => p
+                        .AddCharacterLine("i2", "\"Bye.\"", "bob"))))
+                .BuildAsync();
+            return b;
+        }
+
+        private async Task<BookViewProjection> OpenWithBothChaptersAsync(
+            BookHierarchyBuilder b, CountingContent content)
+        {
+            var sut = CreateSut(content: content);
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch2"), true));
+            return sut;
+        }
+
+        [Fact]
+        public async Task MutateAsync_ExactAttribution_RefreshesTheAffectedParagraphOnly()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var content = new CountingContent(_reader);
+            var sut = await OpenWithBothChaptersAsync(b, content);
+            content.ChildrenOf.Clear();
+
+            var outcome = await sut.MutateAsync(
+                new SetItemSpeakerMutation(_folder, b.ItemId("i1"), b.CharacterId("bob")));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            // The restamped row is on screen…
+            var stamped = Assert.Single(snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")]);
+            Assert.Equal(b.CharacterId("bob"), stamped.Items.Single(i => i.Id == b.ItemId("i1")).CharacterId);
+            Assert.Equal([b.ParagraphId("p1")], content.ParagraphsRead);
+            // …and neither expanded branch was walked to get it there.
+            Assert.Empty(content.ChildrenOf);
+            // The other open chapter keeps the instance it had, untouched.
+            Assert.Equal(b.CharacterId("bob"),
+                snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch2")]
+                    .Single().Items.Single().CharacterId);
+        }
+
+        [Fact]
+        public async Task MutateAsync_ExactAttribution_RefreshesTheDerivedStateThatMovedWithIt()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var content = new CountingContent(_reader);
+            var sut = await OpenWithBothChaptersAsync(b, content);
+            _voices.Names[b.ItemId("i1")] = "Bob's voice";
+
+            // The paragraph's only dialog item becomes narration, so the paragraph stops being a
+            // Character paragraph: its count, its selectable node and its Node Status row all move.
+            var outcome = await sut.MutateAsync(
+                new SetItemSpeakerMutation(_folder, b.ItemId("i1"), ProjectDbContext.NarratorId));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.False(snapshot.NodeCharacterParagraphCounts.TryGetValue(b.ChapterId("ch1"), out var count) && count > 0);
+            Assert.DoesNotContain(b.ChapterId("ch1"), snapshot.SelectableNodeIds);
+            Assert.Equal(0, snapshot.NodeStatus.Single(r => r.ParagraphId == b.ParagraphId("p1")).Unattributed);
+            // The Voice each restamped line would be spoken in was re-resolved with it.
+            Assert.Equal("Bob's voice", snapshot.ResolvedVoiceName(b.ItemId("i1")));
+            Assert.Contains(snapshot.Characters, c => c.Id == b.CharacterId("alice"));
+        }
+
+        [Fact]
+        public async Task MutateAsync_ExactAttribution_ClearsASelectionThatStoppedBeingAttributable()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetParagraphSelected(
+                b.ParagraphId("p1"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")), Selected: true));
+            Assert.Single(sut.Snapshot!.Selections.ParagraphIds);
+
+            // Its last dialog item becomes narration (ADR-0006), so the Paragraph leaves the
+            // Folder Selection with the denominator it was rolled up into.
+            var outcome = await sut.MutateAsync(
+                new SetItemSpeakerMutation(_folder, b.ItemId("i1"), ProjectDbContext.NarratorId));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Empty(snapshot.Selections.ParagraphIds);
+        }
+
+        [Fact]
+        public async Task MutateAsync_ExactAttribution_KeepsASelectionThatIsStillAttributable()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetParagraphSelected(
+                b.ParagraphId("p1"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")), Selected: true));
+
+            // A bulk assign that swaps one character for another moves no denominator, so the dock
+            // bar stays up and a second bulk gesture still has something to act on.
+            var outcome = await sut.MutateAsync(
+                new SetParagraphsSpeakerMutation(_folder, [b.ParagraphId("p1")], b.CharacterId("bob")));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal([b.ParagraphId("p1")], snapshot.Selections.ParagraphIds);
+        }
+
+        [Fact]
+        public async Task AnotherProducersExactAttribution_ConvergesSilentlyAndWithoutRebuilding()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var content = new CountingContent(_reader);
+            var sut = await OpenWithBothChaptersAsync(b, content);
+            content.ChildrenOf.Clear();
+
+            var announced = 0;
+            var updates = 0;
+            sut.ExternalUpdateApplied += update =>
+            {
+                updates++;
+                if (update.Announce) announced++;
+            };
+
+            // The Character Queue, working through the Book in its own scope.
+            var committed = await RemoteWriter().CommitAsync(new AttributeParagraphItemsMutation(
+                _folder, b.ParagraphId("p2"), [new ItemAttribution(b.ItemId("i2"), b.CharacterId("alice"), null)]));
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision, "the queue's attribution never arrived");
+
+            Assert.Equal(b.CharacterId("alice"),
+                sut.Snapshot!.Branches.ParagraphsByChapter[b.ChapterId("ch2")]
+                    .Single().Items.Single().CharacterId);
+            Assert.Equal([b.ParagraphId("p2")], content.ParagraphsRead);
+            Assert.Empty(content.ChildrenOf);
+            // Routine background progress: nothing structural, nothing lost.
+            Assert.Equal(1, updates);
+            Assert.Equal(0, announced);
+        }
+
         private BookMutations RemoteWriter()
         {
             var circuit = _root.CreateAsyncScope();
@@ -1438,6 +1589,49 @@ namespace Read2Me.Tests.State.Projection
             }
         }
 
+
+        /// <summary>
+        /// A real content reader that counts what a build asked it for. It is the only way to tell a
+        /// targeted refresh from a rebuild: both publish a correct snapshot, and the difference is
+        /// which reads were taken to get there.
+        /// </summary>
+        private sealed class CountingContent(IBookContentReader inner) : IBookContentReader
+        {
+            public List<Guid> ChildrenOf { get; } = [];
+            public List<Guid> ParagraphsRead { get; } = [];
+
+            public Task<HierarchyChildren> GetChildrenAsync(
+                ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId)
+            {
+                ChildrenOf.Add(parentId);
+                return inner.GetChildrenAsync(folderId, parentLevel, parentId);
+            }
+
+            public Task<List<Paragraph>> GetParagraphsAsync(
+                ProjectFolderId folderId, IReadOnlyCollection<Guid> paragraphIds)
+            {
+                ParagraphsRead.AddRange(paragraphIds);
+                return inner.GetParagraphsAsync(folderId, paragraphIds);
+            }
+
+            public Task<BookOverview> GetBookOverviewAsync(ProjectFolderId f) => inner.GetBookOverviewAsync(f);
+            public Task<bool> HasBookContentAsync(ProjectFolderId f) => inner.HasBookContentAsync(f);
+            public Task<List<Volume>> GetVolumesAsync(ProjectFolderId f) => inner.GetVolumesAsync(f);
+            public Task<List<Part>> GetPartsAsync(ProjectFolderId f, Guid v) => inner.GetPartsAsync(f, v);
+            public Task<List<Chapter>> GetChaptersAsync(ProjectFolderId f, Guid p) => inner.GetChaptersAsync(f, p);
+            public Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId f, Guid c) =>
+                inner.GetChapterParagraphsAsync(f, c);
+            public Task<int> GetTotalPartCountAsync(ProjectFolderId f) => inner.GetTotalPartCountAsync(f);
+            public Task<int> GetTotalChapterCountAsync(ProjectFolderId f) => inner.GetTotalChapterCountAsync(f);
+            public Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(
+                ProjectFolderId f, IEnumerable<Guid> ids) => inner.GetOrderedParagraphsAsync(f, ids);
+            public Task<ParagraphContext?> GetParagraphContextAsync(
+                ProjectFolderId f, Guid c, Guid p, int before, int after) =>
+                inner.GetParagraphContextAsync(f, c, p, before, after);
+            public Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
+                ProjectFolderId f, Guid c, IReadOnlyList<Guid> ids, int before, int after) =>
+                inner.GetParagraphBatchContextAsync(f, c, ids, before, after);
+        }
 
         private sealed class FakeVoiceResolver : IVoiceResolver
         {

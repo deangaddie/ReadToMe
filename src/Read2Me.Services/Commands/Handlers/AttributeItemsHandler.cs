@@ -1,63 +1,29 @@
-using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
-using Read2Me.Data;
-using Read2Me.Data.Enums;
-using Read2Me.Services.Events;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Commands.Handlers;
 
 /// <summary>
-/// Stamps an attribution answer onto a paragraph's existing items. Item boundaries are frozen
-/// (ADR 0005): nothing here inserts, deletes, reorders or retypes an item, and <c>Text</c> is never
-/// rewritten — so generated audio can only be invalidated by a speaker change, never by a re-split.
+/// The Character Queue's answer, migrated to <see cref="BookMutations"/> (ADR 0007). The stamping
+/// rules, and the exact Paragraph and ParagraphItems a Book View refreshes from, live in
+/// <see cref="Mutations.Implementations.AttributeParagraphItemsMutationImplementation"/>; this
+/// handler stays registered so <c>POST /api/projects/{folder}/commands</c> keeps its existing
+/// request and response shape.
 /// <para>
-/// Each <see cref="ItemAttribution"/> is matched by id against this paragraph's items; ids that
-/// belong to another paragraph, or no longer exist, are ignored (the answer may be stale — the queue
-/// is asynchronous and the user may have edited items since the ask). A null <c>CharacterId</c>
-/// means "unknown" and leaves any existing stamp alone, while <c>VoiceInstructions</c> are
-/// overwritten unconditionally — including to null: the answer is the whole truth about how an item
-/// it names should be read.
+/// It no longer publishes a reconciliation event of its own. Open Book Views converge on the
+/// committed receipt like every other producer's, which is what lets a queue run reach a second
+/// circuit at all.
 /// </para>
 /// <para>
-/// Only non-narrator speech items are stamped. A pause carries no speech at all, and a
-/// narrator-stamped item is one the user (or the splitter) has already settled: assigning an item
-/// to the narrator is also the gesture that locks it out of re-attribution (ADR-0006). Everything
-/// else — attributed dialog included — is re-asked, exactly as before this change.
+/// One behavioural change comes with that: an answer whose stamps all agree with what the items
+/// already carry is now <c>NoChange</c> rather than a save. It consumes no revision, so a re-run
+/// over an attributed chapter no longer makes every open Book View reread it per paragraph. The
+/// response stays <c>null</c> either way.
 /// </para>
 /// </summary>
-public sealed class AttributeItemsHandler(
-    ProjectDbSession session,
-    EventBroadcaster<ParagraphItemsChanged> events) : ICommandHandler<AttributeItemsCommand>
+public sealed class AttributeItemsHandler(BookMutations mutations) : ICommandHandler<AttributeItemsCommand>
 {
-    public async Task<Guid?> HandleAsync(AttributeItemsCommand c, CancellationToken ct)
-    {
-        if (c.Items.Count == 0) return null;
-
-        var db = await session.OpenAsync(c.FolderId);
-        if (!await db.Paragraphs.AnyAsync(p => p.Id == c.ParagraphId, ct)) return null;
-
-        var items = await db.ParagraphItems
-            .Where(i => i.ParagraphId == c.ParagraphId)
-            .ToDictionaryAsync(i => i.Id, ct);
-
-        var stamped = false;
-        foreach (var attribution in c.Items)
-        {
-            if (!items.TryGetValue(attribution.ItemId, out var item)) continue;
-            if (ParagraphItemKinds.IsPause(item.ItemType)) continue;
-            if (NarrationRule.IsNarration(item)) continue;
-
-            if (attribution.CharacterId.HasValue) item.CharacterId = attribution.CharacterId;
-            item.VoiceInstructions = attribution.VoiceInstructions;
-            stamped = true;
-        }
-
-        // An answer that matched nothing — every id stale or foreign — changed no row, so there is
-        // nothing for the UI to redraw.
-        if (!stamped) return null;
-
-        await db.SaveChangesAsync(ct);
-        events.Publish(new ParagraphItemsChanged(c.FolderId, c.ParagraphId));
-        return null;
-    }
+    public Task<Guid?> HandleAsync(AttributeItemsCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(
+            new AttributeParagraphItemsMutation(c.FolderId, c.ParagraphId, c.Items), ct);
 }

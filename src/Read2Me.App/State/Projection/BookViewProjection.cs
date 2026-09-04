@@ -243,9 +243,16 @@ namespace Read2Me.App.State.Projection
         }
 
         /// <summary>
-        /// Rebuilds the bound Book from what a commit actually changed: expansion carried across the
+        /// Brings the bound Book up to what a commit actually changed: expansion carried across the
         /// structural relationships first, so the reader keeps their place, then one authoritative
-        /// build that rechecks both selections against the new revision.
+        /// read that rechecks both selections against the new revision.
+        /// <para>
+        /// How much is read is decided from the effects, never from the mutation's name. A commit
+        /// that named exactly the Paragraphs it restamped and moved no node refreshes those rows;
+        /// anything else — structural, whole-project, or a facet this projection cannot place on a
+        /// row — rebuilds, because guessing wrong produces a plausible stale view rather than a
+        /// visible failure.
+        /// </para>
         /// <para>
         /// Callers hold <c>_builds</c> and have already established that <paramref name="folder"/> is
         /// the bound Book.
@@ -255,6 +262,25 @@ namespace Read2Me.App.State.Projection
             ProjectFolderId folder, BookMutationEffects effects, CancellationToken ct)
         {
             CarryExpansionAcross(folder, effects);
+
+            if (Snapshot is { } current && CanRefreshExactly(effects))
+            {
+                try
+                {
+                    return await RefreshExactlyAsync(folder, current, effects, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // A narrow read that fails is not a reason to strand the Book View: the whole
+                    // rebuild reads the same Book from the same source, so it is tried before anyone
+                    // is told anything (ADR 0007). Reporting a failed rebuild is the recovery
+                    // ticket's job; this is only the fallback.
+                    logger.LogWarning(ex,
+                        "Refreshing the named rows of {Folder} failed; rebuilding the Book View instead.",
+                        folder.Value);
+                }
+            }
+
             return await BuildAndPublishAsync(folder, ct, effects);
         }
 
@@ -624,6 +650,139 @@ namespace Read2Me.App.State.Projection
             var requested = RequestedExpansion(folderId, book.Volumes);
             var loaded = await LoadExpandedBranchesAsync(folderId, book.Volumes, requested, ct);
             var previews = await ResolveVoicePreviewsAsync(folderId, loaded.Branches, ct);
+
+            return await PublishReadsAsync(folderId, revision, book, loaded, previews, reconciling, ct);
+        }
+
+        /// <summary>
+        /// Which facets a Book View can place on a row it already has. Everything else moves data no
+        /// single Paragraph carries — structure, project policy, Voice Rules, the narrator link — and
+        /// is reconciled by rebuilding.
+        /// <para>
+        /// Only the migrated family's facets are listed. Audio, reviews and item text are refreshable
+        /// in principle and are deliberately left out until their own slices prove it: an unlisted
+        /// facet costs a rebuild, while listing one early would ship untested reconciliation for a
+        /// producer that does not exist yet.
+        /// </para>
+        /// </summary>
+        private const BookFacets RowScopedFacets = BookFacets.Attribution | BookFacets.Audio;
+
+        /// <summary>
+        /// Whether a commit can be reconciled by refreshing named rows instead of rebuilding: it
+        /// enumerated what it touched, it moved no node, and every facet it reports is one that lives
+        /// on a Paragraph.
+        /// <para>
+        /// Deliberately a question about the effects and nothing else. A mutation that cannot
+        /// enumerate its own writes says so through its scope, and an unknown or coalesced-overflow
+        /// batch degrades to whole-project — so the safe answer is the default rather than a case
+        /// anyone has to remember to add here.
+        /// </para>
+        /// </summary>
+        private static bool CanRefreshExactly(BookMutationEffects effects) =>
+            effects.Scope == BookMutationScope.Exact
+            && effects.ParagraphIds.Count > 0
+            && (effects.Facets & ~RowScopedFacets) == BookFacets.None;
+
+        /// <summary>
+        /// Reconciles an exact, row-scoped commit by rereading only what it named: the Paragraphs it
+        /// restamped, the Voice each of their items would now be spoken in, and the Book's derived
+        /// overview — counts, selectable nodes, Node Status seed, reviews, roster and narrator — which
+        /// a speaker change moves without moving a node.
+        /// <para>
+        /// The expanded branches are kept as they are. That is the whole point: the Character Queue
+        /// commits once per Paragraph, and a Book View that reread every open Chapter for each answer
+        /// would spend a queue run rereading a Book that moved by one row.
+        /// </para>
+        /// <para>
+        /// A named Paragraph the Book no longer has means the effects and the persisted Book disagree
+        /// — something structural happened that this reader was not told about — so the refresh gives
+        /// up and rebuilds rather than publishing a view it cannot vouch for.
+        /// </para>
+        /// </summary>
+        private async Task<BuildOutcome> RefreshExactlyAsync(
+            ProjectFolderId folderId,
+            BookViewSnapshot current,
+            BookMutationEffects effects,
+            CancellationToken ct)
+        {
+            // Revision before the reads, for the same reason a full build takes it first: a commit
+            // that races this refresh must carry a higher revision than the snapshot it raced.
+            var revision = revisions.Current(folderId);
+            var book = await loader.LoadSnapshotAsync(folderId, ct);
+
+            var affected = effects.ParagraphIds.ToHashSet();
+            var loadedAffected = current.Branches.AllParagraphs()
+                .Where(p => affected.Contains(p.Id))
+                .Select(p => p.Id)
+                .ToHashSet();
+
+            var reread = (await content.GetParagraphsAsync(folderId, loadedAffected))
+                .ToDictionary(p => p.Id);
+
+            if (reread.Count != loadedAffected.Count)
+                return await BuildAndPublishAsync(folderId, ct, effects);
+
+            var branches = ReplaceParagraphs(current.Branches, reread);
+            var previews = await RefreshVoicePreviewsAsync(folderId, current.VoicePreviews, reread.Values, ct);
+
+            return await PublishReadsAsync(
+                folderId, revision, book,
+                new LoadedBranches(branches, current.Expansion), previews, effects, ct);
+        }
+
+        /// <summary>
+        /// The loaded hierarchy with the reread Paragraphs swapped in — a new list only for the
+        /// Chapters that actually hold one, so an untouched branch keeps the instance it had.
+        /// </summary>
+        private static BookViewBranches ReplaceParagraphs(
+            BookViewBranches branches, IReadOnlyDictionary<Guid, Paragraph> reread)
+        {
+            var byChapter = new Dictionary<Guid, IReadOnlyList<Paragraph>>(branches.ParagraphsByChapter.Count);
+            foreach (var (chapterId, paragraphs) in branches.ParagraphsByChapter)
+            {
+                byChapter[chapterId] = paragraphs.Any(p => reread.ContainsKey(p.Id))
+                    ? [.. paragraphs.Select(p => reread.TryGetValue(p.Id, out var fresh) ? fresh : p)]
+                    : paragraphs;
+            }
+
+            return branches with { ParagraphsByChapter = byChapter };
+        }
+
+        /// <summary>
+        /// The previews already resolved, with the refreshed Paragraphs' items resolved again — a
+        /// restamped item is spoken in a different Voice, and nothing else on screen moved.
+        /// </summary>
+        private async Task<IReadOnlyDictionary<Guid, string?>> RefreshVoicePreviewsAsync(
+            ProjectFolderId folderId,
+            IReadOnlyDictionary<Guid, string?> current,
+            IEnumerable<Paragraph> refreshed,
+            CancellationToken ct)
+        {
+            var itemIds = refreshed.SelectMany(p => p.Items).Select(i => i.Id).ToList();
+            if (itemIds.Count == 0) return current;
+
+            var resolved = await voiceResolver.ResolveNamesAsync(folderId, itemIds, ct);
+
+            var merged = new Dictionary<Guid, string?>(current);
+            foreach (var (itemId, name) in resolved)
+                merged[itemId] = name;
+            return merged;
+        }
+
+        /// <summary>
+        /// The one place a snapshot is assembled and published, whatever produced the reads behind
+        /// it. Everything before the call is a read into locals; everything after it is the atomic
+        /// swap — so a failed read leaves the previous snapshot, and its transient state, untouched.
+        /// </summary>
+        private async Task<BuildOutcome> PublishReadsAsync(
+            ProjectFolderId folderId,
+            long revision,
+            BookProjectSnapshot book,
+            LoadedBranches loaded,
+            IReadOnlyDictionary<Guid, string?> previews,
+            BookMutationEffects? reconciling,
+            CancellationToken ct)
+        {
             var surviving = reconciling is { } effects
                 ? await RecheckSelectionsAsync(folderId, effects, book.NarratorOnlyMode, ct)
                 : (SurvivingSelections?)null;

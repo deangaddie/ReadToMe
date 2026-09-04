@@ -51,7 +51,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<SetParagraphCharacterCommand>, SetParagraphCharacterHandler>();
         services.AddScoped<ICommandHandler<SetParagraphsCharacterCommand>, SetParagraphsCharacterHandler>();
         services.AddScoped<ICommandHandler<AttributeItemsCommand>, AttributeItemsHandler>();
-        services.TryAddSingleton<Events.EventBroadcaster<Events.ParagraphItemsChanged>>();
         services.AddScoped<ICommandHandler<AddCharacterAliasCommand>, AddCharacterAliasHandler>();
         services.AddScoped<ICommandHandler<RemoveCharacterAliasCommand>, RemoveCharacterAliasHandler>();
         services.AddScoped<ICommandHandler<MergeCharactersCommand>, MergeCharactersHandler>();
@@ -185,6 +184,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.ClearBookContentMutation>,
             Mutations.Implementations.ClearBookContentMutationImplementation>();
+        // Speaker attribution — the exact, high-frequency family
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetItemSpeakerMutation>,
+            Mutations.Implementations.SetItemSpeakerMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetParagraphSpeakerMutation>,
+            Mutations.Implementations.SetParagraphSpeakerMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetParagraphsSpeakerMutation>,
+            Mutations.Implementations.SetParagraphsSpeakerMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.AttributeParagraphItemsMutation>,
+            Mutations.Implementations.AttributeParagraphItemsMutationImplementation>();
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 

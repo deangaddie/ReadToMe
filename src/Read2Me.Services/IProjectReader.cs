@@ -134,6 +134,13 @@ namespace Read2Me.Services
         Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId folderId, Guid chapterId);
 
         /// <summary>
+        /// Returns exactly the named paragraphs, Items included, ordered within each chapter.
+        /// Paragraphs the Book no longer has are simply absent — which is how a caller learns that
+        /// a targeted refresh needs a rebuild instead.
+        /// </summary>
+        Task<List<Paragraph>> GetParagraphsAsync(ProjectFolderId folderId, IReadOnlyCollection<Guid> paragraphIds);
+
+        /// <summary>
         /// Returns the ordered structural children of <paramref name="parentId"/> at <paramref name="parentLevel"/>.
         /// Volume → Parts; Part → Chapters; Chapter → Paragraphs (Items included).
         /// Returns an empty result if the parent is not found.
