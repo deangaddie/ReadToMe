@@ -65,7 +65,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ProjectUseCases>();
         services.AddScoped<BookUseCases>();
         services.AddScoped<EnqueueUseCases>();
-        services.AddScoped<BookHierarchyLoader>();
         services.AddScoped<IBookProjectLoader, BookProjectLoader>();
         services.AddScoped<ISelectionCoordinator, BookSelectionCoordinator>();
         services.AddScoped<BookHierarchyPresenter>();

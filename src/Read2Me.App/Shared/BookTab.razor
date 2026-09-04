@@ -96,7 +96,7 @@ else
             {
                 <MudText Color="Color.Error" Typo="Typo.caption">@Presenter.Error</MudText>
             }
-            <MudToggleGroup T="BookViewMode" Value="Presenter.ViewMode" ValueChanged="@(v => Presenter.ViewMode = v)"
+            <MudToggleGroup T="BookViewMode" Value="Presenter.ViewMode" ValueChanged="@(v => Presenter.SetViewModeAsync(v))"
                             Color="Color.Primary" Size="Size.Small" CheckMark="false" SelectionMode="SelectionMode.SingleSelection">
                 <MudToggleItem Value="BookViewMode.Combined">
                     <MudIcon Icon="@Icons.Material.Filled.ViewStream" Size="Size.Small" Class="mr-1" /> Combined
@@ -247,7 +247,7 @@ else
 
     async Task MergeAndResetAsync((Guid survivorId, Guid deletedId) merge)
     {
-        Presenter.Tree.FixMergeExpansion(merge.survivorId, merge.deletedId);
+        Presenter.NoteMerged(_folderId, merge.survivorId, merge.deletedId);
         await Presenter.ResetAndLoadAsync(_folderId);
     }
 

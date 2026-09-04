@@ -21,20 +21,20 @@
             @if (isAudioMode)
             {
                 <MudCheckBox T="bool?" Value="@row.CheckboxValue"
-                             ValueChanged="@((bool? v) => Presenter.SetAudioNodeAsync(FolderId, Level, NodeId, v == true))"
+                             ValueChanged="@((bool? v) => Presenter.SetAudioNodeAsync(Level, NodeId, v == true))"
                              Size="Size.Small" />
                 <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
                                Size="Size.Small" title="Select needs audio"
-                               OnClick="@(() => Presenter.SetAudioNodeAsync(FolderId, Level, NodeId, true, needsAudioOnly: true))" />
+                               OnClick="@(() => Presenter.SetAudioNodeAsync(Level, NodeId, true, needsAudioOnly: true))" />
             }
             else
             {
                 <MudCheckBox T="bool?" Value="@row.CheckboxValue"
-                             ValueChanged="@((bool? v) => Presenter.SetNodeAsync(FolderId, Level, NodeId, v == true))"
+                             ValueChanged="@((bool? v) => Presenter.SetNodeAsync(Level, NodeId, v == true))"
                              Size="Size.Small" />
                 <MudIconButton Icon="@Icons.Material.Filled.PlaylistAddCheck"
                                Size="Size.Small" title="Select unprocessed"
-                               OnClick="@(() => Presenter.SetNodeAsync(FolderId, Level, NodeId, true, unprocessedOnly: true))" />
+                               OnClick="@(() => Presenter.SetNodeAsync(Level, NodeId, true, unprocessedOnly: true))" />
             }
         </span>
     }

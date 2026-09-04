@@ -35,6 +35,7 @@ namespace Read2Me.Tests.State.Projection
         private readonly BookSelectionState _selectionState = new();
         private readonly AudioItemSelectionState _audioSelectionState = new();
         private readonly FakeVoiceResolver _voices = new();
+        private readonly FakeSelections _selections;
         private readonly BookRevisionSequence _revisions = new();
 
         public BookViewProjectionTests()
@@ -47,7 +48,8 @@ namespace Read2Me.Tests.State.Projection
             var session = new ProjectDbSession(
                 fileSystem, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
             _reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
-            _treeState = new BookTreeState(new BookHierarchyLoader(_reader));
+            _treeState = new BookTreeState();
+            _selections = new FakeSelections(_selectionState, _audioSelectionState);
         }
 
         private BookViewProjection CreateSut(IBookProjectLoader? loader = null) =>
@@ -56,6 +58,7 @@ namespace Read2Me.Tests.State.Projection
                 _treeState,
                 _selectionState,
                 _audioSelectionState,
+                _selections,
                 _voices,
                 _revisions);
 
@@ -402,8 +405,326 @@ namespace Read2Me.Tests.State.Projection
             Assert.Equal([b.ParagraphId("p1")], reopened.Selections.ParagraphIds);
             Assert.Equal(b.ChapterId("ch1"), Assert.Single(reopened.Expansion.ChapterIds));
         }
+        // ── transient intents ────────────────────────────────────────────────
+
+        [Fact]
+        public async Task ApplyAsync_BeforeAnyOpen_IsRejected()
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                CreateSut().ApplyAsync(new BookViewIntent.TogglePlayback(Guid.NewGuid())));
+        }
+
+        [Fact]
+        public async Task ApplyAsync_ExpandingAChapter_PublishesItsParagraphs()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            var snapshot = await sut.ApplyAsync(
+                new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), Expanded: true));
+
+            Assert.Equal(b.ChapterId("ch1"), Assert.Single(snapshot.Expansion.ChapterIds));
+            Assert.Equal(b.ParagraphId("p1"), Assert.Single(snapshot.Branches.AllParagraphs()).Id);
+            Assert.Same(snapshot, sut.Snapshot);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_CollapsingAChapter_PublishesTheBookWithoutIt()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+
+            var snapshot = await sut.ApplyAsync(
+                new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), Expanded: false));
+
+            Assert.Empty(snapshot.Expansion.ChapterIds);
+            Assert.Empty(snapshot.Branches.ParagraphsByChapter);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_ExpandingWhatIsAlreadyOpen_PublishesNothing()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var published = 0;
+            sut.SnapshotPublished += () => published++;
+
+            var before = sut.Snapshot;
+            var after = await sut.ApplyAsync(
+                new BookViewIntent.SetNodeExpanded(BookNodeLevel.Volume, b.VolumeId("vol"), Expanded: true));
+
+            Assert.Same(before, after);
+            Assert.Equal(0, published);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_SwitchingViewMode_DropsBothSelectionsAndRebuilds()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            var opened = await sut.OpenAsync(_folder);
+
+            _selectionState.For(_folder).AddParagraph(
+                b.ParagraphId("p1"), new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")));
+            _audioSelectionState.For(_folder).AddItem(
+                new AudioItemRef(b.ItemId("i1"), b.ParagraphId("p1"), b.ChapterId("ch1"), Guid.NewGuid(), b.VolumeId("vol")));
+
+            var snapshot = await sut.ApplyAsync(new BookViewIntent.SetViewMode(BookViewMode.SplitAudio));
+
+            Assert.Equal(BookViewMode.SplitAudio, snapshot.ViewMode);
+            Assert.Empty(snapshot.Selections.ParagraphIds);
+            Assert.Empty(snapshot.Selections.AudioItemIds);
+            // A rebuild, not a patch: the content was read again, so the previews were too.
+            Assert.NotSame(opened.Branches, snapshot.Branches);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_TheViewModeAlreadyShowing_PublishesNothing()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            var opened = await sut.OpenAsync(_folder);
+
+            var after = await sut.ApplyAsync(new BookViewIntent.SetViewMode(BookViewMode.Combined));
+
+            Assert.Same(opened, after);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_TogglingPlayback_PublishesTheItemWithoutRereadingTheBook()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            var opened = await sut.OpenAsync(_folder);
+
+            var playing = await sut.ApplyAsync(new BookViewIntent.TogglePlayback(b.ItemId("i1")));
+
+            Assert.Equal(b.ItemId("i1"), playing.PlayingAudioItemId);
+            // Nothing about the Book changed, so the same reads stay published.
+            Assert.Same(opened.Branches, playing.Branches);
+            Assert.Equal(opened.Revision, playing.Revision);
+
+            var stopped = await sut.ApplyAsync(new BookViewIntent.TogglePlayback(b.ItemId("i1")));
+            Assert.Null(stopped.PlayingAudioItemId);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_SelectingAParagraph_PublishesItAndItsRollUp()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch1", c => c
+                    .AddParagraph("p1", p => p.AddRawItem("i1", ParagraphItemType.Speech, "Hello", alice.Id))))
+                .BuildAsync();
+
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            var snapshot = await sut.ApplyAsync(new BookViewIntent.SetParagraphSelected(
+                b.ParagraphId("p1"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")), Selected: true));
+
+            Assert.Equal([b.ParagraphId("p1")], snapshot.Selections.ParagraphIds);
+            // The roll-up counts against the denominator the same snapshot published.
+            Assert.Equal(TriState.Checked,
+                _selectionState.For(_folder).NodeState(BookNodeLevel.Chapter, b.ChapterId("ch1")));
+        }
+
+        [Fact]
+        public async Task ApplyAsync_SelectingANodesParagraphs_CarriesTheUnattributedOnlyNarrowing()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            _selections.NodeParagraphs =
+                [new CharacterParagraphRef(b.ParagraphId("p1"), b.ChapterId("ch1"), Guid.NewGuid(), b.VolumeId("vol"))];
+
+            var snapshot = await sut.ApplyAsync(new BookViewIntent.SetNodeParagraphsSelected(
+                BookNodeLevel.Chapter, b.ChapterId("ch1"), Selected: true, UnattributedOnly: true));
+
+            Assert.Equal([b.ParagraphId("p1")], snapshot.Selections.ParagraphIds);
+            Assert.True(_selections.LastUnattributedOnly);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_SelectingANodesAudioItems_CarriesTheSnapshotsNarratorOnlyMode()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            b.WithProject(narratorOnlyMode: true);
+            await b.AddVolume("vol", v => v.AddChapter("ch1", c => c
+                    .AddParagraph("p1", p => p.AddNarration("i1", "Hello"))))
+                .BuildAsync();
+
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            _selections.NodeAudioItems =
+                [new AudioItemRef(b.ItemId("i1"), b.ParagraphId("p1"), b.ChapterId("ch1"), Guid.NewGuid(), b.VolumeId("vol"))];
+
+            var snapshot = await sut.ApplyAsync(new BookViewIntent.SetNodeAudioItemsSelected(
+                BookNodeLevel.Chapter, b.ChapterId("ch1"), Selected: true, NeedsAudioOnly: true));
+
+            Assert.Equal([b.ItemId("i1")], snapshot.Selections.AudioItemIds);
+            Assert.True(_selections.LastNeedsAudioOnly);
+            Assert.True(_selections.LastNarratorOnlyMode);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_SelectingOneAudioItem_PublishesIt()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            var item = new AudioItemRef(
+                b.ItemId("i1"), b.ParagraphId("p1"), b.ChapterId("ch1"), Guid.NewGuid(), b.VolumeId("vol"));
+            var snapshot = await sut.ApplyAsync(new BookViewIntent.SetAudioItemSelected(item, Selected: true));
+
+            Assert.Equal([b.ItemId("i1")], snapshot.Selections.AudioItemIds);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_ArmingBulkAssign_PublishesIt()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            Assert.True((await sut.ApplyAsync(new BookViewIntent.SetBulkAssign(Armed: true))).Selections.BulkMode);
+            Assert.False((await sut.ApplyAsync(new BookViewIntent.SetBulkAssign(Armed: false))).Selections.BulkMode);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_QueueingTheSelection_PublishesTheSelectionItEmptied()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            await sut.ApplyAsync(new BookViewIntent.SetParagraphSelected(
+                b.ParagraphId("p1"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")), Selected: true));
+
+            var snapshot = await sut.ApplyAsync(new BookViewIntent.QueueSelectedParagraphs());
+
+            Assert.Equal([b.ParagraphId("p1")], _selections.QueuedParagraphs);
+            Assert.Empty(snapshot.Selections.ParagraphIds);
+        }
+
+        [Fact]
+        public async Task ApplyAsync_QueueingTheAudioSelection_PublishesTheSelectionItEmptied()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            var item = new AudioItemRef(
+                b.ItemId("i1"), b.ParagraphId("p1"), b.ChapterId("ch1"), Guid.NewGuid(), b.VolumeId("vol"));
+            await sut.ApplyAsync(new BookViewIntent.SetAudioItemSelected(item, Selected: true));
+
+            var snapshot = await sut.ApplyAsync(new BookViewIntent.QueueSelectedAudioItems());
+
+            Assert.Equal([b.ItemId("i1")], _selections.QueuedAudioItems);
+            Assert.Empty(snapshot.Selections.AudioItemIds);
+        }
+
 
         // ── test doubles ─────────────────────────────────────────────────────
+        /// <summary>
+        /// The circuit's selection writer. The real one is <c>BookSelectionCoordinator</c>, which
+        /// drags both queues and their preflight in with it; what the projection needs from it is
+        /// only that a selection intent reaches the selection state the snapshot then reads.
+        /// </summary>
+        private sealed class FakeSelections(
+            BookSelectionState paragraphs, AudioItemSelectionState items) : ISelectionCoordinator
+        {
+            private ProjectFolderId _folder;
+
+            /// <summary>What a node-wide paragraph selection expands to.</summary>
+            public IReadOnlyList<CharacterParagraphRef> NodeParagraphs { get; set; } = [];
+
+            /// <summary>What a node-wide audio selection expands to.</summary>
+            public IReadOnlyList<AudioItemRef> NodeAudioItems { get; set; } = [];
+
+            public bool? LastUnattributedOnly { get; private set; }
+            public bool? LastNeedsAudioOnly { get; private set; }
+            public bool? LastNarratorOnlyMode { get; private set; }
+
+            public List<Guid> QueuedParagraphs { get; } = [];
+            public List<Guid> QueuedAudioItems { get; } = [];
+
+            public void SetCurrentFolder(ProjectFolderId folderId) => _folder = folderId;
+
+            public Task ToggleParagraphAsync(
+                ProjectFolderId folderId, Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, bool on)
+            {
+                var selection = paragraphs.For(folderId);
+                if (on)
+                    selection.AddParagraph(paragraphId, new ParagraphSelection(volumeId, partId, chapterId));
+                else
+                    selection.RemoveParagraph(paragraphId);
+                return Task.CompletedTask;
+            }
+
+            public Task SetNodeAsync(
+                ProjectFolderId folderId, BookNodeLevel level, Guid id, bool on, bool unprocessedOnly = false)
+            {
+                LastUnattributedOnly = unprocessedOnly;
+                var selection = paragraphs.For(folderId);
+                if (on)
+                    selection.AddParagraphs(NodeParagraphs);
+                else
+                    selection.RemoveParagraphs(NodeParagraphs.Select(r => r.ParagraphId));
+                return Task.CompletedTask;
+            }
+
+            public int SelectedParagraphCount => paragraphs.For(_folder).SelectedParagraphCount;
+
+            public Task AddSelectionToCharacterQueueAsync()
+            {
+                var selection = paragraphs.For(_folder);
+                QueuedParagraphs.AddRange(selection.SelectedParagraphIds());
+                selection.Clear();
+                return Task.CompletedTask;
+            }
+
+            public Task ToggleAudioItemAsync(AudioItemRef item, bool on)
+            {
+                var selection = items.For(_folder);
+                if (on) selection.AddItem(item); else selection.RemoveItem(item.ParagraphItemId);
+                return Task.CompletedTask;
+            }
+
+            public Task SetAudioNodeAsync(
+                ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool on,
+                bool needsAudioOnly = false, bool narratorOnlyMode = false)
+            {
+                LastNeedsAudioOnly = needsAudioOnly;
+                LastNarratorOnlyMode = narratorOnlyMode;
+                var selection = items.For(folderId);
+                if (on)
+                    selection.AddItems(NodeAudioItems);
+                else
+                    selection.RemoveItems(NodeAudioItems.Select(r => r.ParagraphItemId));
+                return Task.CompletedTask;
+            }
+
+            public int SelectedAudioItemCount => items.For(_folder).SelectedItemCount;
+
+            public Task AddSelectionToAudioQueueAsync()
+            {
+                var selection = items.For(_folder);
+                QueuedAudioItems.AddRange(selection.SelectedItems().Select(i => i.ParagraphItemId));
+                selection.Clear();
+                return Task.CompletedTask;
+            }
+        }
+
 
         private sealed class FakeVoiceResolver : IVoiceResolver
         {

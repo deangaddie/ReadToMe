@@ -27,6 +27,14 @@ namespace Read2Me.App.State.Projection
     {
         public static BookViewExpansion Empty { get; } =
             new(new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>());
+
+        /// <summary>The open nodes at one level.</summary>
+        public IReadOnlySet<Guid> At(BookNodeLevel level) => level switch
+        {
+            BookNodeLevel.Volume => VolumeIds,
+            BookNodeLevel.Part => PartIds,
+            _ => ChapterIds,
+        };
     }
 
     /// <summary>

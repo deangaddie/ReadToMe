@@ -22,9 +22,9 @@ namespace Read2Me.App.State.Projection
     /// half-refreshed Book View.
     /// </para>
     /// <para>
-    /// This slice owns opening and switching. Transient intents, committing mutations, and
-    /// reconciling from receipts arrive with the tickets that follow — which is why view mode and
-    /// playback are published from state only opening can currently change.
+    /// Opening binds; <see cref="ApplyAsync"/> is the one way transient Book View state moves
+    /// afterwards. Committing mutations and reconciling from receipts arrive with the tickets that
+    /// follow.
     /// </para>
     /// </summary>
     public sealed class BookViewProjection(
@@ -33,6 +33,7 @@ namespace Read2Me.App.State.Projection
         BookTreeState treeState,
         BookSelectionState selectionState,
         AudioItemSelectionState audioSelectionState,
+        ISelectionCoordinator selections,
         IVoiceResolver voiceResolver,
         BookRevisionSequence revisions)
     {
@@ -78,6 +79,155 @@ namespace Read2Me.App.State.Projection
             }
         }
 
+        /// <summary>
+        /// The one entry for transient Book View state (ADR 0007). Every accepted gesture ends in one
+        /// atomically published snapshot whose content and transient state agree, so no caller has to
+        /// remember a follow-up refresh, and no two gestures can interleave into a mixed view.
+        /// <para>
+        /// A gesture that changes which content the view shows — expansion, and a mode switch, whose
+        /// voice previews must be re-read because voice rules can have changed on another tab — is
+        /// answered with a fresh build. A gesture that changes only view state is published straight
+        /// onto the current snapshot: the Book has not moved, so re-reading it would cost a Book View
+        /// full of reads per checkbox.
+        /// </para>
+        /// <para>
+        /// An intent that changes nothing (expanding what is open, re-picking the current mode) is not
+        /// accepted: the current snapshot comes back unchanged and unpublished.
+        /// </para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The projection is not open on a Book yet.</exception>
+        public async Task<BookViewSnapshot> ApplyAsync(BookViewIntent intent, CancellationToken ct = default)
+        {
+            await _builds.WaitAsync(ct);
+            try
+            {
+                if (Folder is not { } folder || Snapshot is not { } current)
+                    throw new InvalidOperationException("A Book View intent needs a projection already open on a Book.");
+
+                return await ApplyToAsync(folder, current, intent, ct);
+            }
+            finally
+            {
+                _builds.Release();
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds the bound Book from authoritative reads and republishes it.
+        /// <para>
+        /// The interim seam for callers that have just written to the Book: from ticket 04 on, those
+        /// writes arrive as receipts and reconcile themselves, and this stops being called by hand.
+        /// </para>
+        /// </summary>
+        public async Task<BookViewSnapshot> RebuildAsync(CancellationToken ct = default)
+        {
+            await _builds.WaitAsync(ct);
+            try
+            {
+                if (Folder is not { } folder)
+                    throw new InvalidOperationException("A rebuild needs a projection already open on a Book.");
+
+                return await BuildAndPublishAsync(folder, ct);
+            }
+            finally
+            {
+                _builds.Release();
+            }
+        }
+
+        private async Task<BookViewSnapshot> ApplyToAsync(
+            ProjectFolderId folder, BookViewSnapshot current, BookViewIntent intent, CancellationToken ct)
+        {
+            switch (intent)
+            {
+                case BookViewIntent.SetNodeExpanded e:
+                    if (!TrySetExpanded(folder, e.Level, e.NodeId, e.Expanded)) return current;
+                    return await BuildAndPublishAsync(folder, ct);
+
+                case BookViewIntent.SetViewMode m:
+                    if (m.Mode == _viewMode) return current;
+                    _viewMode = m.Mode;
+                    // Each mode selects a different thing — paragraphs to attribute, items to speak —
+                    // so a selection made under the old one has no meaning under the new one.
+                    selectionState.Reset(folder);
+                    audioSelectionState.Reset(folder);
+                    return await BuildAndPublishAsync(folder, ct);
+
+                case BookViewIntent.TogglePlayback p:
+                    _playingAudioItemId = _playingAudioItemId == p.ItemId ? null : p.ItemId;
+                    return PublishTransient(folder, current);
+
+                case BookViewIntent.SetParagraphSelected s:
+                    await selections.ToggleParagraphAsync(
+                        folder, s.ParagraphId, s.Ancestry.ChapterId, s.Ancestry.PartId, s.Ancestry.VolumeId, s.Selected);
+                    return PublishTransient(folder, current);
+
+                case BookViewIntent.SetNodeParagraphsSelected s:
+                    await selections.SetNodeAsync(folder, s.Level, s.NodeId, s.Selected, s.UnattributedOnly);
+                    return PublishTransient(folder, current);
+
+                case BookViewIntent.SetBulkAssign b:
+                    selectionState.For(folder).BulkMode = b.Armed;
+                    return PublishTransient(folder, current);
+
+                case BookViewIntent.SetAudioItemSelected s:
+                    await selections.ToggleAudioItemAsync(s.Item, s.Selected);
+                    return PublishTransient(folder, current);
+
+                case BookViewIntent.SetNodeAudioItemsSelected s:
+                    await selections.SetAudioNodeAsync(
+                        folder, s.Level, s.NodeId, s.Selected, s.NeedsAudioOnly, current.NarratorOnlyMode);
+                    return PublishTransient(folder, current);
+
+                case BookViewIntent.QueueSelectedParagraphs:
+                    await selections.AddSelectionToCharacterQueueAsync();
+                    return PublishTransient(folder, current);
+
+                case BookViewIntent.QueueSelectedAudioItems:
+                    await selections.AddSelectionToAudioQueueAsync();
+                    return PublishTransient(folder, current);
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(intent), intent, "Unknown Book View intent.");
+            }
+        }
+
+        /// <summary>
+        /// Records that a node was opened or closed. Returns false when the intent already said so —
+        /// there is nothing to republish for a gesture that changes nothing.
+        /// <para>
+        /// Closing needs no cascade: the next build walks down from the volumes that are open, so a
+        /// closed branch's descendants are neither read nor kept as intent.
+        /// </para>
+        /// </summary>
+        private bool TrySetExpanded(ProjectFolderId folder, BookNodeLevel level, Guid nodeId, bool expanded)
+        {
+            var open = treeState.For(folder).At(level);
+            return expanded ? open.Add(nodeId) : open.Remove(nodeId);
+        }
+
+        /// <summary>
+        /// Publishes transient state onto the content already on screen. Safe precisely because none
+        /// of it is derived from the Book: the same revision, the same reads, one new snapshot.
+        /// </summary>
+        private BookViewSnapshot PublishTransient(ProjectFolderId folder, BookViewSnapshot current) =>
+            Publish(current with
+            {
+                Selections = CurrentSelections(folder),
+                ViewMode = _viewMode,
+                PlayingAudioItemId = _playingAudioItemId,
+            });
+
+        /// <summary>Both selections as they stand, for the snapshot to carry read-only.</summary>
+        private BookViewSelections CurrentSelections(ProjectFolderId folder)
+        {
+            var selection = selectionState.For(folder);
+            return new BookViewSelections(
+                selection.SelectedParagraphIds().ToHashSet(),
+                selection.BulkMode,
+                audioSelectionState.For(folder).SelectedItems().Select(i => i.ParagraphItemId).ToHashSet());
+        }
+
         private async Task<BookViewSnapshot> BuildAndPublishAsync(ProjectFolderId folderId, CancellationToken ct)
         {
             // Read before the reads below, never after: a mutation committing while this build is in
@@ -96,6 +246,7 @@ namespace Read2Me.App.State.Projection
                 DiscardTransientState(bound);
 
             Folder = folderId;
+            selections.SetCurrentFolder(folderId);
             CommitExpansionIntent(folderId, loaded.Expansion);
 
             var selection = selectionState.For(folderId);
@@ -124,10 +275,7 @@ namespace Read2Me.App.State.Projection
                 NodeStatus = book.NodeStatusSeed,
                 Reviews = book.AudioReviews.ToDictionary(r => r.ParagraphItemId, r => r.Info),
                 VoicePreviews = previews,
-                Selections = new BookViewSelections(
-                    selection.SelectedParagraphIds().ToHashSet(),
-                    selection.BulkMode,
-                    audioSelection.SelectedItems().Select(i => i.ParagraphItemId).ToHashSet()),
+                Selections = CurrentSelections(folderId),
                 ViewMode = _viewMode,
                 PlayingAudioItemId = _playingAudioItemId,
             });
