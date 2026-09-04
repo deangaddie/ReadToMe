@@ -106,8 +106,11 @@ public class DestructiveStructuralMutationTests : ProjectDbTestBase
         var receipt = await CommitAsync(
             new MergeParagraphMutation(_folder, b.ParagraphId("pg2"), MergeDirection.Previous));
 
-        // Nothing is removed but the emptied Paragraph, so this merge can name everything it touched.
+        // Nothing is removed but the emptied Paragraph, so this merge can name everything it
+        // touched — and the survivor now holds items whose speakers, audio and reviews it did not
+        // have, which is why the facets are the removal set rather than structure alone.
         Assert.Equal(BookMutationScope.Exact, receipt.Effects.Scope);
+        Assert.True(receipt.Effects.Facets.HasFlag(BookFacets.Audio));
         Assert.Equal([b.ParagraphId("pg1"), b.ParagraphId("pg2")], receipt.Effects.ParagraphIds);
         Assert.Equal([b.ItemId("i2"), b.ItemId("i3")], receipt.Effects.ParagraphItemIds);
 

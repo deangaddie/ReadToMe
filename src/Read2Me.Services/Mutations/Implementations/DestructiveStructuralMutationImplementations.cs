@@ -27,11 +27,15 @@ internal static class DestructiveEffects
     /// longer has.
     /// </para>
     /// </summary>
+    public const BookFacets RemovedFacets =
+        BookFacets.Structure | BookFacets.ItemText | BookFacets.Attribution
+        | BookFacets.Audio | BookFacets.Reviews;
+
+    /// <summary>A removal that cannot name what went with it — the safe default for this family.</summary>
     public static BookMutationEffects Removed { get; } = new()
     {
         Scope = BookMutationScope.WholeProject,
-        Facets = BookFacets.Structure | BookFacets.ItemText | BookFacets.Attribution
-            | BookFacets.Audio | BookFacets.Reviews,
+        Facets = RemovedFacets,
     };
 
     /// <summary>
@@ -126,9 +130,15 @@ public sealed class MergeParagraphMutationImplementation : IBookMutationImplemen
         // Exhaustive, like the paragraph split: two Paragraphs and the items that moved between
         // them are everything this touched. The Chapter's roll-up denominators move too, but they
         // are derived rather than touched, and BookFacets.Structure already says to rebuild.
+        //
+        // Facets are the removal set rather than Structure alone. No item's own data changed, but
+        // the survivor now holds items carrying speakers, audio and reviews it did not have, and a
+        // reader told "structure only" about that Paragraph would keep item-derived state that no
+        // longer describes it.
         return DestructiveEffects.Folded(plan) with
         {
             Scope = BookMutationScope.Exact,
+            Facets = DestructiveEffects.RemovedFacets,
             ParagraphIds = [plan.SurvivorId, plan.DeletedId],
             ParagraphItemIds = [.. plan.Mutation.ToUpdate.OfType<ParagraphItem>().Select(i => i.Id)],
         };
@@ -155,7 +165,7 @@ public sealed class MergeParagraphItemMutationImplementation
         return DestructiveEffects.Folded(plan) with
         {
             Scope = BookMutationScope.Exact,
-            Facets = DestructiveEffects.Removed.Facets,
+            Facets = DestructiveEffects.RemovedFacets,
             ParagraphIds = [paragraphId],
             ParagraphItemIds = [plan.SurvivorId, plan.DeletedId],
         };
