@@ -75,7 +75,10 @@ public sealed class BookMutations(
 
             // Allocated after the commit and still under the lock, so revision order is commit order.
             receipt = new BookMutationReceipt(
-                mutation.FolderId, mutation.Name, Guid.NewGuid(), revisions.Next(mutation.FolderId), applied);
+                mutation.FolderId, mutation.Name, Guid.NewGuid(), revisions.Next(mutation.FolderId), applied)
+            {
+                OriginId = mutation.OriginId,
+            };
         }
         catch (OperationCanceledException)
         {

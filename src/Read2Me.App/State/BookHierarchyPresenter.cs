@@ -212,6 +212,33 @@ namespace Read2Me.App.State
             nodeStatus.Seed(folderId, snapshot.NodeStatus);
         }
 
+        /// <summary>
+        /// The Book View has converged on someone else's committed change. The two singletons that
+        /// mix persisted counts with live queue progress are reseeded from the snapshot that change
+        /// produced — they are the only Book View state a published snapshot does not carry — and the
+        /// page repaints.
+        /// <para>
+        /// The notice is shown exactly when the projection says so. Whether a change is surprising
+        /// enough to mention is a reconciliation rule, not a MudBlazor one, so this adapter reads the
+        /// verdict rather than recomputing it (ADR 0007).
+        /// </para>
+        /// <para>
+        /// Raised on the projection's pump rather than the circuit's thread, like the queue events
+        /// above it. Both things it touches are built for that: MudBlazor's snackbar provider
+        /// marshals its own render, and <see cref="StateChanged"/> is answered by a component that
+        /// wraps <c>StateHasChanged</c> in <c>InvokeAsync</c>.
+        /// </para>
+        /// </summary>
+        private void OnExternalUpdate(BookViewExternalUpdate update)
+        {
+            SeedDerivedServices(update.Snapshot.Folder, update.Snapshot);
+
+            if (update.Announce)
+                snackbar.Add("Book updated elsewhere", Severity.Info);
+
+            NotifyStateChanged();
+        }
+
         public async Task ResetAndLoadAsync(ProjectFolderId folderId)
         {
             selectionState.Reset(folderId);
@@ -655,6 +682,7 @@ namespace Read2Me.App.State
             if (!_snapshotSubscribed)
             {
                 projection.SnapshotPublished += NotifyStateChanged;
+                projection.ExternalUpdateApplied += OnExternalUpdate;
                 _snapshotSubscribed = true;
             }
         }
@@ -682,6 +710,7 @@ namespace Read2Me.App.State
             if (_snapshotSubscribed)
             {
                 projection.SnapshotPublished -= NotifyStateChanged;
+                projection.ExternalUpdateApplied -= OnExternalUpdate;
                 _snapshotSubscribed = false;
             }
         }

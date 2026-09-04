@@ -17,6 +17,17 @@ namespace Read2Me.App.State.Projection
     public enum BookViewHealth { Coherent, Stale }
 
     /// <summary>
+    /// One convergence on a change committed outside this circuit: the snapshot it produced, and
+    /// whether the reader should be told about it.
+    /// <para>
+    /// <paramref name="Announce"/> is the whole of ADR 0007's notice rule, already decided — a
+    /// structural effect was applied, or a selection was cleared. An adapter shows the notice when
+    /// it is set and says nothing when it is not; it does not get to reinterpret the condition.
+    /// </para>
+    /// </summary>
+    public sealed record BookViewExternalUpdate(BookViewSnapshot Snapshot, bool Announce);
+
+    /// <summary>
     /// Which nodes the reader has open. Intent, not data: a node can be expanded in intent and its
     /// children still absent from <see cref="BookViewBranches"/> for a moment during a rebuild.
     /// </summary>

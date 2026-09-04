@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Events;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
 
@@ -24,8 +26,12 @@ namespace Read2Me.App.State.Projection
     /// <para>
     /// Opening binds; <see cref="ApplyAsync"/> is the one way transient Book View state moves
     /// afterwards; <see cref="MutateAsync"/> is the one way the Book itself does, and it returns only
-    /// once this circuit's view of the change is coherent. Converging on <em>other</em> circuits'
-    /// receipts arrives with the ticket that follows.
+    /// once this circuit's view of the change is coherent.
+    /// </para>
+    /// <para>
+    /// Changes committed by <em>other</em> circuits, the API, or a queue arrive as receipts on a
+    /// bounded mailbox and converge this Book View on its own pump, without the writer waiting on
+    /// it and without the reader navigating anywhere.
     /// </para>
     /// </summary>
     public sealed class BookViewProjection(
@@ -39,7 +45,10 @@ namespace Read2Me.App.State.Projection
         AudioItemSelectionState audioSelectionState,
         ISelectionCoordinator selections,
         IVoiceResolver voiceResolver,
-        BookRevisionSequence revisions)
+        BookRevisionSequence revisions,
+        ProjectDbSession session,
+        EventBroadcaster<BookMutationReceipt> receipts,
+        ILogger<BookViewProjection> logger) : IDisposable
     {
         /// <summary>
         /// One build at a time. Without it two overlapping opens — a fast project switch, or a
@@ -49,6 +58,23 @@ namespace Read2Me.App.State.Projection
         /// order the snapshots are.
         /// </summary>
         private readonly SemaphoreSlim _builds = new(1, 1);
+
+        /// <summary>
+        /// This projection's identity as a mutation producer. Stamped on everything it commits, so
+        /// the copy of the receipt that comes back through the broadcast can be recognised as work
+        /// this circuit has already reconciled and told the reader about by simply showing it.
+        /// </summary>
+        private readonly Guid _originId = Guid.NewGuid();
+
+        private readonly BookViewReceiptMailbox _mailbox = new();
+
+        /// <summary>Stops the pump when the circuit ends.</summary>
+        private readonly CancellationTokenSource _closing = new();
+
+        /// <summary>Counts receipts taken; the pump waits on it rather than polling.</summary>
+        private readonly SemaphoreSlim _arrivals = new(0);
+
+        private bool _subscribed;
 
         private BookViewMode _viewMode = BookViewMode.Combined;
         private Guid? _playingAudioItemId;
@@ -63,6 +89,21 @@ namespace Read2Me.App.State.Projection
         public event Action? SnapshotPublished;
 
         /// <summary>
+        /// Raised after this Book View has converged on a change committed somewhere else — another
+        /// circuit, the API, a queue — with the snapshot that change produced.
+        /// <para>
+        /// Whether the reader is <em>told</em> is the one rule of ADR 0007, decided here rather than
+        /// by the adapter: <see cref="BookViewExternalUpdate.Announce"/> is set if and only if the
+        /// reconciliation applied a structural effect or cleared a selection. Everything else —
+        /// another producer's attribution, audio and review progress — converges silently, because a
+        /// badge moving under a queue's work is not a surprise worth interrupting anyone for. This
+        /// circuit's own mutations never raise it at all: the reader is looking at the change they
+        /// just asked for.
+        /// </para>
+        /// </summary>
+        public event Action<BookViewExternalUpdate>? ExternalUpdateApplied;
+
+        /// <summary>
         /// Binds this projection to <paramref name="folderId"/> — switching projects if it was
         /// bound elsewhere — and publishes one coherent snapshot of that Book.
         /// <para>
@@ -75,12 +116,146 @@ namespace Read2Me.App.State.Projection
             await _builds.WaitAsync(ct);
             try
             {
-                return await BuildAndPublishAsync(folderId, ct);
+                BindTo(folderId);
+                return (await BuildAndPublishAsync(folderId, ct)).Snapshot;
             }
             finally
             {
                 _builds.Release();
             }
+        }
+
+        /// <summary>
+        /// Points the receipt subscription at one Book, starting it the first time. The mailbox is
+        /// told rather than a field of this class set, because the answer is read on the publisher's
+        /// thread: keeping the binding and the pending batch under one lock is what makes "rebound,
+        /// so forget the Book we left" a single step nothing can arrive in the middle of.
+        /// <para>
+        /// Called from the first line of an open rather than after it succeeds, so a mutation
+        /// committing while the very first build is still reading is not dropped on the floor.
+        /// </para>
+        /// </summary>
+        private void BindTo(ProjectFolderId folderId)
+        {
+            _mailbox.BindTo(folderId);
+
+            if (_subscribed) return;
+            receipts.Event += OnReceipt;
+            _subscribed = true;
+            _ = Task.Run(() => PumpAsync(_closing.Token));
+        }
+
+        /// <summary>
+        /// Takes a receipt from whichever producer committed it. This runs on that producer's commit
+        /// path, so it does the least possible: hand it to the mailbox, signal the pump. It never
+        /// reads, never waits and never throws — a reader must not be able to slow or fail someone
+        /// else's committed mutation (ADR 0007).
+        /// </summary>
+        private void OnReceipt(BookMutationReceipt receipt)
+        {
+            try
+            {
+                // Already reconciled synchronously by MutateAsync, and deliberately never announced.
+                if (receipt.OriginId == _originId) return;
+
+                if (_mailbox.TryTake(receipt))
+                    _arrivals.Release();
+            }
+            catch (Exception ex)
+            {
+                // Nothing here is allowed to escape onto the publisher's stack: it is standing inside
+                // another producer's CommitAsync, and the worst this failure may cost is this Book
+                // View's convergence, never someone else's write.
+                logger.LogWarning(ex,
+                    "Taking the receipt for {Mutation} on {Folder} into the Book View mailbox failed.",
+                    receipt.MutationName, receipt.FolderId.Value);
+            }
+        }
+
+        /// <summary>
+        /// Reconciles what the mailbox holds, one batch at a time, for as long as the circuit lives.
+        /// Serializing here is what makes a burst converge instead of racing: each pass takes
+        /// everything that arrived while the last one was reading.
+        /// </summary>
+        private async Task PumpAsync(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    await _arrivals.WaitAsync(ct);
+                    // Null whenever a burst was already swept up by the previous pass.
+                    if (_mailbox.Drain() is { } pending)
+                        await ReconcileExternalAsync(pending, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // The reader keeps the last coherent snapshot rather than a half-built one, and
+                    // the pump stays alive for the next receipt. Marking the projection stale and
+                    // offering recovery is the failure ticket's job.
+                    logger.LogWarning(ex,
+                        "Converging the Book View on {Folder} from another circuit's change failed.",
+                        Folder?.Value);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Brings the Book View up to a change committed somewhere else, and decides whether it is
+        /// worth mentioning.
+        /// <para>
+        /// Unlike the initiating path this does <em>not</em> skip a batch whose revision the
+        /// published snapshot already carries. A plain build — an expansion that happened to run
+        /// after the commit — stamps the new revision while doing none of a reconciliation's work: it
+        /// rechecks no selection and can reach no verdict about whether to tell the reader. Treating
+        /// "the content is already here" as "this batch is handled" is exactly how a selection
+        /// survives the deletion of what it points at.
+        /// </para>
+        /// </summary>
+        private async Task ReconcileExternalAsync(PendingReconciliation pending, CancellationToken ct)
+        {
+            await _builds.WaitAsync(ct);
+            try
+            {
+                if (Folder is not { } folder || folder != pending.FolderId || Snapshot is null)
+                    return;
+
+                // The commit happened in another circuit, so it evicted *its* tracking context, not
+                // this one. Without this, the authoritative reads below are answered out of an
+                // identity map built before the write and the Book View converges on nothing.
+                session.Refresh(folder);
+
+                var built = await ReconcileToAsync(folder, pending.Effects, ct);
+
+                // From the mailbox's own record rather than from the effects: an overflowing batch
+                // degrades those to "every facet", which would announce a queue's routine progress.
+                var announce = pending.Structural || built.ClearedSelection;
+                ExternalUpdateApplied?.Invoke(new BookViewExternalUpdate(built.Snapshot, announce));
+            }
+            finally
+            {
+                _builds.Release();
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds the bound Book from what a commit actually changed: expansion carried across the
+        /// structural relationships first, so the reader keeps their place, then one authoritative
+        /// build that rechecks both selections against the new revision.
+        /// <para>
+        /// Callers hold <c>_builds</c> and have already established that <paramref name="folder"/> is
+        /// the bound Book.
+        /// </para>
+        /// </summary>
+        private async Task<BuildOutcome> ReconcileToAsync(
+            ProjectFolderId folder, BookMutationEffects effects, CancellationToken ct)
+        {
+            CarryExpansionAcross(folder, effects);
+            return await BuildAndPublishAsync(folder, ct, effects);
         }
 
         /// <summary>
@@ -142,7 +317,9 @@ namespace Read2Me.App.State.Projection
                 throw new InvalidOperationException(
                     $"A Book mutation for '{mutation.FolderId.Value}' needs a projection open on that Book.");
 
-            var outcome = await mutations.CommitAsync(mutation, ct);
+            // Stamped so the broadcast copy of this receipt can be recognised as this circuit's own
+            // work: it is reconciled below, synchronously, and must never come back as a surprise.
+            var outcome = await mutations.CommitAsync(mutation with { OriginId = _originId }, ct);
             return outcome switch
             {
                 BookMutationOutcome.Committed committed =>
@@ -170,7 +347,7 @@ namespace Read2Me.App.State.Projection
             await _builds.WaitAsync(CancellationToken.None);
             try
             {
-                if (Folder is not { } folder || folder != receipt.FolderId || Snapshot is not { } current)
+                if (Folder is not { } folder || folder != receipt.FolderId || Snapshot is null)
                     // The mutation committed; only this circuit's view of it is lost, because the
                     // reader switched projects underneath it. Reporting that as a stale projection
                     // rather than a throw is the recovery ticket's job.
@@ -178,12 +355,11 @@ namespace Read2Me.App.State.Projection
                         $"{receipt.MutationName} committed on '{receipt.FolderId.Value}', but the " +
                         "projection had already moved off that Book and cannot show it.");
 
-                // A snapshot at or past this revision already reflects the write — an open that
-                // raced the commit, say. Rebuilding again would only cost a Book View of reads.
-                if (current.Revision >= receipt.Revision) return current;
-
-                CarryExpansionAcross(folder, receipt.Effects);
-                return await BuildAndPublishAsync(folder, CancellationToken.None, receipt.Effects);
+                // Deliberately not skipped when the published snapshot already carries this revision.
+                // A build that raced the commit — an expansion, an open — stamps the new revision
+                // while rechecking no selection against it, so treating its snapshot as a
+                // reconciliation is how a selection outlives the rows it points at.
+                return (await ReconcileToAsync(folder, receipt.Effects, CancellationToken.None)).Snapshot;
             }
             finally
             {
@@ -203,7 +379,7 @@ namespace Read2Me.App.State.Projection
                 if (Folder is not { } folder)
                     throw new InvalidOperationException("A rebuild needs a projection already open on a Book.");
 
-                return await BuildAndPublishAsync(folder, ct);
+                return (await BuildAndPublishAsync(folder, ct)).Snapshot;
             }
             finally
             {
@@ -218,7 +394,7 @@ namespace Read2Me.App.State.Projection
             {
                 case BookViewIntent.SetNodeExpanded e:
                     if (!TrySetExpanded(folder, e.Level, e.NodeId, e.Expanded)) return current;
-                    return await BuildAndPublishAsync(folder, ct);
+                    return (await BuildAndPublishAsync(folder, ct)).Snapshot;
 
                 case BookViewIntent.SetViewMode m:
                     if (m.Mode == _viewMode) return current;
@@ -227,7 +403,7 @@ namespace Read2Me.App.State.Projection
                     // so a selection made under the old one has no meaning under the new one.
                     selectionState.Reset(folder);
                     audioSelectionState.Reset(folder);
-                    return await BuildAndPublishAsync(folder, ct);
+                    return (await BuildAndPublishAsync(folder, ct)).Snapshot;
 
                 case BookViewIntent.TogglePlayback p:
                     _playingAudioItemId = _playingAudioItemId == p.ItemId ? null : p.ItemId;
@@ -424,12 +600,19 @@ namespace Read2Me.App.State.Projection
             audioSelection.AddItems(surviving.AudioItems);
         }
 
+        /// <summary>
+        /// A published snapshot and the one thing about producing it that the snapshot cannot say:
+        /// whether reconciling dropped a selection the reader had made. That is what decides,
+        /// together with structure, whether an external change is worth announcing.
+        /// </summary>
+        private readonly record struct BuildOutcome(BookViewSnapshot Snapshot, bool ClearedSelection);
+
         /// <param name="reconciling">
         /// The effects being reconciled, when this build answers a committed mutation. Its presence
         /// is what makes the build recheck both selections against the new revision — an ordinary
         /// open or expansion has not moved the Book, so there is nothing for them to have lost.
         /// </param>
-        private async Task<BookViewSnapshot> BuildAndPublishAsync(
+        private async Task<BuildOutcome> BuildAndPublishAsync(
             ProjectFolderId folderId, CancellationToken ct, BookMutationEffects? reconciling = null)
         {
             // Read before the reads below, never after: a mutation committing while this build is in
@@ -465,7 +648,7 @@ namespace Read2Me.App.State.Projection
             if (surviving is { } recomputed)
                 ApplySurvivingSelections(folderId, recomputed);
 
-            return Publish(new BookViewSnapshot
+            var published = Publish(new BookViewSnapshot
             {
                 Folder = folderId,
                 Revision = revision,
@@ -490,6 +673,8 @@ namespace Read2Me.App.State.Projection
                 ViewMode = _viewMode,
                 PlayingAudioItemId = _playingAudioItemId,
             });
+
+            return new BuildOutcome(published, surviving?.ClearedAnything ?? false);
         }
 
         private BookViewSnapshot Publish(BookViewSnapshot snapshot)
@@ -612,6 +797,27 @@ namespace Read2Me.App.State.Projection
             audioSelectionState.Reset(previous);
             _viewMode = BookViewMode.Combined;
             _playingAudioItemId = null;
+        }
+
+        /// <summary>
+        /// Ends the circuit's interest in other producers' work: no more receipts are taken, and the
+        /// pump stops. Deliberately does not wait for a reconciliation already in flight — nobody is
+        /// left to see its snapshot, and the commit it answers is long since durable.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_subscribed)
+            {
+                receipts.Event -= OnReceipt;
+                _subscribed = false;
+            }
+
+            _mailbox.Close();
+
+            // Cancelled, not disposed: the pump may be sitting on this token, and taking the source
+            // out from under it would turn a tidy shutdown into an exception on a thread with nobody
+            // left to report it to.
+            _closing.Cancel();
         }
     }
 }

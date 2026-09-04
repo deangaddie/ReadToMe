@@ -176,6 +176,30 @@ public class BookMutationsTests : ProjectDbTestBase
     }
 
     [Fact]
+    public async Task Insert_Commits_EvenWhenAReceiptSubscriberThrows()
+    {
+        var b = await SeedOneItemAsync();
+        await using var circuit = NewCircuit();
+        static void Explode(BookMutationReceipt _) =>
+            throw new InvalidOperationException("A reader that cannot cope with its own mail.");
+        _receipts.Event += Explode;
+
+        BookMutationOutcome outcome;
+        try
+        {
+            outcome = await circuit.Mutations.CommitAsync(
+                new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "Committed."));
+        }
+        finally { _receipts.Event -= Explode; }
+
+        // Publication is best-effort and happens after the commit: a broken reader costs itself its
+        // convergence, never the writer its write.
+        Assert.IsType<BookMutationOutcome.Committed>(outcome);
+        using var reader = OpenUnmigratedDb();
+        Assert.Equal(2, reader.ParagraphItems.Count(i => i.ParagraphId == b.ParagraphId("para")));
+    }
+
+    [Fact]
     public async Task Revisions_AreMonotonicPerProject_AndIndependentAcrossProjects()
     {
         var b = await SeedOneItemAsync();

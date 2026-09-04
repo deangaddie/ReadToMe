@@ -18,6 +18,19 @@ public abstract record BookMutation(ProjectFolderId FolderId)
 {
     /// <summary>The mutation's identity for receipts and logs — its type name.</summary>
     public string Name => GetType().Name;
+
+    /// <summary>
+    /// Who asked for this mutation, when the producer needs to recognise the resulting receipt as
+    /// its own. A Book View projection stamps its own id here, because the receipt reaches every
+    /// open projection and the initiating one has already reconciled: it must not announce a change
+    /// back to the person who just made it (ADR 0007).
+    /// <para>
+    /// <see cref="Guid.Empty"/> means unattributed, which is what every producer that does not
+    /// observe receipts leaves it as. It is an origin marker and nothing more — the write side
+    /// neither validates it nor behaves differently for any value.
+    /// </para>
+    /// </summary>
+    public Guid OriginId { get; init; }
 }
 
 /// <summary>

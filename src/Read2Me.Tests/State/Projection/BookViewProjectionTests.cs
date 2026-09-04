@@ -10,6 +10,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Events;
 using Read2Me.Services.IO;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
@@ -38,6 +39,8 @@ namespace Read2Me.Tests.State.Projection
         private readonly FakeVoiceResolver _voices = new();
         private readonly FakeSelections _selections;
         private readonly BookRevisionSequence _revisions;
+        private readonly EventBroadcaster<BookMutationReceipt> _receipts;
+        private readonly ProjectDbSession _session;
         private readonly ServiceProvider _root;
         private readonly AsyncServiceScope _circuit;
         private readonly BookMutations _mutations;
@@ -60,6 +63,8 @@ namespace Read2Me.Tests.State.Projection
             _reader = _circuit.ServiceProvider.GetRequiredService<ProjectReader>();
             _mutations = _circuit.ServiceProvider.GetRequiredService<BookMutations>();
             _revisions = _root.GetRequiredService<BookRevisionSequence>();
+            _receipts = _root.GetRequiredService<EventBroadcaster<BookMutationReceipt>>();
+            _session = _circuit.ServiceProvider.GetRequiredService<ProjectDbSession>();
             _treeState = new BookTreeState();
             _selections = new FakeSelections(_selectionState, _audioSelectionState);
         }
@@ -75,7 +80,10 @@ namespace Read2Me.Tests.State.Projection
                 _audioSelectionState,
                 _selections,
                 _voices,
-                _revisions);
+                _revisions,
+                _session,
+                _receipts,
+                NullLogger<BookViewProjection>.Instance);
 
         // ── arrangement ──────────────────────────────────────────────────────
 
@@ -999,6 +1007,346 @@ namespace Read2Me.Tests.State.Projection
             Assert.Empty(snapshot.Selections.AudioItemIds);
         }
 
+        // ── converging on other circuits ─────────────────────────────────────
+
+        /// <summary>
+        /// A second circuit writing the same Book: its own scope, its own session and its own
+        /// <see cref="BookMutations"/>, sharing only the singletons the app shares — the revision
+        /// sequence and the receipt broadcast.
+        /// </summary>
+        private BookMutations RemoteWriter()
+        {
+            var circuit = _root.CreateAsyncScope();
+            _otherCircuits.Add(circuit);
+            return circuit.ServiceProvider.GetRequiredService<BookMutations>();
+        }
+
+        private readonly List<AsyncServiceScope> _otherCircuits = [];
+
+        /// <summary>
+        /// Waits for an asynchronous convergence, which by design nobody is awaiting. The timeout is
+        /// generous because it is only ever hit by a genuine failure to converge.
+        /// </summary>
+        private static async Task ConvergesAsync(Func<bool> condition, string expectation)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (condition()) return;
+                await Task.Delay(10);
+            }
+
+            Assert.Fail($"The Book View never converged: {expectation}");
+        }
+
+        /// <summary>
+        /// One receipt from a producer that is not a Book View — a queue reporting progress. Written
+        /// by hand because the families that report these effects have not migrated yet, and because
+        /// what is under test is how a projection treats a receipt, not who produced it.
+        /// </summary>
+        private BookMutationReceipt ExternalReceipt(BookFacets facets, ProjectFolderId? folder = null) =>
+            new(folder ?? _folder, "SomeoneElsesMutation", Guid.NewGuid(), _revisions.Next(folder ?? _folder),
+                new BookMutationEffects { Scope = BookMutationScope.Exact, Facets = facets });
+
+        [Fact]
+        public async Task AnotherCircuitsCommit_ConvergesThisBookViewWithoutBeingAsked()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+            Assert.Single(sut.Snapshot!.Branches.ParagraphsByChapter[b.ChapterId("ch1")]);
+
+            var committed = await RemoteWriter().CommitAsync(
+                new InsertParagraphItemMutation(_folder, b.ItemId("i1"), InsertPosition.After, "Inserted elsewhere"));
+
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision,
+                "another circuit's insertion never reached it");
+            // The expanded branch was reread, not merely invalidated: the new item is on screen.
+            var paragraph = Assert.Single(sut.Snapshot!.Branches.ParagraphsByChapter[b.ChapterId("ch1")]);
+            Assert.Equal(2, paragraph.Items.Count);
+        }
+
+        [Fact]
+        public async Task AnotherCircuitsStructuralChange_IsAnnouncedOnce()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var announced = 0;
+            var updates = 0;
+            sut.ExternalUpdateApplied += update =>
+            {
+                updates++;
+                if (update.Announce) announced++;
+            };
+
+            await RemoteWriter().CommitAsync(new SplitAtParagraphMutation(_folder, b.ParagraphId("p2"), "New"));
+
+            await ConvergesAsync(() => updates == 1, "the structural change never arrived");
+            Assert.Equal(1, announced);
+        }
+
+        [Fact]
+        public async Task AnotherProducersAttributionProgress_ConvergesSilently()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var announced = 0;
+            var updates = 0;
+            sut.ExternalUpdateApplied += update =>
+            {
+                updates++;
+                if (update.Announce) announced++;
+            };
+
+            _receipts.Publish(ExternalReceipt(BookFacets.Attribution | BookFacets.Characters));
+
+            await ConvergesAsync(() => updates == 1, "the attribution progress never arrived");
+            Assert.Equal(0, announced);
+        }
+
+        [Fact]
+        public async Task AnExternalDeletionThatCostsTheReaderTheirSelection_IsAnnounced()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetParagraphSelected(
+                b.ParagraphId("p1"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")), Selected: true));
+            Assert.Single(sut.Snapshot!.Selections.ParagraphIds);
+
+            var announced = 0;
+            sut.ExternalUpdateApplied += update => { if (update.Announce) announced++; };
+
+            await RemoteWriter().CommitAsync(new DeleteParagraphMutation(_folder, b.ParagraphId("p1")));
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Selections.ParagraphIds.Count == 0,
+                "the selection on the deleted Paragraph was never cleared");
+            Assert.Equal(1, announced);
+        }
+
+        [Fact]
+        public async Task ThisCircuitsOwnMutation_IsNeitherAnnouncedNorReconciledTwice()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var updates = 0;
+            sut.ExternalUpdateApplied += _ => updates++;
+
+            await sut.MutateAsync(
+                new InsertParagraphItemMutation(_folder, b.ItemId("i1"), InsertPosition.After, "Mine"));
+            var published = 0;
+            sut.SnapshotPublished += () => published++;
+
+            // A later external change is the barrier: the pump is serial, so once this has converged
+            // the projection has demonstrably had every earlier receipt in its hands.
+            _receipts.Publish(ExternalReceipt(BookFacets.Attribution));
+
+            await ConvergesAsync(() => updates == 1, "the later external change never arrived");
+            Assert.Equal(1, published);
+        }
+
+        [Fact]
+        public async Task AReceiptOlderThanTheSnapshot_RepublishesNothing()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var stale = ExternalReceipt(BookFacets.Structure);
+
+            var sut = CreateSut();
+            // Opens at the revision the receipt already produced, so its Book View is not behind it.
+            await sut.OpenAsync(_folder);
+            var published = 0;
+            var updates = 0;
+            sut.SnapshotPublished += () => published++;
+            sut.ExternalUpdateApplied += _ => updates++;
+
+            _receipts.Publish(stale);
+            _receipts.Publish(ExternalReceipt(BookFacets.Attribution));
+
+            await ConvergesAsync(() => updates == 1, "the newer receipt never arrived");
+            Assert.Equal(1, published);
+        }
+
+        [Fact]
+        public async Task ABurstOfReceipts_CoalescesIntoOneRebuild()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var loader = new SwitchableLoader(new BookProjectLoader(_reader));
+            var sut = CreateSut(loader);
+            await sut.OpenAsync(_folder);
+
+            var published = 0;
+            sut.SnapshotPublished += () => published++;
+
+            // Hold the reconciliation of the first receipt open, so the rest of the burst has to
+            // queue behind it rather than being reconciled one at a time.
+            var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            loader.Held = held;
+            _receipts.Publish(ExternalReceipt(BookFacets.Attribution));
+            await ConvergesAsync(() => loader.Reading, "the first receipt never started a rebuild");
+
+            long newest = 0;
+            for (var i = 0; i < 5; i++)
+                newest = ExternalReceiptPublished(BookFacets.Attribution);
+
+            held.SetResult();
+
+            await ConvergesAsync(() => sut.Snapshot!.Revision >= newest, "the burst never converged");
+            Assert.Equal(2, published);
+            Assert.Equal(_folder, sut.Snapshot!.Folder);
+            Assert.Equal(2, sut.Snapshot.TotalChapters);
+            Assert.Equal(b.VolumeId("vol"), Assert.Single(sut.Snapshot.Volumes).Id);
+        }
+
+        [Fact]
+        public async Task MoreReceiptsThanTheMailboxHolds_StillConvergeOnTheNewestRevision()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var loader = new SwitchableLoader(new BookProjectLoader(_reader));
+            var sut = CreateSut(loader);
+            await sut.OpenAsync(_folder);
+
+            var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            loader.Held = held;
+            _receipts.Publish(ExternalReceipt(BookFacets.Attribution));
+            await ConvergesAsync(() => loader.Reading, "the first receipt never started a rebuild");
+
+            // Well past the bound, so the batch collapses to a whole-project marker. What is dropped
+            // is the detail; the change itself still has to arrive.
+            long newest = 0;
+            for (var i = 0; i < BookViewReceiptMailbox.Capacity + 10; i++)
+                newest = ExternalReceiptPublished(BookFacets.Attribution);
+
+            // A real structural change made while the mailbox is over its bound: the detail naming it
+            // is gone by the time the pump looks, and the Book View still has to end up showing it.
+            var committed = await RemoteWriter().CommitAsync(new SplitAtParagraphMutation(_folder, b.ParagraphId("p2"), "New"));
+            newest = Math.Max(newest, Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision);
+
+            held.SetResult();
+
+            await ConvergesAsync(() => sut.Snapshot!.Revision >= newest, "the overflowing burst never converged");
+            Assert.Equal(3, sut.Snapshot!.TotalChapters);
+        }
+
+        [Fact]
+        public async Task AnOverflowingBurstOfQueueProgress_IsStillNotAnnounced()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var loader = new SwitchableLoader(new BookProjectLoader(_reader));
+            var sut = CreateSut(loader);
+            await sut.OpenAsync(_folder);
+
+            var announced = 0;
+            var updates = 0;
+            sut.ExternalUpdateApplied += update =>
+            {
+                updates++;
+                if (update.Announce) announced++;
+            };
+
+            var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            loader.Held = held;
+            _receipts.Publish(ExternalReceipt(BookFacets.Attribution));
+            await ConvergesAsync(() => loader.Reading, "the first receipt never started a rebuild");
+
+            // Nothing structural anywhere in the burst — only a queue attributing speakers. Losing the
+            // detail to the bound must not turn that into a change the reader is interrupted for.
+            for (var i = 0; i < BookViewReceiptMailbox.Capacity + 10; i++)
+                ExternalReceiptPublished(BookFacets.Attribution | BookFacets.Audio);
+
+            held.SetResult();
+
+            await ConvergesAsync(() => updates == 2, "the overflowing burst never converged");
+            Assert.Equal(0, announced);
+        }
+
+        [Fact]
+        public async Task AProjectionThatFailsToConverge_KeepsItsSnapshotAndConvergesOnTheNext()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            var loader = new SwitchableLoader(new BookProjectLoader(_reader));
+            var sut = CreateSut(loader);
+            var opened = await sut.OpenAsync(_folder);
+
+            loader.Failure = new InvalidOperationException("The read failed while converging.");
+            _receipts.Publish(ExternalReceipt(BookFacets.Attribution));
+            await ConvergesAsync(() => loader.Failures == 1, "the failing convergence never ran");
+
+            // The last coherent snapshot is still the one on screen: a failed convergence publishes
+            // nothing rather than half of something.
+            Assert.Same(opened, sut.Snapshot);
+
+            loader.Failure = null;
+            var revision = ExternalReceiptPublished(BookFacets.Attribution);
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision,
+                "the pump did not survive a failed convergence");
+            Assert.Equal(BookViewHealth.Coherent, sut.Snapshot!.Health);
+        }
+
+        private long ExternalReceiptPublished(BookFacets facets)
+        {
+            var receipt = ExternalReceipt(facets);
+            _receipts.Publish(receipt);
+            return receipt.Revision;
+        }
+
+        [Fact]
+        public async Task AfterSwitchingProjects_ReceiptsForThePreviousBookAreIgnored()
+        {
+            await SeedOneVolumeTwoChaptersAsync();
+            await SeedOtherProjectAsync();
+
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.OpenAsync(_otherFolder);
+
+            var published = 0;
+            var updates = 0;
+            sut.SnapshotPublished += () => published++;
+            sut.ExternalUpdateApplied += _ => updates++;
+
+            _receipts.Publish(ExternalReceipt(BookFacets.Structure));
+            _receipts.Publish(ExternalReceipt(BookFacets.Attribution, _otherFolder));
+
+            await ConvergesAsync(() => updates == 1, "the receipt for the bound Book never arrived");
+            Assert.Equal(1, published);
+            Assert.Equal(_otherFolder, sut.Snapshot!.Folder);
+        }
+
+        [Fact]
+        public async Task ADisposedProjection_StopsConverging()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var published = 0;
+            sut.SnapshotPublished += () => published++;
+
+            sut.Dispose();
+            await RemoteWriter().CommitAsync(
+                new InsertParagraphItemMutation(_folder, b.ItemId("i1"), InsertPosition.After, "One"));
+
+            // A second projection converging on the same Book is the barrier: it proves receipts are
+            // being broadcast and reconciled by someone, and that this one chose not to.
+            var live = CreateSut();
+            await live.OpenAsync(_folder);
+            var committed = await RemoteWriter().CommitAsync(
+                new InsertParagraphItemMutation(_folder, b.ItemId("i2"), InsertPosition.After, "Two"));
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+            await ConvergesAsync(() => live.Snapshot!.Revision >= revision, "the live projection never converged");
+
+            Assert.Equal(0, published);
+        }
+
         // ── test doubles ─────────────────────────────────────────────────────
         /// <summary>
         /// The circuit's selection writer. The real one is <c>BookSelectionCoordinator</c>, which
@@ -1118,8 +1466,14 @@ namespace Read2Me.Tests.State.Projection
         {
             public Exception? Failure { get; set; }
 
+            /// <summary>How many reads have been failed — the only signal a swallowed failure gives.</summary>
+            public int Failures { get; private set; }
+
             /// <summary>Set to hold the next read until the task completes; cleared once it does.</summary>
             public TaskCompletionSource? Held { get; set; }
+
+            /// <summary>True while a held read is waiting — the only way to tell a build has begun.</summary>
+            public bool Reading { get; private set; }
 
             public async Task<BookProjectSnapshot> LoadSnapshotAsync(
                 ProjectFolderId folderId, CancellationToken ct = default)
@@ -1127,10 +1481,16 @@ namespace Read2Me.Tests.State.Projection
                 if (Held is { } held)
                 {
                     Held = null;
+                    Reading = true;
                     await held.Task;
+                    Reading = false;
                 }
 
-                if (Failure is { } failure) throw failure;
+                if (Failure is { } failure)
+                {
+                    Failures++;
+                    throw failure;
+                }
 
                 return await inner.LoadSnapshotAsync(folderId, ct);
             }
@@ -1138,6 +1498,8 @@ namespace Read2Me.Tests.State.Projection
 
         public override async ValueTask DisposeAsync()
         {
+            foreach (var circuit in _otherCircuits)
+                await circuit.DisposeAsync();
             await _circuit.DisposeAsync();
             await _root.DisposeAsync();
             await base.DisposeAsync();

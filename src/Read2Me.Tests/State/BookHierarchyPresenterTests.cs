@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor;
 using NSubstitute;
 using Read2Me.App.State;
@@ -135,12 +136,14 @@ namespace Read2Me.Tests.State
             var audioQueue = new AudioQueueService();
             var events = new EventBroadcaster<ParagraphItemsChanged>();
             var coordinator = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            // No BookMutations: every mutation this file still covers goes through the legacy command
-            // handler. The migrated families are proved on BookViewProjection, where a real write side
-            // is the point.
+            // No BookMutations and no session: every mutation this file still covers goes through the
+            // legacy command handler, and nothing here converges on another circuit. The migrated
+            // families are proved on BookViewProjection, where a real write side is the point.
             var projection = new BookViewProjection(
                 loader, reader, reader, reader, mutations: null!, treeState, selectionState,
-                audioSelectionState, coordinator, voiceResolver, new BookRevisionSequence());
+                audioSelectionState, coordinator, voiceResolver, new BookRevisionSequence(), session: null!,
+                new EventBroadcaster<BookMutationReceipt>(),
+                NullLogger<BookViewProjection>.Instance);
             var presenter = new BookHierarchyPresenter(reader, projection, commandHandler, bookUseCases, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, events);
             return new Context(presenter, projection, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue, audioQueue, events, roster, seed, dialogService, snackbar);
         }

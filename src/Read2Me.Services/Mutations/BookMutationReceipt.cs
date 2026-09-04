@@ -16,4 +16,12 @@ public sealed record BookMutationReceipt(
     string MutationName,
     Guid MutationId,
     long Revision,
-    BookMutationEffects Effects);
+    BookMutationEffects Effects)
+{
+    /// <summary>
+    /// The <see cref="BookMutation.OriginId"/> of the request that produced this receipt, carried
+    /// through unchanged so a producer can pick its own committed work out of the receipts every
+    /// reader sees.
+    /// </summary>
+    public Guid OriginId { get; init; }
+}
