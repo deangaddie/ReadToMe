@@ -45,3 +45,32 @@ public sealed class BookMutationRejectedException(BookMutationRejection reason, 
 {
     public BookMutationRejection Reason { get; } = reason;
 }
+
+/// <summary>
+/// How a producer that owns an external artifact reports a write that did not commit.
+/// <para>
+/// Both artifact adapters — the Audio Queue's take recorder and the Voice audio writer — face the
+/// same question at the same point: the artifact is produced, the Book refused to name it, and the
+/// caller above needs to know whether that was a failure or a cancellation. Cancellation keeps its
+/// own exception type because callers act on it differently: a cancelled queue item is dropped, a
+/// failed one is reported.
+/// </para>
+/// </summary>
+public static class UncommittedArtifact
+{
+    /// <param name="what">What was being written, for the message — "item {id} audio", say.</param>
+    public static Exception AsException(BookMutationOutcome outcome, string what, CancellationToken ct)
+    {
+        var reason = outcome switch
+        {
+            BookMutationOutcome.Rejected rejected => rejected.Message,
+            // Reachable only for a mutation that can report no-change. An adapter that returned
+            // success here would name an artifact it had just discarded.
+            _ => "the Book recorded no change.",
+        };
+
+        return outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled }
+            ? new OperationCanceledException(reason, ct)
+            : new InvalidOperationException($"Writing {what} failed: {reason}");
+    }
+}

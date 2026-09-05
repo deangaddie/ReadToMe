@@ -37,6 +37,7 @@ namespace Read2Me.Tests.Services
 
         public async ValueTask DisposeAsync()
         {
+            if (_services is not null) await _services.DisposeAsync();
             await _session.DisposeAsync();
             if (Directory.Exists(_tempDir))
                 Directory.Delete(_tempDir, recursive: true);
@@ -100,7 +101,7 @@ namespace Read2Me.Tests.Services
         // Regression: adding/deleting a voice through BookCommandHandler must be visible to a
         // follow-up tracked read on the same session. The session caches one long-lived tracking
         // DbContext per folder; without eviction after a write, the tracker returns stale entities
-        // (a deleted voice still counted in Character.Voices — DeleteVoiceHandler uses ExecuteDelete
+        // (a deleted voice still counted in Character.Voices — the delete mutation uses ExecuteDelete
         // which bypasses the tracker). This drove the "voice chip doesn't update until you navigate
         // away and back" bug.
 
@@ -167,17 +168,23 @@ namespace Read2Me.Tests.Services
             return character.Voices.Count;
         }
 
+        /// <summary>
+        /// The real command wiring, sharing this test's <see cref="ProjectDbSession"/> so the
+        /// eviction the write side performs is the one the follow-up tracked read sees.
+        /// </summary>
         private BookCommandHandler BuildCommandHandler()
         {
             var services = new ServiceCollection();
-            services.AddSingleton(_session);
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = _tempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             services.AddSingleton(_fs);
-            services.AddSingleton<ICommandHandler<CreateVoiceCommand>>(new CreateVoiceHandler(_session));
-            services.AddSingleton<ICommandHandler<DeleteVoiceCommand>>(
-                new DeleteVoiceHandler(_session, _fs, new Read2Me.Services.Audio.VoiceOriginalStore(_fs)));
-            var sp = services.BuildServiceProvider();
-            return new BookCommandHandler(sp, _session);
+            services.AddSingleton(_session);
+            _services = services.BuildServiceProvider();
+            return _services.GetRequiredService<BookCommandHandler>();
         }
+
+        private ServiceProvider? _services;
 
         [Fact]
         public void BookReadingService_DoesNotConstructContextsOutsideSession()

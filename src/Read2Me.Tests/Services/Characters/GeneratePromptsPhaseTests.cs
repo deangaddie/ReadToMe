@@ -24,7 +24,7 @@ public class GeneratePromptsPhaseTests
         };
         var sut = new GeneratePromptsPhase();
 
-        var result = await sut.PlanAsync(new PhaseDeps(reader, null!, null!), Folder, CancellationToken.None);
+        var result = await sut.PlanAsync(new PhaseDeps(reader, null!, null!, null!), Folder, CancellationToken.None);
 
         Assert.True(Assert.Single(result, item => item.CharacterId == watson.Id).AlsoNarrates);
         Assert.False(Assert.Single(result, item => item.CharacterId == holmes.Id).AlsoNarrates);

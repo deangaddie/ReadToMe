@@ -284,8 +284,10 @@ namespace Read2Me.App.State
                     Source = audioStream,
                     Extension = extension,
                 };
-                var fileName = await voiceOrchestrator.StoreAudioAsync(req, ct);
-                await commandHandler.ExecuteAsync(new SetVoiceAudioCommand(folder, voiceId, fileName), ct);
+                // One call: the recording is stored and the Book mutation that names it is committed
+                // together, so a refused write leaves neither a file nobody names nor a name with no
+                // file (ADR 0007).
+                await voiceOrchestrator.RecordUploadedAudioAsync(req, ct);
                 BumpAudioToken(voiceId);
             }
             catch (Exception ex)

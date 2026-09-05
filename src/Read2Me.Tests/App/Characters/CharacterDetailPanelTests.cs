@@ -13,6 +13,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
 using Xunit;
@@ -69,7 +70,7 @@ namespace Read2Me.Tests.App.Characters
                 .Returns(new List<Voice>());
 
             var orchestrator = new VoiceOrchestrator(
-                audioPipeline: Substitute.For<IAudioPipeline>(),
+                voiceAudio: Substitute.For<IVoiceAudioWriter>(),
                 transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
                 voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
                 transcriptionSettings: new FakeTranscriptionSettings(),

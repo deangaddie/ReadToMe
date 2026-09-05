@@ -7,6 +7,8 @@ using Microsoft.Extensions.Logging;
 using Read2Me.App.Services;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 
@@ -95,7 +97,8 @@ public sealed class VoiceBatchRunner
         await using var scope = _scopeFactory.CreateAsyncScope();
         var deps = new PhaseDeps(
             scope.ServiceProvider.GetRequiredService<IProjectReader>(),
-            scope.ServiceProvider.GetRequiredService<IBookCommandHandler>(),
+            scope.ServiceProvider.GetRequiredService<BookMutations>(),
+            scope.ServiceProvider.GetRequiredService<IVoiceAudioRemover>(),
             scope.ServiceProvider.GetRequiredService<VoiceOrchestrator>());
         await RunPhaseAsync(phase, deps, folder, ct);
     }

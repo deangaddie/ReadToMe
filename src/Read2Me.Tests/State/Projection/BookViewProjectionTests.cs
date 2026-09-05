@@ -70,7 +70,9 @@ namespace Read2Me.Tests.State.Projection
         }
 
         private BookViewProjection CreateSut(
-            IBookProjectLoader? loader = null, IBookContentReader? content = null) =>
+            IBookProjectLoader? loader = null,
+            IBookContentReader? content = null,
+            IVoiceResolver? voices = null) =>
             new(loader ?? new BookProjectLoader(_reader),
                 content ?? _reader,
                 _reader,
@@ -80,7 +82,7 @@ namespace Read2Me.Tests.State.Projection
                 _selectionState,
                 _audioSelectionState,
                 _selections,
-                _voices,
+                voices ?? _voices,
                 _revisions,
                 _session,
                 _receipts,
@@ -1163,6 +1165,82 @@ namespace Read2Me.Tests.State.Projection
             // Routine background progress: nothing structural, nothing lost.
             Assert.Equal(1, updates);
             Assert.Equal(0, announced);
+        }
+
+        // — Voices and Voice Rules -------------------------------------------
+        //
+        // These use the real VoiceResolver rather than the fake, because the claim under test is that
+        // the preview names the Voice the Audio Queue would actually resolve. A stubbed answer would
+        // prove only that the projection reread something.
+
+        /// <summary>Opens the Book with both chapters expanded and previews resolved for real.</summary>
+        private async Task<BookViewProjection> OpenWithRealPreviewsAsync(BookHierarchyBuilder b)
+        {
+            var sut = CreateSut(voices: new VoiceResolver(_session));
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch2"), true));
+            return sut;
+        }
+
+        /// <summary>Gives Alice two Voices; the first becomes the one her default rule names.</summary>
+        private async Task<(Guid First, Guid Second)> GiveAliceTwoVoicesAsync(BookHierarchyBuilder b)
+        {
+            var first = await CreateVoiceAsync(b.CharacterId("alice"), "First");
+            var second = await CreateVoiceAsync(b.CharacterId("alice"), "Second");
+            return (first, second);
+        }
+
+        private async Task<Guid> CreateVoiceAsync(Guid characterId, string name)
+        {
+            var committed = await RemoteWriter().CommitAsync(new CreateVoiceMutation(_folder, characterId, name));
+            return Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Effects.CreatedId!.Value;
+        }
+
+        /// <summary>
+        /// The gesture this slice exists for: somebody repoints a Character's default Voice Rule in
+        /// another circuit, and this Book View's preview must start naming the Voice the Audio Queue
+        /// would now use — without anyone navigating away and back.
+        /// </summary>
+        [Fact]
+        public async Task AnotherCircuitsVoiceRuleChange_RerereadsTheVoicePreviews()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (_, second) = await GiveAliceTwoVoicesAsync(b);
+            var sut = await OpenWithRealPreviewsAsync(b);
+
+            Assert.Equal("First", sut.Snapshot!.ResolvedVoiceName(b.ItemId("i1")));
+
+            var announced = 0;
+            sut.ExternalUpdateApplied += update => { if (update.Announce) announced++; };
+
+            var committed = await RemoteWriter().CommitAsync(new SetVoiceDefaultMutation(_folder, second));
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision, "the Voice Rule change never arrived");
+
+            Assert.Equal("Second", sut.Snapshot!.ResolvedVoiceName(b.ItemId("i1")));
+            // Nothing structural, nothing selected was lost: neither half of the announce rule fires.
+            Assert.Equal(0, announced);
+        }
+
+        /// <summary>
+        /// A Voice rename moves no rule and no line, and still changes what every item spoken in that
+        /// Voice is labelled — which is why the Voices facet is not one a reader can place on a single
+        /// Paragraph.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_VoiceRename_RepublishesThePreviewsUnderTheNewName()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (first, _) = await GiveAliceTwoVoicesAsync(b);
+            var sut = await OpenWithRealPreviewsAsync(b);
+
+            var outcome = await sut.MutateAsync(new UpdateVoiceMutation(_folder, first, "Young Alice", null));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal("Young Alice", snapshot.ResolvedVoiceName(b.ItemId("i1")));
         }
 
         // — audio assignment and reviews -------------------------------------

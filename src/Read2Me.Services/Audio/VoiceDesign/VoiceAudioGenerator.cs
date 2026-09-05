@@ -1,5 +1,4 @@
-﻿using Read2Me.Core.Audio;
-using Read2Me.Core.Models;
+using Read2Me.Core.Audio;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Audio.VoiceDesign
@@ -7,8 +6,7 @@ namespace Read2Me.Services.Audio.VoiceDesign
     public sealed class VoiceAudioGenerator(
         VoiceDesignSettingsService settings,
         IVoiceDesignClientResolver clientResolver,
-        IAudioPipeline audioPipeline,
-        IBookCommandHandler commandHandler) : IVoiceAudioGenerator
+        IVoiceAudioWriter voiceAudio) : IVoiceAudioGenerator
     {
         public async Task<VoiceGenerationResult> GenerateAsync(VoiceGenerationRequest request, CancellationToken ct)
         {
@@ -44,14 +42,11 @@ namespace Read2Me.Services.Audio.VoiceDesign
                     Source = audioStream,
                     Extension = ".wav",
                 };
-                var fileName = await audioPipeline.StoreAsync(storeReq, ct);
 
-                await commandHandler.ExecuteAsync(new SetVoiceGeneratedCommand(
-                    request.FolderId,
-                    request.VoiceId,
-                    fileName,
-                    sampleText,
-                    request.DesignPrompt), ct);
+                // The take is stored and committed together: the writer owns that ordering, and
+                // owns taking the file away again if the Book refuses to name it (ADR 0007).
+                var fileName = await voiceAudio.RecordGeneratedAsync(
+                    storeReq, sampleText, request.DesignPrompt, ct);
 
                 return VoiceGenerationResult.Success(fileName, sampleText);
             }

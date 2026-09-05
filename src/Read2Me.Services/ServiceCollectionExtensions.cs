@@ -14,7 +14,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddLogging();
         services.AddSingleton<IFileSystem, FileSystemService>();
-        // The voice handlers delete a stale original when they drop a voice's audio.
+        // The Voice audio writer removes a stale original when a voice stops naming its audio.
         services.TryAddScoped<Read2Me.Services.Audio.IVoiceOriginalStore, Read2Me.Services.Audio.VoiceOriginalStore>();
         // Delete
         services.AddScoped<ICommandHandler<DeleteVolumeCommand>, DeleteVolumeHandler>();
@@ -235,6 +235,52 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SetNarratorOnlyModeMutation>,
             Mutations.Implementations.SetNarratorOnlyModeMutationImplementation>();
+        // Voice and Voice Rule lifecycles — Voice rows and rule rows only, previews everywhere
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.CreateVoiceMutation>,
+            Mutations.Implementations.CreateVoiceMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetVoiceDefaultMutation>,
+            Mutations.Implementations.SetVoiceDefaultMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.UpdateVoiceMutation>,
+            Mutations.Implementations.UpdateVoiceMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetVoiceDesignPromptMutation>,
+            Mutations.Implementations.SetVoiceDesignPromptMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetVoiceDesignSettingsOverrideMutation>,
+            Mutations.Implementations.SetVoiceDesignSettingsOverrideMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetVoiceTtsSettingsOverrideMutation>,
+            Mutations.Implementations.SetVoiceTtsSettingsOverrideMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetVoiceTranscriptMutation>,
+            Mutations.Implementations.SetVoiceTranscriptMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetVoiceAudioMutation>,
+            Mutations.Implementations.SetVoiceAudioMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetVoiceGeneratedMutation>,
+            Mutations.Implementations.SetVoiceGeneratedMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetVoiceSourceMutation>,
+            Mutations.Implementations.SetVoiceSourceMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DeleteVoiceMutation>,
+            Mutations.Implementations.DeleteVoiceMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.CreateVoiceRuleMutation>,
+            Mutations.Implementations.CreateVoiceRuleMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DeleteVoiceRuleMutation>,
+            Mutations.Implementations.DeleteVoiceRuleMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.MoveVoiceRuleMutation>,
+            Mutations.Implementations.MoveVoiceRuleMutationImplementation>();
+        // Removing a Voice takes its audio with it, after the commit. The arriving half needs the
+        // audio pipeline and so is registered by the application.
+        services.TryAddScoped<Audio.IVoiceAudioRemover, Audio.VoiceAudioRemover>();
         // The roster's read-plus-write seam, registered here because CreateCharacterHandler needs it.
         services.TryAddScoped<Characters.CharacterResolver>();
         services.AddScoped<BookCommandHandler>();

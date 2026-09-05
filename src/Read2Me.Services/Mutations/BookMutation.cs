@@ -285,3 +285,114 @@ public sealed record SetNarratorCharacterMutation(
 /// </summary>
 public sealed record SetNarratorOnlyModeMutation(
     ProjectFolderId FolderId, bool Enabled) : BookMutation(FolderId);
+
+// ── Voice and Voice Rule lifecycles ──────────────────────────────────────────
+// The Voices a Character can be read in, and the positional rules that pick between them. Nothing
+// here names a Paragraph and nothing here writes one: a Voice row and a Voice Rule row are the only
+// things these touch. What makes the family matter to a Book View is indirect — every item that
+// resolves through a changed Voice or rule now previews a different name — so the effects report
+// Voices and VoiceRules and let the reader reread the previews it holds.
+//
+// The default Voice Rule is the invariant this family protects. A Character with Voices has exactly
+// one, it sorts below every positional rule, and it is created, repointed and removed by the Voice
+// mutations rather than by anyone editing rules directly.
+
+/// <summary>
+/// Adds a Voice to a Character, and — when it is the Character's first — the default Voice Rule that
+/// makes it the one every position falls back to.
+/// <para>
+/// <c>Description</c> and <c>DesignPrompt</c> are here so the voice-plan batch can land a planned
+/// Voice in one commit instead of three. The generic command endpoint leaves both null and sets them
+/// afterwards, because <see cref="CreateVoiceCommand"/>'s shape is fixed.
+/// </para>
+/// </summary>
+public sealed record CreateVoiceMutation(
+    ProjectFolderId FolderId,
+    Guid CharacterId,
+    string VoiceName,
+    bool IsGenerated = false,
+    string? Description = null,
+    string? DesignPrompt = null) : BookMutation(FolderId);
+
+/// <summary>Points the Character's default Voice Rule at this Voice.</summary>
+public sealed record SetVoiceDefaultMutation(ProjectFolderId FolderId, Guid VoiceId) : BookMutation(FolderId);
+
+/// <summary>Renames a Voice and rewrites its description. The audio it names is untouched.</summary>
+public sealed record UpdateVoiceMutation(
+    ProjectFolderId FolderId, Guid VoiceId, string VoiceName, string? Description) : BookMutation(FolderId);
+
+/// <summary>Stores the description a generated Voice is synthesised from.</summary>
+public sealed record SetVoiceDesignPromptMutation(
+    ProjectFolderId FolderId, Guid VoiceId, string Prompt) : BookMutation(FolderId);
+
+/// <summary>Overrides the voice-design server's settings for this Voice, or clears the override with null.</summary>
+public sealed record SetVoiceDesignSettingsOverrideMutation(
+    ProjectFolderId FolderId, Guid VoiceId, string? Json) : BookMutation(FolderId);
+
+/// <summary>Overrides the TTS server's settings for this Voice, or clears the override with null.</summary>
+public sealed record SetVoiceTtsSettingsOverrideMutation(
+    ProjectFolderId FolderId, Guid VoiceId, string? Json) : BookMutation(FolderId);
+
+/// <summary>Stores what the Voice's reference audio actually says — what a cloning TTS is given with it.</summary>
+public sealed record SetVoiceTranscriptMutation(
+    ProjectFolderId FolderId, Guid VoiceId, string Transcript) : BookMutation(FolderId);
+
+/// <summary>
+/// Points a Voice at reference audio.
+/// <para>
+/// Like <see cref="RecordParagraphItemAudioMutation"/> this never reports no-change: an upload lands
+/// at a path derived from the Voice's id and name, so re-uploading writes the same string over
+/// different audio. The path is a name, not the artifact.
+/// </para>
+/// </summary>
+public sealed record SetVoiceAudioMutation(
+    ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : BookMutation(FolderId);
+
+/// <summary>
+/// Records a synthesised take of a designed Voice: the audio, the sample text it speaks, and the
+/// prompt it was designed from, in one commit. Never reports no-change, for the same reason
+/// <see cref="SetVoiceAudioMutation"/> does not.
+/// </summary>
+public sealed record SetVoiceGeneratedMutation(
+    ProjectFolderId FolderId,
+    Guid VoiceId,
+    string AudioFileName,
+    string Transcript,
+    string DesignPrompt) : BookMutation(FolderId);
+
+/// <summary>
+/// Switches a Voice between cloned-from-a-recording and designed-from-a-description. Turning a
+/// Voice generated discards the recording it was cloned from — there is nothing left to clone — and
+/// with it the stored original that would otherwise claim an edit on audio that no longer exists.
+/// </summary>
+public sealed record SetVoiceSourceMutation(
+    ProjectFolderId FolderId, Guid VoiceId, bool IsGenerated) : BookMutation(FolderId);
+
+/// <summary>
+/// Removes a Voice, its audio, its stored original and every rule that named it. The Character's
+/// default Voice Rule follows to its oldest remaining Voice, or goes too when that was the last one.
+/// </summary>
+public sealed record DeleteVoiceMutation(ProjectFolderId FolderId, Guid VoiceId) : BookMutation(FolderId);
+
+/// <summary>
+/// Adds a positional Voice Rule below every rule the Character already has: from a node onward, up
+/// to a node, or one node exactly. The Voice must be one of that Character's own.
+/// </summary>
+public sealed record CreateVoiceRuleMutation(
+    ProjectFolderId FolderId,
+    Guid CharacterId,
+    Guid VoiceId,
+    VoiceAnchorLevel? FromLevel,
+    Guid? FromNodeId,
+    VoiceAnchorLevel? ToLevel,
+    Guid? ToNodeId) : BookMutation(FolderId);
+
+/// <summary>Removes one positional Voice Rule. The default rule is not one of these.</summary>
+public sealed record DeleteVoiceRuleMutation(ProjectFolderId FolderId, Guid RuleId) : BookMutation(FolderId);
+
+/// <summary>
+/// Moves one positional Voice Rule past its neighbour. Rules are evaluated in order, so this is how
+/// a reader decides which of two overlapping rules wins.
+/// </summary>
+public sealed record MoveVoiceRuleMutation(
+    ProjectFolderId FolderId, Guid RuleId, RuleMoveDirection Direction) : BookMutation(FolderId);

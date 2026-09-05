@@ -87,7 +87,8 @@ namespace Read2Me.Services.Audio
             if (outcome is not BookMutationOutcome.Committed)
             {
                 Restore(destination, superseded, hadPreviousTake, paragraphItemId);
-                var failure = Uncommitted(outcome, paragraphItemId, ct);
+                var failure = UncommittedArtifact.AsException(
+                    outcome, $"item {paragraphItemId} audio", ct);
                 logger.LogWarning("Item {Id} audio was not recorded: {Reason}", paragraphItemId, failure.Message);
                 throw failure;
             }
@@ -137,25 +138,5 @@ namespace Read2Me.Services.Audio
             }
         }
 
-        /// <summary>
-        /// The write outcome as the exception the queue reads. Cancellation keeps its own type
-        /// because the processor drops a cancelled item rather than reporting it as a failure.
-        /// </summary>
-        private static Exception Uncommitted(
-            BookMutationOutcome outcome, Guid paragraphItemId, CancellationToken ct)
-        {
-            var reason = outcome switch
-            {
-                BookMutationOutcome.Rejected rejected => rejected.Message,
-                // Not reachable through RecordParagraphItemAudioMutation, which reports a recorded
-                // take whether or not any column moved. Kept because the outcome type is closed and
-                // an adapter that silently returned a path here would name audio it had discarded.
-                _ => "the Book recorded no change.",
-            };
-
-            return outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled }
-                ? new OperationCanceledException(reason, ct)
-                : new InvalidOperationException($"Recording audio for item {paragraphItemId} failed: {reason}");
-        }
     }
 }

@@ -37,9 +37,18 @@ public static class LegacyBookCommandBridge
         this BookMutations mutations,
         BookMutation mutation,
         CancellationToken ct,
+        params BookMutationRejection[] answeredAsNull) =>
+        Flatten(await mutations.CommitAsync(mutation, ct), ct, answeredAsNull);
+
+    /// <summary>
+    /// The flattening itself, for the handlers whose write goes through an artifact adapter rather
+    /// than straight to <see cref="BookMutations"/> and so already holds the outcome.
+    /// </summary>
+    public static Guid? Flatten(
+        BookMutationOutcome outcome,
+        CancellationToken ct,
         params BookMutationRejection[] answeredAsNull)
     {
-        var outcome = await mutations.CommitAsync(mutation, ct);
         return outcome switch
         {
             BookMutationOutcome.Committed committed => committed.Receipt.Effects.CreatedId,

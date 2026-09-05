@@ -11,6 +11,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
 using Xunit;
@@ -35,7 +36,7 @@ namespace Read2Me.Tests.State
         }
 
         private static CharacterPresenter CreatePresenter(
-            IAudioPipeline? audioPipeline = null,
+            IVoiceAudioWriter? voiceAudio = null,
             IBookCommandHandler? commandHandler = null,
             EventBroadcaster<LlmStreamEvent>? llmEvents = null,
             IProjectReader? projectReader = null)
@@ -44,11 +45,11 @@ namespace Read2Me.Tests.State
             reader.GetCharactersWithAliasesAsync(Folder)
                 .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Character>());
 
-            var pipeline = audioPipeline ?? Substitute.For<IAudioPipeline>();
+            var recorder = voiceAudio ?? Substitute.For<IVoiceAudioWriter>();
             var cmd = commandHandler ?? Substitute.For<IBookCommandHandler>();
 
             var orchestrator = new VoiceOrchestrator(
-                audioPipeline: pipeline,
+                voiceAudio: recorder,
                 transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
                 voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
                 transcriptionSettings: new FakeTranscriptionSettings(),
@@ -103,11 +104,11 @@ namespace Read2Me.Tests.State
             var voiceId = Guid.NewGuid();
             var charId = Guid.NewGuid();
 
-            var pipeline = Substitute.For<IAudioPipeline>();
-            pipeline.StoreAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
+            var recorder = Substitute.For<IVoiceAudioWriter>();
+            recorder.RecordUploadedAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
                 .Returns("voices/test.wav");
 
-            var presenter = CreatePresenter(audioPipeline: pipeline);
+            var presenter = CreatePresenter(voiceAudio: recorder);
             await presenter.LoadAsync(Folder);
 
             var tokenBefore = presenter.AudioToken(voiceId);
@@ -125,11 +126,11 @@ namespace Read2Me.Tests.State
             var voiceId = Guid.NewGuid();
             var charId = Guid.NewGuid();
 
-            var pipeline = Substitute.For<IAudioPipeline>();
-            pipeline.StoreAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
+            var recorder = Substitute.For<IVoiceAudioWriter>();
+            recorder.RecordUploadedAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
                 .Returns("voices/test.wav");
 
-            var presenter = CreatePresenter(audioPipeline: pipeline);
+            var presenter = CreatePresenter(voiceAudio: recorder);
             await presenter.LoadAsync(Folder);
 
             var t0 = presenter.AudioToken(voiceId);
@@ -148,11 +149,11 @@ namespace Read2Me.Tests.State
             var voiceId = Guid.NewGuid();
             var charId = Guid.NewGuid();
 
-            var pipeline = Substitute.For<IAudioPipeline>();
-            pipeline.StoreAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
+            var recorder = Substitute.For<IVoiceAudioWriter>();
+            recorder.RecordUploadedAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
                 .Returns("voices/uploaded.wav");
 
-            var presenter = CreatePresenter(audioPipeline: pipeline);
+            var presenter = CreatePresenter(voiceAudio: recorder);
             await presenter.LoadAsync(Folder);
 
             var tokenBefore = presenter.AudioToken(voiceId);
@@ -168,11 +169,11 @@ namespace Read2Me.Tests.State
             var voiceId = Guid.NewGuid();
             var charId = Guid.NewGuid();
 
-            var pipeline = Substitute.For<IAudioPipeline>();
-            pipeline.StoreAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
+            var recorder = Substitute.For<IVoiceAudioWriter>();
+            recorder.RecordUploadedAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
                 .ThrowsAsync(new IOException("upload failed"));
 
-            var presenter = CreatePresenter(audioPipeline: pipeline);
+            var presenter = CreatePresenter(voiceAudio: recorder);
             await presenter.LoadAsync(Folder);
 
             var tokenBefore = presenter.AudioToken(voiceId);
@@ -202,7 +203,7 @@ namespace Read2Me.Tests.State
             var cmd = commandHandler ?? Substitute.For<IBookCommandHandler>();
 
             var orchestrator = new VoiceOrchestrator(
-                audioPipeline: Substitute.For<IAudioPipeline>(),
+                voiceAudio: Substitute.For<IVoiceAudioWriter>(),
                 transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
                 voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
                 transcriptionSettings: new FakeTranscriptionSettings(),
@@ -412,7 +413,7 @@ namespace Read2Me.Tests.State
                 .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Voice> { selectedVoice });
 
             var orchestrator = new VoiceOrchestrator(
-                audioPipeline: Substitute.For<IAudioPipeline>(),
+                voiceAudio: Substitute.For<IVoiceAudioWriter>(),
                 transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
                 voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
                 transcriptionSettings: new FakeTranscriptionSettings(),

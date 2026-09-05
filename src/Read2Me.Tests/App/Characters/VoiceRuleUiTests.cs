@@ -11,6 +11,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
 using Xunit;
@@ -105,7 +106,7 @@ namespace Read2Me.Tests.App.Characters
                 reader,
                 Substitute.For<IBookCommandHandler>(),
                 new VoiceOrchestrator(
-                    Substitute.For<IAudioPipeline>(),
+                    Substitute.For<IVoiceAudioWriter>(),
                     Substitute.For<ITranscriptionClientResolver>(),
                     Substitute.For<IVoiceAudioGenerator>(),
                     new FakeTranscriptionSettings(),
@@ -144,7 +145,7 @@ namespace Read2Me.Tests.App.Characters
             var presenter = new CharacterPresenter(
                 reader, handler,
                 new VoiceOrchestrator(
-                    Substitute.For<IAudioPipeline>(),
+                    Substitute.For<IVoiceAudioWriter>(),
                     Substitute.For<ITranscriptionClientResolver>(),
                     Substitute.For<IVoiceAudioGenerator>(),
                     new FakeTranscriptionSettings(),
