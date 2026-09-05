@@ -146,16 +146,6 @@ namespace Read2Me.Services
             _logger.LogInformation("Cover image removed for project '{Folder}'", folderId);
         }
 
-        public async Task SetNarratorOnlyModeAsync(ProjectFolderId folderId, bool value)
-        {
-            var db = await _session.OpenAsync(folderId);
-            var entity = await db.Projects.SingleOrDefaultAsync();
-            if (entity == null)
-                throw new ProjectNotFoundException(folderId.Value);
-            entity.NarratorOnlyMode = value;
-            await db.SaveChangesAsync();
-        }
-
         public void DeleteProject(ProjectFolderId folderId)
         {
             _session.Evict(folderId);

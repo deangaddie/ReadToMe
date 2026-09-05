@@ -10,7 +10,6 @@ namespace Read2Me.Services
             string originalFileName, Stream fileStream, BookFileType fileType);
         Task SaveCoverImageAsync(ProjectFolderId folderId, string filename, Stream stream);
         Task DeleteCoverImageAsync(ProjectFolderId folderId);
-        Task SetNarratorOnlyModeAsync(ProjectFolderId folderId, bool value);
         void DeleteProject(ProjectFolderId folderId);
     }
 }

@@ -210,6 +210,33 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.DismissAudioReviewMutation>,
             Mutations.Implementations.DismissAudioReviewMutationImplementation>();
+        // Character, narrator and policy lifecycles — Book-wide by reach, however small the write
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.CreateCharacterMutation>,
+            Mutations.Implementations.CreateCharacterMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.RenameCharacterMutation>,
+            Mutations.Implementations.RenameCharacterMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.AddCharacterAliasMutation>,
+            Mutations.Implementations.AddCharacterAliasMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.RemoveCharacterAliasMutation>,
+            Mutations.Implementations.RemoveCharacterAliasMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.MergeCharactersMutation>,
+            Mutations.Implementations.MergeCharactersMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DeleteCharacterMutation>,
+            Mutations.Implementations.DeleteCharacterMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetNarratorCharacterMutation>,
+            Mutations.Implementations.SetNarratorCharacterMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetNarratorOnlyModeMutation>,
+            Mutations.Implementations.SetNarratorOnlyModeMutationImplementation>();
+        // The roster's read-plus-write seam, registered here because CreateCharacterHandler needs it.
+        services.TryAddScoped<Characters.CharacterResolver>();
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 

@@ -222,3 +222,66 @@ public sealed record SetAudioReviewMutation(
 /// being regenerated. A fresh failure resets it to needs-review.
 /// </summary>
 public sealed record DismissAudioReviewMutation(ProjectFolderId FolderId, Guid ItemId) : BookMutation(FolderId);
+
+// ── character, narrator and policy lifecycles ────────────────────────────────
+// The roster and who narrates. Nothing here names a Paragraph, and almost everything here changes
+// what a Paragraph *means*: a merge moves every line the merged character spoke, a delete hands its
+// lines back to the queue, a narrator link changes whose voice the narration is read in, and
+// NarratorOnlyMode changes which items are audio-eligible at all. So this family is reconciled by
+// rebuilding rather than by rereading named rows — the effect is Book-wide even when the write is
+// one row.
+//
+// The seed Narrator row is protected throughout. It is not a character someone invented, it is the
+// unlinked state of narration (ADR-0004), so renaming, deleting or merging it is a refusal rather
+// than a no-op.
+
+/// <summary>
+/// Creates a Character, unless one already answers to <c>CharacterName</c> by canonical name or alias — the
+/// roster is keyed by what a speaker is called, so creating a name that already resolves changes
+/// nothing.
+/// </summary>
+public sealed record CreateCharacterMutation(ProjectFolderId FolderId, string CharacterName) : BookMutation(FolderId);
+
+/// <summary>Renames a Character. Its aliases, Voices and lines are untouched.</summary>
+public sealed record RenameCharacterMutation(
+    ProjectFolderId FolderId, Guid CharacterId, string CharacterName) : BookMutation(FolderId);
+
+/// <summary>Gives a Character another name it answers to, if it does not answer to it already.</summary>
+public sealed record AddCharacterAliasMutation(
+    ProjectFolderId FolderId, Guid CharacterId, string AliasName) : BookMutation(FolderId);
+
+/// <summary>Takes one alias away from whichever Character owns it.</summary>
+public sealed record RemoveCharacterAliasMutation(ProjectFolderId FolderId, Guid AliasId) : BookMutation(FolderId);
+
+/// <summary>
+/// Declares two Characters to be one person: every line, alias and — when asked — the merged name
+/// itself moves to the survivor, the merged Character's Voices and Voice Rules die with it, and a
+/// narrator link on the merged side follows the survivor.
+/// </summary>
+public sealed record MergeCharactersMutation(
+    ProjectFolderId FolderId,
+    Guid SurvivorId,
+    Guid MergedId,
+    bool AddNameAsAlias) : BookMutation(FolderId);
+
+/// <summary>
+/// Removes a Character. Its lines survive as unattributed dialog for the queue to answer again; its
+/// aliases, Voices and Voice Rules do not, and a narrator link to it is cleared in the same
+/// transaction so the delete and the unlink cannot half-land.
+/// </summary>
+public sealed record DeleteCharacterMutation(ProjectFolderId FolderId, Guid CharacterId) : BookMutation(FolderId);
+
+/// <summary>
+/// Says which Character narrates this Book, or unlinks narration from the roster with null
+/// (ADR-0004). The seed Narrator row cannot narrate itself — that <em>is</em> the unlinked state.
+/// </summary>
+public sealed record SetNarratorCharacterMutation(
+    ProjectFolderId FolderId, Guid? CharacterId) : BookMutation(FolderId);
+
+/// <summary>
+/// Turns the Book-wide narrator-only policy on or off. It changes no row on any item and still
+/// changes what every item is: which items the Audio Queue may speak, and therefore the audio
+/// denominators and the Audio Item Selection's eligibility.
+/// </summary>
+public sealed record SetNarratorOnlyModeMutation(
+    ProjectFolderId FolderId, bool Enabled) : BookMutation(FolderId);

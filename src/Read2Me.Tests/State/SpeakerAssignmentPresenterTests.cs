@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor;
@@ -83,8 +84,7 @@ namespace Read2Me.Tests.State
                 NullLogger<BookViewProjection>.Instance);
 
             _presenter = new BookHierarchyPresenter(
-                _reader, _projection, _circuit.ServiceProvider.GetRequiredService<IBookCommandHandler>(),
-                new FakeBookUseCases(), selectionState, audioSelectionState, _dialogs, _snackbar,
+                _reader, _projection, new FakeBookUseCases(), selectionState, audioSelectionState, _dialogs, _snackbar,
                 _characterQueue, new AudioReviewService(),
                 new NodeStatusService(new FakeParagraphQueueProbe()));
         }
@@ -151,6 +151,60 @@ namespace Read2Me.Tests.State
             var args = call.GetArguments();
             var parameters = (DialogParameters<Read2Me.App.Shared.ConfirmDialog>)args[1]!;
             return ((string)args[0]!, (string)parameters["Message"]!, (string)parameters["ConfirmText"]!);
+        }
+
+        private void StubAddCharacterDialog(string? name)
+        {
+            var dialogRef = Substitute.For<IDialogReference>();
+            dialogRef.Result.Returns(Task.FromResult<DialogResult?>(
+                name is null ? DialogResult.Cancel() : DialogResult.Ok(name)));
+
+            _dialogs.ShowAsync<Read2Me.App.Shared.Characters.AddCharacterDialog>(Arg.Any<string>())
+                .Returns(Task.FromResult(dialogRef));
+        }
+
+        // ── inventing a speaker from the chip menu ───────────────────────────
+
+        [Fact]
+        public async Task AddCharacter_CreatesThem_AndTheRosterOnScreenAlreadyKnows()
+        {
+            var b = await SeedAsync();
+            await OpenWithChapterAsync(b);
+            StubAddCharacterDialog("  Carol  ");
+
+            var newId = await _presenter.AddCharacterAsync(_folder);
+
+            Assert.NotNull(newId);
+            // No refresh of its own: the mutation's reconciliation republished the roster, which is
+            // what the chip menu about to stamp this id renders from.
+            Assert.Equal("Carol", _presenter.Characters.Single(c => c.Id == newId).Name);
+        }
+
+        /// <summary>
+        /// Typing a name the Book already has creates nobody, and the gesture still has to answer with
+        /// an id — the caller goes straight on to stamping the row with it.
+        /// </summary>
+        [Fact]
+        public async Task AddCharacter_ANameTheRosterAlreadyAnswersTo_AnswersWithWhoeverGoesByIt()
+        {
+            var b = await SeedAsync();
+            await OpenWithChapterAsync(b);
+            StubAddCharacterDialog("alice");
+
+            Assert.Equal(AliceId, await _presenter.AddCharacterAsync(_folder));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(1, await verify.Characters.CountAsync(c => c.Name == "Alice"));
+        }
+
+        [Fact]
+        public async Task AddCharacter_Cancelled_WritesNothing()
+        {
+            var b = await SeedAsync();
+            await OpenWithChapterAsync(b);
+            StubAddCharacterDialog(null);
+
+            Assert.Null(await _presenter.AddCharacterAsync(_folder));
         }
 
         // ── the chip front door ──────────────────────────────────────────────

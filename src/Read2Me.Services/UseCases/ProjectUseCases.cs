@@ -1,9 +1,11 @@
 using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.UseCases
 {
-    public class ProjectUseCases(IProjectCatalogReader reader, IProjectWriter writer)
+    public class ProjectUseCases(
+        IProjectCatalogReader reader, IProjectWriter writer, BookMutations mutations)
     {
         public async Task<Result<string>> CreateAsync(
             string title, string bookTitle, string author,
@@ -60,12 +62,25 @@ namespace Read2Me.Services.UseCases
             catch (Exception) { return Result.Fail("Failed to delete cover image."); }
         }
 
+        /// <summary>
+        /// Flips the Book-wide narrator-only policy through <see cref="BookMutations"/>, so
+        /// every open Book View reconciles the audio eligibility, denominators and Audio Item
+        /// Selection the flip moves — without anyone navigating away and back (ADR 0007).
+        /// <para>
+        /// A flip to the value already stored is a success that changed nothing, which is exactly
+        /// what the switch in front of the user is already showing.
+        /// </para>
+        /// </summary>
         public async Task<Result> SetNarratorOnlyModeAsync(string folderName, bool value)
         {
             try
             {
-                await writer.SetNarratorOnlyModeAsync(new ProjectFolderId(folderName), value);
-                return Result.Ok();
+                var outcome = await mutations.CommitAsync(
+                    new SetNarratorOnlyModeMutation(new ProjectFolderId(folderName), value));
+
+                return outcome is BookMutationOutcome.Rejected rejected
+                    ? Result.Fail(rejected.Message)
+                    : Result.Ok();
             }
             catch (Exception) { return Result.Fail("Failed to save narrator-only setting."); }
         }

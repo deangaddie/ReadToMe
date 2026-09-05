@@ -1651,6 +1651,148 @@ namespace Read2Me.Tests.State.Projection
             Assert.Equal(0, published);
         }
 
+        // ── characters, narrator and policy ──────────────────────────────────
+
+        [Fact]
+        public async Task MutateAsync_Rename_RepublishesTheRosterEverythingLabelsRowsFrom()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            var outcome = await sut.MutateAsync(
+                new RenameCharacterMutation(_folder, b.CharacterId("alice"), "Alicia"));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal("Alicia", snapshot.Characters.Single(c => c.Id == b.CharacterId("alice")).Name);
+        }
+
+        [Fact]
+        public async Task MutateAsync_NarratorLink_RepublishesWhoNarratesTheBook()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            Assert.False(sut.Snapshot!.Narrator.IsLinked);
+
+            var outcome = await sut.MutateAsync(
+                new SetNarratorCharacterMutation(_folder, b.CharacterId("alice")));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal(b.CharacterId("alice"), snapshot.Narrator.CharacterId);
+            Assert.Equal("Alice", snapshot.Narrator.DisplayName);
+        }
+
+        [Fact]
+        public async Task MutateAsync_NarratorOnlyMode_RepublishesThePolicyDerivedStateHangsOff()
+        {
+            await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            Assert.False(sut.Snapshot!.NarratorOnlyMode);
+
+            var outcome = await sut.MutateAsync(new SetNarratorOnlyModeMutation(_folder, true));
+
+            Assert.True(Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot.NarratorOnlyMode);
+        }
+
+        /// <summary>
+        /// A delete hands the merged character's lines back to the queue, so the rows on screen must
+        /// stop naming her — and the Folder Selection has to be recomputed rather than assumed, even
+        /// though this particular paragraph survives it: unattributed dialog is still attributable.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_CharacterDelete_ClearsTheSpeakersOnScreenAndRechecksTheSelection()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+            await sut.ApplyAsync(new BookViewIntent.SetParagraphSelected(
+                b.ParagraphId("p1"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")), Selected: true));
+
+            var outcome = await sut.MutateAsync(new DeleteCharacterMutation(_folder, b.CharacterId("alice")));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.DoesNotContain(snapshot.Characters, c => c.Id == b.CharacterId("alice"));
+            Assert.Null(snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")]
+                .Single().Items.Single(i => i.Id == b.ItemId("i1")).CharacterId);
+            Assert.Equal([b.ParagraphId("p1")], snapshot.Selections.ParagraphIds);
+        }
+
+        [Fact]
+        public async Task MutateAsync_CharacterMerge_MovesTheLinesOnScreenToTheSurvivor()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+
+            var outcome = await sut.MutateAsync(new MergeCharactersMutation(
+                _folder, b.CharacterId("bob"), b.CharacterId("alice"), AddNameAsAlias: false));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.DoesNotContain(snapshot.Characters, c => c.Id == b.CharacterId("alice"));
+            Assert.Equal(b.CharacterId("bob"), snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")]
+                .Single().Items.Single(i => i.Id == b.ItemId("i1")).CharacterId);
+        }
+
+        /// <summary>
+        /// The reader is on the Characters tab of a second circuit while this Book View is open. A
+        /// rename there has to reach the labels here without anyone navigating — and quietly, because
+        /// a roster change is neither structural nor a lost selection.
+        /// </summary>
+        [Fact]
+        public async Task AnotherCircuitsRename_ReachesThisBookViewSilently()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var announced = 0;
+            sut.ExternalUpdateApplied += update => { if (update.Announce) announced++; };
+
+            var committed = await RemoteWriter().CommitAsync(
+                new RenameCharacterMutation(_folder, b.CharacterId("alice"), "Alicia"));
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision, "the rename never reached this Book View");
+
+            Assert.Equal("Alicia", sut.Snapshot!.Characters.Single(c => c.Id == b.CharacterId("alice")).Name);
+            Assert.Equal(0, announced);
+        }
+
+        [Fact]
+        public async Task AnotherCircuitsAliasChange_ReachesThisBookView()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            var committed = await RemoteWriter().CommitAsync(
+                new AddCharacterAliasMutation(_folder, b.CharacterId("alice"), "Ally"));
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision, "the alias never reached this Book View");
+        }
+
+        [Fact]
+        public async Task AnotherCircuitsNarratorLink_ReachesThisBookView()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            await RemoteWriter().CommitAsync(
+                new SetNarratorCharacterMutation(_folder, b.CharacterId("bob")));
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Narrator.CharacterId == b.CharacterId("bob"),
+                "the narrator link never reached this Book View");
+        }
+
         // ── test doubles ─────────────────────────────────────────────────────
         /// <summary>
         /// The circuit's selection writer. The real one is <c>BookSelectionCoordinator</c>, which

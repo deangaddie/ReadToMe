@@ -32,7 +32,6 @@ namespace Read2Me.App.State
     public class BookHierarchyPresenter(
         IProjectReader reader,
         BookViewProjection projection,
-        IBookCommandHandler commandHandler,
         BookUseCases bookUseCases,
         BookSelectionState selectionState,
         AudioItemSelectionState audioSelectionState,
@@ -398,10 +397,8 @@ namespace Read2Me.App.State
                 return;
             }
 
-            // Resolved before the confirm, not after, because the dialog quotes the character's name:
-            // on the add-new path the id can be newer than the roster. A read, so a cancelled confirm
-            // still writes nothing.
-            var character = await ResolveCharacterAsync(folderId, characterId);
+            // Resolved before the confirm, not after, because the dialog quotes the character's name.
+            var character = ResolveCharacter(characterId);
 
             var items = preview.CharacterItems;
             var paras = preview.ParagraphsWithCharacterItems;
@@ -437,20 +434,17 @@ namespace Read2Me.App.State
         }
 
         /// <summary>
-        /// The roster entry behind a picked id, rebuilding the Book View when the id is newer than the
-        /// roster — the add-new path, where the character was created after the snapshot was
-        /// published. Null for a clear.
+        /// The roster entry behind a picked id, straight off the published snapshot. Null for a clear,
+        /// and null too for an id the roster cannot explain — which the confirm wording handles
+        /// rather than reaching for a read.
+        /// <para>
+        /// It needs no refresh of its own even on the add-new path: creating a Character is a Book
+        /// mutation, so the roster this reads was republished by the reconciliation that gesture
+        /// already waited for (ADR 0007).
+        /// </para>
         /// </summary>
-        private async Task<Character?> ResolveCharacterAsync(ProjectFolderId folderId, Guid? characterId)
-        {
-            if (characterId is not { } id) return null;
-
-            var character = Characters.FirstOrDefault(c => c.Id == id);
-            if (character is not null) return character;
-
-            await projection.RebuildAsync();
-            return Characters.FirstOrDefault(c => c.Id == id);
-        }
+        private Character? ResolveCharacter(Guid? characterId) =>
+            characterId is { } id ? Characters.FirstOrDefault(c => c.Id == id) : null;
 
         private static string BulkConfirmTitle(string? name) =>
             name is null ? "Clear speakers in selection" : $"Assign {name} to selection";
@@ -471,6 +465,16 @@ namespace Read2Me.App.State
         /// <summary>Noun-suffix pluralisation only, the idiom the confirm wordings are written in.</summary>
         private static string Plural(int n) => n == 1 ? "" : "s";
 
+        /// <summary>
+        /// Adds a Character from the chip menu and answers with the id to assign, so the gesture that
+        /// invented a speaker can go straight on to stamping them.
+        /// <para>
+        /// A name the roster already answers to — its own or an alias — creates nobody and is not a
+        /// failure: the id wanted is whoever already goes by it, and finding them costs the one read
+        /// that path needs, because the snapshot's roster carries no aliases. Nothing is refreshed
+        /// here: the mutation's own reconciliation already did (ADR 0007).
+        /// </para>
+        /// </summary>
         public async Task<Guid?> AddCharacterAsync(ProjectFolderId folderId)
         {
             var dialog = await dialogService.ShowAsync<Shared.Characters.AddCharacterDialog>("Add Character");
@@ -478,9 +482,15 @@ namespace Read2Me.App.State
             if (result?.Canceled != false) return null;
             if (result.Data is not string name || string.IsNullOrWhiteSpace(name)) return null;
 
-            var newId = await commandHandler.ExecuteAsync(new CreateCharacterCommand(folderId, name.Trim()));
-            await projection.RebuildAsync();
-            return newId as Guid?;
+            var trimmed = name.Trim();
+            return await MutateAsync(new CreateCharacterMutation(folderId, trimmed)) switch
+            {
+                BookViewMutationOutcome.Coherent coherent => coherent.Receipt.Effects.CreatedId,
+                BookViewMutationOutcome.NoChange =>
+                    (await reader.GetCharactersWithAliasesAsync(folderId))
+                        .FirstOrDefault(c => CharacterResolver.Matches(c, trimmed))?.Id,
+                _ => null,
+            };
         }
 
         public Task AddBookTitleAsync(ProjectFolderId folderId) =>

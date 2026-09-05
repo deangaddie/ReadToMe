@@ -200,7 +200,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<CharacterAttributionService>();
         services.AddScoped<IChainStep>(sp => sp.GetRequiredService<CharacterAttributionService>());
         services.AddScoped<AttributionEscalationChain>();
-        services.AddScoped<CharacterResolver>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddScoped<CharacterPresenter>();
         services.AddScoped<Read2Me.App.State.VoicePromptGenerationState>();
