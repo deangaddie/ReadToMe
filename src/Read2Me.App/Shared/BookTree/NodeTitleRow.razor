@@ -75,8 +75,7 @@
     }
     <BookNodeMenu Spec="@Spec"
                  IsFirst="IsFirst"
-                 IsLast="IsLast"
-                 OnChanged="OnChanged" />
+                 IsLast="IsLast" />
 </MudStack>
 
 @code {
@@ -87,7 +86,6 @@
     [Parameter, EditorRequired] public BookNodeMenuSpec Spec { get; set; } = null!;
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
 
     protected override void OnInitialized()
     {

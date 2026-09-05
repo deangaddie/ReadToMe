@@ -36,8 +36,15 @@ public enum BookFacets
     Voices = 1 << 7,
     VoiceRules = 1 << 8,
     ProjectPolicy = 1 << 9,
+    /// <summary>
+    /// A Volume, Part or Chapter's own title. Not <see cref="Structure"/>: no node was created,
+    /// deleted or moved, so nothing a reader is looking at is about to stop existing. It is its own
+    /// facet rather than part of <see cref="ItemText"/> because a title does not live on a Paragraph
+    /// — a reader holds it in the hierarchy branch it loaded, so naming rows cannot reread it.
+    /// </summary>
+    NodeTitle = 1 << 10,
     All = Structure | ItemText | Attribution | Audio | Reviews
-        | Characters | Narrator | Voices | VoiceRules | ProjectPolicy,
+        | Characters | Narrator | Voices | VoiceRules | ProjectPolicy | NodeTitle,
 }
 
 public enum BookStructuralRelationKind
@@ -70,6 +77,13 @@ public sealed record BookMutationEffects
     // One list per kind of identifier a migrated family actually reports. Each producer family adds
     // the list it needs as it lands; an empty list means "this mutation touched none", which is why
     // a family that cannot enumerate its effects says so through Scope instead of leaving them bare.
+    /// <summary>
+    /// Volumes, Parts and Chapters whose own data — currently their title — changed. No reader
+    /// refreshes from these: a title lives in a loaded hierarchy branch, not on a row, so
+    /// <see cref="BookFacets.NodeTitle"/> rebuilds. They are on the receipt because a receipt states
+    /// what a commit actually touched, not what a reader happens to be able to use.
+    /// </summary>
+    public IReadOnlyList<Guid> NodeIds { get; init; } = [];
     public IReadOnlyList<Guid> ParagraphIds { get; init; } = [];
     public IReadOnlyList<Guid> ParagraphItemIds { get; init; } = [];
     public IReadOnlyList<BookStructuralRelation> Structural { get; init; } = [];

@@ -133,11 +133,11 @@ namespace Read2Me.Tests.Services.NodeStatus
         }
 
         // ---------------------------------------------------------------
-        // OnReviewChanged
+        // Review roll-up
         // ---------------------------------------------------------------
 
         [Fact]
-        public void OnReviewChanged_True_NodeReviewCountIsOne()
+        public void SeededReview_RollsUpToEveryAncestor()
         {
             var svc = new NodeStatusService(new FakeParagraphQueueProbe());
             var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
@@ -146,47 +146,6 @@ namespace Read2Me.Tests.Services.NodeStatus
             Assert.Equal(1, svc.StatusForNode(Folder, ch).Review);
             Assert.Equal(1, svc.StatusForNode(Folder, part).Review);
             Assert.Equal(1, svc.StatusForNode(Folder, vol).Review);
-        }
-
-        [Fact]
-        public void OnReviewChanged_False_NodeReviewDropsToZero()
-        {
-            var svc = new NodeStatusService(new FakeParagraphQueueProbe());
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [new ParagraphStatusSeedRow(para, ch, part, vol, Unattributed: 0, MissingAudio: 0, Review: 1)]);
-
-            svc.OnReviewChanged(Folder, para, needsReview: false);
-
-            Assert.Equal(0, svc.StatusForNode(Folder, ch).Review);
-            Assert.Equal(0, svc.StatusForNode(Folder, part).Review);
-            Assert.Equal(0, svc.StatusForNode(Folder, vol).Review);
-        }
-
-        [Fact]
-        public void OnReviewChanged_True_NodeReviewIncrementsFromZero()
-        {
-            var svc = new NodeStatusService(new FakeParagraphQueueProbe());
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [new ParagraphStatusSeedRow(para, ch, part, vol, Unattributed: 0, MissingAudio: 0, Review: 0)]);
-
-            svc.OnReviewChanged(Folder, para, needsReview: true);
-
-            Assert.Equal(1, svc.StatusForNode(Folder, ch).Review);
-        }
-
-        [Fact]
-        public void OnReviewChanged_FiresChanged()
-        {
-            var svc = new NodeStatusService(new FakeParagraphQueueProbe());
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var para = Guid.NewGuid();
-            svc.Seed(Folder, [new ParagraphStatusSeedRow(para, ch, part, vol, Unattributed: 0, MissingAudio: 0, Review: 1)]);
-
-            int fired = 0;
-            svc.Changed += () => fired++;
-
-            svc.OnReviewChanged(Folder, para, needsReview: false);
-
-            Assert.Equal(1, fired);
         }
 
         // ---------------------------------------------------------------

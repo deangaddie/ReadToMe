@@ -11,8 +11,7 @@
                       Title="@(Chapter.Title ?? "Chapter")"
                       Spec="@BookNodeMenuSpecs.ForChapter(FolderId, Chapter)"
                       IsFirst="IsFirst"
-                      IsLast="IsLast"
-                      OnChanged="OnChanged" />
+                      IsLast="IsLast" />
     </TitleContent>
     <ChildContent>
         @if (Presenter.IsExpanding(Chapter.Id))
@@ -33,8 +32,7 @@
                                   PartId="@PartId"
                                   VolumeId="@VolumeId"
                                   IsFirst="@isFirst"
-                                  IsLast="@isLast"
-                                  OnChanged="OnChanged" />
+                                  IsLast="@isLast" />
                 }
             </MudStack>
         }
@@ -48,7 +46,6 @@
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
 
     EventCallback<bool> ChapterExpandCb =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, Chapter.Id, b));

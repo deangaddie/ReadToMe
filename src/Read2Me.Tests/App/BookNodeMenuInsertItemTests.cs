@@ -25,7 +25,7 @@ public class BookNodeMenuInsertItemTests
         new() { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Text = "Hello there." };
 
     static BookNodeMenuSpec SpecFor(ParagraphItem item) =>
-        BookNodeMenuSpecs.ForParagraphItem(Folder, item, null!);
+        BookNodeMenuSpecs.ForParagraphItem(Folder, item);
 
     /// <summary>A MenuActions whose text prompt answers with <paramref name="answer"/>, or cancels when null.</summary>
     static (MenuActions actions, DialogParameters<EditTextDialog>?[] shown) PromptingWith(string? answer)
@@ -43,7 +43,7 @@ public class BookNodeMenuInsertItemTests
                    return Task.FromResult(dialogRef);
                });
 
-        return (new MenuActions(dialogs, Substitute.For<IBookCommandHandler>()), captured);
+        return (new MenuActions(dialogs), captured);
     }
 
     // ---------------------------------------------------------------

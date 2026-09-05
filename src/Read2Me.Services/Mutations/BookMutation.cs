@@ -286,6 +286,54 @@ public sealed record SetNarratorCharacterMutation(
 public sealed record SetNarratorOnlyModeMutation(
     ProjectFolderId FolderId, bool Enabled) : BookMutation(FolderId);
 
+
+// ── manual and AI book edits ─────────────────────────────────────────────────
+// What a person rewrites by hand, and what an approved AI edit program rewrites for them. The two
+// halves are one family because they write the same two things — a node's title and an item's text
+// — and an AI edit that reached item text by its own path is exactly how the stale-audio rule came
+// to be closed in one corner and open in the other.
+//
+// A rewritten item's audio is discarded and any verdict on it deleted: the WAV speaks words the
+// item no longer has, and because the item still *has* audio it is not Generatable, so a "select
+// needs audio" pass skips it and the mismatch assembles into the exported m4b (ADR-0006). The
+// review is deleted rather than dismissed — it judged audio that no longer exists, and Dismissed
+// means "a human decided this was fine", which would wrongly suppress the verdict on whatever is
+// generated next.
+//
+// A title is not on a Paragraph, so these report it as its own facet and let the reader rebuild.
+
+/// <summary>Rewrites a Volume's title.</summary>
+public sealed record UpdateVolumeTitleMutation(
+    ProjectFolderId FolderId, Guid VolumeId, string Title) : BookMutation(FolderId);
+
+/// <summary>Rewrites a Part's title.</summary>
+public sealed record UpdatePartTitleMutation(
+    ProjectFolderId FolderId, Guid PartId, string Title) : BookMutation(FolderId);
+
+/// <summary>Rewrites a Chapter's title.</summary>
+public sealed record UpdateChapterTitleMutation(
+    ProjectFolderId FolderId, Guid ChapterId, string Title) : BookMutation(FolderId);
+
+/// <summary>
+/// Rewrites one ParagraphItem's text, discarding the audio that spoke the old words and the verdict
+/// on it. Text that comes back unchanged keeps both.
+/// </summary>
+public sealed record UpdateParagraphItemTextMutation(
+    ProjectFolderId FolderId, Guid ItemId, string? Text) : BookMutation(FolderId);
+
+/// <summary>
+/// Applies an approved AI edit program as one Book mutation, however many titles and items it
+/// rewrites. One commit rather than one per row is what keeps a reader from watching a Book edited
+/// in front of them a row at a time, half of it under the old wording.
+/// <para>
+/// A target the Book no longer contains is skipped rather than refused: the program was planned
+/// against a Book the user has been reviewing for minutes and may have edited since, and the rows
+/// that still resolve are the ones they approved.
+/// </para>
+/// </summary>
+public sealed record ApplyBookEditsMutation(
+    ProjectFolderId FolderId, IReadOnlyList<BookEditItem> Edits) : BookMutation(FolderId);
+
 // ── Voice and Voice Rule lifecycles ──────────────────────────────────────────
 // The Voices a Character can be read in, and the positional rules that pick between them. Nothing
 // here names a Paragraph and nothing here writes one: a Voice row and a Voice Rule row are the only

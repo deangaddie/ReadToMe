@@ -243,19 +243,6 @@ namespace Read2Me.App.State
             await LoadAsync(folderId);
         }
 
-        /// <summary>
-        /// Rebuilds the Book View from the persisted Book after a write made elsewhere on the page.
-        /// The interim path only: from ticket 04 on a mutation's receipt reconciles the projection and
-        /// nothing asks for this by hand.
-        /// </summary>
-        public async Task RefreshAsync()
-        {
-            if (projection.Folder is not { } folderId) return;
-
-            SeedDerivedServices(folderId, await projection.RebuildAsync());
-            NotifyStateChanged();
-        }
-
         public Task ReadBookAsync(ProjectFolderId folderId) =>
             ExecuteAndReloadAsync(folderId, () => bookUseCases.ImportAsync(folderId), reset: false);
 
@@ -335,30 +322,6 @@ namespace Read2Me.App.State
             return item is null
                 ? SetParagraphCharacterAsync(folderId, paragraph, characterId)
                 : SetItemCharacterAsync(folderId, item, characterId);
-        }
-
-        /// <summary>
-        /// Mirrors, in the loaded tree, what <c>UpdateParagraphItemTextCommand</c> has just written:
-        /// the edited item's audio is gone and any verdict on it deleted. Called only after the
-        /// command executed and only when the text actually changed, so an edit that changed nothing
-        /// leaves good audio and its review alone.
-        /// <para>
-        /// Without this the row keeps rendering a WAV the database no longer records — the audio
-        /// checkbox stays disabled, a "select needs audio" pass keeps skipping the item, and the
-        /// chapter's audio-remaining badge stays a count too low until the next full load.
-        /// </para>
-        /// </summary>
-        public async Task NoteItemTextEditedAsync(ProjectFolderId folderId, ParagraphItem item)
-        {
-            item.AudioFileName = null;
-            audioReviews.Clear(folderId, item.Id);
-            RecomputeParagraphReview(folderId, item.Id);
-
-            // One read, same as a speaker flip: the audio denominator moves and there is no
-            // increment-side patch on NodeStatusService to move it with.
-            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
-
-            NotifyStateChanged();
         }
 
         public Task SetItemCharacterAsync(ProjectFolderId folderId, ParagraphItem item, Guid? characterId)
@@ -525,22 +488,6 @@ namespace Read2Me.App.State
         /// </summary>
         public Task DismissAudioReviewAsync(ProjectFolderId folderId, Guid paragraphItemId) =>
             MutateAsync(new DismissAudioReviewMutation(folderId, paragraphItemId));
-
-        private void RecomputeParagraphReview(ProjectFolderId folderId, Guid paragraphItemId)
-        {
-            var para = LoadedOwnerOf(paragraphItemId);
-            if (para is null) return;
-
-            var hasAnyNeedsReview = para.Items.Any(i =>
-                audioReviews.ReviewOf(folderId, i.Id)?.State == AudioReviewState.NeedsReview);
-            nodeStatus.OnReviewChanged(folderId, para.Id, hasAnyNeedsReview);
-        }
-
-        /// <summary>The paragraphs the snapshot has loaded — the only ones a patch can be seen in.</summary>
-        private IEnumerable<Paragraph> LoadedParagraphs() => Snapshot?.Branches.AllParagraphs() ?? [];
-
-        private Paragraph? LoadedOwnerOf(Guid paragraphItemId) =>
-            LoadedParagraphs().FirstOrDefault(p => p.Items.Any(i => i.Id == paragraphItemId));
 
         private async Task ExecuteAndReloadAsync(
             ProjectFolderId folderId,

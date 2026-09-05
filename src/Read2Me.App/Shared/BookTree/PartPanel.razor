@@ -30,8 +30,7 @@ else
                                   Title="@(p.Title ?? "Part")"
                                   Spec="@BookNodeMenuSpecs.ForPart(FolderId, p)"
                                   IsFirst="@(idx == 0)"
-                                  IsLast="@(idx == Parts.Count - 1)"
-                                  OnChanged="OnChanged" />
+                                  IsLast="@(idx == Parts.Count - 1)" />
                 </TitleContent>
                 <ChildContent>
                     @if (Presenter.IsExpanding(p.Id))
@@ -52,7 +51,6 @@ else
     [Parameter, EditorRequired] public IReadOnlyList<Part> Parts { get; set; } = null!;
     [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
 
     EventCallback<bool> PartExpandCb(Part p) =>
         EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Part, p.Id, b));
@@ -68,8 +66,7 @@ else
                               PartId="@partId"
                               VolumeId="@VolumeId"
                               IsFirst="@(idx == 0)"
-                              IsLast="@(idx == chapters.Count - 1)"
-                              OnChanged="OnChanged" />
+                              IsLast="@(idx == chapters.Count - 1)" />
             }
         </MudExpansionPanels>;
 

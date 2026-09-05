@@ -278,6 +278,23 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.MoveVoiceRuleMutation>,
             Mutations.Implementations.MoveVoiceRuleMutationImplementation>();
+        // Manual and AI book edits — node titles and item text, and the stale audio that goes with
+        // a rewrite.
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.UpdateVolumeTitleMutation>,
+            Mutations.Implementations.UpdateVolumeTitleMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.UpdatePartTitleMutation>,
+            Mutations.Implementations.UpdatePartTitleMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.UpdateChapterTitleMutation>,
+            Mutations.Implementations.UpdateChapterTitleMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.UpdateParagraphItemTextMutation>,
+            Mutations.Implementations.UpdateParagraphItemTextMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.ApplyBookEditsMutation>,
+            Mutations.Implementations.ApplyBookEditsMutationImplementation>();
         // Removing a Voice takes its audio with it, after the commit. The arriving half needs the
         // audio pipeline and so is registered by the application.
         services.TryAddScoped<Audio.IVoiceAudioRemover, Audio.VoiceAudioRemover>();

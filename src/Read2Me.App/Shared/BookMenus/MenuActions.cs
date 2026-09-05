@@ -2,12 +2,11 @@ using System;
 using System.Threading.Tasks;
 using MudBlazor;
 using Read2Me.Core.Models;
-using Read2Me.Services;
 using Read2Me.Services.Mutations;
 
 namespace Read2Me.App.Shared.BookMenus;
 
-public sealed class MenuActions(IDialogService dialogs, IBookCommandHandler handler)
+public sealed class MenuActions(IDialogService dialogs)
 {
     static readonly DialogOptions EditOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
 
@@ -50,9 +49,6 @@ public sealed class MenuActions(IDialogService dialogs, IBookCommandHandler hand
         var result = await dialog.Result;
         return result?.Canceled == false;
     }
-
-    /// <summary>The legacy path, for the menu gestures whose family has not migrated yet.</summary>
-    public Task<Guid?> ExecuteAsync(BookCommand command) => handler.ExecuteAsync(command);
 
     // ── Mutation factories ───────────────────────────────────────────────────
     // Both gestures are the same entry at every level of the tree, so the node's kind picks the

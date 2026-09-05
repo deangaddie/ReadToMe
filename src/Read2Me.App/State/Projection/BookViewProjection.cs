@@ -659,10 +659,11 @@ namespace Read2Me.App.State.Projection
         /// single Paragraph carries — structure, project policy, Voice Rules, the narrator link — and
         /// is reconciled by rebuilding.
         /// <para>
-        /// Only the migrated families' facets are listed. Item text is refreshable in principle and
-        /// is deliberately left out until its own slice proves it: an unlisted facet costs a rebuild,
-        /// while listing one early would ship untested reconciliation for a producer that does not
-        /// exist yet.
+        /// Only the migrated families' facets are listed: an unlisted facet costs a rebuild, which is
+        /// the safe answer, while listing one early would ship untested reconciliation for a producer
+        /// that does not exist yet. A node title is the edit family's half that stays off the list —
+        /// it belongs to a Volume, Part or Chapter, and a targeted refresh keeps the loaded hierarchy
+        /// branches exactly as they are, so there is nowhere for a reread title to land.
         /// </para>
         /// <para>
         /// Reviews qualify for the same reason the overview reread is part of a targeted refresh at
@@ -671,7 +672,7 @@ namespace Read2Me.App.State.Projection
         /// </para>
         /// </summary>
         private const BookFacets RowScopedFacets =
-            BookFacets.Attribution | BookFacets.Audio | BookFacets.Reviews;
+            BookFacets.ItemText | BookFacets.Attribution | BookFacets.Audio | BookFacets.Reviews;
 
         /// <summary>
         /// Whether a commit can be reconciled by refreshing named rows instead of rebuilding: it

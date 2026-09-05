@@ -6,9 +6,9 @@ namespace Read2Me.Services.NodeStatus
 {
     /// <summary>
     /// Everything a book-tree node row shows, in one value: the three counts of work still
-    /// outstanding (seeded from the database, patched by the On* transitions) plus what the
-    /// attribution queue currently has in flight beneath the node (probed live). The two sources
-    /// and cadences differ inside <see cref="NodeStatusService"/>; the row sees one shape.
+    /// outstanding (seeded from the persisted Book) plus what the attribution queue currently has in
+    /// flight beneath the node (probed live). The two sources and cadences differ inside
+    /// <see cref="NodeStatusService"/>; the row sees one shape.
     /// </summary>
     /// <remarks>
     /// The in-flight fields are attribution-specific by name on purpose: they come from the
@@ -94,17 +94,6 @@ namespace Read2Me.Services.NodeStatus
             foreach (var key in _entries.Keys)
                 if (key.Folder == folder) _entries.TryRemove(key, out _);
 
-            Changed?.Invoke();
-        }
-
-        public void OnReviewChanged(ProjectFolderId folder, Guid paragraphId, bool needsReview)
-        {
-            var key = new ParagraphKey(folder, paragraphId);
-            if (_entries.TryGetValue(key, out var status))
-            {
-                lock (status)
-                    status.Review = needsReview ? 1 : 0;
-            }
             Changed?.Invoke();
         }
 

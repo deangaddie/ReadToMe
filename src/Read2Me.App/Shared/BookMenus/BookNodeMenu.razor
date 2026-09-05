@@ -76,22 +76,19 @@
     [Parameter, EditorRequired] public BookNodeMenuSpec Spec { get; set; } = null!;
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
 
     async Task EditAsync()
     {
         if (Spec.EditAction == null) return;
-        var (command, updateLocal) = await Spec.EditAction(Menu);
-        if (command == null) return;
-        await Menu.ExecuteAsync(command);
-        if (updateLocal != null) await updateLocal();
-        await OnChanged.InvokeAsync();
+        var mutation = await Spec.EditAction(Menu);
+        if (mutation == null) return;
+        await Presenter.MutateAsync(mutation);
     }
 
-    // Splits, merges, deletions, item insertion and pause insertion all cross BookMutations: the
-    // Book View is coherent again — expansion carried onto the new sibling or the merge survivor,
-    // unsafe selections dropped — before these return, so none of them fires a reload of its own
-    // (ADR 0007).
+    // Every gesture on this menu crosses BookMutations, edits included: the Book View is coherent
+    // again — the new wording read back, expansion carried onto the new sibling or the merge
+    // survivor, unsafe selections dropped — before these return, so none of them patches a loaded
+    // entity or fires a reload of its own (ADR 0007).
     async Task SplitAsync(SplitSpec split)
     {
         var mutation = await split.Build(Menu);

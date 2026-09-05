@@ -3,7 +3,6 @@ using NSubstitute;
 using Read2Me.App.Shared;
 using Read2Me.App.Shared.BookMenus;
 using Read2Me.Core.Models;
-using Read2Me.Services;
 using Read2Me.Services.Mutations;
 using Xunit;
 using static Read2Me.App.Shared.BookMenus.MenuActions;
@@ -12,11 +11,10 @@ namespace Read2Me.Tests.App
 {
     public class MenuActionsTests
     {
-        private static (MenuActions actions, IDialogService dialogs, IBookCommandHandler handler) Create()
+        private static (MenuActions actions, IDialogService dialogs) Create()
         {
             var dialogs = Substitute.For<IDialogService>();
-            var handler = Substitute.For<IBookCommandHandler>();
-            return (new MenuActions(dialogs, handler), dialogs, handler);
+            return (new MenuActions(dialogs), dialogs);
         }
 
         private static IDialogReference FakeDialog(DialogResult result)
@@ -33,7 +31,7 @@ namespace Read2Me.Tests.App
         [Fact]
         public async Task PromptTitleAsync_ReturnsNull_WhenCanceled()
         {
-            var (actions, dialogs, _) = Create();
+            var (actions, dialogs) = Create();
             var dialogRef = FakeDialog(DialogResult.Cancel());
             dialogs.ShowAsync<EditTextDialog>(Arg.Any<string>(), Arg.Any<DialogParameters<EditTextDialog>>(), Arg.Any<DialogOptions>())
                    .Returns(Task.FromResult(dialogRef));
@@ -46,7 +44,7 @@ namespace Read2Me.Tests.App
         [Fact]
         public async Task PromptTitleAsync_ReturnsText_WhenConfirmed()
         {
-            var (actions, dialogs, _) = Create();
+            var (actions, dialogs) = Create();
             var dialogRef = FakeDialog(DialogResult.Ok("My Title"));
             dialogs.ShowAsync<EditTextDialog>(Arg.Any<string>(), Arg.Any<DialogParameters<EditTextDialog>>(), Arg.Any<DialogOptions>())
                    .Returns(Task.FromResult(dialogRef));
@@ -63,7 +61,7 @@ namespace Read2Me.Tests.App
         [Fact]
         public async Task ConfirmDeleteAsync_ReturnsFalse_WhenCanceled()
         {
-            var (actions, dialogs, _) = Create();
+            var (actions, dialogs) = Create();
             var dialogRef = FakeDialog(DialogResult.Cancel());
             dialogs.ShowAsync<ConfirmDeleteDialog>(Arg.Any<string>(), Arg.Any<DialogParameters<ConfirmDeleteDialog>>())
                    .Returns(Task.FromResult(dialogRef));
@@ -76,7 +74,7 @@ namespace Read2Me.Tests.App
         [Fact]
         public async Task ConfirmDeleteAsync_ReturnsTrue_WhenConfirmed()
         {
-            var (actions, dialogs, _) = Create();
+            var (actions, dialogs) = Create();
             var dialogRef = FakeDialog(DialogResult.Ok(true));
             dialogs.ShowAsync<ConfirmDeleteDialog>(Arg.Any<string>(), Arg.Any<DialogParameters<ConfirmDeleteDialog>>())
                    .Returns(Task.FromResult(dialogRef));
@@ -84,23 +82,6 @@ namespace Read2Me.Tests.App
             var result = await actions.ConfirmDeleteAsync("Chapter", "Ch 1", hasChildren: true);
 
             Assert.True(result);
-        }
-
-        // ---------------------------------------------------------------
-        // ExecuteAsync
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task ExecuteAsync_DelegatesToHandler_WithExactCommand()
-        {
-            var (actions, _, handler) = Create();
-            var folderId = new ProjectFolderId("test-book");
-            var command = new DeleteChapterCommand(folderId, Guid.NewGuid());
-            handler.ExecuteAsync(command).Returns(Task.FromResult<Guid?>(null));
-
-            await actions.ExecuteAsync(command);
-
-            await handler.Received(1).ExecuteAsync(command);
         }
 
         // ---------------------------------------------------------------
@@ -145,16 +126,18 @@ namespace Read2Me.Tests.App
         // BookNodeMenuSpecs splits — which mutation each node's entry builds
         // ---------------------------------------------------------------
 
-        /// <summary>A MenuActions whose title prompt always answers "New Title".</summary>
-        private static MenuActions PromptingWithATitle()
+        /// <summary>A MenuActions whose text prompt always answers <paramref name="answer"/>.</summary>
+        private static MenuActions PromptingWith(string answer)
         {
-            var (actions, dialogs, _) = Create();
-            var dialogRef = FakeDialog(DialogResult.Ok("New Title"));
+            var (actions, dialogs) = Create();
+            var dialogRef = FakeDialog(DialogResult.Ok(answer));
             dialogs.ShowAsync<EditTextDialog>(
                        Arg.Any<string>(), Arg.Any<DialogParameters<EditTextDialog>>(), Arg.Any<DialogOptions>())
                    .Returns(Task.FromResult(dialogRef));
             return actions;
         }
+
+        private static MenuActions PromptingWithATitle() => PromptingWith("New Title");
 
         [Fact]
         public async Task ForPart_Split_BuildsAVolumeSplitAtThatPart()
@@ -190,6 +173,85 @@ namespace Read2Me.Tests.App
             var mutation = await spec.Splits[0].Build(PromptingWithATitle());
 
             Assert.Equal(paragraphId, Assert.IsType<SplitAtParagraphMutation>(mutation).ParagraphId);
+        }
+
+        // ---------------------------------------------------------------
+        // BookNodeMenuSpecs edits — which mutation each node's Edit entry builds
+        //
+        // Nothing here patches the entity it was built from: the edit crosses BookMutations and the
+        // Book View reads the new wording back from the persisted Book (ADR 0007), so what the spec
+        // must get right is naming the node and carrying the text the producer typed.
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task ForVolume_Edit_BuildsAVolumeTitleUpdate()
+        {
+            var volumeId = Guid.NewGuid();
+            var spec = BookNodeMenuSpecs.ForVolume(
+                new ProjectFolderId("f"), new Read2Me.Data.Entities.Volume { Id = volumeId, Title = "Old" });
+
+            var mutation = await spec.EditAction!(PromptingWithATitle());
+
+            var update = Assert.IsType<UpdateVolumeTitleMutation>(mutation);
+            Assert.Equal(volumeId, update.VolumeId);
+            Assert.Equal("New Title", update.Title);
+        }
+
+        [Fact]
+        public async Task ForPart_Edit_BuildsAPartTitleUpdate()
+        {
+            var partId = Guid.NewGuid();
+            var spec = BookNodeMenuSpecs.ForPart(
+                new ProjectFolderId("f"), new Read2Me.Data.Entities.Part { Id = partId, Title = "Old" });
+
+            var mutation = await spec.EditAction!(PromptingWithATitle());
+
+            Assert.Equal(partId, Assert.IsType<UpdatePartTitleMutation>(mutation).PartId);
+        }
+
+        [Fact]
+        public async Task ForChapter_Edit_BuildsAChapterTitleUpdate()
+        {
+            var chapterId = Guid.NewGuid();
+            var spec = BookNodeMenuSpecs.ForChapter(
+                new ProjectFolderId("f"), new Read2Me.Data.Entities.Chapter { Id = chapterId, Title = "Old" });
+
+            var mutation = await spec.EditAction!(PromptingWithATitle());
+
+            Assert.Equal(chapterId, Assert.IsType<UpdateChapterTitleMutation>(mutation).ChapterId);
+        }
+
+        [Fact]
+        public async Task ForParagraphItem_Edit_BuildsAnItemTextUpdate()
+        {
+            var itemId = Guid.NewGuid();
+            var spec = BookNodeMenuSpecs.ForParagraphItem(
+                new ProjectFolderId("f"), new Read2Me.Data.Entities.ParagraphItem { Id = itemId, Text = "Old" });
+
+            var mutation = await spec.EditAction!(PromptingWith("Rewritten"));
+
+            var update = Assert.IsType<UpdateParagraphItemTextMutation>(mutation);
+            Assert.Equal(itemId, update.ItemId);
+            Assert.Equal("Rewritten", update.Text);
+        }
+
+        /// <summary>
+        /// A cancelled or blank prompt sends nothing. Text that came back unchanged is not filtered
+        /// here any more — the mutation answers NoChange, which costs no revision and no
+        /// reconciliation, and is the one answer that holds however many circuits are open.
+        /// </summary>
+        [Fact]
+        public async Task ForParagraphItem_Edit_SendsNothing_WhenTheProducerCancelled()
+        {
+            var (actions, dialogs) = Create();
+            var dialogRef = FakeDialog(DialogResult.Cancel());
+            dialogs.ShowAsync<EditTextDialog>(
+                       Arg.Any<string>(), Arg.Any<DialogParameters<EditTextDialog>>(), Arg.Any<DialogOptions>())
+                   .Returns(Task.FromResult(dialogRef));
+            var spec = BookNodeMenuSpecs.ForParagraphItem(
+                new ProjectFolderId("f"), new Read2Me.Data.Entities.ParagraphItem { Id = Guid.NewGuid(), Text = "Old" });
+
+            Assert.Null(await spec.EditAction!(actions));
         }
 
         // ---------------------------------------------------------------

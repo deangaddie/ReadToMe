@@ -161,6 +161,7 @@ namespace Read2Me.App.State.Projection
                 // Deliberately dropped: one coalesced batch created no single thing, so there is no
                 // one identity to name.
                 CreatedId = null,
+                NodeIds = Concat(first.NodeIds, second.NodeIds),
                 ParagraphIds = Concat(first.ParagraphIds, second.ParagraphIds),
                 ParagraphItemIds = Concat(first.ParagraphItemIds, second.ParagraphItemIds),
                 Structural = Concat(first.Structural, second.Structural),

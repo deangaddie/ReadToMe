@@ -1729,6 +1729,161 @@ namespace Read2Me.Tests.State.Projection
             Assert.Equal(0, published);
         }
 
+        // ── manual and AI book edits ─────────────────────────────────────────
+        //
+        // The two halves of the edit family reconcile differently on purpose. Item text names the
+        // Paragraph it rewrote and moves only data that lives on it, so it refreshes rows; a node
+        // title lives in the loaded hierarchy branch instead, where a targeted refresh cannot reach
+        // it, so it rebuilds.
+
+        /// <summary>An item with a generated take and a failed verdict on it, in the persisted Book.</summary>
+        private async Task RecordATakeAsync(Guid itemId) =>
+            Assert.IsType<BookMutationOutcome.Committed>(
+                await RemoteWriter().CommitAsync(
+                    new RecordParagraphItemAudioMutation(_folder, itemId, "audio/take.wav", FailedTake())));
+
+        [Fact]
+        public async Task MutateAsync_ItemTextEdit_RefreshesTheAffectedParagraphOnly()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var content = new CountingContent(_reader);
+            var sut = await OpenWithBothChaptersAsync(b, content);
+            content.ChildrenOf.Clear();
+
+            var outcome = await sut.MutateAsync(
+                new UpdateParagraphItemTextMutation(_folder, b.ItemId("n1"), "she whispered."));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            var rewritten = Assert.Single(snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")]);
+            Assert.Equal("she whispered.", rewritten.Items.Single(i => i.Id == b.ItemId("n1")).Text);
+            Assert.Equal([b.ParagraphId("p1")], content.ParagraphsRead);
+            Assert.Empty(content.ChildrenOf);
+        }
+
+        /// <summary>
+        /// The whole point of the rewrite clearing the take: the row has to come back Generatable,
+        /// with no verdict on audio that no longer exists and with the chapter's audio-remaining
+        /// count moved to match — all in the one snapshot, so the two can never disagree.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_ItemTextEdit_MovesTheAudioReviewAndCountsWithTheText()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            await RecordATakeAsync(b.ItemId("n1"));
+            var sut = await OpenWithBothChaptersAsync(b, new CountingContent(_reader));
+            Assert.NotNull(sut.Snapshot!.ReviewOf(b.ItemId("n1")));
+
+            var outcome = await sut.MutateAsync(
+                new UpdateParagraphItemTextMutation(_folder, b.ItemId("n1"), "she whispered."));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            var rewritten = snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")]
+                .Single().Items.Single(i => i.Id == b.ItemId("n1"));
+            Assert.Null(rewritten.AudioFileName);
+            Assert.Null(snapshot.ReviewOf(b.ItemId("n1")));
+            var status = snapshot.NodeStatus.Single(r => r.ParagraphId == b.ParagraphId("p1"));
+            Assert.Equal(0, status.Review);
+            Assert.Equal(2, status.MissingAudio);
+        }
+
+        /// <summary>
+        /// A rewrite hands the item back to the Audio Queue, so an Audio Item Selection holding it is
+        /// still pointing at a present, eligible row — the recheck must keep it rather than clear
+        /// everything an edit touched.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_ItemTextEdit_KeepsTheAudioItemSelectionItLeftEligible()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetAudioItemSelected(
+                new AudioItemRef(b.ItemId("n1"), b.ParagraphId("p1"), b.ChapterId("ch1"), b.PartId("vol"), b.VolumeId("vol")),
+                Selected: true));
+
+            var outcome = await sut.MutateAsync(
+                new UpdateParagraphItemTextMutation(_folder, b.ItemId("n1"), "she whispered."));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal([b.ItemId("n1")], snapshot.Selections.AudioItemIds);
+        }
+
+        /// <summary>
+        /// A title is not on a Paragraph, so the row-refresh path cannot put it on screen. Reporting
+        /// it as its own facet is what sends the reconciliation down the rebuild path that rereads the
+        /// loaded branch it lives in.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_ChapterTitleEdit_RepublishesTheTitleInTheLoadedBranch()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = await OpenWithBothChaptersAsync(b, new CountingContent(_reader));
+
+            var outcome = await sut.MutateAsync(
+                new UpdateChapterTitleMutation(_folder, b.ChapterId("ch1"), "The Meeting"));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal("The Meeting", LoadedChapter(snapshot, b.ChapterId("ch1")).Title);
+        }
+
+        [Fact]
+        public async Task MutateAsync_AnEditThatRewritesNothing_PublishesNothing()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = await OpenWithBothChaptersAsync(b, new CountingContent(_reader));
+            var before = sut.Snapshot!;
+
+            var outcome = await sut.MutateAsync(
+                new UpdateParagraphItemTextMutation(_folder, b.ItemId("n1"), "she said."));
+
+            Assert.IsType<BookViewMutationOutcome.NoChange>(outcome);
+            Assert.Same(before, sut.Snapshot);
+        }
+
+        /// <summary>
+        /// The gesture this slice exists for: somebody accepts an AI edit program in another circuit,
+        /// and this Book View shows every part of it — the retitled chapter and the rewritten item —
+        /// without anyone navigating away and back. It arrives as one convergence because it committed
+        /// as one mutation, and silently, because no node moved and no selection was lost.
+        /// </summary>
+        [Fact]
+        public async Task AnotherCircuitsAcceptedAiEdit_ReachesThisBookViewInOneGo()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = await OpenWithBothChaptersAsync(b, new CountingContent(_reader));
+
+            var announced = 0;
+            var updates = 0;
+            sut.ExternalUpdateApplied += update =>
+            {
+                updates++;
+                if (update.Announce) announced++;
+            };
+
+            var committed = await RemoteWriter().CommitAsync(new ApplyBookEditsMutation(_folder,
+            [
+                new BookEditItem(BookEditTargetKind.ChapterTitle, b.ChapterId("ch1"), "The Meeting"),
+                new BookEditItem(BookEditTargetKind.ParagraphItemText, b.ItemId("n1"), "she whispered."),
+            ]));
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision, "the accepted AI edit never arrived");
+
+            var snapshot = sut.Snapshot!;
+            Assert.Equal("The Meeting", LoadedChapter(snapshot, b.ChapterId("ch1")).Title);
+            Assert.Equal("she whispered.", snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")]
+                .Single().Items.Single(i => i.Id == b.ItemId("n1")).Text);
+            Assert.Equal(1, updates);
+            Assert.Equal(0, announced);
+        }
+
+        /// <summary>One chapter as the Book View has it loaded, whichever part it hangs under.</summary>
+        private static Chapter LoadedChapter(BookViewSnapshot snapshot, Guid chapterId) =>
+            snapshot.Branches.ChaptersByPart.Values
+                .SelectMany(chapters => chapters)
+                .Single(c => c.Id == chapterId);
+
         // ── characters, narrator and policy ──────────────────────────────────
 
         [Fact]

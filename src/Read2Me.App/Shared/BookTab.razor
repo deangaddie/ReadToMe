@@ -165,8 +165,7 @@ else
                          FolderId="@_folderId"
                          IsSingleVolume="true"
                          IsFirst="true"
-                         IsLast="true"
-                         OnChanged="StateHasChanged" />
+                         IsLast="true" />
         }
         else
         {
@@ -179,8 +178,7 @@ else
                                  FolderId="@_folderId"
                                  IsSingleVolume="false"
                                  IsFirst="@(idx == 0)"
-                                 IsLast="@(idx == Presenter.Volumes.Count - 1)"
-                                 OnChanged="StateHasChanged" />
+                                 IsLast="@(idx == Presenter.Volumes.Count - 1)" />
                 }
             </MudExpansionPanels>
         }
@@ -233,10 +231,9 @@ else
             CloseButton = false,
             BackdropClick = false,
         };
-        var dialog = await DialogService.ShowAsync<BookEditDialog>("Edit with AI", parameters, options);
-        var result = await dialog.Result;
-        if (result?.Canceled == false)
-            await Presenter.ResetAndLoadAsync(_folderId);
+        // No reload afterwards: the dialog commits through BookMutations, so the Book View behind it
+        // is coherent before it closes (ADR 0007).
+        await DialogService.ShowAsync<BookEditDialog>("Edit with AI", parameters, options);
     }
 
     async Task ReadBookAsync()

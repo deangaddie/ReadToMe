@@ -1,12 +1,14 @@
 @using Read2Me.Services.BookEdits
+@using Read2Me.Services.Mutations
 @using Read2Me.App.Services.Preflight
 @using Read2Me.App.State
+@using Read2Me.App.State.Projection
 @inject IAiPreflight Preflight
 @inject IDialogService Dialogs
 @inject BookEditPlanner Planner
 @inject ScopeResolver Resolver
 @inject BookEditProposalService Proposals
-@inject IBookCommandHandler CommandHandler
+@inject BookHierarchyPresenter Presenter
 @implements IDisposable
 
 <MudDialog>
@@ -366,13 +368,28 @@
         _phase = Phase.Review;
     }
 
+    /// <summary>
+    /// Lands every approved row in one Book mutation, so the Book is never half-edited for a reader
+    /// and every open Book View converges on the whole program at once (ADR 0007). The Book View
+    /// behind this dialog is already showing the result when it closes.
+    /// <para>
+    /// A refusal keeps the dialog open with the reviewed rows intact. The producer may have spent a
+    /// long time hand-editing them, and closing on a mutation that did not commit would throw that
+    /// away while looking like it had been applied.
+    /// </para>
+    /// </summary>
     async Task ApplyAsync()
     {
         _busy = true;
         try
         {
-            await CommandHandler.ExecuteAsync(
-                new ApplyBookEditsCommand(FolderId, _selection.ToEditItems()));
+            var outcome = await Presenter.MutateAsync(new ApplyBookEditsMutation(FolderId, _selection.ToEditItems()));
+            if (outcome is BookViewMutationOutcome.Uncommitted uncommitted)
+            {
+                _error = $"Applying edits failed: {uncommitted.Message}";
+                return;
+            }
+
             MudDialog.Close(DialogResult.Ok(true));
         }
         catch (Exception ex)

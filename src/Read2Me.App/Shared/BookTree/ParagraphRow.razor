@@ -32,8 +32,7 @@
             @if (!isBusy)
             {
                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPauseParagraph(FolderId, Para)"
-                             IsFirst="false" IsLast="false"
-                             OnChanged="@(async () => { await Presenter.RefreshAsync(); await OnChanged.InvokeAsync(); })" />
+                             IsFirst="false" IsLast="false" />
             }
         </MudStack>
     }
@@ -159,10 +158,9 @@
                                 }
                                 @if (!isAudioBusy)
                                 {
-                                    <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it, Presenter)"
+                                    <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it)"
                                                  IsFirst="@(items[0].Id == it.Id)"
-                                                 IsLast="@(items[^1].Id == it.Id)"
-                                                 OnChanged="OnChanged" />
+                                                 IsLast="@(items[^1].Id == it.Id)" />
                                 }
                             </MudStack>
                         }
@@ -202,10 +200,9 @@
                         }
                         @if (!isBusy)
                         {
-                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it, Presenter)"
+                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it)"
                                                IsFirst="@(items[0].Id == it.Id)"
-                                               IsLast="@(items[^1].Id == it.Id)"
-                                               OnChanged="OnChanged" />
+                                               IsLast="@(items[^1].Id == it.Id)" />
                         }
                         else
                         {
@@ -269,8 +266,7 @@ else
             {
                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraph(FolderId, Para)"
                                IsFirst="IsFirst"
-                               IsLast="IsLast"
-                               OnChanged="@(async () => { await Presenter.RefreshAsync(); await OnChanged.InvokeAsync(); })" />
+                               IsLast="IsLast" />
             }
         </MudStack>
     }
@@ -284,7 +280,6 @@ else
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
 
     protected override void OnInitialized()
     {

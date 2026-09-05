@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
-using Read2Me.App.State;
 using Read2Me.Services.Mutations;
 
 namespace Read2Me.App.Shared.BookMenus;
@@ -15,7 +14,7 @@ public sealed record BookNodeMenuSpec(
     NodeKind Kind,
     Guid EntityId,
     string? EditLabel,
-    Func<MenuActions, Task<(BookCommand? command, Func<Task>? updateLocal)>>? EditAction,
+    Func<MenuActions, Task<BookMutation?>>? EditAction,
     IReadOnlyList<SplitSpec> Splits,
     string DeleteLabel,
     Func<(string itemType, string itemName, bool hasChildren)> GetDeleteConfirmArgs
@@ -65,8 +64,8 @@ public static class BookNodeMenuSpecs
             EditAction: async menu =>
             {
                 var text = await menu.PromptTitleAsync("Edit Volume Title", volume.Title ?? "");
-                if (string.IsNullOrWhiteSpace(text)) return (null, null);
-                return (new UpdateVolumeTitleCommand(folderId, volume.Id, text), () => { volume.Title = text; return Task.CompletedTask; });
+                if (string.IsNullOrWhiteSpace(text)) return null;
+                return new UpdateVolumeTitleMutation(folderId, volume.Id, text);
             },
             Splits: [],
             DeleteLabel: "Delete Volume",
@@ -82,8 +81,8 @@ public static class BookNodeMenuSpecs
             EditAction: async menu =>
             {
                 var text = await menu.PromptTitleAsync("Edit Part Title", part.Title ?? "");
-                if (string.IsNullOrWhiteSpace(text)) return (null, null);
-                return (new UpdatePartTitleCommand(folderId, part.Id, text), () => { part.Title = text; return Task.CompletedTask; });
+                if (string.IsNullOrWhiteSpace(text)) return null;
+                return new UpdatePartTitleMutation(folderId, part.Id, text);
             },
             Splits:
             [
@@ -107,8 +106,8 @@ public static class BookNodeMenuSpecs
             EditAction: async menu =>
             {
                 var text = await menu.PromptTitleAsync("Edit Chapter Title", chapter.Title ?? "");
-                if (string.IsNullOrWhiteSpace(text)) return (null, null);
-                return (new UpdateChapterTitleCommand(folderId, chapter.Id, text), () => { chapter.Title = text; return Task.CompletedTask; });
+                if (string.IsNullOrWhiteSpace(text)) return null;
+                return new UpdateChapterTitleMutation(folderId, chapter.Id, text);
             },
             Splits:
             [
@@ -175,13 +174,11 @@ public static class BookNodeMenuSpecs
     ];
 
     /// <summary>
-    /// The item menu. Editing the text discards the item's generated audio and any verdict on it —
-    /// the handler does that in the database, and <paramref name="presenter"/> mirrors it in the
-    /// loaded tree so the row goes back to Generatable without a reload. Text that comes back
-    /// unchanged posts no command at all.
+    /// The item menu. Editing the text discards the item's generated audio and any verdict on it, and
+    /// the Book View shows the row back at Generatable because the mutation republished it, not
+    /// because this menu patched anything (ADR 0007). Text that comes back unchanged is not sent.
     /// </summary>
-    public static BookNodeMenuSpec ForParagraphItem(
-        ProjectFolderId folderId, ParagraphItem item, BookHierarchyPresenter presenter) =>
+    public static BookNodeMenuSpec ForParagraphItem(ProjectFolderId folderId, ParagraphItem item) =>
         new(
             FolderId: folderId,
             Kind: NodeKind.ParagraphItem,
@@ -190,13 +187,8 @@ public static class BookNodeMenuSpecs
             EditAction: async menu =>
             {
                 var text = await menu.PromptTextAsync("Edit Item Text", item.Text ?? "", lines: 4);
-                if (string.IsNullOrWhiteSpace(text)) return (null, null);
-                if (text == item.Text) return (null, null);
-                return (new UpdateParagraphItemTextCommand(folderId, item.Id, text), async () =>
-                {
-                    item.Text = text;
-                    await presenter.NoteItemTextEditedAsync(folderId, item);
-                });
+                if (string.IsNullOrWhiteSpace(text)) return null;
+                return new UpdateParagraphItemTextMutation(folderId, item.Id, text);
             },
             Splits:
             [
