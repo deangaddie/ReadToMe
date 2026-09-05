@@ -15,6 +15,7 @@ using Read2Me.Services.Events;
 using Read2Me.Services.IO;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
+using Read2Me.Tests.Fakes;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 using AudioReviewState = Read2Me.Data.Enums.AudioReviewState;
@@ -1765,9 +1766,11 @@ namespace Read2Me.Tests.State.Projection
             _receipts.Publish(ExternalReceipt(BookFacets.Attribution));
             await ConvergesAsync(() => loader.Failures == 1, "the failing convergence never ran");
 
-            // The last coherent snapshot is still the one on screen: a failed convergence publishes
-            // nothing rather than half of something.
-            Assert.Same(opened, sut.Snapshot);
+            // The last coherent snapshot's content is still the one on screen: a failed convergence
+            // publishes nothing rather than half of something, and only says it went stale.
+            Assert.Same(opened.Branches, sut.Snapshot!.Branches);
+            Assert.Equal(opened.Revision, sut.Snapshot!.Revision);
+            Assert.Equal(BookViewHealth.Stale, sut.Snapshot!.Health);
 
             loader.Failure = null;
             var revision = ExternalReceiptPublished(BookFacets.Attribution);
@@ -2184,6 +2187,331 @@ namespace Read2Me.Tests.State.Projection
                 "the narrator link never reached this Book View");
         }
 
+        // ── recovering from a failed reconciliation ──────────────────────────
+        //
+        // The Book View has two attempts at every committed change: the targeted refresh, and the
+        // rebuild it falls back to. Both read the same Book from the same place, so a failure of
+        // both is a failure to read at all — and what the reader keeps then is the last view this
+        // projection could vouch for, marked stale, with the Book itself left alone (ADR 0007).
+
+        /// <summary>A read failure for the loader to raise; nothing catches it by type.</summary>
+        private static InvalidOperationException ReadFailure() => new("the database went away");
+
+        /// <summary>
+        /// Both chapters open over a loader a test can break, with the writes real: the setup every
+        /// recovery case starts from, because staleness is only reachable through a commit.
+        /// </summary>
+        private async Task<(BookViewProjection Sut, SwitchableLoader Loader, CountingContent Content)>
+            OpenOverABreakableLoaderAsync(BookHierarchyBuilder b)
+        {
+            var loader = new SwitchableLoader(new BookProjectLoader(_reader));
+            var content = new CountingContent(_reader);
+            var sut = CreateSut(loader, content);
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+            await sut.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch2"), true));
+            content.ChildrenOf.Clear();
+            return (sut, loader, content);
+        }
+
+        /// <summary>Commits a speaker change: exact, row-scoped effects, so a targeted refresh is tried first.</summary>
+        private Task<BookViewMutationOutcome> RestampAsync(BookViewProjection sut, BookHierarchyBuilder b) =>
+            sut.MutateAsync(new SetItemSpeakerMutation(_folder, b.ItemId("i1"), b.CharacterId("bob")));
+
+        /// <summary>The speaker on screen, which a stale Book View is allowed to disagree with.</summary>
+        private static Guid? RenderedSpeakerOf(BookViewSnapshot snapshot, BookHierarchyBuilder b) =>
+            snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")]
+                .Single().Items.Single(i => i.Id == b.ItemId("i1")).CharacterId;
+
+        [Fact]
+        public async Task MutateAsync_ATargetedRefreshThatFails_RebuildsInsteadOfGoingStale()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, content) = await OpenOverABreakableLoaderAsync(b);
+
+            // One read fails — the targeted refresh's — and the rebuild behind it gets a live Book.
+            loader.Failure = ReadFailure();
+            loader.FailFor = 1;
+
+            var outcome = await RestampAsync(sut, b);
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal(BookViewHealth.Coherent, snapshot.Health);
+            Assert.Equal(1, loader.Failures);
+            // A rebuild, not a refresh: it walked the expanded branches to get there.
+            Assert.NotEmpty(content.ChildrenOf);
+            Assert.Equal(b.CharacterId("bob"), RenderedSpeakerOf(snapshot, b));
+        }
+
+        [Fact]
+        public async Task MutateAsync_WhenTheRefreshAndTheRebuildBothFail_KeepsTheLastCoherentSnapshot()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+            var coherent = sut.Snapshot!;
+
+            loader.Failure = ReadFailure();
+            var outcome = await RestampAsync(sut, b);
+
+            var stale = Assert.IsType<BookViewMutationOutcome.CommittedButStale>(outcome);
+            Assert.Equal(BookViewHealth.Stale, stale.Snapshot!.Health);
+            Assert.Same(sut.Snapshot, stale.Snapshot);
+
+            // Both attempts were made, and neither published a candidate: what is on screen is the
+            // coherent content it already had, now saying only that it cannot be vouched for.
+            Assert.Equal(2, loader.Failures);
+            Assert.Same(coherent.Branches, stale.Snapshot.Branches);
+            Assert.Equal(coherent.Revision, stale.Snapshot.Revision);
+            Assert.Equal(coherent.Selections, stale.Snapshot.Selections);
+            Assert.NotEqual(b.CharacterId("bob"), RenderedSpeakerOf(stale.Snapshot, b));
+        }
+
+        /// <summary>
+        /// Committed-but-stale is a committed outcome. A caller that read it as a failure would apply
+        /// the same change twice, and a producer holding a staged artifact would throw it away.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_CommittedButStale_ReportsAChangeTheBookActuallyKept()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+
+            loader.Failure = ReadFailure();
+            var outcome = await RestampAsync(sut, b);
+
+            var stale = Assert.IsType<BookViewMutationOutcome.CommittedButStale>(outcome);
+            Assert.True(outcome.Committed);
+            Assert.Equal(b.ParagraphId("p1"), Assert.Single(stale.Receipt.Effects.ParagraphIds));
+            Assert.Equal(b.CharacterId("bob"), await PersistedSpeakerOfAsync(b.ItemId("i1")));
+        }
+
+        [Fact]
+        public async Task MutateAsync_WhileStale_IsRefusedAndChangesNothing()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+            loader.Failure = ReadFailure();
+            await RestampAsync(sut, b);
+
+            // The read is healthy again, but nobody has said so: a stale Book View is not a basis to
+            // compose another change on, however well the database happens to be feeling.
+            loader.Failure = null;
+            var refused = await sut.MutateAsync(
+                new SetItemSpeakerMutation(_folder, b.ItemId("i2"), b.CharacterId("alice")));
+
+            var uncommitted = Assert.IsType<BookViewMutationOutcome.Uncommitted>(refused);
+            Assert.Equal(BookMutationRejection.Stale, uncommitted.Reason);
+            Assert.NotEqual(b.CharacterId("alice"), await PersistedSpeakerOfAsync(b.ItemId("i2")));
+        }
+
+        [Fact]
+        public async Task ApplyAsync_WhileStale_StillMovesTheViewAndStaysStale()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+            loader.Failure = ReadFailure();
+            await RestampAsync(sut, b);
+
+            // Safe viewing: reading, selecting and playing are not writes, so none of them is blocked.
+            var played = await sut.ApplyAsync(new BookViewIntent.TogglePlayback(b.ItemId("i1")));
+
+            Assert.Equal(b.ItemId("i1"), played.PlayingAudioItemId);
+            Assert.Equal(BookViewHealth.Stale, played.Health);
+        }
+
+        /// <summary>
+        /// An expansion reads the Book again, so it is tempting to treat it as a recovery. It is not:
+        /// it rechecks no selection, which is exactly the half of reconciliation that failed.
+        /// </summary>
+        [Fact]
+        public async Task ApplyAsync_AnExpansionWhileStale_DoesNotDeclareTheViewHealthy()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+            loader.Failure = ReadFailure();
+            await RestampAsync(sut, b);
+            loader.Failure = null;
+
+            var collapsed = await sut.ApplyAsync(
+                new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch2"), false));
+
+            Assert.DoesNotContain(b.ChapterId("ch2"), collapsed.Expansion.ChapterIds);
+            Assert.Equal(BookViewHealth.Stale, collapsed.Health);
+        }
+
+        [Fact]
+        public async Task RetryRebuildAsync_OnceTheReadRecovers_PublishesACoherentBookView()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+            loader.Failure = ReadFailure();
+            await RestampAsync(sut, b);
+
+            loader.Failure = null;
+            var recovered = await sut.RetryRebuildAsync();
+
+            Assert.Equal(BookViewHealth.Coherent, recovered.Health);
+            Assert.Same(sut.Snapshot, recovered);
+            // The change the failed reconciliation could not show is on screen now…
+            Assert.Equal(b.CharacterId("bob"), RenderedSpeakerOf(recovered, b));
+            // …and the Book View is a basis for further changes again.
+            Assert.IsType<BookViewMutationOutcome.Coherent>(await sut.MutateAsync(
+                new SetItemSpeakerMutation(_folder, b.ItemId("i2"), b.CharacterId("alice"))));
+        }
+
+        [Fact]
+        public async Task RetryRebuildAsync_ThatFailsAgain_LeavesTheBookViewStale()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+            loader.Failure = ReadFailure();
+            await RestampAsync(sut, b);
+            var stale = sut.Snapshot!;
+
+            var retried = await sut.RetryRebuildAsync();
+
+            Assert.Equal(BookViewHealth.Stale, retried.Health);
+            Assert.Same(stale, retried);
+        }
+
+        /// <summary>
+        /// The reader switched projects while the change was committing. The commit is real and must
+        /// be reported as such, but nothing is stale: what is on screen is a coherent view of a
+        /// different Book, so the outcome carries no snapshot and there is nothing to retry.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_WhenTheReaderMovesOffTheBookMidCommit_ReportsACommitWithNoViewOfIt()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            await SeedOtherProjectAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+
+            // The switch holds the build lock across its read, so the commit below lands while this
+            // projection is provably still between the two Books.
+            var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            loader.Held = held;
+            var switching = sut.OpenAsync(_otherFolder);
+            await ConvergesAsync(() => loader.Reading, "the project switch never started reading");
+
+            var gesture = RestampAsync(sut, b);
+            held.SetResult();
+            await switching;
+
+            var outcome = Assert.IsType<BookViewMutationOutcome.CommittedButStale>(await gesture);
+            Assert.Null(outcome.Snapshot);
+            Assert.Equal(b.CharacterId("bob"), await PersistedSpeakerOfAsync(b.ItemId("i1")));
+
+            // Not stale — the Book View it now shows is coherent, and has nothing to recover.
+            Assert.Equal(_otherFolder, sut.Snapshot!.Folder);
+            Assert.Equal(BookViewHealth.Coherent, sut.Snapshot!.Health);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.RetryRebuildAsync());
+        }
+
+        [Fact]
+        public async Task RetryRebuildAsync_OnACoherentBookView_IsRejected()
+        {
+            await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.RetryRebuildAsync());
+        }
+
+        /// <summary>
+        /// Reopening the Book is an authoritative rebuild that also rechecks both selections, so it
+        /// recovers a stale projection on the same terms as an explicit retry.
+        /// </summary>
+        [Fact]
+        public async Task OpenAsync_OnAStaleBookView_RecoversIt()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+            loader.Failure = ReadFailure();
+            await RestampAsync(sut, b);
+
+            loader.Failure = null;
+            var reopened = await sut.OpenAsync(_folder);
+
+            Assert.Equal(BookViewHealth.Coherent, reopened.Health);
+        }
+
+        [Fact]
+        public async Task AnotherCircuitsCommit_ThatCannotBeRead_GoesStaleWithoutAnnouncingAnything()
+        {
+            await SeedTwoAttributableChaptersAsync();
+            var loader = new SwitchableLoader(new BookProjectLoader(_reader));
+            var sut = CreateSut(loader);
+            var coherent = await sut.OpenAsync(_folder);
+
+            var announced = 0;
+            var updates = 0;
+            sut.ExternalUpdateApplied += update => { updates++; if (update.Announce) announced++; };
+
+            loader.Failure = ReadFailure();
+            _receipts.Publish(ExternalReceipt(BookFacets.Structure));
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Health == BookViewHealth.Stale, "the failed convergence never went stale");
+
+            // Nothing converged, so there is nothing to announce — the stale indicator is the news.
+            Assert.Equal(0, updates);
+            Assert.Equal(0, announced);
+            Assert.Same(coherent.Branches, sut.Snapshot!.Branches);
+        }
+
+        // ── cancellation ─────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task MutateAsync_CancelledBeforeCommit_ChangesNothingAndPublishesNothing()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var published = 0;
+            sut.SnapshotPublished += () => published++;
+
+            using var cancelled = new CancellationTokenSource();
+            await cancelled.CancelAsync();
+
+            var outcome = await sut.MutateAsync(
+                new SetItemSpeakerMutation(_folder, b.ItemId("i1"), b.CharacterId("bob")), cancelled.Token);
+
+            var uncommitted = Assert.IsType<BookViewMutationOutcome.Uncommitted>(outcome);
+            Assert.Equal(BookMutationRejection.Cancelled, uncommitted.Reason);
+            Assert.NotEqual(b.CharacterId("bob"), await PersistedSpeakerOfAsync(b.ItemId("i1")));
+            Assert.Equal(0, published);
+            Assert.Equal(BookViewHealth.Coherent, sut.Snapshot!.Health);
+        }
+
+        /// <summary>
+        /// Past the commit point the change is real, so reconciliation runs under the circuit's
+        /// lifetime rather than the gesture's. Cancelling the gesture must not be able to report a
+        /// committed mutation as uncommitted, nor leave the Book View showing the older Book.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_CancelledAfterCommit_StillReconcilesToACoherentBookView()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var (sut, loader, _) = await OpenOverABreakableLoaderAsync(b);
+
+            // Held on the reconciliation's first read, which is the first thing past the commit.
+            var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            loader.Held = held;
+
+            using var cancelled = new CancellationTokenSource();
+            var gesture = sut.MutateAsync(
+                new SetItemSpeakerMutation(_folder, b.ItemId("i1"), b.CharacterId("bob")), cancelled.Token);
+
+            await ConvergesAsync(() => loader.Reading, "the commit never reached its reconciliation");
+            await cancelled.CancelAsync();
+            held.SetResult();
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(await gesture).Snapshot;
+            Assert.Equal(BookViewHealth.Coherent, snapshot.Health);
+            Assert.Equal(b.CharacterId("bob"), await PersistedSpeakerOfAsync(b.ItemId("i1")));
+            Assert.Equal(b.CharacterId("bob"), RenderedSpeakerOf(snapshot, b));
+        }
+
         // ── test doubles ─────────────────────────────────────────────────────
         /// <summary>
         /// The circuit's selection writer. The real one is <c>BookSelectionCoordinator</c>, which
@@ -2335,44 +2663,6 @@ namespace Read2Me.Tests.State.Projection
                 IReadOnlyDictionary<Guid, string?> names =
                     itemIds.ToDictionary(id => id, id => Names.GetValueOrDefault(id));
                 return Task.FromResult(names);
-            }
-        }
-
-        /// <summary>
-        /// A real loader that can be made to fail, or held mid-read — the two things a build does
-        /// that the projection's behaviour hangs on and a real database will not do on cue.
-        /// </summary>
-        private sealed class SwitchableLoader(IBookProjectLoader inner) : IBookProjectLoader
-        {
-            public Exception? Failure { get; set; }
-
-            /// <summary>How many reads have been failed — the only signal a swallowed failure gives.</summary>
-            public int Failures { get; private set; }
-
-            /// <summary>Set to hold the next read until the task completes; cleared once it does.</summary>
-            public TaskCompletionSource? Held { get; set; }
-
-            /// <summary>True while a held read is waiting — the only way to tell a build has begun.</summary>
-            public bool Reading { get; private set; }
-
-            public async Task<BookProjectSnapshot> LoadSnapshotAsync(
-                ProjectFolderId folderId, CancellationToken ct = default)
-            {
-                if (Held is { } held)
-                {
-                    Held = null;
-                    Reading = true;
-                    await held.Task;
-                    Reading = false;
-                }
-
-                if (Failure is { } failure)
-                {
-                    Failures++;
-                    throw failure;
-                }
-
-                return await inner.LoadSnapshotAsync(folderId, ct);
             }
         }
 

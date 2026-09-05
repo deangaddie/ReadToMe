@@ -128,12 +128,6 @@ namespace Read2Me.Tests.State
         private Paragraph Loaded(BookHierarchyBuilder b, string paragraph) =>
             _presenter.Paragraphs(b.ChapterId("ch"))!.Single(p => p.Id == b.ParagraphId(paragraph));
 
-        private async Task<Guid?> SpeakerOfAsync(Guid itemId)
-        {
-            await using var db = await OpenDbAsync();
-            return (await db.ParagraphItems.FindAsync(itemId))!.CharacterId;
-        }
-
         private void StubConfirm(bool confirmed)
         {
             var dialogRef = Substitute.For<IDialogReference>();
@@ -222,8 +216,8 @@ namespace Read2Me.Tests.State
             // The chip fired on p1; the gesture is about the selection, not the row.
             await _presenter.AssignCharacterAsync(_folder, Loaded(b, "p1"), null, BobId);
 
-            Assert.Equal(BobId, await SpeakerOfAsync(b.ItemId("d1")));
-            Assert.Equal(BobId, await SpeakerOfAsync(b.ItemId("d2")));
+            Assert.Equal(BobId, await PersistedSpeakerOfAsync(b.ItemId("d1")));
+            Assert.Equal(BobId, await PersistedSpeakerOfAsync(b.ItemId("d2")));
         }
 
         [Fact]
@@ -236,8 +230,8 @@ namespace Read2Me.Tests.State
 
             await _presenter.AssignCharacterAsync(_folder, Loaded(b, "p2"), null, BobId);
 
-            Assert.Equal(BobId, await SpeakerOfAsync(b.ItemId("d2")));
-            Assert.Equal(AliceId, await SpeakerOfAsync(b.ItemId("d1")));
+            Assert.Equal(BobId, await PersistedSpeakerOfAsync(b.ItemId("d2")));
+            Assert.Equal(AliceId, await PersistedSpeakerOfAsync(b.ItemId("d1")));
             // A single assign asks nothing: only the fan-out is behind a confirm.
             Assert.Empty(_dialogs.ReceivedCalls());
         }
@@ -255,8 +249,8 @@ namespace Read2Me.Tests.State
 
             // The narration item itself moved — an item chip stamps any speaker on any speech item
             // (ADR-0006) — and its dialog neighbour did not.
-            Assert.Equal(BobId, await SpeakerOfAsync(b.ItemId("n1")));
-            Assert.Equal(AliceId, await SpeakerOfAsync(b.ItemId("d1")));
+            Assert.Equal(BobId, await PersistedSpeakerOfAsync(b.ItemId("n1")));
+            Assert.Equal(AliceId, await PersistedSpeakerOfAsync(b.ItemId("d1")));
         }
 
         [Fact]
@@ -313,7 +307,7 @@ namespace Read2Me.Tests.State
 
             await _presenter.AssignCharacterToSelectionAsync(_folder, BobId);
 
-            Assert.Equal(BobId, await SpeakerOfAsync(b.ItemId("d1")));
+            Assert.Equal(BobId, await PersistedSpeakerOfAsync(b.ItemId("d1")));
             _snackbar.Received(1).Add(
                 "Assigned Bob to 2 lines in 2 paragraphs.", Severity.Success,
                 Arg.Any<Action<SnackbarOptions>>(), Arg.Any<string>());
@@ -347,7 +341,7 @@ namespace Read2Me.Tests.State
                 "No dialog in the selection — nothing to assign.", Severity.Info,
                 Arg.Any<Action<SnackbarOptions>>(), Arg.Any<string>());
             Assert.Empty(_dialogs.ReceivedCalls());
-            Assert.Equal(ProjectDbContext.NarratorId, await SpeakerOfAsync(b.ItemId("n3")));
+            Assert.Equal(ProjectDbContext.NarratorId, await PersistedSpeakerOfAsync(b.ItemId("n3")));
         }
 
         [Fact]
@@ -361,7 +355,7 @@ namespace Read2Me.Tests.State
 
             await _presenter.AssignCharacterToSelectionAsync(_folder, BobId);
 
-            Assert.Equal(AliceId, await SpeakerOfAsync(b.ItemId("d1")));
+            Assert.Equal(AliceId, await PersistedSpeakerOfAsync(b.ItemId("d1")));
             Assert.Equal(1, _presenter.Selection.SelectedParagraphCount);
             Assert.True(_presenter.Selection.BulkMode);
         }
@@ -380,7 +374,7 @@ namespace Read2Me.Tests.State
             Assert.Equal("Clear speakers in selection", title);
             Assert.Equal("Clear", confirmText);
             Assert.Contains("lose their speaker", message);
-            Assert.Null(await SpeakerOfAsync(b.ItemId("d1")));
+            Assert.Null(await PersistedSpeakerOfAsync(b.ItemId("d1")));
             _snackbar.Received(1).Add(
                 "Cleared speakers on 1 lines in 1 paragraphs.", Severity.Success,
                 Arg.Any<Action<SnackbarOptions>>(), Arg.Any<string>());

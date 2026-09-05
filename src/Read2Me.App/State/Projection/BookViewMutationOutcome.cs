@@ -22,6 +22,26 @@ namespace Read2Me.App.State.Projection
         public sealed record Coherent(BookMutationReceipt Receipt, BookViewSnapshot Snapshot)
             : BookViewMutationOutcome;
 
+        /// <summary>
+        /// The mutation committed, but this circuit's Book View could not be brought up to it: the
+        /// targeted refresh and the rebuild behind it both failed, or the reader moved off the Book
+        /// while it was committing.
+        /// <para>
+        /// Deliberately not an <see cref="Uncommitted"/>: the Book <em>changed</em>, so retrying the
+        /// gesture would apply it twice, and a producer holding an external artifact must keep it.
+        /// What is on screen is the last coherent snapshot, and the projection stays stale until
+        /// <see cref="BookViewProjection.RetryRebuildAsync"/> succeeds.
+        /// </para>
+        /// </summary>
+        /// <param name="Snapshot">
+        /// The last coherent snapshot, marked stale — or null when the reader moved to another
+        /// project while the change was committing, which is the one case where this outcome does
+        /// <em>not</em> leave a Stale Book View projection behind: what is on screen is a coherent
+        /// view of a different Book, so there is nothing to retry, only something to report.
+        /// </param>
+        public sealed record CommittedButStale(BookMutationReceipt Receipt, BookViewSnapshot? Snapshot)
+            : BookViewMutationOutcome;
+
         /// <summary>A valid gesture that changed nothing. Nothing committed, nothing republished.</summary>
         public sealed record NoChange : BookViewMutationOutcome;
 
@@ -29,6 +49,6 @@ namespace Read2Me.App.State.Projection
         public sealed record Uncommitted(BookMutationRejection Reason, string Message)
             : BookViewMutationOutcome;
 
-        public bool Committed => this is Coherent;
+        public bool Committed => this is Coherent or CommittedButStale;
     }
 }

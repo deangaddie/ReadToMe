@@ -76,6 +76,15 @@ namespace Read2Me.App.State.Projection
 
         private bool _subscribed;
 
+        /// <summary>
+        /// Whether reconciliation has failed since the last coherent one — the Stale Book View
+        /// projection of ADR 0007. Held here rather than read back off the published snapshot,
+        /// because it has to survive the snapshots ordinary gestures publish in the meantime:
+        /// expanding a node while stale reads the Book again but rechecks no selection, so it must
+        /// not be allowed to quietly declare the view healthy.
+        /// </summary>
+        private bool _stale;
+
         private BookViewMode _viewMode = BookViewMode.Combined;
         private Guid? _playingAudioItemId;
 
@@ -110,6 +119,11 @@ namespace Read2Me.App.State.Projection
         /// The binding moves only when the build succeeds. If a read fails, the projection stays
         /// bound where it was, keeps the snapshot it had, and the failure propagates.
         /// </para>
+        /// <para>
+        /// Opening a Stale Book View projection recovers it, because a successful open is an
+        /// authoritative rebuild — but it recovers it as a reconciliation, rechecking the selections
+        /// the failed one never reached, rather than by simply declaring the view healthy again.
+        /// </para>
         /// </summary>
         public async Task<BookViewSnapshot> OpenAsync(ProjectFolderId folderId, CancellationToken ct = default)
         {
@@ -117,7 +131,8 @@ namespace Read2Me.App.State.Projection
             try
             {
                 BindTo(folderId);
-                return (await BuildAndPublishAsync(folderId, ct)).Snapshot;
+                var recovering = _stale ? BookMutationEffects.Unknown : null;
+                return (await BuildAndPublishAsync(folderId, ct, recovering)).Snapshot;
             }
             finally
             {
@@ -194,9 +209,9 @@ namespace Read2Me.App.State.Projection
                 }
                 catch (Exception ex)
                 {
-                    // The reader keeps the last coherent snapshot rather than a half-built one, and
-                    // the pump stays alive for the next receipt. Marking the projection stale and
-                    // offering recovery is the failure ticket's job.
+                    // Reconciliation itself no longer throws — it goes stale instead — so anything
+                    // reaching here failed outside it. The pump stays alive for the next receipt
+                    // either way: a reader whose convergence broke once must still converge later.
                     logger.LogWarning(ex,
                         "Converging the Book View on {Folder} from another circuit's change failed.",
                         Folder?.Value);
@@ -221,7 +236,7 @@ namespace Read2Me.App.State.Projection
             await _builds.WaitAsync(ct);
             try
             {
-                if (Folder is not { } folder || folder != pending.FolderId || Snapshot is null)
+                if (Folder is not { } folder || folder != pending.FolderId || Snapshot is not { } current)
                     return;
 
                 // The commit happened in another circuit, so it evicted *its* tracking context, not
@@ -229,7 +244,11 @@ namespace Read2Me.App.State.Projection
                 // identity map built before the write and the Book View converges on nothing.
                 session.Refresh(folder);
 
-                var built = await ReconcileToAsync(folder, pending.Effects, ct);
+                var built = await ReconcileOrMarkStaleAsync(folder, current, pending.Effects, ct);
+
+                // A stale outcome applied nothing: the reader's own stale indicator is the feedback,
+                // and "Book updated elsewhere" would claim a convergence that did not happen.
+                if (built.WentStale) return;
 
                 // From the mailbox's own record rather than from the effects: an overflowing batch
                 // degrades those to "every facet", which would announce a queue's routine progress.
@@ -273,8 +292,8 @@ namespace Read2Me.App.State.Projection
                 {
                     // A narrow read that fails is not a reason to strand the Book View: the whole
                     // rebuild reads the same Book from the same source, so it is tried before anyone
-                    // is told anything (ADR 0007). Reporting a failed rebuild is the recovery
-                    // ticket's job; this is only the fallback.
+                    // is told anything (ADR 0007). Only when that fails too does the projection go
+                    // stale, which is ReconcileOrMarkStaleAsync's job rather than this one's.
                     logger.LogWarning(ex,
                         "Refreshing the named rows of {Folder} failed; rebuilding the Book View instead.",
                         folder.Value);
@@ -282,6 +301,57 @@ namespace Read2Me.App.State.Projection
             }
 
             return await BuildAndPublishAsync(folder, ct, effects);
+        }
+
+        /// <summary>
+        /// Reconciles, or goes stale trying. Both attempts ADR 0007 allows — the targeted refresh and
+        /// the rebuild it falls back to — live inside <see cref="ReconcileToAsync"/>; this is what
+        /// happens when neither of them could read the Book.
+        /// <para>
+        /// A read failure is deliberately not allowed to escape as an exception. The commit it
+        /// answers is already durable, and a caller handed a throw would reasonably read it as
+        /// "nothing happened" — so the answer is the last coherent snapshot, marked stale, and no
+        /// candidate published from reads that did not all succeed.
+        /// </para>
+        /// <para>Callers hold <c>_builds</c>.</para>
+        /// </summary>
+        private async Task<BuildOutcome> ReconcileOrMarkStaleAsync(
+            ProjectFolderId folder,
+            BookViewSnapshot current,
+            BookMutationEffects effects,
+            CancellationToken ct)
+        {
+            try
+            {
+                return await ReconcileToAsync(folder, effects, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // The circuit is going away, not the Book View: nobody is left to be told anything.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Reconciling the Book View on {Folder} failed; keeping the last coherent snapshot and marking it stale.",
+                    folder.Value);
+                return new BuildOutcome(MarkStale(current), ClearedSelection: false, WentStale: true);
+            }
+        }
+
+        /// <summary>
+        /// Gives up on reconciling without touching what is on screen: the reader keeps the last
+        /// coherent snapshot, now saying so, rather than a candidate half-built from a Book this
+        /// projection could not finish reading (ADR 0007).
+        /// </summary>
+        private BookViewSnapshot MarkStale(BookViewSnapshot current)
+        {
+            // Already stale — a retry that failed again — so there is nothing new to say and nobody
+            // to repaint. Asking the field rather than the snapshot keeps one answer to the question.
+            if (_stale) return current;
+
+            _stale = true;
+            return Publish(current with { Health = BookViewHealth.Stale });
         }
 
         /// <summary>
@@ -343,14 +413,21 @@ namespace Read2Me.App.State.Projection
                 throw new InvalidOperationException(
                     $"A Book mutation for '{mutation.FolderId.Value}' needs a projection open on that Book.");
 
+            // Refused rather than committed: a gesture is composed against what the reader can see,
+            // and a stale Book View is by definition not what the Book says (ADR 0007). Recovery is
+            // RetryRebuildAsync, which is deliberately the one thing still open to them here.
+            if (_stale)
+                return new BookViewMutationOutcome.Uncommitted(
+                    BookMutationRejection.Stale,
+                    "This Book View could not be refreshed after the last change, so it is out of date. " +
+                    "Refresh it before changing the Book again.");
+
             // Stamped so the broadcast copy of this receipt can be recognised as this circuit's own
             // work: it is reconciled below, synchronously, and must never come back as a surprise.
             var outcome = await mutations.CommitAsync(mutation with { OriginId = _originId }, ct);
             return outcome switch
             {
-                BookMutationOutcome.Committed committed =>
-                    new BookViewMutationOutcome.Coherent(
-                        committed.Receipt, await ReconcileAsync(committed.Receipt)),
+                BookMutationOutcome.Committed committed => await ReconcileAsync(committed.Receipt),
                 BookMutationOutcome.NoChange => new BookViewMutationOutcome.NoChange(),
                 BookMutationOutcome.Rejected rejected =>
                     new BookViewMutationOutcome.Uncommitted(rejected.Reason, rejected.Message),
@@ -360,32 +437,36 @@ namespace Read2Me.App.State.Projection
         }
 
         /// <summary>
-        /// Brings the published snapshot up to a committed receipt.
+        /// Brings the published snapshot up to a committed receipt, and answers the gesture with
+        /// which of the two committed outcomes it reached.
         /// <para>
-        /// This family's effects are structural, so the answer is always an authoritative rebuild:
-        /// structure moves counts and roll-up denominators that no single node's data carries.
-        /// Targeted refresh for the precise item-level families arrives with their own slices.
+        /// The commit is durable by the time this runs, so nothing here reports failure: a Book View
+        /// that cannot be read goes stale and says <em>committed</em>-but-stale, because a caller
+        /// told otherwise would retry a mutation that has already been applied.
         /// </para>
         /// </summary>
-        private async Task<BookViewSnapshot> ReconcileAsync(BookMutationReceipt receipt)
+        private async Task<BookViewMutationOutcome> ReconcileAsync(BookMutationReceipt receipt)
         {
             // Not the caller's token: see MutateAsync.
             await _builds.WaitAsync(CancellationToken.None);
             try
             {
-                if (Folder is not { } folder || folder != receipt.FolderId || Snapshot is null)
-                    // The mutation committed; only this circuit's view of it is lost, because the
-                    // reader switched projects underneath it. Reporting that as a stale projection
-                    // rather than a throw is the recovery ticket's job.
-                    throw new InvalidOperationException(
-                        $"{receipt.MutationName} committed on '{receipt.FolderId.Value}', but the " +
-                        "projection had already moved off that Book and cannot show it.");
+                if (Folder is not { } folder || folder != receipt.FolderId || Snapshot is not { } current)
+                    // The reader switched projects underneath the commit. Nothing is stale — the Book
+                    // View they are looking at now is a coherent view of a different Book — there is
+                    // simply no view of the one that changed for this outcome to carry.
+                    return new BookViewMutationOutcome.CommittedButStale(receipt, Snapshot: null);
 
                 // Deliberately not skipped when the published snapshot already carries this revision.
                 // A build that raced the commit — an expansion, an open — stamps the new revision
                 // while rechecking no selection against it, so treating its snapshot as a
                 // reconciliation is how a selection outlives the rows it points at.
-                return (await ReconcileToAsync(folder, receipt.Effects, CancellationToken.None)).Snapshot;
+                var built = await ReconcileOrMarkStaleAsync(
+                    folder, current, receipt.Effects, CancellationToken.None);
+
+                return built.WentStale
+                    ? new BookViewMutationOutcome.CommittedButStale(receipt, built.Snapshot)
+                    : new BookViewMutationOutcome.Coherent(receipt, built.Snapshot);
             }
             finally
             {
@@ -394,18 +475,30 @@ namespace Read2Me.App.State.Projection
         }
 
         /// <summary>
-        /// Rebuilds the bound Book from authoritative reads and republishes it — the recovery and
-        /// legacy-caller seam, for the families that still write outside <see cref="MutateAsync"/>.
+        /// Recovers a Stale Book View projection by reading the whole Book again — the one gesture
+        /// ADR 0007 leaves open while a projection is stale, and the only way out of it.
+        /// <para>
+        /// Reconciles rather than merely rebuilds: the reconciliation that failed never got to
+        /// recheck the selections, so a retry that published a healthy snapshot without doing so
+        /// would recover the view by declaring the very thing it could not verify.
+        /// </para>
+        /// <para>
+        /// A retry that fails again leaves the projection exactly as it was — still stale, still
+        /// showing the last coherent snapshot — and the returned snapshot says so.
+        /// </para>
         /// </summary>
-        public async Task<BookViewSnapshot> RebuildAsync(CancellationToken ct = default)
+        /// <exception cref="InvalidOperationException">The projection is not stale.</exception>
+        public async Task<BookViewSnapshot> RetryRebuildAsync(CancellationToken ct = default)
         {
             await _builds.WaitAsync(ct);
             try
             {
-                if (Folder is not { } folder)
-                    throw new InvalidOperationException("A rebuild needs a projection already open on a Book.");
+                if (!_stale || Folder is not { } folder || Snapshot is not { } current)
+                    throw new InvalidOperationException(
+                        "RetryRebuildAsync is recovery for a Stale Book View projection; this one has nothing to recover.");
 
-                return (await BuildAndPublishAsync(folder, ct)).Snapshot;
+                return (await ReconcileOrMarkStaleAsync(
+                    folder, current, BookMutationEffects.Unknown, ct)).Snapshot;
             }
             finally
             {
@@ -627,11 +720,13 @@ namespace Read2Me.App.State.Projection
         }
 
         /// <summary>
-        /// A published snapshot and the one thing about producing it that the snapshot cannot say:
-        /// whether reconciling dropped a selection the reader had made. That is what decides,
-        /// together with structure, whether an external change is worth announcing.
+        /// A published snapshot and the two things about producing it that the snapshot cannot say:
+        /// whether reconciling dropped a selection the reader had made — which decides, together with
+        /// structure, whether an external change is worth announcing — and whether it reconciled at
+        /// all, or gave up and left the last coherent snapshot standing.
         /// </summary>
-        private readonly record struct BuildOutcome(BookViewSnapshot Snapshot, bool ClearedSelection);
+        private readonly record struct BuildOutcome(
+            BookViewSnapshot Snapshot, bool ClearedSelection, bool WentStale = false);
 
         /// <param name="reconciling">
         /// The effects being reconciled, when this build answers a committed mutation. Its presence
@@ -796,6 +891,14 @@ namespace Read2Me.App.State.Projection
 
             // Everything above is a read into locals. Only past this line does the projection — or
             // any state it shares with the rest of the circuit — actually change.
+
+            // A build that rechecked both selections against the persisted Book is a recovery in its
+            // own right, whatever asked for it. A build that did not — an expansion, a mode switch —
+            // leaves a stale projection stale: it reread the Book, but not the one thing the failed
+            // reconciliation was in the middle of proving.
+            if (reconciling is not null)
+                _stale = false;
+
             if (Folder is { } bound && bound != folderId)
                 DiscardTransientState(bound);
 
@@ -818,7 +921,7 @@ namespace Read2Me.App.State.Projection
             {
                 Folder = folderId,
                 Revision = revision,
-                Health = BookViewHealth.Coherent,
+                Health = _stale ? BookViewHealth.Stale : BookViewHealth.Coherent,
                 Filename = book.Filename,
                 HasContent = book.HasContent,
                 Volumes = book.Volumes,

@@ -33,6 +33,17 @@ namespace Read2Me.Tests.Infrastructure
         }
 
         /// <summary>
+        /// Who the persisted Book says speaks an item. The question "did that write actually
+        /// commit?" reduces to this often enough — across the projection, presenter and mutation
+        /// fixtures — that asking it through a fresh context belongs here rather than in each.
+        /// </summary>
+        protected async Task<Guid?> PersistedSpeakerOfAsync(Guid paragraphItemId)
+        {
+            await using var db = await OpenDbAsync();
+            return (await db.ParagraphItems.FindAsync(paragraphItemId))!.CharacterId;
+        }
+
+        /// <summary>
         /// Opens the same database without migrating it — for tests that drive the migrator
         /// themselves (e.g. migrate to an older migration, seed, then migrate up).
         /// Caller owns dispose.

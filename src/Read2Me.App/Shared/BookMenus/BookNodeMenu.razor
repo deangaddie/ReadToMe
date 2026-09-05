@@ -1,8 +1,11 @@
 @inject MenuActions Menu
 @inject BookHierarchyPresenter Presenter
 
+@* Every item below is a Book mutation, and a Stale Book View projection refuses all of them
+   (ADR 0007) — so the whole menu closes rather than offering gestures that cannot be taken. *@
 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
          AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+         Disabled="Presenter.IsStale"
          @onclick:stopPropagation="true">
     @if (Spec.EditLabel != null)
     {

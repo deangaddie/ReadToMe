@@ -70,6 +70,22 @@ namespace Read2Me.App.State
         /// </summary>
         public NarratorIdentity Narrator => Snapshot?.Narrator ?? NarratorIdentity.Unlinked;
 
+        /// <summary>
+        /// Whether the Book View is a Stale Book View projection (ADR 0007) — still showing the last
+        /// coherent snapshot, but no longer able to vouch for it. The page turns this into a banner
+        /// with the retry that clears it.
+        /// </summary>
+        public bool IsStale => Snapshot?.Health == BookViewHealth.Stale;
+
+        /// <summary>
+        /// Whether a Book-level gesture is worth offering. The projection refuses every mutation
+        /// while stale anyway; this greys out the deliberate ones — the Book menu, the node menus —
+        /// so the reader is not invited to reach for them. The incidental ones, a speaker chip
+        /// above all, stay clickable and answer with the refusal, because greying out every chip in
+        /// the tree would read as the Book itself being broken rather than the view of it.
+        /// </summary>
+        public bool CanMutate => !IsBusy && !IsStale;
+
         public BookViewMode ViewMode => Snapshot?.ViewMode ?? BookViewMode.Combined;
         public bool SplitView => ViewMode != BookViewMode.Combined;
         public Guid? PlayingAudioItemId => Snapshot?.PlayingAudioItemId;
@@ -298,11 +314,14 @@ namespace Read2Me.App.State
                     return new BookMutationOutcome.Committed(coherent.Receipt);
                 case BookViewMutationOutcome.Uncommitted uncommitted:
                     return new BookMutationOutcome.Rejected(uncommitted.Reason, uncommitted.Message);
+                // Committed is what the producer above needs to hear: the Book names the artifacts it
+                // staged, so they must be kept. Only this circuit's view of the import is missing,
+                // and the stale banner answers that. Nothing to reseed either — a stale outcome
+                // published no new reads, so the two singletons still hold what they were given.
+                case BookViewMutationOutcome.CommittedButStale stale:
+                    return new BookMutationOutcome.Committed(stale.Receipt);
                 case BookViewMutationOutcome.NoChange:
                     return new BookMutationOutcome.NoChange();
-                // Enumerated rather than defaulted: a committed-but-stale case arriving here must
-                // not be flattened into "nothing happened", because the producer above would then
-                // delete the artifacts the committed Book names.
                 default:
                     throw new NotSupportedException($"Unhandled Book View outcome {outcome.GetType().Name}.");
             }
@@ -335,11 +354,51 @@ namespace Read2Me.App.State
                     case BookViewMutationOutcome.Coherent coherent:
                         SeedDerivedServices(coherent.Snapshot.Folder, coherent.Snapshot);
                         break;
+                    // Both arms say the change was kept, because the one thing the reader must not
+                    // conclude is that it was lost — they would make it a second time. They differ
+                    // on what to do next, and only one of them has a Refresh to point at.
+                    case BookViewMutationOutcome.CommittedButStale { Snapshot: null }:
+                        // They switched projects while it was committing. Nothing is stale: this
+                        // Book View is a coherent view of a different Book.
+                        snackbar.Add("Your change was saved to the book you moved away from.", Severity.Info);
+                        break;
+                    case BookViewMutationOutcome.CommittedButStale:
+                        snackbar.Add(
+                            "Your change was saved, but this Book View could not be refreshed. " +
+                            "Use Refresh to reload it — do not repeat the change.",
+                            Severity.Warning);
+                        break;
                     case BookViewMutationOutcome.Uncommitted uncommitted:
                         snackbar.Add(uncommitted.Message, Severity.Warning);
                         break;
                 }
                 return outcome;
+            }
+            finally
+            {
+                IsBusy = false;
+                NotifyStateChanged();
+            }
+        }
+
+        /// <summary>
+        /// The recovery behind the stale banner: rebuild this Book View from the persisted Book. A
+        /// retry that fails again leaves the banner up rather than clearing it and hoping — the
+        /// projection is still stale, and the reader is told the refresh did not take.
+        /// </summary>
+        public async Task RetryRebuildAsync()
+        {
+            // A queued click, or a convergence that recovered the projection while the banner was
+            // still on screen: there is nothing left to retry, and the projection refuses by
+            // throwing — which a Blazor event handler has nowhere to put.
+            if (!IsStale) return;
+
+            IsBusy = true;
+            NotifyStateChanged();
+            try
+            {
+                if (await projection.RetryRebuildAsync() is { Health: BookViewHealth.Stale })
+                    snackbar.Add("The Book View still could not be refreshed.", Severity.Warning);
             }
             finally
             {

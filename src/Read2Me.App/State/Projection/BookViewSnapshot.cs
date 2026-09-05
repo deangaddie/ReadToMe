@@ -11,8 +11,11 @@ namespace Read2Me.App.State.Projection
     /// <summary>
     /// Whether the published snapshot still describes the persisted Book.
     /// <see cref="Stale"/> is the Stale Book View projection of ADR 0007 — the last coherent
-    /// snapshot kept on screen after reconciliation failed. Only reconciliation can produce it,
-    /// so an opened projection is always <see cref="Coherent"/>.
+    /// snapshot kept on screen after a targeted refresh and its rebuild both failed. Only
+    /// reconciliation can produce it, and only a reconciliation that succeeds clears it: a
+    /// <c>RetryRebuildAsync</c>, a later convergence, or reopening the Book. Ordinary gestures keep
+    /// publishing while stale — the Book View stays readable — and their snapshots stay stale too,
+    /// because rereading the Book is not the same as rechecking what was selected in it.
     /// </summary>
     public enum BookViewHealth { Coherent, Stale }
 
