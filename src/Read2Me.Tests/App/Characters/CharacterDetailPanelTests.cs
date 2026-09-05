@@ -77,8 +77,13 @@ namespace Read2Me.Tests.App.Characters
                 voiceDesignPromptService: new FakeVoiceDesignPromptService(buildResult, generateResult),
                 fileSystem: Substitute.For<IFileSystem>());
 
-            return new CharacterPresenter(reader, Substitute.For<IBookCommandHandler>(), orchestrator,
-                new EventBroadcaster<LlmStreamEvent>());
+            // No write side: this file covers the panel's prompt-building and generation states,
+            // none of which commits a Book mutation. Those are covered in CharacterPresenterTests,
+            // where BookMutations is real.
+            return new CharacterPresenter(
+                reader, mutations: null!, characters: null!,
+                voiceAudio: Substitute.For<IVoiceAudioRemover>(),
+                orchestrator, new EventBroadcaster<LlmStreamEvent>());
         }
 
         private static CharacterDetailPanel CreatePanel(

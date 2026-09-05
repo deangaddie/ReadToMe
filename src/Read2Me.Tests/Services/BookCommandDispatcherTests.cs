@@ -9,17 +9,26 @@ using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Books;
+using Read2Me.Services.Commands;
+using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.Services
 {
-    public class BookCommandHandlerTests : ProjectDbTestBase
+    /// <summary>
+    /// What <c>POST /api/projects/{folder}/commands</c> does to the Book, per command. The seam is
+    /// <see cref="BookCommandDispatcher"/>, which is what the endpoint's adapter depends on — the
+    /// writes themselves now live behind <c>BookMutations</c> (ADR 0007) and are asserted family by
+    /// family under <c>Services/Mutations</c>; what is proved here is that dispatching a command by
+    /// its wire name still reaches them and still answers with the identity the contract names.
+    /// </summary>
+    public class BookCommandDispatcherTests : ProjectDbTestBase
     {
-        private readonly BookCommandHandler _svc;
+        private readonly BookCommandDispatcher _dispatcher;
         private readonly ProjectFolderId _folder;
 
-        public BookCommandHandlerTests()
+        public BookCommandDispatcherTests()
         {
             var services = new ServiceCollection();
             services.AddBookCommandHandlers();
@@ -27,9 +36,26 @@ namespace Read2Me.Tests.Services
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             var sp = services.BuildServiceProvider();
 
-            _svc = sp.GetRequiredService<BookCommandHandler>();
+            _dispatcher = sp.GetRequiredService<BookCommandDispatcher>();
             _folder = new ProjectFolderId(FolderName);
         }
+
+        /// <summary>
+        /// The endpoint's success answer: the id the command reports, having first insisted the
+        /// command was not refused — a refusal is a 422 there, not a success-shaped null id.
+        /// </summary>
+        private async Task<Guid?> ExecuteAsync(BookCommand command)
+        {
+            var result = await _dispatcher.ExecuteAsync(command);
+            Assert.False(
+                result.Outcome is BookMutationOutcome.Rejected,
+                $"{command.GetType().Name} was refused: {(result.Outcome as BookMutationOutcome.Rejected)?.Message}");
+            return result.EntityId;
+        }
+
+        /// <summary>The same dispatch for a command the endpoint is expected to refuse.</summary>
+        private async Task<BookMutationOutcome> DispatchAsync(BookCommand command) =>
+            (await _dispatcher.ExecuteAsync(command)).Outcome;
 
         // ---------------------------------------------------------------
         // Delete commands
@@ -41,7 +67,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeleteVolumeCommand(_folder, b.VolumeId("vol")));
+            await ExecuteAsync(new DeleteVolumeCommand(_folder, b.VolumeId("vol")));
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol")));
@@ -53,7 +79,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddPart("part", p => p.AddChapter(configure: c => c.AddParagraph(configure: p2 => p2.AddNarration("item", "Hello world"))))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeletePartCommand(_folder, b.PartId("part")));
+            await ExecuteAsync(new DeletePartCommand(_folder, b.PartId("part")));
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Parts.AnyAsync(p => p.Id == b.PartId("part")));
@@ -65,7 +91,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeleteChapterCommand(_folder, b.ChapterId("ch")));
+            await ExecuteAsync(new DeleteChapterCommand(_folder, b.ChapterId("ch")));
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Chapters.AnyAsync(c => c.Id == b.ChapterId("ch")));
@@ -77,7 +103,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeleteParagraphCommand(_folder, b.ParagraphId("para")));
+            await ExecuteAsync(new DeleteParagraphCommand(_folder, b.ParagraphId("para")));
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Paragraphs.AnyAsync(p => p.Id == b.ParagraphId("para")));
@@ -89,7 +115,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new DeleteParagraphItemCommand(_folder, b.ItemId("item")));
+            await ExecuteAsync(new DeleteParagraphItemCommand(_folder, b.ItemId("item")));
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.ParagraphItems.AnyAsync(i => i.Id == b.ItemId("item")));
@@ -108,7 +134,7 @@ namespace Read2Me.Tests.Services
                 .AddVolume("vol2", v => v.AddPart("part2"))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol2"), MergeDirection.Previous));
+            await ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol2"), MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol2")));
@@ -121,7 +147,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol"), MergeDirection.Previous));
+            await ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol"), MergeDirection.Previous));
 
             await using var verify = await OpenDbAsync();
             Assert.True(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol")));
@@ -133,7 +159,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol"), MergeDirection.Next));
+            await ExecuteAsync(new MergeVolumeCommand(_folder, b.VolumeId("vol"), MergeDirection.Next));
 
             await using var verify = await OpenDbAsync();
             Assert.True(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol")));
@@ -152,7 +178,7 @@ namespace Read2Me.Tests.Services
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
                 p.AddRawItem("item", ParagraphItemType.Speech, "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+            await ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
@@ -169,7 +195,7 @@ namespace Read2Me.Tests.Services
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
                 p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+            await ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
@@ -186,7 +212,7 @@ namespace Read2Me.Tests.Services
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
                 p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), ProjectDbContext.NarratorId));
+            await ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), ProjectDbContext.NarratorId));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
@@ -203,7 +229,7 @@ namespace Read2Me.Tests.Services
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
                 p.AddPause("pause", ParagraphItemType.ChapterPause)))).BuildAsync();
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("pause"), character.Id));
+            await ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("pause"), character.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("pause")))!.CharacterId);
@@ -220,7 +246,7 @@ namespace Read2Me.Tests.Services
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p =>
                 p.AddRawItem("item", ParagraphItemType.Speech, "Hello world", character.Id)))).BuildAsync();
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
+            await ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
 
             await using var verify = await OpenDbAsync();
             Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("item")))!.CharacterId);
@@ -254,7 +280,7 @@ namespace Read2Me.Tests.Services
                 p.AddNarration("item", "Hello world")))).BuildAsync();
             await SeedAudioAsync(b.ItemId("item"));
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+            await ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
             Assert.Null(await AudioFileNameOfAsync(b.ItemId("item")));
         }
@@ -269,7 +295,7 @@ namespace Read2Me.Tests.Services
                 p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
             await SeedAudioAsync(b.ItemId("item"));
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
+            await ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), null));
 
             Assert.Null(await AudioFileNameOfAsync(b.ItemId("item")));
         }
@@ -284,7 +310,7 @@ namespace Read2Me.Tests.Services
                 p.AddCharacterLine("item", "Hello world", speaker: "alice")))).BuildAsync();
             await SeedAudioAsync(b.ItemId("item"));
 
-            await _svc.ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
+            await ExecuteAsync(new SetItemCharacterCommand(_folder, b.ItemId("item"), character.Id));
 
             Assert.NotNull(await AudioFileNameOfAsync(b.ItemId("item")));
         }
@@ -305,7 +331,7 @@ namespace Read2Me.Tests.Services
                 .BuildAsync();
             await SeedAudioAsync(b.ItemId("narration"), b.ItemId("moved"), b.ItemId("alreadyBob"));
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
 
             Assert.Null(await AudioFileNameOfAsync(b.ItemId("moved")));
             Assert.NotNull(await AudioFileNameOfAsync(b.ItemId("narration")));    // never swept
@@ -326,7 +352,7 @@ namespace Read2Me.Tests.Services
                 .BuildAsync();
             await SeedAudioAsync(b.ItemId("item"));
 
-            await _svc.ExecuteAsync(new AttributeItemsCommand(_folder, b.ParagraphId("para"),
+            await ExecuteAsync(new AttributeItemsCommand(_folder, b.ParagraphId("para"),
                 [new ItemAttribution(b.ItemId("item"), alice.Id, null)]));
 
             await using var verify = await OpenDbAsync();
@@ -345,7 +371,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new ClearBookContentCommand(_folder));
+            await ExecuteAsync(new ClearBookContentCommand(_folder));
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Volumes.AnyAsync());
@@ -363,7 +389,7 @@ namespace Read2Me.Tests.Services
         public async Task ExecuteAsync_UnknownCommand_ThrowsNotSupportedException()
         {
             var unknownCmd = new UnknownTestCommand(_folder);
-            await Assert.ThrowsAsync<NotSupportedException>(() => _svc.ExecuteAsync(unknownCmd));
+            await Assert.ThrowsAsync<NotSupportedException>(() => ExecuteAsync(unknownCmd));
         }
 
         private record UnknownTestCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
@@ -384,7 +410,7 @@ namespace Read2Me.Tests.Services
                     .AddParagraph(configure: p => p.AddNarration("itemC", "C"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new AddPausesCommand(_folder));
+            await ExecuteAsync(new AddPausesCommand(_folder));
 
             await using var verify = await OpenDbAsync();
             Assert.True(await verify.ParagraphItems.AnyAsync(i => i.ItemType == ParagraphItemType.ParagraphPause));
@@ -403,14 +429,14 @@ namespace Read2Me.Tests.Services
                     .AddParagraph(configure: p => p.AddNarration("itemC", "C"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new AddPausesCommand(_folder));
+            await ExecuteAsync(new AddPausesCommand(_folder));
 
             await using var count1db = await OpenDbAsync();
             var countAfterFirst = await count1db.ParagraphItems
                 .CountAsync(i => i.ItemType == ParagraphItemType.ParagraphPause || i.ItemType == ParagraphItemType.ChapterPause);
             await count1db.DisposeAsync();
 
-            await _svc.ExecuteAsync(new AddPausesCommand(_folder));
+            await ExecuteAsync(new AddPausesCommand(_folder));
 
             await using var count2db = await OpenDbAsync();
             var countAfterSecond = await count2db.ParagraphItems
@@ -435,7 +461,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            var newEntityId = await _svc.ExecuteAsync(
+            var newEntityId = await ExecuteAsync(
                 new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.Before, kind));
 
             // The mutation behind this command does report the Paragraph it created, but this
@@ -469,7 +495,7 @@ namespace Read2Me.Tests.Services
             var ok = BookCommandJson.TryDeserialize("InsertPauseParagraph", body, _folder, out var command, out var error);
             Assert.True(ok, error);
 
-            await _svc.ExecuteAsync(command!);
+            await ExecuteAsync(command!);
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
@@ -488,7 +514,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c.AddParagraph("para", p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.After, PauseKind.ParagraphPause));
+            await ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.After, PauseKind.ParagraphPause));
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
@@ -511,7 +537,7 @@ namespace Read2Me.Tests.Services
                     .AddParagraph("para2", p => p.AddNarration("item2", "Second"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.After, PauseKind.ChapterPause));
+            await ExecuteAsync(new InsertPauseParagraphCommand(_folder, b.ItemId("item"), InsertPosition.After, PauseKind.ChapterPause));
 
             await using var verify = await OpenDbAsync();
             var paragraphs = await verify.Paragraphs
@@ -528,28 +554,32 @@ namespace Read2Me.Tests.Services
         }
 
         // ---------------------------------------------------------------
-        // InsertParagraphItemCommand — the legacy façade over BookMutations
+        // InsertParagraphItemCommand
         //
-        // Insertion has migrated to BookMutations (ADR 0007), so what it actually does to the
-        // Book is asserted in BookMutationsTests. What is left here is the only thing this seam
-        // still owns: the flattening of a typed outcome back into the Guid?-or-throw contract that
-        // POST /commands answers with. It goes when the façade goes.
+        // What insertion does to the Book is asserted against BookMutations in
+        // BookMutationsTests. What is left here is the command layer's own answer: which of the
+        // mutation's refusals the endpoint softens to 200 { "newEntityId": null } and which it
+        // reports as a 422.
         // ---------------------------------------------------------------
 
         [Theory]
         [InlineData("")]
         [InlineData("   ")]
-        public async Task InsertParagraphItemCommand_WhitespaceOnlyText_Throws(string text)
+        public async Task InsertParagraphItemCommand_WhitespaceOnlyText_IsRefused(string text)
         {
             // The only guard on the agent path: the commands endpoint dispatches any BookCommand
-            // by name, with no dialog in front of it, and turns this throw into a 422.
+            // by name, with no dialog in front of it, and turns this refusal into a 422.
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
                 .AddParagraph("para", p => p.AddNarration("item", "Hello world"))))
                 .BuildAsync();
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _svc.ExecuteAsync(
-                new InsertParagraphItemCommand(_folder, b.ItemId("item"), InsertPosition.After, text)));
+            var outcome = await DispatchAsync(
+                new InsertParagraphItemCommand(_folder, b.ItemId("item"), InsertPosition.After, text));
+
+            Assert.Equal(
+                BookMutationRejection.Validation,
+                Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
@@ -563,7 +593,7 @@ namespace Read2Me.Tests.Services
                 .AddParagraph("para", p => p.AddPause("pause", ParagraphItemType.ParagraphPause))))
                 .BuildAsync();
 
-            var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
+            var newId = await ExecuteAsync(new InsertParagraphItemCommand(
                 _folder, b.ItemId("pause"), InsertPosition.After, "Text."));
 
             Assert.Null(newId);
@@ -583,7 +613,7 @@ namespace Read2Me.Tests.Services
                 .AddParagraph("para", p => p.AddNarration("item", "Hello world"))))
                 .BuildAsync();
 
-            var newId = await _svc.ExecuteAsync(new InsertParagraphItemCommand(
+            var newId = await ExecuteAsync(new InsertParagraphItemCommand(
                 _folder, Guid.NewGuid(), InsertPosition.After, "Nowhere."));
 
             Assert.Null(newId);
@@ -604,41 +634,13 @@ namespace Read2Me.Tests.Services
             var ok = BookCommandJson.TryDeserialize("InsertParagraphItem", body, _folder, out var command, out var error);
             Assert.True(ok, error);
 
-            var newId = await _svc.ExecuteAsync(command!);
+            var newId = await ExecuteAsync(command!);
 
             Assert.NotNull(newId);
             await using var verify = await OpenDbAsync();
             var inserted = await verify.ParagraphItems.FindAsync(newId!.Value);
             Assert.Equal("Agent line.", inserted!.Text);
             Assert.Null(inserted.CharacterId);
-        }
-
-        // ---------------------------------------------------------------
-        // ApplyMutationAsync — ToUpdate with detached entity
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task ApplyMutation_WithDetachedUpdatedEntity_PersistsFkChange()
-        {
-            var b = new BookHierarchyBuilder(OpenDbAsync);
-            await b
-                .AddVolume("vol1", v => v.AddPart("part"))
-                .AddVolume("vol2")
-                .BuildAsync();
-
-            await using var db = await OpenDbAsync();
-            var trackedPart = await db.Parts.FindAsync(b.PartId("part"));
-            db.Entry(trackedPart!).State = EntityState.Detached;
-
-            trackedPart!.VolumeId = b.VolumeId("vol2");
-
-            var mutation = new HierarchyMutation(ToAdd: [], ToDelete: [], ToUpdate: [trackedPart]);
-            await BookCommandHandler.ApplyMutationAsync(db, mutation);
-            await db.DisposeAsync();
-
-            await using var verify = await OpenDbAsync();
-            var saved = await verify.Parts.FindAsync(b.PartId("part"));
-            Assert.Equal(b.VolumeId("vol2"), saved!.VolumeId);
         }
 
         // ---------------------------------------------------------------
@@ -651,7 +653,7 @@ namespace Read2Me.Tests.Services
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.BuildAsync();
 
-            var result = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Mr. Hyde"));
+            var result = await ExecuteAsync(new CreateCharacterCommand(_folder, "Mr. Hyde"));
 
             Assert.NotNull(result);
             await using var verify = await OpenDbAsync();
@@ -666,7 +668,7 @@ namespace Read2Me.Tests.Services
             b.WithCharacter("alice", existing);
             await b.BuildAsync();
 
-            var result = await _svc.ExecuteAsync(new CreateCharacterCommand(_folder, "Alice"));
+            var result = await ExecuteAsync(new CreateCharacterCommand(_folder, "Alice"));
 
             Assert.Equal(existing.Id, result);
             await using var verify = await OpenDbAsync();
@@ -690,7 +692,7 @@ namespace Read2Me.Tests.Services
                     .AddNarration("narrationItem", "Narration"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("charItem1")))!.CharacterId);
@@ -709,7 +711,7 @@ namespace Read2Me.Tests.Services
                     .AddRawItem("charItem", ParagraphItemType.Speech, "Hello"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id, "whispering, tense"));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id, "whispering, tense"));
 
             await using var verify = await OpenDbAsync();
             var item = await verify.ParagraphItems.FindAsync(b.ItemId("charItem"));
@@ -735,7 +737,7 @@ namespace Read2Me.Tests.Services
             await seed.SaveChangesAsync();
             await seed.DisposeAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
 
             await using var verify = await OpenDbAsync();
             var item = await verify.ParagraphItems.FindAsync(b.ItemId("charItem"));
@@ -756,7 +758,7 @@ namespace Read2Me.Tests.Services
                     .AddNarration("ni", "N"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), character.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("ci1")))!.CharacterId);
@@ -781,7 +783,7 @@ namespace Read2Me.Tests.Services
                     .AddRawItem("unattributed", ParagraphItemType.Speech, "U"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("narration")))!.CharacterId);
@@ -803,8 +805,8 @@ namespace Read2Me.Tests.Services
                     .AddRawItem("unattributed", ParagraphItemType.Speech, "U"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
 
             await using var verify = await OpenDbAsync();
             foreach (var name in new[] { "narration", "attributed", "unattributed" })
@@ -826,7 +828,7 @@ namespace Read2Me.Tests.Services
                     .AddPause("pause", ParagraphItemType.ParagraphPause))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), alice.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), alice.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(alice.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("n1")))!.CharacterId);
@@ -845,11 +847,11 @@ namespace Read2Me.Tests.Services
                 .AddParagraph("para", p => p.AddCharacterLine("line", "\"Hi,\"", speaker: "alice"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), ProjectDbContext.NarratorId));
             await using (var mid = await OpenDbAsync())
                 Assert.Equal(ProjectDbContext.NarratorId, (await mid.ParagraphItems.FindAsync(b.ItemId("line")))!.CharacterId);
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), alice.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), alice.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(alice.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("line")))!.CharacterId);
@@ -871,7 +873,7 @@ namespace Read2Me.Tests.Services
                     .AddCharacterLine("dialog", "\"Hi,\"", speaker: "alice"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), bob.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(ProjectDbContext.NarratorId, (await verify.ParagraphItems.FindAsync(b.ItemId("narration")))!.CharacterId);
@@ -890,7 +892,7 @@ namespace Read2Me.Tests.Services
                     .AddRawItem("ci2", ParagraphItemType.Speech, "B", existingChar.Id))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), null));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para"), null));
 
             await using var verify = await OpenDbAsync();
             Assert.Null((await verify.ParagraphItems.FindAsync(b.ItemId("ci1")))!.CharacterId);
@@ -910,7 +912,7 @@ namespace Read2Me.Tests.Services
                     .AddRawItem("other", ParagraphItemType.Speech, "O"))))
                 .BuildAsync();
 
-            await _svc.ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para1"), character.Id));
+            await ExecuteAsync(new SetParagraphCharacterCommand(_folder, b.ParagraphId("para1"), character.Id));
 
             await using var verify = await OpenDbAsync();
             Assert.Equal(character.Id, (await verify.ParagraphItems.FindAsync(b.ItemId("target")))!.CharacterId);

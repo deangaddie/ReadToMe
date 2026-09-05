@@ -60,11 +60,36 @@ namespace Read2Me.Tests.Services.Mutations
         private async Task<BookMutationRejection> RefusedAsync(BookMutation mutation) =>
             Assert.IsType<BookMutationOutcome.Rejected>(await CommitAsync(mutation)).Reason;
 
-        /// <summary>The Voice family is not migrated yet, so its seeding still goes through commands.</summary>
-        private async Task<Guid?> CommandAsync(BookCommand command)
+        /// <summary>Arrange-side Voice seeding, committed the same way the app commits it.</summary>
+        private async Task<Guid> CreateVoiceAsync(Guid characterId, string name) =>
+            Assert.IsType<BookMutationOutcome.Committed>(
+                await CommitAsync(new CreateVoiceMutation(_folder, characterId, name)))
+                .Receipt.Effects.CreatedId!.Value;
+
+        /// <summary>
+        /// A rule on <em>another</em> character's Voice, written straight to the Book. It has to be:
+        /// <c>CreateVoiceRuleMutation</c> refuses to make one, because a rule is a claim about which
+        /// of <em>this</em> character's voices reads a stretch of the book. The schema still permits
+        /// the row — a Restrict FK on <c>VoiceRules.VoiceId</c> — so a Book written before that
+        /// validation existed can hold one, and the destructive mutations below must cope with it.
+        /// <para>
+        /// Seeding it through the command layer, as this file used to, quietly did nothing: the
+        /// refusal was flattened to a null id and the assertions passed against a rule that was
+        /// never there.
+        /// </para>
+        /// </summary>
+        private async Task SeedForeignVoiceRuleAsync(Guid characterId, Guid voiceId)
         {
-            await using var scope = _root.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<IBookCommandHandler>().ExecuteAsync(command);
+            await using var db = await OpenDbAsync();
+            db.VoiceRules.Add(new VoiceRule
+            {
+                Id = Guid.NewGuid(),
+                CharacterId = characterId,
+                VoiceId = voiceId,
+                IsDefault = false,
+                Rank = "a1",
+            });
+            await db.SaveChangesAsync();
         }
 
         private static readonly Guid AliceId = Guid.NewGuid();
@@ -337,31 +362,31 @@ namespace Read2Me.Tests.Services.Mutations
         public async Task Merge_takesTheMergedVoicesAndRules_andSaysSo()
         {
             await SeedRosterAsync();
-            var voiceId = await CommandAsync(new CreateVoiceCommand(_folder, AliceId, "Alice Voice"));
+            var voiceId = await CreateVoiceAsync(AliceId, "Alice Voice");
 
             var effects = await AppliedAsync(new MergeCharactersMutation(_folder, BobId, AliceId, false));
 
             Assert.Equal(BookFacets.Characters | BookFacets.Voices | BookFacets.VoiceRules, effects.Facets);
             await using var verify = await OpenDbAsync();
-            Assert.Null(await verify.Voices.FindAsync(voiceId!.Value));
-            Assert.Empty(await verify.VoiceRules.Where(r => r.VoiceId == voiceId.Value).ToListAsync());
+            Assert.Null(await verify.Voices.FindAsync(voiceId));
+            Assert.Empty(await verify.VoiceRules.Where(r => r.VoiceId == voiceId).ToListAsync());
         }
 
         [Fact]
         public async Task Merge_leavesTheSurvivorsOwnVoiceAndDefaultRuleAlone()
         {
             await SeedRosterAsync();
-            var survivorVoiceId = await CommandAsync(new CreateVoiceCommand(_folder, BobId, "Bob Voice"));
-            await CommandAsync(new CreateVoiceCommand(_folder, AliceId, "Alice Voice"));
+            var survivorVoiceId = await CreateVoiceAsync(BobId, "Bob Voice");
+            await CreateVoiceAsync(AliceId, "Alice Voice");
 
             await AppliedAsync(new MergeCharactersMutation(_folder, BobId, AliceId, false));
 
             await using var verify = await OpenDbAsync();
             var voice = Assert.Single(await verify.Voices.Where(v => v.CharacterId == BobId).ToListAsync());
-            Assert.Equal(survivorVoiceId!.Value, voice.Id);
+            Assert.Equal(survivorVoiceId, voice.Id);
             var rule = Assert.Single(await verify.VoiceRules.Where(r => r.CharacterId == BobId).ToListAsync());
             Assert.True(rule.IsDefault);
-            Assert.Equal(survivorVoiceId.Value, rule.VoiceId);
+            Assert.Equal(survivorVoiceId, rule.VoiceId);
         }
 
         /// <summary>
@@ -373,13 +398,13 @@ namespace Read2Me.Tests.Services.Mutations
         {
             await SeedRosterAsync();
             var otherId = (await AppliedAsync(new CreateCharacterMutation(_folder, "Carol"))).CreatedId!.Value;
-            var voiceId = await CommandAsync(new CreateVoiceCommand(_folder, AliceId, "Alice Voice"));
-            await CommandAsync(new CreateVoiceRuleCommand(_folder, otherId, voiceId!.Value, null, null, null, null));
+            var voiceId = await CreateVoiceAsync(AliceId, "Alice Voice");
+            await SeedForeignVoiceRuleAsync(otherId, voiceId);
 
             await AppliedAsync(new MergeCharactersMutation(_folder, BobId, AliceId, false));
 
             await using var verify = await OpenDbAsync();
-            Assert.Empty(await verify.VoiceRules.Where(r => r.VoiceId == voiceId.Value).ToListAsync());
+            Assert.Empty(await verify.VoiceRules.Where(r => r.VoiceId == voiceId).ToListAsync());
             Assert.True(await verify.Characters.AnyAsync(c => c.Id == otherId));
         }
 
@@ -491,16 +516,16 @@ namespace Read2Me.Tests.Services.Mutations
         public async Task Delete_takesTheVoicesAndRules_includingAForeignOne()
         {
             await SeedRosterAsync();
-            var voiceId = await CommandAsync(new CreateVoiceCommand(_folder, AliceId, "Alice Voice"));
+            var voiceId = await CreateVoiceAsync(AliceId, "Alice Voice");
             // Bob borrows Alice's voice — Restrict FK on VoiceRules.VoiceId.
-            await CommandAsync(new CreateVoiceRuleCommand(_folder, BobId, voiceId!.Value, null, null, null, null));
+            await SeedForeignVoiceRuleAsync(BobId, voiceId);
 
             var effects = await AppliedAsync(new DeleteCharacterMutation(_folder, AliceId));
 
             Assert.Equal(BookFacets.Characters | BookFacets.Voices | BookFacets.VoiceRules, effects.Facets);
             await using var verify = await OpenDbAsync();
-            Assert.False(await verify.Voices.AnyAsync(v => v.Id == voiceId.Value));
-            Assert.False(await verify.VoiceRules.AnyAsync(r => r.VoiceId == voiceId.Value));
+            Assert.False(await verify.Voices.AnyAsync(v => v.Id == voiceId));
+            Assert.False(await verify.VoiceRules.AnyAsync(r => r.VoiceId == voiceId));
             Assert.True(await verify.Characters.AnyAsync(c => c.Id == BobId));
         }
 

@@ -19,7 +19,7 @@ namespace Read2Me.Tests.Api
         private static readonly ProjectFolderId Folder = new("book");
 
         private static BookCommandResult Committed(Guid? createdId = null) =>
-            LegacyBookCommandBridge.AsCommandResult(
+            BookCommandWireContract.AsCommandResult(
                 new BookMutationOutcome.Committed(new BookMutationReceipt(
                     Folder, "SomeMutation", Guid.NewGuid(), 1,
                     new BookMutationEffects
@@ -94,7 +94,7 @@ namespace Read2Me.Tests.Api
         [InlineData(BookMutationRejection.Validation)]
         public void ARefusalTheCommandSoftens_IsSuccessWithNoIdentity(BookMutationRejection reason)
         {
-            var softened = LegacyBookCommandBridge.AsCommandResult(
+            var softened = BookCommandWireContract.AsCommandResult(
                 new BookMutationOutcome.Rejected(reason, "nope"), reason);
 
             Assert.Null(IdOf(BookCommandApiAdapter.ToResult(softened, CancellationToken.None)));
@@ -108,7 +108,7 @@ namespace Read2Me.Tests.Api
         public void AnExpectedRefusalTheCommandDoesNotSoften_Is422WithItsReason(BookMutationRejection reason)
         {
             var result = BookCommandApiAdapter.ToResult(
-                LegacyBookCommandBridge.AsCommandResult(
+                BookCommandWireContract.AsCommandResult(
                     new BookMutationOutcome.Rejected(reason, "that character is not in this book")),
                 CancellationToken.None);
 
@@ -124,7 +124,7 @@ namespace Read2Me.Tests.Api
             cts.Cancel();
 
             Assert.Throws<OperationCanceledException>(() => BookCommandApiAdapter.ToResult(
-                LegacyBookCommandBridge.AsCommandResult(new BookMutationOutcome.Rejected(
+                BookCommandWireContract.AsCommandResult(new BookMutationOutcome.Rejected(
                     BookMutationRejection.Cancelled, "cancelled before it committed")),
                 cts.Token));
         }

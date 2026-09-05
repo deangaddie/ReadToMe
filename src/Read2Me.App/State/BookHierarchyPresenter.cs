@@ -24,9 +24,10 @@ namespace Read2Me.App.State
     /// gesture is forwarded as a <see cref="BookViewIntent"/> — so the page owns no second copy of
     /// Book View state and no rules of its own about how that state moves.
     /// <para>
-    /// What is still the adapter's own: the busy and error flags of a running command, the seeding of
-    /// the two singletons that mix persisted counts with live queue progress, and the Book mutations
-    /// that the families still on the legacy command path own until their own slice lands.
+    /// What is still the adapter's own: the busy and error flags of a running gesture, the seeding of
+    /// the two singletons that mix persisted counts with live queue progress, and the dialogs and
+    /// snackbars a typed outcome turns into. It never receives <see cref="BookMutations"/> — every
+    /// write goes through the projection, which is what makes one reconciliation rule the only one.
     /// </para>
     /// </summary>
     public class BookHierarchyPresenter(
@@ -408,7 +409,7 @@ namespace Read2Me.App.State
         }
 
         // ---------------------------------------------------------------
-        // Book mutations — the families still on the legacy command path
+        // Book mutations
         // ---------------------------------------------------------------
 
         /// <summary>

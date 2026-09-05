@@ -8,13 +8,35 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
+using Read2Me.Services.Characters;
+using Read2Me.Services.Mutations;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.App.State
 {
+    /// <summary>
+    /// The Characters tab's producer of Book mutations (ADR 0007). Every roster, Voice and Voice
+    /// Rule gesture on this page commits through <see cref="BookMutations"/>, so an open Book View —
+    /// in this circuit or another — converges on it from the receipt.
+    /// <para>
+    /// The page keeps reads of its own rather than rendering a <c>BookViewSnapshot</c>: what it
+    /// shows is one character's lines, voices and rules, none of which a Book View snapshot carries.
+    /// So a gesture here still ends in <see cref="LoadAsync"/>, its own authoritative reread, and
+    /// the tree converges separately.
+    /// </para>
+    /// <para>
+    /// A refused mutation becomes <see cref="Error"/>. The command endpoint softens some of those
+    /// refusals to <c>200 { "newEntityId": null }</c> for the contract it predates; nothing here has
+    /// to, so a protected-narrator or unknown-target gesture now says why it did nothing instead of
+    /// looking like it worked.
+    /// </para>
+    /// </summary>
     public class CharacterPresenter(
         IProjectReader reader,
-        IBookCommandHandler commandHandler,
+        BookMutations mutations,
+        CharacterResolver characters,
+        IVoiceAudioRemover voiceAudio,
         VoiceOrchestrator voiceOrchestrator,
         Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Llm.LlmStreamEvent> llmEvents)
     {
@@ -94,34 +116,40 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
-        // ── Character commands ────────────────────────────────────────────────
-
-        public Task AddCharacterAsync(string name) =>
-            ExecuteAndReloadAsync(new CreateCharacterCommand(_folderId!.Value, name));
-
-        public Task AddAliasAsync(Guid characterId, string name) =>
-            ExecuteAndReloadAsync(new AddCharacterAliasCommand(_folderId!.Value, characterId, name));
-
-        public Task RemoveAliasAsync(Guid aliasId) =>
-            ExecuteAndReloadAsync(new RemoveCharacterAliasCommand(_folderId!.Value, aliasId));
-
-        public Task MergeAsync(Guid survivorId, Guid mergedId, bool addNameAsAlias) =>
-            ExecuteAndReloadAsync(new MergeCharactersCommand(_folderId!.Value, survivorId, mergedId, addNameAsAlias));
-
-        public Task DeleteCharacterAsync(Guid characterId) =>
-            ExecuteAndReloadAsync(new DeleteCharacterCommand(_folderId!.Value, characterId));
-
-        public Task SetNarratorCharacterAsync(Guid? characterId) =>
-            ExecuteAndReloadAsync(new SetNarratorCharacterCommand(_folderId!.Value, characterId));
-
-        public Task RenameCharacterAsync(Guid characterId, string name) =>
-            ExecuteAndReloadAsync(new RenameCharacterCommand(_folderId!.Value, characterId, name));
+        // ── Character mutations ────────────────────────────────────────────────
 
         /// <summary>
-        /// Applies accepted rows from the character-discovery review dialog: one create-character
-        /// command per included row (idempotent — resolves to the existing id on a name/alias match)
-        /// followed by one add-alias command per alias on that row (deduped by the handler). Excluded
-        /// rows produce nothing.
+        /// Adds a character, or resolves the one who already answers to the name — the same
+        /// idempotent-by-name gesture the discovery dialog applies row by row.
+        /// </summary>
+        public Task AddCharacterAsync(string name) =>
+            ExecuteAndReloadAsync(async (folder, ct) =>
+                (await characters.ResolveOrCreateWithOutcomeAsync(folder, name, ct)).Outcome);
+
+        public Task AddAliasAsync(Guid characterId, string name) =>
+            ExecuteAndReloadAsync(folder => new AddCharacterAliasMutation(folder, characterId, name));
+
+        public Task RemoveAliasAsync(Guid aliasId) =>
+            ExecuteAndReloadAsync(folder => new RemoveCharacterAliasMutation(folder, aliasId));
+
+        public Task MergeAsync(Guid survivorId, Guid mergedId, bool addNameAsAlias) =>
+            ExecuteAndReloadAsync(folder =>
+                new MergeCharactersMutation(folder, survivorId, mergedId, addNameAsAlias));
+
+        public Task DeleteCharacterAsync(Guid characterId) =>
+            ExecuteAndReloadAsync(folder => new DeleteCharacterMutation(folder, characterId));
+
+        public Task SetNarratorCharacterAsync(Guid? characterId) =>
+            ExecuteAndReloadAsync(folder => new SetNarratorCharacterMutation(folder, characterId));
+
+        public Task RenameCharacterAsync(Guid characterId, string name) =>
+            ExecuteAndReloadAsync(folder => new RenameCharacterMutation(folder, characterId, name));
+
+        /// <summary>
+        /// Applies accepted rows from the character-discovery review dialog: one resolve-or-create
+        /// per included row (idempotent — answers with the existing id on a name/alias match)
+        /// followed by one add-alias mutation per alias on that row (deduped by the mutation).
+        /// Excluded rows produce nothing.
         /// </summary>
         public async Task ApplyDiscoveredCharactersAsync(
             IReadOnlyList<DiscoveredCharacterRow> rows, CancellationToken ct = default)
@@ -133,15 +161,7 @@ namespace Read2Me.App.State
             try
             {
                 foreach (var row in rows.Where(r => r.Included))
-                {
-                    var characterId = await commandHandler.ExecuteAsync(
-                        new CreateCharacterCommand(folder, row.Name), ct);
-                    if (characterId is not { } id) continue;
-
-                    foreach (var alias in row.Aliases)
-                        await commandHandler.ExecuteAsync(
-                            new AddCharacterAliasCommand(folder, id, alias), ct);
-                }
+                    Accepted(await characters.ApplyDiscoveredAsync(folder, row.Name, row.Aliases, ct));
             }
             catch (Exception ex)
             {
@@ -151,12 +171,12 @@ namespace Read2Me.App.State
             await LoadAsync(folder);
         }
 
-        // ── Voice DB commands ─────────────────────────────────────────────────
+        // ── Voice mutations ─────────────────────────────────────────────────
 
         public Task AddVoiceAsync(Guid characterId, string name) =>
-            ExecuteAndReloadAsync(new CreateVoiceCommand(_folderId!.Value, characterId, name));
+            ExecuteAndReloadAsync(folder => new CreateVoiceMutation(folder, characterId, name));
 
-        /// <summary>Creates a voice and returns its new ID without triggering a full reload.</summary>
+        /// <summary>Creates a voice and answers with its new id, reloading as every gesture does.</summary>
         public async Task<Guid?> AddVoiceAndGetIdAsync(Guid characterId, string name, bool isGenerated = false)
         {
             if (_folderId is not { } folder) return null;
@@ -166,7 +186,10 @@ namespace Read2Me.App.State
             Guid? id = null;
             try
             {
-                id = await commandHandler.ExecuteAsync(new CreateVoiceCommand(folder, characterId, name, isGenerated));
+                var outcome = await mutations.CommitAsync(
+                    new CreateVoiceMutation(folder, characterId, name, isGenerated));
+                if (Accepted(outcome) && outcome is BookMutationOutcome.Committed committed)
+                    id = committed.Receipt.Effects.CreatedId;
             }
             catch (Exception ex)
             {
@@ -177,84 +200,58 @@ namespace Read2Me.App.State
             return id;
         }
 
-        public async Task SetVoiceTranscriptDirectAsync(Guid voiceId, string transcript)
-        {
-            if (_folderId is not { } folder) return;
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            try
-            {
-                await commandHandler.ExecuteAsync(new SetVoiceTranscriptCommand(folder, voiceId, transcript));
-                UpdateVoiceInPlace(voiceId, v => v.Transcript = transcript);
-            }
-            catch (Exception ex)
-            {
-                Error = ex.Message;
-            }
-            IsBusy = false;
-            NotifyStateChanged();
-        }
+        public Task SetVoiceTranscriptDirectAsync(Guid voiceId, string transcript) =>
+            ExecuteInPlaceAsync(
+                folder => new SetVoiceTranscriptMutation(folder, voiceId, transcript),
+                voiceId, v => v.Transcript = transcript);
 
         public Task SetVoiceSourceAsync(Guid voiceId, bool isGenerated) =>
-            ExecuteAndReloadAsync(new SetVoiceSourceCommand(_folderId!.Value, voiceId, isGenerated));
+            // Through the audio remover, not straight to BookMutations: a Voice that has become
+            // designed stops naming its recording, and the file goes after that commits (ADR 0007).
+            ExecuteAndReloadAsync((folder, ct) =>
+                voiceAudio.SetVoiceSourceAsync(folder, voiceId, isGenerated, ct));
 
         public Task SetVoiceDesignPromptDirectAsync(Guid voiceId, string prompt) =>
-            ExecuteAndReloadAsync(new SetVoiceDesignPromptCommand(_folderId!.Value, voiceId, prompt));
+            ExecuteAndReloadAsync(folder => new SetVoiceDesignPromptMutation(folder, voiceId, prompt));
 
-        public async Task SetVoiceSettingsOverrideAsync(Guid voiceId, string? json)
-        {
-            if (_folderId is not { } folder) return;
-            IsBusy = true; Error = null; NotifyStateChanged();
-            try
-            {
-                await commandHandler.ExecuteAsync(new SetVoiceSettingsOverrideCommand(folder, voiceId, json));
-                UpdateVoiceInPlace(voiceId, v => v.VoiceDesignSettingsOverrideJson = json);
-            }
-            catch (Exception ex) { Error = ex.Message; }
-            IsBusy = false; NotifyStateChanged();
-        }
+        public Task SetVoiceSettingsOverrideAsync(Guid voiceId, string? json) =>
+            ExecuteInPlaceAsync(
+                folder => new SetVoiceDesignSettingsOverrideMutation(folder, voiceId, json),
+                voiceId, v => v.VoiceDesignSettingsOverrideJson = json);
 
-        public async Task SetVoiceTtsSettingsOverrideAsync(Guid voiceId, string? json)
-        {
-            if (_folderId is not { } folder) return;
-            IsBusy = true; Error = null; NotifyStateChanged();
-            try
-            {
-                await commandHandler.ExecuteAsync(new SetVoiceTtsSettingsOverrideCommand(folder, voiceId, json));
-                UpdateVoiceInPlace(voiceId, v => v.TtsSettingsOverrideJson = json);
-            }
-            catch (Exception ex) { Error = ex.Message; }
-            IsBusy = false; NotifyStateChanged();
-        }
+        public Task SetVoiceTtsSettingsOverrideAsync(Guid voiceId, string? json) =>
+            ExecuteInPlaceAsync(
+                folder => new SetVoiceTtsSettingsOverrideMutation(folder, voiceId, json),
+                voiceId, v => v.TtsSettingsOverrideJson = json);
 
         public Task SetVoiceDefaultAsync(Guid voiceId) =>
-            ExecuteAndReloadAsync(new SetVoiceDefaultCommand(_folderId!.Value, voiceId));
+            ExecuteAndReloadAsync(folder => new SetVoiceDefaultMutation(folder, voiceId));
 
         public Task UpdateVoiceAsync(Guid voiceId, string name, string? description) =>
-            ExecuteAndReloadAsync(new UpdateVoiceCommand(_folderId!.Value, voiceId, name, description));
+            ExecuteAndReloadAsync(folder => new UpdateVoiceMutation(folder, voiceId, name, description));
 
         public Task DeleteVoiceAsync(Guid voiceId) =>
-            ExecuteAndReloadAsync(new DeleteVoiceCommand(_folderId!.Value, voiceId));
+            // Same ordering as a source flip: the Book stops naming the recording first, the file
+            // goes afterwards.
+            ExecuteAndReloadAsync((folder, ct) => voiceAudio.DeleteVoiceAsync(folder, voiceId, ct));
 
-        // ── Voice Rule commands ───────────────────────────────────────────────
+        // ── Voice Rule mutations ───────────────────────────────────────────────
 
         public Task CreateVoiceRuleAsync(
             Guid characterId, Guid voiceId,
             VoiceAnchorLevel? fromLevel, Guid? fromNodeId,
             VoiceAnchorLevel? toLevel, Guid? toNodeId) =>
-            ExecuteAndReloadAsync(new CreateVoiceRuleCommand(
-                _folderId!.Value, characterId, voiceId,
-                fromLevel, fromNodeId, toLevel, toNodeId));
+            ExecuteAndReloadAsync(folder => new CreateVoiceRuleMutation(
+                folder, characterId, voiceId, fromLevel, fromNodeId, toLevel, toNodeId));
 
         public Task DeleteVoiceRuleAsync(Guid ruleId) =>
-            ExecuteAndReloadAsync(new DeleteVoiceRuleCommand(_folderId!.Value, ruleId));
+            ExecuteAndReloadAsync(folder => new DeleteVoiceRuleMutation(folder, ruleId));
 
         public Task MoveVoiceRuleUpAsync(Guid ruleId) =>
-            ExecuteAndReloadAsync(new MoveVoiceRuleCommand(_folderId!.Value, ruleId, RuleMoveDirection.Up));
+            ExecuteAndReloadAsync(folder => new MoveVoiceRuleMutation(folder, ruleId, RuleMoveDirection.Up));
 
         public Task MoveVoiceRuleDownAsync(Guid ruleId) =>
-            ExecuteAndReloadAsync(new MoveVoiceRuleCommand(_folderId!.Value, ruleId, RuleMoveDirection.Down));
+            ExecuteAndReloadAsync(folder => new MoveVoiceRuleMutation(folder, ruleId, RuleMoveDirection.Down));
 
         // ── Voice orchestration (AI + file I/O + DB) ─────────────────────────
 
@@ -322,8 +319,9 @@ namespace Read2Me.App.State
             try
             {
                 var transcript = await voiceOrchestrator.TranscribeAsync(folder, voiceId, audioStream, fileName, ct);
-                await commandHandler.ExecuteAsync(new SetVoiceTranscriptCommand(folder, voiceId, transcript), ct);
-                UpdateVoiceInPlace(voiceId, v => v.Transcript = transcript);
+                if (Accepted(await mutations.CommitAsync(
+                        new SetVoiceTranscriptMutation(folder, voiceId, transcript), ct)))
+                    UpdateVoiceInPlace(voiceId, v => v.Transcript = transcript);
             }
             catch (Exception ex)
             {
@@ -472,7 +470,15 @@ namespace Read2Me.App.State
 
         // ── Internal ──────────────────────────────────────────────────────────
 
-        private async Task ExecuteAndReloadAsync(BookCommand command)
+        private Task ExecuteAndReloadAsync(Func<ProjectFolderId, BookMutation> mutation) =>
+            ExecuteAndReloadAsync((folder, ct) => mutations.CommitAsync(mutation(folder), ct));
+
+        /// <summary>
+        /// Commits one Book mutation and rereads the page from the persisted Book afterwards, which
+        /// is where every gesture on this tab ends: the reads it renders are not on a receipt.
+        /// </summary>
+        private async Task ExecuteAndReloadAsync(
+            Func<ProjectFolderId, CancellationToken, Task<BookMutationOutcome>> commit)
         {
             if (_folderId is not { } folder) return;
             IsBusy = true;
@@ -480,7 +486,7 @@ namespace Read2Me.App.State
             NotifyStateChanged();
             try
             {
-                await commandHandler.ExecuteAsync(command);
+                Accepted(await commit(folder, CancellationToken.None));
             }
             catch (Exception ex)
             {
@@ -488,6 +494,42 @@ namespace Read2Me.App.State
             }
             IsBusy = false;
             await LoadAsync(folder);
+        }
+
+        /// <summary>
+        /// The one-field gestures that patch the loaded <see cref="VoiceEntity"/> instead of
+        /// reloading, because a full reread would replace every object the open panels and unsent
+        /// drafts are bound to. The patch is applied only if the write took.
+        /// </summary>
+        private async Task ExecuteInPlaceAsync(
+            Func<ProjectFolderId, BookMutation> mutation, Guid voiceId, Action<VoiceEntity> patch)
+        {
+            if (_folderId is not { } folder) return;
+            IsBusy = true;
+            Error = null;
+            NotifyStateChanged();
+            try
+            {
+                if (Accepted(await mutations.CommitAsync(mutation(folder))))
+                    UpdateVoiceInPlace(voiceId, patch);
+            }
+            catch (Exception ex)
+            {
+                Error = ex.Message;
+            }
+            IsBusy = false;
+            NotifyStateChanged();
+        }
+
+        /// <summary>
+        /// Turns a refusal into the page's <see cref="Error"/>. Answers whether the gesture is worth
+        /// carrying on from — a mutation that changed nothing legally did, a refused one did not.
+        /// </summary>
+        private bool Accepted(BookMutationOutcome outcome)
+        {
+            if (outcome is not BookMutationOutcome.Rejected rejected) return true;
+            Error = rejected.Message;
+            return false;
         }
 
         private void NotifyStateChanged() => StateChanged?.Invoke();

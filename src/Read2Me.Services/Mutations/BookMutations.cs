@@ -160,9 +160,9 @@ public sealed class BookMutations(
     private delegate Task<BookMutationEffects> ImplementationCall(
         BookMutation mutation, ProjectDbContext db, CancellationToken ct);
 
-    // Dispatch by closed generic, the same shape BookCommandHandler uses for ICommandHandler<T>.
-    // The duplication is migration scaffolding: the contraction ticket deletes that dispatcher — and
-    // its own eviction finally-block — once no caller holds the legacy façade.
+    // Dispatch by closed generic, the same shape BookCommandDispatcher uses for ICommandHandler<T>.
+    // The two are not the same registry and must not be merged: a command is a wire name the API
+    // contract owns, a mutation is a domain operation, and most mutations have no command at all.
     private ImplementationCall ResolveImplementation(BookMutation mutation)
     {
         var contract = typeof(IBookMutationImplementation<>).MakeGenericType(mutation.GetType());

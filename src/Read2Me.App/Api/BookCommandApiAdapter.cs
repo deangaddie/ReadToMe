@@ -13,7 +13,7 @@ namespace Read2Me.App.Api
     /// <para>
     /// The map is deliberately complete and command-agnostic. Which refusals a particular command
     /// has always answered as <c>200 { "newEntityId": null }</c> is decided one layer down, in the
-    /// handler that translates that command (see <see cref="LegacyBookCommandBridge"/>), so this
+    /// handler that translates that command (see <see cref="BookCommandWireContract"/>), so this
     /// never infers wire behaviour from a command's name.
     /// </para>
     /// </summary>

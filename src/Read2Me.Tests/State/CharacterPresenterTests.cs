@@ -1,95 +1,211 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Read2Me.App.Services;
 using Read2Me.App.State;
 using Read2Me.Core.Audio;
+using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.AppData.Entities;
+using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Services.Audio.VoiceDesign;
+using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
-using Read2Me.Services.Audio;
-using Read2Me.Services.Audio.VoiceDesign;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
+using Read2Me.Tests.Infrastructure;
+using Read2Me.TestUtils;
 using Xunit;
+using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Tests.State
 {
-    public class CharacterPresenterTests
+    /// <summary>
+    /// The Characters tab's adapter. Its write side is real — a SQLite project and
+    /// <see cref="BookMutations"/> — because every gesture on this page is a Book mutation
+    /// (ADR 0007), and "the tab shows what was written" is only worth asserting against a Book that
+    /// was actually written to.
+    /// <para>
+    /// Its read side stays substituted: what this page renders is one character's lines, voices and
+    /// rules, and the tests below are about what the presenter does with those objects — patching a
+    /// loaded Voice in place rather than replacing every one of them — not about the queries that
+    /// produce them. What each mutation does to the Book is asserted in
+    /// <c>CharacterLifecycleMutationTests</c> and <c>VoiceLifecycleMutationTests</c>.
+    /// </para>
+    /// </summary>
+    public class CharacterPresenterTests : ProjectDbTestBase
     {
-        private static readonly ProjectFolderId Folder = new("test-book");
+        private readonly ServiceProvider _root;
+        private readonly AsyncServiceScope _circuit;
+        private readonly ProjectFolderId _folder;
+
+        public CharacterPresenterTests()
+        {
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            _root = services.BuildServiceProvider();
+            _circuit = _root.CreateAsyncScope();
+            _folder = new ProjectFolderId(FolderName);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _circuit.DisposeAsync();
+            await _root.DisposeAsync();
+            await base.DisposeAsync();
+        }
 
         private sealed class FakeTranscriptionSettings : TranscriptionSettingsService
         {
             public FakeTranscriptionSettings() : base(null!, null!) { }
-            public override Task<TranscriptionServiceConfig?> GetActiveConfigAsync() => Task.FromResult<TranscriptionServiceConfig?>(null);
+            public override Task<TranscriptionServiceConfig?> GetActiveConfigAsync() =>
+                Task.FromResult<TranscriptionServiceConfig?>(null);
         }
 
         private sealed class FakeVoiceDesignPromptService : VoiceDesignPromptService
         {
             public FakeVoiceDesignPromptService() : base(null!, null!, null!, null!) { }
-            public override Task<GenerateResult> GenerateWithPromptAsync(string renderedPrompt, CancellationToken ct = default)
-                => Task.FromResult(new GenerateResult(GenerateStatus.Failed, null, null));
+            public override Task<GenerateResult> GenerateWithPromptAsync(
+                string renderedPrompt, CancellationToken ct = default) =>
+                Task.FromResult(new GenerateResult(GenerateStatus.Failed, null, null));
         }
 
-        private static CharacterPresenter CreatePresenter(
+        // ── fixture ───────────────────────────────────────────────────────────
+
+        private BookMutations Mutations => _circuit.ServiceProvider.GetRequiredService<BookMutations>();
+
+        /// <summary>
+        /// The presenter over the real write side, with its reads substituted. The reader defaults
+        /// to an empty roster, so a test that needs one arranges it.
+        /// </summary>
+        private CharacterPresenter CreatePresenter(
             IVoiceAudioWriter? voiceAudio = null,
-            IBookCommandHandler? commandHandler = null,
             EventBroadcaster<LlmStreamEvent>? llmEvents = null,
             IProjectReader? projectReader = null)
         {
             var reader = projectReader ?? Substitute.For<IProjectReader>();
-            reader.GetCharactersWithAliasesAsync(Folder)
-                .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Character>());
-
-            var recorder = voiceAudio ?? Substitute.For<IVoiceAudioWriter>();
-            var cmd = commandHandler ?? Substitute.For<IBookCommandHandler>();
+            if (projectReader is null)
+                reader.GetCharactersWithAliasesAsync(_folder).Returns(new List<Character>());
 
             var orchestrator = new VoiceOrchestrator(
-                voiceAudio: recorder,
+                voiceAudio: voiceAudio ?? Substitute.For<IVoiceAudioWriter>(),
                 transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
                 voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
                 transcriptionSettings: new FakeTranscriptionSettings(),
                 voiceDesignPromptService: new FakeVoiceDesignPromptService(),
                 fileSystem: Substitute.For<IFileSystem>());
 
-            return new CharacterPresenter(reader, cmd, orchestrator,
+            return new CharacterPresenter(
+                reader,
+                Mutations,
+                new CharacterResolver(reader, Mutations),
+                // Nothing here deletes a Voice or flips its source; those two order a file against
+                // the commit, and that ordering is asserted in VoiceAudioWriterTests.
+                Substitute.For<IVoiceAudioRemover>(),
+                orchestrator,
                 llmEvents ?? new EventBroadcaster<LlmStreamEvent>());
         }
 
-        [Fact]
-        public async Task NarratorLink_LoadsIdentityAndWritesThroughSetNarratorCommand()
+        /// <summary>
+        /// The smallest Book a Character gesture can be committed against. Each character is seeded
+        /// as a row of its own identity and name, never the test's object: what Voices that object
+        /// carries is the arrangement of what the page has loaded, and several tests deliberately
+        /// load Voices the Book does not have — or two objects for one id.
+        /// </summary>
+        private Task SeedProjectAsync(params Character[] characters)
         {
-            var watsonId = Guid.NewGuid();
-            var identity = new NarratorIdentity(watsonId, "Dr. Watson", true);
-            var reader = Substitute.For<IProjectReader>();
-            reader.GetNarratorAsync(Folder, Arg.Any<CancellationToken>()).Returns(identity);
-            var commands = Substitute.For<IBookCommandHandler>();
-            var presenter = CreatePresenter(commandHandler: commands, projectReader: reader);
-
-            await presenter.LoadAsync(Folder);
-            await presenter.SetNarratorCharacterAsync(watsonId);
-
-            Assert.Equal(identity, presenter.Narrator);
-            await commands.Received(1).ExecuteAsync(
-                Arg.Is<SetNarratorCharacterCommand>(c => c != null && c.FolderId == Folder && c.CharacterId == watsonId),
-                Arg.Any<CancellationToken>());
+            var builder = new BookHierarchyBuilder(OpenDbAsync);
+            foreach (var c in characters)
+                builder.WithCharacter(c.Name, new Character { Id = c.Id, Name = c.Name });
+            return builder.BuildAsync();
         }
+
+        /// <summary>
+        /// Puts real Voice rows behind the ids a test's substituted reader hands back. Ids the
+        /// character's own navigation collection already carried into the Book are skipped: the
+        /// arrangement decides which lists hold a Voice, not how many rows it has.
+        /// </summary>
+        private async Task SeedVoicesAsync(Guid characterId, params Guid[] voiceIds)
+        {
+            await using var db = await OpenDbAsync();
+            foreach (var id in voiceIds)
+                if (await db.Voices.FindAsync(id) is null)
+                    db.Voices.Add(new VoiceEntity { Id = id, CharacterId = characterId, Name = "Voice" });
+            await db.SaveChangesAsync();
+        }
+
+        private async Task<VoiceEntity> PersistedVoiceAsync(Guid voiceId)
+        {
+            await using var db = await OpenDbAsync();
+            return await db.Voices.SingleAsync(v => v.Id == voiceId);
+        }
+
+        // ── narrator ──────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task SetNarratorCharacter_LinksTheNarratorInThePersistedBook()
+        {
+            var watson = new Character { Id = Guid.NewGuid(), Name = "Dr. Watson" };
+            await SeedProjectAsync(watson);
+
+            var identity = new NarratorIdentity(watson.Id, watson.Name, true);
+            var reader = Substitute.For<IProjectReader>();
+            reader.GetNarratorAsync(_folder, Arg.Any<CancellationToken>()).Returns(identity);
+            reader.GetCharactersWithAliasesAsync(_folder).Returns(new List<Character> { watson });
+
+            var presenter = CreatePresenter(projectReader: reader);
+            await presenter.LoadAsync(_folder);
+            await presenter.SetNarratorCharacterAsync(watson.Id);
+
+            Assert.Null(presenter.Error);
+            Assert.Equal(identity, presenter.Narrator);
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(watson.Id, (await NarratorIdentity.LoadAsync(verify)).CharacterId);
+        }
+
+        /// <summary>
+        /// The refusals the command endpoint softens to a success-shaped null are not softened here:
+        /// nothing on this page has to answer a contract that predates them, so a gesture that did
+        /// nothing says why.
+        /// </summary>
+        [Fact]
+        public async Task AGestureTheBookRefuses_ReportsWhyRatherThanLookingLikeItWorked()
+        {
+            await SeedProjectAsync();
+            var presenter = CreatePresenter();
+            await presenter.LoadAsync(_folder);
+
+            await presenter.DeleteCharacterAsync(ProjectDbContext.NarratorId);
+
+            Assert.NotNull(presenter.Error);
+
+            await using var verify = await OpenDbAsync();
+            Assert.True(await verify.Characters.AnyAsync(c => c.Id == ProjectDbContext.NarratorId));
+        }
+
+        // ── voice design prompt ───────────────────────────────────────────────
 
         [Fact]
         public async Task GenerateDesignPrompt_LlmFails_StillBracketsAThroughputRunOfOne()
         {
             var stream = new EventBroadcaster<LlmStreamEvent>();
-            var runs = new System.Collections.Generic.List<LlmStreamEvent>();
+            var runs = new List<LlmStreamEvent>();
             stream.Event += e => { if (e is RunStarted or RunEnded) runs.Add(e); };
 
             // The fake design service always fails, so this also covers the rule that a failed
             // run must still close — an unclosed run strands the next run's total.
             var presenter = CreatePresenter(llmEvents: stream);
-            await presenter.LoadAsync(Folder);
+            await presenter.LoadAsync(_folder);
 
             Assert.Null(await presenter.GenerateDesignPromptWithTextAsync("rendered prompt"));
 
@@ -97,6 +213,8 @@ namespace Read2Me.Tests.State
                 e => Assert.IsType<RunStarted>(e),
                 e => Assert.IsType<RunEnded>(e));
         }
+
+        // ── uploaded voice audio ──────────────────────────────────────────────
 
         [Fact]
         public async Task VoiceAudioUrl_ChangesAfterUpload()
@@ -109,7 +227,7 @@ namespace Read2Me.Tests.State
                 .Returns("voices/test.wav");
 
             var presenter = CreatePresenter(voiceAudio: recorder);
-            await presenter.LoadAsync(Folder);
+            await presenter.LoadAsync(_folder);
 
             var tokenBefore = presenter.AudioToken(voiceId);
             await presenter.UploadVoiceAudioAsync(
@@ -131,7 +249,7 @@ namespace Read2Me.Tests.State
                 .Returns("voices/test.wav");
 
             var presenter = CreatePresenter(voiceAudio: recorder);
-            await presenter.LoadAsync(Folder);
+            await presenter.LoadAsync(_folder);
 
             var t0 = presenter.AudioToken(voiceId);
             await presenter.UploadVoiceAudioAsync(charId, voiceId, "V", new MemoryStream([1]), ".wav");
@@ -154,7 +272,7 @@ namespace Read2Me.Tests.State
                 .Returns("voices/uploaded.wav");
 
             var presenter = CreatePresenter(voiceAudio: recorder);
-            await presenter.LoadAsync(Folder);
+            await presenter.LoadAsync(_folder);
 
             var tokenBefore = presenter.AudioToken(voiceId);
             await presenter.UploadVoiceAudioAsync(charId, voiceId, "Voice", new MemoryStream([1, 2, 3]), ".wav");
@@ -174,7 +292,7 @@ namespace Read2Me.Tests.State
                 .ThrowsAsync(new IOException("upload failed"));
 
             var presenter = CreatePresenter(voiceAudio: recorder);
-            await presenter.LoadAsync(Folder);
+            await presenter.LoadAsync(_folder);
 
             var tokenBefore = presenter.AudioToken(voiceId);
             await presenter.UploadVoiceAudioAsync(charId, voiceId, "Voice", new MemoryStream([1]), ".wav");
@@ -185,33 +303,25 @@ namespace Read2Me.Tests.State
 
         // ── UpdateVoiceInPlace guard tests ────────────────────────────────────
 
-        // Helper: builds a presenter whose reader returns the given character (with voices)
-        // and whose GetCharacterVoicesAsync returns the given voices list.
-        private static async Task<CharacterPresenter> CreatePresenterWithCharacterAsync(
-            Read2Me.Data.Entities.Character character,
-            System.Collections.Generic.List<Read2Me.Data.Entities.Voice> voicesList,
-            IBookCommandHandler? commandHandler = null)
+        /// <summary>
+        /// A presenter showing one character, with real Voice rows behind the ids its substituted
+        /// reader hands back — so the one-field gestures below commit for real and then patch the
+        /// loaded objects rather than reloading every one of them.
+        /// </summary>
+        private async Task<CharacterPresenter> CreatePresenterWithCharacterAsync(
+            Character character, List<VoiceEntity> voicesList, params Character[] alsoOnTheRoster)
         {
+            await SeedProjectAsync([.. new[] { character }.Concat(alsoOnTheRoster)]);
+            await SeedVoicesAsync(character.Id, [.. voicesList.Select(v => v.Id).Distinct()]);
+
             var reader = Substitute.For<IProjectReader>();
-            reader.GetCharactersWithAliasesAsync(Folder)
-                .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Character> { character });
-            reader.GetCharacterLinesAsync(Folder, character.Id)
-                .Returns(new System.Collections.Generic.List<Read2Me.Core.Models.CharacterLine>());
-            reader.GetCharacterVoicesAsync(Folder, character.Id)
-                .Returns(voicesList);
+            reader.GetCharactersWithAliasesAsync(_folder)
+                .Returns([.. new[] { character }.Concat(alsoOnTheRoster)]);
+            reader.GetCharacterLinesAsync(_folder, character.Id).Returns(new List<CharacterLine>());
+            reader.GetCharacterVoicesAsync(_folder, character.Id).Returns(voicesList);
 
-            var cmd = commandHandler ?? Substitute.For<IBookCommandHandler>();
-
-            var orchestrator = new VoiceOrchestrator(
-                voiceAudio: Substitute.For<IVoiceAudioWriter>(),
-                transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
-                voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
-                transcriptionSettings: new FakeTranscriptionSettings(),
-                voiceDesignPromptService: new FakeVoiceDesignPromptService(),
-                fileSystem: Substitute.For<IFileSystem>());
-
-            var presenter = new CharacterPresenter(reader, cmd, orchestrator, new EventBroadcaster<LlmStreamEvent>());
-            await presenter.LoadAsync(Folder);
+            var presenter = CreatePresenter(projectReader: reader);
+            await presenter.LoadAsync(_folder);
             await presenter.SelectCharacterAsync(character);
             return presenter;
         }
@@ -221,19 +331,12 @@ namespace Read2Me.Tests.State
         {
             // Same Voice reference in both Voices list and Character.Voices
             var voiceId = Guid.NewGuid();
-            var sharedVoice = new Read2Me.Data.Entities.Voice { Id = voiceId, Transcript = "original" };
+            var sharedVoice = new VoiceEntity { Id = voiceId, Transcript = "original" };
 
-            var character = new Read2Me.Data.Entities.Character
-            {
-                Id = Guid.NewGuid(),
-                Name = "Alice",
-                Voices = new System.Collections.Generic.List<Read2Me.Data.Entities.Voice> { sharedVoice }
-            };
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [sharedVoice] };
 
-            // GetCharacterVoicesAsync returns the SAME object that's in Character.Voices
-            var voicesList = new System.Collections.Generic.List<Read2Me.Data.Entities.Voice> { sharedVoice };
-
-            var presenter = await CreatePresenterWithCharacterAsync(character, voicesList);
+            // GetCharacterVoicesAsync returns the SAME object that is in Character.Voices
+            var presenter = await CreatePresenterWithCharacterAsync(character, [sharedVoice]);
 
             await presenter.SetVoiceTranscriptDirectAsync(voiceId, "updated");
 
@@ -242,6 +345,7 @@ namespace Read2Me.Tests.State
             // Presenter.Voices and SelectedCharacter.Voices both point to the same object
             Assert.Same(presenter.Voices.Find(v => v.Id == voiceId),
                         presenter.SelectedCharacter!.Voices.FirstOrDefault(v => v.Id == voiceId));
+            Assert.Equal("updated", (await PersistedVoiceAsync(voiceId)).Transcript);
         }
 
         [Fact]
@@ -249,18 +353,12 @@ namespace Read2Me.Tests.State
         {
             // Voice in Voices list; SelectedCharacter.Voices is empty
             var voiceId = Guid.NewGuid();
-            var voice = new Read2Me.Data.Entities.Voice { Id = voiceId, Transcript = "original" };
+            var voice = new VoiceEntity { Id = voiceId, Transcript = "original" };
 
-            var character = new Read2Me.Data.Entities.Character
-            {
-                Id = Guid.NewGuid(),
-                Name = "Bob",
-                Voices = [] // character has no voices in its navigation collection
-            };
+            // character has no voices in its navigation collection
+            var character = new Character { Id = Guid.NewGuid(), Name = "Bob", Voices = [] };
 
-            var voicesList = new System.Collections.Generic.List<Read2Me.Data.Entities.Voice> { voice };
-
-            var presenter = await CreatePresenterWithCharacterAsync(character, voicesList);
+            var presenter = await CreatePresenterWithCharacterAsync(character, [voice]);
 
             await presenter.SetVoiceTranscriptDirectAsync(voiceId, "set from list");
 
@@ -273,19 +371,12 @@ namespace Read2Me.Tests.State
         {
             // Different Voice objects for same ID in Voices vs SelectedCharacter.Voices
             var voiceId = Guid.NewGuid();
-            var voiceInList = new Read2Me.Data.Entities.Voice { Id = voiceId, Transcript = "list-original" };
-            var voiceInChar = new Read2Me.Data.Entities.Voice { Id = voiceId, Transcript = "char-original" };
+            var voiceInList = new VoiceEntity { Id = voiceId, Transcript = "list-original" };
+            var voiceInChar = new VoiceEntity { Id = voiceId, Transcript = "char-original" };
 
-            var character = new Read2Me.Data.Entities.Character
-            {
-                Id = Guid.NewGuid(),
-                Name = "Carol",
-                Voices = new System.Collections.Generic.List<Read2Me.Data.Entities.Voice> { voiceInChar }
-            };
+            var character = new Character { Id = Guid.NewGuid(), Name = "Carol", Voices = [voiceInChar] };
 
-            var voicesList = new System.Collections.Generic.List<Read2Me.Data.Entities.Voice> { voiceInList };
-
-            var presenter = await CreatePresenterWithCharacterAsync(character, voicesList);
+            var presenter = await CreatePresenterWithCharacterAsync(character, [voiceInList]);
 
             await presenter.SetVoiceTranscriptDirectAsync(voiceId, "synced");
 
@@ -294,35 +385,94 @@ namespace Read2Me.Tests.State
             Assert.Equal("synced", voiceInChar.Transcript);
         }
 
+        [Fact]
+        public async Task UpdateVoiceInPlace_PatchesNonSelectedCharacterVoices()
+        {
+            var voiceId = Guid.NewGuid();
+            var selectedVoice = new VoiceEntity { Id = voiceId, Transcript = "selected-original" };
+            var otherVoice = new VoiceEntity { Id = voiceId, Transcript = "other-original" };
+
+            var selectedChar = new Character { Id = Guid.NewGuid(), Name = "Selected", Voices = [selectedVoice] };
+            var otherChar = new Character { Id = Guid.NewGuid(), Name = "Other", Voices = [otherVoice] };
+
+            var presenter = await CreatePresenterWithCharacterAsync(selectedChar, [selectedVoice], otherChar);
+
+            await presenter.SetVoiceTranscriptDirectAsync(voiceId, "patched");
+
+            Assert.Equal("patched", selectedVoice.Transcript);
+            Assert.Equal("patched", otherVoice.Transcript);
+        }
+
+        /// <summary>
+        /// The patch is applied only when the write took: a gesture the Book refused must not leave
+        /// the page showing a value nothing was saved for.
+        /// </summary>
+        [Fact]
+        public async Task UpdateVoiceInPlace_WhenTheWriteIsRefused_LeavesTheLoadedVoiceAlone()
+        {
+            var voice = new VoiceEntity { Id = Guid.NewGuid(), Transcript = "original" };
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [voice] };
+
+            // Seeded with the character but not the Voice, so the Book has nothing to write to.
+            await SeedProjectAsync(character);
+            var reader = Substitute.For<IProjectReader>();
+            reader.GetCharactersWithAliasesAsync(_folder).Returns(new List<Character> { character });
+            reader.GetCharacterLinesAsync(_folder, character.Id).Returns(new List<CharacterLine>());
+            reader.GetCharacterVoicesAsync(_folder, character.Id).Returns(new List<VoiceEntity> { voice });
+
+            var presenter = CreatePresenter(projectReader: reader);
+            await presenter.LoadAsync(_folder);
+            await presenter.SelectCharacterAsync(character);
+
+            await presenter.SetVoiceTranscriptDirectAsync(voice.Id, "never saved");
+
+            Assert.Equal("original", voice.Transcript);
+            Assert.NotNull(presenter.Error);
+        }
+
         // ── SetVoiceTtsSettingsOverrideAsync ──────────────────────────────────
 
         [Fact]
-        public async Task SetVoiceTtsSettingsOverrideAsync_DispatchesCommand()
+        public async Task SetVoiceTtsSettingsOverrideAsync_CommitsTheOverride()
         {
-            var voiceId = Guid.NewGuid();
-            var voice = new Read2Me.Data.Entities.Voice { Id = voiceId };
-            var character = new Read2Me.Data.Entities.Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [voice] };
-            var cmd = Substitute.For<IBookCommandHandler>();
+            var voice = new VoiceEntity { Id = Guid.NewGuid() };
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [voice] };
 
-            var presenter = await CreatePresenterWithCharacterAsync(character, [voice], cmd);
-            await presenter.SetVoiceTtsSettingsOverrideAsync(voiceId, "{\"cfg_value\":3.5}");
+            var presenter = await CreatePresenterWithCharacterAsync(character, [voice]);
+            await presenter.SetVoiceTtsSettingsOverrideAsync(voice.Id, "{\"cfg_value\":3.5}");
 
-            await cmd.Received(1).ExecuteAsync(
-                Arg.Is<SetVoiceTtsSettingsOverrideCommand>(c => c != null && c.VoiceId == voiceId && c.Json == "{\"cfg_value\":3.5}"),
-                Arg.Any<CancellationToken>());
+            Assert.Equal("{\"cfg_value\":3.5}", (await PersistedVoiceAsync(voice.Id)).TtsSettingsOverrideJson);
         }
 
         [Fact]
         public async Task SetVoiceTtsSettingsOverrideAsync_UpdatesVoiceInPlace()
         {
-            var voiceId = Guid.NewGuid();
-            var voice = new Read2Me.Data.Entities.Voice { Id = voiceId, TtsSettingsOverrideJson = null };
-            var character = new Read2Me.Data.Entities.Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [voice] };
+            var voice = new VoiceEntity { Id = Guid.NewGuid(), TtsSettingsOverrideJson = null };
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [voice] };
 
             var presenter = await CreatePresenterWithCharacterAsync(character, [voice]);
-            await presenter.SetVoiceTtsSettingsOverrideAsync(voiceId, "{\"cfg_value\":3.5}");
+            await presenter.SetVoiceTtsSettingsOverrideAsync(voice.Id, "{\"cfg_value\":3.5}");
 
             Assert.Equal("{\"cfg_value\":3.5}", voice.TtsSettingsOverrideJson);
+        }
+
+        // ── voice rules ───────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task CreateVoiceRule_CommitsThePositionalRule()
+        {
+            var voice = new VoiceEntity { Id = Guid.NewGuid() };
+            var character = new Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [voice] };
+
+            var presenter = await CreatePresenterWithCharacterAsync(character, [voice]);
+            await presenter.CreateVoiceRuleAsync(character.Id, voice.Id, null, null, null, null);
+
+            Assert.Null(presenter.Error);
+
+            await using var verify = await OpenDbAsync();
+            var rule = await verify.VoiceRules.SingleAsync(r => r.CharacterId == character.Id);
+            Assert.Equal(voice.Id, rule.VoiceId);
+            Assert.False(rule.IsDefault);
         }
 
         // ── ReadyVoiceCount ───────────────────────────────────────────────────
@@ -330,14 +480,13 @@ namespace Read2Me.Tests.State
         [Fact]
         public void ReadyVoiceCount_AllReady_ReturnsTotal()
         {
-            var presenter = CreatePresenter();
-            var character = new Read2Me.Data.Entities.Character
+            var character = new Character
             {
                 Id = Guid.NewGuid(), Name = "Alice",
                 Voices =
                 [
-                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = "voices/a.wav" },
-                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = "voices/b.wav" },
+                    new VoiceEntity { Id = Guid.NewGuid(), AudioFileName = "voices/a.wav" },
+                    new VoiceEntity { Id = Guid.NewGuid(), AudioFileName = "voices/b.wav" },
                 ]
             };
             Assert.Equal(2, CharacterPresenter.ReadyVoiceCount(character));
@@ -346,14 +495,13 @@ namespace Read2Me.Tests.State
         [Fact]
         public void ReadyVoiceCount_NoneReady_ReturnsZero()
         {
-            var presenter = CreatePresenter();
-            var character = new Read2Me.Data.Entities.Character
+            var character = new Character
             {
-                Id = Guid.NewGuid(), Name = "Bob",
+                Id = Guid.NewGuid(), Name = "Alice",
                 Voices =
                 [
-                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = null },
-                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = string.Empty },
+                    new VoiceEntity { Id = Guid.NewGuid() },
+                    new VoiceEntity { Id = Guid.NewGuid(), AudioFileName = "" },
                 ]
             };
             Assert.Equal(0, CharacterPresenter.ReadyVoiceCount(character));
@@ -362,154 +510,102 @@ namespace Read2Me.Tests.State
         [Fact]
         public void ReadyVoiceCount_Partial_ReturnsReadyOnly()
         {
-            var presenter = CreatePresenter();
-            var character = new Read2Me.Data.Entities.Character
+            var character = new Character
             {
-                Id = Guid.NewGuid(), Name = "Carol",
+                Id = Guid.NewGuid(), Name = "Alice",
                 Voices =
                 [
-                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = "voices/a.wav" },
-                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = null },
-                    new Read2Me.Data.Entities.Voice { Id = Guid.NewGuid(), AudioFileName = string.Empty },
+                    new VoiceEntity { Id = Guid.NewGuid(), AudioFileName = "voices/a.wav" },
+                    new VoiceEntity { Id = Guid.NewGuid() },
                 ]
             };
             Assert.Equal(1, CharacterPresenter.ReadyVoiceCount(character));
         }
 
         [Fact]
-        public void ReadyVoiceCount_EmptyVoicesList_ReturnsZero()
+        public void ReadyVoiceCount_EmptyVoicesList_ReturnsZero() =>
+            Assert.Equal(0, CharacterPresenter.ReadyVoiceCount(
+                new Character { Id = Guid.NewGuid(), Name = "Alice", Voices = [] }));
+
+        // ── discovery review ──────────────────────────────────────────────────
+
+        /// <summary>The roster the Book actually holds, minus the seed narrator row.</summary>
+        private async Task<List<Character>> PersistedRosterAsync()
         {
-            var presenter = CreatePresenter();
-            var character = new Read2Me.Data.Entities.Character { Id = Guid.NewGuid(), Name = "Dan", Voices = [] };
-            Assert.Equal(0, CharacterPresenter.ReadyVoiceCount(character));
-        }
-
-        // ── UpdateVoiceInPlace patches non-selected character voices ──────────
-
-        [Fact]
-        public async Task UpdateVoiceInPlace_PatchesNonSelectedCharacterVoices()
-        {
-            var voiceId = Guid.NewGuid();
-            var selectedVoice = new Read2Me.Data.Entities.Voice { Id = voiceId, Transcript = "selected-original" };
-            var otherVoice = new Read2Me.Data.Entities.Voice { Id = voiceId, Transcript = "other-original" };
-
-            var selectedChar = new Read2Me.Data.Entities.Character
-            {
-                Id = Guid.NewGuid(), Name = "Selected",
-                Voices = [selectedVoice]
-            };
-            var otherChar = new Read2Me.Data.Entities.Character
-            {
-                Id = Guid.NewGuid(), Name = "Other",
-                Voices = [otherVoice]
-            };
-
-            var reader = Substitute.For<IProjectReader>();
-            reader.GetCharactersWithAliasesAsync(Folder)
-                .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Character> { selectedChar, otherChar });
-            reader.GetCharacterLinesAsync(Folder, selectedChar.Id)
-                .Returns(new System.Collections.Generic.List<Read2Me.Core.Models.CharacterLine>());
-            reader.GetCharacterVoicesAsync(Folder, selectedChar.Id)
-                .Returns(new System.Collections.Generic.List<Read2Me.Data.Entities.Voice> { selectedVoice });
-
-            var orchestrator = new VoiceOrchestrator(
-                voiceAudio: Substitute.For<IVoiceAudioWriter>(),
-                transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
-                voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
-                transcriptionSettings: new FakeTranscriptionSettings(),
-                voiceDesignPromptService: new FakeVoiceDesignPromptService(),
-                fileSystem: Substitute.For<IFileSystem>());
-
-            var presenter = new CharacterPresenter(reader, Substitute.For<IBookCommandHandler>(), orchestrator,
-                new EventBroadcaster<LlmStreamEvent>());
-            await presenter.LoadAsync(Folder);
-            await presenter.SelectCharacterAsync(selectedChar);
-
-            await presenter.SetVoiceTranscriptDirectAsync(voiceId, "patched");
-
-            Assert.Equal("patched", selectedVoice.Transcript);
-            Assert.Equal("patched", otherVoice.Transcript);
-        }
-
-        /// <summary>Records dispatched commands and returns a scripted id for CreateCharacterCommand.</summary>
-        private sealed class ScriptedCommandHandler : IBookCommandHandler
-        {
-            public List<BookCommand> Executed { get; } = [];
-            public Func<CreateCharacterCommand, Guid?> ResolveCreateId { get; set; } = _ => Guid.NewGuid();
-
-            public Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
-            {
-                Executed.Add(command);
-                return Task.FromResult(command is CreateCharacterCommand create ? ResolveCreateId(create) : null);
-            }
+            await using var db = await OpenDbAsync();
+            return await db.Characters
+                .Include(c => c.Aliases)
+                .Where(c => c.Id != ProjectDbContext.NarratorId)
+                .ToListAsync();
         }
 
         [Fact]
         public async Task ApplyDiscoveredCharacters_IncludedRow_CreatesCharacterAndAliases()
         {
-            var handler = new ScriptedCommandHandler();
-            var presenter = CreatePresenter(commandHandler: handler);
-            await presenter.LoadAsync(Folder);
+            await SeedProjectAsync();
+            var presenter = CreatePresenter();
+            await presenter.LoadAsync(_folder);
 
-            var row = new DiscoveredCharacterRow { Name = "Gandalf", Aliases = ["Mithrandir", "Greyhame"] };
-            await presenter.ApplyDiscoveredCharactersAsync([row]);
+            await presenter.ApplyDiscoveredCharactersAsync(
+                [new DiscoveredCharacterRow { Name = "Gandalf", Aliases = ["Mithrandir", "Greyhame"] }]);
 
-            Assert.Equal(3, handler.Executed.Count);
-            var create = Assert.IsType<CreateCharacterCommand>(handler.Executed[0]);
-            Assert.Equal("Gandalf", create.Name);
-            var alias1 = Assert.IsType<AddCharacterAliasCommand>(handler.Executed[1]);
-            Assert.Equal("Mithrandir", alias1.Name);
-            var alias2 = Assert.IsType<AddCharacterAliasCommand>(handler.Executed[2]);
-            Assert.Equal("Greyhame", alias2.Name);
-            Assert.Equal(alias1.CharacterId, alias2.CharacterId);
+            var gandalf = Assert.Single(await PersistedRosterAsync());
+            Assert.Equal("Gandalf", gandalf.Name);
+            Assert.Equal(["Greyhame", "Mithrandir"], gandalf.Aliases.Select(a => a.Name).Order());
         }
 
         [Fact]
-        public async Task ApplyDiscoveredCharacters_ExcludedRow_ProducesNoCommands()
+        public async Task ApplyDiscoveredCharacters_ExcludedRow_WritesNothing()
         {
-            var handler = new ScriptedCommandHandler();
-            var presenter = CreatePresenter(commandHandler: handler);
-            await presenter.LoadAsync(Folder);
+            await SeedProjectAsync();
+            var presenter = CreatePresenter();
+            await presenter.LoadAsync(_folder);
 
-            var row = new DiscoveredCharacterRow { Name = "Bombadil", Included = false };
-            await presenter.ApplyDiscoveredCharactersAsync([row]);
+            await presenter.ApplyDiscoveredCharactersAsync(
+                [new DiscoveredCharacterRow { Name = "Bombadil", Included = false }]);
 
-            Assert.Empty(handler.Executed);
+            Assert.Empty(await PersistedRosterAsync());
         }
 
+        /// <summary>
+        /// The row the dialog already knew about: the create resolves to whoever answers to the name
+        /// rather than making a second of them, and the new alias still lands on them.
+        /// </summary>
         [Fact]
-        public async Task ApplyDiscoveredCharacters_ExistingCharacterNewAlias_StillProducesAliasCommand()
+        public async Task ApplyDiscoveredCharacters_ExistingCharacterNewAlias_AddsTheAliasToTheExistingCharacter()
         {
-            var existingId = Guid.NewGuid();
-            var handler = new ScriptedCommandHandler { ResolveCreateId = _ => existingId };
-            var presenter = CreatePresenter(commandHandler: handler);
-            await presenter.LoadAsync(Folder);
+            var frodo = new Character { Id = Guid.NewGuid(), Name = "Frodo" };
+            await SeedProjectAsync(frodo);
 
-            var row = new DiscoveredCharacterRow
+            var reader = Substitute.For<IProjectReader>();
+            reader.GetCharactersWithAliasesAsync(_folder).Returns(new List<Character> { frodo });
+            var presenter = CreatePresenter(projectReader: reader);
+            await presenter.LoadAsync(_folder);
+
+            await presenter.ApplyDiscoveredCharactersAsync([new DiscoveredCharacterRow
             {
                 Name = "Frodo", Aliases = ["Ringbearer"], AlreadyExists = true,
-            };
-            await presenter.ApplyDiscoveredCharactersAsync([row]);
+            }]);
 
-            Assert.Equal(2, handler.Executed.Count);
-            var alias = Assert.IsType<AddCharacterAliasCommand>(handler.Executed[1]);
-            Assert.Equal(existingId, alias.CharacterId);
-            Assert.Equal("Ringbearer", alias.Name);
+            var persisted = Assert.Single(await PersistedRosterAsync());
+            Assert.Equal(frodo.Id, persisted.Id);
+            Assert.Equal("Ringbearer", Assert.Single(persisted.Aliases).Name);
         }
 
         [Fact]
         public async Task ApplyDiscoveredCharacters_MixedRows_OnlyIncludedApplied()
         {
-            var handler = new ScriptedCommandHandler();
-            var presenter = CreatePresenter(commandHandler: handler);
-            await presenter.LoadAsync(Folder);
+            await SeedProjectAsync();
+            var presenter = CreatePresenter();
+            await presenter.LoadAsync(_folder);
 
-            var included = new DiscoveredCharacterRow { Name = "Sam" };
-            var excluded = new DiscoveredCharacterRow { Name = "Ghost of Christmas Past", Included = false };
-            await presenter.ApplyDiscoveredCharactersAsync([included, excluded]);
+            await presenter.ApplyDiscoveredCharactersAsync(
+            [
+                new DiscoveredCharacterRow { Name = "Sam" },
+                new DiscoveredCharacterRow { Name = "Ghost of Christmas Past", Included = false },
+            ]);
 
-            var create = Assert.Single(handler.Executed);
-            Assert.Equal("Sam", Assert.IsType<CreateCharacterCommand>(create).Name);
+            Assert.Equal("Sam", Assert.Single(await PersistedRosterAsync()).Name);
         }
     }
 }

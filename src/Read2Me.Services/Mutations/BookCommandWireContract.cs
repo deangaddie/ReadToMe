@@ -6,8 +6,8 @@ namespace Read2Me.Services.Mutations;
 /// Turns a mutation outcome into the answer <c>POST /api/projects/{folder}/commands</c> has always
 /// given for that command, without losing the outcome itself.
 /// <para>
-/// The endpoint keeps its existing responses through the migration (ADR 0007), and which refusals a
-/// command has always answered with <c>200 { "newEntityId": null }</c> differs per command: a
+/// The endpoint keeps its existing responses (ADR 0007), and which refusals a command has always
+/// answered with <c>200 { "newEntityId": null }</c> differs per command: a
 /// command aimed at a node the Book does not contain no-ops nearly everywhere, the Character roster
 /// and Voice Rule commands have always answered a protected-narrator or default-rule gesture the
 /// same way, and <see cref="Commands.Handlers.SetNarratorCharacterHandler"/> answers none of them
@@ -23,11 +23,14 @@ namespace Read2Me.Services.Mutations;
 /// reads the outcome from <see cref="BookMutations"/> directly.
 /// </para>
 /// <para>
-/// This bridge is scaffolding with a known end. The final contraction ticket deletes it together
-/// with the legacy façade, once no caller remains that cannot read an outcome.
+/// This is not scaffolding any more, which is why it is no longer named as such: the command layer
+/// is a permanent wire contract, and this is where a typed outcome is spoken in its terms. Nothing
+/// above the command handlers uses it — every other producer, the Book View, the Characters tab,
+/// the queues, imports and AI edits alike, commits through <see cref="BookMutations"/> and reads
+/// the outcome, so the flattening reaches exactly the one contract that predates it.
 /// </para>
 /// </summary>
-public static class LegacyBookCommandBridge
+public static class BookCommandWireContract
 {
     /// <summary>The common shape: a command naming something the Book does not contain answers null.</summary>
     public static Task<BookCommandResult> ExecuteCommandAsync(
@@ -62,21 +65,5 @@ public static class LegacyBookCommandBridge
             BookMutationOutcome.Rejected rejected when answeredAsNull.Contains(rejected.Reason)
                 => new(new BookMutationOutcome.NoChange(), null),
             _ => new(outcome, null),
-        };
-
-    /// <summary>
-    /// The lossy step the legacy <see cref="IBookCommandHandler"/> façade still needs: one nullable
-    /// id, with every refusal it did not soften raised as an exception. Only the callers that cannot
-    /// yet read an outcome come through here, and ticket 15 deletes them with it.
-    /// </summary>
-    public static Guid? Flatten(BookCommandResult result, CancellationToken ct) =>
-        result.Outcome switch
-        {
-            BookMutationOutcome.Committed or BookMutationOutcome.NoChange => result.EntityId,
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled
-                => throw new OperationCanceledException(cancelled.Message, ct),
-            BookMutationOutcome.Rejected rejected => throw new InvalidOperationException(rejected.Message),
-            // Unreachable — the hierarchy is closed by a private constructor — but C# cannot prove it.
-            _ => throw new NotSupportedException($"Unhandled mutation outcome {result.Outcome.GetType().Name}."),
         };
 }

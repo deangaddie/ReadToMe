@@ -5,6 +5,8 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Commands;
+using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -42,10 +44,19 @@ namespace Read2Me.Tests.Services.Characters
             await base.DisposeAsync();
         }
 
+        /// <summary>
+        /// The wire answer: the id the command reports, having first insisted the command was not
+        /// refused — a refusal is a 422 on the endpoint, not a success-shaped null id.
+        /// </summary>
         private async Task<Guid?> RunAsync(BookCommand command)
         {
             await using var scope = _root.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<IBookCommandHandler>().ExecuteAsync(command);
+            var result = await scope.ServiceProvider
+                .GetRequiredService<BookCommandDispatcher>().ExecuteAsync(command);
+            Assert.False(
+                result.Outcome is BookMutationOutcome.Rejected,
+                $"{command.GetType().Name} was refused: {(result.Outcome as BookMutationOutcome.Rejected)?.Message}");
+            return result.EntityId;
         }
 
         private static readonly Guid AliceId = Guid.NewGuid();

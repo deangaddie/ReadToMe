@@ -5,6 +5,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Commands;
 using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
 using Read2Me.TestUtils;
@@ -55,10 +56,18 @@ namespace Read2Me.Tests.Services.Mutations
         private async Task<BookMutationReceipt> CommittedAsync(BookMutation mutation) =>
             Assert.IsType<BookMutationOutcome.Committed>(await CommitAsync(mutation)).Receipt;
 
-        private async Task<Guid?> ExecuteLegacyAsync(BookCommand command)
+        private async Task<BookCommandResult> DispatchAsync(BookCommand command)
         {
             await using var scope = _root.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<BookCommandHandler>().ExecuteAsync(command);
+            return await scope.ServiceProvider.GetRequiredService<BookCommandDispatcher>().ExecuteAsync(command);
+        }
+
+        /// <summary>Asserts the wire answer these commands have always given: 200 with no id.</summary>
+        private async Task AnswersNullAsync(BookCommand command)
+        {
+            var result = await DispatchAsync(command);
+            Assert.False(result.Outcome is BookMutationOutcome.Rejected, command.GetType().Name);
+            Assert.Null(result.EntityId);
         }
 
         private BookHierarchyBuilder _book = null!;
@@ -307,15 +316,15 @@ namespace Read2Me.Tests.Services.Mutations
         {
             var itemId = await SeedItemAsync();
 
-            Assert.Null(await ExecuteLegacyAsync(new SetParagraphItemAudioCommand(_folder, itemId, "audio/abc.wav")));
-            Assert.Null(await ExecuteLegacyAsync(new SetParagraphItemAudioCommand(_folder, Guid.NewGuid(), "audio/x.wav")));
-            Assert.Null(await ExecuteLegacyAsync(new SetAudioReviewCommand(
+            await AnswersNullAsync(new SetParagraphItemAudioCommand(_folder, itemId, "audio/abc.wav"));
+            await AnswersNullAsync(new SetParagraphItemAudioCommand(_folder, Guid.NewGuid(), "audio/x.wav"));
+            await AnswersNullAsync(new SetAudioReviewCommand(
                 _folder, itemId,
                 NormalizeOk: true, NormalizeReason: null,
                 VerifyOk: false, Wer: 0.42, VerifyReason: "over threshold",
-                Transcript: "got this", OriginalTextSnapshot: "Hello")));
-            Assert.Null(await ExecuteLegacyAsync(new DismissAudioReviewCommand(_folder, itemId)));
-            Assert.Null(await ExecuteLegacyAsync(new DismissAudioReviewCommand(_folder, itemId)));
+                Transcript: "got this", OriginalTextSnapshot: "Hello"));
+            await AnswersNullAsync(new DismissAudioReviewCommand(_folder, itemId));
+            await AnswersNullAsync(new DismissAudioReviewCommand(_folder, itemId));
 
             Assert.Equal("audio/abc.wav", await AudioOfAsync(itemId));
             Assert.Equal(EntityReviewState.Dismissed, (await ReviewAsync(itemId))!.State);

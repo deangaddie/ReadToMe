@@ -59,8 +59,6 @@ public static class ServiceRegistrationExtensions
         services.Configure<BookMutationOptions>(configuration.GetSection(BookMutationOptions.SectionName));
         
         services.AddScoped<BookCommandApiAdapter>();
-        services.AddScoped<BookCommandHandler>();
-        services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 
         services.AddScoped<BookReadingService>();
         services.AddScoped<ProjectUseCases>();

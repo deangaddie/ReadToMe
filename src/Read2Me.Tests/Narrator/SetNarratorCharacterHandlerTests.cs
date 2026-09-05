@@ -4,6 +4,8 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Commands;
+using Read2Me.Services.Mutations;
 using Read2Me.TestUtils;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
@@ -46,12 +48,21 @@ namespace Read2Me.Tests.Narrator
                 .WithCharacter("watson", new Character { Id = WatsonId, Name = "Dr. Watson" })
                 .AddVolume("vol", v => v.AddChapter()).BuildAsync();
 
-        private async Task<Guid?> RunAsync(Guid? characterId)
+        /// <summary>
+        /// The endpoint's answer for this command, which is the whole point of the file: unlike
+        /// its siblings it softens nothing, so every expected refusal reaches the wire as a 422.
+        /// </summary>
+        private async Task<BookMutationOutcome> RunAsync(Guid? characterId)
         {
             await using var scope = _root.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<IBookCommandHandler>()
+            var result = await scope.ServiceProvider.GetRequiredService<BookCommandDispatcher>()
                 .ExecuteAsync(new SetNarratorCharacterCommand(_folder, characterId));
+            Assert.Null(result.EntityId);
+            return result.Outcome;
         }
+
+        private async Task<string> RefusalMessageAsync(Guid? characterId) =>
+            Assert.IsType<BookMutationOutcome.Rejected>(await RunAsync(characterId)).Message;
 
         private async Task<NarratorIdentity> IdentityAsync()
         {
@@ -60,53 +71,52 @@ namespace Read2Me.Tests.Narrator
         }
 
         [Fact]
-        public async Task Set_LinksTheCharacter_AndAnswersNull()
+        public async Task Set_LinksTheCharacter_AndAnswersNoId()
         {
             await SeedAsync();
 
-            Assert.Null(await RunAsync(WatsonId));
+            Assert.IsType<BookMutationOutcome.Committed>(await RunAsync(WatsonId));
             Assert.Equal(WatsonId, (await IdentityAsync()).CharacterId);
         }
 
         [Fact]
-        public async Task Set_ToTheLinkAlreadyThere_AnswersNullRatherThanThrowing()
+        public async Task Set_ToTheLinkAlreadyThere_ChangesNothingRatherThanRefusing()
         {
             await SeedAsync();
             await RunAsync(WatsonId);
 
-            Assert.Null(await RunAsync(WatsonId));
+            Assert.IsType<BookMutationOutcome.NoChange>(await RunAsync(WatsonId));
             Assert.Equal(WatsonId, (await IdentityAsync()).CharacterId);
         }
 
         [Fact]
-        public async Task UnknownCharacterId_Throws_AndLeavesTheLinkAlone()
+        public async Task UnknownCharacterId_IsRefused_AndLeavesTheLinkAlone()
         {
             await SeedAsync();
             await RunAsync(WatsonId);
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => RunAsync(Guid.NewGuid()));
+            Assert.IsType<BookMutationOutcome.Rejected>(await RunAsync(Guid.NewGuid()));
 
             Assert.Equal(WatsonId, (await IdentityAsync()).CharacterId);
         }
 
         [Fact]
-        public async Task SeedNarratorRow_Throws()
+        public async Task SeedNarratorRow_IsRefused()
         {
             await SeedAsync();
 
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => RunAsync(ProjectDbContext.NarratorId));
+            var message = await RefusalMessageAsync(ProjectDbContext.NarratorId);
 
-            Assert.Contains("Narrator", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Narrator", message, StringComparison.Ordinal);
             Assert.False((await IdentityAsync()).IsLinked);
         }
 
         [Fact]
-        public async Task NoProjectRow_Throws()
+        public async Task NoProjectRow_IsRefused()
         {
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => RunAsync(null));
+            var message = await RefusalMessageAsync(null);
 
-            Assert.Contains("project", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project", message, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -8,6 +8,7 @@ using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.IO;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
@@ -19,7 +20,7 @@ namespace Read2Me.Tests.Services
         private readonly string _tempDir;
         private readonly ProjectService _writer;
         private readonly ProjectReader _reader;
-        private readonly BookCommandHandler _cmd;
+        private readonly BookMutations _mutations;
 
         public ProjectServiceIntegrationTests()
         {
@@ -38,7 +39,7 @@ namespace Read2Me.Tests.Services
 
             _writer = sp.GetRequiredService<ProjectService>();
             _reader = sp.GetRequiredService<ProjectReader>();
-            _cmd = sp.GetRequiredService<BookCommandHandler>();
+            _mutations = sp.GetRequiredService<BookMutations>();
         }
 
         public void Dispose()
@@ -294,7 +295,6 @@ namespace Read2Me.Tests.Services
 
             var ex = await Record.ExceptionAsync(() => _writer.DeleteCoverImageAsync(folderName));
 
-            Assert.Null(ex);
         }
 
         // ---------------------------------------------------------------
@@ -311,7 +311,7 @@ namespace Read2Me.Tests.Services
             var b = BuilderFor(folderPath);
             await b.AddVolume("vol").AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new UpdateVolumeTitleCommand(folderName, b.VolumeId("vol"), "New Title"));
+            await _mutations.CommitAsync(new UpdateVolumeTitleMutation(folderName, b.VolumeId("vol"), "New Title"));
 
             await using var db2 = await OpenDbAsync(folderPath);
             var vol = await db2.Volumes.FindAsync(b.VolumeId("vol"));
@@ -319,14 +319,15 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task UpdateVolumeTitleAsync_WhenNotFound_DoesNotThrow()
+        public async Task UpdateVolumeTitleAsync_WhenNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("Vol NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new UpdateVolumeTitleCommand(folderName, Guid.NewGuid(), "X")));
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new UpdateVolumeTitleMutation(folderName, Guid.NewGuid(), "X"))).Reason);
 
-            Assert.Null(ex);
         }
 
         // ---------------------------------------------------------------
@@ -343,7 +344,7 @@ namespace Read2Me.Tests.Services
             var b = BuilderFor(folderPath);
             await b.AddVolume("vol", v => v.AddPart("part")).AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new UpdatePartTitleCommand(folderName, b.PartId("part"), "New Part"));
+            await _mutations.CommitAsync(new UpdatePartTitleMutation(folderName, b.PartId("part"), "New Part"));
 
             await using var db2 = await OpenDbAsync(folderPath);
             var part = await db2.Parts.FindAsync(b.PartId("part"));
@@ -351,14 +352,15 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task UpdatePartTitleAsync_WhenNotFound_DoesNotThrow()
+        public async Task UpdatePartTitleAsync_WhenNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("Part NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new UpdatePartTitleCommand(folderName, Guid.NewGuid(), "X")));
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new UpdatePartTitleMutation(folderName, Guid.NewGuid(), "X"))).Reason);
 
-            Assert.Null(ex);
         }
 
         // ---------------------------------------------------------------
@@ -375,7 +377,7 @@ namespace Read2Me.Tests.Services
             var b = BuilderFor(folderPath);
             await b.AddVolume("vol", v => v.AddChapter("ch")).AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new UpdateChapterTitleCommand(folderName, b.ChapterId("ch"), "New Chapter"));
+            await _mutations.CommitAsync(new UpdateChapterTitleMutation(folderName, b.ChapterId("ch"), "New Chapter"));
 
             await using var db2 = await OpenDbAsync(folderPath);
             var ch = await db2.Chapters.FindAsync(b.ChapterId("ch"));
@@ -383,14 +385,15 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task UpdateChapterTitleAsync_WhenNotFound_DoesNotThrow()
+        public async Task UpdateChapterTitleAsync_WhenNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("Ch NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new UpdateChapterTitleCommand(folderName, Guid.NewGuid(), "X")));
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new UpdateChapterTitleMutation(folderName, Guid.NewGuid(), "X"))).Reason);
 
-            Assert.Null(ex);
         }
 
         // ---------------------------------------------------------------
@@ -409,7 +412,7 @@ namespace Read2Me.Tests.Services
                 .AddParagraph(configure: p => p.AddNarration("item", "Old text"))))
                 .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new UpdateParagraphItemTextCommand(folderName, b.ItemId("item"), "New text"));
+            await _mutations.CommitAsync(new UpdateParagraphItemTextMutation(folderName, b.ItemId("item"), "New text"));
 
             await using var db2 = await OpenDbAsync(folderPath);
             var item = await db2.ParagraphItems.FindAsync(b.ItemId("item"));
@@ -417,14 +420,15 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task UpdateParagraphItemTextAsync_WhenNotFound_DoesNotThrow()
+        public async Task UpdateParagraphItemTextAsync_WhenNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("Item NotFound", "Title", "Author", "f.txt", stream, BookFileType.Text);
 
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new UpdateParagraphItemTextCommand(folderName, Guid.NewGuid(), "X")));
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new UpdateParagraphItemTextMutation(folderName, Guid.NewGuid(), "X"))).Reason);
 
-            Assert.Null(ex);
         }
 
         // ---------------------------------------------------------------
@@ -445,7 +449,7 @@ namespace Read2Me.Tests.Services
                 .AddPart("p3"))
                 .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, b.PartId("p2"), "Vol2"));
+            await _mutations.CommitAsync(new SplitAtPartMutation(folderName, b.PartId("p2"), "Vol2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
@@ -472,7 +476,7 @@ namespace Read2Me.Tests.Services
                 .AddPart("p2"))
                 .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, b.PartId("p1"), "NewVol"));
+            await _mutations.CommitAsync(new SplitAtPartMutation(folderName, b.PartId("p1"), "NewVol"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
@@ -482,12 +486,13 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task SplitVolumeAsync_WhenPartNotFound_DoesNotThrow()
+        public async Task SplitVolumeAsync_WhenPartNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("SplitVolNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, Guid.NewGuid(), null)));
-            Assert.Null(ex);
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new SplitAtPartMutation(folderName, Guid.NewGuid(), null))).Reason);
         }
 
         // ---------------------------------------------------------------
@@ -509,7 +514,7 @@ namespace Read2Me.Tests.Services
                     .AddChapter("ch3")))
                 .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtChapterCommand(folderName, b.ChapterId("ch2"), "P2"));
+            await _mutations.CommitAsync(new SplitAtChapterMutation(folderName, b.ChapterId("ch2"), "P2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var parts = await verify.Parts.OrderBy(p => p.Order).ToListAsync();
@@ -524,12 +529,13 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task SplitPartAsync_WhenChapterNotFound_DoesNotThrow()
+        public async Task SplitPartAsync_WhenChapterNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("SplitPartNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtChapterCommand(folderName, Guid.NewGuid(), null)));
-            Assert.Null(ex);
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new SplitAtChapterMutation(folderName, Guid.NewGuid(), null))).Reason);
         }
 
         // ---------------------------------------------------------------
@@ -551,7 +557,7 @@ namespace Read2Me.Tests.Services
                     .AddParagraph("pg3", configure: p => p.AddNarration("i3"))))
                 .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtParagraphCommand(folderName, b.ParagraphId("pg2"), "Ch2"));
+            await _mutations.CommitAsync(new SplitAtParagraphMutation(folderName, b.ParagraphId("pg2"), "Ch2"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var chapters = await verify.Chapters.OrderBy(c => c.Order).ToListAsync();
@@ -566,12 +572,13 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task SplitChapterAsync_WhenParagraphNotFound_DoesNotThrow()
+        public async Task SplitChapterAsync_WhenParagraphNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("SplitChNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtParagraphCommand(folderName, Guid.NewGuid(), null)));
-            Assert.Null(ex);
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new SplitAtParagraphMutation(folderName, Guid.NewGuid(), null))).Reason);
         }
 
         // ---------------------------------------------------------------
@@ -594,7 +601,7 @@ namespace Read2Me.Tests.Services
                         .AddNarration("item3", "c"))))
                 .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, b.ItemId("item2")));
+            await _mutations.CommitAsync(new SplitAtItemMutation(folderName, b.ItemId("item2")));
 
             await using var verify = await OpenDbAsync(folderPath);
             var paragraphs = await verify.Paragraphs.OrderBy(p => p.Order).ToListAsync();
@@ -607,12 +614,13 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task SplitParagraphAsync_WhenItemNotFound_DoesNotThrow()
+        public async Task SplitParagraphAsync_WhenItemNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("SplitPgNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, Guid.NewGuid())));
-            Assert.Null(ex);
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new SplitAtItemMutation(folderName, Guid.NewGuid()))).Reason);
         }
 
         // ---------------------------------------------------------------
@@ -634,7 +642,7 @@ namespace Read2Me.Tests.Services
                         .AddNarration("item2", "y"))))
                 .AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, b.ItemId("item2")));
+            await _mutations.CommitAsync(new SplitAtItemMutation(folderName, b.ItemId("item2")));
 
             await using var verify = await OpenDbAsync(folderPath);
             var paragraphs = await verify.Paragraphs.OrderBy(p => p.Order).ToListAsync();
@@ -646,12 +654,13 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task SplitParagraphItemAsync_WhenItemNotFound_DoesNotThrow()
+        public async Task SplitParagraphItemAsync_WhenItemNotFound_IsRefused()
         {
             var stream = new MemoryStream(new byte[] { 1 });
             var folderName = await _writer.CreateProjectAsync("SplitLineNF", "T", "A", "f.txt", stream, BookFileType.Text);
-            var ex = await Record.ExceptionAsync(() => _cmd.ExecuteAsync(new SplitAtItemCommand(folderName, Guid.NewGuid())));
-            Assert.Null(ex);
+            // A gesture naming a node the Book does not contain is refused, not silently applied.
+            Assert.Equal(BookMutationRejection.NotFound,
+                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new SplitAtItemMutation(folderName, Guid.NewGuid()))).Reason);
         }
 
         // ---------------------------------------------------------------
@@ -668,7 +677,7 @@ namespace Read2Me.Tests.Services
             var b = BuilderFor(folderPath);
             await b.AddVolume("vol1", v => v.AddPart("p1")).AddHierarchyAsync();
 
-            await _cmd.ExecuteAsync(new SplitAtPartCommand(folderName, b.PartId("p1"), "NewVol"));
+            await _mutations.CommitAsync(new SplitAtPartMutation(folderName, b.PartId("p1"), "NewVol"));
 
             await using var verify = await OpenDbAsync(folderPath);
             var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();

@@ -86,7 +86,7 @@ public sealed class SetVoiceGeneratedHandler(BookMutations mutations) : ICommand
 public sealed class SetVoiceSourceHandler(IVoiceAudioRemover voiceAudio) : ICommandHandler<SetVoiceSourceCommand>
 {
     public async Task<BookCommandResult> HandleAsync(SetVoiceSourceCommand c, CancellationToken ct) =>
-        LegacyBookCommandBridge.AsCommandResult(
+        BookCommandWireContract.AsCommandResult(
             await voiceAudio.SetVoiceSourceAsync(c.FolderId, c.VoiceId, c.IsGenerated, ct),
             BookMutationRejection.NotFound);
 }
@@ -94,7 +94,7 @@ public sealed class SetVoiceSourceHandler(IVoiceAudioRemover voiceAudio) : IComm
 public sealed class DeleteVoiceHandler(IVoiceAudioRemover voiceAudio) : ICommandHandler<DeleteVoiceCommand>
 {
     public async Task<BookCommandResult> HandleAsync(DeleteVoiceCommand c, CancellationToken ct) =>
-        LegacyBookCommandBridge.AsCommandResult(
+        BookCommandWireContract.AsCommandResult(
             await voiceAudio.DeleteVoiceAsync(c.FolderId, c.VoiceId, ct),
             BookMutationRejection.NotFound);
 }

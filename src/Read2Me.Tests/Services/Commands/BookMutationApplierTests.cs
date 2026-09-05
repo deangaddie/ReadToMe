@@ -78,6 +78,34 @@ namespace Read2Me.Tests.Services.Commands
             Assert.Equal("after", reloaded.Title);
         }
 
+        /// <summary>
+        /// The same for an entity the context is no longer tracking — a planner that read a node,
+        /// detached it and repointed its parent. Nothing has told the change tracker anything, so
+        /// the update has to be attached as modified rather than assumed already known.
+        /// </summary>
+        [Fact]
+        public async Task Update_of_a_detached_entity_persists_its_foreign_key_change()
+        {
+            await using var seed = await OpenDbAsync();
+            var first = new Volume { Id = Guid.NewGuid(), Order = "a" };
+            var second = new Volume { Id = Guid.NewGuid(), Order = "b" };
+            var part = new Part { Id = Guid.NewGuid(), VolumeId = first.Id, Order = "a" };
+            seed.Volumes.AddRange(first, second);
+            seed.Parts.Add(part);
+            await seed.SaveChangesAsync();
+
+            await using var db = await OpenDbAsync();
+            var detached = await db.Parts.FindAsync(part.Id);
+            db.Entry(detached!).State = EntityState.Detached;
+            detached!.VolumeId = second.Id;
+
+            await BookMutationApplier.ApplyMutationAsync(
+                db, new HierarchyMutation(ToAdd: [], ToDelete: [], ToUpdate: [detached]));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(second.Id, (await verify.Parts.SingleAsync(p => p.Id == part.Id)).VolumeId);
+        }
+
         [Fact]
         public async Task Add_of_an_unhandled_entity_type_throws()
         {

@@ -306,8 +306,6 @@ public static class ServiceCollectionExtensions
         // The roster's read-plus-write seam, registered here because CreateCharacterHandler needs it.
         services.TryAddScoped<Characters.CharacterResolver>();
         services.AddScoped<BookCommandDispatcher>();
-        services.AddScoped<BookCommandHandler>();
-        services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 
         return services;
     }

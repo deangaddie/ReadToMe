@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Services;
 using Read2Me.Services.Books;
 using Read2Me.Services.IO;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
@@ -296,15 +297,15 @@ public class VoiceResolverTests : ProjectDbTestBase
         var (b, charId, voiceAId, voiceBId) = await SeedBaseAsync(item1Narration: true);
         await SeedDefaultRule(charId, voiceAId);                       // Alice → Voice A
         await SeedDefaultRule(ProjectDbContext.NarratorId, voiceBId);  // Narrator → Voice B
-        var commands = NewCommandHandler();
+        var mutations = NewMutations();
         var itemId = b.ItemId("item1");
 
         Assert.Equal(voiceBId, (await _resolver.ResolveAsync(_folder, [itemId]))[itemId]);
 
-        await commands.ExecuteAsync(new SetItemCharacterCommand(_folder, itemId, charId));
+        await mutations.CommitAsync(new SetItemSpeakerMutation(_folder, itemId, charId));
         Assert.Equal(voiceAId, (await _resolver.ResolveAsync(_folder, [itemId]))[itemId]);
 
-        await commands.ExecuteAsync(new SetItemCharacterCommand(_folder, itemId, ProjectDbContext.NarratorId));
+        await mutations.CommitAsync(new SetItemSpeakerMutation(_folder, itemId, ProjectDbContext.NarratorId));
         Assert.Equal(voiceBId, (await _resolver.ResolveAsync(_folder, [itemId]))[itemId]);
     }
 
@@ -337,13 +338,13 @@ public class VoiceResolverTests : ProjectDbTestBase
         Assert.Equal(charId, (await verify.ParagraphItems.FindAsync(b.ItemId("item1")))!.CharacterId);
     }
 
-    private BookCommandHandler NewCommandHandler()
+    private BookMutations NewMutations()
     {
         var services = new ServiceCollection();
         services.AddBookCommandHandlers();
         services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
-        return services.BuildServiceProvider().GetRequiredService<BookCommandHandler>();
+        return services.BuildServiceProvider().GetRequiredService<BookMutations>();
     }
 
     [Fact]

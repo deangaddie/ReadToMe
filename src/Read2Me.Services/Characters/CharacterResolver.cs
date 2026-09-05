@@ -52,6 +52,30 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
+        /// One discovery row applied: whoever answers to the name — created if nobody does — plus
+        /// every alias the row carries. Two producers apply these rows, the review dialog and
+        /// <c>POST /characters/discover/apply</c>, and neither should have to know that a row is a
+        /// resolve followed by one alias mutation each.
+        /// </summary>
+        /// <returns>
+        /// The first refusal, if the row hit one, so the caller can report it and move on; otherwise
+        /// the resolve's own outcome — <c>NoChange</c> for a name the roster already answered to.
+        /// </returns>
+        public async Task<BookMutationOutcome> ApplyDiscoveredAsync(
+            ProjectFolderId folder, string name, IReadOnlyList<string> aliases, CancellationToken ct)
+        {
+            var (outcome, id) = await ResolveOrCreateWithOutcomeAsync(folder, name, ct);
+            if (outcome is BookMutationOutcome.Rejected) return outcome;
+
+            foreach (var alias in aliases)
+                if (await mutations.CommitAsync(new AddCharacterAliasMutation(folder, id, alias), ct)
+                    is BookMutationOutcome.Rejected refused)
+                    return refused;
+
+            return outcome;
+        }
+
+        /// <summary>
         /// Whoever already answers to <paramref name="name"/>, or null if nobody does. Public because a
         /// producer that has just been told its create changed nothing still needs the id of whoever
         /// was already there.
