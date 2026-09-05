@@ -12,11 +12,12 @@ namespace Read2Me.Services.Mutations.Implementations;
 /// link decides whose Voice narration is read in, and NarratorOnlyMode decides which items are
 /// audio-eligible at all.
 /// <para>
-/// So the effects here are deliberately not the exact, row-scoped kind the attribution and audio
-/// families report. Naming rows a reader could refresh in place would be a lie about a change whose
-/// reach is the whole Book — the facets say <see cref="BookFacets.Characters"/>,
-/// <see cref="BookFacets.Narrator"/> or <see cref="BookFacets.ProjectPolicy"/>, none of which a
-/// Book View can place on one row, so every one of them reconciles by rebuilding.
+/// So what makes a reader rebuild for these is the <em>facets</em>, never the scope:
+/// <see cref="BookFacets.Characters"/>, <see cref="BookFacets.Narrator"/> and
+/// <see cref="BookFacets.ProjectPolicy"/> are none of them things a Book View can place on one
+/// Paragraph, so a targeted refresh is never offered them. The scope answers a different question —
+/// whether the identifiers below are exhaustive — and a roster gesture that moved no line is
+/// honestly <see cref="BookMutationScope.Exact"/> about the nothing it names.
 /// </para>
 /// <para>
 /// The seed Narrator row is protected throughout. It is not a Character anyone invented: it is the
@@ -50,6 +51,22 @@ internal static class RosterEffects
     public static BookMutationRejectedException ProtectedNarrator(string verb) =>
         new(BookMutationRejection.Validation,
             $"The seed Narrator row cannot be {verb} — it is the unlinked state of narration, not a character.");
+
+    /// <summary>
+    /// The facets a roster removal actually moved, from the row counts its steps reported. The
+    /// Character itself always moves; whether any line, Voice, Voice Rule or narrator link went with
+    /// it is a fact about this Book, not about the gesture — which is why a merge and a delete of a
+    /// Character nobody speaks for report only <see cref="BookFacets.Characters"/>.
+    /// </summary>
+    public static BookFacets Removed(int lines, int voices, int rules, int narratorLinks)
+    {
+        var facets = BookFacets.Characters;
+        if (lines > 0) facets |= BookFacets.Attribution;
+        if (voices > 0) facets |= BookFacets.Voices;
+        if (rules > 0) facets |= BookFacets.VoiceRules;
+        if (narratorLinks > 0) facets |= BookFacets.Narrator;
+        return facets;
+    }
 
     /// <summary>
     /// Clears the Voice Rules that would otherwise outlive a Character's Voices.
@@ -233,7 +250,7 @@ public sealed class MergeCharactersMutationImplementation : IBookMutationImpleme
             .Where(c => c.Id == mutation.MergedId)
             .ExecuteDeleteAsync(ct);
 
-        return RosterEffects.BookWide(RosterFacets(lines, voices, rules, narrator));
+        return RosterEffects.BookWide(RosterEffects.Removed(lines, voices, rules, narrator));
     }
 
     /// <summary>
@@ -264,20 +281,6 @@ public sealed class MergeCharactersMutationImplementation : IBookMutationImpleme
         }
     }
 
-    /// <summary>
-    /// The facets a roster removal actually moved, from the row counts its steps reported. The
-    /// Character itself always moves; whether any line, Voice, Voice Rule or narrator link went with
-    /// it is a fact about this Book, not about the gesture.
-    /// </summary>
-    internal static BookFacets RosterFacets(int lines, int voices, int rules, int narratorLinks)
-    {
-        var facets = BookFacets.Characters;
-        if (lines > 0) facets |= BookFacets.Attribution;
-        if (voices > 0) facets |= BookFacets.Voices;
-        if (rules > 0) facets |= BookFacets.VoiceRules;
-        if (narratorLinks > 0) facets |= BookFacets.Narrator;
-        return facets;
-    }
 }
 
 /// <summary>
@@ -322,8 +325,7 @@ public sealed class DeleteCharacterMutationImplementation : IBookMutationImpleme
             .Where(c => c.Id == mutation.CharacterId)
             .ExecuteDeleteAsync(ct);
 
-        return RosterEffects.BookWide(
-            MergeCharactersMutationImplementation.RosterFacets(lines, voices, rules, narrator));
+        return RosterEffects.BookWide(RosterEffects.Removed(lines, voices, rules, narrator));
     }
 }
 

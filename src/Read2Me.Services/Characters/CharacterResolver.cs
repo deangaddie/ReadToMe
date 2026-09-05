@@ -41,7 +41,12 @@ namespace Read2Me.Services.Characters
                     $"CreateCharacterMutation neither created nor found a character named '{name}'.");
         }
 
-        private async Task<Guid?> FindAsync(ProjectFolderId folder, string name) =>
+        /// <summary>
+        /// Whoever already answers to <paramref name="name"/>, or null if nobody does. Public because a
+        /// producer that has just been told its create changed nothing still needs the id of whoever
+        /// was already there.
+        /// </summary>
+        public async Task<Guid?> FindAsync(ProjectFolderId folder, string name) =>
             (await reader.GetCharactersWithAliasesAsync(folder)).FirstOrDefault(c => Matches(c, name))?.Id;
     }
 }

@@ -142,7 +142,9 @@ namespace Read2Me.Tests.State
                 audioSelectionState, coordinator, voiceResolver, new BookRevisionSequence(), session: null!,
                 new EventBroadcaster<BookMutationReceipt>(),
                 NullLogger<BookViewProjection>.Instance);
-            var presenter = new BookHierarchyPresenter(reader, projection, bookUseCases, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioReviews, nodeStatus);
+            // No CharacterResolver either: only the add-a-character gesture reads the roster through it,
+            // and that is covered on SpeakerAssignmentPresenterTests, where the write side is real.
+            var presenter = new BookHierarchyPresenter(reader, projection, characterRoster: null!, bookUseCases, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioReviews, nodeStatus);
             return new Context(presenter, projection, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue, audioQueue, roster, seed, dialogService, snackbar);
         }
 

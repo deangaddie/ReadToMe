@@ -75,7 +75,7 @@ namespace Read2Me.Tests.State
                 NullLogger<BookViewProjection>.Instance);
 
             _presenter = new BookHierarchyPresenter(
-                reader, projection, new FakeBookUseCases(), selectionState, audioSelectionState,
+                reader, projection, _circuit.ServiceProvider.GetRequiredService<CharacterResolver>(), new FakeBookUseCases(), selectionState, audioSelectionState,
                 Substitute.For<IDialogService>(), snackbar, characterQueue, _reviews, _nodeStatus);
         }
 

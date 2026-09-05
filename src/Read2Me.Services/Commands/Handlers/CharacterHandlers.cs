@@ -16,11 +16,12 @@ namespace Read2Me.Services.Commands.Handlers;
 /// one line each, until the wire contract is free to move.
 /// </para>
 /// <para>
-/// The roster handlers pass <see cref="BookMutationRejection.Validation"/> to the legacy bridge as a
-/// second answer-as-null case. The endpoint has always answered a protected-narrator rename, delete
-/// or merge with <c>200 { "newEntityId": null }</c>; the mutations below now say <em>why</em> they
-/// refused, and this is where that added precision is flattened back to the contract agents already
-/// hold. <see cref="SetNarratorCharacterHandler"/> is the one that does not flatten.
+/// The three handlers whose mutation can refuse a protected-narrator gesture — rename, merge and
+/// delete — pass <see cref="BookMutationRejection.Validation"/> to the legacy bridge as a second
+/// answer-as-null case. The endpoint has always answered those with <c>200 { "newEntityId": null }</c>;
+/// the mutations below now say <em>why</em> they refused, and this is where that added precision is
+/// flattened back to the contract agents already hold.
+/// <see cref="SetNarratorCharacterHandler"/> is the one that does not flatten.
 /// </para>
 /// </summary>
 public sealed class SetItemCharacterHandler(BookMutations mutations) : ICommandHandler<SetItemCharacterCommand>
@@ -61,16 +62,14 @@ public sealed class AddCharacterAliasHandler(BookMutations mutations) : ICommand
 {
     public Task<Guid?> HandleAsync(AddCharacterAliasCommand c, CancellationToken ct) =>
         mutations.ExecuteLegacyAsync(
-            new AddCharacterAliasMutation(c.FolderId, c.CharacterId, c.Name), ct,
-            BookMutationRejection.NotFound, BookMutationRejection.Validation);
+            new AddCharacterAliasMutation(c.FolderId, c.CharacterId, c.Name), ct);
 }
 
 public sealed class RemoveCharacterAliasHandler(BookMutations mutations) : ICommandHandler<RemoveCharacterAliasCommand>
 {
     public Task<Guid?> HandleAsync(RemoveCharacterAliasCommand c, CancellationToken ct) =>
         mutations.ExecuteLegacyAsync(
-            new RemoveCharacterAliasMutation(c.FolderId, c.AliasId), ct,
-            BookMutationRejection.NotFound, BookMutationRejection.Validation);
+            new RemoveCharacterAliasMutation(c.FolderId, c.AliasId), ct);
 }
 
 public sealed class MergeCharactersHandler(BookMutations mutations) : ICommandHandler<MergeCharactersCommand>

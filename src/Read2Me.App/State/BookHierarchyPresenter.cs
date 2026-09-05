@@ -32,6 +32,7 @@ namespace Read2Me.App.State
     public class BookHierarchyPresenter(
         IProjectReader reader,
         BookViewProjection projection,
+        CharacterResolver characterRoster,
         BookUseCases bookUseCases,
         BookSelectionState selectionState,
         AudioItemSelectionState audioSelectionState,
@@ -486,9 +487,7 @@ namespace Read2Me.App.State
             return await MutateAsync(new CreateCharacterMutation(folderId, trimmed)) switch
             {
                 BookViewMutationOutcome.Coherent coherent => coherent.Receipt.Effects.CreatedId,
-                BookViewMutationOutcome.NoChange =>
-                    (await reader.GetCharactersWithAliasesAsync(folderId))
-                        .FirstOrDefault(c => CharacterResolver.Matches(c, trimmed))?.Id,
+                BookViewMutationOutcome.NoChange => await characterRoster.FindAsync(folderId, trimmed),
                 _ => null,
             };
         }

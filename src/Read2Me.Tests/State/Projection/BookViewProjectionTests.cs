@@ -1763,6 +1763,60 @@ namespace Read2Me.Tests.State.Projection
             Assert.Equal(0, announced);
         }
 
+        /// <summary>
+        /// Narrator-only mode makes <em>more</em> of the Book speakable, not less — everything is read
+        /// in the narrator's voice, so an item with no speaker stops being an obstacle. A selected
+        /// item therefore survives the flip, and this pins that: it is the one policy in the family
+        /// that could plausibly cost a reader their Audio Item Selection, and it does not.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_NarratorOnlyMode_KeepsTheAudioItemSelectionItLeftEligible()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetAudioItemSelected(
+                new AudioItemRef(b.ItemId("i1"), b.ParagraphId("p1"), b.ChapterId("ch1"), Guid.NewGuid(), b.VolumeId("vol")),
+                Selected: true));
+
+            var outcome = await sut.MutateAsync(new SetNarratorOnlyModeMutation(_folder, true));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.True(snapshot.NarratorOnlyMode);
+            Assert.Equal([b.ItemId("i1")], snapshot.Selections.AudioItemIds);
+        }
+
+        /// <summary>
+        /// Nothing in this family removes a Paragraph or an item — a delete unlinks lines rather than
+        /// deleting them — so no roster gesture can cost a reader their selection, and none of them is
+        /// structural either. Both halves of the announce rule are therefore false, and a roster
+        /// change committed elsewhere must reach the reader without interrupting them.
+        /// </summary>
+        [Fact]
+        public async Task AnotherCircuitsCharacterDelete_KeepsTheSelectionAndStaysSilent()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetParagraphSelected(
+                b.ParagraphId("p1"),
+                new ParagraphSelection(b.VolumeId("vol"), Guid.NewGuid(), b.ChapterId("ch1")), Selected: true));
+
+            var announced = 0;
+            sut.ExternalUpdateApplied += update => { if (update.Announce) announced++; };
+
+            var committed = await RemoteWriter().CommitAsync(
+                new DeleteCharacterMutation(_folder, b.CharacterId("alice")));
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision, "the delete never reached this Book View");
+
+            Assert.DoesNotContain(sut.Snapshot!.Characters, c => c.Id == b.CharacterId("alice"));
+            Assert.Equal([b.ParagraphId("p1")], sut.Snapshot!.Selections.ParagraphIds);
+            Assert.Equal(0, announced);
+        }
+
         [Fact]
         public async Task AnotherCircuitsAliasChange_ReachesThisBookView()
         {
