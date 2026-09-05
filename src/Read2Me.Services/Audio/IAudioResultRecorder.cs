@@ -24,11 +24,15 @@ namespace Read2Me.Services.Audio
     /// Book mutation that records it — the audio reference and the verdict on it together, so no
     /// reader can see a row playing new audio under the previous take's review chip.
     /// <para>
-    /// The WAV is <em>staged</em> beside its destination before the mutation and moved into place
-    /// only after it commits. That ordering is what keeps the persisted Book from ever naming an
-    /// artifact that is not there: a mutation that does not commit — the item was deleted while the
-    /// take was generating, another writer held the project too long — leaves the item's existing
-    /// audio exactly as it was, and the staged file is cleaned up.
+    /// Every file operation happens <em>before</em> the mutation, so the take is complete at the path
+    /// the Book is about to name by the time the commit publishes its receipt. That ordering is what
+    /// lets another circuit converge on that receipt and play the item at once: a Book View never
+    /// names audio that is still on its way.
+    /// </para>
+    /// <para>
+    /// The take is staged beside its destination first, and the take it replaces is set aside rather
+    /// than overwritten, so a mutation that does not commit — the item was deleted while the take was
+    /// generating, another writer held the project too long — puts back exactly what was there.
     /// </para>
     /// </summary>
     public sealed class AudioResultRecorder(
@@ -38,10 +42,14 @@ namespace Read2Me.Services.Audio
     {
         /// <summary>
         /// Records the take, or throws. The queue's processor turns a throw into a failed item, which
-        /// is the honest reading of an uncommitted write: nothing was recorded, and the operator log
-        /// carries why.
+        /// is the honest reading of an uncommitted write: nothing was recorded, the previous take is
+        /// back where it was, and the operator log carries why.
         /// </summary>
         /// <exception cref="InvalidOperationException">The Book mutation did not commit.</exception>
+        /// <exception cref="OperationCanceledException">
+        /// It did not commit because it was cancelled. Told apart from the rest because the queue
+        /// does: a cancelled item is dropped, not reported as a failure.
+        /// </exception>
         public async Task<string> RecordAsync(
             ProjectFolderId folder,
             Guid paragraphItemId,
@@ -62,6 +70,13 @@ namespace Read2Me.Services.Audio
                 paragraphItemId, staged, result.AudioBytes.Length,
                 CanonicalWav.DurationMs(result.AudioBytes.Length));
 
+            // The take this one replaces is kept until the mutation commits: it is the only copy of
+            // the audio the Book currently names, and a rejected mutation leaves the Book naming it.
+            var superseded = destination + ".superseded";
+            var hadPreviousTake = fs.FileExists(destination);
+            if (hadPreviousTake) fs.MoveFile(destination, superseded);
+            fs.MoveFile(staged, destination);
+
             var outcome = await mutations.CommitAsync(
                 new RecordParagraphItemAudioMutation(folder, paragraphItemId, relativePath, new AudioReviewVerdict(
                     result.Normalize.Ok, result.Normalize.Reason,
@@ -71,47 +86,63 @@ namespace Read2Me.Services.Audio
 
             if (outcome is not BookMutationOutcome.Committed)
             {
-                Discard(staged, paragraphItemId);
-                throw Uncommitted(outcome, paragraphItemId, ct);
+                Restore(destination, superseded, hadPreviousTake, paragraphItemId);
+                var failure = Uncommitted(outcome, paragraphItemId, ct);
+                logger.LogWarning("Item {Id} audio was not recorded: {Reason}", paragraphItemId, failure.Message);
+                throw failure;
             }
 
-            fs.MoveFile(staged, destination);
+            Discard(superseded, paragraphItemId);
 
-            if (result.Normalize.Ok && result.Verify.Ok)
-            {
-                logger.LogDebug("Item {Id} recorded clean — review cleared (wer {Wer})",
-                    paragraphItemId, result.Verify.Wer);
-            }
-            else
-            {
-                logger.LogDebug(
-                    "Item {Id} recorded needs-review — normalizeOk {NormOk} ({NormReason}), " +
-                    "verifyOk {VerifyOk} ({VerifyReason}), wer {Wer}",
-                    paragraphItemId, result.Normalize.Ok, result.Normalize.Reason,
-                    result.Verify.Ok, result.Verify.Reason, result.Verify.Wer);
-            }
+            logger.LogDebug(
+                "Item {Id} recorded at '{Path}' — normalizeOk {NormOk} ({NormReason}), " +
+                "verifyOk {VerifyOk} ({VerifyReason}), wer {Wer}",
+                paragraphItemId, destination, result.Normalize.Ok, result.Normalize.Reason,
+                result.Verify.Ok, result.Verify.Reason, result.Verify.Wer);
 
             return relativePath;
         }
 
         /// <summary>
-        /// Best-effort: the take is already lost, and failing to tidy up after it must not turn one
-        /// unrecorded item into a throw the queue reports as something else.
+        /// Puts back what the Book still names after a mutation that did not commit: the take this
+        /// one was about to replace, or nothing at all if the item had none.
         /// </summary>
-        private void Discard(string staged, Guid paragraphItemId)
+        private void Restore(string destination, string superseded, bool hadPreviousTake, Guid paragraphItemId)
         {
             try
             {
-                fs.DeleteFile(staged);
+                if (hadPreviousTake) fs.MoveFile(superseded, destination);
+                else fs.DeleteFile(destination);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Could not remove the staged audio '{Path}' for item {Id}.",
-                    staged, paragraphItemId);
+                // Best-effort: the take is already lost, and failing to tidy up after it must not
+                // turn one unrecorded item into a throw the queue reports as something else.
+                logger.LogWarning(ex, "Could not restore the previous audio of item {Id} at '{Path}'.",
+                    paragraphItemId, destination);
             }
         }
 
-        private Exception Uncommitted(BookMutationOutcome outcome, Guid paragraphItemId, CancellationToken ct)
+        /// <summary>Best-effort for the same reason: a leftover file is not worth failing an item over.</summary>
+        private void Discard(string path, Guid paragraphItemId)
+        {
+            try
+            {
+                if (fs.FileExists(path)) fs.DeleteFile(path);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not remove the superseded audio '{Path}' of item {Id}.",
+                    path, paragraphItemId);
+            }
+        }
+
+        /// <summary>
+        /// The write outcome as the exception the queue reads. Cancellation keeps its own type
+        /// because the processor drops a cancelled item rather than reporting it as a failure.
+        /// </summary>
+        private static Exception Uncommitted(
+            BookMutationOutcome outcome, Guid paragraphItemId, CancellationToken ct)
         {
             var reason = outcome switch
             {
@@ -121,8 +152,6 @@ namespace Read2Me.Services.Audio
                 // an adapter that silently returned a path here would name audio it had discarded.
                 _ => "the Book recorded no change.",
             };
-
-            logger.LogWarning("Item {Id} audio was not recorded: {Reason}", paragraphItemId, reason);
 
             return outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled }
                 ? new OperationCanceledException(reason, ct)

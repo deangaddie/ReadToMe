@@ -17,7 +17,7 @@ namespace Read2Me.Services.Mutations.Implementations;
 /// </summary>
 internal static class AudioEffects
 {
-    public static BookMutationEffects Recorded(Guid paragraphId, Guid itemId, BookFacets facets) => new()
+    public static BookMutationEffects OnItem(Guid paragraphId, Guid itemId, BookFacets facets) => new()
     {
         Scope = BookMutationScope.Exact,
         Facets = facets,
@@ -29,7 +29,7 @@ internal static class AudioEffects
     public static async Task<ParagraphItem> ItemAsync(ProjectDbContext db, Guid itemId, CancellationToken ct) =>
         await db.ParagraphItems.FirstOrDefaultAsync(i => i.Id == itemId, ct)
             ?? throw new BookMutationRejectedException(
-                BookMutationRejection.NotFound, $"No paragraph item {itemId} to record audio against.");
+                BookMutationRejection.NotFound, $"No paragraph item {itemId} to record audio or a review against.");
 
     /// <summary>
     /// Applies a verdict to the item's review row and reports whether it moved.
@@ -120,7 +120,7 @@ public sealed class RecordParagraphItemAudioMutationImplementation
 
         var reviewMoved = await AudioEffects.ApplyVerdictAsync(db, mutation.ItemId, mutation.Verdict, ct);
 
-        return AudioEffects.Recorded(item.ParagraphId, item.Id,
+        return AudioEffects.OnItem(item.ParagraphId, item.Id,
             reviewMoved ? BookFacets.Audio | BookFacets.Reviews : BookFacets.Audio);
     }
 }
@@ -140,7 +140,7 @@ public sealed class SetParagraphItemAudioMutationImplementation
         if (item.AudioFileName == mutation.RelativePath) return BookMutationEffects.Nothing;
 
         item.AudioFileName = mutation.RelativePath;
-        return AudioEffects.Recorded(item.ParagraphId, item.Id, BookFacets.Audio);
+        return AudioEffects.OnItem(item.ParagraphId, item.Id, BookFacets.Audio);
     }
 }
 
@@ -154,7 +154,7 @@ public sealed class SetAudioReviewMutationImplementation
         var item = await AudioEffects.ItemAsync(db, mutation.ItemId, ct);
 
         return await AudioEffects.ApplyVerdictAsync(db, mutation.ItemId, mutation.Verdict, ct)
-            ? AudioEffects.Recorded(item.ParagraphId, item.Id, BookFacets.Reviews)
+            ? AudioEffects.OnItem(item.ParagraphId, item.Id, BookFacets.Reviews)
             : BookMutationEffects.Nothing;
     }
 }
@@ -179,6 +179,6 @@ public sealed class DismissAudioReviewMutationImplementation
         existing.State = EntityReviewState.Dismissed;
         existing.UpdatedUtc = DateTime.UtcNow;
 
-        return AudioEffects.Recorded(item.ParagraphId, item.Id, BookFacets.Reviews);
+        return AudioEffects.OnItem(item.ParagraphId, item.Id, BookFacets.Reviews);
     }
 }

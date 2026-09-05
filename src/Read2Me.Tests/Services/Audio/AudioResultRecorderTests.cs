@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,6 +8,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Events;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
@@ -18,8 +20,9 @@ namespace Read2Me.Tests.Services.Audio
 {
     /// <summary>
     /// The Audio Queue's write adapter (ADR 0007). What is under test is the ordering the persisted
-    /// Book depends on: the take is staged beside its destination, the mutation commits, and only
-    /// then does the WAV take the name the Book now carries.
+    /// Book depends on: the take is staged beside its destination and put in place before the
+    /// mutation, so a receipt can never reach a reader ahead of the audio it names, and a mutation
+    /// that does not commit puts the previous take back.
     /// <para>
     /// The write side is real — a SQLite project and <see cref="BookMutations"/> — because "the item
     /// points at the file that is actually there" is a claim about both at once. What the mutation
@@ -105,8 +108,28 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal($"audio/{itemId}.wav", relativePath);
             Assert.Equal(relativePath, (await ItemAsync(itemId)).AudioFileName);
             Assert.True(_fs.FileExists(PathOf(itemId)));
-            // Nothing left staged: the promotion moved the file rather than copying it.
-            Assert.DoesNotContain(_fs.GetAllPaths(), p => p.EndsWith(".staging", StringComparison.Ordinal));
+            // Exactly one file: nothing staged, nothing set aside, no copies.
+            Assert.Equal([PathOf(itemId)], _fs.GetAllPaths());
+        }
+
+        /// <summary>
+        /// The receipt reaches other circuits during the commit, so the take has to be at the path
+        /// the Book is about to name before the commit runs — not after it.
+        /// </summary>
+        [Fact]
+        public async Task TheTakeIsInPlaceBeforeTheMutationCommits()
+        {
+            var itemId = await SeedItemAsync();
+            byte[] audio = [0x52, 0x49, 0x46, 0x46, 0x77];
+            string? whenTheBookWasWritten = null;
+            _root.GetRequiredService<EventBroadcaster<BookMutationReceipt>>().Event += _ =>
+                whenTheBookWasWritten = _fs.FileExists(PathOf(itemId))
+                    ? Encoding.Latin1.GetString(_fs.GetFileContent(PathOf(itemId)))
+                    : null;
+
+            await Sut().RecordAsync(_folder, itemId, Clean(audio), "In a hole in the ground", TestContext.Current.CancellationToken);
+
+            Assert.Equal(Encoding.Latin1.GetString(audio), whenTheBookWasWritten);
         }
 
         [Fact]

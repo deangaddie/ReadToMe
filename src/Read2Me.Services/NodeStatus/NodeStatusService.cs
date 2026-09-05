@@ -97,17 +97,6 @@ namespace Read2Me.Services.NodeStatus
             Changed?.Invoke();
         }
 
-        public void OnAudioAssigned(ProjectFolderId folder, Guid paragraphId)
-        {
-            var key = new ParagraphKey(folder, paragraphId);
-            if (_entries.TryGetValue(key, out var status))
-            {
-                lock (status)
-                    status.MissingAudio = Math.Max(0, status.MissingAudio - 1);
-            }
-            Changed?.Invoke();
-        }
-
         public void OnReviewChanged(ProjectFolderId folder, Guid paragraphId, bool needsReview)
         {
             var key = new ParagraphKey(folder, paragraphId);

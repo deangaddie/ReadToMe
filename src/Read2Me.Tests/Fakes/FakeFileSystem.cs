@@ -80,8 +80,9 @@ namespace Read2Me.Tests.Fakes
             if (!_files.TryGetValue(sourcePath, out var content))
                 throw new FileNotFoundException($"File not found in FakeFileSystem: {sourcePath}");
 
+            _clock = _clock.AddSeconds(1);
             _files[destinationPath] = content;
-            _writeTimes[destinationPath] = _clock = _clock.AddSeconds(1);
+            _writeTimes[destinationPath] = _clock;
             _files.Remove(sourcePath);
             _writeTimes.Remove(sourcePath);
         }
