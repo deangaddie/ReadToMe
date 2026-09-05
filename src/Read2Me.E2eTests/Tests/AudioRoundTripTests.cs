@@ -48,7 +48,7 @@ public class AudioRoundTripTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         await Page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Add to Audio queue" })
             .ClickAsync();
 
-        // Pipeline completes: play button appears via the AudioFileAssigned push.
+        // Pipeline completes: the recorded take reconciles the Book View and the play button appears.
         await Expect(Page.Locator($"[data-testid='audio-play-{itemId}']"))
             .ToBeVisibleAsync(new() { Timeout = 30_000 });
 

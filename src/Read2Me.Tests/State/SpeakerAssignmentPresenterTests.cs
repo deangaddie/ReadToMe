@@ -85,7 +85,7 @@ namespace Read2Me.Tests.State
             _presenter = new BookHierarchyPresenter(
                 _reader, _projection, _circuit.ServiceProvider.GetRequiredService<IBookCommandHandler>(),
                 new FakeBookUseCases(), selectionState, audioSelectionState, _dialogs, _snackbar,
-                _characterQueue, audioQueue, new AudioReviewService(),
+                _characterQueue, new AudioReviewService(),
                 new NodeStatusService(new FakeParagraphQueueProbe()));
         }
 

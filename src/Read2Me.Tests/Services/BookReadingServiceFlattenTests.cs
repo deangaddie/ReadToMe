@@ -24,6 +24,7 @@ file sealed class FixedPathFileSystem(string fixedPath) : IFileSystem
     public Stream OpenRead(string path) => File.OpenRead(path);
     public void EnsureDirectory(string path) => Directory.CreateDirectory(path);
     public void DeleteFile(string path) => File.Delete(path);
+    public void MoveFile(string sourcePath, string destinationPath) => File.Move(sourcePath, destinationPath, overwrite: true);
     public async Task WriteFileAsync(string path, Stream source)
     {
         await using var f = File.Create(path);

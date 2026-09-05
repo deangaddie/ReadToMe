@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Commands.Handlers;
 
@@ -112,15 +113,15 @@ public sealed class UpdateParagraphItemTextHandler(ProjectDbSession session) : I
     }
 }
 
-public sealed class SetParagraphItemAudioHandler(ProjectDbSession session) : ICommandHandler<SetParagraphItemAudioCommand>
+/// <summary>
+/// Points an item at an audio file, migrated to <see cref="BookMutations"/> (ADR 0007). The Audio
+/// Queue does not come through here — it records the take and its verdict together — so this serves
+/// only <c>POST /api/projects/{folder}/commands</c>, whose response shape is unchanged: an unknown
+/// item and a path the item already carries both answer null.
+/// </summary>
+public sealed class SetParagraphItemAudioHandler(BookMutations mutations) : ICommandHandler<SetParagraphItemAudioCommand>
 {
-    public async Task<Guid?> HandleAsync(SetParagraphItemAudioCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var e = await db.ParagraphItems.FindAsync(c.ItemId);
-        if (e == null) return null;
-        e.AudioFileName = c.AudioFileName;
-        await db.SaveChangesAsync();
-        return null;
-    }
+    public Task<Guid?> HandleAsync(SetParagraphItemAudioCommand c, CancellationToken ct) =>
+        mutations.ExecuteLegacyAsync(
+            new SetParagraphItemAudioMutation(c.FolderId, c.ItemId, c.AudioFileName), ct);
 }

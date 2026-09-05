@@ -142,7 +142,7 @@ namespace Read2Me.Tests.State
                 audioSelectionState, coordinator, voiceResolver, new BookRevisionSequence(), session: null!,
                 new EventBroadcaster<BookMutationReceipt>(),
                 NullLogger<BookViewProjection>.Instance);
-            var presenter = new BookHierarchyPresenter(reader, projection, commandHandler, bookUseCases, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus);
+            var presenter = new BookHierarchyPresenter(reader, projection, commandHandler, bookUseCases, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioReviews, nodeStatus);
             return new Context(presenter, projection, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue, audioQueue, roster, seed, dialogService, snackbar);
         }
 
@@ -652,32 +652,12 @@ namespace Read2Me.Tests.State
         }
 
         // ---------------------------------------------------------------
-        // DismissAudioReviewAsync — issues command + faints in-memory review
+        // NoteItemTextEditedAsync — a text edit returns the item to pre-generation state
         // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task DismissAudioReviewAsync_IssuesCommand_AndSetsInMemoryDismissed()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var itemId = Guid.NewGuid();
-            ctx.AudioReviews.Set(Folder, itemId, new AudioReviewInfo(
-                Read2Me.Core.Models.AudioReviewState.NeedsReview, NormalizeOk: true, NormalizeReason: null,
-                VerifyOk: false, Wer: 0.3, VerifyReason: "WER 0.3 > 0.15",
-                Transcript: "t", OriginalTextSnapshot: "o"));
-
-            await ctx.Presenter.DismissAudioReviewAsync(Folder, itemId);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<DismissAudioReviewCommand>(c => c != null && c.ParagraphItemId == itemId && c.FolderId.Value == Folder.Value));
-            Assert.Equal(Read2Me.Core.Models.AudioReviewState.Dismissed, ctx.AudioReviews.ReviewOf(Folder, itemId)!.State);
-        }
-
-        // ---------------------------------------------------------------
-        // DismissAudioReviewAsync — decrements review badge live (issue 0004)
-        // ---------------------------------------------------------------
-
+        /// <summary>
+        /// A Book whose one item carries a needs-review verdict, in the database seed and in the
+        /// in-memory mirror the tree renders from.
+        /// </summary>
         private static async Task<(Context ctx, Guid itemId, OneChapterBook book)>
             CreateWithReviewSeedRowAsync()
         {
@@ -701,7 +681,6 @@ namespace Read2Me.Tests.State
                 new(paraId, book.ChapterId, book.PartId, book.VolumeId, Unattributed: 0, MissingAudio: 0, Review: 1),
             ]);
 
-            // Seed an in-memory NeedsReview for the item.
             ctx.AudioReviews.Set(Folder, itemId, new AudioReviewInfo(
                 Read2Me.Core.Models.AudioReviewState.NeedsReview,
                 NormalizeOk: true, NormalizeReason: null,
@@ -711,22 +690,6 @@ namespace Read2Me.Tests.State
             return (ctx, itemId, book);
         }
 
-        [Fact]
-        public async Task DismissAudioReviewAsync_DecrementsReviewBadge()
-        {
-            var (ctx, itemId, book) = await CreateWithReviewSeedRowAsync();
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, book.ChapterId).Review);
-
-            await ctx.Presenter.DismissAudioReviewAsync(Folder, itemId);
-
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, book.ChapterId).Review);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, book.PartId).Review);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, book.VolumeId).Review);
-        }
-
-        // ---------------------------------------------------------------
-        // NoteItemTextEditedAsync — a text edit returns the item to pre-generation state
-        // ---------------------------------------------------------------
 
         /// <summary>
         /// The row has to go back to Generatable without a reload: while it still shows a WAV its
@@ -823,66 +786,6 @@ namespace Read2Me.Tests.State
 
             Assert.Equal(TriState.Indeterminate, ctx.Presenter.AudioSelection.NodeState(BookNodeLevel.Chapter, chId));
         }
-
-        // ---------------------------------------------------------------
-        // Live audio badge updates (issue 0003)
-        // ---------------------------------------------------------------
-
-        private static async Task<(Context ctx, Paragraph para, OneChapterBook book)>
-            CreateWithAudioSeedRowAsync(int missingAudio)
-        {
-            var book = NewOneChapterBook();
-            var paraId = Guid.NewGuid();
-
-            var para = new Paragraph
-            {
-                Id = paraId,
-                ChapterId = book.ChapterId,
-                Items =
-                [
-                    new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paraId, ItemType = ParagraphItemType.Speech, Order = "a" },
-                ]
-            };
-
-            var ctx = Create();
-            await OpenWithChapterAsync(ctx, book, [para], nodeStatusSeed:
-            [
-                new(paraId, book.ChapterId, book.PartId, book.VolumeId,
-                    Unattributed: 0, MissingAudio: missingAudio, Review: 0),
-            ]);
-
-            return (ctx, para, book);
-        }
-
-        [Fact]
-        public async Task OnAudioFileAssigned_LastMissingItem_DecrementsAudioBadge()
-        {
-            var (ctx, para, book) = await CreateWithAudioSeedRowAsync(missingAudio: 1);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, book.ChapterId).AudioRemaining);
-
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, book.ChapterId, book.PartId, book.VolumeId);
-            ctx.AudioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
-
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, book.ChapterId).AudioRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, book.PartId).AudioRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, book.VolumeId).AudioRemaining);
-        }
-
-        [Fact]
-        public async Task OnAudioFileAssigned_NonLastMissingItem_DoesNotDecrementToZero()
-        {
-            var (ctx, para, book) = await CreateWithAudioSeedRowAsync(missingAudio: 2);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, book.ChapterId).AudioRemaining);
-
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, book.ChapterId, book.PartId, book.VolumeId);
-            ctx.AudioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
-
-            // Still 1 missing audio item in paragraph → still contributes 1 to node count
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, book.ChapterId).AudioRemaining);
-        }
-
 
         // ---------------------------------------------------------------
         // ViewMode setter (issue 003)
@@ -1063,60 +966,6 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, book.ChapterId, expanded: true);
 
             Assert.Same(published, ctx.Projection.Snapshot);
-        }
-
-        // ---------------------------------------------------------------
-        // OnAudioFileAssigned — item stamping and node status (issue 004)
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task OnAudioFileAssigned_KnownItem_StampsAudioFileName()
-        {
-            var (ctx, para, book) = await CreateWithAudioSeedRowAsync(missingAudio: 1);
-
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, book.ChapterId, book.PartId, book.VolumeId);
-            ctx.AudioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/chapter1/item.wav"));
-
-            Assert.Equal("audio/chapter1/item.wav", item.AudioFileName);
-        }
-
-        [Fact]
-        public async Task OnAudioFileAssigned_KnownItem_NodeStatusDecrementsAudioBadge()
-        {
-            var (ctx, para, book) = await CreateWithAudioSeedRowAsync(missingAudio: 1);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, book.ChapterId).AudioRemaining);
-
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, book.ChapterId, book.PartId, book.VolumeId);
-            ctx.AudioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
-
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, book.ChapterId).AudioRemaining);
-        }
-
-        [Fact]
-        public async Task OnAudioFileAssigned_UnknownItemId_NoException()
-        {
-            var (ctx, para, book) = await CreateWithAudioSeedRowAsync(missingAudio: 1);
-
-            var unknownRef = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), book.ChapterId, book.PartId, book.VolumeId);
-            var ex = Record.Exception(() => ctx.AudioQueue.Apply(
-                new QueuedAudioItem(Folder, unknownRef), new Disposition.Complete(null, "audio/ghost.wav")));
-
-            Assert.Null(ex);
-        }
-
-        [Fact]
-        public async Task OnAudioFileAssigned_WrongFolder_ItemNotStamped()
-        {
-            var (ctx, para, book) = await CreateWithAudioSeedRowAsync(missingAudio: 1);
-
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, book.ChapterId, book.PartId, book.VolumeId);
-            var otherFolder = new ProjectFolderId("other-book");
-            ctx.AudioQueue.Apply(new QueuedAudioItem(otherFolder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
-
-            Assert.Null(item.AudioFileName);
         }
 
         // ---------------------------------------------------------------

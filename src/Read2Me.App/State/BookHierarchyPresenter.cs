@@ -39,7 +39,6 @@ namespace Read2Me.App.State
         IDialogService dialogService,
         ISnackbar snackbar,
         CharacterQueueService characterQueue,
-        AudioQueueService audioQueue,
         AudioReviewService audioReviews,
         NodeStatusService nodeStatus) : IDisposable
     {
@@ -177,7 +176,6 @@ namespace Read2Me.App.State
         // Opening
         // ---------------------------------------------------------------
 
-        private bool _audioQueueSubscribed;
         private bool _characterQueueSubscribed;
         private bool _snapshotSubscribed;
 
@@ -512,18 +510,12 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
-        public async Task DismissAudioReviewAsync(ProjectFolderId folderId, Guid paragraphItemId)
-        {
-            await commandHandler.ExecuteAsync(new DismissAudioReviewCommand(folderId, paragraphItemId));
-
-            var current = audioReviews.ReviewOf(folderId, paragraphItemId);
-            if (current is not null)
-                audioReviews.Set(folderId, paragraphItemId,
-                    current with { State = AudioReviewState.Dismissed });
-
-            RecomputeParagraphReview(folderId, paragraphItemId);
-            NotifyStateChanged();
-        }
+        /// <summary>
+        /// Silences one item's review. The badge and the chip both come back on the snapshot the
+        /// mutation reconciles, so there is nothing to patch here — they cannot disagree.
+        /// </summary>
+        public Task DismissAudioReviewAsync(ProjectFolderId folderId, Guid paragraphItemId) =>
+            MutateAsync(new DismissAudioReviewMutation(folderId, paragraphItemId));
 
         private void RecomputeParagraphReview(ProjectFolderId folderId, Guid paragraphItemId)
         {
@@ -559,18 +551,6 @@ namespace Read2Me.App.State
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 
-        private void OnAudioFileAssigned(ProjectFolderId folder, Guid paragraphItemId, string relativePath)
-        {
-            if (CurrentFolder is not { } current || current != folder) return;
-
-            var para = LoadedOwnerOf(paragraphItemId);
-            if (para is null) return;
-
-            var item = para.Items.First(i => i.Id == paragraphItemId);
-            item.AudioFileName = relativePath;
-            nodeStatus.OnAudioAssigned(folder, item.ParagraphId);
-        }
-
         /// <summary>
         /// A bulk write must never meet an in-flight attribution, so any armed bulk mode is turned
         /// off — not merely greyed out — the moment the character queue has work.
@@ -586,12 +566,6 @@ namespace Read2Me.App.State
 
         private void Subscribe()
         {
-            if (!_audioQueueSubscribed)
-            {
-                audioQueue.AudioFileAssigned += OnAudioFileAssigned;
-                _audioQueueSubscribed = true;
-            }
-
             if (!_characterQueueSubscribed)
             {
                 characterQueue.Changed += DisarmBulkIfQueueBusy;
@@ -613,12 +587,6 @@ namespace Read2Me.App.State
             {
                 characterQueue.Changed -= DisarmBulkIfQueueBusy;
                 _characterQueueSubscribed = false;
-            }
-
-            if (_audioQueueSubscribed)
-            {
-                audioQueue.AudioFileAssigned -= OnAudioFileAssigned;
-                _audioQueueSubscribed = false;
             }
 
             if (_snapshotSubscribed)

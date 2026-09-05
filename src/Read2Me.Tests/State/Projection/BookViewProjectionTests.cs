@@ -1165,6 +1165,159 @@ namespace Read2Me.Tests.State.Projection
             Assert.Equal(0, announced);
         }
 
+        // — audio assignment and reviews -------------------------------------
+
+        private static AudioReviewVerdict CleanTake() =>
+            new(NormalizeOk: true, NormalizeReason: null,
+                VerifyOk: true, Wer: 0.0, VerifyReason: null,
+                Transcript: "said", OriginalTextSnapshot: "said");
+
+        private static AudioReviewVerdict FailedTake() =>
+            new(NormalizeOk: true, NormalizeReason: null,
+                VerifyOk: false, Wer: 0.42, VerifyReason: "over threshold",
+                Transcript: "heard", OriginalTextSnapshot: "said");
+
+        [Fact]
+        public async Task MutateAsync_ExactAudioRecording_RefreshesTheAffectedParagraphOnly()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var content = new CountingContent(_reader);
+            var sut = await OpenWithBothChaptersAsync(b, content);
+            content.ChildrenOf.Clear();
+
+            var outcome = await sut.MutateAsync(new RecordParagraphItemAudioMutation(
+                _folder, b.ItemId("i1"), "audio/i1.wav", CleanTake()));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            var refreshed = Assert.Single(snapshot.Branches.ParagraphsByChapter[b.ChapterId("ch1")]);
+            Assert.Equal("audio/i1.wav", refreshed.Items.Single(i => i.Id == b.ItemId("i1")).AudioFileName);
+            Assert.Equal([b.ParagraphId("p1")], content.ParagraphsRead);
+            // The queue writes one of these per item; walking both open chapters for each is the
+            // cost this family exists to avoid.
+            Assert.Empty(content.ChildrenOf);
+        }
+
+        /// <summary>
+        /// The two indicators a take moves are read from the same snapshot: a row cannot come back
+        /// playing new audio while its review chip still describes the take before it.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_AFailedTake_MovesTheAudioAndReviewBadgesTogether()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = await OpenWithBothChaptersAsync(b, new CountingContent(_reader));
+
+            var outcome = await sut.MutateAsync(new RecordParagraphItemAudioMutation(
+                _folder, b.ItemId("i1"), "audio/i1.wav", FailedTake()));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            var status = snapshot.NodeStatus.Single(r => r.ParagraphId == b.ParagraphId("p1"));
+            Assert.Equal(1, status.MissingAudio);   // the paragraph's narration still has none
+            Assert.Equal(1, status.Review);
+            Assert.Equal(Read2Me.Core.Models.AudioReviewState.NeedsReview, snapshot.ReviewOf(b.ItemId("i1"))!.State);
+        }
+
+        [Fact]
+        public async Task MutateAsync_DismissingAReview_ClearsTheBadgeAndTheDetailTogether()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var content = new CountingContent(_reader);
+            var sut = await OpenWithBothChaptersAsync(b, content);
+            await sut.MutateAsync(new RecordParagraphItemAudioMutation(
+                _folder, b.ItemId("i1"), "audio/i1.wav", FailedTake()));
+            content.ChildrenOf.Clear();
+
+            var outcome = await sut.MutateAsync(new DismissAudioReviewMutation(_folder, b.ItemId("i1")));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal(0, snapshot.NodeStatus.Single(r => r.ParagraphId == b.ParagraphId("p1")).Review);
+            Assert.Equal(Read2Me.Core.Models.AudioReviewState.Dismissed, snapshot.ReviewOf(b.ItemId("i1"))!.State);
+            Assert.Empty(content.ChildrenOf);
+        }
+
+        /// <summary>
+        /// An item that has just been given audio is still a legal audio target — regenerating it is
+        /// the whole point of selecting one that already has a take — so the selection stands, with
+        /// the roll-up basis recomputed against the new revision.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_AudioRecording_KeepsTheAudioItemSelectionItLeftEligible()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            await sut.ApplyAsync(new BookViewIntent.SetAudioItemSelected(
+                new AudioItemRef(b.ItemId("i1"), b.ParagraphId("p1"), b.ChapterId("ch1"), b.PartId("vol"), b.VolumeId("vol")),
+                Selected: true));
+
+            var outcome = await sut.MutateAsync(new RecordParagraphItemAudioMutation(
+                _folder, b.ItemId("i1"), "audio/i1.wav", CleanTake()));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Equal([b.ItemId("i1")], snapshot.Selections.AudioItemIds);
+        }
+
+        /// <summary>
+        /// A take recorded against one item still rechecks the whole Audio Item Selection: a row
+        /// selected against an older revision that the Book no longer contains is dropped in the
+        /// same publication that shows the take.
+        /// </summary>
+        [Fact]
+        public async Task MutateAsync_AudioRecording_ClearsAnAudioSelectionThePersistedBookNoLongerHas()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            var gone = Guid.NewGuid();
+            await sut.ApplyAsync(new BookViewIntent.SetAudioItemSelected(
+                new AudioItemRef(gone, Guid.NewGuid(), b.ChapterId("ch2"), b.PartId("vol"), b.VolumeId("vol")),
+                Selected: true));
+
+            var outcome = await sut.MutateAsync(new RecordParagraphItemAudioMutation(
+                _folder, b.ItemId("i1"), "audio/i1.wav", CleanTake()));
+
+            var snapshot = Assert.IsType<BookViewMutationOutcome.Coherent>(outcome).Snapshot;
+            Assert.Empty(snapshot.Selections.AudioItemIds);
+        }
+
+        /// <summary>
+        /// The Audio Queue, working through the Book from its own scope: badges and review details
+        /// reach this Book View without navigation, without rereading its expanded branches, and
+        /// without a notice — routine progress is not a surprise (ADR 0007).
+        /// </summary>
+        [Fact]
+        public async Task AnotherProducersRecordedTake_ConvergesSilentlyAndWithoutRebuilding()
+        {
+            var b = await SeedTwoAttributableChaptersAsync();
+            var content = new CountingContent(_reader);
+            var sut = await OpenWithBothChaptersAsync(b, content);
+            content.ChildrenOf.Clear();
+
+            var announced = 0;
+            var updates = 0;
+            sut.ExternalUpdateApplied += update =>
+            {
+                updates++;
+                if (update.Announce) announced++;
+            };
+
+            var committed = await RemoteWriter().CommitAsync(new RecordParagraphItemAudioMutation(
+                _folder, b.ItemId("i2"), "audio/i2.wav", FailedTake()));
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+
+            await ConvergesAsync(
+                () => sut.Snapshot!.Revision >= revision, "the queue's recorded take never arrived");
+
+            Assert.Equal("audio/i2.wav",
+                sut.Snapshot!.Branches.ParagraphsByChapter[b.ChapterId("ch2")]
+                    .Single().Items.Single().AudioFileName);
+            Assert.Equal(Read2Me.Core.Models.AudioReviewState.NeedsReview, sut.Snapshot!.ReviewOf(b.ItemId("i2"))!.State);
+            Assert.Equal([b.ParagraphId("p2")], content.ParagraphsRead);
+            Assert.Empty(content.ChildrenOf);
+            Assert.Equal(1, updates);
+            Assert.Equal(0, announced);
+        }
+
         private BookMutations RemoteWriter()
         {
             var circuit = _root.CreateAsyncScope();

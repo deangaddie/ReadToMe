@@ -75,6 +75,17 @@ namespace Read2Me.Tests.Fakes
 
         public void DeleteFile(string path) => _files.Remove(path);
 
+        public void MoveFile(string sourcePath, string destinationPath)
+        {
+            if (!_files.TryGetValue(sourcePath, out var content))
+                throw new FileNotFoundException($"File not found in FakeFileSystem: {sourcePath}");
+
+            _files[destinationPath] = content;
+            _writeTimes[destinationPath] = _clock = _clock.AddSeconds(1);
+            _files.Remove(sourcePath);
+            _writeTimes.Remove(sourcePath);
+        }
+
         public async Task WriteFileAsync(string path, Stream source)
         {
             using var ms = new MemoryStream();

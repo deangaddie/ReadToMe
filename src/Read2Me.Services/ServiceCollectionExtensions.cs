@@ -197,6 +197,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.AttributeParagraphItemsMutation>,
             Mutations.Implementations.AttributeParagraphItemsMutationImplementation>();
+        // Audio assignment and reviews — the Audio Queue's exact, high-frequency family
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.RecordParagraphItemAudioMutation>,
+            Mutations.Implementations.RecordParagraphItemAudioMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetParagraphItemAudioMutation>,
+            Mutations.Implementations.SetParagraphItemAudioMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetAudioReviewMutation>,
+            Mutations.Implementations.SetAudioReviewMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.DismissAudioReviewMutation>,
+            Mutations.Implementations.DismissAudioReviewMutationImplementation>();
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 

@@ -171,3 +171,54 @@ public sealed record AttributeParagraphItemsMutation(
     ProjectFolderId FolderId,
     Guid ParagraphId,
     IReadOnlyList<ItemAttribution> Items) : BookMutation(FolderId);
+
+// ── audio assignment and reviews ─────────────────────────────────────────────
+// The Audio Queue's half of the high-frequency traffic, and the same shape as speaker attribution:
+// one known item, one known Paragraph, no node created or moved. A queue run writes one of these
+// per item, so a Book View that rebuilt for each would spend the run rereading a Book that gained
+// one WAV.
+//
+// Recording is one mutation rather than two because the audio and the verdict on it are one fact.
+// Committing them separately is how a Book View comes to show a played row whose review chip still
+// describes the previous take.
+
+/// <summary>
+/// What the pipeline concluded about a take: whether normalisation and verification passed, and the
+/// evidence a person needs to judge it themselves. Both stages passing is the absence of a review,
+/// not a review that says "fine" — row presence <em>is</em> the needs-review signal.
+/// </summary>
+public sealed record AudioReviewVerdict(
+    bool NormalizeOk,
+    string? NormalizeReason,
+    bool VerifyOk,
+    double? Wer,
+    string? VerifyReason,
+    string? Transcript,
+    string? OriginalTextSnapshot);
+
+/// <summary>
+/// Records one generated take: the item's audio reference and the verdict on it, together.
+/// <para>
+/// The WAV is staged on disk before this commits and moved into place after it, so the persisted
+/// Book never names an artifact that is not finished (ADR 0007).
+/// </para>
+/// </summary>
+public sealed record RecordParagraphItemAudioMutation(
+    ProjectFolderId FolderId,
+    Guid ItemId,
+    string RelativePath,
+    AudioReviewVerdict Verdict) : BookMutation(FolderId);
+
+/// <summary>Points one item at an audio file, with no verdict — the generic command endpoint's half.</summary>
+public sealed record SetParagraphItemAudioMutation(
+    ProjectFolderId FolderId, Guid ItemId, string RelativePath) : BookMutation(FolderId);
+
+/// <summary>Records a verdict on an item's existing audio without touching the audio itself.</summary>
+public sealed record SetAudioReviewMutation(
+    ProjectFolderId FolderId, Guid ItemId, AudioReviewVerdict Verdict) : BookMutation(FolderId);
+
+/// <summary>
+/// The reader's "I have listened to it and it is fine": the review stops asking without the take
+/// being regenerated. A fresh failure resets it to needs-review.
+/// </summary>
+public sealed record DismissAudioReviewMutation(ProjectFolderId FolderId, Guid ItemId) : BookMutation(FolderId);
