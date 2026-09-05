@@ -90,10 +90,12 @@ namespace Read2Me.App.Api
             if (!TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
-            var result = await useCases.ImportAsync(folderId.Value, body?.Reread ?? false, ct);
-            return result.IsSuccess
-                ? Results.Ok()
-                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+            // An import that changed nothing is still a legal import, and the wire contract has one
+            // success: 200 for a Book that was replaced and for one there was nothing to replace.
+            var outcome = await useCases.ImportAsync(folderId, body?.Reread ?? false, ct);
+            return outcome is BookImportOutcome.Failed failed
+                ? Results.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
+                : Results.Ok();
         }
 
         /// Both gates in one place: the name must parse as a single path segment

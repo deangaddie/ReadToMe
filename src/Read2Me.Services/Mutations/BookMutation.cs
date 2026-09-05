@@ -444,3 +444,37 @@ public sealed record DeleteVoiceRuleMutation(ProjectFolderId FolderId, Guid Rule
 /// </summary>
 public sealed record MoveVoiceRuleMutation(
     ProjectFolderId FolderId, Guid RuleId, RuleMoveDirection Direction) : BookMutation(FolderId);
+
+// ── imports and rereads ──────────────────────────────────────────────────────
+// Where a Book's content comes from in the first place: the initial import, the automatic reread of
+// the source file, and the manual reread that re-splits it under hand-chosen options. All three are
+// the same operation — replace what the Book holds with what the file says — so all three commit
+// through the one mutation below.
+//
+// One mutation rather than "clear, then repopulate" is the whole point. Two commits would publish a
+// receipt for the *empty* Book in between, and every other open Book View would rebuild against it:
+// the reader would watch their project empty itself and refill. Inside one transaction there is no
+// moment at which an empty or half-imported Book is visible to anyone.
+//
+// The Book's content is all that is replaced. Characters, Voices and Voice Rules survive a reread —
+// they are what the reader built up around the text, not the text.
+
+/// <summary>
+/// Replaces the Book's content with freshly read content, in one commit.
+/// <para>
+/// <c>ReplaceExisting</c> is what separates a reread from a first import: a reread removes every
+/// Volume, Part, Chapter, Paragraph and item first — and with them the attribution, audio and
+/// reviews that hung off them — while an import into an empty Book adds to what is there.
+/// </para>
+/// <para>
+/// <c>CoverImageFileName</c> names an image already written into the project folder. Like the Audio
+/// Queue's take, the artifact exists before the Book names it (ADR 0007), and the producer removes
+/// it again if this mutation does not commit. It is honoured only while the project has no cover:
+/// an import never overwrites a cover the reader chose.
+/// </para>
+/// </summary>
+public sealed record ImportBookContentMutation(
+    ProjectFolderId FolderId,
+    BookContent Content,
+    bool ReplaceExisting,
+    string? CoverImageFileName = null) : BookMutation(FolderId);

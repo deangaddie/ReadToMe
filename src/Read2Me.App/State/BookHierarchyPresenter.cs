@@ -235,31 +235,77 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
-        public async Task ResetAndLoadAsync(ProjectFolderId folderId)
-        {
-            selectionState.Reset(folderId);
-            audioSelectionState.Reset(folderId);
-            nodeStatus.Clear(folderId);
-            await LoadAsync(folderId);
-        }
+        // ---------------------------------------------------------------
+        // Imports and rereads
+        // ---------------------------------------------------------------
 
+        /// <summary>Reads the project's source file into a Book that has none yet.</summary>
         public Task ReadBookAsync(ProjectFolderId folderId) =>
-            ExecuteAndReloadAsync(folderId, () => bookUseCases.ImportAsync(folderId), reset: false);
+            ImportAsync(folderId, commit => bookUseCases.ImportAsync(folderId, reread: false, commit));
 
-        public async Task ConfirmRereadAsync(ProjectFolderId folderId) =>
-            await ExecuteAndReloadAsync(folderId, () => bookUseCases.ImportAsync(folderId, reread: true), reset: true);
+        /// <summary>Throws the Book's content away and reads the source file again in its place.</summary>
+        public Task ConfirmRereadAsync(ProjectFolderId folderId) =>
+            ImportAsync(folderId, commit => bookUseCases.ImportAsync(folderId, reread: true, commit));
 
+        /// <summary>The same replacement, re-split under options the reader chooses in a dialog.</summary>
         public async Task ManualRereadAsync(ProjectFolderId folderId)
         {
             var dialog = await dialogService.ShowAsync<Shared.ManualRereadDialog>("Manual Reread Book");
             var result = await dialog.Result;
             if (result?.Canceled != false) return;
 
-            var options = result.Data as ManualReadOptions;
-            if (options is null) return;
+            if (result.Data is not ManualReadOptions options) return;
 
-            await ExecuteAndReloadAsync(folderId,
-                () => bookUseCases.ImportManuallyAsync(folderId, options), reset: true);
+            await ImportAsync(folderId, commit => bookUseCases.ImportManuallyAsync(folderId, options, commit));
+        }
+
+        /// <summary>
+        /// Runs one import and shows what it did. There is no reload afterwards, and nothing to
+        /// reset: the replacement commits as one Book mutation, and the projection that commits it
+        /// rebuilds this circuit's Book View — dropping the selections and expansion that pointed at
+        /// content the reread deleted — before the gesture returns (ADR 0007).
+        /// </summary>
+        private async Task ImportAsync(
+            ProjectFolderId folderId, Func<CommitBookMutation, Task<BookImportOutcome>> import)
+        {
+            IsBusy = true;
+            Error = null;
+            NotifyStateChanged();
+            try
+            {
+                Error = (await import(CommitImportAsync)).Error;
+            }
+            finally
+            {
+                IsBusy = false;
+                NotifyStateChanged();
+            }
+        }
+
+        /// <summary>
+        /// Where an import's mutation commits: this circuit's own projection, so the reader who asked
+        /// for the reread waits for their Book View rather than being notified of it as someone
+        /// else's change. The producer above needs the write-side outcome back, because only it knows
+        /// whether the artifacts it staged were taken.
+        /// </summary>
+        private async Task<BookMutationOutcome> CommitImportAsync(BookMutation mutation, CancellationToken ct)
+        {
+            var outcome = await projection.MutateAsync(mutation, ct);
+            switch (outcome)
+            {
+                case BookViewMutationOutcome.Coherent coherent:
+                    SeedDerivedServices(coherent.Snapshot.Folder, coherent.Snapshot);
+                    return new BookMutationOutcome.Committed(coherent.Receipt);
+                case BookViewMutationOutcome.Uncommitted uncommitted:
+                    return new BookMutationOutcome.Rejected(uncommitted.Reason, uncommitted.Message);
+                case BookViewMutationOutcome.NoChange:
+                    return new BookMutationOutcome.NoChange();
+                // Enumerated rather than defaulted: a committed-but-stale case arriving here must
+                // not be flattened into "nothing happened", because the producer above would then
+                // delete the artifacts the committed Book names.
+                default:
+                    throw new NotSupportedException($"Unhandled Book View outcome {outcome.GetType().Name}.");
+            }
         }
 
         /// <summary>
@@ -488,22 +534,6 @@ namespace Read2Me.App.State
         /// </summary>
         public Task DismissAudioReviewAsync(ProjectFolderId folderId, Guid paragraphItemId) =>
             MutateAsync(new DismissAudioReviewMutation(folderId, paragraphItemId));
-
-        private async Task ExecuteAndReloadAsync(
-            ProjectFolderId folderId,
-            Func<Task<Result>> operation,
-            bool reset)
-        {
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            var result = await operation();
-            Error = result.IsSuccess ? null : result.Error;
-            if (result.IsSuccess)
-                await (reset ? ResetAndLoadAsync(folderId) : LoadAsync(folderId));
-            IsBusy = false;
-            NotifyStateChanged();
-        }
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
 

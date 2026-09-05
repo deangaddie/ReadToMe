@@ -7,65 +7,46 @@ using VersOne.Epub;
 
 namespace Read2Me.Services
 {
+    /// <summary>What reading a project's source file produced, before anything is written.</summary>
+    public sealed record BookReadResult(BookContent Content, byte[]? CoverImage);
+
+    /// <summary>
+    /// Reads a project's source file into Book content. It writes nothing: the content it returns is
+    /// staged into the Book by the one import mutation that replaces it (ADR 0007), so the file read
+    /// — the slow, failure-prone half — happens outside any transaction or write lock.
+    /// </summary>
     public class BookReadingService(
         ProjectDbSession session,
         EpubFileReader epubReader,
         TextFileReader textReader,
-        IBookContentPersister persister,
         ILogger<BookReadingService> logger)
     {
-        public async Task<byte[]?> ReadBookAsync(string folderName, CancellationToken cancellationToken = default)
+        public async Task<BookReadResult> ReadBookAsync(string folderName, CancellationToken cancellationToken = default)
         {
             logger.LogInformation("Starting book read for project '{Folder}'", folderName);
 
-            var db = await session.OpenAsync(folderName);
+            var (path, type) = await ResolveBookFileAsync(folderName, cancellationToken);
 
-            var project = await db.Projects.SingleOrDefaultAsync(cancellationToken)
-                ?? throw new InvalidOperationException($"No project record found in '{folderName}'.");
-
-            var folderPath = session.FileSystem.GetProjectFolderPath(folderName);
-            var bookFilePath = Path.Combine(folderPath, project.Filename);
-            if (!session.FileSystem.FileExists(bookFilePath))
-                throw new FileNotFoundException($"Book file not found: {bookFilePath}");
-
-            byte[]? coverImage = null;
-            BookContent content;
-            if (project.Type == BookFileType.Epub)
+            // Only an epub carries a cover image; a text file is text.
+            var read = type switch
             {
-                var result = await epubReader.ReadAsync(bookFilePath, cancellationToken);
-                content = result.Content;
-                coverImage = result.CoverImage;
-            }
-            else
-            {
-                content = project.Type switch
-                {
-                    BookFileType.Text => await textReader.ReadAsync(bookFilePath, cancellationToken),
-                    _ => throw new NotSupportedException($"Unsupported file type: {project.Type}")
-                };
-            }
+                BookFileType.Epub => ToResult(await epubReader.ReadAsync(path, cancellationToken)),
+                BookFileType.Text => new BookReadResult(await textReader.ReadAsync(path, cancellationToken), null),
+                _ => throw new NotSupportedException($"Unsupported file type: {type}")
+            };
 
-            await persister.PersistAsync(db, content, cancellationToken);
             logger.LogInformation("Book read complete for project '{Folder}'", folderName);
-            return coverImage;
+            return read;
         }
 
         public async Task<List<string>> FlattenFromFileAsync(string folderName, CancellationToken cancellationToken = default)
         {
             logger.LogInformation("Flattening book content from source file for '{Folder}'", folderName);
 
-            var db = await session.OpenAsync(folderName);
-
-            var project = await db.Projects.SingleOrDefaultAsync(cancellationToken)
-                ?? throw new InvalidOperationException($"No project record found in '{folderName}'.");
-
-            var folderPath = session.FileSystem.GetProjectFolderPath(folderName);
-            var bookFilePath = Path.Combine(folderPath, project.Filename);
-            if (!session.FileSystem.FileExists(bookFilePath))
-                throw new FileNotFoundException($"Book file not found: {bookFilePath}");
+            var (bookFilePath, type) = await ResolveBookFileAsync(folderName, cancellationToken);
 
             List<string> texts;
-            if (project.Type == BookFileType.Epub)
+            if (type == BookFileType.Epub)
             {
                 var epub = await EpubReader.ReadBookAsync(bookFilePath);
                 texts = epub.ReadingOrder
@@ -124,16 +105,31 @@ namespace Read2Me.Services
             return texts;
         }
 
-        public async Task ReadBookManuallyAsync(string folderName, List<string> lines, ManualReadOptions options, CancellationToken cancellationToken = default)
-        {
-            logger.LogInformation("Manual book read for project '{Folder}'", folderName);
+        private static BookReadResult ToResult(EpubReadResult epub) => new(epub.Content, epub.CoverImage);
 
+        /// <summary>Re-splits already-flattened lines under hand-chosen options. Reads nothing and writes nothing.</summary>
+        public BookContent ReadManually(List<string> lines, ManualReadOptions options) =>
+            ManualBookReader.Read(lines, options);
+
+        /// <summary>
+        /// The project's source file, or the expected failure that says why there is not one.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The folder holds no project record.</exception>
+        /// <exception cref="FileNotFoundException">The project names a file that is not there.</exception>
+        private async Task<(string Path, BookFileType Type)> ResolveBookFileAsync(
+            string folderName, CancellationToken cancellationToken)
+        {
             var db = await session.OpenAsync(folderName);
 
-            var content = ManualBookReader.Read(lines, options);
+            var project = await db.Projects.SingleOrDefaultAsync(cancellationToken)
+                ?? throw new InvalidOperationException($"No project record found in '{folderName}'.");
 
-            await persister.PersistAsync(db, content, cancellationToken);
-            logger.LogInformation("Manual book read complete for project '{Folder}'", folderName);
+            var folderPath = session.FileSystem.GetProjectFolderPath(folderName);
+            var bookFilePath = Path.Combine(folderPath, project.Filename);
+            if (!session.FileSystem.FileExists(bookFilePath))
+                throw new FileNotFoundException($"Book file not found: {bookFilePath}");
+
+            return (bookFilePath, project.Type);
         }
     }
 }

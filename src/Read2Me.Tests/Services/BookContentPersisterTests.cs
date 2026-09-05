@@ -47,7 +47,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         // Import records the splitter's decision on the speaker, not on a type: narration gets the
         // narrator, dialog is left for the attribution queue (ADR-0006). Both are Speech items.
@@ -76,7 +76,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var allKeys = await CollectAllKeysInTraversalOrderAsync(_db);
         AssertStrictlyAscending(allKeys);
@@ -101,7 +101,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var allKeys = await CollectAllKeysInTraversalOrderAsync(_db);
         AssertStrictlyAscending(allKeys);
@@ -122,7 +122,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var vol = await _db.Volumes.SingleAsync();
         var part = await _db.Parts.SingleAsync();
@@ -142,7 +142,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var part = await _db.Parts.SingleAsync();
         var chapter = await _db.Chapters.SingleAsync();
@@ -162,7 +162,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var chapter = await _db.Chapters.SingleAsync();
         var para = await _db.Paragraphs.SingleAsync();
@@ -182,7 +182,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var para = await _db.Paragraphs.SingleAsync();
         var item = await _db.ParagraphItems.SingleAsync();
@@ -212,7 +212,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var parts = await _db.Parts.OrderBy(p => p.Order).ToListAsync();
         var lastItemOfPart1 = await _db.ParagraphItems
@@ -241,7 +241,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ]),
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var volumes = await _db.Volumes.OrderBy(v => v.Order).ToListAsync();
         var lastItemOfVol1 = await _db.ParagraphItems
@@ -276,7 +276,7 @@ public class BookContentPersisterTests : IAsyncDisposable
             ])
         ]);
 
-        await _sut.PersistAsync(_db, content);
+        await PersistAndSaveAsync(content);
 
         var allKeys = await CollectAllKeysInTraversalOrderAsync(_db);
         Assert.Equal(allKeys.Count, allKeys.Distinct().Count());
@@ -321,5 +321,15 @@ public class BookContentPersisterTests : IAsyncDisposable
         for (int i = 1; i < keys.Count; i++)
             Assert.True(string.Compare(keys[i - 1], keys[i], StringComparison.Ordinal) < 0,
                 $"Key at [{i - 1}] '{keys[i - 1]}' is not < key at [{i}] '{keys[i]}'");
+    }
+
+    /// <summary>
+    /// The persister stages rows without saving them — the import mutation that calls it owns the
+    /// transaction (ADR 0007) — so a test that reads them back has to commit them itself.
+    /// </summary>
+    private async Task PersistAndSaveAsync(BookContent content)
+    {
+        await _sut.PersistAsync(_db, content);
+        await _db.SaveChangesAsync();
     }
 }

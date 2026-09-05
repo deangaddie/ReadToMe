@@ -278,6 +278,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.MoveVoiceRuleMutation>,
             Mutations.Implementations.MoveVoiceRuleMutationImplementation>();
+        // Imports and rereads — clearing and repopulating as one commit, never two.
+        services.TryAddScoped<IBookContentPersister, BookContentPersister>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.ImportBookContentMutation>,
+            Mutations.Implementations.ImportBookContentMutationImplementation>();
         // Manual and AI book edits — node titles and item text, and the stale audio that goes with
         // a rewrite.
         services.AddScoped<

@@ -60,7 +60,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 
-        services.AddScoped<IBookContentPersister, BookContentPersister>();
         services.AddScoped<BookReadingService>();
         services.AddScoped<ProjectUseCases>();
         services.AddScoped<BookUseCases>();

@@ -33,7 +33,8 @@ namespace Read2Me.Services
                 // Handlers mutate through the session's long-lived DbContext (and some use
                 // ExecuteDelete/ExecuteUpdate, which bypass the change tracker entirely), so
                 // without eviction a follow-up read returns stale tracked entities — e.g. a
-                // deleted voice still counted in Character.Voices. Mirrors BookUseCases.ImportAsync.
+                // deleted voice still counted in Character.Voices. Mirrors BookMutations, which owns
+                // the same eviction for every producer that has migrated off this façade.
                 _session.Evict(command.FolderId);
             }
         }

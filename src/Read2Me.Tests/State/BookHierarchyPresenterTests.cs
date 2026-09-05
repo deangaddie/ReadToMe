@@ -21,20 +21,32 @@ using Xunit;
 
 namespace Read2Me.Tests.State
 {
-    // Fake BookUseCases: controllable import results without real dependencies.
+    // Fake BookUseCases: controllable import outcomes without real dependencies. It records the
+    // commit the presenter hands it, because routing that through the circuit's own projection —
+    // rather than committing behind its back and reloading — is the point of the import slice.
     internal class FakeBookUseCases : BookUseCases
     {
-        private Result _result = Result.Ok();
+        private BookImportOutcome _outcome = new BookImportOutcome.Replaced();
 
-        public FakeBookUseCases() : base(null!, null!, null!, null!) { }
+        public FakeBookUseCases() : base(null!, null!, null!, null!, null!) { }
 
-        public void SetResult(Result r) => _result = r;
+        public CommitBookMutation? Commit { get; private set; }
 
-        public override Task<Result> ImportAsync(string folderName, bool reread = false, CancellationToken ct = default)
-            => Task.FromResult(_result);
+        public void SetOutcome(BookImportOutcome outcome) => _outcome = outcome;
 
-        public override Task<Result> ImportManuallyAsync(string folderName, ManualReadOptions options, CancellationToken ct = default)
-            => Task.FromResult(_result);
+        public override Task<BookImportOutcome> ImportAsync(
+            ProjectFolderId folderId, bool reread, CommitBookMutation commit, CancellationToken ct = default)
+        {
+            Commit = commit;
+            return Task.FromResult(_outcome);
+        }
+
+        public override Task<BookImportOutcome> ImportManuallyAsync(
+            ProjectFolderId folderId, ManualReadOptions options, CommitBookMutation commit, CancellationToken ct = default)
+        {
+            Commit = commit;
+            return Task.FromResult(_outcome);
+        }
     }
 
     public class BookHierarchyPresenterTests
@@ -248,7 +260,7 @@ namespace Read2Me.Tests.State
         public async Task ReadBookAsync_Success_ErrorIsNull()
         {
             var ctx = Create();
-            ctx.BookUseCases.SetResult(Result.Ok());
+            ctx.BookUseCases.SetOutcome(new BookImportOutcome.Replaced());
 
             await ctx.Presenter.ReadBookAsync(Folder);
 
@@ -259,7 +271,8 @@ namespace Read2Me.Tests.State
         public async Task ReadBookAsync_Failure_SetsError()
         {
             var ctx = Create();
-            ctx.BookUseCases.SetResult(Result.Fail("Import failed"));
+            ctx.BookUseCases.SetOutcome(
+                new BookImportOutcome.Failed(BookImportFailure.FileMissing, "Import failed"));
 
             await ctx.Presenter.ReadBookAsync(Folder);
 
@@ -270,11 +283,33 @@ namespace Read2Me.Tests.State
         public async Task ReadBookAsync_IsBusy_FalseAfterComplete()
         {
             var ctx = Create();
-            ctx.BookUseCases.SetResult(Result.Ok());
+            ctx.BookUseCases.SetOutcome(new BookImportOutcome.Replaced());
 
             await ctx.Presenter.ReadBookAsync(Folder);
 
             Assert.False(ctx.Presenter.IsBusy);
+        }
+
+        /// <summary>
+        /// The import commits through this circuit's projection, not behind it: that is what makes
+        /// the Book View coherent when the gesture returns, and what stops the reader being told
+        /// their own reread happened "elsewhere" (ADR 0007).
+        /// </summary>
+        [Fact]
+        public async Task ReadBookAsync_CommitsThroughThisCircuitsProjection()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            await ctx.Presenter.ReadBookAsync(Folder);
+
+            Assert.NotNull(ctx.BookUseCases.Commit);
+            // The projection's own guard answering is the proof: a commit that went straight to
+            // BookMutations would not care which Book this circuit has open.
+            var refused = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => ctx.BookUseCases.Commit!(
+                    new ClearBookContentMutation(new ProjectFolderId("another-book")), CancellationToken.None));
+            Assert.Contains("needs a projection open on that Book", refused.Message);
         }
 
         // ---------------------------------------------------------------
@@ -632,25 +667,6 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.LoadAsync(Folder);
 
             Assert.False(ctx.Presenter.IsNodeSelectable(Guid.NewGuid()));
-        }
-
-        // ---------------------------------------------------------------
-        // ResetAndLoadAsync clears selection
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task ResetAndLoadAsync_ClearsSelection()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
-            ctx.Presenter.Selection.AddParagraph(Guid.NewGuid(), new ParagraphSelection(volId, ptId, chId));
-            Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
-
-            await ctx.Presenter.ResetAndLoadAsync(Folder);
-
-            Assert.Equal(0, ctx.Presenter.Selection.SelectedParagraphCount);
         }
 
         // ---------------------------------------------------------------

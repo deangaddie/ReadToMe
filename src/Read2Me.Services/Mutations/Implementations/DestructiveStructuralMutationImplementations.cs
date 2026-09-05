@@ -274,6 +274,22 @@ public sealed class ClearBookContentMutationImplementation
     public async Task<BookMutationEffects> ApplyAsync(
         ClearBookContentMutation mutation, ProjectDbContext db, CancellationToken ct)
     {
+        var removed = await BookContentRemoval.ClearAsync(db, ct);
+        return removed == 0 ? BookMutationEffects.Nothing : DestructiveEffects.Removed;
+    }
+}
+
+/// <summary>
+/// Emptying a Book of its content, shared by the mutation that only does that and the reread that
+/// does it as the first half of a replacement (ADR 0007). A reread cannot commit the clear and then
+/// commit the import, because that would publish the empty Book in between — so it borrows the
+/// removal rather than the mutation.
+/// </summary>
+internal static class BookContentRemoval
+{
+    /// <summary>Removes every node and item, and returns how many rows went.</summary>
+    public static async Task<int> ClearAsync(ProjectDbContext db, CancellationToken ct)
+    {
         // Bottom-up, and as set operations rather than through the change tracker: a Book's content
         // is far too large to load merely in order to delete it.
         var removed = await db.ParagraphItems.ExecuteDeleteAsync(ct);
@@ -281,7 +297,6 @@ public sealed class ClearBookContentMutationImplementation
         removed += await db.Chapters.ExecuteDeleteAsync(ct);
         removed += await db.Parts.ExecuteDeleteAsync(ct);
         removed += await db.Volumes.ExecuteDeleteAsync(ct);
-
-        return removed == 0 ? BookMutationEffects.Nothing : DestructiveEffects.Removed;
+        return removed;
     }
 }

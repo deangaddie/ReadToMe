@@ -1471,6 +1471,40 @@ namespace Read2Me.Tests.State.Projection
             Assert.Equal(1, announced);
         }
 
+        /// <summary>
+        /// The reread case the import slice exists for: a second Book View open on the same project
+        /// while someone else replaces its content. It must land on the new Book — never on the empty
+        /// one the replacement passes through internally — with the selection that pointed at the old
+        /// rows dropped, and it must be told, because both halves of the announce rule apply.
+        /// </summary>
+        [Fact]
+        public async Task AnotherCircuitsReread_ReplacesThisBookViewWithoutEverShowingAnEmptyBook()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var sut = CreateSut();
+            await sut.OpenAsync(_folder);
+            _selectionState.For(_folder).AddParagraph(
+                b.ParagraphId("p1"), new ParagraphSelection(b.VolumeId("vol"), b.PartId("vol"), b.ChapterId("ch1")));
+
+            var emptyBooksSeen = 0;
+            var announced = 0;
+            sut.SnapshotPublished += () => { if (!sut.Snapshot!.HasContent) emptyBooksSeen++; };
+            sut.ExternalUpdateApplied += update => { if (update.Announce) announced++; };
+
+            var content = new BookContent([new VolumeContent(
+                "Reread", [new PartContent(null, [new ChapterContent("Fresh", [new ParagraphContent("Brand new.")])])])]);
+            var committed = await RemoteWriter().CommitAsync(
+                new ImportBookContentMutation(_folder, content, ReplaceExisting: true));
+
+            var revision = Assert.IsType<BookMutationOutcome.Committed>(committed).Receipt.Revision;
+            await ConvergesAsync(() => sut.Snapshot!.Revision >= revision, "the reread never reached it");
+
+            Assert.Equal("Reread", Assert.Single(sut.Snapshot!.Volumes).Title);
+            Assert.Equal(0, emptyBooksSeen);
+            Assert.Empty(sut.Snapshot!.Selections.ParagraphIds);
+            Assert.Equal(1, announced);
+        }
+
         [Fact]
         public async Task AnotherProducersAttributionProgress_ConvergesSilently()
         {

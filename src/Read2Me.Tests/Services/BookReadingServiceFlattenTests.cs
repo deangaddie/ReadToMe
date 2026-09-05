@@ -63,7 +63,6 @@ public class BookReadingServiceFlattenTests : IAsyncDisposable
             _session,
             new EpubFileReader(NullLogger<EpubFileReader>.Instance),
             new TextFileReader(NullLogger<TextFileReader>.Instance),
-            new BookContentPersister(),
             NullLogger<BookReadingService>.Instance);
     }
 
