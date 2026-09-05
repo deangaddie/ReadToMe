@@ -11,20 +11,20 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class UpdateVolumeTitleHandler(BookMutations mutations) : ICommandHandler<UpdateVolumeTitleCommand>
 {
-    public Task<Guid?> HandleAsync(UpdateVolumeTitleCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new UpdateVolumeTitleMutation(c.FolderId, c.VolumeId, c.Title), ct);
+    public Task<BookCommandResult> HandleAsync(UpdateVolumeTitleCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new UpdateVolumeTitleMutation(c.FolderId, c.VolumeId, c.Title), ct);
 }
 
 public sealed class UpdatePartTitleHandler(BookMutations mutations) : ICommandHandler<UpdatePartTitleCommand>
 {
-    public Task<Guid?> HandleAsync(UpdatePartTitleCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new UpdatePartTitleMutation(c.FolderId, c.PartId, c.Title), ct);
+    public Task<BookCommandResult> HandleAsync(UpdatePartTitleCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new UpdatePartTitleMutation(c.FolderId, c.PartId, c.Title), ct);
 }
 
 public sealed class UpdateChapterTitleHandler(BookMutations mutations) : ICommandHandler<UpdateChapterTitleCommand>
 {
-    public Task<Guid?> HandleAsync(UpdateChapterTitleCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new UpdateChapterTitleMutation(c.FolderId, c.ChapterId, c.Title), ct);
+    public Task<BookCommandResult> HandleAsync(UpdateChapterTitleCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new UpdateChapterTitleMutation(c.FolderId, c.ChapterId, c.Title), ct);
 }
 
 /// <summary>
@@ -33,8 +33,8 @@ public sealed class UpdateChapterTitleHandler(BookMutations mutations) : IComman
 /// </summary>
 public sealed class UpdateParagraphItemTextHandler(BookMutations mutations) : ICommandHandler<UpdateParagraphItemTextCommand>
 {
-    public Task<Guid?> HandleAsync(UpdateParagraphItemTextCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new UpdateParagraphItemTextMutation(c.FolderId, c.ItemId, c.Text), ct);
+    public Task<BookCommandResult> HandleAsync(UpdateParagraphItemTextCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new UpdateParagraphItemTextMutation(c.FolderId, c.ItemId, c.Text), ct);
 }
 
 /// <summary>
@@ -45,7 +45,7 @@ public sealed class UpdateParagraphItemTextHandler(BookMutations mutations) : IC
 /// </summary>
 public sealed class SetParagraphItemAudioHandler(BookMutations mutations) : ICommandHandler<SetParagraphItemAudioCommand>
 {
-    public Task<Guid?> HandleAsync(SetParagraphItemAudioCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(SetParagraphItemAudioCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new SetParagraphItemAudioMutation(c.FolderId, c.ItemId, c.AudioFileName), ct);
 }

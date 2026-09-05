@@ -305,6 +305,7 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<Audio.IVoiceAudioRemover, Audio.VoiceAudioRemover>();
         // The roster's read-plus-write seam, registered here because CreateCharacterHandler needs it.
         services.TryAddScoped<Characters.CharacterResolver>();
+        services.AddScoped<BookCommandDispatcher>();
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 

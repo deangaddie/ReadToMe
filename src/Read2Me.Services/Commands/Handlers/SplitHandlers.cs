@@ -11,24 +11,24 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class SplitAtPartHandler(BookMutations mutations) : ICommandHandler<SplitAtPartCommand>
 {
-    public Task<Guid?> HandleAsync(SplitAtPartCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SplitAtPartMutation(c.FolderId, c.PartId, c.NewVolumeTitle), ct);
+    public Task<BookCommandResult> HandleAsync(SplitAtPartCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SplitAtPartMutation(c.FolderId, c.PartId, c.NewVolumeTitle), ct);
 }
 
 public sealed class SplitAtChapterHandler(BookMutations mutations) : ICommandHandler<SplitAtChapterCommand>
 {
-    public Task<Guid?> HandleAsync(SplitAtChapterCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SplitAtChapterMutation(c.FolderId, c.ChapterId, c.NewPartTitle), ct);
+    public Task<BookCommandResult> HandleAsync(SplitAtChapterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SplitAtChapterMutation(c.FolderId, c.ChapterId, c.NewPartTitle), ct);
 }
 
 public sealed class SplitAtParagraphHandler(BookMutations mutations) : ICommandHandler<SplitAtParagraphCommand>
 {
-    public Task<Guid?> HandleAsync(SplitAtParagraphCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SplitAtParagraphMutation(c.FolderId, c.ParagraphId, c.NewChapterTitle), ct);
+    public Task<BookCommandResult> HandleAsync(SplitAtParagraphCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SplitAtParagraphMutation(c.FolderId, c.ParagraphId, c.NewChapterTitle), ct);
 }
 
 public sealed class SplitAtItemHandler(BookMutations mutations) : ICommandHandler<SplitAtItemCommand>
 {
-    public Task<Guid?> HandleAsync(SplitAtItemCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SplitAtItemMutation(c.FolderId, c.ItemId), ct);
+    public Task<BookCommandResult> HandleAsync(SplitAtItemCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SplitAtItemMutation(c.FolderId, c.ItemId), ct);
 }

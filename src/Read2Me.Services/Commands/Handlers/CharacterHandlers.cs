@@ -26,8 +26,8 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class SetItemCharacterHandler(BookMutations mutations) : ICommandHandler<SetItemCharacterCommand>
 {
-    public Task<Guid?> HandleAsync(SetItemCharacterCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SetItemSpeakerMutation(c.FolderId, c.ItemId, c.CharacterId), ct);
+    public Task<BookCommandResult> HandleAsync(SetItemCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SetItemSpeakerMutation(c.FolderId, c.ItemId, c.CharacterId), ct);
 }
 
 /// <summary>
@@ -38,60 +38,65 @@ public sealed class SetItemCharacterHandler(BookMutations mutations) : ICommandH
 /// </summary>
 public sealed class CreateCharacterHandler(CharacterResolver resolver) : ICommandHandler<CreateCharacterCommand>
 {
-    public async Task<Guid?> HandleAsync(CreateCharacterCommand c, CancellationToken ct) =>
-        await resolver.ResolveOrCreateAsync(c.FolderId, c.Name, ct);
+    public async Task<BookCommandResult> HandleAsync(CreateCharacterCommand c, CancellationToken ct)
+    {
+        // The identity is answered either way — that is what makes the command idempotent by name —
+        // but the outcome still says which of the two happened.
+        var (outcome, id) = await resolver.ResolveOrCreateWithOutcomeAsync(c.FolderId, c.Name, ct);
+        return new BookCommandResult(outcome, id);
+    }
 }
 
 public sealed class SetParagraphCharacterHandler(BookMutations mutations)
     : ICommandHandler<SetParagraphCharacterCommand>
 {
-    public Task<Guid?> HandleAsync(SetParagraphCharacterCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(SetParagraphCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new SetParagraphSpeakerMutation(c.FolderId, c.ParagraphId, c.CharacterId, c.VoiceInstructions), ct);
 }
 
 public sealed class SetParagraphsCharacterHandler(BookMutations mutations)
     : ICommandHandler<SetParagraphsCharacterCommand>
 {
-    public Task<Guid?> HandleAsync(SetParagraphsCharacterCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(SetParagraphsCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new SetParagraphsSpeakerMutation(c.FolderId, c.ParagraphIds, c.CharacterId), ct);
 }
 
 public sealed class AddCharacterAliasHandler(BookMutations mutations) : ICommandHandler<AddCharacterAliasCommand>
 {
-    public Task<Guid?> HandleAsync(AddCharacterAliasCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(AddCharacterAliasCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new AddCharacterAliasMutation(c.FolderId, c.CharacterId, c.Name), ct);
 }
 
 public sealed class RemoveCharacterAliasHandler(BookMutations mutations) : ICommandHandler<RemoveCharacterAliasCommand>
 {
-    public Task<Guid?> HandleAsync(RemoveCharacterAliasCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(RemoveCharacterAliasCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new RemoveCharacterAliasMutation(c.FolderId, c.AliasId), ct);
 }
 
 public sealed class MergeCharactersHandler(BookMutations mutations) : ICommandHandler<MergeCharactersCommand>
 {
-    public Task<Guid?> HandleAsync(MergeCharactersCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(MergeCharactersCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new MergeCharactersMutation(c.FolderId, c.SurvivorId, c.MergedId, c.AddNameAsAlias), ct,
             BookMutationRejection.NotFound, BookMutationRejection.Validation);
 }
 
 public sealed class RenameCharacterHandler(BookMutations mutations) : ICommandHandler<RenameCharacterCommand>
 {
-    public Task<Guid?> HandleAsync(RenameCharacterCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(RenameCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new RenameCharacterMutation(c.FolderId, c.CharacterId, c.Name), ct,
             BookMutationRejection.NotFound, BookMutationRejection.Validation);
 }
 
 public sealed class DeleteCharacterHandler(BookMutations mutations) : ICommandHandler<DeleteCharacterCommand>
 {
-    public Task<Guid?> HandleAsync(DeleteCharacterCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(DeleteCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new DeleteCharacterMutation(c.FolderId, c.CharacterId), ct,
             BookMutationRejection.NotFound, BookMutationRejection.Validation);
 }

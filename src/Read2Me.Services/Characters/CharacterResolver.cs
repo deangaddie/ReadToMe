@@ -27,18 +27,28 @@ namespace Read2Me.Services.Characters
         /// report (ADR 0007).
         /// </para>
         /// </summary>
-        public virtual async Task<Guid> ResolveOrCreateAsync(ProjectFolderId folder, string name, CancellationToken ct)
+        public virtual async Task<Guid> ResolveOrCreateAsync(
+            ProjectFolderId folder, string name, CancellationToken ct) =>
+            (await ResolveOrCreateWithOutcomeAsync(folder, name, ct)).Id;
+
+        /// <summary>
+        /// The same answer for a caller that also has to report whether anything was written — the
+        /// generic command endpoint, which answers with the id either way but must not describe a
+        /// created Character as a Book that did not change.
+        /// </summary>
+        public async Task<(BookMutationOutcome Outcome, Guid Id)> ResolveOrCreateWithOutcomeAsync(
+            ProjectFolderId folder, string name, CancellationToken ct)
         {
             if (await FindAsync(folder, name) is { } existing)
-                return existing;
+                return (new BookMutationOutcome.NoChange(), existing);
 
-            if (await mutations.CommitAsync(new CreateCharacterMutation(folder, name), ct)
-                is BookMutationOutcome.Committed { Receipt.Effects.CreatedId: { } created })
-                return created;
+            var outcome = await mutations.CommitAsync(new CreateCharacterMutation(folder, name), ct);
+            if (outcome is BookMutationOutcome.Committed { Receipt.Effects.CreatedId: { } created })
+                return (outcome, created);
 
-            return await FindAsync(folder, name)
+            return (outcome, await FindAsync(folder, name)
                 ?? throw new InvalidOperationException(
-                    $"CreateCharacterMutation neither created nor found a character named '{name}'.");
+                    $"CreateCharacterMutation neither created nor found a character named '{name}'."));
         }
 
         /// <summary>

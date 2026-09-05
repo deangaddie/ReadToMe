@@ -23,7 +23,7 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class AttributeItemsHandler(BookMutations mutations) : ICommandHandler<AttributeItemsCommand>
 {
-    public Task<Guid?> HandleAsync(AttributeItemsCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(AttributeItemsCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new AttributeParagraphItemsMutation(c.FolderId, c.ParagraphId, c.Items), ct);
 }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Read2Me.App.Api;
 using Read2Me.App.Audio;
 using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
@@ -57,6 +58,7 @@ public static class ServiceRegistrationExtensions
         services.AddBookCommandHandlers();
         services.Configure<BookMutationOptions>(configuration.GetSection(BookMutationOptions.SectionName));
         
+        services.AddScoped<BookCommandApiAdapter>();
         services.AddScoped<BookCommandHandler>();
         services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
 

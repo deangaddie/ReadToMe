@@ -216,7 +216,7 @@ namespace Read2Me.Tests.Services.Characters
                 new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1")], BobId),
                 CancellationToken.None);
 
-            Assert.Null(result);
+            Assert.Null(result.EntityId);
         }
     }
 }

@@ -14,31 +14,31 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class MergeVolumeHandler(BookMutations mutations) : ICommandHandler<MergeVolumeCommand>
 {
-    public Task<Guid?> HandleAsync(MergeVolumeCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new MergeVolumeMutation(c.FolderId, c.VolumeId, c.Direction), ct);
+    public Task<BookCommandResult> HandleAsync(MergeVolumeCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergeVolumeMutation(c.FolderId, c.VolumeId, c.Direction), ct);
 }
 
 public sealed class MergePartHandler(BookMutations mutations) : ICommandHandler<MergePartCommand>
 {
-    public Task<Guid?> HandleAsync(MergePartCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new MergePartMutation(c.FolderId, c.PartId, c.Direction), ct);
+    public Task<BookCommandResult> HandleAsync(MergePartCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergePartMutation(c.FolderId, c.PartId, c.Direction), ct);
 }
 
 public sealed class MergeChapterHandler(BookMutations mutations) : ICommandHandler<MergeChapterCommand>
 {
-    public Task<Guid?> HandleAsync(MergeChapterCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new MergeChapterMutation(c.FolderId, c.ChapterId, c.Direction), ct);
+    public Task<BookCommandResult> HandleAsync(MergeChapterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergeChapterMutation(c.FolderId, c.ChapterId, c.Direction), ct);
 }
 
 public sealed class MergeParagraphHandler(BookMutations mutations) : ICommandHandler<MergeParagraphCommand>
 {
-    public Task<Guid?> HandleAsync(MergeParagraphCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new MergeParagraphMutation(c.FolderId, c.ParagraphId, c.Direction), ct);
+    public Task<BookCommandResult> HandleAsync(MergeParagraphCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergeParagraphMutation(c.FolderId, c.ParagraphId, c.Direction), ct);
 }
 
 public sealed class MergeParagraphItemHandler(BookMutations mutations)
     : ICommandHandler<MergeParagraphItemCommand>
 {
-    public Task<Guid?> HandleAsync(MergeParagraphItemCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new MergeParagraphItemMutation(c.FolderId, c.ItemId, c.Direction), ct);
+    public Task<BookCommandResult> HandleAsync(MergeParagraphItemCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergeParagraphItemMutation(c.FolderId, c.ItemId, c.Direction), ct);
 }

@@ -12,47 +12,44 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class AddBookTitleHandler(BookMutations mutations) : ICommandHandler<AddBookTitleCommand>
 {
-    public Task<Guid?> HandleAsync(AddBookTitleCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new AddBookTitleMutation(c.FolderId), ct);
+    public Task<BookCommandResult> HandleAsync(AddBookTitleCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new AddBookTitleMutation(c.FolderId), ct);
 }
 
 public sealed class AddVolumeTitlesHandler(BookMutations mutations) : ICommandHandler<AddVolumeTitlesCommand>
 {
-    public Task<Guid?> HandleAsync(AddVolumeTitlesCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new AddVolumeTitlesMutation(c.FolderId), ct);
+    public Task<BookCommandResult> HandleAsync(AddVolumeTitlesCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new AddVolumeTitlesMutation(c.FolderId), ct);
 }
 
 public sealed class AddPartTitlesHandler(BookMutations mutations) : ICommandHandler<AddPartTitlesCommand>
 {
-    public Task<Guid?> HandleAsync(AddPartTitlesCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new AddPartTitlesMutation(c.FolderId), ct);
+    public Task<BookCommandResult> HandleAsync(AddPartTitlesCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new AddPartTitlesMutation(c.FolderId), ct);
 }
 
 public sealed class AddChapterTitlesHandler(BookMutations mutations) : ICommandHandler<AddChapterTitlesCommand>
 {
-    public Task<Guid?> HandleAsync(AddChapterTitlesCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new AddChapterTitlesMutation(c.FolderId), ct);
+    public Task<BookCommandResult> HandleAsync(AddChapterTitlesCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new AddChapterTitlesMutation(c.FolderId), ct);
 }
 
 public sealed class AddPausesHandler(BookMutations mutations) : ICommandHandler<AddPausesCommand>
 {
-    public Task<Guid?> HandleAsync(AddPausesCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new AddPausesMutation(c.FolderId), ct);
+    public Task<BookCommandResult> HandleAsync(AddPausesCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new AddPausesMutation(c.FolderId), ct);
 }
 
 public sealed class InsertPauseParagraphHandler(BookMutations mutations)
     : ICommandHandler<InsertPauseParagraphCommand>
 {
-    public async Task<Guid?> HandleAsync(InsertPauseParagraphCommand c, CancellationToken ct)
-    {
-        await mutations.ExecuteLegacyAsync(
-            new InsertPauseParagraphMutation(c.FolderId, c.AnchorItemId, c.Position, c.PauseKind), ct);
-
-        // The mutation reports the Paragraph it created, because a reader reconciling from the
-        // receipt needs it. This command never answered with one, and ADR 0007 keeps the commands
-        // endpoint's JSON contract fixed through the migration, so the id stops here.
-        return null;
-    }
+    // The mutation reports the Paragraph it created, because a reader reconciling from the receipt
+    // needs it. This command has never answered with one, and ADR 0007 keeps the commands endpoint's
+    // JSON contract fixed through the migration, so the identity stops here.
+    public async Task<BookCommandResult> HandleAsync(InsertPauseParagraphCommand c, CancellationToken ct) =>
+        (await mutations.ExecuteCommandAsync(
+            new InsertPauseParagraphMutation(c.FolderId, c.AnchorItemId, c.Position, c.PauseKind), ct))
+            .WithoutIdentity();
 }
 
 /// <summary>
@@ -61,6 +58,6 @@ public sealed class InsertPauseParagraphHandler(BookMutations mutations)
 /// </summary>
 public sealed class ClearBookContentHandler(BookMutations mutations) : ICommandHandler<ClearBookContentCommand>
 {
-    public Task<Guid?> HandleAsync(ClearBookContentCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new ClearBookContentMutation(c.FolderId), ct);
+    public Task<BookCommandResult> HandleAsync(ClearBookContentCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new ClearBookContentMutation(c.FolderId), ct);
 }

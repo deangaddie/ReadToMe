@@ -10,6 +10,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Commands;
 using Read2Me.Services.Events;
 using Read2Me.Services.IO;
 using Read2Me.Services.Mutations;
@@ -1449,6 +1450,75 @@ namespace Read2Me.Tests.State.Projection
             // The expanded branch was reread, not merely invalidated: the new item is on screen.
             var paragraph = Assert.Single(sut.Snapshot!.Branches.ParagraphsByChapter[b.ChapterId("ch1")]);
             Assert.Equal(2, paragraph.Items.Count);
+        }
+
+        /// <summary>
+        /// An API client's command is a producer like any other (ADR 0007): it commits through the
+        /// same module, publishes the same receipt, and so invalidates <em>every</em> Book View open
+        /// on that project — including one whose reader is doing nothing at all. Before the
+        /// migration an API-originated write reached no open circuit, which is the drift this proves
+        /// is gone.
+        /// </summary>
+        [Fact]
+        public async Task ACommandFromTheApi_ConvergesEveryOpenBookView()
+        {
+            var b = await SeedOneVolumeTwoChaptersAsync();
+            var first = CreateSut();
+            var second = CreateOtherCircuitSut();
+            await first.OpenAsync(_folder);
+            await second.OpenAsync(_folder);
+            await first.ApplyAsync(new BookViewIntent.SetNodeExpanded(BookNodeLevel.Chapter, b.ChapterId("ch1"), true));
+            var announced = 0;
+            first.ExternalUpdateApplied += update => { if (update.Announce) announced++; };
+
+            var response = await ApiCommands().ExecuteAsync(
+                new InsertParagraphItemCommand(_folder, b.ItemId("i1"), InsertPosition.After, "From an agent"),
+                CancellationToken.None);
+
+            var created = response.EntityId;
+            Assert.NotNull(created);
+            await ConvergesAsync(
+                () => first.Snapshot!.Branches.ParagraphsByChapter.TryGetValue(b.ChapterId("ch1"), out var loaded)
+                      && loaded.Count == 1 && loaded[0].Items.Any(i => i.Id == created),
+                "the API's insertion never reached the first Book View");
+            await ConvergesAsync(
+                () => second.Snapshot!.Revision >= first.Snapshot!.Revision,
+                "the API's insertion never reached the second Book View");
+            // Structural, and neither circuit asked for it, so both readers are told.
+            Assert.Equal(1, announced);
+        }
+
+        /// <summary>
+        /// What an API request runs, in a scope of its own — no Book View lives in it. The
+        /// endpoint's own JSON mapping over this is <c>BookCommandApiAdapter</c>'s, and is tested
+        /// where it lives.
+        /// </summary>
+        private BookCommandDispatcher ApiCommands()
+        {
+            var request = _root.CreateAsyncScope();
+            _otherCircuits.Add(request);
+            return request.ServiceProvider.GetRequiredService<BookCommandDispatcher>();
+        }
+
+        /// <summary>
+        /// A second reader's Book View, with the scope and transient state a second circuit really
+        /// has — <see cref="CreateSut"/> shares this one's, which is fine while only one projection
+        /// is live but not when two must converge independently.
+        /// </summary>
+        private BookViewProjection CreateOtherCircuitSut()
+        {
+            var circuit = _root.CreateAsyncScope();
+            _otherCircuits.Add(circuit);
+            var reader = circuit.ServiceProvider.GetRequiredService<ProjectReader>();
+            var paragraphs = new BookSelectionState();
+            var items = new AudioItemSelectionState();
+            return new BookViewProjection(
+                new BookProjectLoader(reader), reader, reader, reader,
+                circuit.ServiceProvider.GetRequiredService<BookMutations>(),
+                new BookTreeState(), paragraphs, items, new FakeSelections(paragraphs, items),
+                new FakeVoiceResolver(), _revisions,
+                circuit.ServiceProvider.GetRequiredService<ProjectDbSession>(),
+                _receipts, NullLogger<BookViewProjection>.Instance);
         }
 
         [Fact]

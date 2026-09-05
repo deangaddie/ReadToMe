@@ -21,59 +21,59 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class CreateVoiceHandler(BookMutations mutations) : ICommandHandler<CreateVoiceCommand>
 {
-    public Task<Guid?> HandleAsync(CreateVoiceCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new CreateVoiceMutation(c.FolderId, c.CharacterId, c.Name, c.IsGenerated), ct);
+    public Task<BookCommandResult> HandleAsync(CreateVoiceCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new CreateVoiceMutation(c.FolderId, c.CharacterId, c.Name, c.IsGenerated), ct);
 }
 
 public sealed class SetVoiceDefaultHandler(BookMutations mutations) : ICommandHandler<SetVoiceDefaultCommand>
 {
-    public Task<Guid?> HandleAsync(SetVoiceDefaultCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SetVoiceDefaultMutation(c.FolderId, c.VoiceId), ct);
+    public Task<BookCommandResult> HandleAsync(SetVoiceDefaultCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SetVoiceDefaultMutation(c.FolderId, c.VoiceId), ct);
 }
 
 public sealed class UpdateVoiceHandler(BookMutations mutations) : ICommandHandler<UpdateVoiceCommand>
 {
-    public Task<Guid?> HandleAsync(UpdateVoiceCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new UpdateVoiceMutation(c.FolderId, c.VoiceId, c.Name, c.Description), ct);
+    public Task<BookCommandResult> HandleAsync(UpdateVoiceCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new UpdateVoiceMutation(c.FolderId, c.VoiceId, c.Name, c.Description), ct);
 }
 
 public sealed class SetVoiceDesignPromptHandler(BookMutations mutations)
     : ICommandHandler<SetVoiceDesignPromptCommand>
 {
-    public Task<Guid?> HandleAsync(SetVoiceDesignPromptCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SetVoiceDesignPromptMutation(c.FolderId, c.VoiceId, c.Prompt), ct);
+    public Task<BookCommandResult> HandleAsync(SetVoiceDesignPromptCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SetVoiceDesignPromptMutation(c.FolderId, c.VoiceId, c.Prompt), ct);
 }
 
 public sealed class SetVoiceSettingsOverrideHandler(BookMutations mutations)
     : ICommandHandler<SetVoiceSettingsOverrideCommand>
 {
-    public Task<Guid?> HandleAsync(SetVoiceSettingsOverrideCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SetVoiceDesignSettingsOverrideMutation(c.FolderId, c.VoiceId, c.Json), ct);
+    public Task<BookCommandResult> HandleAsync(SetVoiceSettingsOverrideCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SetVoiceDesignSettingsOverrideMutation(c.FolderId, c.VoiceId, c.Json), ct);
 }
 
 public sealed class SetVoiceTtsSettingsOverrideHandler(BookMutations mutations)
     : ICommandHandler<SetVoiceTtsSettingsOverrideCommand>
 {
-    public Task<Guid?> HandleAsync(SetVoiceTtsSettingsOverrideCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SetVoiceTtsSettingsOverrideMutation(c.FolderId, c.VoiceId, c.Json), ct);
+    public Task<BookCommandResult> HandleAsync(SetVoiceTtsSettingsOverrideCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SetVoiceTtsSettingsOverrideMutation(c.FolderId, c.VoiceId, c.Json), ct);
 }
 
 public sealed class SetVoiceTranscriptHandler(BookMutations mutations) : ICommandHandler<SetVoiceTranscriptCommand>
 {
-    public Task<Guid?> HandleAsync(SetVoiceTranscriptCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SetVoiceTranscriptMutation(c.FolderId, c.VoiceId, c.Transcript), ct);
+    public Task<BookCommandResult> HandleAsync(SetVoiceTranscriptCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SetVoiceTranscriptMutation(c.FolderId, c.VoiceId, c.Transcript), ct);
 }
 
 public sealed class SetVoiceAudioHandler(BookMutations mutations) : ICommandHandler<SetVoiceAudioCommand>
 {
-    public Task<Guid?> HandleAsync(SetVoiceAudioCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new SetVoiceAudioMutation(c.FolderId, c.VoiceId, c.AudioFileName), ct);
+    public Task<BookCommandResult> HandleAsync(SetVoiceAudioCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SetVoiceAudioMutation(c.FolderId, c.VoiceId, c.AudioFileName), ct);
 }
 
 public sealed class SetVoiceGeneratedHandler(BookMutations mutations) : ICommandHandler<SetVoiceGeneratedCommand>
 {
-    public Task<Guid?> HandleAsync(SetVoiceGeneratedCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(SetVoiceGeneratedCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new SetVoiceGeneratedMutation(c.FolderId, c.VoiceId, c.AudioFileName, c.Transcript, c.DesignPrompt), ct);
 }
 
@@ -85,24 +85,24 @@ public sealed class SetVoiceGeneratedHandler(BookMutations mutations) : ICommand
 /// </summary>
 public sealed class SetVoiceSourceHandler(IVoiceAudioRemover voiceAudio) : ICommandHandler<SetVoiceSourceCommand>
 {
-    public async Task<Guid?> HandleAsync(SetVoiceSourceCommand c, CancellationToken ct) =>
-        LegacyBookCommandBridge.Flatten(
+    public async Task<BookCommandResult> HandleAsync(SetVoiceSourceCommand c, CancellationToken ct) =>
+        LegacyBookCommandBridge.AsCommandResult(
             await voiceAudio.SetVoiceSourceAsync(c.FolderId, c.VoiceId, c.IsGenerated, ct),
-            ct, BookMutationRejection.NotFound);
+            BookMutationRejection.NotFound);
 }
 
 public sealed class DeleteVoiceHandler(IVoiceAudioRemover voiceAudio) : ICommandHandler<DeleteVoiceCommand>
 {
-    public async Task<Guid?> HandleAsync(DeleteVoiceCommand c, CancellationToken ct) =>
-        LegacyBookCommandBridge.Flatten(
+    public async Task<BookCommandResult> HandleAsync(DeleteVoiceCommand c, CancellationToken ct) =>
+        LegacyBookCommandBridge.AsCommandResult(
             await voiceAudio.DeleteVoiceAsync(c.FolderId, c.VoiceId, ct),
-            ct, BookMutationRejection.NotFound);
+            BookMutationRejection.NotFound);
 }
 
 public sealed class CreateVoiceRuleHandler(BookMutations mutations) : ICommandHandler<CreateVoiceRuleCommand>
 {
-    public Task<Guid?> HandleAsync(CreateVoiceRuleCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(CreateVoiceRuleCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new CreateVoiceRuleMutation(
                 c.FolderId, c.CharacterId, c.VoiceId, c.FromLevel, c.FromNodeId, c.ToLevel, c.ToNodeId), ct,
             BookMutationRejection.NotFound, BookMutationRejection.Validation);
@@ -110,16 +110,16 @@ public sealed class CreateVoiceRuleHandler(BookMutations mutations) : ICommandHa
 
 public sealed class DeleteVoiceRuleHandler(BookMutations mutations) : ICommandHandler<DeleteVoiceRuleCommand>
 {
-    public Task<Guid?> HandleAsync(DeleteVoiceRuleCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(DeleteVoiceRuleCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new DeleteVoiceRuleMutation(c.FolderId, c.RuleId), ct,
             BookMutationRejection.NotFound, BookMutationRejection.Validation);
 }
 
 public sealed class MoveVoiceRuleHandler(BookMutations mutations) : ICommandHandler<MoveVoiceRuleCommand>
 {
-    public Task<Guid?> HandleAsync(MoveVoiceRuleCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(MoveVoiceRuleCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new MoveVoiceRuleMutation(c.FolderId, c.RuleId, c.Direction), ct,
             BookMutationRejection.NotFound, BookMutationRejection.Validation);
 }

@@ -7,6 +7,7 @@ using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -110,6 +111,27 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(first, second);
             var all = await _reader.GetCharactersAsync(_folder);
             Assert.Equal(2, all.Count);
+        }
+
+        /// <summary>
+        /// The same answer, with the write it did or did not make named. The commands endpoint
+        /// reports the id either way; a caller that reads the outcome must not be told a Character
+        /// was created when one was only found, or that nothing changed when one was created.
+        /// </summary>
+        [Fact]
+        public async Task ResolveOrCreateWithOutcome_SaysWhetherItWrote()
+        {
+            await SeedProjectAsync();
+
+            var created = await _resolver.ResolveOrCreateWithOutcomeAsync(
+                _folder, "Gandalf", CancellationToken.None);
+            var found = await _resolver.ResolveOrCreateWithOutcomeAsync(
+                _folder, "gandalf", CancellationToken.None);
+
+            var receipt = Assert.IsType<BookMutationOutcome.Committed>(created.Outcome).Receipt;
+            Assert.Equal(created.Id, receipt.Effects.CreatedId);
+            Assert.IsType<BookMutationOutcome.NoChange>(found.Outcome);
+            Assert.Equal(created.Id, found.Id);
         }
     }
 }

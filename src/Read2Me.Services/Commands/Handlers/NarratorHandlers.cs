@@ -19,6 +19,6 @@ namespace Read2Me.Services.Commands.Handlers;
 public sealed class SetNarratorCharacterHandler(BookMutations mutations)
     : ICommandHandler<SetNarratorCharacterCommand>
 {
-    public Task<Guid?> HandleAsync(SetNarratorCharacterCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyStrictAsync(new SetNarratorCharacterMutation(c.FolderId, c.CharacterId), ct);
+    public Task<BookCommandResult> HandleAsync(SetNarratorCharacterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandStrictAsync(new SetNarratorCharacterMutation(c.FolderId, c.CharacterId), ct);
 }

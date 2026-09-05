@@ -1,43 +1,18 @@
 using Read2Me.Core.Models;
 using Read2Me.Services.Commands;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services
 {
-    public class BookCommandHandler : IBookCommandHandler
+    /// <summary>
+    /// The legacy façade: one command, one nullable id, every refusal it did not soften raised as an
+    /// exception. It is a thin wrapper over <see cref="BookCommandDispatcher"/> for the callers that
+    /// still hold <see cref="IBookCommandHandler"/>, and ticket 15 deletes it with them.
+    /// </summary>
+    public class BookCommandHandler(BookCommandDispatcher dispatcher) : IBookCommandHandler
     {
-        private readonly IServiceProvider _serviceProvider;
-        private readonly ProjectDbSession _session;
-
-        public BookCommandHandler(IServiceProvider serviceProvider, ProjectDbSession session)
-        {
-            _serviceProvider = serviceProvider;
-            _session = session;
-        }
-
-        public async Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
-        {
-            var handlerType = typeof(ICommandHandler<>).MakeGenericType(command.GetType());
-            var handler = _serviceProvider.GetService(handlerType);
-
-            if (handler == null)
-                throw new NotSupportedException($"Unhandled command type: {command.GetType().Name}");
-
-            var method = handlerType.GetMethod(nameof(ICommandHandler<BookCommand>.HandleAsync));
-            try
-            {
-                return await (Task<Guid?>)method!.Invoke(handler, [command, ct])!;
-            }
-            finally
-            {
-                // Evict the cached tracking context so the next read opens a fresh one.
-                // Handlers mutate through the session's long-lived DbContext (and some use
-                // ExecuteDelete/ExecuteUpdate, which bypass the change tracker entirely), so
-                // without eviction a follow-up read returns stale tracked entities — e.g. a
-                // deleted voice still counted in Character.Voices. Mirrors BookMutations, which owns
-                // the same eviction for every producer that has migrated off this façade.
-                _session.Evict(command.FolderId);
-            }
-        }
+        public async Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default) =>
+            LegacyBookCommandBridge.Flatten(await dispatcher.ExecuteAsync(command, ct), ct);
 
         // Keep for backward compat with tests that reference BookCommandHandler.ApplyMutationAsync directly.
         internal static System.Threading.Tasks.Task ApplyMutationAsync(

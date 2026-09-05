@@ -14,8 +14,8 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class SetAudioReviewHandler(BookMutations mutations) : ICommandHandler<SetAudioReviewCommand>
 {
-    public Task<Guid?> HandleAsync(SetAudioReviewCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(
+    public Task<BookCommandResult> HandleAsync(SetAudioReviewCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(
             new SetAudioReviewMutation(c.FolderId, c.ParagraphItemId, new AudioReviewVerdict(
                 c.NormalizeOk, c.NormalizeReason,
                 c.VerifyOk, c.Wer, c.VerifyReason,
@@ -24,6 +24,6 @@ public sealed class SetAudioReviewHandler(BookMutations mutations) : ICommandHan
 
 public sealed class DismissAudioReviewHandler(BookMutations mutations) : ICommandHandler<DismissAudioReviewCommand>
 {
-    public Task<Guid?> HandleAsync(DismissAudioReviewCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new DismissAudioReviewMutation(c.FolderId, c.ParagraphItemId), ct);
+    public Task<BookCommandResult> HandleAsync(DismissAudioReviewCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new DismissAudioReviewMutation(c.FolderId, c.ParagraphItemId), ct);
 }

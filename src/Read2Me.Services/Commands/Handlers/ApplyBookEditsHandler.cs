@@ -10,6 +10,6 @@ namespace Read2Me.Services.Commands.Handlers;
 /// </summary>
 public sealed class ApplyBookEditsHandler(BookMutations mutations) : ICommandHandler<ApplyBookEditsCommand>
 {
-    public Task<Guid?> HandleAsync(ApplyBookEditsCommand c, CancellationToken ct) =>
-        mutations.ExecuteLegacyAsync(new ApplyBookEditsMutation(c.FolderId, c.Edits), ct);
+    public Task<BookCommandResult> HandleAsync(ApplyBookEditsCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new ApplyBookEditsMutation(c.FolderId, c.Edits), ct);
 }

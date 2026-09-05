@@ -4,5 +4,5 @@ namespace Read2Me.Services.Commands;
 
 public interface ICommandHandler<in TCommand> where TCommand : BookCommand
 {
-    Task<Guid?> HandleAsync(TCommand command, CancellationToken ct);
+    Task<BookCommandResult> HandleAsync(TCommand command, CancellationToken ct);
 }
