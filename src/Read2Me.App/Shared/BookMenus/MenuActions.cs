@@ -2,11 +2,11 @@ using System;
 using System.Threading.Tasks;
 using MudBlazor;
 using Read2Me.Core.Models;
-using Read2Me.Services;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.App.Shared.BookMenus;
 
-public sealed class MenuActions(IDialogService dialogs, IBookCommandHandler handler)
+public sealed class MenuActions(IDialogService dialogs)
 {
     static readonly DialogOptions EditOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
 
@@ -50,27 +50,27 @@ public sealed class MenuActions(IDialogService dialogs, IBookCommandHandler hand
         return result?.Canceled == false;
     }
 
-    public Task<Guid?> ExecuteAsync(BookCommand command) => handler.ExecuteAsync(command);
+    // ── Mutation factories ───────────────────────────────────────────────────
+    // Both gestures are the same entry at every level of the tree, so the node's kind picks the
+    // mutation here rather than five near-identical menus doing it themselves.
 
-    // ── Command factories ────────────────────────────────────────────────────
-
-    public static BookCommand BuildMerge(ProjectFolderId folderId, NodeKind kind, Guid id, MergeDirection dir) => kind switch
+    public static BookMutation BuildMerge(ProjectFolderId folderId, NodeKind kind, Guid id, MergeDirection dir) => kind switch
     {
-        NodeKind.Volume        => new MergeVolumeCommand(folderId, id, dir),
-        NodeKind.Part          => new MergePartCommand(folderId, id, dir),
-        NodeKind.Chapter       => new MergeChapterCommand(folderId, id, dir),
-        NodeKind.Paragraph     => new MergeParagraphCommand(folderId, id, dir),
-        NodeKind.ParagraphItem => new MergeParagraphItemCommand(folderId, id, dir),
+        NodeKind.Volume        => new MergeVolumeMutation(folderId, id, dir),
+        NodeKind.Part          => new MergePartMutation(folderId, id, dir),
+        NodeKind.Chapter       => new MergeChapterMutation(folderId, id, dir),
+        NodeKind.Paragraph     => new MergeParagraphMutation(folderId, id, dir),
+        NodeKind.ParagraphItem => new MergeParagraphItemMutation(folderId, id, dir),
         _                      => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
-    public static BookCommand BuildDelete(ProjectFolderId folderId, NodeKind kind, Guid id) => kind switch
+    public static BookMutation BuildDelete(ProjectFolderId folderId, NodeKind kind, Guid id) => kind switch
     {
-        NodeKind.Volume        => new DeleteVolumeCommand(folderId, id),
-        NodeKind.Part          => new DeletePartCommand(folderId, id),
-        NodeKind.Chapter       => new DeleteChapterCommand(folderId, id),
-        NodeKind.Paragraph     => new DeleteParagraphCommand(folderId, id),
-        NodeKind.ParagraphItem => new DeleteParagraphItemCommand(folderId, id),
+        NodeKind.Volume        => new DeleteVolumeMutation(folderId, id),
+        NodeKind.Part          => new DeletePartMutation(folderId, id),
+        NodeKind.Chapter       => new DeleteChapterMutation(folderId, id),
+        NodeKind.Paragraph     => new DeleteParagraphMutation(folderId, id),
+        NodeKind.ParagraphItem => new DeleteParagraphItemMutation(folderId, id),
         _                      => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 }

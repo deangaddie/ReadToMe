@@ -5,6 +5,7 @@ using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.App.Api
 {
@@ -40,11 +41,12 @@ namespace Read2Me.App.Api
                 outcome.Characters.Select(c => new DiscoveredCharacterDto(c.Name, c.Aliases)).ToList()));
         }
 
-        /// Same command loop the discovery review dialog runs: create resolves to the
-        /// existing character on a name/alias match, alias adds are deduped by the handler.
+        /// Applies the same rows the discovery review dialog applies, through the same seam, so the
+        /// agent path and the human one cannot drift: resolve-or-create answers with the existing
+        /// character on a name/alias match, and alias adds are deduped by the mutation (ADR 0007).
         private static async Task<IResult> ApplyAsync(
             string folder, IReadOnlyList<ApplyDiscoveryRow> rows, IFileSystem fs,
-            IBookCommandHandler handler, CancellationToken ct)
+            CharacterResolver characters, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
@@ -55,13 +57,9 @@ namespace Read2Me.App.Api
                 if (string.IsNullOrWhiteSpace(row.Name))
                     continue;
 
-                var characterId = await handler.ExecuteAsync(new CreateCharacterCommand(folderId, row.Name), ct);
-                if (characterId is not { } id)
-                    continue;
-
-                foreach (var alias in row.Aliases ?? [])
-                    await handler.ExecuteAsync(new AddCharacterAliasCommand(folderId, id, alias), ct);
-                applied++;
+                if (await characters.ApplyDiscoveredAsync(folderId, row.Name, row.Aliases ?? [], ct)
+                    is not BookMutationOutcome.Rejected)
+                    applied++;
             }
             return Results.Ok(new ApplyDiscoveryResponse(applied));
         }

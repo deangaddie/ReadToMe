@@ -6,6 +6,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Llm;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
@@ -15,7 +16,7 @@ namespace Read2Me.Tests.Services.Characters
     public class AliasInjectionTests : ProjectDbTestBase
     {
         private readonly ProjectFolderId _folder;
-        private readonly BookCommandHandler _handler;
+        private readonly BookMutations _mutations;
         private readonly ProjectReader _reader;
 
         public AliasInjectionTests()
@@ -28,7 +29,7 @@ namespace Read2Me.Tests.Services.Characters
             services.AddScoped(sp => NullLogger<ProjectReader>.Instance);
             var sp = services.BuildServiceProvider();
 
-            _handler = sp.GetRequiredService<BookCommandHandler>();
+            _mutations = sp.GetRequiredService<BookMutations>();
             _reader = sp.GetRequiredService<ProjectReader>();
             _folder = new ProjectFolderId(FolderName);
         }
@@ -44,13 +45,22 @@ namespace Read2Me.Tests.Services.Characters
             await db.SaveChangesAsync();
         }
 
+        /// <summary>Arrange-side writes, committed the way the app commits them (ADR 0007).</summary>
+        private async Task<Guid> CreateCharacterAsync(string name) =>
+            Assert.IsType<BookMutationOutcome.Committed>(
+                await _mutations.CommitAsync(new CreateCharacterMutation(_folder, name)))
+                .Receipt.Effects.CreatedId!.Value;
+
+        private Task AddAliasAsync(Guid characterId, string alias) =>
+            _mutations.CommitAsync(new AddCharacterAliasMutation(_folder, characterId, alias));
+
         [Fact]
         public async Task GetCharactersWithAliasesAsync_IncludesAliases()
         {
             await SeedProjectAsync();
-            var charId = await _handler.ExecuteAsync(new CreateCharacterCommand(_folder, "Bilbo"));
-            await _handler.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Mr. Baggins"));
-            await _handler.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Old Bilbo"));
+            var charId = await CreateCharacterAsync("Bilbo");
+            await AddAliasAsync(charId, "Mr. Baggins");
+            await AddAliasAsync(charId, "Old Bilbo");
 
             var characters = await _reader.GetCharactersWithAliasesAsync(_folder);
             var bilbo = characters.Single(c => c.Name == "Bilbo");
@@ -64,8 +74,8 @@ namespace Read2Me.Tests.Services.Characters
         public async Task KnownCharactersJson_ContainsAliasesForEachCharacter()
         {
             await SeedProjectAsync();
-            var charId = await _handler.ExecuteAsync(new CreateCharacterCommand(_folder, "Bilbo"));
-            await _handler.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Mr. Baggins"));
+            var charId = await CreateCharacterAsync("Bilbo");
+            await AddAliasAsync(charId, "Mr. Baggins");
 
             var characters = await _reader.GetCharactersWithAliasesAsync(_folder);
             var serialized = PromptTemplates.BuildKnownCharactersJson(
@@ -81,8 +91,8 @@ namespace Read2Me.Tests.Services.Characters
         {
             // Simulate the queue worker alias-matching logic.
             await SeedProjectAsync();
-            var charId = await _handler.ExecuteAsync(new CreateCharacterCommand(_folder, "Bilbo"));
-            await _handler.ExecuteAsync(new AddCharacterAliasCommand(_folder, charId!.Value, "Mr. Baggins"));
+            var charId = await CreateCharacterAsync("Bilbo");
+            await AddAliasAsync(charId, "Mr. Baggins");
 
             var characters = await _reader.GetCharactersWithAliasesAsync(_folder);
 
@@ -94,7 +104,7 @@ namespace Read2Me.Tests.Services.Characters
 
             Assert.NotNull(existing);
             Assert.Equal("Bilbo", existing!.Name);
-            Assert.Equal(charId!.Value, existing.Id);
+            Assert.Equal(charId, existing.Id);
 
             // No duplicate character should be created when alias resolves
             var allCharacters = await _reader.GetCharactersAsync(_folder);

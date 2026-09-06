@@ -1,12 +1,11 @@
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
-using Read2Me.Services.Commands.Handlers;
-using Read2Me.Services.IO;
+using Read2Me.Services.Commands;
+using Read2Me.Services.Mutations;
 using Read2Me.TestUtils;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
@@ -14,35 +13,56 @@ using Xunit;
 namespace Read2Me.Tests.Narrator
 {
     /// <summary>
-    /// The single write path for the narrator link. Unlike its sibling handlers it throws
-    /// rather than returning null on a bad target: the endpoint turns that into a 422, where
-    /// <c>return null</c> would render rejection as <c>200 { "newEntityId": null }</c> to a
-    /// machine caller (ADR-0004, spec §9).
+    /// The narrator link's command shape. What it writes is
+    /// <c>SetNarratorCharacterMutation</c> — proved in
+    /// <see cref="Tests.Services.Mutations.CharacterLifecycleMutationTests"/> — so what is left to
+    /// hold here is the one way this command differs from every sibling: a refusal throws, and
+    /// <c>CommandEndpoints</c> turns that into a 422. Answering null would render rejection to an
+    /// agent as <c>200 { "newEntityId": null }</c>, indistinguishable from success (ADR-0004, spec §9).
     /// </summary>
     public class SetNarratorCharacterHandlerTests : ProjectDbTestBase
     {
-        private readonly SetNarratorCharacterHandler _handler;
+        private readonly ServiceProvider _root;
         private readonly ProjectFolderId _folder;
 
         public SetNarratorCharacterHandlerTests()
         {
-            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
-            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _handler = new SetNarratorCharacterHandler(session);
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            _root = services.BuildServiceProvider();
             _folder = new ProjectFolderId(FolderName);
         }
 
-        private static readonly Guid WatsonId = Guid.NewGuid();
-        private static readonly Guid HolmesId = Guid.NewGuid();
-
-        private async Task SeedAsync(Guid? link = null)
+        public override async ValueTask DisposeAsync()
         {
-            var b = new BookHierarchyBuilder(OpenDbAsync)
-                .WithCharacter("watson", new Character { Id = WatsonId, Name = "Dr. Watson" })
-                .WithCharacter("holmes", new Character { Id = HolmesId, Name = "Holmes" });
-            if (link.HasValue) b.WithNarratorLink(link.Value);
-            await b.AddVolume("vol", v => v.AddChapter()).BuildAsync();
+            await _root.DisposeAsync();
+            await base.DisposeAsync();
         }
+
+        private static readonly Guid WatsonId = Guid.NewGuid();
+
+        private Task SeedAsync() =>
+            new BookHierarchyBuilder(OpenDbAsync)
+                .WithCharacter("watson", new Character { Id = WatsonId, Name = "Dr. Watson" })
+                .AddVolume("vol", v => v.AddChapter()).BuildAsync();
+
+        /// <summary>
+        /// The endpoint's answer for this command, which is the whole point of the file: unlike
+        /// its siblings it softens nothing, so every expected refusal reaches the wire as a 422.
+        /// </summary>
+        private async Task<BookMutationOutcome> RunAsync(Guid? characterId)
+        {
+            await using var scope = _root.CreateAsyncScope();
+            var result = await scope.ServiceProvider.GetRequiredService<BookCommandDispatcher>()
+                .ExecuteAsync(new SetNarratorCharacterCommand(_folder, characterId));
+            Assert.Null(result.EntityId);
+            return result.Outcome;
+        }
+
+        private async Task<string> RefusalMessageAsync(Guid? characterId) =>
+            Assert.IsType<BookMutationOutcome.Rejected>(await RunAsync(characterId)).Message;
 
         private async Task<NarratorIdentity> IdentityAsync()
         {
@@ -50,87 +70,53 @@ namespace Read2Me.Tests.Narrator
             return await NarratorIdentity.LoadAsync(db);
         }
 
-        private Task<Guid?> RunAsync(Guid? characterId) =>
-            _handler.HandleAsync(new SetNarratorCharacterCommand(_folder, characterId), CancellationToken.None);
-
         [Fact]
-        public async Task Set_LinksTheCharacter()
+        public async Task Set_LinksTheCharacter_AndAnswersNoId()
         {
             await SeedAsync();
 
-            var result = await RunAsync(WatsonId);
-
-            Assert.Null(result);
-            var identity = await IdentityAsync();
-            Assert.Equal(WatsonId, identity.CharacterId);
-            Assert.Equal("Dr. Watson", identity.DisplayName);
-            Assert.True(identity.IsLinked);
+            Assert.IsType<BookMutationOutcome.Committed>(await RunAsync(WatsonId));
+            Assert.Equal(WatsonId, (await IdentityAsync()).CharacterId);
         }
 
         [Fact]
-        public async Task Set_OverAnExistingLink_Changes()
-        {
-            await SeedAsync(link: WatsonId);
-
-            await RunAsync(HolmesId);
-
-            Assert.Equal(HolmesId, (await IdentityAsync()).CharacterId);
-        }
-
-        [Fact]
-        public async Task Null_Unlinks()
-        {
-            await SeedAsync(link: WatsonId);
-
-            await RunAsync(null);
-
-            Assert.Equal(NarratorIdentity.Unlinked, await IdentityAsync());
-        }
-
-        [Fact]
-        public async Task Null_OnAnAlreadyUnlinkedProject_IsAccepted()
+        public async Task Set_ToTheLinkAlreadyThere_ChangesNothingRatherThanRefusing()
         {
             await SeedAsync();
+            await RunAsync(WatsonId);
 
-            await RunAsync(null);
-
-            Assert.Equal(NarratorIdentity.Unlinked, await IdentityAsync());
+            Assert.IsType<BookMutationOutcome.NoChange>(await RunAsync(WatsonId));
+            Assert.Equal(WatsonId, (await IdentityAsync()).CharacterId);
         }
 
-        /// <summary>
-        /// Covers the spec's "foreign id" case too: each project owns its own SQLite file, so a
-        /// character belonging to another project is simply an id this project's Characters table
-        /// does not hold — the same lookup, the same rejection.
-        /// </summary>
         [Fact]
-        public async Task UnknownCharacterId_Throws_AndLeavesTheLinkAlone()
+        public async Task UnknownCharacterId_IsRefused_AndLeavesTheLinkAlone()
         {
-            await SeedAsync(link: WatsonId);
+            await SeedAsync();
+            await RunAsync(WatsonId);
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => RunAsync(Guid.NewGuid()));
+            Assert.IsType<BookMutationOutcome.Rejected>(await RunAsync(Guid.NewGuid()));
 
             Assert.Equal(WatsonId, (await IdentityAsync()).CharacterId);
         }
 
         [Fact]
-        public async Task SeedNarratorRow_Throws()
+        public async Task SeedNarratorRow_IsRefused()
         {
-            // Linking the narrator to itself is nonsense: it *is* the unlinked state.
             await SeedAsync();
 
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => RunAsync(ProjectDbContext.NarratorId));
+            var message = await RefusalMessageAsync(ProjectDbContext.NarratorId);
 
-            Assert.Contains("Narrator", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Narrator", message, StringComparison.Ordinal);
             Assert.False((await IdentityAsync()).IsLinked);
         }
 
         [Fact]
-        public async Task NoProjectRow_Throws()
+        public async Task NoProjectRow_IsRefused()
         {
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => RunAsync(null));
+            var message = await RefusalMessageAsync(null);
 
-            Assert.Contains("project", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project", message, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

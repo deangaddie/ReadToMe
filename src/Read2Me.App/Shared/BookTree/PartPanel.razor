@@ -5,11 +5,11 @@
 @if (Parts.Count == 1)
 {
     var p = Parts[0];
-    @if (Presenter.Tree.LoadingIds.Contains(p.Id))
+    @if (Presenter.IsExpanding(p.Id))
     {
         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
     }
-    else if (Presenter.Tree.GetChapters(p.Id) is { } singlePartChapters)
+    else if (Presenter.Chapters(p.Id) is { } singlePartChapters)
     {
         @RenderChapters(singlePartChapters, p.Id)
     }
@@ -21,7 +21,7 @@ else
         {
             var p = Parts[i];
             var idx = i;
-            <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedPartIds.Contains(p.Id)"
+            <MudExpansionPanel Expanded="@Presenter.IsExpanded(BookNodeLevel.Part, p.Id)"
                               ExpandedChanged="@PartExpandCb(p)">
                 <TitleContent>
                     <NodeTitleRow FolderId="@FolderId"
@@ -30,20 +30,14 @@ else
                                   Title="@(p.Title ?? "Part")"
                                   Spec="@BookNodeMenuSpecs.ForPart(FolderId, p)"
                                   IsFirst="@(idx == 0)"
-                                  IsLast="@(idx == Parts.Count - 1)"
-                                  PreviousSiblingId="@(idx > 0 ? Parts[idx - 1].Id : null)"
-                                  NextSiblingId="@(idx < Parts.Count - 1 ? Parts[idx + 1].Id : null)"
-                                  OnChanged="OnChanged"
-                                  OnMerged="OnMerged"
-                                  OnSplit="OnSplit"
-                                  OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                                  IsLast="@(idx == Parts.Count - 1)" />
                 </TitleContent>
                 <ChildContent>
-                    @if (Presenter.Tree.LoadingIds.Contains(p.Id))
+                    @if (Presenter.IsExpanding(p.Id))
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
                     }
-                    else if (Presenter.Tree.GetChapters(p.Id) is { } multiPartChapters)
+                    else if (Presenter.Chapters(p.Id) is { } multiPartChapters)
                     {
                         @RenderChapters(multiPartChapters, p.Id)
                     }
@@ -54,17 +48,14 @@ else
 }
 
 @code {
-    [Parameter, EditorRequired] public List<Part> Parts { get; set; } = null!;
+    [Parameter, EditorRequired] public IReadOnlyList<Part> Parts { get; set; } = null!;
     [Parameter, EditorRequired] public ProjectFolderId FolderId { get; set; }
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     EventCallback<bool> PartExpandCb(Part p) =>
-        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnPartExpandedAsync(p, b));
+        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Part, p.Id, b));
 
-    RenderFragment RenderChapters(List<Chapter> chapters, Guid partId) =>
+    RenderFragment RenderChapters(IReadOnlyList<Chapter> chapters, Guid partId) =>
         @<MudExpansionPanels MultiExpansion="true">
             @for (int i = 0; i < chapters.Count; i++)
             {
@@ -75,12 +66,7 @@ else
                               PartId="@partId"
                               VolumeId="@VolumeId"
                               IsFirst="@(idx == 0)"
-                              IsLast="@(idx == chapters.Count - 1)"
-                              PreviousSiblingId="@(idx > 0 ? chapters[idx - 1].Id : null)"
-                              NextSiblingId="@(idx < chapters.Count - 1 ? chapters[idx + 1].Id : null)"
-                              OnChanged="OnChanged"
-                              OnMerged="OnMerged"
-                              OnSplit="OnSplit" />
+                              IsLast="@(idx == chapters.Count - 1)" />
             }
         </MudExpansionPanels>;
 

@@ -1,68 +1,44 @@
 using Read2Me.Core.Models;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-public sealed class DeleteVolumeHandler(ProjectDbSession session) : ICommandHandler<DeleteVolumeCommand>
+/// <summary>
+/// The five deletions, migrated to <see cref="BookMutations"/> (ADR 0007). Each handler is a
+/// translation only.
+/// <para>
+/// The endpoint's contract is unchanged, including the shape these had before: deleting a node the
+/// Book does not contain answers with no id rather than failing, which
+/// <c>ExecuteCommandAsync</c> preserves by mapping the mutation's <c>NotFound</c> to null.
+/// </para>
+/// </summary>
+public sealed class DeleteVolumeHandler(BookMutations mutations) : ICommandHandler<DeleteVolumeCommand>
 {
-    public async Task<Guid?> HandleAsync(DeleteVolumeCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var e = await db.Volumes.FindAsync(c.VolumeId);
-        if (e == null) return null;
-        db.Volumes.Remove(e);
-        await db.SaveChangesAsync();
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(DeleteVolumeCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new DeleteVolumeMutation(c.FolderId, c.VolumeId), ct);
 }
 
-public sealed class DeletePartHandler(ProjectDbSession session) : ICommandHandler<DeletePartCommand>
+public sealed class DeletePartHandler(BookMutations mutations) : ICommandHandler<DeletePartCommand>
 {
-    public async Task<Guid?> HandleAsync(DeletePartCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var e = await db.Parts.FindAsync(c.PartId);
-        if (e == null) return null;
-        db.Parts.Remove(e);
-        await db.SaveChangesAsync();
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(DeletePartCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new DeletePartMutation(c.FolderId, c.PartId), ct);
 }
 
-public sealed class DeleteChapterHandler(ProjectDbSession session) : ICommandHandler<DeleteChapterCommand>
+public sealed class DeleteChapterHandler(BookMutations mutations) : ICommandHandler<DeleteChapterCommand>
 {
-    public async Task<Guid?> HandleAsync(DeleteChapterCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var e = await db.Chapters.FindAsync(c.ChapterId);
-        if (e == null) return null;
-        db.Chapters.Remove(e);
-        await db.SaveChangesAsync();
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(DeleteChapterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new DeleteChapterMutation(c.FolderId, c.ChapterId), ct);
 }
 
-public sealed class DeleteParagraphHandler(ProjectDbSession session) : ICommandHandler<DeleteParagraphCommand>
+public sealed class DeleteParagraphHandler(BookMutations mutations) : ICommandHandler<DeleteParagraphCommand>
 {
-    public async Task<Guid?> HandleAsync(DeleteParagraphCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var e = await db.Paragraphs.FindAsync(c.ParagraphId);
-        if (e == null) return null;
-        db.Paragraphs.Remove(e);
-        await db.SaveChangesAsync();
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(DeleteParagraphCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new DeleteParagraphMutation(c.FolderId, c.ParagraphId), ct);
 }
 
-public sealed class DeleteParagraphItemHandler(ProjectDbSession session) : ICommandHandler<DeleteParagraphItemCommand>
+public sealed class DeleteParagraphItemHandler(BookMutations mutations)
+    : ICommandHandler<DeleteParagraphItemCommand>
 {
-    public async Task<Guid?> HandleAsync(DeleteParagraphItemCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var e = await db.ParagraphItems.FindAsync(c.ItemId);
-        if (e == null) return null;
-        db.ParagraphItems.Remove(e);
-        await db.SaveChangesAsync();
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(DeleteParagraphItemCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new DeleteParagraphItemMutation(c.FolderId, c.ItemId), ct);
 }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.App.Characters;
 
@@ -72,7 +73,11 @@ public sealed class GeneratePromptsPhase : ISweepPhase<PromptWorkItem>
             foreach (var voice in existing)
             {
                 ct.ThrowIfCancellationRequested();
-                await deps.CommandHandler.ExecuteAsync(new DeleteVoiceCommand(_folder, voice.Id), ct);
+                // Through the writer, not the mutation: the voice's audio has to go after the commit
+                // that stops naming it, never inside it.
+                var dropped = await deps.VoiceAudio.DeleteVoiceAsync(_folder, voice.Id, ct);
+                if (Refusal(dropped) is { } reason)
+                    return new PhaseStepOutcome(Ok: false, Update: null, FailReason: reason);
             }
         }
 
@@ -83,19 +88,38 @@ public sealed class GeneratePromptsPhase : ISweepPhase<PromptWorkItem>
         {
             ct.ThrowIfCancellationRequested();
 
-            var voiceId = await deps.CommandHandler.ExecuteAsync(
-                new CreateVoiceCommand(_folder, item.CharacterId, voice.Name, IsGenerated: true), ct);
-            if (voiceId is not { } id)
+            // One commit per planned voice, not three: the name, description and design prompt are
+            // the same fact about the same new voice, and splitting them would have every open Book
+            // View reresolve its previews twice for a voice that is not finished being described.
+            var created = await deps.Mutations.CommitAsync(
+                new CreateVoiceMutation(
+                    _folder, item.CharacterId, voice.Name,
+                    IsGenerated: true, voice.Description, voice.DesignPrompt), ct);
+
+            if (created is BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound })
                 return new PhaseStepOutcome(Ok: false, Update: null,
                     FailReason: $"Character {item.CharacterName} no longer exists");
-
-            await deps.CommandHandler.ExecuteAsync(
-                new UpdateVoiceCommand(_folder, id, voice.Name, voice.Description), ct);
-            await deps.CommandHandler.ExecuteAsync(
-                new SetVoiceDesignPromptCommand(_folder, id, voice.DesignPrompt), ct);
+            if (Refusal(created) is { } reason)
+                return new PhaseStepOutcome(Ok: false, Update: null, FailReason: reason);
         }
 
         // No per-voice UI update: the voices are new, so the tab reloads on BatchCompleted.
         return new PhaseStepOutcome(Ok: true, Update: null, FailReason: null);
+    }
+
+    /// <summary>
+    /// Why a step should stop, or null for an outcome it can carry on from.
+    /// <para>
+    /// A cancelled write is not one of these. The runner drops a cancelled sweep rather than counting
+    /// a failure, so cancellation leaves by the exception every other cancellation point here throws
+    /// — which is why that case is raised before the refusals are read rather than returned as one.
+    /// </para>
+    /// </summary>
+    private static string? Refusal(BookMutationOutcome outcome)
+    {
+        if (outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled)
+            throw new OperationCanceledException(cancelled.Message);
+
+        return outcome is BookMutationOutcome.Rejected rejected ? rejected.Message : null;
     }
 }

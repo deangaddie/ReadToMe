@@ -24,7 +24,12 @@ internal static class BookMutationApplier
         };
     }
 
-    internal static async Task ApplyMutationAsync(ProjectDbContext db, HierarchyMutation mutation)
+    /// <summary>
+    /// Puts a planned mutation on the change tracker without saving it. Callers that own a
+    /// transaction and a single commit point — <c>BookMutations</c> — stage and save themselves;
+    /// legacy command handlers use <see cref="ApplyMutationAsync"/>, which saves immediately.
+    /// </summary>
+    internal static void StageMutation(ProjectDbContext db, HierarchyMutation mutation)
     {
         foreach (var entity in mutation.ToAdd)
         {
@@ -54,17 +59,11 @@ internal static class BookMutationApplier
         {
             db.Entry(entity).State = EntityState.Modified;
         }
-        await db.SaveChangesAsync();
     }
 
-    internal static async Task<HierarchyMutation?> PlanAndApplyAsync(
-        ProjectDbContext db,
-        Func<BookHierarchy, HierarchyMutation?> planner)
+    internal static async Task ApplyMutationAsync(ProjectDbContext db, HierarchyMutation mutation)
     {
-        var h = await LoadBookHierarchyAsync(db);
-        var mutation = planner(h);
-        if (mutation != null)
-            await ApplyMutationAsync(db, mutation);
-        return mutation;
+        StageMutation(db, mutation);
+        await db.SaveChangesAsync();
     }
 }

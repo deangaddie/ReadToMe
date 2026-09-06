@@ -1,44 +1,34 @@
 using Read2Me.Core.Models;
-using Read2Me.Data.Entities;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-public sealed class SplitAtPartHandler(ProjectDbSession session) : ICommandHandler<SplitAtPartCommand>
+/// <summary>
+/// The four splits, migrated to <see cref="BookMutations"/> (ADR 0007). Each handler is now only a
+/// translation: the write, its transaction, its commit point and the split relationship a Book View
+/// keeps its place by all live in the mutation implementations. The handlers stay registered so
+/// <c>POST /api/projects/{folder}/commands</c> keeps its <c>newEntityId</c> response unchanged.
+/// </summary>
+public sealed class SplitAtPartHandler(BookMutations mutations) : ICommandHandler<SplitAtPartCommand>
 {
-    public async Task<Guid?> HandleAsync(SplitAtPartCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var mutation = await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanSplitVolume(c.PartId, c.NewVolumeTitle));
-        return mutation != null ? ((Volume)mutation.ToAdd[0]).Id : null;
-    }
+    public Task<BookCommandResult> HandleAsync(SplitAtPartCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SplitAtPartMutation(c.FolderId, c.PartId, c.NewVolumeTitle), ct);
 }
 
-public sealed class SplitAtChapterHandler(ProjectDbSession session) : ICommandHandler<SplitAtChapterCommand>
+public sealed class SplitAtChapterHandler(BookMutations mutations) : ICommandHandler<SplitAtChapterCommand>
 {
-    public async Task<Guid?> HandleAsync(SplitAtChapterCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var mutation = await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanSplitPart(c.ChapterId, c.NewPartTitle));
-        return mutation != null ? ((Part)mutation.ToAdd[0]).Id : null;
-    }
+    public Task<BookCommandResult> HandleAsync(SplitAtChapterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SplitAtChapterMutation(c.FolderId, c.ChapterId, c.NewPartTitle), ct);
 }
 
-public sealed class SplitAtParagraphHandler(ProjectDbSession session) : ICommandHandler<SplitAtParagraphCommand>
+public sealed class SplitAtParagraphHandler(BookMutations mutations) : ICommandHandler<SplitAtParagraphCommand>
 {
-    public async Task<Guid?> HandleAsync(SplitAtParagraphCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var mutation = await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanSplitChapter(c.ParagraphId, c.NewChapterTitle));
-        return mutation != null ? ((Chapter)mutation.ToAdd[0]).Id : null;
-    }
+    public Task<BookCommandResult> HandleAsync(SplitAtParagraphCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SplitAtParagraphMutation(c.FolderId, c.ParagraphId, c.NewChapterTitle), ct);
 }
 
-public sealed class SplitAtItemHandler(ProjectDbSession session) : ICommandHandler<SplitAtItemCommand>
+public sealed class SplitAtItemHandler(BookMutations mutations) : ICommandHandler<SplitAtItemCommand>
 {
-    public async Task<Guid?> HandleAsync(SplitAtItemCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        var mutation = await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanSplitParagraph(c.ItemId));
-        return mutation != null ? ((Paragraph)mutation.ToAdd[0]).Id : null;
-    }
+    public Task<BookCommandResult> HandleAsync(SplitAtItemCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new SplitAtItemMutation(c.FolderId, c.ItemId), ct);
 }

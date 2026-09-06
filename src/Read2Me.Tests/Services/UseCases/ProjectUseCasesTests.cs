@@ -12,7 +12,9 @@ namespace Read2Me.Tests.Services.UseCases
     {
         private readonly IProjectReader _reader = Substitute.For<IProjectReader>();
         private readonly IProjectWriter _writer = Substitute.For<IProjectWriter>();
-        private ProjectUseCases Sut => new(_reader, _writer);
+        // The write side is null because no test here flips narrator-only mode; that mutation is proved
+        // against a real BookMutations in CharacterLifecycleMutationTests.
+        private ProjectUseCases Sut => new(_reader, _writer, null!);
 
         [Fact]
         public async Task CreateAsync_OnSuccess_ReturnsFolderName()

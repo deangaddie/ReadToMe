@@ -6,6 +6,7 @@ using Read2Me.Core.Audio;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
@@ -31,7 +32,7 @@ namespace Read2Me.Tests.Services.Voice
         }
 
         private static VoiceOrchestrator Create(
-            IAudioPipeline? audioPipeline = null,
+            IVoiceAudioWriter? voiceAudio = null,
             ITranscriptionClientResolver? resolver = null,
             IVoiceAudioGenerator? voiceAudioGenerator = null,
             TranscriptionSettingsService? transcriptionSettings = null,
@@ -39,7 +40,7 @@ namespace Read2Me.Tests.Services.Voice
             IFileSystem? fileSystem = null)
         {
             return new VoiceOrchestrator(
-                audioPipeline: audioPipeline ?? Substitute.For<IAudioPipeline>(),
+                voiceAudio: voiceAudio ?? Substitute.For<IVoiceAudioWriter>(),
                 transcriptionResolver: resolver ?? Substitute.For<ITranscriptionClientResolver>(),
                 voiceAudioGenerator: voiceAudioGenerator ?? Substitute.For<IVoiceAudioGenerator>(),
                 transcriptionSettings: transcriptionSettings ?? new FakeTranscriptionSettings(null),
@@ -51,9 +52,9 @@ namespace Read2Me.Tests.Services.Voice
         // ── Upload ────────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task StoreAudioAsync_PipelineCalledWithRequest_ReturnsFilename()
+        public async Task RecordUploadedAudioAsync_RecorderCalledWithRequest_ReturnsFilename()
         {
-            var pipeline = Substitute.For<IAudioPipeline>();
+            var recorder = Substitute.For<IVoiceAudioWriter>();
             var request = new AudioStoreRequest
             {
                 FolderId = new ProjectFolderId("f"),
@@ -63,26 +64,26 @@ namespace Read2Me.Tests.Services.Voice
                 Source = new MemoryStream(new byte[] { 1, 2, 3 }),
                 Extension = ".wav",
             };
-            pipeline.StoreAsync(request, Arg.Any<CancellationToken>()).Returns("voices/alice.wav");
+            recorder.RecordUploadedAsync(request, Arg.Any<CancellationToken>()).Returns("voices/alice.wav");
 
-            var sut = Create(audioPipeline: pipeline);
-            var result = await sut.StoreAudioAsync(request);
+            var sut = Create(voiceAudio: recorder);
+            var result = await sut.RecordUploadedAudioAsync(request);
 
             Assert.Equal("voices/alice.wav", result);
-            await pipeline.Received(1).StoreAsync(request, Arg.Any<CancellationToken>());
+            await recorder.Received(1).RecordUploadedAsync(request, Arg.Any<CancellationToken>());
         }
 
         [Fact]
-        public async Task StoreAudioAsync_PipelineThrows_PropagatesException()
+        public async Task RecordUploadedAudioAsync_RecorderThrows_PropagatesException()
         {
-            var pipeline = Substitute.For<IAudioPipeline>();
-            pipeline.StoreAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
+            var recorder = Substitute.For<IVoiceAudioWriter>();
+            recorder.RecordUploadedAsync(Arg.Any<AudioStoreRequest>(), Arg.Any<CancellationToken>())
                 .ThrowsAsync(new IOException("disk full"));
 
-            var sut = Create(audioPipeline: pipeline);
+            var sut = Create(voiceAudio: recorder);
 
             await Assert.ThrowsAsync<IOException>(() =>
-                sut.StoreAudioAsync(new AudioStoreRequest
+                sut.RecordUploadedAudioAsync(new AudioStoreRequest
                 {
                     FolderId = new ProjectFolderId("f"),
                     CharacterId = Guid.NewGuid(),

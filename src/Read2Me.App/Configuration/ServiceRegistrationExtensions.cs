@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Read2Me.App.Api;
 using Read2Me.App.Audio;
 using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
 using Read2Me.App.Services.Preflight;
 using Read2Me.App.State;
+using Read2Me.App.State.Projection;
 using Read2Me.Services.Queueing;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
@@ -15,6 +17,7 @@ using Read2Me.App.Shared.BookMenus;
 using Read2Me.AppData;
 using Read2Me.Data;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Audio.ParagraphTts;
@@ -53,20 +56,20 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAudioItemReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IVoiceResolver, VoiceResolver>();
         services.AddBookCommandHandlers();
+        services.Configure<BookMutationOptions>(configuration.GetSection(BookMutationOptions.SectionName));
         
-        services.AddScoped<BookCommandHandler>();
-        services.AddScoped<IBookCommandHandler>(sp => sp.GetRequiredService<BookCommandHandler>());
+        services.AddScoped<BookCommandApiAdapter>();
 
-        services.AddScoped<IBookContentPersister, BookContentPersister>();
         services.AddScoped<BookReadingService>();
         services.AddScoped<ProjectUseCases>();
         services.AddScoped<BookUseCases>();
         services.AddScoped<EnqueueUseCases>();
-        services.AddScoped<BookHierarchyLoader>();
         services.AddScoped<IBookProjectLoader, BookProjectLoader>();
         services.AddScoped<ISelectionCoordinator, BookSelectionCoordinator>();
         services.AddScoped<BookHierarchyPresenter>();
-        
+        // One per circuit: a Book View projection is one reader's view of one Book (ADR 0007).
+        services.AddScoped<BookViewProjection>();
+
         services.AddSingleton<EpubFileReader>();
         services.AddSingleton<TextFileReader>();
 
@@ -157,6 +160,9 @@ public static class ServiceRegistrationExtensions
         services.AddKeyedScoped<IVoiceDesignClient, VoxCpm2VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.VoxCpm2);
         services.AddKeyedScoped<IVoiceDesignClient, Qwen3VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.Qwen3);
         services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, FileAudioPipeline>();
+        // The arriving half of the Voice audio ordering rule: it needs the pipeline above, which is
+        // an application service, so it is registered here rather than with the mutation wiring.
+        services.AddScoped<Read2Me.Services.Audio.IVoiceAudioWriter, Read2Me.Services.Audio.VoiceAudioWriter>();
         services.AddScoped<IAudioItemPipeline, AudioItemPipeline>();
         services.AddScoped<IAudioItemResolver, AudioItemResolver>();
         services.AddScoped<IAudioResultRecorder, AudioResultRecorder>();
@@ -196,7 +202,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<CharacterAttributionService>();
         services.AddScoped<IChainStep>(sp => sp.GetRequiredService<CharacterAttributionService>());
         services.AddScoped<AttributionEscalationChain>();
-        services.AddScoped<CharacterResolver>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddScoped<CharacterPresenter>();
         services.AddScoped<Read2Me.App.State.VoicePromptGenerationState>();

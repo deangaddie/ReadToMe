@@ -9,6 +9,7 @@ using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Characters
@@ -19,7 +20,7 @@ namespace Read2Me.App.Characters
         CharacterResolver resolver,
         IUnattributedItemCounter reader,
         IProjectCatalogReader catalog,
-        IBookCommandHandler commands,
+        BookMutations mutations,
         ILogger<CharacterQueueProcessor> logger) : ICharacterQueueProcessor
     {
         public async Task ProcessItemAsync(QueuedParagraph item, CancellationToken hostCt)
@@ -217,8 +218,23 @@ namespace Read2Me.App.Characters
                         : attributed.VoiceInstructions));
             }
 
-            await commands.ExecuteAsync(
-                new AttributeItemsCommand(item.Folder, item.ParagraphId, attributions), ct);
+            // Straight to the write side (ADR 0007): the receipt this commit publishes is how every
+            // open Book View — including ones in other circuits — converges on the stamps, so the
+            // queue neither patches a view nor publishes an event of its own.
+            var outcome = await mutations.CommitAsync(
+                new AttributeParagraphItemsMutation(item.Folder, item.ParagraphId, attributions), ct);
+
+            // A cancelled apply is a cancelled item, not a settled one — the legacy command path
+            // threw here, and the drain's own handler is what turns that into "cancelled paragraph".
+            if (outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled)
+                throw new OperationCanceledException(cancelled.Message, ct);
+
+            // Every other refusal is expected and not the queue's business to retry: the paragraph
+            // the answer names can have been deleted while the ask was in flight, and an answer that
+            // agreed with what is already stamped changes nothing.
+            if (outcome is BookMutationOutcome.Rejected rejected)
+                logger.LogInformation("Attribution for paragraph {ParagraphId} was not applied: {Reason} — {Message}",
+                    item.ParagraphId, rejected.Reason, rejected.Message);
         }
 
         /// <summary>

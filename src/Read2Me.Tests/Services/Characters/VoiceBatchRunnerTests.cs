@@ -40,7 +40,7 @@ public class VoiceBatchRunnerTests
         return (runner, events, llmEvents);
     }
 
-    private static PhaseDeps DummyDeps() => new(null!, null!, null!);
+    private static PhaseDeps DummyDeps() => new(null!, null!, null!, null!);
 
     // ── Fake phase ─────────────────────────────────────────────────────────────
 

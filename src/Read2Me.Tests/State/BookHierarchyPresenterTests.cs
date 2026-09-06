@@ -1,6 +1,8 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor;
 using NSubstitute;
 using Read2Me.App.State;
+using Read2Me.App.State.Projection;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
@@ -9,6 +11,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Queueing;
 using Read2Me.Services.UseCases;
@@ -18,20 +21,32 @@ using Xunit;
 
 namespace Read2Me.Tests.State
 {
-    // Fake BookUseCases: controllable import results without real dependencies.
+    // Fake BookUseCases: controllable import outcomes without real dependencies. It records the
+    // commit the presenter hands it, because routing that through the circuit's own projection —
+    // rather than committing behind its back and reloading — is the point of the import slice.
     internal class FakeBookUseCases : BookUseCases
     {
-        private Result _result = Result.Ok();
+        private BookImportOutcome _outcome = new BookImportOutcome.Replaced();
 
-        public FakeBookUseCases() : base(null!, null!, null!, null!) { }
+        public FakeBookUseCases() : base(null!, null!, null!, null!, null!) { }
 
-        public void SetResult(Result r) => _result = r;
+        public CommitBookMutation? Commit { get; private set; }
 
-        public override Task<Result> ImportAsync(string folderName, bool reread = false, CancellationToken ct = default)
-            => Task.FromResult(_result);
+        public void SetOutcome(BookImportOutcome outcome) => _outcome = outcome;
 
-        public override Task<Result> ImportManuallyAsync(string folderName, ManualReadOptions options, CancellationToken ct = default)
-            => Task.FromResult(_result);
+        public override Task<BookImportOutcome> ImportAsync(
+            ProjectFolderId folderId, bool reread, CommitBookMutation commit, CancellationToken ct = default)
+        {
+            Commit = commit;
+            return Task.FromResult(_outcome);
+        }
+
+        public override Task<BookImportOutcome> ImportManuallyAsync(
+            ProjectFolderId folderId, ManualReadOptions options, CommitBookMutation commit, CancellationToken ct = default)
+        {
+            Commit = commit;
+            return Task.FromResult(_outcome);
+        }
     }
 
     public class BookHierarchyPresenterTests
@@ -40,18 +55,20 @@ namespace Read2Me.Tests.State
 
         private record Context(
             BookHierarchyPresenter Presenter,
+            BookViewProjection Projection,
             IProjectReader Reader,
             IBookProjectLoader Loader,
-            IBookCommandHandler CommandHandler,
             FakeBookUseCases BookUseCases,
             BookTreeState TreeState,
             AudioReviewService AudioReviews,
             NodeStatusService NodeStatus,
             FakeVoiceResolver VoiceResolver,
             CharacterQueueService CharacterQueue,
-            // Only the Create() fixture wires these; the bespoke fixtures below leave them null.
-            IDialogService Dialogs = null!,
-            ISnackbar Snackbar = null!);
+            AudioQueueService AudioQueue,
+            List<Character> Roster,
+            List<ParagraphStatusSeedRow> NodeStatusSeed,
+            IDialogService Dialogs,
+            ISnackbar Snackbar);
 
         private static BookProjectSnapshot EmptySnapshot(
             IReadOnlyDictionary<Guid, int>? nodeCounts = null,
@@ -77,16 +94,24 @@ namespace Read2Me.Tests.State
                 NodeStatusSeed: nodeStatusSeed ?? []
             );
 
+        /// <summary>
+        /// The presenter over a real <see cref="BookViewProjection"/> — the seam it adapts — with the
+        /// reads behind the projection substituted. Nothing the Book View renders is presenter state
+        /// any more, so a test arranges the reads and then opens.
+        /// </summary>
         private static Context Create(IReadOnlyDictionary<Guid, int>? nodeCounts = null)
         {
             var reader = Substitute.For<IProjectReader>();
             var loader = Substitute.For<IBookProjectLoader>();
-            var commandHandler = Substitute.For<IBookCommandHandler>();
             var bookUseCases = new FakeBookUseCases();
             var dialogService = Substitute.For<IDialogService>();
 
+            // Read on every build rather than captured once, so a test that adds to the roster sees
+            // it after the next rebuild — the add-a-character path, which no longer patches a list.
+            var roster = new List<Character>();
+            var seed = new List<ParagraphStatusSeedRow>();
             loader.LoadSnapshotAsync(Arg.Any<ProjectFolderId>(), Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(nodeCounts));
+                .Returns(_ => EmptySnapshot(nodeCounts, characters: roster, nodeStatusSeed: seed));
 
             reader.GetCharacterParagraphsAsync(
                 Arg.Any<ProjectFolderId>(), Arg.Any<BookNodeLevel>(), Arg.Any<Guid>(), Arg.Any<bool>())
@@ -107,8 +132,7 @@ namespace Read2Me.Tests.State
                     [.. (nodeCounts ?? new Dictionary<Guid, int>()).Keys],
                     nodeCounts ?? new Dictionary<Guid, int>()));
 
-            var hierarchyLoader = new BookHierarchyLoader(reader);
-            var treeState = new BookTreeState(hierarchyLoader);
+            var treeState = new BookTreeState();
             var selectionState = new BookSelectionState();
             var audioSelectionState = new AudioItemSelectionState();
             var characterQueue = new CharacterQueueService();
@@ -120,8 +144,73 @@ namespace Read2Me.Tests.State
             var voiceResolver = new FakeVoiceResolver();
             var audioQueue = new AudioQueueService();
             var coordinator = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, voiceResolver, coordinator, new EventBroadcaster<ParagraphItemsChanged>());
-            return new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue, dialogService, snackbar);
+            // No BookMutations and no session: what this file covers is the adapter's own half —
+            // rendering the latest snapshot, routing gestures as intents, turning typed outcomes
+            // into dialogs and snackbars — none of which commits anything. Writes are proved on
+            // BookViewProjection and on BookMutations, where a real write side is the point.
+            var projection = new BookViewProjection(
+                loader, reader, reader, reader, mutations: null!, treeState, selectionState,
+                audioSelectionState, coordinator, voiceResolver, new BookRevisionSequence(), session: null!,
+                new EventBroadcaster<BookMutationReceipt>(),
+                NullLogger<BookViewProjection>.Instance);
+            // No CharacterResolver either: only the add-a-character gesture reads the roster through it,
+            // and that is covered on SpeakerAssignmentPresenterTests, where the write side is real.
+            var presenter = new BookHierarchyPresenter(reader, projection, characterRoster: null!, bookUseCases, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioReviews, nodeStatus);
+            return new Context(presenter, projection, reader, loader, bookUseCases, treeState, audioReviews, nodeStatus, voiceResolver, characterQueue, audioQueue, roster, seed, dialogService, snackbar);
+        }
+
+        /// <summary>
+        /// The Book's status rows, as the loader reports them on every build. Mutate the list to stage
+        /// what a write changed: the rebuild that ends the write reads it back.
+        /// </summary>
+        private static List<ParagraphStatusSeedRow> StubNodeStatus(
+            Context ctx, params ParagraphStatusSeedRow[] rows)
+        {
+            ctx.NodeStatusSeed.Clear();
+            ctx.NodeStatusSeed.AddRange(rows);
+            return ctx.NodeStatusSeed;
+        }
+
+        /// <summary>The one volume, part and chapter of the smallest Book a chapter can be opened in.</summary>
+        private readonly record struct OneChapterBook(Guid VolumeId, Guid PartId, Guid ChapterId);
+
+        private static OneChapterBook NewOneChapterBook() =>
+            new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+
+        /// <summary>
+        /// Opens a Book of one volume, one part and one chapter, and expands that chapter so its
+        /// paragraphs are loaded. The projection opens a lone volume and a lone part itself, so the
+        /// chapter is the only gesture a test has to make.
+        /// </summary>
+        private static async Task OpenWithChapterAsync(
+            Context ctx,
+            OneChapterBook book,
+            IReadOnlyList<Paragraph> paragraphs,
+            IReadOnlyList<ParagraphStatusSeedRow>? nodeStatusSeed = null,
+            IReadOnlyDictionary<Guid, int>? nodeCounts = null,
+            List<(Guid ParagraphItemId, AudioReviewInfo Info)>? audioReviews = null)
+        {
+            var volume = new Volume { Id = book.VolumeId, Order = "a" };
+            if (nodeStatusSeed is not null) StubNodeStatus(ctx, [.. nodeStatusSeed]);
+
+            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
+                .Returns(_ => EmptySnapshot(
+                    hasContent: true,
+                    volumes: [volume],
+                    characters: ctx.Roster,
+                    nodeCounts: nodeCounts,
+                    audioReviews: audioReviews,
+                    nodeStatusSeed: ctx.NodeStatusSeed));
+
+            ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Volume, book.VolumeId)
+                .Returns(new HierarchyChildren([new Part { Id = book.PartId, Order = "a" }], null, null));
+            ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Part, book.PartId)
+                .Returns(new HierarchyChildren(null, [new Chapter { Id = book.ChapterId, Order = "a" }], null));
+            ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, book.ChapterId)
+                .Returns(new HierarchyChildren(null, null, [.. paragraphs]));
+
+            await ctx.Presenter.LoadAsync(Folder);
+            await ctx.Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, book.ChapterId, expanded: true);
         }
 
         // ---------------------------------------------------------------
@@ -170,7 +259,7 @@ namespace Read2Me.Tests.State
         public async Task ReadBookAsync_Success_ErrorIsNull()
         {
             var ctx = Create();
-            ctx.BookUseCases.SetResult(Result.Ok());
+            ctx.BookUseCases.SetOutcome(new BookImportOutcome.Replaced());
 
             await ctx.Presenter.ReadBookAsync(Folder);
 
@@ -181,7 +270,8 @@ namespace Read2Me.Tests.State
         public async Task ReadBookAsync_Failure_SetsError()
         {
             var ctx = Create();
-            ctx.BookUseCases.SetResult(Result.Fail("Import failed"));
+            ctx.BookUseCases.SetOutcome(
+                new BookImportOutcome.Failed(BookImportFailure.FileMissing, "Import failed"));
 
             await ctx.Presenter.ReadBookAsync(Folder);
 
@@ -192,11 +282,33 @@ namespace Read2Me.Tests.State
         public async Task ReadBookAsync_IsBusy_FalseAfterComplete()
         {
             var ctx = Create();
-            ctx.BookUseCases.SetResult(Result.Ok());
+            ctx.BookUseCases.SetOutcome(new BookImportOutcome.Replaced());
 
             await ctx.Presenter.ReadBookAsync(Folder);
 
             Assert.False(ctx.Presenter.IsBusy);
+        }
+
+        /// <summary>
+        /// The import commits through this circuit's projection, not behind it: that is what makes
+        /// the Book View coherent when the gesture returns, and what stops the reader being told
+        /// their own reread happened "elsewhere" (ADR 0007).
+        /// </summary>
+        [Fact]
+        public async Task ReadBookAsync_CommitsThroughThisCircuitsProjection()
+        {
+            var ctx = Create();
+            await ctx.Presenter.LoadAsync(Folder);
+
+            await ctx.Presenter.ReadBookAsync(Folder);
+
+            Assert.NotNull(ctx.BookUseCases.Commit);
+            // The projection's own guard answering is the proof: a commit that went straight to
+            // BookMutations would not care which Book this circuit has open.
+            var refused = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => ctx.BookUseCases.Commit!(
+                    new ClearBookContentMutation(new ProjectFolderId("another-book")), CancellationToken.None));
+            Assert.Contains("needs a projection open on that Book", refused.Message);
         }
 
         // ---------------------------------------------------------------
@@ -218,113 +330,6 @@ namespace Read2Me.Tests.State
             ctx.Presenter.RequestConfirmReread();
             ctx.Presenter.CancelConfirmReread();
             Assert.False(ctx.Presenter.ConfirmReread);
-        }
-
-        // ---------------------------------------------------------------
-        // SetItemCharacterAsync
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task SetItemCharacterAsync_UnknownCharacterId_SetsCharacterNull()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                CharacterId = Guid.NewGuid(),
-                Character = new Character { Id = Guid.NewGuid(), Name = "Bob" },
-                Order = "a"
-            };
-
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, null);
-            await ctx.CommandHandler.Received(1).ExecuteAsync(Arg.Any<SetItemCharacterCommand>());
-
-            Assert.Null(item.Character);
-            Assert.Null(item.CharacterId);
-        }
-
-        [Fact]
-        public async Task SetItemCharacterAsync_KnownCharacterId_SetsCharacter()
-        {
-            var ctx = Create();
-            var charId = Guid.NewGuid();
-            var character = new Character { Id = charId, Name = "Alice" };
-
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(hasContent: true, characters: [character]));
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var item = new ParagraphItem { Id = Guid.NewGuid(), Order = "a" };
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, charId);
-
-            Assert.Equal(charId, item.CharacterId);
-            Assert.Equal("Alice", item.Character?.Name);
-        }
-
-        // ---------------------------------------------------------------
-        // SplitAndReloadAsync — new panel expansion
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task SplitAndReload_SourceExpanded_ExpandsNewParent()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var sourcePartId = Guid.NewGuid();
-            var newPartId = Guid.NewGuid();
-            ctx.Presenter.Tree.ExpandedPartIds.Add(sourcePartId);
-            ctx.CommandHandler.ExecuteAsync(Arg.Any<SplitAtChapterCommand>()).Returns(newPartId);
-
-            await ctx.Presenter.SplitAndReloadAsync(
-                Folder,
-                new SplitAtChapterCommand(Folder, Guid.NewGuid(), null),
-                BookHierarchyPresenter.SplitLevel.Part,
-                sourcePartId);
-
-            Assert.Contains(sourcePartId, ctx.Presenter.Tree.ExpandedPartIds);
-            Assert.Contains(newPartId, ctx.Presenter.Tree.ExpandedPartIds);
-        }
-
-        [Fact]
-        public async Task SplitAndReload_SourceCollapsed_DoesNotExpandNewParent()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var sourcePartId = Guid.NewGuid();
-            var newPartId = Guid.NewGuid();
-            ctx.CommandHandler.ExecuteAsync(Arg.Any<SplitAtChapterCommand>()).Returns(newPartId);
-
-            await ctx.Presenter.SplitAndReloadAsync(
-                Folder,
-                new SplitAtChapterCommand(Folder, Guid.NewGuid(), null),
-                BookHierarchyPresenter.SplitLevel.Part,
-                sourcePartId);
-
-            Assert.DoesNotContain(newPartId, ctx.Presenter.Tree.ExpandedPartIds);
-        }
-
-        [Fact]
-        public async Task SetItemCharacterAsync_StaleCharacterList_RefreshesAndSetsCharacter()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-            Assert.Empty(ctx.Presenter.Characters);
-
-            var charId = Guid.NewGuid();
-            var character = new Character { Id = charId, Name = "NewChar" };
-
-            ctx.Reader.GetCharactersAsync(Folder).Returns(new List<Character> { character });
-
-            var item = new ParagraphItem { Id = Guid.NewGuid(), Order = "a" };
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, charId);
-
-            Assert.Equal(charId, item.CharacterId);
-            Assert.Equal("NewChar", item.Character?.Name);
-            await ctx.Reader.Received().GetCharactersAsync(Folder);
         }
 
         // ---------------------------------------------------------------
@@ -402,7 +407,7 @@ namespace Read2Me.Tests.State
 
             var pId = Guid.NewGuid();
             var chId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var volId = Guid.NewGuid();
-            await ctx.Presenter.ToggleParagraphAsync(Folder, pId, chId, ptId, volId, on: true);
+            await ctx.Presenter.ToggleParagraphAsync(pId, new ParagraphSelection(volId, ptId, chId), on: true);
 
             Assert.True(ctx.Presenter.Selection.IsParagraphSelected(pId));
         }
@@ -415,8 +420,8 @@ namespace Read2Me.Tests.State
 
             var pId = Guid.NewGuid();
             var chId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var volId = Guid.NewGuid();
-            await ctx.Presenter.ToggleParagraphAsync(Folder, pId, chId, ptId, volId, on: true);
-            await ctx.Presenter.ToggleParagraphAsync(Folder, pId, chId, ptId, volId, on: false);
+            await ctx.Presenter.ToggleParagraphAsync(pId, new ParagraphSelection(volId, ptId, chId), on: true);
+            await ctx.Presenter.ToggleParagraphAsync(pId, new ParagraphSelection(volId, ptId, chId), on: false);
 
             Assert.False(ctx.Presenter.Selection.IsParagraphSelected(pId));
         }
@@ -432,7 +437,7 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.LoadAsync(Folder);
 
             var pId = Guid.NewGuid();
-            await ctx.Presenter.ToggleParagraphAsync(Folder, pId, chId, ptId, volId, on: true);
+            await ctx.Presenter.ToggleParagraphAsync(pId, new ParagraphSelection(volId, ptId, chId), on: true);
 
             Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
         }
@@ -457,7 +462,7 @@ namespace Read2Me.Tests.State
                     new CharacterParagraphRef(pId2, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Chapter, chId, on: true);
 
             Assert.True(ctx.Presenter.Selection.IsParagraphSelected(pId1));
             Assert.True(ctx.Presenter.Selection.IsParagraphSelected(pId2));
@@ -478,8 +483,8 @@ namespace Read2Me.Tests.State
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: false);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Chapter, chId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Chapter, chId, on: false);
 
             Assert.False(ctx.Presenter.Selection.IsParagraphSelected(pId));
         }
@@ -508,7 +513,7 @@ namespace Read2Me.Tests.State
                     new CharacterParagraphRef(pId2, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Volume, volId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Volume, volId, on: true);
 
             Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Volume, volId));
             Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Part, ptId));
@@ -533,7 +538,7 @@ namespace Read2Me.Tests.State
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Part, ptId, on: true);
 
             Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
         }
@@ -553,8 +558,8 @@ namespace Read2Me.Tests.State
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: false);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Part, ptId, on: false);
 
             Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
             Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Part, ptId));
@@ -576,8 +581,8 @@ namespace Read2Me.Tests.State
                     new CharacterParagraphRef(pId2, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Volume, volId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Volume, volId, on: false);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Volume, volId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Volume, volId, on: false);
 
             Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Volume, volId));
             Assert.Equal(TriState.Unchecked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Part, ptId));
@@ -601,8 +606,8 @@ namespace Read2Me.Tests.State
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: false);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Part, ptId, on: false);
 
             Assert.False(ctx.Presenter.Selection.IsParagraphSelected(pId));
             Assert.Equal(0, ctx.Presenter.Selection.SelectedParagraphCount);
@@ -626,9 +631,9 @@ namespace Read2Me.Tests.State
                     new CharacterParagraphRef(pId, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: false);
-            await ctx.Presenter.SetNodeAsync(Folder, BookNodeLevel.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Part, ptId, on: true);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Part, ptId, on: false);
+            await ctx.Presenter.SetNodeAsync(BookNodeLevel.Part, ptId, on: true);
 
             Assert.Equal(TriState.Checked, ctx.Presenter.Selection.NodeState(BookNodeLevel.Chapter, chId));
             Assert.True(ctx.Presenter.Selection.IsParagraphSelected(pId));
@@ -664,605 +669,6 @@ namespace Read2Me.Tests.State
         }
 
         // ---------------------------------------------------------------
-        // ResetAndLoadAsync clears selection
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task ResetAndLoadAsync_ClearsSelection()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
-            ctx.Presenter.Selection.AddParagraph(Guid.NewGuid(), new ParagraphSelection(volId, ptId, chId));
-            Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
-
-            await ctx.Presenter.ResetAndLoadAsync(Folder);
-
-            Assert.Equal(0, ctx.Presenter.Selection.SelectedParagraphCount);
-        }
-
-        // ---------------------------------------------------------------
-        // SetItemCharacterAsync clears queue outcome
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task SetItemCharacterAsync_ClearsQueueOutcome()
-        {
-            var ctx = Create();
-            var reader = ctx.Reader;
-            var loader = ctx.Loader;
-            var commandHandler = ctx.CommandHandler;
-            var dialogService = Substitute.For<IDialogService>();
-            var queue = new CharacterQueueService();
-            var hierarchyLoader = new BookHierarchyLoader(reader);
-            var treeState = new BookTreeState(hierarchyLoader);
-            var selectionState = new BookSelectionState();
-            var audioSelectionState = new AudioItemSelectionState();
-            var snackbar = Substitute.For<ISnackbar>();
-            var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
-            paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var audioQueueLocal = new AudioQueueService();
-            var coordinatorLocal = new BookSelectionCoordinator(reader, queue, audioQueueLocal, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, new FakeBookUseCases(),
-                treeState, selectionState, audioSelectionState, dialogService, snackbar, queue, audioQueueLocal, new AudioReviewService(), new NodeStatusService(new FakeParagraphQueueProbe()), new FakeVoiceResolver(), coordinatorLocal, new EventBroadcaster<ParagraphItemsChanged>());
-            await presenter.LoadAsync(Folder);
-
-            var paragraphId = Guid.NewGuid();
-            var queuedItem = new QueuedParagraph(Folder, paragraphId, "Preview", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-            queue.Enqueue([queuedItem]);
-            queue.MarkProcessing(queuedItem);
-            queue.Apply(queuedItem, new Disposition.Failed("some error"));
-            Assert.NotNull(queue.OutcomeOf(Folder, paragraphId));
-
-            var item = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = paragraphId, Order = "a" };
-            await presenter.SetItemCharacterAsync(Folder, item, null);
-
-            Assert.Null(queue.OutcomeOf(Folder, paragraphId));
-        }
-
-        // ---------------------------------------------------------------
-        // DismissAudioReviewAsync — issues command + faints in-memory review
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task DismissAudioReviewAsync_IssuesCommand_AndSetsInMemoryDismissed()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var itemId = Guid.NewGuid();
-            ctx.AudioReviews.Set(Folder, itemId, new AudioReviewInfo(
-                Read2Me.Core.Models.AudioReviewState.NeedsReview, NormalizeOk: true, NormalizeReason: null,
-                VerifyOk: false, Wer: 0.3, VerifyReason: "WER 0.3 > 0.15",
-                Transcript: "t", OriginalTextSnapshot: "o"));
-
-            await ctx.Presenter.DismissAudioReviewAsync(Folder, itemId);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<DismissAudioReviewCommand>(c => c != null && c.ParagraphItemId == itemId && c.FolderId.Value == Folder.Value));
-            Assert.Equal(Read2Me.Core.Models.AudioReviewState.Dismissed, ctx.AudioReviews.ReviewOf(Folder, itemId)!.State);
-        }
-
-        // ---------------------------------------------------------------
-        // DismissAudioReviewAsync — decrements review badge live (issue 0004)
-        // ---------------------------------------------------------------
-
-        private static ParagraphStatusSeedRow MakeReviewSeedRow(
-            Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int review) =>
-            new(paragraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 0, Review: review);
-
-        private static async Task<(Context ctx, Guid itemId, Guid chapterId, Guid partId, Guid volumeId)>
-            CreateWithReviewSeedRow()
-        {
-            var volumeId = Guid.NewGuid(); var partId = Guid.NewGuid(); var chapterId = Guid.NewGuid();
-            var paraId = Guid.NewGuid();
-            var itemId = Guid.NewGuid();
-
-            var para = new Paragraph
-            {
-                Id = paraId,
-                Items =
-                [
-                    new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Speech, Order = "a" },
-                ]
-            };
-
-            var reader = Substitute.For<IProjectReader>();
-            var loader = Substitute.For<IBookProjectLoader>();
-            var commandHandler = Substitute.For<IBookCommandHandler>();
-            var bookUseCases = new FakeBookUseCases();
-            var dialogService = Substitute.For<IDialogService>();
-
-            var seedRows = new List<ParagraphStatusSeedRow>
-            {
-                new(paraId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 0, Review: 1),
-            };
-            loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(new BookProjectSnapshot(
-                    Filename: null, HasContent: true, Volumes: [], Characters: [],
-                    TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
-                    NodeCharacterParagraphCounts: new Dictionary<Guid, int>(),
-                    NarratorOnlyMode: false,
-                    AudioNodeCounts: new Dictionary<Guid, int>(),
-                    AudioReviews: [],
-                    NodeStatusSeed: seedRows));
-
-            reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
-                .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
-
-            var hierarchyLoader = new BookHierarchyLoader(reader);
-            var treeState = new BookTreeState(hierarchyLoader);
-            var selectionState = new BookSelectionState();
-            var audioSelectionState = new AudioItemSelectionState();
-            var characterQueue = new CharacterQueueService();
-            var audioQueue = new AudioQueueService();
-            var snackbar = Substitute.For<ISnackbar>();
-            var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
-            paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var audioReviews = new AudioReviewService();
-            var nodeStatus = new NodeStatusService(new FakeParagraphQueueProbe());
-            var coordinator788 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator788, new EventBroadcaster<ParagraphItemsChanged>());
-
-            await presenter.LoadAsync(Folder);
-            // Expand chapter so paragraph is loaded into cache (item→paragraph mapping).
-            await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
-
-            // Seed an in-memory NeedsReview for the item.
-            audioReviews.Set(Folder, itemId, new AudioReviewInfo(
-                Read2Me.Core.Models.AudioReviewState.NeedsReview,
-                NormalizeOk: true, NormalizeReason: null,
-                VerifyOk: false, Wer: 0.3, VerifyReason: "WER too high",
-                Transcript: "t", OriginalTextSnapshot: "o"));
-
-            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, new FakeVoiceResolver(), characterQueue);
-            return (ctx, itemId, chapterId, partId, volumeId);
-        }
-
-        [Fact]
-        public async Task DismissAudioReviewAsync_DecrementsReviewBadge()
-        {
-            var (ctx, itemId, chapterId, partId, volumeId) = await CreateWithReviewSeedRow();
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).Review);
-
-            await ctx.Presenter.DismissAudioReviewAsync(Folder, itemId);
-
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).Review);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, partId).Review);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, volumeId).Review);
-        }
-
-        // ---------------------------------------------------------------
-        // NoteItemTextEditedAsync — a text edit returns the item to pre-generation state
-        // ---------------------------------------------------------------
-
-        /// <summary>
-        /// The row has to go back to Generatable without a reload: while it still shows a WAV its
-        /// audio checkbox stays disabled, a "select needs audio" pass keeps skipping it, and the
-        /// chapter's audio-remaining badge reads one too low.
-        /// </summary>
-        [Fact]
-        public async Task NoteItemTextEditedAsync_ClearsAudio_DropsTheReview_AndRaisesTheAudioBadge()
-        {
-            var (ctx, itemId, chapterId, partId, volumeId) = await CreateWithReviewSeedRow();
-            var item = ctx.Presenter.Tree.TryGetOwner(itemId)!.Items.Single(i => i.Id == itemId);
-            item.AudioFileName = "item.wav";
-
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).Review);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
-
-            // The handler has already cleared the WAV and deleted the verdict; the reseed reads that back.
-            ctx.Reader.GetNodeStatusSeedAsync(Folder).Returns<IReadOnlyList<ParagraphStatusSeedRow>>(
-            [
-                new(item.ParagraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: 1, Review: 0),
-            ]);
-
-            await ctx.Presenter.NoteItemTextEditedAsync(Folder, item);
-
-            Assert.Null(item.AudioFileName);
-            Assert.Null(ctx.AudioReviews.ReviewOf(Folder, itemId));
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, volumeId).AudioRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).Review);
-        }
-
-        // ---------------------------------------------------------------
-        // SetParagraphCharacterAsync — single command regardless of null/non-null id
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task SetParagraphCharacterAsync_Clearing_SendsSingleSetParagraphCharacterCommandWithNullId()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var paragraph = new Paragraph
-            {
-                Id = Guid.NewGuid(),
-                Items =
-                [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a", CharacterId = Guid.NewGuid() },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b", CharacterId = Guid.NewGuid() },
-                ]
-            };
-
-            await ctx.Presenter.SetParagraphCharacterAsync(Folder, paragraph, null);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphCharacterCommand>(c => c != null && c.ParagraphId == paragraph.Id && c.CharacterId == null));
-            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetItemCharacterCommand>());
-        }
-
-        // ---------------------------------------------------------------
-        // ParagraphItemsChanged — presenter reloads that paragraph's items
-        // ---------------------------------------------------------------
-
-        private static async Task<(Context ctx, CharacterQueueService queue, Paragraph para,
-            QueuedParagraph queued, EventBroadcaster<ParagraphItemsChanged> events, IProjectReader reader)>
-            CreateWithLoadedParagraph()
-        {
-            var chapterId = Guid.NewGuid();
-            var para = new Paragraph
-            {
-                Id = Guid.NewGuid(),
-                ChapterId = chapterId,
-                Items =
-                [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a" },
-                ]
-            };
-
-            var reader = Substitute.For<IProjectReader>();
-            var loader = Substitute.For<IBookProjectLoader>();
-            var commandHandler = Substitute.For<IBookCommandHandler>();
-            var bookUseCases = new FakeBookUseCases();
-            var dialogService = Substitute.For<IDialogService>();
-
-            loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(new BookProjectSnapshot(
-                    Filename: null, HasContent: true, Volumes: [], Characters: [],
-                    TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
-                    NodeCharacterParagraphCounts: new Dictionary<Guid, int>(),
-                    NarratorOnlyMode: false,
-                    AudioNodeCounts: new Dictionary<Guid, int>(),
-                    AudioReviews: [],
-                    NodeStatusSeed: []));
-
-            reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
-                .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
-
-            var hierarchyLoader = new BookHierarchyLoader(reader);
-            var treeState = new BookTreeState(hierarchyLoader);
-            var selectionState = new BookSelectionState();
-            var audioSelectionState = new AudioItemSelectionState();
-            var queue = new CharacterQueueService();
-            var snackbar2 = Substitute.For<ISnackbar>();
-            var paragraphTtsSettings2 = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
-            paragraphTtsSettings2.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var audioQueue889 = new AudioQueueService();
-            var coordinator889 = new BookSelectionCoordinator(reader, queue, audioQueue889, paragraphTtsSettings2, snackbar2, selectionState, audioSelectionState, new FakeAiPreflight());
-            var events889 = new EventBroadcaster<ParagraphItemsChanged>();
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar2, queue, audioQueue889, new AudioReviewService(), new NodeStatusService(new FakeParagraphQueueProbe()), new FakeVoiceResolver(), coordinator889, events889);
-
-            await presenter.LoadAsync(Folder);
-            // Expand chapter so paragraphs are loaded into the cache.
-            await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
-
-            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, new AudioReviewService(), new NodeStatusService(new FakeParagraphQueueProbe()), new FakeVoiceResolver(), queue);
-            var queuedPara = new QueuedParagraph(Folder, para.Id, "preview", chapterId, Guid.NewGuid(), Guid.NewGuid());
-            return (ctx, queue, para, queuedPara, events889, reader);
-        }
-
-        [Fact]
-        public async Task ParagraphItemsChanged_ReloadsThatParagraphsItems()
-        {
-            // Attribution re-segments: the paragraph's item list is replaced wholesale, not patched.
-            var (_, _, para, queued, events, reader) = await CreateWithLoadedParagraph();
-
-            var charId = Guid.NewGuid();
-            var reloaded = new Paragraph
-            {
-                Id = para.Id,
-                ChapterId = queued.ChapterId,
-                Items =
-                [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a", CharacterId = charId },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b", CharacterId = ProjectDbContext.NarratorId },
-                ]
-            };
-            reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, queued.ChapterId)
-                .Returns(new HierarchyChildren(null, null, [reloaded]));
-
-            events.Publish(new ParagraphItemsChanged(Folder, para.Id));
-
-            Assert.Equal(2, para.Items.Count);
-            Assert.Equal(charId, para.Items.First().CharacterId);
-        }
-
-        [Fact]
-        public async Task ParagraphItemsChanged_ParagraphNotInTree_DoesNotThrow()
-        {
-            var (_, _, _, _, events, _) = await CreateWithLoadedParagraph();
-
-            var ex = Record.Exception(() =>
-                events.Publish(new ParagraphItemsChanged(Folder, Guid.NewGuid())));
-
-            Assert.Null(ex);
-        }
-
-        // ---------------------------------------------------------------
-        // Live attribution badge updates (issue 0002)
-        // ---------------------------------------------------------------
-
-        private static ParagraphStatusSeedRow MakeSeedRow(
-            Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int unattributed) =>
-            new(paragraphId, chapterId, partId, volumeId, unattributed, MissingAudio: 0, Review: 0);
-
-        // ---------------------------------------------------------------
-        // A flip reseeds derived counts and clears selection (ADR-0006)
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task SetItemCharacterAsync_FlipIntoDialog_MakesTheParagraphSelectableAndCounted()
-        {
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-            // A chapter of pure narration: nothing attributable, so nothing selectable.
-            var ctx = Create(nodeCounts: new Dictionary<Guid, int>());
-            await ctx.Presenter.LoadAsync(Folder);
-            Assert.False(ctx.Presenter.IsNodeSelectable(ch));
-
-            var para = new Paragraph { Id = paraId, ChapterId = ch };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Speech,
-                CharacterId = ProjectDbContext.NarratorId,
-                Paragraph = para,
-            };
-            para.Items.Add(item);
-
-            // Giving it a character makes its paragraph a Character paragraph.
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(_ => new BookOverview(
-                null, true, [], [], 0, 0,
-                [ch, part, vol],
-                new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 }));
-
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, Guid.NewGuid());
-
-            Assert.True(ctx.Presenter.IsNodeSelectable(ch));
-            Assert.True(ctx.Presenter.IsNodeSelectable(part));
-            Assert.True(ctx.Presenter.IsNodeSelectable(vol));
-        }
-
-        [Fact]
-        public async Task SetItemCharacterAsync_FlipToNarrator_DropsTheParagraphOutOfTheCounts()
-        {
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-            var ctx = Create(nodeCounts: new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 });
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(
-                    nodeCounts: new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 },
-                    selectableNodes: [ch, part, vol]));
-            await ctx.Presenter.LoadAsync(Folder);
-            Assert.True(ctx.Presenter.IsNodeSelectable(ch));
-
-            var para = new Paragraph { Id = paraId, ChapterId = ch };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Speech,
-                CharacterId = Guid.NewGuid(),
-                Paragraph = para,
-            };
-            para.Items.Add(item);
-
-            // Its last dialog item becomes narration, so the paragraph stops being attributable.
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(_ => new BookOverview(
-                null, true, [], [], 0, 0, [], new Dictionary<Guid, int>()));
-
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, ProjectDbContext.NarratorId);
-
-            Assert.False(ctx.Presenter.IsNodeSelectable(ch));
-            Assert.False(ctx.Presenter.IsNodeSelectable(part));
-            Assert.False(ctx.Presenter.IsNodeSelectable(vol));
-        }
-
-        [Fact]
-        public async Task SetItemCharacterAsync_WhenTheCountsMove_SelectionIsCleared()
-        {
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-            var ctx = Create(nodeCounts: new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 });
-            await ctx.Presenter.LoadAsync(Folder);
-            ctx.Presenter.Selection.AddParagraph(paraId, new ParagraphSelection(vol, part, ch));
-            Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
-
-            var para = new Paragraph { Id = paraId, ChapterId = ch };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Speech,
-                CharacterId = Guid.NewGuid(),
-                Paragraph = para,
-            };
-            para.Items.Add(item);
-
-            ctx.Reader.GetBookOverviewAsync(Folder).Returns(_ => new BookOverview(
-                null, true, [], [], 0, 0, [], new Dictionary<Guid, int>()));
-
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, ProjectDbContext.NarratorId);
-
-            Assert.Equal(0, ctx.Presenter.Selection.SelectedParagraphCount);
-        }
-
-        [Fact]
-        public async Task SetItemCharacterAsync_WhenTheCountsHold_SelectionSurvives()
-        {
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-            var ctx = Create(nodeCounts: new Dictionary<Guid, int> { [ch] = 1, [part] = 1, [vol] = 1 });
-            await ctx.Presenter.LoadAsync(Folder);
-            ctx.Presenter.Selection.AddParagraph(paraId, new ParagraphSelection(vol, part, ch));
-
-            var para = new Paragraph { Id = paraId, ChapterId = ch };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Speech,
-                CharacterId = Guid.NewGuid(),
-                Paragraph = para,
-            };
-            para.Items.Add(item);
-
-            // Swapping one character for another moves no denominator, so the dock bar stays up.
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, Guid.NewGuid());
-
-            Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_ReseedsOnceForTheWholeBatch()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 2));
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
-
-            // One reseed for the batch, not one per item — two items were stamped.
-            await ctx.Reader.Received(1).GetNodeStatusSeedAsync(Folder);
-            Assert.NotEmpty(selected.Items);
-        }
-
-        [Fact]
-        public async Task SetItemCharacterAsync_LastUnattributedItem_DecrementsChapterBadge()
-        {
-            var ctx = Create();
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 1)]));
-
-            await ctx.Presenter.LoadAsync(Folder);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
-
-            var para = new Paragraph { Id = paraId };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Speech,
-                Paragraph = para,
-            };
-            para.Items.Add(item);
-
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, Guid.NewGuid());
-
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, part).AttributionRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, vol).AttributionRemaining);
-        }
-
-        [Fact]
-        public async Task SetItemCharacterAsync_NonLastUnattributedItem_DoesNotDecrementBadge()
-        {
-            var ctx = Create();
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 2)]));
-
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var para = new Paragraph { Id = paraId };
-            var item1 = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Speech,
-                Paragraph = para,
-            };
-            var item2 = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "b",
-                ItemType = ParagraphItemType.Speech,
-                Paragraph = para,
-            };
-            para.Items.Add(item1);
-            para.Items.Add(item2);
-
-            ctx.Reader.GetNodeStatusSeedAsync(Folder)
-                .Returns(_ => (IReadOnlyList<ParagraphStatusSeedRow>)
-                    [MakeSeedRow(paraId, ch, part, vol, unattributed: 1)]);
-
-            // Assign only item1; item2 remains unattributed
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item1, Guid.NewGuid());
-
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
-        }
-
-        [Fact]
-        public async Task SetParagraphCharacterAsync_ZeroesEntireParagraphAttribution()
-        {
-            var ctx = Create();
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 3)]));
-
-            await ctx.Presenter.LoadAsync(Folder);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
-
-            var para = new Paragraph
-            {
-                Id = paraId,
-                Items =
-                [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a" },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b" },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "c" },
-                ]
-            };
-
-            await ctx.Presenter.SetParagraphCharacterAsync(Folder, para, Guid.NewGuid());
-
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, part).AttributionRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, vol).AttributionRemaining);
-        }
-
-        [Fact]
-        public async Task SetParagraphCharacterAsync_Clearing_ReportsEveryItemUnattributed()
-        {
-            var ctx = Create();
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 0)]));
-
-            await ctx.Presenter.LoadAsync(Folder);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
-
-            var stamped = Guid.NewGuid();
-            var para = new Paragraph
-            {
-                Id = paraId,
-                Items =
-                [
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a", CharacterId = stamped },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b", CharacterId = ProjectDbContext.NarratorId },
-                    new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "c", CharacterId = stamped },
-                ]
-            };
-
-            ctx.Reader.GetNodeStatusSeedAsync(Folder)
-                .Returns(_ => (IReadOnlyList<ParagraphStatusSeedRow>)
-                    [MakeSeedRow(paraId, ch, part, vol, unattributed: 2)]);
-
-            await ctx.Presenter.SetParagraphCharacterAsync(Folder, para, null);
-
-            // Clearing un-attributes both character items — the badge must rise, not report 0.
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, part).AttributionRemaining);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, vol).AttributionRemaining);
-        }
-
-        // ---------------------------------------------------------------
         // SetAudioNodeAsync needsAudioOnly (issue 0001)
         // ---------------------------------------------------------------
 
@@ -1283,7 +689,7 @@ namespace Read2Me.Tests.State
                     new AudioItemRef(itemId2, paraId2, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetAudioNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true, needsAudioOnly: true);
+            await ctx.Presenter.SetAudioNodeAsync(BookNodeLevel.Chapter, chId, on: true, needsAudioOnly: true);
 
             Assert.True(ctx.Presenter.AudioSelection.IsItemSelected(itemId1));
             Assert.True(ctx.Presenter.AudioSelection.IsItemSelected(itemId2));
@@ -1300,7 +706,7 @@ namespace Read2Me.Tests.State
             ctx.Reader.GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, false)
                 .Returns(new List<AudioItemRef>());
 
-            await ctx.Presenter.SetAudioNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true);
+            await ctx.Presenter.SetAudioNodeAsync(BookNodeLevel.Chapter, chId, on: true);
 
             await ctx.Reader.Received(1).GetAudioItemRefsAsync(Folder, BookNodeLevel.Chapter, chId, false);
         }
@@ -1323,138 +729,9 @@ namespace Read2Me.Tests.State
                     new AudioItemRef(itemId1, paraId1, chId, ptId, volId),
                 });
 
-            await ctx.Presenter.SetAudioNodeAsync(Folder, BookNodeLevel.Chapter, chId, on: true, needsAudioOnly: true);
+            await ctx.Presenter.SetAudioNodeAsync(BookNodeLevel.Chapter, chId, on: true, needsAudioOnly: true);
 
             Assert.Equal(TriState.Indeterminate, ctx.Presenter.AudioSelection.NodeState(BookNodeLevel.Chapter, chId));
-        }
-
-        // ---------------------------------------------------------------
-        // Live audio badge updates (issue 0003)
-        // ---------------------------------------------------------------
-
-        private static ParagraphStatusSeedRow MakeAudioSeedRow(
-            Guid paragraphId, Guid chapterId, Guid partId, Guid volumeId, int missingAudio) =>
-            new(paragraphId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: missingAudio, Review: 0);
-
-        private static async Task<(Context ctx, AudioQueueService audioQueue, Paragraph para, Guid chapterId, Guid partId, Guid volumeId)>
-            CreateWithAudioSeedRow(int missingAudio)
-        {
-            var volumeId = Guid.NewGuid(); var partId = Guid.NewGuid(); var chapterId = Guid.NewGuid();
-            var paraId = Guid.NewGuid();
-            var itemId = Guid.NewGuid();
-
-            var para = new Paragraph
-            {
-                Id = paraId,
-                Items =
-                [
-                    new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Speech, Order = "a" },
-                ]
-            };
-
-            var reader = Substitute.For<IProjectReader>();
-            var loader = Substitute.For<IBookProjectLoader>();
-            var commandHandler = Substitute.For<IBookCommandHandler>();
-            var bookUseCases = new FakeBookUseCases();
-            var dialogService = Substitute.For<IDialogService>();
-
-            var seedRows = new List<ParagraphStatusSeedRow>
-            {
-                new(paraId, chapterId, partId, volumeId, Unattributed: 0, MissingAudio: missingAudio, Review: 0),
-            };
-            loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(new BookProjectSnapshot(
-                    Filename: null, HasContent: true, Volumes: [], Characters: [],
-                    TotalParts: 0, TotalChapters: 0, SelectableNodeIds: [],
-                    NodeCharacterParagraphCounts: new Dictionary<Guid, int>(),
-                    NarratorOnlyMode: false,
-                    AudioNodeCounts: new Dictionary<Guid, int>(),
-                    AudioReviews: [],
-                    NodeStatusSeed: seedRows));
-
-            reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
-                .Returns(new HierarchyChildren(null, null, new List<Paragraph> { para }));
-
-            var hierarchyLoader = new BookHierarchyLoader(reader);
-            var treeState = new BookTreeState(hierarchyLoader);
-            var selectionState = new BookSelectionState();
-            var audioSelectionState = new AudioItemSelectionState();
-            var characterQueue = new CharacterQueueService();
-            var audioQueue = new AudioQueueService();
-            var snackbar = Substitute.For<ISnackbar>();
-            var paragraphTtsSettings = Substitute.For<ParagraphTtsSettingsService>(null!, null!);
-            paragraphTtsSettings.GetActiveConfigAsync().Returns((Read2Me.AppData.Entities.ParagraphTtsServiceConfig?)null);
-            var audioReviews = new AudioReviewService();
-            var nodeStatus = new NodeStatusService(new FakeParagraphQueueProbe());
-            var coordinator1173 = new BookSelectionCoordinator(reader, characterQueue, audioQueue, paragraphTtsSettings, snackbar, selectionState, audioSelectionState, new FakeAiPreflight());
-            var presenter = new BookHierarchyPresenter(reader, loader, commandHandler, bookUseCases, treeState, selectionState, audioSelectionState, dialogService, snackbar, characterQueue, audioQueue, audioReviews, nodeStatus, new FakeVoiceResolver(), coordinator1173, new EventBroadcaster<ParagraphItemsChanged>());
-
-            await presenter.LoadAsync(Folder);
-            await presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
-
-            var ctx = new Context(presenter, reader, loader, commandHandler, bookUseCases, treeState, audioReviews, nodeStatus, new FakeVoiceResolver(), characterQueue);
-            return (ctx, audioQueue, para, chapterId, partId, volumeId);
-        }
-
-        [Fact]
-        public async Task OnAudioFileAssigned_LastMissingItem_DecrementsAudioBadge()
-        {
-            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
-
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            audioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
-
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, partId).AudioRemaining);
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, volumeId).AudioRemaining);
-        }
-
-        [Fact]
-        public async Task OnAudioFileAssigned_NonLastMissingItem_DoesNotDecrementToZero()
-        {
-            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 2);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
-
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            audioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
-
-            // Still 1 missing audio item in paragraph → still contributes 1 to node count
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
-        }
-
-        [Fact]
-        public async Task SetItemCharacterAsync_ClearCharacter_RaisesBadge()
-        {
-            var ctx = Create();
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid(); var paraId = Guid.NewGuid();
-
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(nodeStatusSeed: [MakeSeedRow(paraId, ch, part, vol, unattributed: 0)]));
-
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var para = new Paragraph { Id = paraId };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(), ParagraphId = paraId, Order = "a",
-                ItemType = ParagraphItemType.Speech,
-                CharacterId = Guid.NewGuid(),
-                Paragraph = para,
-            };
-            para.Items.Add(item);
-
-            // A flip reseeds the badges from the reader rather than patching a counter (ADR-0006).
-            ctx.Reader.GetNodeStatusSeedAsync(Folder)
-                .Returns(_ => (IReadOnlyList<ParagraphStatusSeedRow>)
-                    [MakeSeedRow(paraId, ch, part, vol, unattributed: 1)]);
-
-            // Clear the character — item becomes unattributed, badge rises to 1
-            await ctx.Presenter.SetItemCharacterAsync(Folder, item, null);
-
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
         }
 
         // ---------------------------------------------------------------
@@ -1468,10 +745,10 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.LoadAsync(Folder);
 
             var volId = Guid.NewGuid(); var ptId = Guid.NewGuid(); var chId = Guid.NewGuid();
-            await ctx.Presenter.ToggleParagraphAsync(Folder, Guid.NewGuid(), chId, ptId, volId, on: true);
+            await ctx.Presenter.ToggleParagraphAsync(Guid.NewGuid(), new ParagraphSelection(volId, ptId, chId), on: true);
             Assert.Equal(1, ctx.Presenter.SelectedParagraphCount);
 
-            ctx.Presenter.ViewMode = BookViewMode.SplitAudio;
+            await ctx.Presenter.SetViewModeAsync(BookViewMode.SplitAudio);
 
             Assert.Equal(0, ctx.Presenter.SelectedParagraphCount);
         }
@@ -1486,7 +763,7 @@ namespace Read2Me.Tests.State
             await ctx.Presenter.ToggleAudioItemAsync(new AudioItemRef(Guid.NewGuid(), paraId, chId, ptId, volId), on: true);
             Assert.Equal(1, ctx.Presenter.SelectedAudioItemCount);
 
-            ctx.Presenter.ViewMode = BookViewMode.SplitAudio;
+            await ctx.Presenter.SetViewModeAsync(BookViewMode.SplitAudio);
 
             Assert.Equal(0, ctx.Presenter.SelectedAudioItemCount);
         }
@@ -1500,7 +777,7 @@ namespace Read2Me.Tests.State
             int fired = 0;
             ctx.Presenter.StateChanged += () => fired++;
 
-            ctx.Presenter.ViewMode = BookViewMode.SplitAudio;
+            await ctx.Presenter.SetViewModeAsync(BookViewMode.SplitAudio);
 
             Assert.Equal(1, fired);
         }
@@ -1514,147 +791,128 @@ namespace Read2Me.Tests.State
             int fired = 0;
             ctx.Presenter.StateChanged += () => fired++;
 
-            ctx.Presenter.ViewMode = BookViewMode.Combined; // already Combined
+            await ctx.Presenter.SetViewModeAsync(BookViewMode.Combined); // already Combined
 
             Assert.Equal(0, fired);
         }
 
         // ---------------------------------------------------------------
-        // EnsureVoicePreviewAsync — delegates to IVoiceResolver (001c)
+        // Voice previews — resolved with the snapshot, for what it loaded
         // ---------------------------------------------------------------
 
         [Fact]
-        public async Task EnsureVoicePreviewAsync_ReturnsNamesFromVoiceResolver()
+        public async Task LoadAsync_NamesTheVoiceOfEveryLoadedItem()
         {
             var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
+            var book = NewOneChapterBook();
+            var paraId = Guid.NewGuid();
             var itemId = Guid.NewGuid();
+            var para = new Paragraph
+            {
+                Id = paraId,
+                ChapterId = book.ChapterId,
+                Items = [new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Speech, Order = "a" }],
+            };
             ctx.VoiceResolver.SetName(itemId, "Alice Voice");
 
-            await ctx.Presenter.EnsureVoicePreviewAsync(Folder, [itemId]);
+            await OpenWithChapterAsync(ctx, book, [para]);
 
             Assert.Equal("Alice Voice", ctx.Presenter.ResolvedVoiceName(itemId));
         }
 
         [Fact]
-        public async Task EnsureVoicePreviewAsync_NullName_CachedAsNull()
+        public async Task ResolvedVoiceName_ItemNoBranchHasLoaded_IsNull()
         {
             var ctx = Create();
             await ctx.Presenter.LoadAsync(Folder);
 
-            var itemId = Guid.NewGuid();
-            ctx.VoiceResolver.SetName(itemId, null);
-
-            await ctx.Presenter.EnsureVoicePreviewAsync(Folder, [itemId]);
-
-            Assert.Null(ctx.Presenter.ResolvedVoiceName(itemId));
+            Assert.Null(ctx.Presenter.ResolvedVoiceName(Guid.NewGuid()));
         }
 
         [Fact]
-        public async Task EnsureVoicePreviewAsync_SecondCall_SameId_DoesNotReResolve()
+        public async Task SwitchingViewMode_ReResolvesTheVoicePreviews()
         {
+            // Voice rules can be edited on another tab: entering the audio view has to name the Voice
+            // the queue would use now, not the one the last snapshot was built with.
             var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
+            var book = NewOneChapterBook();
+            var paraId = Guid.NewGuid();
             var itemId = Guid.NewGuid();
+            var para = new Paragraph
+            {
+                Id = paraId,
+                ChapterId = book.ChapterId,
+                Items = [new ParagraphItem { Id = itemId, ParagraphId = paraId, ItemType = ParagraphItemType.Speech, Order = "a" }],
+            };
             ctx.VoiceResolver.SetName(itemId, "First");
-            await ctx.Presenter.EnsureVoicePreviewAsync(Folder, [itemId]);
-
-            // Cached: second call must NOT re-resolve a name already known.
-            ctx.VoiceResolver.SetName(itemId, "Changed");
-            await ctx.Presenter.EnsureVoicePreviewAsync(Folder, [itemId]);
-
-            Assert.Equal("First", ctx.Presenter.ResolvedVoiceName(itemId));
-        }
-
-        [Fact]
-        public async Task EnsureVoicePreviewAsync_AfterInvalidate_ReResolves()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var itemId = Guid.NewGuid();
-            ctx.VoiceResolver.SetName(itemId, "First");
-            await ctx.Presenter.EnsureVoicePreviewAsync(Folder, [itemId]);
+            await OpenWithChapterAsync(ctx, book, [para]);
 
             ctx.VoiceResolver.SetName(itemId, "Changed");
-            ctx.Presenter.InvalidateVoicePreview();
-            await ctx.Presenter.EnsureVoicePreviewAsync(Folder, [itemId]);
-
-            Assert.Equal("Changed", ctx.Presenter.ResolvedVoiceName(itemId));
-        }
-
-        [Fact]
-        public async Task EnteringSplitAudio_InvalidatesVoicePreview()
-        {
-            var ctx = Create();
-            await ctx.Presenter.LoadAsync(Folder);
-
-            var itemId = Guid.NewGuid();
-            ctx.VoiceResolver.SetName(itemId, "First");
-            await ctx.Presenter.EnsureVoicePreviewAsync(Folder, [itemId]);
-
-            // Simulate a voice-rule edit on another tab, then re-enter SplitAudio.
-            ctx.VoiceResolver.SetName(itemId, "Changed");
-            ctx.Presenter.ViewMode = BookViewMode.SplitAudio;
-            await ctx.Presenter.EnsureVoicePreviewAsync(Folder, [itemId]);
+            await ctx.Presenter.SetViewModeAsync(BookViewMode.SplitAudio);
 
             Assert.Equal("Changed", ctx.Presenter.ResolvedVoiceName(itemId));
         }
 
         // ---------------------------------------------------------------
-        // OnAudioFileAssigned — item stamping and node status (issue 004)
+        // Expansion — an intent, answered by a snapshot carrying the branch
         // ---------------------------------------------------------------
 
         [Fact]
-        public async Task OnAudioFileAssigned_KnownItem_StampsAudioFileName()
+        public async Task SetNodeExpandedAsync_Chapter_PublishesItsParagraphs()
         {
-            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
+            var ctx = Create();
+            var book = NewOneChapterBook();
+            var para = new Paragraph { Id = Guid.NewGuid(), ChapterId = book.ChapterId };
 
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            audioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/chapter1/item.wav"));
+            await OpenWithChapterAsync(ctx, book, [para]);
 
-            Assert.Equal("audio/chapter1/item.wav", item.AudioFileName);
+            Assert.True(ctx.Presenter.IsExpanded(BookNodeLevel.Chapter, book.ChapterId));
+            Assert.Equal(para.Id, Assert.Single(ctx.Presenter.Paragraphs(book.ChapterId)!).Id);
         }
 
         [Fact]
-        public async Task OnAudioFileAssigned_KnownItem_NodeStatusDecrementsAudioBadge()
+        public async Task SetNodeExpandedAsync_Collapsing_DropsTheBranchAndTheIntent()
         {
-            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+            var ctx = Create();
+            var book = NewOneChapterBook();
+            await OpenWithChapterAsync(ctx, book, [new Paragraph { Id = Guid.NewGuid(), ChapterId = book.ChapterId }]);
 
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            audioQueue.Apply(new QueuedAudioItem(Folder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
+            await ctx.Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, book.ChapterId, expanded: false);
 
-            Assert.Equal(0, ctx.NodeStatus.StatusForNode(Folder, chapterId).AudioRemaining);
+            Assert.False(ctx.Presenter.IsExpanded(BookNodeLevel.Chapter, book.ChapterId));
+            Assert.Null(ctx.Presenter.Paragraphs(book.ChapterId));
         }
 
         [Fact]
-        public async Task OnAudioFileAssigned_UnknownItemId_NoException()
+        public async Task SetNodeExpandedAsync_TakesTheSpinnerDownWithARepaintOfItsOwn()
         {
-            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
+            // The snapshot that answers the gesture is published while the spinner is still up, so a
+            // view repainting only on that event would be left rendering the spinner over the branch.
+            var ctx = Create();
+            var book = NewOneChapterBook();
+            await OpenWithChapterAsync(ctx, book, []);
+            await ctx.Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, book.ChapterId, expanded: false);
 
-            var unknownRef = new AudioItemRef(Guid.NewGuid(), Guid.NewGuid(), chapterId, partId, volumeId);
-            var ex = Record.Exception(() => audioQueue.Apply(
-                new QueuedAudioItem(Folder, unknownRef), new Disposition.Complete(null, "audio/ghost.wav")));
+            var spinnerAtEachRepaint = new List<bool>();
+            ctx.Presenter.StateChanged += () => spinnerAtEachRepaint.Add(ctx.Presenter.IsExpanding(book.ChapterId));
 
-            Assert.Null(ex);
+            await ctx.Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, book.ChapterId, expanded: true);
+
+            Assert.False(ctx.Presenter.IsExpanding(book.ChapterId));
+            Assert.False(spinnerAtEachRepaint[^1]);
         }
 
         [Fact]
-        public async Task OnAudioFileAssigned_WrongFolder_ItemNotStamped()
+        public async Task SetNodeExpandedAsync_AlreadyExpanded_PublishesNothing()
         {
-            var (ctx, audioQueue, para, chapterId, partId, volumeId) = await CreateWithAudioSeedRow(missingAudio: 1);
+            var ctx = Create();
+            var book = NewOneChapterBook();
+            await OpenWithChapterAsync(ctx, book, [new Paragraph { Id = Guid.NewGuid(), ChapterId = book.ChapterId }]);
 
-            var item = para.Items.First();
-            var itemRef = new AudioItemRef(item.Id, para.Id, chapterId, partId, volumeId);
-            var otherFolder = new ProjectFolderId("other-book");
-            audioQueue.Apply(new QueuedAudioItem(otherFolder, itemRef), new Disposition.Complete(null, "audio/item.wav"));
+            var published = ctx.Projection.Snapshot!;
+            await ctx.Presenter.SetNodeExpandedAsync(BookNodeLevel.Chapter, book.ChapterId, expanded: true);
 
-            Assert.Null(item.AudioFileName);
+            Assert.Same(published, ctx.Projection.Snapshot);
         }
 
         // ---------------------------------------------------------------
@@ -1669,7 +927,7 @@ namespace Read2Me.Tests.State
         {
             var ctx = Create();
             await ctx.Presenter.LoadAsync(Folder);
-            ctx.Presenter.Selection.BulkMode = true;
+            await ctx.Presenter.SetBulkAssignAsync(true);
 
             ctx.CharacterQueue.Enqueue([AnyQueuedParagraph()]);
 
@@ -1681,7 +939,7 @@ namespace Read2Me.Tests.State
         {
             var ctx = Create();
             await ctx.Presenter.LoadAsync(Folder);
-            ctx.Presenter.Selection.BulkMode = true;
+            await ctx.Presenter.SetBulkAssignAsync(true);
 
             // CancelAll on an empty queue raises Changed with an idle snapshot.
             ctx.CharacterQueue.CancelAll();
@@ -1694,7 +952,7 @@ namespace Read2Me.Tests.State
         {
             var ctx = Create();
             await ctx.Presenter.LoadAsync(Folder);
-            ctx.Presenter.Selection.BulkMode = true;
+            await ctx.Presenter.SetBulkAssignAsync(true);
             ctx.CharacterQueue.Enqueue([AnyQueuedParagraph()]);
 
             ctx.CharacterQueue.CancelAll();
@@ -1714,383 +972,6 @@ namespace Read2Me.Tests.State
             ctx.CharacterQueue.Enqueue([AnyQueuedParagraph()]);
 
             Assert.True(selection.BulkMode);
-        }
-
-        // ---------------------------------------------------------------
-        // AssignCharacterToSelectionAsync — the bulk apply path
-        // ---------------------------------------------------------------
-
-        /// <summary>
-        /// Two paragraphs loaded under one expanded chapter, the first of them selected. The reader
-        /// answers the preview with <paramref name="preview"/> and the confirm resolves to
-        /// <paramref name="confirmed"/>.
-        /// </summary>
-        private static async Task<(Context ctx, Paragraph selected, Paragraph unselected)>
-            CreateWithBulkSelectionAsync(BulkAssignPreview preview, bool confirmed = true)
-        {
-            var chapterId = Guid.NewGuid();
-            var partId = Guid.NewGuid();
-            var volumeId = Guid.NewGuid();
-
-            static Paragraph MakeParagraph(Guid chapter) =>
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    ChapterId = chapter,
-                    Items =
-                    [
-                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "a" },
-                        new ParagraphItem { Id = Guid.NewGuid(), ItemType = ParagraphItemType.Speech, Order = "b", CharacterId = ProjectDbContext.NarratorId },
-                    ],
-                };
-
-            var selected = MakeParagraph(chapterId);
-            var unselected = MakeParagraph(chapterId);
-
-            var ctx = Create();
-            ctx.Loader.LoadSnapshotAsync(Folder, Arg.Any<CancellationToken>())
-                .Returns(EmptySnapshot(hasContent: true));
-            ctx.Reader.GetChildrenAsync(Folder, BookNodeLevel.Chapter, chapterId)
-                .Returns(new HierarchyChildren(null, null, [selected, unselected]));
-            ctx.Reader.GetBulkAssignPreviewAsync(Folder, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-                .Returns(preview);
-            ctx.Reader.GetNodeStatusSeedAsync(Folder)
-                .Returns(_ => (IReadOnlyList<ParagraphStatusSeedRow>)Array.Empty<ParagraphStatusSeedRow>());
-
-            StubConfirm(ctx.Dialogs, confirmed);
-
-            await ctx.Presenter.LoadAsync(Folder);
-            await ctx.Presenter.Tree.OnChapterExpandedAsync(new Chapter { Id = chapterId, Order = "a" }, expanded: true);
-
-            ctx.Presenter.Selection.AddParagraph(
-                selected.Id, new ParagraphSelection(volumeId, partId, chapterId));
-
-            return (ctx, selected, unselected);
-        }
-
-        private static void StubConfirm(IDialogService dialogs, bool confirmed)
-        {
-            var dialogRef = Substitute.For<IDialogReference>();
-            dialogRef.Result.Returns(Task.FromResult<DialogResult?>(
-                confirmed ? DialogResult.Ok(true) : DialogResult.Cancel()));
-
-            dialogs.ShowAsync<Read2Me.App.Shared.ConfirmDialog>(
-                    Arg.Any<string>(),
-                    Arg.Any<DialogParameters<Read2Me.App.Shared.ConfirmDialog>>())
-                .Returns(Task.FromResult(dialogRef));
-        }
-
-        private static (string Title, string Message, string ConfirmText) CapturedConfirm(IDialogService dialogs)
-        {
-            var call = dialogs.ReceivedCalls().Single(c => c.GetMethodInfo().Name == nameof(IDialogService.ShowAsync));
-            var args = call.GetArguments();
-            var parameters = (DialogParameters<Read2Me.App.Shared.ConfirmDialog>)args[1]!;
-            return ((string)args[0]!, (string)parameters["Message"]!, (string)parameters["ConfirmText"]!);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_RunsOutcomeClearThenCommandThenSeedThenStampThenNotify()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            var charId = Guid.NewGuid();
-            var log = new List<string>();
-
-            // A stored outcome so ClearOutcome actually raises Changed.
-            var queued = new QueuedParagraph(Folder, selected.Id, "preview", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-            ctx.CharacterQueue.Enqueue([queued]);
-            ctx.CharacterQueue.MarkProcessing(queued);
-            ctx.CharacterQueue.Apply(queued, new Disposition.Failed("boom"));
-
-            ctx.CommandHandler.ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>())
-                .Returns(_ => { log.Add("command"); return (Guid?)null; });
-            ctx.Reader.GetNodeStatusSeedAsync(Folder)
-                .Returns(_ => { log.Add("seed"); return (IReadOnlyList<ParagraphStatusSeedRow>)Array.Empty<ParagraphStatusSeedRow>(); });
-            ctx.CharacterQueue.Changed += () => log.Add("outcome-cleared");
-            ctx.Presenter.StateChanged += () =>
-                log.Add(selected.Items.First().CharacterId == charId ? "notify-after-stamp" : "notify-before-stamp");
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
-
-            Assert.Equal(new[] { "outcome-cleared", "command", "seed", "notify-after-stamp" }, log);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_StampsSelectedLoadedParagraphsOnly()
-        {
-            var (ctx, selected, unselected) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            var charId = Guid.NewGuid();
-            ctx.Reader.GetCharactersAsync(Folder).Returns([new Character { Id = charId, Name = "Zelda" }]);
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
-
-            Assert.Equal(charId, selected.Items.First().CharacterId);
-            Assert.Equal("Zelda", selected.Items.First().Character?.Name);
-            // Narration is never stamped, and a loaded paragraph outside the selection is untouched.
-            Assert.Equal(ProjectDbContext.NarratorId, selected.Items.Last().CharacterId);
-            Assert.Null(unselected.Items.First().CharacterId);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_IssuesOneBulkCommandCarryingTheSelectedIds()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            var charId = Guid.NewGuid();
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphsCharacterCommand>(c =>
-                    c != null && c.CharacterId == charId &&
-                    c.ParagraphIds.Count == 1 && c.ParagraphIds[0] == selected.Id));
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_NullId_ClearsAcrossTheSelection()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            selected.Items.First().CharacterId = Guid.NewGuid();
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, null);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphsCharacterCommand>(c => c != null && c.CharacterId == null));
-            Assert.Null(selected.Items.First().CharacterId);
-
-            var (title, message, confirmText) = CapturedConfirm(ctx.Dialogs);
-            Assert.Equal("Clear speakers in selection", title);
-            Assert.Equal("1 dialog line in 1 paragraph lose their speaker and need attributing again.", message);
-            Assert.Equal("Clear", confirmText);
-            ctx.Snackbar.Received(1).Add(
-                "Cleared speakers on 1 lines in 1 paragraphs.", Severity.Success,
-                Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_NoDialogInSelection_InfoSnackbarNoConfirmNoCommand()
-        {
-            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(0, 0));
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
-
-            ctx.Snackbar.Received(1).Add(
-                "No dialog in the selection — nothing to assign.", Severity.Info,
-                Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
-            Assert.Empty(ctx.Dialogs.ReceivedCalls());
-            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_CancelledConfirm_WritesNothing_AndKeepsSelectionAndBulkMode()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1), confirmed: false);
-            ctx.Presenter.Selection.BulkMode = true;
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
-
-            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
-            Assert.Null(selected.Items.First().CharacterId);
-            Assert.True(ctx.Presenter.Selection.IsParagraphSelected(selected.Id));
-            Assert.True(ctx.Presenter.Selection.BulkMode);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_UnknownCharacterId_RefreshesRosterBeforeStamping()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            Assert.Empty(ctx.Presenter.Characters);
-
-            var charId = Guid.NewGuid();
-            ctx.Reader.GetCharactersAsync(Folder).Returns([new Character { Id = charId, Name = "NewChar" }]);
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
-
-            await ctx.Reader.Received().GetCharactersAsync(Folder);
-            Assert.Equal("NewChar", selected.Items.First().Character?.Name);
-            Assert.Equal("Assign NewChar to selection", CapturedConfirm(ctx.Dialogs).Title);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_IdTheRosterCannotExplain_StillReadsAsAnAssign()
-        {
-            // Defensive: the roster refresh above cannot place the id. The wording must not flip to
-            // the clear verbs, because a character id is still being written.
-            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
-
-            var (title, _, confirmText) = CapturedConfirm(ctx.Dialogs);
-            Assert.Equal("Assign the character to selection", title);
-            Assert.Equal("Assign", confirmText);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_KeepsTheSelection()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
-
-            Assert.True(ctx.Presenter.Selection.IsParagraphSelected(selected.Id));
-            Assert.Equal(1, ctx.Presenter.Selection.SelectedParagraphCount);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_ReSeedsNodeStatusForTheWholeFolder()
-        {
-            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            var vol = Guid.NewGuid(); var part = Guid.NewGuid(); var ch = Guid.NewGuid();
-
-            ctx.Reader.GetNodeStatusSeedAsync(Folder).Returns(
-                new List<ParagraphStatusSeedRow> { MakeSeedRow(Guid.NewGuid(), ch, part, vol, unattributed: 2) });
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, Guid.NewGuid());
-
-            Assert.Equal(1, ctx.NodeStatus.StatusForNode(Folder, ch).AttributionRemaining);
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_ConfirmQuotesTheFigures_AndNamesTheSkippedParagraphs()
-        {
-            // 3 paragraphs selected, 2 of them holding the 5 dialog lines.
-            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(2, 5));
-            // Two more selected paragraphs under a chapter that was never expanded — not loaded, so
-            // they only move the counts.
-            var unloadedChapterId = Guid.NewGuid();
-            ctx.Presenter.Selection.AddParagraph(Guid.NewGuid(), new ParagraphSelection(Guid.NewGuid(), Guid.NewGuid(), unloadedChapterId));
-            ctx.Presenter.Selection.AddParagraph(Guid.NewGuid(), new ParagraphSelection(Guid.NewGuid(), Guid.NewGuid(), unloadedChapterId));
-
-            var charId = Guid.NewGuid();
-            ctx.Reader.GetCharactersAsync(Folder).Returns([new Character { Id = charId, Name = "Zelda" }]);
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
-
-            var (title, message, confirmText) = CapturedConfirm(ctx.Dialogs);
-            Assert.Equal("Assign Zelda to selection", title);
-            Assert.Equal(
-                "Zelda becomes the speaker for 5 dialog lines in 2 paragraphs. Existing speakers are replaced. " +
-                "1 selected paragraph have no dialog and stay unchanged.",
-                message);
-            Assert.Equal("Assign", confirmText);
-            ctx.Snackbar.Received(1).Add(
-                "Assigned Zelda to 5 lines in 2 paragraphs.", Severity.Success,
-                Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
-        }
-
-        [Fact]
-        public async Task AssignCharacterToSelection_NoSkippedParagraphs_OmitsThatSentence()
-        {
-            var (ctx, _, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 4));
-            var charId = Guid.NewGuid();
-            ctx.Reader.GetCharactersAsync(Folder).Returns([new Character { Id = charId, Name = "Zelda" }]);
-
-            await ctx.Presenter.AssignCharacterToSelectionAsync(Folder, charId);
-
-            Assert.Equal(
-                "Zelda becomes the speaker for 4 dialog lines in 1 paragraph. Existing speakers are replaced.",
-                CapturedConfirm(ctx.Dialogs).Message);
-        }
-
-        // ---------------------------------------------------------------
-        // AssignCharacterAsync — the chip front door
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task AssignCharacter_ArmedAndInSelection_ParagraphChip_FansOutAcrossTheSelection()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            ctx.Presenter.Selection.BulkMode = true;
-            var charId = Guid.NewGuid();
-
-            await ctx.Presenter.AssignCharacterAsync(Folder, selected, null, charId);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphsCharacterCommand>(c => c != null && c.CharacterId == charId));
-            await AssertNoSingleAssignAsync(ctx);
-        }
-
-        [Fact]
-        public async Task AssignCharacter_ArmedAndInSelection_SegmentChip_FansOutTheSameWay()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            ctx.Presenter.Selection.BulkMode = true;
-            var charId = Guid.NewGuid();
-
-            await ctx.Presenter.AssignCharacterAsync(Folder, selected, selected.Items.First(), charId);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphsCharacterCommand>(c => c != null && c.CharacterId == charId));
-            await AssertNoSingleAssignAsync(ctx);
-        }
-
-        [Fact]
-        public async Task AssignCharacter_ArmedAndInSelection_NullId_FansOutAsAClear()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            ctx.Presenter.Selection.BulkMode = true;
-
-            await ctx.Presenter.AssignCharacterAsync(Folder, selected, null, null);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphsCharacterCommand>(c => c != null && c.CharacterId == null));
-            await AssertNoSingleAssignAsync(ctx);
-        }
-
-        /// <summary>Neither single-assign leg fired — the pick went out as one bulk command only.</summary>
-        private static async Task AssertNoSingleAssignAsync(Context ctx)
-        {
-            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphCharacterCommand>());
-            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetItemCharacterCommand>());
-        }
-
-        [Fact]
-        public async Task AssignCharacter_ArmedButRowOutsideTheSelection_AssignsSingly()
-        {
-            var (ctx, _, unselected) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            ctx.Presenter.Selection.BulkMode = true;
-            var charId = Guid.NewGuid();
-
-            await ctx.Presenter.AssignCharacterAsync(Folder, unselected, null, charId);
-            await ctx.Presenter.AssignCharacterAsync(Folder, unselected, unselected.Items.First(), charId);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphCharacterCommand>(c =>
-                    c != null && c.ParagraphId == unselected.Id && c.CharacterId == charId));
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetItemCharacterCommand>(c =>
-                    c != null && c.ItemId == unselected.Items.First().Id && c.CharacterId == charId));
-            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
-        }
-
-        [Fact]
-        public async Task AssignCharacter_Disarmed_AssignsSingly_BothChipKinds()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-            var charId = Guid.NewGuid();
-
-            Assert.False(ctx.Presenter.Selection.BulkMode);
-
-            await ctx.Presenter.AssignCharacterAsync(Folder, selected, null, charId);
-            await ctx.Presenter.AssignCharacterAsync(Folder, selected, selected.Items.First(), charId);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphCharacterCommand>(c =>
-                    c != null && c.ParagraphId == selected.Id && c.CharacterId == charId));
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetItemCharacterCommand>(c =>
-                    c != null && c.ItemId == selected.Items.First().Id && c.CharacterId == charId));
-            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
-        }
-
-        [Fact]
-        public async Task AssignCharacter_Disarmed_NullId_ClearsThatRowOnly()
-        {
-            var (ctx, selected, _) = await CreateWithBulkSelectionAsync(new BulkAssignPreview(1, 1));
-
-            await ctx.Presenter.AssignCharacterAsync(Folder, selected, null, null);
-
-            await ctx.CommandHandler.Received(1).ExecuteAsync(
-                Arg.Is<SetParagraphCharacterCommand>(c => c != null && c.CharacterId == null));
-            await ctx.CommandHandler.DidNotReceive().ExecuteAsync(Arg.Any<SetParagraphsCharacterCommand>());
         }
     }
 }

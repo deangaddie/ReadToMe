@@ -38,6 +38,23 @@ namespace Read2Me.Services
                 ctx.Dispose();
         }
 
+        /// <summary>
+        /// Drops what the cached context has tracked for a project, so the next read builds its
+        /// entities from the database instead of returning the ones it materialised before someone
+        /// else's write.
+        /// <para>
+        /// The gentler half of <see cref="Evict"/>, for a reader that did not do the writing: it
+        /// leaves the context alive. Evicting would dispose a <see cref="ProjectDbContext"/> another
+        /// part of the same scope may be holding, which is not something a reader converging in the
+        /// background is entitled to do.
+        /// </para>
+        /// </summary>
+        public void Refresh(ProjectFolderId folderId)
+        {
+            if (_contextCache.TryGetValue(folderId, out var ctx))
+                ctx.ChangeTracker.Clear();
+        }
+
         public async ValueTask DisposeAsync()
         {
             foreach (var ctx in _contextCache.Values)

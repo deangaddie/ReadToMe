@@ -46,6 +46,26 @@ else
 {
     @* Bottom padding reserves space so the fixed selection footer never hides content. *@
     <MudStack Spacing="3" Class="pa-3" Style="@($"padding-bottom:{(Presenter.SelectedParagraphCount > 0 || Presenter.SelectedAudioItemCount > 0 ? "72px" : "0")};")">
+        @* The Stale Book View projection of ADR 0007: what is below is the last view we could vouch
+           for, so it stays readable, and changing the book waits until a refresh succeeds. *@
+        @if (Presenter.IsStale)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-0"
+                      Icon="@Icons.Material.Filled.SyncProblem">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudText Typo="Typo.body2">
+                        This Book View is out of date — it could not be refreshed after the last change.
+                        Changes are paused until it reloads.
+                    </MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               Disabled="Presenter.IsBusy"
+                               OnClick="@(() => Presenter.RetryRebuildAsync())">
+                        Refresh
+                    </MudButton>
+                </MudStack>
+            </MudAlert>
+        }
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="1">
             @{
                 var audioRemaining = NodeStatus.AudioRemainingForFolder(_folderId);
@@ -64,7 +84,7 @@ else
                 <MudButton Variant="Variant.Outlined"
                            Size="Size.Small"
                            StartIcon="@Icons.Material.Filled.AutoFixHigh"
-                           Disabled="Presenter.IsBusy"
+                           Disabled="@(!Presenter.CanMutate)"
                            OnClick="OpenAiEditDialogAsync">
                     Edit with AI
                 </MudButton>
@@ -96,7 +116,7 @@ else
             {
                 <MudText Color="Color.Error" Typo="Typo.caption">@Presenter.Error</MudText>
             }
-            <MudToggleGroup T="BookViewMode" Value="Presenter.ViewMode" ValueChanged="@(v => Presenter.ViewMode = v)"
+            <MudToggleGroup T="BookViewMode" Value="Presenter.ViewMode" ValueChanged="@(v => Presenter.SetViewModeAsync(v))"
                             Color="Color.Primary" Size="Size.Small" CheckMark="false" SelectionMode="SelectionMode.SingleSelection">
                 <MudToggleItem Value="BookViewMode.Combined">
                     <MudIcon Icon="@Icons.Material.Filled.ViewStream" Size="Size.Small" Class="mr-1" /> Combined
@@ -118,42 +138,42 @@ else
             </MudMessageBox>
             <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                     <MudMenuItem Icon="@Icons.Material.Filled.Refresh" IconColor="Color.Warning"
-                                 OnClick="HandleRereadClickAsync" Disabled="Presenter.IsBusy">
+                                 OnClick="HandleRereadClickAsync" Disabled="@(!Presenter.CanMutate)">
                         Reread Book
                     </MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.EditNote" IconColor="Color.Info"
-                                 OnClick="@(() => Presenter.ManualRereadAsync(_folderId))" Disabled="Presenter.IsBusy">
+                                 OnClick="@(() => Presenter.ManualRereadAsync(_folderId))" Disabled="@(!Presenter.CanMutate)">
                         Manual Reread Book
                     </MudMenuItem>
                     <MudDivider />
                     <MudMenuItem Icon="@Icons.Material.Filled.Title" IconColor="Color.Secondary"
-                                 OnClick="@(() => Presenter.AddBookTitleAsync(_folderId))" Disabled="Presenter.IsBusy">
+                                 OnClick="@(() => Presenter.AddBookTitleAsync(_folderId))" Disabled="@(!Presenter.CanMutate)">
                         Add book title
                     </MudMenuItem>
                     @if (Presenter.Volumes.Count > 1)
                     {
                         <MudMenuItem Icon="@Icons.Material.Filled.LibraryBooks" IconColor="Color.Secondary"
-                                     OnClick="@(() => Presenter.AddVolumeTitlesAsync(_folderId))" Disabled="Presenter.IsBusy">
+                                     OnClick="@(() => Presenter.AddVolumeTitlesAsync(_folderId))" Disabled="@(!Presenter.CanMutate)">
                             Add volume titles
                         </MudMenuItem>
                     }
                     @if (Presenter.TotalParts > Presenter.Volumes.Count)
                     {
                         <MudMenuItem Icon="@Icons.Material.Filled.BookmarkBorder" IconColor="Color.Secondary"
-                                     OnClick="@(() => Presenter.AddPartTitlesAsync(_folderId))" Disabled="Presenter.IsBusy">
+                                     OnClick="@(() => Presenter.AddPartTitlesAsync(_folderId))" Disabled="@(!Presenter.CanMutate)">
                             Add part titles
                         </MudMenuItem>
                     }
                     @if (Presenter.TotalChapters > Presenter.TotalParts)
                     {
                         <MudMenuItem Icon="@Icons.Material.Filled.MenuBook" IconColor="Color.Secondary"
-                                     OnClick="@(() => Presenter.AddChapterTitlesAsync(_folderId))" Disabled="Presenter.IsBusy">
+                                     OnClick="@(() => Presenter.AddChapterTitlesAsync(_folderId))" Disabled="@(!Presenter.CanMutate)">
                             Add chapter titles
                         </MudMenuItem>
                     }
                     <MudDivider />
                     <MudMenuItem Icon="@Icons.Material.Filled.Pause" IconColor="Color.Secondary"
-                                 OnClick="@(() => Presenter.AddPausesAsync(_folderId))" Disabled="Presenter.IsBusy">
+                                 OnClick="@(() => Presenter.AddPausesAsync(_folderId))" Disabled="@(!Presenter.CanMutate)">
                         Add pauses
                     </MudMenuItem>
                 </MudMenu>
@@ -165,10 +185,7 @@ else
                          FolderId="@_folderId"
                          IsSingleVolume="true"
                          IsFirst="true"
-                         IsLast="true"
-                         OnChanged="StateHasChanged"
-                         OnMerged="MergeAndResetAsync"
-                         OnSplit="HandleSplitAsync" />
+                         IsLast="true" />
         }
         else
         {
@@ -181,12 +198,7 @@ else
                                  FolderId="@_folderId"
                                  IsSingleVolume="false"
                                  IsFirst="@(idx == 0)"
-                                 IsLast="@(idx == Presenter.Volumes.Count - 1)"
-                                 PreviousSiblingId="@(idx > 0 ? Presenter.Volumes[idx - 1].Id : null)"
-                                 NextSiblingId="@(idx < Presenter.Volumes.Count - 1 ? Presenter.Volumes[idx + 1].Id : null)"
-                                 OnChanged="StateHasChanged"
-                                 OnMerged="MergeAndResetAsync"
-                                 OnSplit="HandleSplitAsync" />
+                                 IsLast="@(idx == Presenter.Volumes.Count - 1)" />
                 }
             </MudExpansionPanels>
         }
@@ -239,20 +251,10 @@ else
             CloseButton = false,
             BackdropClick = false,
         };
-        var dialog = await DialogService.ShowAsync<BookEditDialog>("Edit with AI", parameters, options);
-        var result = await dialog.Result;
-        if (result?.Canceled == false)
-            await Presenter.ResetAndLoadAsync(_folderId);
+        // No reload afterwards: the dialog commits through BookMutations, so the Book View behind it
+        // is coherent before it closes (ADR 0007).
+        await DialogService.ShowAsync<BookEditDialog>("Edit with AI", parameters, options);
     }
-
-    async Task MergeAndResetAsync((Guid survivorId, Guid deletedId) merge)
-    {
-        Presenter.Tree.FixMergeExpansion(merge.survivorId, merge.deletedId);
-        await Presenter.ResetAndLoadAsync(_folderId);
-    }
-
-    Task HandleSplitAsync(BookSplit s) =>
-        Presenter.SplitAndReloadAsync(_folderId, s.Command, s.Level, s.SourceParentId);
 
     async Task ReadBookAsync()
     {

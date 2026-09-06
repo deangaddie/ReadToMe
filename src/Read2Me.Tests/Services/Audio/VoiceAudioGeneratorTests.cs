@@ -5,6 +5,8 @@ using Read2Me.AppData.Entities;
 using Read2Me.Core.Audio;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
@@ -26,19 +28,42 @@ namespace Read2Me.Tests.Services.Audio
             public IVoiceDesignClient Resolve(VoiceDesignServiceType type) => client;
         }
 
-        private class FakeAudioPipeline : IAudioPipeline
+        /// <summary>
+        /// Stands in for the write adapter: it records what the generator handed it, which is the
+        /// only thing this test is about. Whether that reaches the Book — and what happens to the
+        /// file when it does not — is <see cref="VoiceAudioWriterTests"/>.
+        /// </summary>
+        private sealed class RecordingVoiceAudioWriter : IVoiceAudioWriter
         {
-            public Task<string> StoreAsync(AudioStoreRequest request, CancellationToken ct = default)
+            public AudioStoreRequest? Request { get; private set; }
+            public string? Transcript { get; private set; }
+            public string? DesignPrompt { get; private set; }
+            public int Calls { get; private set; }
+
+            public Task<string> RecordUploadedAsync(AudioStoreRequest request, CancellationToken ct = default) =>
+                throw new NotSupportedException("The generator only ever records a generated take.");
+
+            public Task<BookMutationOutcome> DeleteVoiceAsync(
+                ProjectFolderId folder, Guid voiceId, CancellationToken ct = default) =>
+                throw new NotSupportedException("The generator only ever records a generated take.");
+
+            public Task<BookMutationOutcome> SetVoiceSourceAsync(
+                ProjectFolderId folder, Guid voiceId, bool isGenerated, CancellationToken ct = default) =>
+                throw new NotSupportedException("The generator only ever records a generated take.");
+
+            public Task<string> RecordGeneratedAsync(
+                AudioStoreRequest request, string transcript, string designPrompt, CancellationToken ct = default)
             {
+                Calls++;
+                Request = request;
+                Transcript = transcript;
+                DesignPrompt = designPrompt;
                 return Task.FromResult($"voices/{request.CharacterId}/{request.VoiceId}-voice.wav");
             }
-
-            public Task<string> StoreParagraphAudioAsync(ProjectFolderId folderId, Guid paragraphItemId, Stream source, CancellationToken ct = default)
-                => Task.FromResult($"audio/{paragraphItemId}.wav");
         }
 
         [Fact]
-        public async Task GenerateAsync_SucceedsAndCallsCommandHandler()
+        public async Task GenerateAsync_SucceedsAndRecordsTheTake()
         {
             // Setup
             var dbOptions = new DbContextOptionsBuilder<Read2MeDbContext>()
@@ -56,10 +81,9 @@ namespace Read2Me.Tests.Services.Audio
             var settings = new VoiceDesignSettingsService(dbFactory, NullLogger<VoiceDesignSettingsService>.Instance);
             var client = new FakeVoiceDesignClient();
             var resolver = new FakeClientResolver(client);
-            var pipeline = new FakeAudioPipeline();
-            var commandHandler = new FakeCommandHandler();
+            var voiceAudio = new RecordingVoiceAudioWriter();
 
-            var generator = new VoiceAudioGenerator(settings, resolver, pipeline, commandHandler);
+            var generator = new VoiceAudioGenerator(settings, resolver, voiceAudio);
 
             var request = new VoiceGenerationRequest
             {
@@ -77,11 +101,11 @@ namespace Read2Me.Tests.Services.Audio
             // Assert
             Assert.True(result.IsSuccess);
             Assert.NotNull(result.AudioFileName);
-            Assert.Single(commandHandler.ExecutedCommands);
-            var cmd = Assert.IsType<SetVoiceGeneratedCommand>(commandHandler.ExecutedCommands[0]);
-            Assert.Equal(request.VoiceId, cmd.VoiceId);
-            Assert.Equal(result.AudioFileName, cmd.AudioFileName);
-            Assert.Equal("Calm voice", cmd.DesignPrompt);
+            Assert.Equal(1, voiceAudio.Calls);
+            Assert.Equal(request.VoiceId, voiceAudio.Request!.VoiceId);
+            Assert.Equal("Calm voice", voiceAudio.DesignPrompt);
+            // The take speaks the sample sentence, and that is what a cloning TTS is handed with it.
+            Assert.Equal(result.Transcript, voiceAudio.Transcript);
         }
 
         private class TestDbContextFactory<T>(DbContextOptions<T> options) : IDbContextFactory<T> where T : DbContext
@@ -89,14 +113,5 @@ namespace Read2Me.Tests.Services.Audio
             public T CreateDbContext() => (T)Activator.CreateInstance(typeof(T), options)!;
         }
 
-        private class FakeCommandHandler : IBookCommandHandler
-        {
-            public System.Collections.Generic.List<BookCommand> ExecutedCommands { get; } = [];
-            public Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
-            {
-                ExecutedCommands.Add(command);
-                return Task.FromResult<Guid?>(null);
-            }
-        }
     }
 }

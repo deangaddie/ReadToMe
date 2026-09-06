@@ -14,6 +14,7 @@ using Read2Me.Services;
 using Read2Me.Services.Commands;
 using Read2Me.Services.Commands.Handlers;
 using Read2Me.Services.IO;
+using Read2Me.Services.Mutations;
 using Xunit;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
@@ -37,6 +38,7 @@ namespace Read2Me.Tests.Services
 
         public async ValueTask DisposeAsync()
         {
+            if (_services is not null) await _services.DisposeAsync();
             await _session.DisposeAsync();
             if (Directory.Exists(_tempDir))
                 Directory.Delete(_tempDir, recursive: true);
@@ -97,38 +99,38 @@ namespace Read2Me.Tests.Services
             Assert.NotSame(first, second);
         }
 
-        // Regression: adding/deleting a voice through BookCommandHandler must be visible to a
+        // Regression: adding/deleting a voice through BookMutations must be visible to a
         // follow-up tracked read on the same session. The session caches one long-lived tracking
         // DbContext per folder; without eviction after a write, the tracker returns stale entities
-        // (a deleted voice still counted in Character.Voices — DeleteVoiceHandler uses ExecuteDelete
+        // (a deleted voice still counted in Character.Voices — the delete mutation uses ExecuteDelete
         // which bypasses the tracker). This drove the "voice chip doesn't update until you navigate
         // away and back" bug.
 
         [Fact]
-        public async Task DeleteVoiceCommand_ThenTrackedRead_ReflectsDeletion()
+        public async Task DeleteVoiceMutation_ThenTrackedRead_ReflectsDeletion()
         {
             await SeedProjectDbAsync();
             var (characterId, voiceIds) = await SeedCharacterWithVoicesAsync(count: 2);
-            var handler = BuildCommandHandler();
+            var mutations = BuildMutations();
 
             // Load into the cached tracking context first (this is what the UI does before deleting).
             Assert.Equal(2, await ReadTrackedVoiceCountAsync(characterId));
 
-            await handler.ExecuteAsync(new DeleteVoiceCommand(_folder, voiceIds[0]));
+            await mutations.CommitAsync(new DeleteVoiceMutation(_folder, voiceIds[0]));
 
             Assert.Equal(1, await ReadTrackedVoiceCountAsync(characterId));
         }
 
         [Fact]
-        public async Task CreateVoiceCommand_ThenTrackedRead_ReflectsAddition()
+        public async Task CreateVoiceMutation_ThenTrackedRead_ReflectsAddition()
         {
             await SeedProjectDbAsync();
             var (characterId, _) = await SeedCharacterWithVoicesAsync(count: 1);
-            var handler = BuildCommandHandler();
+            var mutations = BuildMutations();
 
             Assert.Equal(1, await ReadTrackedVoiceCountAsync(characterId));
 
-            await handler.ExecuteAsync(new CreateVoiceCommand(_folder, characterId, "Second"));
+            await mutations.CommitAsync(new CreateVoiceMutation(_folder, characterId, "Second"));
 
             Assert.Equal(2, await ReadTrackedVoiceCountAsync(characterId));
         }
@@ -167,17 +169,23 @@ namespace Read2Me.Tests.Services
             return character.Voices.Count;
         }
 
-        private BookCommandHandler BuildCommandHandler()
+        /// <summary>
+        /// The real write-side wiring, sharing this test's <see cref="ProjectDbSession"/> so the
+        /// eviction the write side performs is the one the follow-up tracked read sees.
+        /// </summary>
+        private BookMutations BuildMutations()
         {
             var services = new ServiceCollection();
-            services.AddSingleton(_session);
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = _tempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             services.AddSingleton(_fs);
-            services.AddSingleton<ICommandHandler<CreateVoiceCommand>>(new CreateVoiceHandler(_session));
-            services.AddSingleton<ICommandHandler<DeleteVoiceCommand>>(
-                new DeleteVoiceHandler(_session, _fs, new Read2Me.Services.Audio.VoiceOriginalStore(_fs)));
-            var sp = services.BuildServiceProvider();
-            return new BookCommandHandler(sp, _session);
+            services.AddSingleton(_session);
+            _services = services.BuildServiceProvider();
+            return _services.GetRequiredService<BookMutations>();
         }
+
+        private ServiceProvider? _services;
 
         [Fact]
         public void BookReadingService_DoesNotConstructContextsOutsideSession()

@@ -24,6 +24,7 @@ namespace Read2Me.Tests.Fakes
         public virtual Task<List<Part>> GetPartsAsync(ProjectFolderId folderId, Guid volumeId) => Task.FromResult(new List<Part>());
         public virtual Task<List<Chapter>> GetChaptersAsync(ProjectFolderId folderId, Guid partId) => Task.FromResult(new List<Chapter>());
         public virtual Task<List<Paragraph>> GetChapterParagraphsAsync(ProjectFolderId folderId, Guid chapterId) => Task.FromResult(new List<Paragraph>());
+        public virtual Task<List<Paragraph>> GetParagraphsAsync(ProjectFolderId folderId, IReadOnlyCollection<Guid> paragraphIds) => Task.FromResult(new List<Paragraph>());
         public virtual Task<HierarchyChildren> GetChildrenAsync(ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId) =>
             Task.FromResult(new HierarchyChildren(null, null, null));
         public virtual Task<List<Character>> GetCharactersAsync(ProjectFolderId folderId) => Task.FromResult(new List<Character>());

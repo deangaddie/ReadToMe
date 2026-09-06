@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using MudBlazor;
 using Read2Me.App.Shared;
+using Read2Me.App.State.Projection;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
@@ -11,244 +12,405 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.UseCases;
-using Read2Me.Services.Voice;
 
 namespace Read2Me.App.State
 {
+    /// <summary>
+    /// The MudBlazor Book View's adapter over <see cref="BookViewProjection"/> (ADR 0007). Everything
+    /// the tree renders is read straight off the latest published snapshot, and every transient
+    /// gesture is forwarded as a <see cref="BookViewIntent"/> — so the page owns no second copy of
+    /// Book View state and no rules of its own about how that state moves.
+    /// <para>
+    /// What is still the adapter's own: the busy and error flags of a running gesture, the seeding of
+    /// the two singletons that mix persisted counts with live queue progress, and the dialogs and
+    /// snackbars a typed outcome turns into. It never receives <see cref="BookMutations"/> — every
+    /// write goes through the projection, which is what makes one reconciliation rule the only one.
+    /// </para>
+    /// </summary>
     public class BookHierarchyPresenter(
         IProjectReader reader,
-        IBookProjectLoader loader,
-        IBookCommandHandler commandHandler,
+        BookViewProjection projection,
+        CharacterResolver characterRoster,
         BookUseCases bookUseCases,
-        BookTreeState treeState,
         BookSelectionState selectionState,
         AudioItemSelectionState audioSelectionState,
         IDialogService dialogService,
         ISnackbar snackbar,
         CharacterQueueService characterQueue,
-        AudioQueueService audioQueue,
         AudioReviewService audioReviews,
-        NodeStatusService nodeStatus,
-        IVoiceResolver voiceResolver,
-        ISelectionCoordinator selectionCoordinator,
-        EventBroadcaster<ParagraphItemsChanged> paragraphItemsChanged) : IDisposable
+        NodeStatusService nodeStatus) : IDisposable
     {
         public bool IsLoading { get; private set; }
-        public bool HasContent { get; private set; }
         public bool IsBusy { get; private set; }
-
-        private BookViewMode _viewMode = BookViewMode.Combined;
-        public BookViewMode ViewMode
-        {
-            get => _viewMode;
-            set
-            {
-                if (_viewMode == value) return;
-                _viewMode = value;
-                Selection?.Clear();
-                AudioSelection?.Clear();
-                // Voice rules can be edited on another tab without a reload; clear
-                // the preview cache on (re)entry so it re-resolves against the DB.
-                if (value == BookViewMode.SplitAudio)
-                    InvalidateVoicePreview();
-                NotifyStateChanged();
-            }
-        }
-
-        public bool SplitView => _viewMode != BookViewMode.Combined;
-
         public bool ConfirmReread { get; private set; }
-        public string? Filename { get; private set; }
         public string? Error { get; private set; }
-        public IReadOnlyList<Volume> Volumes { get; private set; } = [];
-        public List<Character> Characters { get; private set; } = [];
-        public int TotalParts { get; private set; }
-        public int TotalChapters { get; private set; }
-        public PerFolderState Tree { get; private set; } = null!;
-        public FolderSelection Selection { get; private set; } = null!;
-        public AudioItemSelection AudioSelection { get; private set; } = null!;
 
-        public Guid? PlayingAudioItemId { get; private set; }
-        public event Action? PlayingItemChanged;
+        public event Action? StateChanged;
 
-        public void TogglePlayingAudioItem(Guid itemId)
-        {
-            PlayingAudioItemId = PlayingAudioItemId == itemId ? null : itemId;
-            PlayingItemChanged?.Invoke();
-        }
+        // ---------------------------------------------------------------
+        // The published snapshot, as the tree reads it
+        // ---------------------------------------------------------------
 
-        private HashSet<Guid> _selectableNodes = [];
-        private IReadOnlyDictionary<Guid, int> _nodeCounts = new Dictionary<Guid, int>();
-        private IReadOnlyDictionary<Guid, int> _audioNodeCounts = new Dictionary<Guid, int>();
+        private BookViewSnapshot? Snapshot => projection.Snapshot;
 
-        public bool NarratorOnlyMode { get; private set; }
+        public bool HasContent => Snapshot?.HasContent ?? false;
+        public string? Filename => Snapshot?.Filename;
+        public IReadOnlyList<Volume> Volumes => Snapshot?.Volumes ?? [];
+        public IReadOnlyList<Character> Characters => Snapshot?.Characters ?? [];
+        public int TotalParts => Snapshot?.TotalParts ?? 0;
+        public int TotalChapters => Snapshot?.TotalChapters ?? 0;
+        public bool NarratorOnlyMode => Snapshot?.NarratorOnlyMode ?? false;
 
         /// <summary>
         /// Who narrates this book — read-time projection of the narrator link (ADR-0004). The
         /// character picker names it on the pinned narrator entry so "Narrator (Alice)" is visibly
         /// a different choice from "Alice".
         /// </summary>
-        public NarratorIdentity Narrator { get; private set; } = NarratorIdentity.Unlinked;
+        public NarratorIdentity Narrator => Snapshot?.Narrator ?? NarratorIdentity.Unlinked;
 
-        private readonly Dictionary<Guid, string?> _resolvedVoiceNames = new();
-        private NarratorIdentity _voicePreviewNarrator = NarratorIdentity.Unlinked;
-        private Task<NarratorIdentity>? _voicePreviewNarratorTask;
+        /// <summary>
+        /// Whether the Book View is a Stale Book View projection (ADR 0007) — still showing the last
+        /// coherent snapshot, but no longer able to vouch for it. The page turns this into a banner
+        /// with the retry that clears it.
+        /// </summary>
+        public bool IsStale => Snapshot?.Health == BookViewHealth.Stale;
 
-        public string? ResolvedVoiceName(Guid itemId) =>
-            _resolvedVoiceNames.TryGetValue(itemId, out var name) ? name : null;
+        /// <summary>
+        /// Whether a Book-level gesture is worth offering. The projection refuses every mutation
+        /// while stale anyway; this greys out the deliberate ones — the Book menu, the node menus —
+        /// so the reader is not invited to reach for them. The incidental ones, a speaker chip
+        /// above all, stay clickable and answer with the refusal, because greying out every chip in
+        /// the tree would read as the Book itself being broken rather than the view of it.
+        /// </summary>
+        public bool CanMutate => !IsBusy && !IsStale;
 
-        public NarratorIdentity VoicePreviewNarrator => _voicePreviewNarrator;
+        public BookViewMode ViewMode => Snapshot?.ViewMode ?? BookViewMode.Combined;
+        public bool SplitView => ViewMode != BookViewMode.Combined;
+        public Guid? PlayingAudioItemId => Snapshot?.PlayingAudioItemId;
 
-        // Resolves voice names only for item ids not already cached, then merges
-        // (does not replace). Cheap no-op once an item is resolved, so it is safe
-        // to call from render — toggles no longer trigger resolver work.
-        public async Task EnsureVoicePreviewAsync(ProjectFolderId folderId, IEnumerable<Guid> itemIds)
+        /// <summary>The Voice the Audio Queue would use for an item, resolved with the snapshot.</summary>
+        public string? ResolvedVoiceName(Guid itemId) => Snapshot?.ResolvedVoiceName(itemId);
+
+        public bool IsNodeSelectable(Guid nodeId) => Snapshot?.SelectableNodeIds.Contains(nodeId) ?? false;
+
+        public bool IsNodeAudioSelectable(Guid nodeId) =>
+            Snapshot is { } s && s.AudioNodeCounts.TryGetValue(nodeId, out var count) && count > 0;
+
+        /// <summary>
+        /// The live Folder Selection, whose roll-up denominators are the ones the last snapshot
+        /// published. Rows read it; only an intent moves it.
+        /// </summary>
+        public FolderSelection Selection { get; private set; } = null!;
+
+        /// <summary>The live Audio Item Selection, on the same terms as <see cref="Selection"/>.</summary>
+        public AudioItemSelection AudioSelection { get; private set; } = null!;
+
+        public ProjectFolderId? CurrentFolder => projection.Folder;
+
+        public int SelectedParagraphCount => Selection?.SelectedParagraphCount ?? 0;
+        public int SelectedAudioItemCount => AudioSelection?.SelectedItemCount ?? 0;
+
+        // ---------------------------------------------------------------
+        // Hierarchy rendering — branches and expansion, both from the snapshot
+        // ---------------------------------------------------------------
+
+        public bool IsExpanded(BookNodeLevel level, Guid nodeId) =>
+            Snapshot?.Expansion.At(level).Contains(nodeId) ?? false;
+
+        public IReadOnlyList<Part>? Parts(Guid volumeId) => Branch(Snapshot?.Branches.PartsByVolume, volumeId);
+        public IReadOnlyList<Chapter>? Chapters(Guid partId) => Branch(Snapshot?.Branches.ChaptersByPart, partId);
+        public IReadOnlyList<Paragraph>? Paragraphs(Guid chapterId) => Branch(Snapshot?.Branches.ParagraphsByChapter, chapterId);
+
+        private static IReadOnlyList<T>? Branch<T>(IReadOnlyDictionary<Guid, IReadOnlyList<T>>? branches, Guid id) =>
+            branches is not null && branches.TryGetValue(id, out var loaded) ? loaded : null;
+
+        /// <summary>
+        /// Whether a node is waiting on the build its expand gesture started. Liveness of a gesture in
+        /// flight, not Book View state: it exists only between the click and the snapshot that answers
+        /// it, which is exactly the window no snapshot can describe.
+        /// </summary>
+        public bool IsExpanding(Guid nodeId) => _expanding.Contains(nodeId);
+
+        private readonly HashSet<Guid> _expanding = [];
+
+        public async Task SetNodeExpandedAsync(BookNodeLevel level, Guid nodeId, bool expanded)
         {
-            var narratorTask = _voicePreviewNarratorTask ??= reader.GetNarratorAsync(folderId);
-            var missing = itemIds.Where(id => !_resolvedVoiceNames.ContainsKey(id)).ToList();
-            if (missing.Count > 0)
+            if (expanded)
             {
-                var names = await voiceResolver.ResolveNamesAsync(folderId, missing);
-                foreach (var (id, name) in names)
-                    _resolvedVoiceNames[id] = name;
+                _expanding.Add(nodeId);
+                NotifyStateChanged();
             }
 
-            _voicePreviewNarrator = await narratorTask;
+            try
+            {
+                await projection.ApplyAsync(new BookViewIntent.SetNodeExpanded(level, nodeId, expanded));
+            }
+            finally
+            {
+                // The snapshot that answers the gesture is published while the spinner is still up,
+                // so taking it down needs a repaint of its own — including when the intent changed
+                // nothing and published no snapshot at all.
+                if (_expanding.Remove(nodeId))
+                    NotifyStateChanged();
+            }
         }
 
-        // Drops cached voice previews so the next render re-resolves. Call when
-        // anything affecting voice selection changes (voice rules, attribution,
-        // narrator-only mode, reload).
-        public void InvalidateVoicePreview()
-        {
-            _resolvedVoiceNames.Clear();
-            _voicePreviewNarrator = NarratorIdentity.Unlinked;
-            _voicePreviewNarratorTask = null;
-        }
+        // ---------------------------------------------------------------
+        // Transient gestures — every one of them an intent
+        // ---------------------------------------------------------------
 
-        public bool IsNodeSelectable(Guid nodeId) => _selectableNodes.Contains(nodeId);
-        public bool IsNodeAudioSelectable(Guid nodeId) => _audioNodeCounts.ContainsKey(nodeId) && _audioNodeCounts[nodeId] > 0;
+        public Task SetViewModeAsync(BookViewMode mode) =>
+            projection.ApplyAsync(new BookViewIntent.SetViewMode(mode));
 
-        private ProjectFolderId? _lastFolder;
-        private bool _audioQueueSubscribed;
-        private bool _itemsChangedSubscribed;
+        public Task TogglePlayingAudioItemAsync(Guid itemId) =>
+            projection.ApplyAsync(new BookViewIntent.TogglePlayback(itemId));
+
+        public Task ToggleParagraphAsync(Guid paragraphId, ParagraphSelection ancestry, bool on) =>
+            projection.ApplyAsync(new BookViewIntent.SetParagraphSelected(paragraphId, ancestry, on));
+
+        public Task SetNodeAsync(BookNodeLevel level, Guid nodeId, bool on, bool unprocessedOnly = false) =>
+            projection.ApplyAsync(new BookViewIntent.SetNodeParagraphsSelected(level, nodeId, on, unprocessedOnly));
+
+        public Task SetBulkAssignAsync(bool armed) =>
+            projection.ApplyAsync(new BookViewIntent.SetBulkAssign(armed));
+
+        public Task ToggleAudioItemAsync(AudioItemRef item, bool on) =>
+            projection.ApplyAsync(new BookViewIntent.SetAudioItemSelected(item, on));
+
+        public Task SetAudioNodeAsync(BookNodeLevel level, Guid nodeId, bool on, bool needsAudioOnly = false) =>
+            projection.ApplyAsync(new BookViewIntent.SetNodeAudioItemsSelected(level, nodeId, on, needsAudioOnly));
+
+        public Task AddSelectionToCharacterQueueAsync() =>
+            projection.ApplyAsync(new BookViewIntent.QueueSelectedParagraphs());
+
+        public Task AddSelectionToAudioQueueAsync() =>
+            projection.ApplyAsync(new BookViewIntent.QueueSelectedAudioItems());
+
+        // ---------------------------------------------------------------
+        // Opening
+        // ---------------------------------------------------------------
+
         private bool _characterQueueSubscribed;
-
-        public event Action? StateChanged;
+        private bool _snapshotSubscribed;
 
         public async Task LoadAsync(ProjectFolderId folderId)
         {
             IsLoading = true;
-
-            if (!_audioQueueSubscribed)
-            {
-                audioQueue.AudioFileAssigned += OnAudioFileAssigned;
-                _audioQueueSubscribed = true;
-            }
-
-            if (!_itemsChangedSubscribed)
-            {
-                paragraphItemsChanged.Event += OnParagraphItemsChanged;
-                _itemsChangedSubscribed = true;
-            }
-
-            if (!_characterQueueSubscribed)
-            {
-                characterQueue.Changed += DisarmBulkIfQueueBusy;
-                _characterQueueSubscribed = true;
-            }
-
-            if (_lastFolder.HasValue && _lastFolder.Value.Value != folderId.Value)
-            {
-                selectionState.Reset(_lastFolder.Value);
-                audioSelectionState.Reset(_lastFolder.Value);
-            }
-
-            _lastFolder = folderId;
-            selectionCoordinator.SetCurrentFolder(folderId);
-            Tree = treeState.For(folderId);
-            Tree.Changed -= NotifyStateChanged;
-            Tree.Changed += NotifyStateChanged;
-            Selection = selectionState.For(folderId);
-            AudioSelection = audioSelectionState.For(folderId);
+            Subscribe();
             ConfirmReread = false;
 
-            var snapshot = await loader.LoadSnapshotAsync(folderId);
-            Filename = snapshot.Filename;
-            HasContent = snapshot.HasContent;
-            Volumes = snapshot.Volumes;
-            Characters = snapshot.Characters;
-            TotalParts = snapshot.TotalParts;
-            TotalChapters = snapshot.TotalChapters;
-            NarratorOnlyMode = snapshot.NarratorOnlyMode;
-            Narrator = snapshot.Narrator ?? NarratorIdentity.Unlinked;
-            _selectableNodes = snapshot.SelectableNodeIds;
-            _nodeCounts = snapshot.NodeCharacterParagraphCounts;
-            Selection.SetCounts(_nodeCounts);
-            _audioNodeCounts = snapshot.AudioNodeCounts;
-            AudioSelection.SetCounts(_audioNodeCounts);
-            InvalidateVoicePreview();
+            var snapshot = await projection.OpenAsync(folderId);
 
-            // Load audio-review flags from prior sessions so they surface on project open.
-            if (snapshot.HasContent)
-                audioReviews.Hydrate(folderId, snapshot.AudioReviews);
-
-            nodeStatus.Seed(folderId, snapshot.NodeStatusSeed);
-
-            if (Volumes.Count == 1)
-                Tree.ExpandedVolumeIds.Add(Volumes[0].Id);
-
-            await Tree.RestoreExpandedAsync();
+            Selection = selectionState.For(folderId);
+            AudioSelection = audioSelectionState.For(folderId);
+            SeedDerivedServices(folderId, snapshot);
 
             IsLoading = false;
             NotifyStateChanged();
         }
 
-        public async Task ResetAndLoadAsync(ProjectFolderId folderId)
+        /// <summary>
+        /// Hands the snapshot's persisted half to the two singletons that combine it with live queue
+        /// progress. Neither is revision-stamped state, which is why they are seeded from a snapshot
+        /// rather than carried on one.
+        /// </summary>
+        private void SeedDerivedServices(ProjectFolderId folderId, BookViewSnapshot snapshot)
         {
-            selectionState.Reset(folderId);
-            audioSelectionState.Reset(folderId);
-            nodeStatus.Clear(folderId);
-            Tree?.Reset();
-            await LoadAsync(folderId);
+            if (snapshot.HasContent)
+                audioReviews.Hydrate(folderId, [.. snapshot.Reviews.Select(r => (r.Key, r.Value))]);
+
+            nodeStatus.Seed(folderId, snapshot.NodeStatus);
         }
 
+        /// <summary>
+        /// The Book View has converged on someone else's committed change. The two singletons that
+        /// mix persisted counts with live queue progress are reseeded from the snapshot that change
+        /// produced — they are the only Book View state a published snapshot does not carry — and the
+        /// page repaints.
+        /// <para>
+        /// The notice is shown exactly when the projection says so. Whether a change is surprising
+        /// enough to mention is a reconciliation rule, not a MudBlazor one, so this adapter reads the
+        /// verdict rather than recomputing it (ADR 0007).
+        /// </para>
+        /// <para>
+        /// Raised on the projection's pump rather than the circuit's thread, like the queue events
+        /// above it. Both things it touches are built for that: MudBlazor's snackbar provider
+        /// marshals its own render, and <see cref="StateChanged"/> is answered by a component that
+        /// wraps <c>StateHasChanged</c> in <c>InvokeAsync</c>.
+        /// </para>
+        /// </summary>
+        private void OnExternalUpdate(BookViewExternalUpdate update)
+        {
+            SeedDerivedServices(update.Snapshot.Folder, update.Snapshot);
+
+            if (update.Announce)
+                snackbar.Add("Book updated elsewhere", Severity.Info);
+
+            NotifyStateChanged();
+        }
+
+        // ---------------------------------------------------------------
+        // Imports and rereads
+        // ---------------------------------------------------------------
+
+        /// <summary>Reads the project's source file into a Book that has none yet.</summary>
         public Task ReadBookAsync(ProjectFolderId folderId) =>
-            ExecuteAndReloadAsync(folderId, () => bookUseCases.ImportAsync(folderId), resetTree: false);
+            ImportAsync(folderId, commit => bookUseCases.ImportAsync(folderId, reread: false, commit));
 
-        public async Task ConfirmRereadAsync(ProjectFolderId folderId) =>
-            await ExecuteAndReloadAsync(folderId, () => bookUseCases.ImportAsync(folderId, reread: true), resetTree: true);
+        /// <summary>Throws the Book's content away and reads the source file again in its place.</summary>
+        public Task ConfirmRereadAsync(ProjectFolderId folderId) =>
+            ImportAsync(folderId, commit => bookUseCases.ImportAsync(folderId, reread: true, commit));
 
+        /// <summary>The same replacement, re-split under options the reader chooses in a dialog.</summary>
         public async Task ManualRereadAsync(ProjectFolderId folderId)
         {
             var dialog = await dialogService.ShowAsync<Shared.ManualRereadDialog>("Manual Reread Book");
             var result = await dialog.Result;
             if (result?.Canceled != false) return;
 
-            var options = result.Data as ManualReadOptions;
-            if (options is null) return;
+            if (result.Data is not ManualReadOptions options) return;
 
-            await ExecuteAndReloadAsync(folderId,
-                () => bookUseCases.ImportManuallyAsync(folderId, options), resetTree: true);
+            await ImportAsync(folderId, commit => bookUseCases.ImportManuallyAsync(folderId, options, commit));
         }
 
-        public enum SplitLevel { Volume, Part, Chapter, Paragraph }
-
-        public async Task SplitAndReloadAsync(
-            ProjectFolderId folderId, BookCommand command, SplitLevel level, Guid sourceParentId)
+        /// <summary>
+        /// Runs one import and shows what it did. There is no reload afterwards, and nothing to
+        /// reset: the replacement commits as one Book mutation, and the projection that commits it
+        /// rebuilds this circuit's Book View — dropping the selections and expansion that pointed at
+        /// content the reread deleted — before the gesture returns (ADR 0007).
+        /// </summary>
+        private async Task ImportAsync(
+            ProjectFolderId folderId, Func<CommitBookMutation, Task<BookImportOutcome>> import)
         {
-            var newId = await commandHandler.ExecuteAsync(command);
-            if (newId is Guid created)
-                Tree.MarkSplitExpansion(level switch
-                {
-                    SplitLevel.Volume => Tree.ExpandedVolumeIds,
-                    SplitLevel.Part => Tree.ExpandedPartIds,
-                    _ => Tree.ExpandedChapterIds,
-                }, sourceParentId, created);
-            await ResetAndLoadAsync(folderId);
+            IsBusy = true;
+            Error = null;
+            NotifyStateChanged();
+            try
+            {
+                Error = (await import(CommitImportAsync)).Error;
+            }
+            finally
+            {
+                IsBusy = false;
+                NotifyStateChanged();
+            }
         }
+
+        /// <summary>
+        /// Where an import's mutation commits: this circuit's own projection, so the reader who asked
+        /// for the reread waits for their Book View rather than being notified of it as someone
+        /// else's change. The producer above needs the write-side outcome back, because only it knows
+        /// whether the artifacts it staged were taken.
+        /// </summary>
+        private async Task<BookMutationOutcome> CommitImportAsync(BookMutation mutation, CancellationToken ct)
+        {
+            var outcome = await projection.MutateAsync(mutation, ct);
+            switch (outcome)
+            {
+                case BookViewMutationOutcome.Coherent coherent:
+                    SeedDerivedServices(coherent.Snapshot.Folder, coherent.Snapshot);
+                    return new BookMutationOutcome.Committed(coherent.Receipt);
+                case BookViewMutationOutcome.Uncommitted uncommitted:
+                    return new BookMutationOutcome.Rejected(uncommitted.Reason, uncommitted.Message);
+                // Committed is what the producer above needs to hear: the Book names the artifacts it
+                // staged, so they must be kept. Only this circuit's view of the import is missing,
+                // and the stale banner answers that. Nothing to reseed either — a stale outcome
+                // published no new reads, so the two singletons still hold what they were given.
+                case BookViewMutationOutcome.CommittedButStale stale:
+                    return new BookMutationOutcome.Committed(stale.Receipt);
+                case BookViewMutationOutcome.NoChange:
+                    return new BookMutationOutcome.NoChange();
+                default:
+                    throw new NotSupportedException($"Unhandled Book View outcome {outcome.GetType().Name}.");
+            }
+        }
+
+        /// <summary>
+        /// Commits one Book mutation. The Book View is already coherent by the time this returns —
+        /// the projection rebuilt it from the receipt — so there is nothing here to refresh, reseed
+        /// or re-select afterwards (ADR 0007).
+        /// <para>
+        /// Only a refusal is worth telling the producer about, as a message. A coherent success
+        /// needs no announcement, because the Book View in front of them already shows it, and a
+        /// gesture that changed nothing has nothing to announce.
+        /// </para>
+        /// </summary>
+        /// <returns>
+        /// The outcome, for the few gestures that report their own success — a bulk assign says how
+        /// much it moved. Most callers ignore it: the Book View is the report.
+        /// </returns>
+        public async Task<BookViewMutationOutcome> MutateAsync(BookMutation mutation)
+        {
+            IsBusy = true;
+            Error = null;
+            NotifyStateChanged();
+            try
+            {
+                var outcome = await projection.MutateAsync(mutation);
+                switch (outcome)
+                {
+                    case BookViewMutationOutcome.Coherent coherent:
+                        SeedDerivedServices(coherent.Snapshot.Folder, coherent.Snapshot);
+                        break;
+                    // Both arms say the change was kept, because the one thing the reader must not
+                    // conclude is that it was lost — they would make it a second time. They differ
+                    // on what to do next, and only one of them has a Refresh to point at.
+                    case BookViewMutationOutcome.CommittedButStale { Snapshot: null }:
+                        // They switched projects while it was committing. Nothing is stale: this
+                        // Book View is a coherent view of a different Book.
+                        snackbar.Add("Your change was saved to the book you moved away from.", Severity.Info);
+                        break;
+                    case BookViewMutationOutcome.CommittedButStale:
+                        snackbar.Add(
+                            "Your change was saved, but this Book View could not be refreshed. " +
+                            "Use Refresh to reload it — do not repeat the change.",
+                            Severity.Warning);
+                        break;
+                    case BookViewMutationOutcome.Uncommitted uncommitted:
+                        snackbar.Add(uncommitted.Message, Severity.Warning);
+                        break;
+                }
+                return outcome;
+            }
+            finally
+            {
+                IsBusy = false;
+                NotifyStateChanged();
+            }
+        }
+
+        /// <summary>
+        /// The recovery behind the stale banner: rebuild this Book View from the persisted Book. A
+        /// retry that fails again leaves the banner up rather than clearing it and hoping — the
+        /// projection is still stale, and the reader is told the refresh did not take.
+        /// </summary>
+        public async Task RetryRebuildAsync()
+        {
+            // A queued click, or a convergence that recovered the projection while the banner was
+            // still on screen: there is nothing left to retry, and the projection refuses by
+            // throwing — which a Blazor event handler has nowhere to put.
+            if (!IsStale) return;
+
+            IsBusy = true;
+            NotifyStateChanged();
+            try
+            {
+                if (await projection.RetryRebuildAsync() is { Health: BookViewHealth.Stale })
+                    snackbar.Add("The Book View still could not be refreshed.", Severity.Warning);
+            }
+            finally
+            {
+                IsBusy = false;
+                NotifyStateChanged();
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Book mutations
+        // ---------------------------------------------------------------
 
         /// <summary>
         /// The single front door behind every character chip. Chips render identically in both modes and
@@ -268,66 +430,31 @@ namespace Read2Me.App.State
                 : SetItemCharacterAsync(folderId, item, characterId);
         }
 
-        /// <summary>
-        /// Mirrors, in the loaded tree, what <c>UpdateParagraphItemTextCommand</c> has just written:
-        /// the edited item's audio is gone and any verdict on it deleted. Called only after the
-        /// command executed and only when the text actually changed, so an edit that changed nothing
-        /// leaves good audio and its review alone.
-        /// <para>
-        /// Without this the row keeps rendering a WAV the database no longer records — the audio
-        /// checkbox stays disabled, a "select needs audio" pass keeps skipping the item, and the
-        /// chapter's audio-remaining badge stays a count too low until the next full load.
-        /// </para>
-        /// </summary>
-        public async Task NoteItemTextEditedAsync(ProjectFolderId folderId, ParagraphItem item)
+        public Task SetItemCharacterAsync(ProjectFolderId folderId, ParagraphItem item, Guid? characterId)
         {
-            item.AudioFileName = null;
-            audioReviews.Clear(folderId, item.Id);
-            RecomputeParagraphReview(folderId, item.Id);
-
-            // One read, same as a speaker flip: the audio denominator moves and there is no
-            // increment-side patch on NodeStatusService to move it with.
-            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
-
-            NotifyStateChanged();
-        }
-
-        public async Task SetItemCharacterAsync(ProjectFolderId folderId, ParagraphItem item, Guid? characterId)
-        {
-            await commandHandler.ExecuteAsync(new SetItemCharacterCommand(folderId, item.Id, characterId));
+            // Queue state, not Book data: the paragraph's last outcome describes an attempt the user
+            // has just answered by hand, so it stops being worth showing.
             characterQueue.ClearOutcome(folderId, item.ParagraphId);
 
-            var character = await ResolveCharacterAsync(folderId, characterId);
-
-            item.CharacterId = characterId;
-            item.Character = character;
-            item.AudioFileName = null;   // a hand-flip discards the item's audio (ADR-0006)
-
-            await ReseedAfterSpeakerChangeAsync(folderId);
-
-            InvalidateVoicePreview();
-            NotifyStateChanged();
+            return MutateAsync(new SetItemSpeakerMutation(folderId, item.Id, characterId));
         }
 
-        public async Task SetParagraphCharacterAsync(ProjectFolderId folderId, Paragraph paragraph, Guid? characterId)
+        public Task SetParagraphCharacterAsync(ProjectFolderId folderId, Paragraph paragraph, Guid? characterId)
         {
             characterQueue.ClearOutcome(folderId, paragraph.Id);
 
-            var character = characterId.HasValue ? Characters.Find(c => c.Id == characterId.Value) : null;
-
-            await commandHandler.ExecuteAsync(new SetParagraphCharacterCommand(folderId, paragraph.Id, characterId));
-            ParagraphCharacterStamp.Apply(paragraph.Items, characterId, character, sweepAllNarrationParagraph: true);
-
-            await ReseedAfterSpeakerChangeAsync(folderId);
-
-            InvalidateVoicePreview();
-            NotifyStateChanged();
+            return MutateAsync(new SetParagraphSpeakerMutation(folderId, paragraph.Id, characterId));
         }
 
         /// <summary>
         /// Bulk apply: one character — or a clear, when <paramref name="characterId"/> is null — across
-        /// every Character item in every selected paragraph, behind one confirm. The selection is kept,
-        /// so the dock bar stays up and bulk mode stays armed.
+        /// every Character item in every selected paragraph, behind one confirm.
+        /// <para>
+        /// What becomes of the selection afterwards is not decided here: the projection recomputes it
+        /// against the new revision (ADR 0007), so an ordinary fan-out — which moves no denominator —
+        /// keeps it and leaves the dock bar up, while a paragraph the assign turned all-narration
+        /// drops out of it with the roll-up it was counted in.
+        /// </para>
         /// </summary>
         public async Task AssignCharacterToSelectionAsync(ProjectFolderId folderId, Guid? characterId)
         {
@@ -340,10 +467,8 @@ namespace Read2Me.App.State
                 return;
             }
 
-            // Resolved before the confirm, not after, because the dialog quotes the character's name:
-            // on the add-new path the id can be newer than the roster. A read, so a cancelled confirm
-            // still writes nothing.
-            var character = await ResolveCharacterAsync(folderId, characterId);
+            // Resolved before the confirm, not after, because the dialog quotes the character's name.
+            var character = ResolveCharacter(characterId);
 
             var items = preview.CharacterItems;
             var paras = preview.ParagraphsWithCharacterItems;
@@ -363,24 +488,13 @@ namespace Read2Me.App.State
             foreach (var id in ids)
                 characterQueue.ClearOutcome(folderId, id);
 
-            await commandHandler.ExecuteAsync(new SetParagraphsCharacterCommand(folderId, ids, characterId));
-
-            // Walk the loaded paragraphs testing membership, never the selection looking ids up — the
-            // selection can dwarf what is in memory. Unloaded paragraphs need nothing: their chapter
-            // reads the committed write when it expands. Done before the reseed, so the reseed's
-            // Changed event cannot land mid-walk — and before the selection is cleared, since the
-            // walk reads it.
-            foreach (var p in Tree.AllParagraphs())
-            {
-                if (Selection.IsParagraphSelected(p.Id))
-                    ParagraphCharacterStamp.Apply(p.Items, characterId, character);
-            }
-
-            // One reseed for the whole batch, not one per item.
-            await ReseedAfterSpeakerChangeAsync(folderId);
-
-            InvalidateVoicePreview();
-            NotifyStateChanged();
+            // One mutation for the whole batch, not one per paragraph. Nothing is patched afterwards:
+            // the projection republishes the affected rows, the counts they roll up into, and the
+            // Folder Selection recomputed against the new revision — a paragraph that has stopped
+            // being a Character paragraph drops out of the selection with its denominator (ADR 0007).
+            if (await MutateAsync(new SetParagraphsSpeakerMutation(folderId, ids, characterId))
+                is not BookViewMutationOutcome.Coherent)
+                return;
 
             snackbar.Add(
                 name is null
@@ -390,54 +504,17 @@ namespace Read2Me.App.State
         }
 
         /// <summary>
-        /// A speaker change can flip whether a paragraph is a Character paragraph at all — assign its
-        /// last dialog item to the narrator and it stops being one; give a narration item to a
-        /// character and it starts (ADR-0006). Selectable nodes, roll-up denominators and the status
-        /// badges are all derived from that, so they are reseeded from the reader rather than patched
-        /// incrementally: mixed-structure denominators have been a bug source before, and there is no
-        /// precedent for patching "paragraph becomes / stops being attributable".
+        /// The roster entry behind a picked id, straight off the published snapshot. Null for a clear,
+        /// and null too for an id the roster cannot explain — which the confirm wording handles
+        /// rather than reaching for a read.
         /// <para>
-        /// Selection is cleared only when the denominators actually moved, so a roll-up checkbox can
-        /// never mix totals from before and after the edit — while an ordinary bulk assign, which
-        /// changes no membership, keeps its selection and leaves the dock bar up.
-        /// </para>
-        /// <para>
-        /// Called once per gesture, never once per item. Two reads on a flip measured cheap enough at
-        /// book scale to need no debouncing; revisit with a measurement, not a guess.
+        /// It needs no refresh of its own even on the add-new path: creating a Character is a Book
+        /// mutation, so the roster this reads was republished by the reconciliation that gesture
+        /// already waited for (ADR 0007).
         /// </para>
         /// </summary>
-        private async Task ReseedAfterSpeakerChangeAsync(ProjectFolderId folderId)
-        {
-            var overview = await reader.GetBookOverviewAsync(folderId);
-
-            var moved = overview.NodeCharacterParagraphCounts.Count != _nodeCounts.Count
-                || overview.NodeCharacterParagraphCounts.Any(kv =>
-                    !_nodeCounts.TryGetValue(kv.Key, out var was) || was != kv.Value);
-
-            _selectableNodes = overview.SelectableNodeIds;
-            _nodeCounts = overview.NodeCharacterParagraphCounts;
-
-            if (moved) Selection.Clear();
-            Selection.SetCounts(_nodeCounts);
-
-            nodeStatus.Seed(folderId, await reader.GetNodeStatusSeedAsync(folderId));
-        }
-
-        /// <summary>
-        /// The roster entry behind a picked id, refreshing from the reader when the id is newer than
-        /// the roster — the add-new path, where the character was created after this presenter loaded.
-        /// Null for a clear.
-        /// </summary>
-        private async Task<Character?> ResolveCharacterAsync(ProjectFolderId folderId, Guid? characterId)
-        {
-            if (characterId is not { } id) return null;
-
-            var character = Characters.Find(c => c.Id == id);
-            if (character is not null) return character;
-
-            Characters = await reader.GetCharactersAsync(folderId);
-            return Characters.Find(c => c.Id == id);
-        }
+        private Character? ResolveCharacter(Guid? characterId) =>
+            characterId is { } id ? Characters.FirstOrDefault(c => c.Id == id) : null;
 
         private static string BulkConfirmTitle(string? name) =>
             name is null ? "Clear speakers in selection" : $"Assign {name} to selection";
@@ -458,6 +535,16 @@ namespace Read2Me.App.State
         /// <summary>Noun-suffix pluralisation only, the idiom the confirm wordings are written in.</summary>
         private static string Plural(int n) => n == 1 ? "" : "s";
 
+        /// <summary>
+        /// Adds a Character from the chip menu and answers with the id to assign, so the gesture that
+        /// invented a speaker can go straight on to stamping them.
+        /// <para>
+        /// A name the roster already answers to — its own or an alias — creates nobody and is not a
+        /// failure: the id wanted is whoever already goes by it, and finding them costs the one read
+        /// that path needs, because the snapshot's roster carries no aliases. Nothing is refreshed
+        /// here: the mutation's own reconciliation already did (ADR 0007).
+        /// </para>
+        /// </summary>
         public async Task<Guid?> AddCharacterAsync(ProjectFolderId folderId)
         {
             var dialog = await dialogService.ShowAsync<Shared.Characters.AddCharacterDialog>("Add Character");
@@ -465,26 +552,29 @@ namespace Read2Me.App.State
             if (result?.Canceled != false) return null;
             if (result.Data is not string name || string.IsNullOrWhiteSpace(name)) return null;
 
-            var newId = await commandHandler.ExecuteAsync(new CreateCharacterCommand(folderId, name.Trim()));
-            Characters = await reader.GetCharactersAsync(folderId);
-            NotifyStateChanged();
-            return newId as Guid?;
+            var trimmed = name.Trim();
+            return await MutateAsync(new CreateCharacterMutation(folderId, trimmed)) switch
+            {
+                BookViewMutationOutcome.Coherent coherent => coherent.Receipt.Effects.CreatedId,
+                BookViewMutationOutcome.NoChange => await characterRoster.FindAsync(folderId, trimmed),
+                _ => null,
+            };
         }
 
         public Task AddBookTitleAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddBookTitleCommand(folderId));
+            MutateAsync(new AddBookTitleMutation(folderId));
 
         public Task AddVolumeTitlesAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddVolumeTitlesCommand(folderId));
+            MutateAsync(new AddVolumeTitlesMutation(folderId));
 
         public Task AddPartTitlesAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddPartTitlesCommand(folderId));
+            MutateAsync(new AddPartTitlesMutation(folderId));
 
         public Task AddChapterTitlesAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddChapterTitlesCommand(folderId));
+            MutateAsync(new AddChapterTitlesMutation(folderId));
 
         public Task AddPausesAsync(ProjectFolderId folderId) =>
-            ExecuteCommandAndReloadAsync(folderId, new AddPausesCommand(folderId));
+            MutateAsync(new AddPausesMutation(folderId));
 
         public void RequestConfirmReread()
         {
@@ -498,160 +588,43 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
-        // ---------------------------------------------------------------
-        // Selection mutators — delegate to ISelectionCoordinator
-        // ---------------------------------------------------------------
-
-        public async Task ToggleParagraphAsync(
-            ProjectFolderId folderId, Guid paragraphId,
-            Guid chapterId, Guid partId, Guid volumeId, bool on)
-        {
-            await selectionCoordinator.ToggleParagraphAsync(folderId, paragraphId, chapterId, partId, volumeId, on);
-            NotifyStateChanged();
-        }
-
-        public async Task SetNodeAsync(
-            ProjectFolderId folderId, BookNodeLevel level, Guid id, bool on, bool unprocessedOnly = false)
-        {
-            await selectionCoordinator.SetNodeAsync(folderId, level, id, on, unprocessedOnly);
-            NotifyStateChanged();
-        }
-
-        public int SelectedParagraphCount => selectionCoordinator.SelectedParagraphCount;
-
-        // ---------------------------------------------------------------
-        // Audio item selection mutators — delegate to ISelectionCoordinator
-        // ---------------------------------------------------------------
-
-        public async Task ToggleAudioItemAsync(AudioItemRef item, bool on)
-        {
-            await selectionCoordinator.ToggleAudioItemAsync(item, on);
-            NotifyStateChanged();
-        }
-
-        public async Task SetAudioNodeAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool on, bool needsAudioOnly = false)
-        {
-            await selectionCoordinator.SetAudioNodeAsync(folderId, level, nodeId, on, needsAudioOnly, NarratorOnlyMode);
-            NotifyStateChanged();
-        }
-
-        public int SelectedAudioItemCount => selectionCoordinator.SelectedAudioItemCount;
-
-        public async Task DismissAudioReviewAsync(ProjectFolderId folderId, Guid paragraphItemId)
-        {
-            await commandHandler.ExecuteAsync(new DismissAudioReviewCommand(folderId, paragraphItemId));
-
-            var current = audioReviews.ReviewOf(folderId, paragraphItemId);
-            if (current is not null)
-                audioReviews.Set(folderId, paragraphItemId,
-                    current with { State = AudioReviewState.Dismissed });
-
-            RecomputeParagraphReview(folderId, paragraphItemId);
-            NotifyStateChanged();
-        }
-
-        private void RecomputeParagraphReview(ProjectFolderId folderId, Guid paragraphItemId)
-        {
-            var para = Tree.TryGetOwner(paragraphItemId);
-            if (para is null) return;
-
-            var hasAnyNeedsReview = para.Items.Any(i =>
-                audioReviews.ReviewOf(folderId, i.Id)?.State == AudioReviewState.NeedsReview);
-            nodeStatus.OnReviewChanged(folderId, para.Id, hasAnyNeedsReview);
-        }
-
-        public async Task AddSelectionToAudioQueueAsync()
-        {
-            await selectionCoordinator.AddSelectionToAudioQueueAsync();
-            NotifyStateChanged();
-        }
-
-        public ProjectFolderId? CurrentFolder => _lastFolder;
-
-        public async Task AddSelectionToCharacterQueueAsync()
-        {
-            await selectionCoordinator.AddSelectionToCharacterQueueAsync();
-            NotifyStateChanged();
-        }
-
-        private async Task ExecuteAndReloadAsync(
-            ProjectFolderId folderId,
-            Func<Task<Result>> operation,
-            bool resetTree)
-        {
-            IsBusy = true;
-            Error = null;
-            NotifyStateChanged();
-            var result = await operation();
-            Error = result.IsSuccess ? null : result.Error;
-            if (result.IsSuccess)
-                await (resetTree ? ResetAndLoadAsync(folderId) : LoadAsync(folderId));
-            IsBusy = false;
-            NotifyStateChanged();
-        }
-
-        private Task ExecuteCommandAndReloadAsync(ProjectFolderId folderId, BookCommand command) =>
-            ExecuteAndReloadAsync(folderId, async () =>
-            {
-                await commandHandler.ExecuteAsync(command);
-                return Result.Ok();
-            }, resetTree: true);
+        /// <summary>
+        /// Silences one item's review. The badge and the chip both come back on the snapshot the
+        /// mutation reconciles, so there is nothing to patch here — they cannot disagree.
+        /// </summary>
+        public Task DismissAudioReviewAsync(ProjectFolderId folderId, Guid paragraphItemId) =>
+            MutateAsync(new DismissAudioReviewMutation(folderId, paragraphItemId));
 
         private void NotifyStateChanged() => StateChanged?.Invoke();
-
-        /// <summary>The node-status counter unit: speech items still without a speaker (ADR-0006).</summary>
-        private static int CountUnattributed(IEnumerable<ParagraphItem>? items) =>
-            items?.Count(i => !ParagraphItemKinds.IsPause(i.ItemType) && i.CharacterId is null) ?? 0;
-
-        /// <summary>
-        /// A paragraph's items changed (attribution stamped speakers, or an item was stamped by
-        /// hand). Any number of items can change in one event, so the whole item list is reloaded
-        /// rather than a single stamp patched.
-        /// </summary>
-        private async void OnParagraphItemsChanged(ParagraphItemsChanged e)
-        {
-            if (_lastFolder is not { } current || current.Value != e.FolderId.Value) return;
-
-            var para = Tree.AllParagraphs().FirstOrDefault(p => p.Id == e.ParagraphId);
-            if (para is null) return;
-
-            var children = await reader.GetChildrenAsync(e.FolderId, BookNodeLevel.Chapter, para.ChapterId);
-            var reloaded = children?.Paragraphs?.FirstOrDefault(p => p.Id == e.ParagraphId);
-            if (reloaded is null) return;
-
-            para.Items = reloaded.Items;
-
-            // Attribution can create brand-new characters. Refresh the roster so they show up in
-            // the chip menu without a navigate-away/back reload.
-            var stamped = para.Items.Select(i => i.CharacterId).OfType<Guid>().ToList();
-            if (stamped.Any(id => Characters.All(c => c.Id != id)))
-                Characters = await reader.GetCharactersAsync(e.FolderId);
-
-            nodeStatus.OnCharacterAttributed(e.FolderId, e.ParagraphId, CountUnattributed(para.Items));
-            InvalidateVoicePreview();
-            NotifyStateChanged();
-        }
-
-        private void OnAudioFileAssigned(ProjectFolderId folder, Guid paragraphItemId, string relativePath)
-        {
-            if (_lastFolder is not { } current || current.Value != folder.Value) return;
-
-            var para = Tree.TryGetOwner(paragraphItemId);
-            if (para is null) return;
-
-            var item = para.Items.First(i => i.Id == paragraphItemId);
-            item.AudioFileName = relativePath;
-            nodeStatus.OnAudioAssigned(folder, item.ParagraphId);
-        }
 
         /// <summary>
         /// A bulk write must never meet an in-flight attribution, so any armed bulk mode is turned
         /// off — not merely greyed out — the moment the character queue has work.
         /// </summary>
-        private void DisarmBulkIfQueueBusy()
+        private async void DisarmBulkIfQueueBusy()
         {
-            if (characterQueue.Snapshot().IsBusy && Selection is not null)
-                Selection.BulkMode = false;
+            // An event handler, so it has nowhere to throw: a projection that is not open yet has no
+            // armed bulk mode to disarm either.
+            if (CurrentFolder is null) return;
+            if (characterQueue.Snapshot().IsBusy && Selection is { BulkMode: true })
+                await SetBulkAssignAsync(false);
+        }
+
+        private void Subscribe()
+        {
+            if (!_characterQueueSubscribed)
+            {
+                characterQueue.Changed += DisarmBulkIfQueueBusy;
+                _characterQueueSubscribed = true;
+            }
+
+            // Every snapshot repaints the Book View, whichever gesture or rebuild produced it.
+            if (!_snapshotSubscribed)
+            {
+                projection.SnapshotPublished += NotifyStateChanged;
+                projection.ExternalUpdateApplied += OnExternalUpdate;
+                _snapshotSubscribed = true;
+            }
         }
 
         public void Dispose()
@@ -662,16 +635,11 @@ namespace Read2Me.App.State
                 _characterQueueSubscribed = false;
             }
 
-            if (_audioQueueSubscribed)
+            if (_snapshotSubscribed)
             {
-                audioQueue.AudioFileAssigned -= OnAudioFileAssigned;
-                _audioQueueSubscribed = false;
-            }
-
-            if (_itemsChangedSubscribed)
-            {
-                paragraphItemsChanged.Event -= OnParagraphItemsChanged;
-                _itemsChangedSubscribed = false;
+                projection.SnapshotPublished -= NotifyStateChanged;
+                projection.ExternalUpdateApplied -= OnExternalUpdate;
+                _snapshotSubscribed = false;
             }
         }
     }

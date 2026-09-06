@@ -32,9 +32,7 @@
             @if (!isBusy)
             {
                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForPauseParagraph(FolderId, Para)"
-                             IsFirst="false" IsLast="false"
-                             OnChanged="@(() => { Presenter.Tree.RemoveParagraph(Para.Id); OnChanged.InvokeAsync(); })"
-                             OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                             IsFirst="false" IsLast="false" />
             }
         </MudStack>
     }
@@ -57,7 +55,7 @@
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
                         <MudCheckBox T="bool" Value="@isSplitSelected"
-                                     ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(FolderId, Para.Id, ChapterId, PartId, VolumeId, v))"
+                                     ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(Para.Id, new ParagraphSelection(VolumeId, PartId, ChapterId), v))"
                                      Size="Size.Small" />
                         @if (queueOutcome is not null)
                         {
@@ -110,7 +108,7 @@
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1"
                                               Style="flex-wrap:wrap;">
                                         <SplitAudioVoicePreview CharacterId="@it.CharacterId"
-                                                                Narrator="@Presenter.VoicePreviewNarrator"
+                                                                Narrator="@Presenter.Narrator"
                                                                 VoiceName="@Presenter.ResolvedVoiceName(it.Id)"
                                                                 TestId="@($"voice-preview-{it.Id}")" />
                                         @if (!string.IsNullOrWhiteSpace(it.VoiceInstructions))
@@ -155,16 +153,14 @@
                                     <MudIconButton Icon="@Icons.Material.Filled.PlayCircleOutline"
                                                    Size="Size.Small"
                                                    data-testid="@($"audio-play-{it.Id}")"
-                                                   OnClick="@(() => Presenter.TogglePlayingAudioItem(it.Id))"
+                                                   OnClick="@(() => Presenter.TogglePlayingAudioItemAsync(it.Id))"
                                                    Color="@(Presenter.PlayingAudioItemId == it.Id ? Color.Primary : Color.Default)" />
                                 }
                                 @if (!isAudioBusy)
                                 {
-                                    <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it, Presenter)"
+                                    <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it)"
                                                  IsFirst="@(items[0].Id == it.Id)"
-                                                 IsLast="@(items[^1].Id == it.Id)"
-                                                 OnChanged="OnChanged"
-                                                 OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                                                 IsLast="@(items[^1].Id == it.Id)" />
                                 }
                             </MudStack>
                         }
@@ -204,11 +200,9 @@
                         }
                         @if (!isBusy)
                         {
-                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it, Presenter)"
+                            <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraphItem(FolderId, it)"
                                                IsFirst="@(items[0].Id == it.Id)"
-                                               IsLast="@(items[^1].Id == it.Id)"
-                                               OnChanged="OnChanged"
-                                               OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                                               IsLast="@(items[^1].Id == it.Id)" />
                         }
                         else
                         {
@@ -237,7 +231,7 @@ else
             {
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
                     <MudCheckBox T="bool" Value="@isSelected"
-                                 ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(FolderId, Para.Id, ChapterId, PartId, VolumeId, v))"
+                                 ValueChanged="@((bool v) => Presenter.ToggleParagraphAsync(Para.Id, new ParagraphSelection(VolumeId, PartId, ChapterId), v))"
                                  Size="Size.Small" />
                     @if (queueOutcome is not null)
                     {
@@ -272,10 +266,7 @@ else
             {
                 <BookNodeMenu Spec="@BookNodeMenuSpecs.ForParagraph(FolderId, Para)"
                                IsFirst="IsFirst"
-                               IsLast="IsLast"
-                               OnChanged="@(() => { Presenter.Tree.RemoveParagraph(Para.Id); OnChanged.InvokeAsync(); })"
-                               OnSplit="OnSplit"
-                               OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                               IsLast="IsLast" />
             }
         </MudStack>
     }
@@ -289,26 +280,13 @@ else
     [Parameter, EditorRequired] public Guid VolumeId { get; set; }
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     protected override void OnInitialized()
     {
         Queue.Changed += Refresh;
         AudioQueue.Changed += Refresh;
         AudioReviews.Changed += Refresh;
-        Presenter.PlayingItemChanged += Refresh;
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        if (Presenter.ViewMode == BookViewMode.SplitAudio)
-        {
-            var itemIds = Para.Items
-                .Where(i => !ParagraphItemKinds.IsPause(i.ItemType))
-                .Select(i => i.Id);
-            await Presenter.EnsureVoicePreviewAsync(FolderId, itemIds);
-        }
+        Presenter.StateChanged += Refresh;
     }
 
     void Refresh() => InvokeAsync(StateHasChanged);
@@ -318,6 +296,6 @@ else
         Queue.Changed -= Refresh;
         AudioQueue.Changed -= Refresh;
         AudioReviews.Changed -= Refresh;
-        Presenter.PlayingItemChanged -= Refresh;
+        Presenter.StateChanged -= Refresh;
     }
 }

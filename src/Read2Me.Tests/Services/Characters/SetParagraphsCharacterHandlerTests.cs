@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
@@ -9,22 +10,40 @@ using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Commands.Handlers;
 using Read2Me.Services.IO;
+using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Characters
 {
+    /// <summary>
+    /// The bulk assign's sweep rules, still asserted through the command the generic endpoint
+    /// posts — its request and response shape are unchanged by the move to
+    /// <c>BookMutations</c> (ADR 0007). What the write reports to a Book View is asserted on the
+    /// mutation itself, in <c>SpeakerAttributionMutationTests</c>.
+    /// </summary>
     public class SetParagraphsCharacterHandlerTests : ProjectDbTestBase
     {
+        private readonly ServiceProvider _root;
         private readonly SetParagraphsCharacterHandler _handler;
         private readonly ProjectFolderId _folder;
 
         public SetParagraphsCharacterHandlerTests()
         {
-            var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
-            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            _handler = new SetParagraphsCharacterHandler(session);
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            _root = services.BuildServiceProvider();
+
+            _handler = new SetParagraphsCharacterHandler(_root.GetRequiredService<BookMutations>());
             _folder = new ProjectFolderId(FolderName);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _root.DisposeAsync();
+            await base.DisposeAsync();
         }
 
         private static readonly Guid AliceId = Guid.NewGuid();
@@ -197,7 +216,7 @@ namespace Read2Me.Tests.Services.Characters
                 new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1")], BobId),
                 CancellationToken.None);
 
-            Assert.Null(result);
+            Assert.Null(result.EntityId);
         }
     }
 }

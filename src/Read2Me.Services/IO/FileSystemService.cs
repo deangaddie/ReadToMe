@@ -46,6 +46,9 @@ namespace Read2Me.Services.IO
 
         public void DeleteFile(string path) => File.Delete(path);
 
+        public void MoveFile(string sourcePath, string destinationPath) =>
+            File.Move(sourcePath, destinationPath, overwrite: true);
+
         public async Task WriteFileAsync(string path, Stream source)
         {
             using var dest = File.Create(path);

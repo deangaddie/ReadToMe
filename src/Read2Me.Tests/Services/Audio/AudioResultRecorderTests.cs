@@ -1,115 +1,215 @@
+using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
+using Read2Me.Data;
+using Read2Me.Data.Entities;
+using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Events;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
+using Read2Me.Tests.Infrastructure;
+using Read2Me.TestUtils;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
 {
-    public class AudioResultRecorderTests
+    /// <summary>
+    /// The Audio Queue's write adapter (ADR 0007). What is under test is the ordering the persisted
+    /// Book depends on: the take is staged beside its destination and put in place before the
+    /// mutation, so a receipt can never reach a reader ahead of the audio it names, and a mutation
+    /// that does not commit puts the previous take back.
+    /// <para>
+    /// The write side is real — a SQLite project and <see cref="BookMutations"/> — because "the item
+    /// points at the file that is actually there" is a claim about both at once. What the mutation
+    /// reports is asserted in <c>AudioRecordingMutationTests</c>.
+    /// </para>
+    /// </summary>
+    public class AudioResultRecorderTests : ProjectDbTestBase
     {
+        private readonly ServiceProvider _root;
         private readonly FakeFileSystem _fs;
-        private readonly FakeBookCommandHandler _commands;
-        private readonly AudioReviewService _reviews;
-        private readonly AudioResultRecorder _sut;
         private readonly ProjectFolderId _folder;
 
-        private const string FolderName = "test-book";
-        private const string FakeRoot = @"C:\fake-workspace";
+        public AudioResultRecorderTests()
+        {
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            _root = services.BuildServiceProvider();
 
-        private static readonly Guid ItemId = Guid.NewGuid();
+            _folder = new ProjectFolderId(FolderName);
+            _fs = new FakeFileSystem(TempDir);
+            _fs.SeedFolder(FolderName);
+        }
 
-        private static PipelineResult OkResult() => new(
-            AudioBytes: [0x52, 0x49, 0x46, 0x46],
+        public override async ValueTask DisposeAsync()
+        {
+            await _root.DisposeAsync();
+            await base.DisposeAsync();
+        }
+
+        private AudioResultRecorder Sut()
+        {
+            var scope = _root.CreateScope();
+            return new AudioResultRecorder(
+                _fs, scope.ServiceProvider.GetRequiredService<BookMutations>(),
+                NullLogger<AudioResultRecorder>.Instance);
+        }
+
+        private async Task<Guid> SeedItemAsync()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c
+                    .AddParagraph(configure: p => p.AddNarration("item", "In a hole in the ground"))))
+                .BuildAsync();
+            return b.ItemId("item");
+        }
+
+        private static PipelineResult Clean(byte[]? audio = null) => new(
+            AudioBytes: audio ?? [0x52, 0x49, 0x46, 0x46],
             Normalize: new NormalizeOutcome(Ok: true, Reason: null),
             Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "In a hole in the ground", Rescued: false),
             Outcome: new WorkOutcome.Ok());
 
-        public AudioResultRecorderTests()
+        private static PipelineResult FailedVerify() => new(
+            AudioBytes: [0x52, 0x49, 0x46, 0x46],
+            Normalize: new NormalizeOutcome(Ok: true, Reason: null),
+            Verify: new VerifyOutcome(Ok: false, Wer: 0.42, Reason: "WER 0.42", Transcript: "wrong", Rescued: false),
+            Outcome: new WorkOutcome.Ok());
+
+        private string PathOf(Guid itemId) =>
+            Path.Combine(_fs.GetProjectFolderPath(FolderName), "audio", $"{itemId}.wav");
+
+        private async Task<ParagraphItem> ItemAsync(Guid itemId)
         {
-            _folder = new ProjectFolderId(FolderName);
-            _fs = new FakeFileSystem(FakeRoot);
-            _fs.SeedFolder(FolderName);
-            _commands = new FakeBookCommandHandler();
-            _reviews = new AudioReviewService();
-            _sut = new AudioResultRecorder(_fs, _commands, _reviews, NullLogger<AudioResultRecorder>.Instance);
+            await using var db = await OpenDbAsync();
+            return await db.ParagraphItems.AsNoTracking().SingleAsync(i => i.Id == itemId);
+        }
+
+        private async Task<AudioReview?> ReviewAsync(Guid itemId)
+        {
+            await using var db = await OpenDbAsync();
+            return await db.AudioReviews.AsNoTracking().FirstOrDefaultAsync(r => r.ParagraphItemId == itemId);
         }
 
         [Fact]
-        public async Task WritesWavFile_AtExpectedPath()
+        public async Task Records_TheAudioReference_AndLeavesTheWavWhereTheBookSaysItIs()
         {
-            var id = Guid.NewGuid();
-            await _sut.RecordAsync(_folder, id, OkResult(), "source text", CancellationToken.None);
+            var itemId = await SeedItemAsync();
 
-            var expectedPath = Path.Combine(FakeRoot, FolderName, "audio", $"{id}.wav");
-            Assert.True(_fs.FileExists(expectedPath));
+            var relativePath = await Sut().RecordAsync(_folder, itemId, Clean(), "In a hole in the ground", TestContext.Current.CancellationToken);
+
+            Assert.Equal($"audio/{itemId}.wav", relativePath);
+            Assert.Equal(relativePath, (await ItemAsync(itemId)).AudioFileName);
+            Assert.True(_fs.FileExists(PathOf(itemId)));
+            // Exactly one file: nothing staged, nothing set aside, no copies.
+            Assert.Equal([PathOf(itemId)], _fs.GetAllPaths());
+        }
+
+        /// <summary>
+        /// The receipt reaches other circuits during the commit, so the take has to be at the path
+        /// the Book is about to name before the commit runs — not after it.
+        /// </summary>
+        [Fact]
+        public async Task TheTakeIsInPlaceBeforeTheMutationCommits()
+        {
+            var itemId = await SeedItemAsync();
+            byte[] audio = [0x52, 0x49, 0x46, 0x46, 0x77];
+            string? whenTheBookWasWritten = null;
+            _root.GetRequiredService<EventBroadcaster<BookMutationReceipt>>().Event += _ =>
+                whenTheBookWasWritten = _fs.FileExists(PathOf(itemId))
+                    ? Encoding.Latin1.GetString(_fs.GetFileContent(PathOf(itemId)))
+                    : null;
+
+            await Sut().RecordAsync(_folder, itemId, Clean(audio), "In a hole in the ground", TestContext.Current.CancellationToken);
+
+            Assert.Equal(Encoding.Latin1.GetString(audio), whenTheBookWasWritten);
         }
 
         [Fact]
-        public async Task IssuesBothCommands()
+        public async Task AFailedStage_RecordsTheVerdictWithTheAudioItJudged()
         {
-            await _sut.RecordAsync(_folder, ItemId, OkResult(), "source text", CancellationToken.None);
+            var itemId = await SeedItemAsync();
 
-            Assert.Equal(2, _commands.Executed.Count);
-            Assert.Contains(_commands.Executed, c => c is SetParagraphItemAudioCommand);
-            Assert.Contains(_commands.Executed, c => c is SetAudioReviewCommand);
-        }
+            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "In a hole in the ground", TestContext.Current.CancellationToken);
 
-        [Fact]
-        public async Task NormalizeFail_SetsReview_WithNormalizeOkFalse()
-        {
-            var id = Guid.NewGuid();
-            var result = new PipelineResult(
-                AudioBytes: [0x52, 0x49, 0x46, 0x46],
-                Normalize: new NormalizeOutcome(Ok: false, Reason: "ffmpeg failed"),
-                Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "text", Rescued: false),
-                Outcome: new WorkOutcome.Ok());
-
-            await _sut.RecordAsync(_folder, id, result, "source text", CancellationToken.None);
-
-            var review = _reviews.ReviewOf(_folder, id);
-            Assert.NotNull(review);
-            Assert.False(review!.NormalizeOk);
-        }
-
-        [Fact]
-        public async Task VerifyFail_SetsReview_WithVerifyOkFalseAndWer()
-        {
-            var id = Guid.NewGuid();
-            var result = new PipelineResult(
-                AudioBytes: [0x52, 0x49, 0x46, 0x46],
-                Normalize: new NormalizeOutcome(Ok: true, Reason: null),
-                Verify: new VerifyOutcome(Ok: false, Wer: 0.42, Reason: "WER 0.42", Transcript: "wrong", Rescued: false),
-                Outcome: new WorkOutcome.Ok());
-
-            await _sut.RecordAsync(_folder, id, result, "source text", CancellationToken.None);
-
-            var review = _reviews.ReviewOf(_folder, id);
+            var review = await ReviewAsync(itemId);
             Assert.NotNull(review);
             Assert.False(review!.VerifyOk);
             Assert.Equal(0.42, review.Wer);
+            Assert.Equal($"audio/{itemId}.wav", (await ItemAsync(itemId)).AudioFileName);
         }
 
         [Fact]
-        public async Task BothOk_ClearsExistingReview()
+        public async Task ACleanTake_RemovesThePreviousTakesReview()
         {
-            var id = Guid.NewGuid();
-            _reviews.Set(_folder, id, new AudioReviewInfo(
-                AudioReviewState.NeedsReview, false, "stale", false, 0.9, "stale", null, null));
+            var itemId = await SeedItemAsync();
+            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "In a hole in the ground", TestContext.Current.CancellationToken);
 
-            await _sut.RecordAsync(_folder, id, OkResult(), "source text", CancellationToken.None);
+            await Sut().RecordAsync(_folder, itemId, Clean(), "In a hole in the ground", TestContext.Current.CancellationToken);
 
-            Assert.Null(_reviews.ReviewOf(_folder, id));
+            Assert.Null(await ReviewAsync(itemId));
         }
 
+        /// <summary>
+        /// A re-record of an item whose columns do not move — same path, same clean verdict — is
+        /// still a new take, so the file the Book names is the one just generated.
+        /// </summary>
         [Fact]
-        public async Task Returns_ExpectedRelativePath()
+        public async Task ARetakeThatMovesNoColumn_StillReplacesTheAudioOnDisk()
         {
-            var id = Guid.NewGuid();
-            var path = await _sut.RecordAsync(_folder, id, OkResult(), "source text", CancellationToken.None);
+            var itemId = await SeedItemAsync();
+            await Sut().RecordAsync(_folder, itemId, Clean(), "In a hole in the ground", TestContext.Current.CancellationToken);
 
-            Assert.Equal($"audio/{id}.wav", path);
+            byte[] retake = [0x52, 0x49, 0x46, 0x46, 0x99];
+            await Sut().RecordAsync(_folder, itemId, Clean(retake), "In a hole in the ground", TestContext.Current.CancellationToken);
+
+            Assert.Equal(retake, _fs.GetFileContent(PathOf(itemId)));
+        }
+
+        /// <summary>
+        /// The item was deleted while its take was generating. The Book cannot name the WAV, so the
+        /// staged file goes with the rejection rather than being left behind for nothing to claim.
+        /// </summary>
+        [Fact]
+        public async Task AnUncommittedRecording_LeavesNoAudioBehind()
+        {
+            await SeedItemAsync();
+            var ghost = Guid.NewGuid();
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                Sut().RecordAsync(_folder, ghost, Clean(), "gone", TestContext.Current.CancellationToken));
+
+            Assert.Empty(_fs.GetAllPaths());
+        }
+
+        /// <summary>
+        /// The audio the item already had survives a recording that does not commit: the take is
+        /// staged elsewhere, so a rejection cannot destroy the take before it.
+        /// </summary>
+        [Fact]
+        public async Task AnUncommittedRecording_LeavesTheItemsExistingAudioAlone()
+        {
+            var itemId = await SeedItemAsync();
+            await Sut().RecordAsync(_folder, itemId, Clean(), "In a hole in the ground", TestContext.Current.CancellationToken);
+            var recorded = _fs.GetFileContent(PathOf(itemId));
+
+            await using (var db = await OpenDbAsync())
+            {
+                db.ParagraphItems.RemoveRange(db.ParagraphItems.Where(i => i.Id == itemId));
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            }
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                Sut().RecordAsync(_folder, itemId, Clean([0x52, 0x49, 0x46, 0x46, 0x01]), "gone", TestContext.Current.CancellationToken));
+
+            Assert.Equal(recorded, _fs.GetFileContent(PathOf(itemId)));
         }
     }
 }

@@ -154,8 +154,8 @@ namespace Read2Me.Services.Characters
             var key = Key(item);
             switch (disposition)
             {
-                // The stamps themselves reach the UI through ParagraphItemsChanged, published by the
-                // apply command — the queue only carries queue state.
+                // The stamps themselves reach every open Book View through the receipt the apply
+                // commits (ADR 0007) — the queue only carries queue state.
                 case Disposition.Complete complete:
                     _store.Settle(key, elapsedSeconds: complete.Elapsed);
                     break;

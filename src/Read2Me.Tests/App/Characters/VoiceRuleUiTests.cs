@@ -11,6 +11,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
 using Xunit;
@@ -101,11 +102,14 @@ namespace Read2Me.Tests.App.Characters
             reader.GetDefaultVoiceIdAsync(Folder, characterId).Returns((Guid?)null);
             reader.GetCharacterVoiceRulesAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>()).Returns(expectedRules);
 
+            // No write side: this case is about the rules the presenter loaded, not one it wrote.
             var presenter = new CharacterPresenter(
                 reader,
-                Substitute.For<IBookCommandHandler>(),
+                mutations: null!,
+                characters: null!,
+                Substitute.For<IVoiceAudioRemover>(),
                 new VoiceOrchestrator(
-                    Substitute.For<IAudioPipeline>(),
+                    Substitute.For<IVoiceAudioWriter>(),
                     Substitute.For<ITranscriptionClientResolver>(),
                     Substitute.For<IVoiceAudioGenerator>(),
                     new FakeTranscriptionSettings(),
@@ -119,47 +123,6 @@ namespace Read2Me.Tests.App.Characters
 
             Assert.Single(presenter.VoiceRules);
             Assert.Equal(ruleId, presenter.VoiceRules[0].Id);
-        }
-
-        // ── Presenter rule command methods ────────────────────────────────────
-
-        [Fact]
-        public async Task Presenter_CreateVoiceRule_ExecutesCommand()
-        {
-            var characterId = Guid.NewGuid();
-            var voiceId = Guid.NewGuid();
-
-            var handler = Substitute.For<IBookCommandHandler>();
-            handler.ExecuteAsync(Arg.Any<CreateVoiceRuleCommand>(), default)
-                .Returns(ci => { return Task.FromResult<Guid?>(Guid.NewGuid()); });
-
-            var reader = Substitute.For<IProjectReader>();
-            reader.GetCharactersWithAliasesAsync(Arg.Any<ProjectFolderId>()).Returns(new List<Character>());
-            reader.GetCharacterVoiceRulesAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>())
-                .Returns(new List<VoiceRuleRow>());
-            reader.GetCharacterVoicesAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>()).Returns(new List<Voice>());
-            reader.GetDefaultVoiceIdAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>()).Returns((Guid?)null);
-            reader.GetCharacterLinesAsync(Arg.Any<ProjectFolderId>(), Arg.Any<Guid>()).Returns(new List<CharacterLine>());
-
-            var presenter = new CharacterPresenter(
-                reader, handler,
-                new VoiceOrchestrator(
-                    Substitute.For<IAudioPipeline>(),
-                    Substitute.For<ITranscriptionClientResolver>(),
-                    Substitute.For<IVoiceAudioGenerator>(),
-                    new FakeTranscriptionSettings(),
-                    new FakeVoiceDesignPromptService(),
-                    Substitute.For<IFileSystem>()),
-                new EventBroadcaster<LlmStreamEvent>());
-
-            // Simulate folderId being set.
-            await presenter.LoadAsync(Folder);
-
-            await presenter.CreateVoiceRuleAsync(characterId, voiceId, null, null, null, null);
-
-            await handler.Received(1).ExecuteAsync(
-                Arg.Is<CreateVoiceRuleCommand>(c => c != null && c.CharacterId == characterId && c.VoiceId == voiceId),
-                Arg.Any<CancellationToken>());
         }
 
         // ── Fakes ─────────────────────────────────────────────────────────────

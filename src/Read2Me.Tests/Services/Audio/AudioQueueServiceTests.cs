@@ -78,25 +78,21 @@ namespace Read2Me.Tests.Services.Audio
         // ── Apply: the five arms ──────────────────────────────────────────────
 
         /// <summary>
-        /// Completion is one transition, not a settle followed by two side effects: the arm stamps
-        /// the cache-bust version and publishes the recorded path, so nothing can complete an item
-        /// without them.
+        /// Completion is one transition, not a settle followed by a side effect: the arm stamps the
+        /// cache-bust version with it, so nothing can complete an item without it. The recorded audio
+        /// itself crosses BookMutations, not this queue (ADR 0007).
         /// </summary>
         [Fact]
-        public void Apply_Complete_Settles_StampsVersion_AndPublishesPath()
+        public void Apply_Complete_Settles_AndStampsVersion()
         {
             var svc = new AudioQueueService();
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
-            (ProjectFolderId Folder, Guid Id, string Path)? assigned = null;
-            svc.AudioFileAssigned += (f, id, p) => assigned = (f, id, p);
-
             svc.Apply(item, new Disposition.Complete(null, "audio/test.wav"));
 
             Assert.Null(svc.StatusOf(Folder, IdOf(item)));
             Assert.NotNull(svc.AudioVersionOf(Folder, IdOf(item)));
-            Assert.Equal((Folder, IdOf(item), "audio/test.wav"), assigned);
         }
 
         [Fact]

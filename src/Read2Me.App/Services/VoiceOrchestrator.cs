@@ -6,6 +6,7 @@ using Read2Me.Core.Audio;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Voice;
@@ -13,17 +14,22 @@ using Read2Me.Services.Voice;
 namespace Read2Me.App.Services
 {
     public class VoiceOrchestrator(
-        IAudioPipeline audioPipeline,
+        IVoiceAudioWriter voiceAudio,
         ITranscriptionClientResolver transcriptionResolver,
         IVoiceAudioGenerator voiceAudioGenerator,
         TranscriptionSettingsService transcriptionSettings,
         VoiceDesignPromptService voiceDesignPromptService,
         IFileSystem fileSystem)
     {
-        public async Task<string> StoreAudioAsync(
+        /// <summary>
+        /// Stores an uploaded recording against a Voice and commits the Book mutation that names it,
+        /// in that order (ADR 0007). Returns the project-relative path, or throws when the Book
+        /// refused the write — in which case the staged file has already been taken away again.
+        /// </summary>
+        public async Task<string> RecordUploadedAudioAsync(
             AudioStoreRequest request,
             CancellationToken ct = default) =>
-            await audioPipeline.StoreAsync(request, ct);
+            await voiceAudio.RecordUploadedAsync(request, ct);
 
         public async Task<string> TranscribeAsync(
             ProjectFolderId folder,

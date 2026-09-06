@@ -1,53 +1,44 @@
 using Read2Me.Core.Models;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Commands.Handlers;
 
-public sealed class MergeVolumeHandler(ProjectDbSession session) : ICommandHandler<MergeVolumeCommand>
+/// <summary>
+/// The five merges, migrated to <see cref="BookMutations"/> (ADR 0007). Each handler is a
+/// translation only: the merge itself lives in the mutation implementation, where the survivor it
+/// folded into is reported so an open Book View can move expansion onto it.
+/// <para>
+/// The endpoint's contract is unchanged. A merge never created anything, so it still answers with
+/// no id, and a first or last sibling with nothing to merge into is still a quiet no-op.
+/// </para>
+/// </summary>
+public sealed class MergeVolumeHandler(BookMutations mutations) : ICommandHandler<MergeVolumeCommand>
 {
-    public async Task<Guid?> HandleAsync(MergeVolumeCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanMergeVolume(c.VolumeId, c.Direction));
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(MergeVolumeCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergeVolumeMutation(c.FolderId, c.VolumeId, c.Direction), ct);
 }
 
-public sealed class MergePartHandler(ProjectDbSession session) : ICommandHandler<MergePartCommand>
+public sealed class MergePartHandler(BookMutations mutations) : ICommandHandler<MergePartCommand>
 {
-    public async Task<Guid?> HandleAsync(MergePartCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanMergePart(c.PartId, c.Direction));
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(MergePartCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergePartMutation(c.FolderId, c.PartId, c.Direction), ct);
 }
 
-public sealed class MergeChapterHandler(ProjectDbSession session) : ICommandHandler<MergeChapterCommand>
+public sealed class MergeChapterHandler(BookMutations mutations) : ICommandHandler<MergeChapterCommand>
 {
-    public async Task<Guid?> HandleAsync(MergeChapterCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanMergeChapter(c.ChapterId, c.Direction));
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(MergeChapterCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergeChapterMutation(c.FolderId, c.ChapterId, c.Direction), ct);
 }
 
-public sealed class MergeParagraphHandler(ProjectDbSession session) : ICommandHandler<MergeParagraphCommand>
+public sealed class MergeParagraphHandler(BookMutations mutations) : ICommandHandler<MergeParagraphCommand>
 {
-    public async Task<Guid?> HandleAsync(MergeParagraphCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanMergeParagraph(c.ParagraphId, c.Direction));
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(MergeParagraphCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergeParagraphMutation(c.FolderId, c.ParagraphId, c.Direction), ct);
 }
 
-public sealed class MergeParagraphItemHandler(ProjectDbSession session) : ICommandHandler<MergeParagraphItemCommand>
+public sealed class MergeParagraphItemHandler(BookMutations mutations)
+    : ICommandHandler<MergeParagraphItemCommand>
 {
-    public async Task<Guid?> HandleAsync(MergeParagraphItemCommand c, CancellationToken ct)
-    {
-        var db = await session.OpenAsync(c.FolderId);
-        await BookMutationApplier.PlanAndApplyAsync(db, h => h.PlanMergeParagraphItem(c.ItemId, c.Direction));
-        return null;
-    }
+    public Task<BookCommandResult> HandleAsync(MergeParagraphItemCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new MergeParagraphItemMutation(c.FolderId, c.ItemId, c.Direction), ct);
 }

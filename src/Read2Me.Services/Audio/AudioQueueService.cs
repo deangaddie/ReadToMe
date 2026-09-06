@@ -41,7 +41,6 @@ namespace Read2Me.Services.Audio
         private readonly ConcurrentDictionary<AudioItemKey, long> _versions = new();
 
         public event Action? Changed;
-        public event Action<ProjectFolderId, Guid, string>? AudioFileAssigned;
 
         public ChannelReader<QueuedAudioItem> Reader => _channel.Reader;
 
@@ -70,11 +69,12 @@ namespace Read2Me.Services.Audio
         /// collaborators.
         /// </para>
         /// <para>
-        /// <see cref="Disposition.Complete"/>'s cache-bust stamp and <see cref="AudioFileAssigned"/>
-        /// publish sit <i>inside</i> the arm rather than beside it: they are the transition, and
-        /// splitting them out would recreate the two-call sequence <c>Apply</c> exists to remove —
-        /// making it possible to complete an item without stamping it. That is why the recorded
-        /// relative path rides <see cref="Disposition.Complete.Product"/>.
+        /// <see cref="Disposition.Complete"/>'s cache-bust stamp sits <i>inside</i> the arm rather
+        /// than beside it: it is part of the transition, and splitting it out would recreate the
+        /// two-call sequence <c>Apply</c> exists to remove — making it possible to complete an item
+        /// without stamping it. The recorded audio itself is no longer this queue's business: the
+        /// item's audio reference and the review of it are one Book mutation, committed by the
+        /// recorder, and every open Book View converges on its receipt (ADR 0007).
         /// </para>
         /// <para>
         /// Each retry arm bumps exactly the counter its own <see cref="QueueDisposition.Decide"/> arm
@@ -92,7 +92,6 @@ namespace Read2Me.Services.Audio
                 case Disposition.Complete complete:
                     _store.Settle(key, elapsedSeconds: complete.Elapsed);
                     _versions[key] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    AudioFileAssigned?.Invoke(item.Folder, item.Item.ParagraphItemId, complete.Product!);
                     break;
 
                 case Disposition.Unfinished unfinished:

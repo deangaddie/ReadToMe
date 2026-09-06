@@ -1,9 +1,15 @@
 using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Characters
 {
-    public class CharacterResolver(ICharacterReader reader, IBookCommandHandler commands)
+    /// <summary>
+    /// Turns a spoken name into the Character that answers to it, creating one if nobody does. This
+    /// is the roster's read-plus-write seam: the attribution queue names speakers in prose, and the
+    /// generic <c>CreateCharacter</c> command is the same question asked by an agent.
+    /// </summary>
+    public class CharacterResolver(ICharacterReader reader, BookMutations mutations)
     {
         public static bool Matches(Character c, string name) =>
             string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase) ||
@@ -11,18 +17,70 @@ namespace Read2Me.Services.Characters
 
         /// <summary>
         /// Returns the id of an existing Character matching <paramref name="name"/> by canonical name
-        /// or alias (case-insensitive), creating a new Character if none matches.
+        /// or alias (case-insensitively), creating a new Character if none matches.
+        /// <para>
+        /// The read comes first so that the common case — a name already on the roster — costs no
+        /// write, no revision and no Book View reconciliation. <see cref="CreateCharacterMutation"/>
+        /// asks the same question again inside its transaction and answers <c>NoChange</c> when it
+        /// finds a match this read missed, so a race creates no duplicate; this then reads once more
+        /// for the id that won, because a mutation that changed nothing has no created identity to
+        /// report (ADR 0007).
+        /// </para>
         /// </summary>
-        public virtual async Task<Guid> ResolveOrCreateAsync(ProjectFolderId folder, string name, CancellationToken ct)
-        {
-            var characters = await reader.GetCharactersWithAliasesAsync(folder);
-            var existing = characters.FirstOrDefault(c => Matches(c, name));
-            if (existing != null)
-                return existing.Id;
+        public virtual async Task<Guid> ResolveOrCreateAsync(
+            ProjectFolderId folder, string name, CancellationToken ct) =>
+            (await ResolveOrCreateWithOutcomeAsync(folder, name, ct)).Id;
 
-            var created = await commands.ExecuteAsync(new CreateCharacterCommand(folder, name), ct);
-            return created ?? throw new InvalidOperationException(
-                $"CreateCharacterCommand returned null for name '{name}'");
+        /// <summary>
+        /// The same answer for a caller that also has to report whether anything was written — the
+        /// generic command endpoint, which answers with the id either way but must not describe a
+        /// created Character as a Book that did not change.
+        /// </summary>
+        public async Task<(BookMutationOutcome Outcome, Guid Id)> ResolveOrCreateWithOutcomeAsync(
+            ProjectFolderId folder, string name, CancellationToken ct)
+        {
+            if (await FindAsync(folder, name) is { } existing)
+                return (new BookMutationOutcome.NoChange(), existing);
+
+            var outcome = await mutations.CommitAsync(new CreateCharacterMutation(folder, name), ct);
+            if (outcome is BookMutationOutcome.Committed { Receipt.Effects.CreatedId: { } created })
+                return (outcome, created);
+
+            return (outcome, await FindAsync(folder, name)
+                ?? throw new InvalidOperationException(
+                    $"CreateCharacterMutation neither created nor found a character named '{name}'."));
         }
+
+        /// <summary>
+        /// One discovery row applied: whoever answers to the name — created if nobody does — plus
+        /// every alias the row carries. Two producers apply these rows, the review dialog and
+        /// <c>POST /characters/discover/apply</c>, and neither should have to know that a row is a
+        /// resolve followed by one alias mutation each.
+        /// </summary>
+        /// <returns>
+        /// The first refusal, if the row hit one, so the caller can report it and move on; otherwise
+        /// the resolve's own outcome — <c>NoChange</c> for a name the roster already answered to.
+        /// </returns>
+        public async Task<BookMutationOutcome> ApplyDiscoveredAsync(
+            ProjectFolderId folder, string name, IReadOnlyList<string> aliases, CancellationToken ct)
+        {
+            var (outcome, id) = await ResolveOrCreateWithOutcomeAsync(folder, name, ct);
+            if (outcome is BookMutationOutcome.Rejected) return outcome;
+
+            foreach (var alias in aliases)
+                if (await mutations.CommitAsync(new AddCharacterAliasMutation(folder, id, alias), ct)
+                    is BookMutationOutcome.Rejected refused)
+                    return refused;
+
+            return outcome;
+        }
+
+        /// <summary>
+        /// Whoever already answers to <paramref name="name"/>, or null if nobody does. Public because a
+        /// producer that has just been told its create changed nothing still needs the id of whoever
+        /// was already there.
+        /// </summary>
+        public async Task<Guid?> FindAsync(ProjectFolderId folder, string name) =>
+            (await reader.GetCharactersWithAliasesAsync(folder)).FirstOrDefault(c => Matches(c, name))?.Id;
     }
 }

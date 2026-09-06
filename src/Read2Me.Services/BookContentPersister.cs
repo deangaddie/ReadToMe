@@ -8,10 +8,9 @@ namespace Read2Me.Services
 {
     public class BookContentPersister : IBookContentPersister
     {
-        public async Task PersistAsync(ProjectDbContext db, BookContent content, CancellationToken cancellationToken = default)
+        public Task<int> PersistAsync(ProjectDbContext db, BookContent content, CancellationToken cancellationToken = default)
         {
-            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
-
+            var added = 0;
             string? prev = null;
             string NextKey() => prev = OrderHelper.GetNextOrder(prev);
 
@@ -19,21 +18,25 @@ namespace Read2Me.Services
             {
                 var volume = new Volume { Id = Guid.NewGuid(), Title = vol.Title, Order = NextKey() };
                 db.Volumes.Add(volume);
+                added++;
 
                 foreach (var part in vol.Parts)
                 {
                     var partEntity = new Part { Id = Guid.NewGuid(), VolumeId = volume.Id, Title = part.Title, Order = NextKey() };
                     db.Parts.Add(partEntity);
+                    added++;
 
                     foreach (var ch in part.Chapters)
                     {
                         var chapter = new Chapter { Id = Guid.NewGuid(), PartId = partEntity.Id, Title = ch.Title, Order = NextKey() };
                         db.Chapters.Add(chapter);
+                        added++;
 
                         foreach (var para in ch.Paragraphs)
                         {
                             var paragraph = new Paragraph { Id = Guid.NewGuid(), ChapterId = chapter.Id, Order = NextKey() };
                             db.Paragraphs.Add(paragraph);
+                            added++;
 
                             var segments = ParagraphSplitter.Split(para.Text);
                             var attributed = NarrationClassifier.Classify(segments, ProjectDbContext.NarratorId);
@@ -48,14 +51,14 @@ namespace Read2Me.Services
                                     CharacterId = seg.CharacterId,
                                     Text = seg.Text
                                 });
+                                added++;
                             }
                         }
                     }
                 }
             }
 
-            await db.SaveChangesAsync(cancellationToken);
-            await tx.CommitAsync(cancellationToken);
+            return Task.FromResult(added);
         }
     }
 }

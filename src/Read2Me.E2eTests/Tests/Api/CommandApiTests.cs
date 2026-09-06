@@ -99,6 +99,25 @@ public class CommandApiTests(E2eAppFixture app)
         JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}"))
             .RootElement.GetProperty("narrator").Clone();
 
+    /// <summary>
+    /// A command aimed at a node the Book does not contain has always been a quiet success rather
+    /// than an error, and stays one now that the write reports <c>NotFound</c> underneath
+    /// (ADR 0007). The whole response body is still <c>{ "newEntityId": null }</c>.
+    /// </summary>
+    [Fact]
+    public async Task Command_for_a_node_the_book_does_not_have_is_200_with_a_null_id()
+    {
+        var folder = $"api-noop-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "No-op Book", "Author");
+
+        var response = await PostCommandAsync(folder,
+            $$"""{ "type": "DeleteChapter", "chapterId": "{{Guid.NewGuid()}}" }""");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("newEntityId").ValueKind);
+    }
+
     [Fact]
     public async Task Unknown_command_type_is_400()
     {

@@ -1,11 +1,15 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Read2Me.Core.Configuration;
 using Read2Me.App.Characters;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.App.Characters
@@ -20,14 +24,15 @@ namespace Read2Me.Tests.App.Characters
     /// (phase 1) and <c>CharacterDispositionTests</c> (translation + phase 2), with no fakes.
     /// </para>
     /// </summary>
-    public class CharacterQueueProcessorTests
+    public class CharacterQueueProcessorTests : ProjectDbTestBase
     {
         private readonly RecordingQueue _queue;
         private readonly FakeEscalationChain _attribution;
         private readonly FakeResolver _resolver;
         private readonly FakeCharacterReader _reader;
         private readonly FakeNarratorCatalog _catalog;
-        private readonly FakeCommandHandler _commands;
+        private readonly RecordingAttribution _commits;
+        private readonly ServiceProvider _root;
         private readonly CharacterQueueProcessor _sut;
         private readonly QueuedParagraph _item;
 
@@ -38,23 +43,40 @@ namespace Read2Me.Tests.App.Characters
             _resolver = new FakeResolver();
             _reader = new FakeCharacterReader();
             _catalog = new FakeNarratorCatalog();
-            _commands = new FakeCommandHandler();
+            _commits = new RecordingAttribution();
+
+            // A real write side over a real (empty) project, with only this family's implementation
+            // replaced: the queue commits through BookMutations exactly as it does in the app, while
+            // the answers below keep naming items no Book has to contain.
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            services.AddSingleton<IBookMutationImplementation<AttributeParagraphItemsMutation>>(_commits);
+            _root = services.BuildServiceProvider();
+
             _sut = new CharacterQueueProcessor(
                 _queue,
                 _attribution,
                 _resolver,
                 _reader,
                 _catalog,
-                _commands,
+                _root.GetRequiredService<BookMutations>(),
                 NullLogger<CharacterQueueProcessor>.Instance);
 
             _item = new QueuedParagraph(
-                new ProjectFolderId("test"),
+                new ProjectFolderId(FolderName),
                 Guid.NewGuid(),
                 "Preview text",
                 Guid.NewGuid(),
                 Guid.NewGuid(),
                 Guid.NewGuid());
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _root.DisposeAsync();
+            await base.DisposeAsync();
         }
 
         // ── Outcome builders ──────────────────────────────────────────────────
@@ -83,7 +105,7 @@ namespace Read2Me.Tests.App.Characters
         /// <summary>The one attribution the command carried.</summary>
         private ItemAttribution SingleAttribution()
         {
-            var cmd = Assert.IsType<AttributeItemsCommand>(Assert.Single(_commands.SentCommands));
+            var cmd = Assert.Single(_commits.Applied);
             Assert.Equal(_item.ParagraphId, cmd.ParagraphId);
             return Assert.Single(cmd.Items);
         }
@@ -198,7 +220,7 @@ namespace Read2Me.Tests.App.Characters
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            Assert.Empty(_commands.SentCommands);
+            Assert.Empty(_commits.Applied);
             Assert.NotNull(DispositionFor<Disposition.Unfinished>(_item).Elapsed);
         }
 
@@ -280,7 +302,7 @@ namespace Read2Me.Tests.App.Characters
 
             await _sut.ProcessItemAsync(items[0], CancellationToken.None);
 
-            Assert.Equal(3, _commands.SentCommands.Count);
+            Assert.Equal(3, _commits.Applied.Count);
             Assert.Equal(1, _catalog.Reads);
         }
 
@@ -303,7 +325,7 @@ namespace Read2Me.Tests.App.Characters
 
             foreach (var item in items)
                 DispositionFor<Disposition.Complete>(item);
-            Assert.Equal(3, _commands.SentCommands.Count);
+            Assert.Equal(3, _commits.Applied.Count);
         }
 
         [Fact]
@@ -359,8 +381,8 @@ namespace Read2Me.Tests.App.Characters
             await _sut.ProcessItemAsync(early, CancellationToken.None);
 
             // Commands applied in stream order.
-            Assert.Equal(2, _commands.SentCommands.Count);
-            var cmd0 = Assert.IsType<AttributeItemsCommand>(_commands.SentCommands[0]);
+            Assert.Equal(2, _commits.Applied.Count);
+            var cmd0 = _commits.Applied[0];
             Assert.Equal(early.ParagraphId, cmd0.ParagraphId);
         }
 
@@ -604,13 +626,26 @@ namespace Read2Me.Tests.App.Characters
                 => Task.FromResult(Unattributed);
         }
 
-        private class FakeCommandHandler : IBookCommandHandler
+        /// <summary>
+        /// Stands in for the attribution mutation's implementation, so these orchestration tests
+        /// keep their fabricated ids and still commit through the real <see cref="BookMutations"/> —
+        /// which is what the queue actually does (ADR 0007). What the real implementation stamps,
+        /// and what it reports, is asserted in <c>SpeakerAttributionMutationTests</c>.
+        /// </summary>
+        private sealed class RecordingAttribution : IBookMutationImplementation<AttributeParagraphItemsMutation>
         {
-            public List<BookCommand> SentCommands { get; } = [];
-            public Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
+            public List<AttributeParagraphItemsMutation> Applied { get; } = [];
+
+            public Task<BookMutationEffects> ApplyAsync(
+                AttributeParagraphItemsMutation mutation, ProjectDbContext db, CancellationToken ct)
             {
-                SentCommands.Add(command);
-                return Task.FromResult<Guid?>(null);
+                Applied.Add(mutation);
+                return Task.FromResult(new BookMutationEffects
+                {
+                    Scope = BookMutationScope.Exact,
+                    Facets = BookFacets.Attribution,
+                    ParagraphIds = [mutation.ParagraphId],
+                });
             }
         }
     }

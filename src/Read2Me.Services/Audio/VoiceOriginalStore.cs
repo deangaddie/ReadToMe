@@ -86,8 +86,6 @@ namespace Read2Me.Services.Audio
         }
 
         private string FullPath(ProjectFolderId folder, string relativePath) =>
-            Path.Combine(
-                fs.GetProjectFolderPath(folder.Value),
-                relativePath.Replace('/', Path.DirectorySeparatorChar));
+            fs.ProjectFilePath(folder, relativePath);
     }
 }

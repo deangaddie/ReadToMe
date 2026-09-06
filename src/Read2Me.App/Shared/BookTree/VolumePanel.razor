@@ -8,7 +8,7 @@
 }
 else
 {
-    <MudExpansionPanel Expanded="@Presenter.Tree.ExpandedVolumeIds.Contains(Volume.Id)"
+    <MudExpansionPanel Expanded="@Presenter.IsExpanded(BookNodeLevel.Volume, Volume.Id)"
                       ExpandedChanged="@VolumeExpandCb">
         <TitleContent>
             <NodeTitleRow FolderId="@FolderId"
@@ -17,13 +17,7 @@ else
                           Title="@(Volume.Title ?? "Volume")"
                           Spec="@BookNodeMenuSpecs.ForVolume(FolderId, Volume)"
                           IsFirst="IsFirst"
-                          IsLast="IsLast"
-                          PreviousSiblingId="PreviousSiblingId"
-                          NextSiblingId="NextSiblingId"
-                          OnChanged="OnChanged"
-                          OnMerged="OnMerged"
-                          OnSplit="OnSplit"
-                          OnReset="@(() => Presenter.ResetAndLoadAsync(FolderId))" />
+                          IsLast="IsLast" />
         </TitleContent>
         <ChildContent>
             @RenderVolumeBody(Volume)
@@ -37,29 +31,21 @@ else
     [Parameter, EditorRequired] public bool IsSingleVolume { get; set; }
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public Guid? PreviousSiblingId { get; set; }
-    [Parameter] public Guid? NextSiblingId { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     EventCallback<bool> VolumeExpandCb =>
-        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.Tree.OnVolumeExpandedAsync(Volume, b));
+        EventCallback.Factory.Create<bool>(this, (bool b) => Presenter.SetNodeExpandedAsync(BookNodeLevel.Volume, Volume.Id, b));
 
     RenderFragment RenderVolumeBody(Volume vol) =>
         @<text>
-            @if (Presenter.Tree.LoadingIds.Contains(vol.Id))
+            @if (Presenter.IsExpanding(vol.Id))
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ma-2" />
             }
-            else if (Presenter.Tree.GetParts(vol.Id) is { } parts)
+            else if (Presenter.Parts(vol.Id) is { } parts)
             {
                 <PartPanel Parts="@parts"
                            FolderId="@FolderId"
-                           VolumeId="@vol.Id"
-                           OnChanged="OnChanged"
-                           OnMerged="OnMerged"
-                           OnSplit="OnSplit" />
+                           VolumeId="@vol.Id" />
             }
         </text>;
 

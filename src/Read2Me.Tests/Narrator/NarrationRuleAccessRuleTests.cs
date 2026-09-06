@@ -18,12 +18,13 @@ namespace Read2Me.Tests.Narrator
     {
         /// <summary>
         /// The comparison the seam owns — either direction, any spacing: an <em>item's</em> speaker
-        /// tested against the sentinel. A command's own <c>c.CharacterId</c> is excluded: the
-        /// handlers that compare it are asking a different question — may this command touch the
-        /// seed narrator row at all — which is ADR-0004's business, not this rule's.
+        /// tested against the sentinel. A request's own CharacterId is excluded — <c>c</c> on a
+        /// command, <c>mutation</c> on a Book mutation: the code that compares those is asking a
+        /// different question, may this request touch the seed narrator row at all, which is
+        /// ADR-0004's business rather than this rule's.
         /// </summary>
         private static readonly Regex SpeakerComparison =
-            new(@"(?<!\bc)\.CharacterId\s*[!=]=\s*ProjectDbContext\.NarratorId", RegexOptions.Compiled);
+            new(@"(?<!\bc)(?<!\bmutation)\.CharacterId\s*[!=]=\s*ProjectDbContext\.NarratorId", RegexOptions.Compiled);
 
         /// <summary>
         /// Source-root-relative paths allowed to spell the comparison out, and why. Paths, not bare

@@ -28,6 +28,14 @@ namespace Read2Me.Core.IO
         Stream OpenRead(string path);
         void EnsureDirectory(string path);
         void DeleteFile(string path);
+
+        /// <summary>
+        /// Moves <paramref name="sourcePath"/> onto <paramref name="destinationPath"/>, replacing
+        /// whatever is already there.
+        /// A producer stages an external artifact beside its destination and moves it into place
+        /// only once the Book mutation that names it has committed (ADR 0007).
+        /// </summary>
+        void MoveFile(string sourcePath, string destinationPath);
         Task WriteFileAsync(string path, Stream source);
         Task WriteAllLinesAsync(string path, IEnumerable<string> lines);
     }

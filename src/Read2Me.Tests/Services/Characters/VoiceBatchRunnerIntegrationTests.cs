@@ -4,8 +4,10 @@ using NSubstitute;
 using Read2Me.App.Characters;
 using Read2Me.App.Services;
 using Read2Me.Core.Audio;
+using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Microsoft.EntityFrameworkCore;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
@@ -17,14 +19,32 @@ using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Fakes;
+using Read2Me.Tests.Infrastructure;
 using Xunit;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Tests.Services.Characters
 {
-    public class VoiceBatchRunnerIntegrationTests
+    /// <summary>
+    /// The voice batch driven end to end through <see cref="VoiceBatchRunner"/>.
+    /// <para>
+    /// Its reads are faked — the roster and the LLM's plan are what each case is arranged from — but
+    /// its <em>writes</em> go to a real project database through <c>BookMutations</c>, because that is
+    /// what the batch is now a producer of (ADR 0007). So "the sweep created these voices" is asserted
+    /// by reading them back rather than by watching commands go past.
+    /// </para>
+    /// </summary>
+    public class VoiceBatchRunnerIntegrationTests : ProjectDbTestBase
     {
         private static readonly ProjectFolderId Folder = new("test-book");
+
+        private ServiceProvider? _root;
+
+        public override async ValueTask DisposeAsync()
+        {
+            if (_root is not null) await _root.DisposeAsync();
+            await base.DisposeAsync();
+        }
 
         // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -67,32 +87,100 @@ namespace Read2Me.Tests.Services.Characters
             var chars = characters ?? Array.Empty<Character>();
             var voicesMap = voicesByCharacter ?? new Dictionary<Guid, List<VoiceEntity>>();
 
+            SeedProject(chars, voicesMap);
+
             var fakeReader = new FakeProjectReader2(
                 chars, voicesMap, "Test Book", "Test Author", narrator ?? NarratorIdentity.Unlinked);
-            var fakeCommandHandler = new FakeCommandHandler(voicesMap);
-            var events = new List<VoiceBatchEvent>();
 
             var fakeOrchestrator = new FakeVoiceOrchestrator(
                 cannedPrompt, orchestratorThrows, orchestratorDelayMs,
                 audioGenerationFails, audioGenerationThrows,
                 cannedAudioFileName, cannedTranscript, cannedPlan);
 
+            return BuildRunner(fakeReader, fakeOrchestrator);
+        }
+
+        /// <summary>
+        /// The runner over a real write side: the mutation wiring and its project database, with the
+        /// roster reads and the LLM standing in as fakes.
+        /// </summary>
+        private Harness BuildRunner(IProjectReader reader, VoiceOrchestrator orchestrator)
+        {
+            var events = new List<VoiceBatchEvent>();
+
             var services = new ServiceCollection();
-            services.AddSingleton<IProjectReader>(fakeReader);
-            services.AddSingleton<IBookCommandHandler>(fakeCommandHandler);
-            services.AddSingleton<VoiceOrchestrator>(fakeOrchestrator);
-            var sp = services.BuildServiceProvider();
+            services.AddBookCommandHandlers();
+            services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            services.AddSingleton(reader);
+            services.AddSingleton<VoiceOrchestrator>(orchestrator);
+            _root = services.BuildServiceProvider();
 
             var broadcaster = new EventBroadcaster<VoiceBatchEvent>();
             broadcaster.Event += e => { lock (events) events.Add(e); };
 
             var sut = new VoiceBatchRunner(
-                sp.GetRequiredService<IServiceScopeFactory>(),
+                _root.GetRequiredService<IServiceScopeFactory>(),
                 NullLogger<VoiceBatchRunner>.Instance,
                 broadcaster,
                 new EventBroadcaster<LlmStreamEvent>());
 
-            return new Harness(sut, fakeCommandHandler, events);
+            return new Harness(sut, events);
+        }
+
+        /// <summary>
+        /// Puts the arranged roster and voices into the project database, so the writes the sweep
+        /// makes land against the same Book the fake reader describes.
+        /// </summary>
+        private void SeedProject(
+            IReadOnlyCollection<Character> characters, Dictionary<Guid, List<VoiceEntity>> voicesByCharacter)
+        {
+            using var db = OpenDbAsync().GetAwaiter().GetResult();
+            db.Projects.Add(new Project
+            {
+                Title = "Test Book", BookTitle = "Test Book", Author = "Test Author",
+                Filename = "t.txt", Type = BookFileType.Text,
+            });
+
+            foreach (var character in characters)
+            {
+                // The seed Narrator row is already there — it is created with the database, not by
+                // anyone arranging a test (ADR-0004).
+                if (!db.Characters.Any(c => c.Id == character.Id))
+                    db.Characters.Add(new Character
+                    {
+                        Id = character.Id, Name = character.Name, IsNarrator = character.IsNarrator,
+                    });
+
+                if (!voicesByCharacter.TryGetValue(character.Id, out var voices)) continue;
+
+                foreach (var voice in voices)
+                    db.Voices.Add(new VoiceEntity
+                    {
+                        Id = voice.Id, CharacterId = character.Id, Name = voice.Name,
+                        Source = voice.Source, DesignPrompt = voice.DesignPrompt,
+                        AudioFileName = voice.AudioFileName, CreatedUtc = DateTime.UtcNow,
+                    });
+            }
+
+            db.SaveChanges();
+        }
+
+        /// <summary>The voices the sweep left behind for one character, oldest first.</summary>
+        private async Task<List<VoiceEntity>> ReadVoicesAsync(Guid characterId)
+        {
+            await using var db = await OpenDbAsync();
+            return await db.Voices
+                .Where(v => v.CharacterId == characterId)
+                .OrderBy(v => v.CreatedUtc)
+                .ToListAsync();
+        }
+
+        /// <summary>Every voice in the Book, for the cases that assert nothing was created at all.</summary>
+        private async Task<List<VoiceEntity>> ReadAllVoicesAsync()
+        {
+            await using var db = await OpenDbAsync();
+            return await db.Voices.OrderBy(v => v.CreatedUtc).ToListAsync();
         }
 
         // ── Tests ──────────────────────────────────────────────────────────────
@@ -116,22 +204,20 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            var createCommands = h.CommandHandler.Issued
-                .OfType<CreateVoiceCommand>()
-                .Where(c => c.CharacterId == character.Id)
-                .ToList();
+            var created = await ReadVoicesAsync(character.Id);
 
-            Assert.Equal(2, createCommands.Count);
-            Assert.Equal(new[] { "Young Alice", "Adult Alice" }, createCommands.Select(c => c.Name));
-            Assert.All(createCommands, c => Assert.True(c.IsGenerated));
+            Assert.Equal(2, created.Count);
+            Assert.All(created, v => Assert.Equal(VoiceSource.Generated, v.Source));
 
-            var updateCommands = h.CommandHandler.Issued.OfType<UpdateVoiceCommand>().ToList();
-            Assert.Equal(2, updateCommands.Count);
-            Assert.Equal("Part 1, Chapter 1 to Part 1, Chapter 7", updateCommands[0].Description);
+            // Name, description and prompt land together — one commit per planned voice — so each
+            // planned voice is checked as the whole row it became.
+            var young = created.Single(v => v.Name == "Young Alice");
+            Assert.Equal("Part 1, Chapter 1 to Part 1, Chapter 7", young.Description);
+            Assert.Equal("a girl's voice", young.DesignPrompt);
 
-            var promptCommands = h.CommandHandler.Issued.OfType<SetVoiceDesignPromptCommand>().ToList();
-            Assert.Equal(2, promptCommands.Count);
-            Assert.Equal(new[] { "a girl's voice", "a grown woman's voice" }, promptCommands.Select(c => c.Prompt));
+            var adult = created.Single(v => v.Name == "Adult Alice");
+            Assert.Equal("Part 2 onwards", adult.Description);
+            Assert.Equal("a grown woman's voice", adult.DesignPrompt);
         }
 
         [Fact]
@@ -148,12 +234,7 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            var createCommands = h.CommandHandler.Issued
-                .OfType<CreateVoiceCommand>()
-                .Where(c => c.CharacterId == narrator.Id)
-                .ToList();
-
-            Assert.Single(createCommands);
+            Assert.Single(await ReadVoicesAsync(narrator.Id));
         }
 
         [Fact]
@@ -170,9 +251,9 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder, regenerateAll: true);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.DoesNotContain(existingVoice, voices[narrator.Id]);
-            Assert.Contains(h.CommandHandler.Issued,
-                command => command is CreateVoiceCommand create && create.CharacterId == narrator.Id);
+            var replanned = await ReadVoicesAsync(narrator.Id);
+            Assert.DoesNotContain(replanned, v => v.Id == existingVoice.Id);
+            Assert.NotEmpty(replanned);
         }
 
         [Fact]
@@ -192,10 +273,8 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.DoesNotContain(h.CommandHandler.Issued,
-                command => command is CreateVoiceCommand create && create.CharacterId == narrator.Id);
-            Assert.Contains(h.CommandHandler.Issued,
-                command => command is CreateVoiceCommand create && create.CharacterId == watson.Id);
+            Assert.Empty(await ReadVoicesAsync(narrator.Id));
+            Assert.NotEmpty(await ReadVoicesAsync(watson.Id));
         }
 
         [Fact]
@@ -217,7 +296,7 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder, regenerateAll: true);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.Contains(narratorVoice, voices[narrator.Id]);
+            Assert.Contains(await ReadVoicesAsync(narrator.Id), v => v.Id == narratorVoice.Id);
         }
 
         [Fact]
@@ -237,11 +316,11 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.Empty(h.CommandHandler.Issued);
+            Assert.Equal([voice.Id], (await ReadAllVoicesAsync()).Select(v => v.Id));
         }
 
         [Fact]
-        public async Task GeneratePrompts_UploadedVoice_NoPromptCommandIssued()
+        public async Task GeneratePrompts_UploadedVoice_NoPromptWritten()
         {
             var character = MakeCharacter("Carol");
             var uploaded = MakeUploadedVoice(character.Id);
@@ -255,11 +334,11 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.DoesNotContain(h.CommandHandler.Issued, c => c is SetVoiceDesignPromptCommand s && s.VoiceId == uploaded.Id);
+            Assert.Null((await ReadVoicesAsync(character.Id)).Single(v => v.Id == uploaded.Id).DesignPrompt);
         }
 
         [Fact]
-        public async Task GeneratePrompts_PromptVoiceAlreadyHasPrompt_NoCommandIssued()
+        public async Task GeneratePrompts_PromptVoiceAlreadyHasPrompt_IsLeftAlone()
         {
             var character = MakeCharacter("Dave");
             var voice = MakeGeneratedVoice(character.Id, designPrompt: "existing prompt");
@@ -273,7 +352,8 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.DoesNotContain(h.CommandHandler.Issued, c => c is SetVoiceDesignPromptCommand s && s.VoiceId == voice.Id);
+            Assert.Equal("existing prompt",
+                (await ReadVoicesAsync(character.Id)).Single(v => v.Id == voice.Id).DesignPrompt);
         }
 
         [Fact]
@@ -286,43 +366,26 @@ namespace Read2Me.Tests.Services.Characters
             var fakeOrchestrator = new SequencedFakeVoiceOrchestrator(
                 new[] { true, false }, "good prompt");
 
-            var fakeReader = new FakeProjectReader2(
-                new[] { c1, c2 },
-                new Dictionary<Guid, List<VoiceEntity>>
-                {
-                    [c1.Id] = new List<VoiceEntity>(),
-                    [c2.Id] = new List<VoiceEntity>(),
-                },
-                "Book", "Author");
+            var voices = new Dictionary<Guid, List<VoiceEntity>>
+            {
+                [c1.Id] = new List<VoiceEntity>(),
+                [c2.Id] = new List<VoiceEntity>(),
+            };
+            SeedProject([c1, c2], voices);
 
-            var fakeCommandHandler = new FakeCommandHandler();
-            var events = new List<VoiceBatchEvent>();
+            var h = BuildRunner(new FakeProjectReader2([c1, c2], voices, "Book", "Author"), fakeOrchestrator);
 
-            var services = new ServiceCollection();
-            services.AddSingleton<IProjectReader>(fakeReader);
-            services.AddSingleton<IBookCommandHandler>(fakeCommandHandler);
-            services.AddSingleton<VoiceOrchestrator>(fakeOrchestrator);
-            var sp = services.BuildServiceProvider();
-
-            var broadcaster = new EventBroadcaster<VoiceBatchEvent>();
-            broadcaster.Event += e => { lock (events) events.Add(e); };
-            var sut = new VoiceBatchRunner(
-                sp.GetRequiredService<IServiceScopeFactory>(),
-                NullLogger<VoiceBatchRunner>.Instance,
-                broadcaster,
-                new EventBroadcaster<LlmStreamEvent>());
-
-            sut.StartGeneratePrompts(Folder);
-            await WaitForIdleAsync(sut);
+            h.Sut.StartGeneratePrompts(Folder);
+            await WaitForIdleAsync(h.Sut);
 
             // c2 should still get its voices even though c1 failed
-            Assert.Contains(fakeCommandHandler.Issued, c => c is CreateVoiceCommand cv && cv.CharacterId == c2.Id);
-            Assert.DoesNotContain(fakeCommandHandler.Issued, c => c is CreateVoiceCommand cv && cv.CharacterId == c1.Id);
-            Assert.Equal(1, sut.Failed);
+            Assert.NotEmpty(await ReadVoicesAsync(c2.Id));
+            Assert.Empty(await ReadVoicesAsync(c1.Id));
+            Assert.Equal(1, h.Sut.Failed);
         }
 
         [Fact]
-        public async Task GeneratePrompts_Idempotent_NoCommandsIssuedWhenAllVoicesAlreadyPrompted()
+        public async Task GeneratePrompts_Idempotent_NothingWrittenWhenAllVoicesAlreadyPrompted()
         {
             var character = MakeCharacter("Grace");
             var voice = MakeGeneratedVoice(character.Id, designPrompt: "already set");
@@ -336,9 +399,10 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            // No create or set-prompt commands
-            Assert.Empty(h.CommandHandler.Issued.OfType<CreateVoiceCommand>());
-            Assert.Empty(h.CommandHandler.Issued.OfType<SetVoiceDesignPromptCommand>());
+            // Nothing created, and the prompt that was already there is untouched.
+            var after = await ReadAllVoicesAsync();
+            Assert.Equal([voice.Id], after.Select(v => v.Id));
+            Assert.Equal("already set", after[0].DesignPrompt);
         }
 
         [Fact]
@@ -378,8 +442,7 @@ namespace Read2Me.Tests.Services.Characters
             h.Sut.StartGeneratePrompts(Folder);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.Contains(h.CommandHandler.Issued, c => c is CreateVoiceCommand cv && cv.CharacterId == character.Id);
-            Assert.Contains(h.CommandHandler.Issued, c => c is SetVoiceDesignPromptCommand s && s.Prompt == "silky smooth");
+            Assert.Contains(await ReadVoicesAsync(character.Id), v => v.DesignPrompt == "silky smooth");
             Assert.Contains(h.Events, e => e is BatchCompleted bc && bc.Processed == 1 && bc.Failed == 0);
         }
 
@@ -534,28 +597,26 @@ namespace Read2Me.Tests.Services.Characters
                 cannedAudioFileName: "voices/frank.wav",
                 cannedTranscript: "hello");
 
-            var fakeReader = new FakeProjectReader2(
-                new[] { c1, c2 },
-                new Dictionary<Guid, List<VoiceEntity>> { [c1.Id] = new List<VoiceEntity> { v1 }, [c2.Id] = new List<VoiceEntity> { v2 } },
-                "Book", "Author");
+            var h = BuildSequencedAudioRunner(c1, c2, v1, v2, fakeOrchestrator);
 
-            var fakeCommandHandler = new FakeCommandHandler();
-            var events = new List<VoiceBatchEvent>();
+            h.Sut.StartGenerateAudio(Folder);
+            await WaitForIdleAsync(h.Sut);
 
-            var services = new ServiceCollection();
-            services.AddSingleton<IProjectReader>(fakeReader);
-            services.AddSingleton<IBookCommandHandler>(fakeCommandHandler);
-            services.AddSingleton<VoiceOrchestrator>(fakeOrchestrator);
-            var sp = services.BuildServiceProvider();
-            var broadcaster1 = new EventBroadcaster<VoiceBatchEvent>();
-            broadcaster1.Event += e => { lock (events) events.Add(e); };
-            var sut = new VoiceBatchRunner(sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<VoiceBatchRunner>.Instance, broadcaster1, new EventBroadcaster<LlmStreamEvent>());
+            Assert.Contains(h.Events, e => e is VoiceUpdated vu && vu.VoiceId == v2.Id && vu.AudioFileName == "voices/frank.wav");
+            Assert.Equal(1, h.Sut.Failed);
+        }
 
-            sut.StartGenerateAudio(Folder);
-            await WaitForIdleAsync(sut);
-
-            Assert.Contains(events, e => e is VoiceUpdated vu && vu.VoiceId == v2.Id && vu.AudioFileName == "voices/frank.wav");
-            Assert.Equal(1, sut.Failed);
+        /// <summary>The two-character audio-sweep arrangement both sequenced-failure cases share.</summary>
+        private Harness BuildSequencedAudioRunner(
+            Character c1, Character c2, VoiceEntity v1, VoiceEntity v2, VoiceOrchestrator orchestrator)
+        {
+            var voices = new Dictionary<Guid, List<VoiceEntity>>
+            {
+                [c1.Id] = [v1],
+                [c2.Id] = [v2],
+            };
+            SeedProject([c1, c2], voices);
+            return BuildRunner(new FakeProjectReader2([c1, c2], voices, "Book", "Author"), orchestrator);
         }
 
         [Fact]
@@ -572,28 +633,13 @@ namespace Read2Me.Tests.Services.Characters
                 cannedAudioFileName: "voices/hank.wav",
                 cannedTranscript: "hello");
 
-            var fakeReader = new FakeProjectReader2(
-                new[] { c1, c2 },
-                new Dictionary<Guid, List<VoiceEntity>> { [c1.Id] = new List<VoiceEntity> { v1 }, [c2.Id] = new List<VoiceEntity> { v2 } },
-                "Book", "Author");
+            var h = BuildSequencedAudioRunner(c1, c2, v1, v2, fakeOrchestrator);
 
-            var fakeCommandHandler = new FakeCommandHandler();
-            var events = new List<VoiceBatchEvent>();
+            h.Sut.StartGenerateAudio(Folder);
+            await WaitForIdleAsync(h.Sut);
 
-            var services = new ServiceCollection();
-            services.AddSingleton<IProjectReader>(fakeReader);
-            services.AddSingleton<IBookCommandHandler>(fakeCommandHandler);
-            services.AddSingleton<VoiceOrchestrator>(fakeOrchestrator);
-            var sp = services.BuildServiceProvider();
-            var broadcaster2 = new EventBroadcaster<VoiceBatchEvent>();
-            broadcaster2.Event += e => { lock (events) events.Add(e); };
-            var sut = new VoiceBatchRunner(sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<VoiceBatchRunner>.Instance, broadcaster2, new EventBroadcaster<LlmStreamEvent>());
-
-            sut.StartGenerateAudio(Folder);
-            await WaitForIdleAsync(sut);
-
-            Assert.Contains(events, e => e is VoiceUpdated vu && vu.VoiceId == v2.Id && vu.AudioFileName == "voices/hank.wav");
-            Assert.Equal(1, sut.Failed);
+            Assert.Contains(h.Events, e => e is VoiceUpdated vu && vu.VoiceId == v2.Id && vu.AudioFileName == "voices/hank.wav");
+            Assert.Equal(1, h.Sut.Failed);
         }
 
         [Fact]
@@ -671,10 +717,7 @@ namespace Read2Me.Tests.Services.Characters
 
         // ── Fakes ──────────────────────────────────────────────────────────────
 
-        private sealed record Harness(
-            VoiceBatchRunner Sut,
-            FakeCommandHandler CommandHandler,
-            List<VoiceBatchEvent> Events);
+        private sealed record Harness(VoiceBatchRunner Sut, List<VoiceBatchEvent> Events);
 
         private sealed class FakeProjectReader2 : ProjectReaderFakeBase
         {
@@ -715,30 +758,6 @@ namespace Read2Me.Tests.Services.Characters
                 Task.FromResult(_narrator);
         }
 
-        private sealed class FakeCommandHandler : IBookCommandHandler
-        {
-            private readonly Dictionary<Guid, List<VoiceEntity>>? _voicesByCharacter;
-
-            public FakeCommandHandler(Dictionary<Guid, List<VoiceEntity>>? voicesByCharacter = null) =>
-                _voicesByCharacter = voicesByCharacter;
-
-            public List<BookCommand> Issued { get; } = new();
-
-            public Task<Guid?> ExecuteAsync(BookCommand command, CancellationToken ct = default)
-            {
-                lock (Issued) Issued.Add(command);
-                if (command is DeleteVoiceCommand delete && _voicesByCharacter is not null)
-                {
-                    foreach (var voices in _voicesByCharacter.Values)
-                        voices.RemoveAll(voice => voice.Id == delete.VoiceId);
-                }
-                // Return a new Guid for CreateVoiceCommand so the service can use the id
-                if (command is CreateVoiceCommand)
-                    return Task.FromResult<Guid?>(Guid.NewGuid());
-                return Task.FromResult<Guid?>(null);
-            }
-        }
-
         private sealed class FakeVoiceOrchestrator : VoiceOrchestrator
         {
             private readonly string _cannedPrompt;
@@ -756,7 +775,7 @@ namespace Read2Me.Tests.Services.Characters
                 string cannedAudioFileName = "voices/voice.wav", string cannedTranscript = "sample text",
                 IReadOnlyList<VoicePlanVoice>? cannedPlan = null)
                 : base(
-                    audioPipeline: Substitute.For<IAudioPipeline>(),
+                    voiceAudio: Substitute.For<IVoiceAudioWriter>(),
                     transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
                     voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
                     transcriptionSettings: new FakeTranscriptionSettings(),
@@ -820,7 +839,7 @@ namespace Read2Me.Tests.Services.Characters
 
             public SequencedFakeVoiceOrchestrator(bool[] shouldThrow, string cannedPrompt)
                 : base(
-                    audioPipeline: Substitute.For<IAudioPipeline>(),
+                    voiceAudio: Substitute.For<IVoiceAudioWriter>(),
                     transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
                     voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
                     transcriptionSettings: new FakeTranscriptionSettings(),
@@ -868,7 +887,7 @@ namespace Read2Me.Tests.Services.Characters
                 string cannedTranscript,
                 bool[]? shouldThrow = null)
                 : base(
-                    audioPipeline: Substitute.For<IAudioPipeline>(),
+                    voiceAudio: Substitute.For<IVoiceAudioWriter>(),
                     transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
                     voiceAudioGenerator: Substitute.For<IVoiceAudioGenerator>(),
                     transcriptionSettings: new FakeTranscriptionSettings(),

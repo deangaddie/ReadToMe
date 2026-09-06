@@ -1,7 +1,11 @@
 @inject MenuActions Menu
+@inject BookHierarchyPresenter Presenter
 
+@* Every item below is a Book mutation, and a Stale Book View projection refuses all of them
+   (ADR 0007) — so the whole menu closes rather than offering gestures that cannot be taken. *@
 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
          AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+         Disabled="Presenter.IsStale"
          @onclick:stopPropagation="true">
     @if (Spec.EditLabel != null)
     {
@@ -75,86 +79,47 @@
     [Parameter, EditorRequired] public BookNodeMenuSpec Spec { get; set; } = null!;
     [Parameter, EditorRequired] public bool IsFirst { get; set; }
     [Parameter, EditorRequired] public bool IsLast { get; set; }
-    [Parameter] public Guid? PreviousSiblingId { get; set; }
-    [Parameter] public Guid? NextSiblingId { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
-    [Parameter] public EventCallback OnReset { get; set; }
-    [Parameter] public EventCallback<(Guid survivorId, Guid deletedId)> OnMerged { get; set; }
-    [Parameter] public EventCallback<BookSplit> OnSplit { get; set; }
 
     async Task EditAsync()
     {
         if (Spec.EditAction == null) return;
-        var (command, updateLocal) = await Spec.EditAction(Menu);
-        if (command == null) return;
-        await Menu.ExecuteAsync(command);
-        if (updateLocal != null) await updateLocal();
-        await OnChanged.InvokeAsync();
+        var mutation = await Spec.EditAction(Menu);
+        if (mutation == null) return;
+        await Presenter.MutateAsync(mutation);
     }
 
+    // Every gesture on this menu crosses BookMutations, edits included: the Book View is coherent
+    // again — the new wording read back, expansion carried onto the new sibling or the merge
+    // survivor, unsafe selections dropped — before these return, so none of them patches a loaded
+    // entity or fires a reload of its own (ADR 0007).
     async Task SplitAsync(SplitSpec split)
     {
-        if (split.BuildHierarchySplit != null)
-        {
-            var (command, parentId) = await split.BuildHierarchySplit(Menu);
-            if (command == null) return;
-            await OnSplit.InvokeAsync(new BookSplit(command, split.Level, parentId));
-        }
-        else if (split.BuildDirectCommand != null)
-        {
-            var command = await split.BuildDirectCommand(Menu);
-            if (command == null) return;
-            await Menu.ExecuteAsync(command);
-            await OnReset.InvokeAsync();
-        }
+        var mutation = await split.Build(Menu);
+        if (mutation == null) return;
+        await Presenter.MutateAsync(mutation);
     }
 
-    async Task MergeWithPreviousAsync()
-    {
-        await Menu.ExecuteAsync(MenuActions.BuildMerge(Spec.FolderId, Spec.Kind, Spec.EntityId, MergeDirection.Previous));
-        if (Spec.MergeResetsTree)
-            await OnReset.InvokeAsync();
-        else if (PreviousSiblingId.HasValue)
-            await OnMerged.InvokeAsync((PreviousSiblingId.Value, Spec.EntityId));
-        else
-            await OnReset.InvokeAsync();
-    }
+    Task MergeWithPreviousAsync() => MergeAsync(MergeDirection.Previous);
 
-    async Task MergeWithNextAsync()
-    {
-        await Menu.ExecuteAsync(MenuActions.BuildMerge(Spec.FolderId, Spec.Kind, Spec.EntityId, MergeDirection.Next));
-        if (Spec.MergeResetsTree)
-            await OnReset.InvokeAsync();
-        else if (NextSiblingId.HasValue)
-            await OnMerged.InvokeAsync((Spec.EntityId, NextSiblingId.Value));
-        else
-            await OnReset.InvokeAsync();
-    }
+    Task MergeWithNextAsync() => MergeAsync(MergeDirection.Next);
+
+    Task MergeAsync(MergeDirection direction) =>
+        Presenter.MutateAsync(MenuActions.BuildMerge(Spec.FolderId, Spec.Kind, Spec.EntityId, direction));
 
     async Task DeleteAsync()
     {
         var (itemType, itemName, hasChildren) = Spec.GetDeleteConfirmArgs();
         if (!await Menu.ConfirmDeleteAsync(itemType, itemName, hasChildren)) return;
-        await Menu.ExecuteAsync(MenuActions.BuildDelete(Spec.FolderId, Spec.Kind, Spec.EntityId));
-        if (Spec.DeleteCallsChanged)
-            await OnChanged.InvokeAsync();
-        else
-            await OnReset.InvokeAsync();
+        await Presenter.MutateAsync(MenuActions.BuildDelete(Spec.FolderId, Spec.Kind, Spec.EntityId));
     }
 
-    // A new item raises the chapter's audio denominator and its attribution-remaining count, and
-    // can flip the paragraph into a character paragraph — so it reloads rather than patching.
     async Task InsertItemAsync(InsertItemSpec spec)
     {
-        var command = await spec.Build(Menu);
-        if (command == null) return;
-        await Menu.ExecuteAsync(command);
-        await OnReset.InvokeAsync();
+        var mutation = await spec.Build(Menu);
+        if (mutation == null) return;
+        await Presenter.MutateAsync(mutation);
     }
 
-    async Task InsertPauseAsync(InsertPauseSpec spec, InsertPosition position)
-    {
-        await Menu.ExecuteAsync(new InsertPauseParagraphCommand(Spec.FolderId, Spec.EntityId, position, spec.PauseKind));
-        await OnReset.InvokeAsync();
-    }
+    Task InsertPauseAsync(InsertPauseSpec spec, InsertPosition position) =>
+        Presenter.MutateAsync(new InsertPauseParagraphMutation(Spec.FolderId, Spec.EntityId, position, spec.PauseKind));
 }
