@@ -74,6 +74,24 @@ chapter children carry the paragraphs with their items).
 the seed Narrator row and `displayName` is `"Narrator"`. There is no null case. Set
 or clear the link with `SetNarratorCharacter` (section 5).
 
+Project-level metadata and the cover image:
+
+```bash
+curl -s -X PATCH http://localhost:5000/api/projects/{folder} \
+  -H 'content-type: application/json' -d '{ "title": "New title", "author": "A. Author" }'
+  # omitted fields stay as they are; a blank title/bookTitle is 400; the folder name never changes
+
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/narrator-only-mode \
+  -H 'content-type: application/json' -d '{ "enabled": true }'     # → 204
+
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/cover \
+  -F file=@/path/to/cover.jpg                        # jpg/jpeg/png/webp ≤ 10 MB → { "coverImage": "cover.jpg" }
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/cover   # → 204, also when there was none
+```
+
+The cover is served at `/workspace/{folder}/{coverImage}`; `GET /api/projects` lists
+`coverImage` and `fileType` (`Epub` | `Text`) per project alongside the audio counters.
+
 ## 2. Discover characters, attribute dialog
 
 ```bash

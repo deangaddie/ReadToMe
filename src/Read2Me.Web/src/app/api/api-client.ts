@@ -48,8 +48,18 @@ export class ApiClient {
     );
   }
 
+  patch<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
+    return this.run<T>(
+      this.http.patch<T>(url, body ?? null, { params: toParams(params), headers: this.headers() }),
+    );
+  }
+
   postForm<T>(url: string, form: FormData): Promise<T> {
     return this.run<T>(this.http.post<T>(url, form, { headers: this.headers() }));
+  }
+
+  putForm<T>(url: string, form: FormData): Promise<T> {
+    return this.run<T>(this.http.put<T>(url, form, { headers: this.headers() }));
   }
 
   private headers(): HttpHeaders {

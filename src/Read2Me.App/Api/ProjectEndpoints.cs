@@ -25,7 +25,18 @@ namespace Read2Me.App.Api
                 .WithSummary("Delete a project folder and everything in it.");
             endpoints.MapPost("/api/projects/{folder}/import", ImportAsync)
                 .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first.");
+            endpoints.MapPatch("/api/projects/{folder}", UpdateAsync)
+                .WithSummary("Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes.");
+            endpoints.MapPut("/api/projects/{folder}/narrator-only-mode", SetNarratorOnlyModeAsync)
+                .WithSummary("Set the Book-wide narrator-only policy: only narration items get audio.");
+            endpoints.MapPut("/api/projects/{folder}/cover", SaveCoverAsync)
+                .WithSummary("Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}.");
+            endpoints.MapDelete("/api/projects/{folder}/cover", DeleteCoverAsync)
+                .WithSummary("Remove the cover image; a project without one still answers 204.");
         }
+
+        private static readonly string[] CoverExtensions = [".jpg", ".jpeg", ".png", ".webp"];
+        private const long MaxCoverBytes = 10L * 1024 * 1024;
 
         private static async Task<IResult> ListAsync(ProjectUseCases useCases)
         {
@@ -66,11 +77,7 @@ namespace Read2Me.App.Api
             if (!TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
-            var project = await reader.GetProjectAsync(folderId);
-            if (project is null) return Results.NotFound();
-
-            var narrator = await reader.GetNarratorAsync(folderId, ct);
-            return Results.Ok(ProjectDetailDto.From(folderId.Value, project, narrator));
+            return await DetailAsync(folderId, reader, ct);
         }
 
         private static IResult Delete(string folder, IFileSystem fs, ProjectUseCases useCases)
@@ -82,6 +89,102 @@ namespace Read2Me.App.Api
             return result.IsSuccess
                 ? Results.NoContent()
                 : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        private static async Task<IResult> UpdateAsync(
+            string folder, UpdateProjectRequest? body, IFileSystem fs, IProjectCatalogReader reader,
+            ProjectUseCases useCases, CancellationToken ct)
+        {
+            if (!TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+            if (body is null)
+                return Results.Problem("Expected a JSON body.", statusCode: StatusCodes.Status400BadRequest);
+
+            // A provided-but-blank title or book title is a mistake, not a clear; author may be blank.
+            var title = body.Title?.Trim();
+            var bookTitle = body.BookTitle?.Trim();
+            var author = body.Author?.Trim();
+            if (title is not null && title.Length == 0)
+                return Results.Problem("Title cannot be blank.", statusCode: StatusCodes.Status400BadRequest);
+            if (bookTitle is not null && bookTitle.Length == 0)
+                return Results.Problem("Book title cannot be blank.", statusCode: StatusCodes.Status400BadRequest);
+
+            var result = await useCases.UpdateMetadataAsync(folderId.Value, title, bookTitle, author);
+            if (!result.IsSuccess)
+                return Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+
+            return await DetailAsync(folderId, reader, ct);
+        }
+
+        private static async Task<IResult> SetNarratorOnlyModeAsync(
+            string folder, NarratorOnlyModeRequest? body, IFileSystem fs, ProjectUseCases useCases)
+        {
+            if (!TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+            if (body is null)
+                return Results.Problem("Expected a JSON body with 'enabled'.", statusCode: StatusCodes.Status400BadRequest);
+
+            var result = await useCases.SetNarratorOnlyModeAsync(folderId.Value, body.Enabled);
+            return result.IsSuccess
+                ? Results.NoContent()
+                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        private static async Task<IResult> SaveCoverAsync(
+            string folder, HttpRequest request, IFileSystem fs, ProjectUseCases useCases)
+        {
+            if (!TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+            if (!request.HasFormContentType)
+                return Results.Problem("Expected multipart form data.", statusCode: StatusCodes.Status400BadRequest);
+
+            IFormFile? file;
+            try
+            {
+                file = (await request.ReadFormAsync()).Files.GetFile("file");
+            }
+            catch (InvalidDataException ex)
+            {
+                // A malformed multipart body (no boundary parts, truncated) is the client's error.
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status400BadRequest);
+            }
+            if (file is null)
+                return Results.Problem("Field 'file' is required.", statusCode: StatusCodes.Status400BadRequest);
+
+            // The stored name is the client's base name: it is what the detail DTO echoes and what
+            // /workspace serves, so a path in it would be both a traversal and a broken link.
+            var fileName = Path.GetFileName(file.FileName);
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            if (!CoverExtensions.Contains(extension))
+                return Results.Problem("Unsupported format. Use .jpg, .png, or .webp.", statusCode: StatusCodes.Status400BadRequest);
+            if (file.Length > MaxCoverBytes)
+                return Results.Problem("Cover image must be 10 MB or smaller.", statusCode: StatusCodes.Status400BadRequest);
+
+            await using var stream = file.OpenReadStream();
+            var result = await useCases.SaveCoverImageAsync(folderId.Value, fileName, stream);
+            return result.IsSuccess
+                ? Results.Ok(new CoverImageResponse(fileName))
+                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        private static async Task<IResult> DeleteCoverAsync(string folder, IFileSystem fs, ProjectUseCases useCases)
+        {
+            if (!TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+
+            var result = await useCases.DeleteCoverImageAsync(folderId.Value);
+            return result.IsSuccess
+                ? Results.NoContent()
+                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        private static async Task<IResult> DetailAsync(ProjectFolderId folderId, IProjectCatalogReader reader, CancellationToken ct)
+        {
+            var project = await reader.GetProjectAsync(folderId);
+            if (project is null) return Results.NotFound();
+
+            var narrator = await reader.GetNarratorAsync(folderId, ct);
+            return Results.Ok(ProjectDetailDto.From(folderId.Value, project, narrator));
         }
 
         private static async Task<IResult> ImportAsync(

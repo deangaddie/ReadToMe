@@ -68,3 +68,10 @@
   color: var(--r2m-text-muted);
   margin-top: var(--r2m-space-2);
 }
+
+.sg__shelf {
+  flex: 1 1 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--r2m-space-3);
+}

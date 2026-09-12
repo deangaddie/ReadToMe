@@ -46,6 +46,38 @@ describe('per-area API services', () => {
     await expect(call).resolves.toEqual({ folderName: 'T' });
   });
 
+  it('ProjectsApi.update patches only the fields given and resolves the detail', async () => {
+    const call = TestBed.inject(ProjectsApi).update('f', { title: 'New' });
+    const req = http.expectOne({ method: 'PATCH', url: '/api/projects/f' });
+    expect(req.request.body).toEqual({ title: 'New' });
+    req.flush({ folderName: 'f', title: 'New' });
+    await expect(call).resolves.toEqual({ folderName: 'f', title: 'New' });
+  });
+
+  it('ProjectsApi.setNarratorOnlyMode puts the flag', async () => {
+    const call = TestBed.inject(ProjectsApi).setNarratorOnlyMode('f', true);
+    const req = http.expectOne({ method: 'PUT', url: '/api/projects/f/narrator-only-mode' });
+    expect(req.request.body).toEqual({ enabled: true });
+    req.flush(null, { status: 204, statusText: 'No Content' });
+    await call;
+  });
+
+  it('ProjectsApi cover: PUT multipart file, DELETE to clear', async () => {
+    const api = TestBed.inject(ProjectsApi);
+    const upload = api.uploadCover('f', new File(['x'], 'cover.png', { type: 'image/png' }));
+    const put = http.expectOne({ method: 'PUT', url: '/api/projects/f/cover' });
+    const form = put.request.body as FormData;
+    expect((form.get('file') as File).name).toBe('cover.png');
+    put.flush({ coverImage: 'cover.png' });
+    await expect(upload).resolves.toEqual({ coverImage: 'cover.png' });
+
+    const clear = api.deleteCover('f');
+    http
+      .expectOne({ method: 'DELETE', url: '/api/projects/f/cover' })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await clear;
+  });
+
   it('ProjectsApi.import posts the reread flag', async () => {
     const call = TestBed.inject(ProjectsApi).import('f', true);
     const req = http.expectOne({ method: 'POST', url: '/api/projects/f/import' });

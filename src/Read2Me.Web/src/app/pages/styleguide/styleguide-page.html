@@ -166,6 +166,27 @@
   </div>
 </ng-template>
 
+<!-- ===================================================== project card -->
+<app-story
+  name="Project card"
+  selector="r2m-project-card"
+  anchor="project-card"
+  note="Shelf card: cover or generated placeholder art, title, author, audio progress or 'Not read in yet', overflow menu with Open / Delete."
+  [body]="projectCardTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #projectCardTpl>
+  <div class="sg__shelf">
+    @for (project of shelfProjects; track project.folderName) {
+      <r2m-project-card
+        [project]="project"
+        (open)="onShelf('Open', project)"
+        (delete)="onShelf('Delete', project)"
+      />
+    }
+  </div>
+</ng-template>
+
 <!-- ===================================================== sparkline -->
 <app-story
   name="Sparkline"

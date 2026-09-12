@@ -98,6 +98,20 @@ namespace Read2Me.Services
             }
         }
 
+        public async Task UpdateMetadataAsync(ProjectFolderId folderId, string? title, string? bookTitle, string? author)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var entity = await db.Projects.SingleOrDefaultAsync();
+            if (entity == null)
+                throw new ProjectNotFoundException(folderId.Value);
+
+            if (title is not null) entity.Title = title;
+            if (bookTitle is not null) entity.BookTitle = bookTitle;
+            if (author is not null) entity.Author = author;
+            await db.SaveChangesAsync();
+            _logger.LogInformation("Metadata updated for project '{Folder}'", folderId);
+        }
+
         public async Task SaveCoverImageAsync(ProjectFolderId folderId, string filename, Stream stream)
         {
             _logger.LogInformation("Saving cover image '{File}' for project '{Folder}'", filename, folderId);

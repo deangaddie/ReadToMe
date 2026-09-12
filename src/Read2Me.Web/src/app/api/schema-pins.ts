@@ -11,6 +11,7 @@ import type {
   AppTheme,
   AudioProcessingUpdateRequest,
   LlmServerConfig,
+  NarratorOnlyModeRequest,
   ParagraphTtsServiceConfig,
   Schema,
   SemanticSimilarityServiceConfig,
@@ -19,6 +20,7 @@ import type {
   ThemeSelectionUpdate,
   ToSentenceCaseConfig,
   TranscriptionServiceConfig,
+  UpdateProjectRequest,
   VoiceDesignServiceConfig,
 } from './dtos';
 
@@ -36,4 +38,6 @@ export type SchemaPins = [
   Pin<AudioProcessingUpdateRequest, Schema['AudioProcessingUpdateRequest']>,
   Pin<AppTheme, Schema['AppTheme']>,
   Pin<ThemeSelectionUpdate, Schema['ThemeSelectionUpdateRequest']>,
+  Pin<UpdateProjectRequest, Schema['UpdateProjectRequest']>,
+  Pin<NarratorOnlyModeRequest, Schema['NarratorOnlyModeRequest']>,
 ];

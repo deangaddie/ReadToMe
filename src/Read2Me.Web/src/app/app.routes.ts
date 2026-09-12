@@ -13,8 +13,8 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'projects' },
   {
     path: 'projects',
-    loadComponent: placeholder,
-    data: routeMeta({ section: 'projects', title: 'Projects', slice: 8 }),
+    loadComponent: () => import('./pages/projects/projects-page').then((m) => m.ProjectsPage),
+    data: routeMeta({ section: 'projects', title: 'Projects' }),
   },
   {
     path: 'projects/:folder',

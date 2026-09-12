@@ -56,7 +56,8 @@ namespace Read2Me.Services
                     string.IsNullOrWhiteSpace(project.Author) ? null : project.Author,
                     project.CoverImage,
                     counts?.Total ?? 0,
-                    counts?.Done ?? 0));
+                    counts?.Done ?? 0,
+                    project.Type.ToString()));
             }
             return summaries;
         }

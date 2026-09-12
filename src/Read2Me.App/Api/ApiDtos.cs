@@ -7,6 +7,13 @@ namespace Read2Me.App.Api
 
     public sealed record ImportRequest(bool Reread = false);
 
+    /// <summary>PATCH body: every field optional; an omitted or null field is left as it is.</summary>
+    public sealed record UpdateProjectRequest(string? Title = null, string? BookTitle = null, string? Author = null);
+
+    public sealed record NarratorOnlyModeRequest(bool Enabled);
+
+    public sealed record CoverImageResponse(string CoverImage);
+
     /// <summary>
     /// Who narrates the book, projected from <see cref="NarratorIdentity"/> — the raw link
     /// column never goes on the wire. Unlinked serialises as

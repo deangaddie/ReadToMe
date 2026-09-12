@@ -42,6 +42,20 @@ namespace Read2Me.Services.UseCases
             catch (Exception) { return Result.Fail("Failed to delete project. Please try again."); }
         }
 
+        /// <summary>
+        /// Title, book title and author; null leaves a field alone. Blank values are rejected by the
+        /// API before they get here, so this only guards the write.
+        /// </summary>
+        public async Task<Result> UpdateMetadataAsync(string folderName, string? title, string? bookTitle, string? author)
+        {
+            try
+            {
+                await writer.UpdateMetadataAsync(folderName, title, bookTitle, author);
+                return Result.Ok();
+            }
+            catch (Exception) { return Result.Fail("Failed to save project details."); }
+        }
+
         public async Task<Result> SaveCoverImageAsync(string folderName, string filename, Stream stream)
         {
             try

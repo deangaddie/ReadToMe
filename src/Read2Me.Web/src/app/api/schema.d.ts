@@ -109,7 +109,31 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["UpdateProjectRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         trace?: never;
     };
     "/api/projects/{folder}/import": {
@@ -147,6 +171,102 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/narrator-only-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the Book-wide narrator-only policy: only narration items get audio. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["NarratorOnlyModeRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Remove the cover image; a project without one still answers 204. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -2324,6 +2444,9 @@ export interface components {
             promptStyle?: components["schemas"]["AttributionPromptStyle"];
             supportsModelSwitch?: boolean;
         };
+        NarratorOnlyModeRequest: {
+            enabled: boolean;
+        };
         NodeEnqueueRequest: {
             level: string;
             /** Format: uuid */
@@ -2391,6 +2514,11 @@ export interface components {
             settingsJson?: string;
         };
         TranscriptionServiceType: number;
+        UpdateProjectRequest: {
+            title?: null | string;
+            bookTitle?: null | string;
+            author?: null | string;
+        };
         VoiceBatchStartRequest: {
             /** @default false */
             regenerateAll: boolean;

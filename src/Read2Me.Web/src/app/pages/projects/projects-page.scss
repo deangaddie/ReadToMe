@@ -1,0 +1,65 @@
+.projects__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--r2m-space-4);
+}
+
+.projects__card--deleting {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.projects__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r2m-space-2);
+  padding-bottom: var(--r2m-space-3);
+  border: 1px solid var(--r2m-outline);
+  border-radius: var(--r2m-radius-lg);
+  background: var(--r2m-surface-low);
+  overflow: hidden;
+}
+
+.projects__skeleton-cover,
+.projects__skeleton-line {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--r2m-text-muted) 12%, transparent) 25%,
+    color-mix(in srgb, var(--r2m-text-muted) 22%, transparent) 50%,
+    color-mix(in srgb, var(--r2m-text-muted) 12%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: projects-shimmer 1.4s ease-in-out infinite;
+}
+
+.projects__skeleton-cover {
+  aspect-ratio: 3 / 4;
+}
+
+.projects__skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  margin: 0 var(--r2m-space-3);
+  width: 55%;
+}
+
+.projects__skeleton-line--title {
+  height: 16px;
+  width: 80%;
+}
+
+@keyframes projects-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .projects__skeleton-cover,
+  .projects__skeleton-line {
+    animation: none;
+  }
+}

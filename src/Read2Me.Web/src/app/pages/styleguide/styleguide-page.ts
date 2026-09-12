@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
+import { ProjectSummary } from '@app/api';
 import { AudioGenEvent, LlmStreamEvent } from '@app/live/hub-events';
 import { LIVE_FAMILIES, LiveFamily } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
@@ -23,6 +24,7 @@ import { JobView } from '@app/ui/job-pill/job';
 import { JobPill } from '@app/ui/job-pill/job-pill';
 import { KeyValue, KeyValueRow } from '@app/ui/key-value/key-value';
 import { PageHeader } from '@app/ui/page-header/page-header';
+import { ProjectCard } from '@app/ui/project-card/project-card';
 import {
   PreflightPlan,
   PreflightServiceProgress,
@@ -56,6 +58,7 @@ interface TocEntry {
     MatButtonToggleModule,
     MatIconModule,
     PageHeader,
+    ProjectCard,
     EmptyState,
     StatusChip,
     CountBadge,
@@ -196,6 +199,7 @@ export class StyleguidePage {
     { anchor: 'key-value', label: 'Key/value' },
     { anchor: 'inline-edit', label: 'Inline edit' },
     { anchor: 'file-drop', label: 'File drop' },
+    { anchor: 'project-card', label: 'Project card' },
     { anchor: 'sparkline', label: 'Sparkline' },
     { anchor: 'toast', label: 'Toast' },
     { anchor: 'job-pill', label: 'Job pill' },
@@ -228,6 +232,28 @@ export class StyleguidePage {
 
   // ---- inline edit / file drop -------------------------------------------------------------------
   readonly inlineValue = signal('Chapter 3 — The Encyclopedists');
+  readonly shelfProjects: ProjectSummary[] = [
+    {
+      folderName: 'foundation',
+      title: 'Foundation',
+      author: 'Isaac Asimov',
+      coverImage: null,
+      audioItemTotal: 1240,
+      audioItemDone: 310,
+      audioPercent: 25,
+      fileType: 'Epub',
+    },
+    {
+      folderName: 'the-left-hand-of-darkness',
+      title: 'The Left Hand of Darkness: a very long title that wraps onto two lines',
+      author: 'Ursula K. Le Guin',
+      coverImage: null,
+      audioItemTotal: 0,
+      audioItemDone: 0,
+      audioPercent: 0,
+      fileType: 'Text',
+    },
+  ];
   readonly droppedFiles = signal<string[]>([]);
   readonly rejectedFiles = signal<string[]>([]);
 
@@ -251,6 +277,10 @@ export class StyleguidePage {
   readonly flatValues = [5, 5, 5, 5, 5];
 
   // ---- toasts ------------------------------------------------------------------------------------
+  onShelf(action: string, project: ProjectSummary): void {
+    this.toast.info(`${action}: ${project.title}`);
+  }
+
   toastSuccess(): void {
     this.toast.success('Assembly finished: foundation.m4b');
   }

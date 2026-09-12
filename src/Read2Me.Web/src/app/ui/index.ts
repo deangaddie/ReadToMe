@@ -29,3 +29,4 @@ export * from './stream-llm/llm-turns';
 export * from './stream-llm/stream-llm';
 export * from './stream-audio/audio-cards';
 export * from './stream-audio/stream-audio';
+export * from './project-card/project-card';

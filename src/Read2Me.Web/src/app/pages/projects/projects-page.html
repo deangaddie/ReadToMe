@@ -1,0 +1,42 @@
+<r2m-page-header title="Projects" subtitle="Every audiobook in the workspace.">
+  <button actions mat-flat-button type="button" class="projects__new" (click)="create()">
+    <mat-icon>add</mat-icon> New project
+  </button>
+</r2m-page-header>
+
+@if (store.error(); as error) {
+  <r2m-status-chip status="error" [label]="'Projects could not be loaded: ' + error" />
+}
+
+@if (showSkeleton()) {
+  <div class="projects__grid" aria-busy="true" aria-label="Loading projects">
+    @for (i of skeletons; track i) {
+      <div class="projects__skeleton">
+        <div class="projects__skeleton-cover"></div>
+        <div class="projects__skeleton-line projects__skeleton-line--title"></div>
+        <div class="projects__skeleton-line"></div>
+      </div>
+    }
+  </div>
+} @else if (projects().length === 0 && !store.error()) {
+  <r2m-empty-state
+    icon="library_books"
+    headline="No projects yet"
+    hint="Import an epub or text file to create your first audiobook project."
+  >
+    <button action mat-flat-button type="button" class="projects__new" (click)="create()">
+      <mat-icon>add</mat-icon> New project
+    </button>
+  </r2m-empty-state>
+} @else {
+  <div class="projects__grid">
+    @for (project of projects(); track project.folderName) {
+      <r2m-project-card
+        [project]="project"
+        [class.projects__card--deleting]="deleting() === project.folderName"
+        (open)="open(project)"
+        (delete)="delete(project)"
+      />
+    }
+  </div>
+}

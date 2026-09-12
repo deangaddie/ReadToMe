@@ -65,6 +65,17 @@ export interface ProjectSummary {
   audioItemTotal: number;
   audioItemDone: number;
   audioPercent: number;
+  /** `BookFileType` member name (`Epub` | `Text`); null for a folder whose DB could not be opened. */
+  fileType: string | null;
+}
+
+/** `PATCH /api/projects/{folder}`: every field optional, omitted/null fields are left as they are. */
+export type UpdateProjectRequest = Schema['UpdateProjectRequest'];
+
+export type NarratorOnlyModeRequest = Schema['NarratorOnlyModeRequest'];
+
+export interface CoverImageResponse {
+  coverImage: string;
 }
 
 /** Multipart fields for `POST /api/projects`; `title` and `file` are required by the host. */
@@ -405,13 +416,7 @@ export interface AiServiceDto {
 }
 
 export type AiServiceStatus =
-  | 'NotFound'
-  | 'Stopped'
-  | 'Starting'
-  | 'Ready'
-  | 'Recovering'
-  | 'Down'
-  | 'Unknown';
+  'NotFound' | 'Stopped' | 'Starting' | 'Ready' | 'Recovering' | 'Down' | 'Unknown';
 
 export interface AiServiceStatusDto {
   name: string;
