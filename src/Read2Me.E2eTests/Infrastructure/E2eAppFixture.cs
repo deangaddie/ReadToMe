@@ -24,6 +24,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
     public FakeAiRoutingHandler FakeAi { get; } = new();
     public FakeAiServiceControl FakeControl { get; } = new();
     public string WorkspaceDir { get; private set; } = "";
+    public string WebRootDir { get; private set; } = "";
     public string BaseUrl { get; private set; } = "";
     public IServiceProvider Services => _host!.Services;
 
@@ -33,6 +34,8 @@ public sealed class E2eAppFixture : IAsyncLifetime
     {
         WorkspaceDir = Path.Combine(Path.GetTempPath(), "r2me-e2e", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(WorkspaceDir);
+        WebRootDir = Path.Combine(WorkspaceDir, "wwwroot");
+        Directory.CreateDirectory(WebRootDir);
 
         // Mirrors Program.CreateHostBuilder minus Serilog, plus test overrides.
         // IHostBuilder.ConfigureServices delegates run after Startup.ConfigureServices,
@@ -43,6 +46,10 @@ public sealed class E2eAppFixture : IAsyncLifetime
                 new Dictionary<string, string?> { ["Workspace:FolderPath"] = WorkspaceDir }))
             .ConfigureWebHostDefaults(web => web
                 .UseStartup<Startup>()
+                // Isolated physical web root so tests can stage (or withhold) the Angular bundle
+                // without depending on whether a developer has run ng build. Blazor/MudBlazor static
+                // assets still resolve through the Development static-web-assets manifest.
+                .UseWebRoot(WebRootDir)
                 .UseUrls("http://127.0.0.1:0"))
             .ConfigureServices(s =>
             {

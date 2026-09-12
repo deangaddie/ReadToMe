@@ -1,0 +1,108 @@
+// Global styles: self-hosted fonts, design tokens and the Angular Material (M3) theme.
+// Fonts live in src/assets/fonts/ (no CDN — the app is local and offline-friendly).
+@use 'theme';
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/InterVariable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/InterVariable-Italic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Material Symbols Rounded';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url('./assets/fonts/MaterialSymbolsRounded.woff2') format('woff2');
+}
+
+// Ligature icon font; MatIconRegistry's default font-set class points here (app.config.ts).
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+
+  &.filled {
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 400,
+      'GRAD' 0,
+      'opsz' 24;
+  }
+}
+
+html {
+  height: 100%;
+  color-scheme: light dark;
+  @include theme.material-theme;
+
+  &[data-theme='light'] {
+    color-scheme: light;
+  }
+  &[data-theme='dark'] {
+    color-scheme: dark;
+  }
+}
+
+// A subtree that pins its own scheme (style guide preview panels) re-emits the theme so every
+// light-dark() token inside it resolves against the pinned scheme.
+[data-scheme='light'] {
+  color-scheme: light;
+  @include theme.material-theme;
+}
+[data-scheme='dark'] {
+  color-scheme: dark;
+  @include theme.material-theme;
+}
+
+body {
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  font-family: var(--r2m-font-sans);
+  margin: 0;
+  height: 100%;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--r2m-font-mono);
+}
+
+a {
+  color: var(--r2m-accent);
+}
+
+// r2m-toast: the snackbar panel is transparent so the r2m-toast host paints the soft status colour.
+.r2m-toast-panel {
+  --mdc-snackbar-container-color: transparent;
+  --mdc-snackbar-supporting-text-color: inherit;
+  --mat-snack-bar-container-color: transparent;
+  box-shadow: none;
+}

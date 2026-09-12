@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using Read2Me.AppData;
 using Read2Me.AppData.Entities;
 
+using Read2Me.Services.Events;
+
 namespace Read2Me.Services
 {
     /// <summary>
@@ -16,8 +18,22 @@ namespace Read2Me.Services
 
         public event Action? OnChanged;
 
-        public LlmSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<LlmSettingsService> logger)
+        private readonly EventBroadcaster<SettingsChanged>? _changes;
+
+        private void NotifyChanged()
         {
+            OnChanged?.Invoke();
+            _changes?.Publish(new SettingsChanged(SettingsArea.Llm));
+        }
+
+        /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
+        public LlmSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<LlmSettingsService> logger)
+            : this(dbFactory, logger, null) { }
+
+        public LlmSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<LlmSettingsService> logger,
+            EventBroadcaster<SettingsChanged>? changes)
+        {
+            _changes = changes;
             _dbFactory = dbFactory;
             _store = new ServiceConfigStore<LlmServerConfig>(
                 dbFactory, logger,
@@ -27,7 +43,7 @@ namespace Read2Me.Services
                 c => c.Id,
                 (c, id) => c.Id = id,
                 "LLM");
-            _store.OnChanged += () => OnChanged?.Invoke();
+            _store.OnChanged += () => NotifyChanged();
         }
 
         public Task<List<LlmServerConfig>> GetAllConfigsAsync() => _store.GetAllConfigsAsync();
@@ -46,7 +62,7 @@ namespace Read2Me.Services
             if (entries.Any(e => e.ConfigId == configId))
             {
                 await WriteChainEntriesAsync(entries.Where(e => e.ConfigId != configId).ToList());
-                OnChanged?.Invoke();
+                NotifyChanged();
             }
         }
 
@@ -73,7 +89,7 @@ namespace Read2Me.Services
         public virtual async Task SetAttributionChainEntriesAsync(IReadOnlyList<AttributionChainEntry> entries)
         {
             await WriteChainEntriesAsync(entries);
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         /// <summary>
@@ -125,7 +141,7 @@ namespace Read2Me.Services
         public virtual async Task SetSelfConsistencyAsync(bool value)
         {
             await MutateSettingsAsync(s => s.AttributionSelfConsistency = value);
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         private async Task<List<AttributionChainEntry>> ReadChainEntriesAsync()

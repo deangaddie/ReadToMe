@@ -20,6 +20,7 @@ namespace Read2Me.App.Api
             endpoints.MapDiscoveryEndpoints();
             endpoints.MapVoiceEndpoints();
             endpoints.MapAssemblyEndpoints();
+            endpoints.MapThemeEndpoints(); // before MapSettingsEndpoints: it owns the /api/settings 404 fallback
             endpoints.MapSettingsEndpoints();
             endpoints.MapAiServiceEndpoints();
             endpoints.MapOpenApi();

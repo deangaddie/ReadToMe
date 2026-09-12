@@ -1,0 +1,126 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r2m-space-3);
+  min-width: min(560px, 90vw);
+}
+
+.editor__preview {
+  border-radius: var(--r2m-radius-md);
+  border: 1px solid var(--r2m-outline);
+  overflow: hidden;
+  font-size: var(--r2m-text-sm);
+}
+
+.editor__preview-bar {
+  padding: var(--r2m-space-1) var(--r2m-space-3);
+  font-weight: 600;
+}
+
+.editor__preview-body {
+  display: flex;
+  height: 72px;
+}
+
+.editor__preview-nav {
+  width: 40px;
+  display: grid;
+  place-items: center;
+}
+
+.editor__preview-card {
+  flex: 1;
+  margin: var(--r2m-space-2);
+  border-radius: var(--r2m-radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-3);
+  padding: 0 var(--r2m-space-3);
+}
+
+.editor__preview-chip {
+  padding: 2px var(--r2m-space-2);
+  border-radius: var(--r2m-radius-pill);
+  font-size: var(--r2m-text-xs);
+}
+
+.editor__preview-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.editor__name {
+  width: 100%;
+}
+
+.editor__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--r2m-space-4);
+}
+
+.editor__colour {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  grid-template-rows: auto auto auto;
+  align-items: center;
+  column-gap: var(--r2m-space-2);
+  row-gap: 2px;
+
+  input[type='color'] {
+    width: 36px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-sm);
+    background: none;
+    cursor: pointer;
+  }
+}
+
+.editor__colour-label {
+  grid-column: 1 / -1;
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text-muted);
+}
+
+.editor__hex {
+  width: 9ch;
+  height: 30px;
+  padding: 0 var(--r2m-space-2);
+  border: 1px solid var(--r2m-outline);
+  border-radius: var(--r2m-radius-sm);
+  background: var(--r2m-surface);
+  color: var(--r2m-text);
+  font-family: var(--r2m-font-mono);
+  font-size: var(--r2m-text-sm);
+}
+
+.editor__error,
+.editor__hint {
+  grid-column: 1 / -1;
+  font-size: var(--r2m-text-xs);
+  color: var(--r2m-text-muted);
+}
+
+.editor__error {
+  color: var(--r2m-status-error);
+}
+
+.editor__advanced-toggle {
+  align-self: flex-start;
+}
+
+.editor__advanced {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--r2m-space-3) var(--r2m-space-4);
+}
+
+.editor__clear {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}

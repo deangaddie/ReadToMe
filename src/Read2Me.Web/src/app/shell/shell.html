@@ -1,0 +1,173 @@
+<mat-toolbar class="shell__appbar">
+  <button
+    mat-icon-button
+    type="button"
+    class="shell__menu"
+    (click)="toggleRail()"
+    aria-label="Toggle navigation"
+    matTooltip="Toggle navigation"
+  >
+    <mat-icon>menu</mat-icon>
+  </button>
+  <a class="shell__brand" routerLink="/projects">Read2Me</a>
+
+  <nav class="shell__crumbs" aria-label="Breadcrumb">
+    @for (crumb of crumbs(); track $index; let last = $last) {
+      @if (crumb.link && !last) {
+        <a class="shell__crumb" [routerLink]="crumb.link">{{ crumb.label }}</a>
+      } @else {
+        <span class="shell__crumb shell__crumb--current" aria-current="page">{{
+          crumb.label
+        }}</span>
+      }
+      @if (!last) {
+        <span class="shell__crumb-sep" aria-hidden="true">›</span>
+      }
+    }
+  </nav>
+
+  <span class="shell__spacer"></span>
+
+  <span
+    class="shell__conn"
+    [class]="'shell__conn--' + connection()"
+    role="status"
+    [attr.aria-label]="connectionLabel()"
+    [matTooltip]="connectionLabel()"
+  >
+    <span class="shell__conn-dot" aria-hidden="true"></span>
+    <span class="shell__conn-text">live</span>
+  </span>
+
+  <button
+    mat-icon-button
+    type="button"
+    [matMenuTriggerFor]="themeMenu"
+    aria-label="Theme"
+    matTooltip="Theme"
+  >
+    <mat-icon>{{
+      schemePreference() === 'dark'
+        ? 'dark_mode'
+        : schemePreference() === 'light'
+          ? 'light_mode'
+          : 'brightness_auto'
+    }}</mat-icon>
+  </button>
+  <mat-menu #themeMenu="matMenu">
+    <button mat-menu-item type="button" (click)="setScheme('light')">
+      <mat-icon>light_mode</mat-icon><span>Light</span>
+    </button>
+    <button mat-menu-item type="button" (click)="setScheme('dark')">
+      <mat-icon>dark_mode</mat-icon><span>Dark</span>
+    </button>
+    <button mat-menu-item type="button" (click)="setScheme('system')">
+      <mat-icon>brightness_auto</mat-icon><span>Follow system</span>
+    </button>
+  </mat-menu>
+
+  <a mat-icon-button routerLink="/settings" aria-label="Settings" matTooltip="Settings">
+    <mat-icon>settings</mat-icon>
+  </a>
+</mat-toolbar>
+
+<mat-sidenav-container class="shell__body" [hasBackdrop]="narrow()">
+  <mat-sidenav
+    class="shell__rail"
+    [class.shell__rail--expanded]="narrow() || railExpanded()"
+    [mode]="narrow() ? 'over' : 'side'"
+    [opened]="narrow() ? railOpen() : true"
+    [disableClose]="!narrow()"
+    (closedStart)="closeModalRail()"
+  >
+    <nav class="shell__nav" aria-label="Sections">
+      @if (contextItems().length) {
+        <mat-nav-list class="shell__nav-group shell__nav-group--context">
+          @for (item of contextItems(); track item.label) {
+            <a
+              mat-list-item
+              [routerLink]="item.link"
+              routerLinkActive="shell__nav-item--active"
+              [routerLinkActiveOptions]="{ exact: !!item.exact }"
+              [matTooltip]="item.label"
+              [matTooltipDisabled]="narrow() || railExpanded()"
+              matTooltipPosition="right"
+              (click)="closeModalRail()"
+            >
+              <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+              <span matListItemTitle class="shell__nav-label">{{ item.label }}</span>
+            </a>
+          }
+        </mat-nav-list>
+      }
+      <span class="shell__nav-spacer"></span>
+      <mat-nav-list class="shell__nav-group shell__nav-group--global">
+        @for (item of globalItems; track item.label) {
+          <a
+            mat-list-item
+            [routerLink]="item.link"
+            routerLinkActive="shell__nav-item--active"
+            [routerLinkActiveOptions]="{ exact: !!item.exact }"
+            [matTooltip]="item.label"
+            [matTooltipDisabled]="narrow() || railExpanded()"
+            matTooltipPosition="right"
+            (click)="closeModalRail()"
+          >
+            <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+            <span matListItemTitle class="shell__nav-label">{{ item.label }}</span>
+          </a>
+        }
+      </mat-nav-list>
+    </nav>
+  </mat-sidenav>
+
+  <mat-sidenav
+    class="shell__drawer"
+    position="end"
+    mode="over"
+    [opened]="drawerOpen()"
+    (closedStart)="drawerOpen.set(false)"
+  >
+    <div class="shell__drawer-head">
+      <span class="shell__drawer-title">Activity</span>
+      <button
+        mat-icon-button
+        type="button"
+        (click)="toggleDrawer()"
+        aria-label="Close activity drawer"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+    <r2m-empty-state
+      compact
+      icon="pending_actions"
+      headline="No background work"
+      hint="Jobs, LLM and audio streams and service status appear here (slice 14)."
+    />
+  </mat-sidenav>
+
+  <mat-sidenav-content class="shell__content">
+    <main class="shell__main">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>
+
+<footer class="shell__activity" aria-label="Background activity">
+  <span class="shell__activity-idle">
+    <mat-icon aria-hidden="true">hourglass_empty</mat-icon>
+    <span>No background work</span>
+  </span>
+  <span class="shell__spacer"></span>
+  <button
+    mat-icon-button
+    type="button"
+    (click)="toggleDrawer()"
+    [attr.aria-expanded]="drawerOpen()"
+    aria-label="Toggle activity drawer"
+    matTooltip="Activity"
+  >
+    <mat-icon>{{ drawerOpen() ? 'expand_more' : 'expand_less' }}</mat-icon>
+  </button>
+</footer>

@@ -4,6 +4,8 @@ using MudBlazor;
 using Read2Me.AppData;
 using Read2Me.AppData.Entities;
 
+using Read2Me.Services.Events;
+
 namespace Read2Me.Services
 {
     public class ThemeService
@@ -17,8 +19,22 @@ namespace Read2Me.Services
 
         public event Action? OnThemeChanged;
 
-        public ThemeService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<ThemeService> logger)
+        private readonly EventBroadcaster<SettingsChanged>? _changes;
+
+        private void NotifyChanged()
         {
+            OnThemeChanged?.Invoke();
+            _changes?.Publish(new SettingsChanged(SettingsArea.Themes));
+        }
+
+        /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
+        public ThemeService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<ThemeService> logger)
+            : this(dbFactory, logger, null) { }
+
+        public ThemeService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<ThemeService> logger,
+            EventBroadcaster<SettingsChanged>? changes)
+        {
+            _changes = changes;
             _dbFactory = dbFactory;
             _logger = logger;
         }
@@ -90,7 +106,7 @@ namespace Read2Me.Services
             await db.SaveChangesAsync();
 
             InvalidateCache();
-            OnThemeChanged?.Invoke();
+            NotifyChanged();
         }
 
         public async Task<AppTheme> CreateThemeAsync(AppTheme theme)
@@ -138,7 +154,7 @@ namespace Read2Me.Services
                 _cacheLock.Release();
             }
 
-            OnThemeChanged?.Invoke();
+            NotifyChanged();
         }
 
         public async Task DeleteThemeAsync(int themeId)
@@ -163,7 +179,7 @@ namespace Read2Me.Services
 
             await db.SaveChangesAsync();
             InvalidateCache();
-            OnThemeChanged?.Invoke();
+            NotifyChanged();
         }
 
         public async Task SetFollowSystemPreferenceAsync(bool follow)
@@ -182,7 +198,7 @@ namespace Read2Me.Services
             await db.SaveChangesAsync();
 
             InvalidateCache();
-            OnThemeChanged?.Invoke();
+            NotifyChanged();
         }
 
         public async Task<bool> GetFollowSystemPreferenceAsync()

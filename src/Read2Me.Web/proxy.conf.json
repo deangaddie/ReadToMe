@@ -1,0 +1,16 @@
+{
+  "/api": { "target": "http://localhost:5000", "secure": false, "changeOrigin": true, "ws": true },
+  "/hubs": { "target": "http://localhost:5000", "secure": false, "changeOrigin": true, "ws": true },
+  "/workspace": {
+    "target": "http://localhost:5000",
+    "secure": false,
+    "changeOrigin": true,
+    "ws": true
+  },
+  "/openapi": {
+    "target": "http://localhost:5000",
+    "secure": false,
+    "changeOrigin": true,
+    "ws": true
+  }
+}

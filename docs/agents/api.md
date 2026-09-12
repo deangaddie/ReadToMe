@@ -44,6 +44,9 @@ curl -s -X PUT http://localhost:5000/api/settings/llm/active \
 Prompt templates: `GET /api/settings/prompts` (all kinds, resolved),
 `PUT /api/settings/prompts/{kind}` to override, `DELETE` to reset.
 Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`.
+Themes (shared with both UIs): `GET/POST /api/settings/themes`, `PUT/DELETE /api/settings/themes/{id}`
+(built-in rows are read-only → 400), `GET/PUT /api/settings/themes/selection`
+(`{ selectedThemeId, followSystemPreference }`, both optional on PUT).
 
 Container health (read-only): `GET /api/ai-services`,
 `GET /api/ai-services/{name}/status`. Remember the GPU fits one model at a time —
@@ -168,3 +171,32 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/assembly \
 Output lands at `<workspace>/{folder}/output/<book title>.m4b`
 (`_partial_<date>` suffix for partial builds). Requires a valid ffmpeg path in
 `/api/settings/audio-processing`.
+
+## 7. Live hub (`/hubs/live`, SignalR)
+
+Push channel for anything that changes without a request: queue roll-ups, per-node and per-item
+status, mutation receipts, assembly / voice-batch / watchdog progress, LLM and audio-gen streams,
+throughput, and settings changes. Payloads are camelCase JSON, enums as names, nulls omitted;
+multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.App/Live/LiveMessages.cs`.
+
+| Direction | Name | Notes |
+|---|---|---|
+| client → server | `JoinProject(folder)` / `LeaveProject(folder)` | joins `project:{folder}`; `JoinProject` returns a `ProjectSnapshot` (`revision`, `nodes`, `paragraphs`, `items`, `folderAudioRemaining`) |
+| client → server | `JoinStream("llm" \| "audio")` / `LeaveStream(kind)` | joins `stream:llm` / `stream:audio`; the current in-progress turn is replayed to the caller first |
+| client → server | `GetSnapshot()` | `{ queue, assembly, voiceBatch, watchdog, throughput, projects }` for the projects this connection joined |
+| server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
+| server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
+| server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
+| server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone |
+| server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
+| server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
+
+Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
+only computed for folders `NodeStatusService` has seeded. Example with the .NET client:
+
+```csharp
+var conn = new HubConnectionBuilder().WithUrl("http://localhost:5000/hubs/live").Build();
+conn.On<JsonElement>("receipt", r => Console.WriteLine(r));
+await conn.StartAsync();
+var snapshot = await conn.InvokeAsync<JsonElement>("JoinProject", "dracula");
+```

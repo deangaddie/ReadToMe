@@ -150,6 +150,14 @@ namespace Read2Me.Services.Audio
             return new AudioQueueSnapshot(queued, processing, avg, eta, completed, elapsed);
         }
 
+        /// <summary>
+        /// Items of <paramref name="folder"/> the queue currently says anything about: queued,
+        /// processing, carrying an outcome, or with a bumped audio version. Feeds the live hub relay.
+        /// </summary>
+        public IReadOnlyCollection<Guid> KnownItems(ProjectFolderId folder)
+            => _store.TrackedKeys().Concat(_store.OutcomeKeys()).Concat(_versions.Keys)
+                .Where(k => k.Folder == folder).Select(k => k.ParagraphItemId).Distinct().ToArray();
+
         public AudioItemQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphItemId)
             => Map(_store.StatusOf(new AudioItemKey(folder, paragraphItemId)));
 

@@ -29,6 +29,14 @@ docker compose up -d mpnet-base-v2     # Semantic similarity
 docker compose stop <service>
 docker compose up -d --build            # After Dockerfile/entrypoint changes
 docker logs -f read2me-llama
+
+# Web front end (Angular, src/Read2Me.Web — see its README.md)
+cd src/Read2Me.Web
+npm ci                                  # Node 24 / npm 11 pinned in engines
+npm start                               # ng serve on http://localhost:4200/app/, proxies /api,/hubs,/workspace,/openapi to :5000
+npm run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored)
+npm run check                           # lint + typecheck + test + build
+npm run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
 ```
 
 ## Architecture

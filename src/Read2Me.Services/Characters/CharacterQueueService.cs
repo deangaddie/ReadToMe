@@ -194,6 +194,15 @@ namespace Read2Me.Services.Characters
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Paragraphs of <paramref name="folder"/> the queue currently says anything about: queued,
+        /// processing, or carrying a terminal outcome. The live hub relay diffs per-item status from
+        /// this set; the Blazor tree keeps pulling <see cref="StatusOf"/> per row.
+        /// </summary>
+        public IReadOnlyCollection<Guid> KnownParagraphs(ProjectFolderId folder)
+            => _store.TrackedKeys().Concat(_store.OutcomeKeys())
+                .Where(k => k.Folder == folder).Select(k => k.ParagraphId).Distinct().ToArray();
+
         public ParagraphQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphId)
             => Map(_store.StatusOf(new ParagraphKey(folder, paragraphId)));
 

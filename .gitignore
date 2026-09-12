@@ -337,6 +337,11 @@ Infra/ContainerHealth/test-results/
 Infra/ContainerHealth/playwright-report/
 Infra/ContainerHealth/dist/
 
+# Angular front end (src/Read2Me.Web) build + cache output
+src/Read2Me.App/wwwroot/app/
+src/Read2Me.Web/.angular/
+src/Read2Me.Web/dist/
+
 # Visual Studio 6 build log
 *.plg
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Events;
 
 namespace Read2Me.Services
 {
@@ -11,8 +12,22 @@ namespace Read2Me.Services
 
         public event Action? OnChanged;
 
-        public SemanticSimilaritySettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<SemanticSimilaritySettingsService> logger)
+        private readonly EventBroadcaster<SettingsChanged>? _changes;
+
+        private void NotifyChanged()
         {
+            OnChanged?.Invoke();
+            _changes?.Publish(new SettingsChanged(SettingsArea.SemanticSimilarity));
+        }
+
+        /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
+        public SemanticSimilaritySettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<SemanticSimilaritySettingsService> logger)
+            : this(dbFactory, logger, null) { }
+
+        public SemanticSimilaritySettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<SemanticSimilaritySettingsService> logger,
+            EventBroadcaster<SettingsChanged>? changes)
+        {
+            _changes = changes;
             _store = new ServiceConfigStore<SemanticSimilarityServiceConfig>(
                 dbFactory, logger,
                 db => db.SemanticSimilarityServiceConfigs,
@@ -21,7 +36,7 @@ namespace Read2Me.Services
                 c => c.Id,
                 (c, id) => c.Id = id,
                 "SemanticSimilarity");
-            _store.OnChanged += () => OnChanged?.Invoke();
+            _store.OnChanged += () => NotifyChanged();
         }
 
         public Task<List<SemanticSimilarityServiceConfig>> GetAllConfigsAsync() => _store.GetAllConfigsAsync();

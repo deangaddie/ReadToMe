@@ -1,0 +1,149 @@
+<r2m-page-header
+  title="Themes"
+  subtitle="Shared with the Blazor UI: applying a theme here restyles both."
+>
+  <mat-slide-toggle
+    actions
+    [checked]="followSystem()"
+    [disabled]="busyGlobal()"
+    (change)="setFollowSystem($event.checked)"
+    matTooltip="Use the built-in Light or Dark theme to match the operating system"
+  >
+    Follow system
+  </mat-slide-toggle>
+  <button actions mat-flat-button type="button" (click)="create()" [disabled]="busyGlobal()">
+    <mat-icon>add</mat-icon> New theme
+  </button>
+</r2m-page-header>
+
+@if (loadError()) {
+  <r2m-status-chip status="error" [label]="'Themes could not be loaded: ' + loadError()" />
+}
+
+@if (themes().length === 0) {
+  <r2m-empty-state
+    icon="palette"
+    headline="No themes"
+    hint="The host seeds the built-in themes on first request."
+  />
+} @else {
+  <div class="themes__grid">
+    @for (theme of themes(); track theme.id) {
+      <article
+        class="themes__card"
+        [class.themes__card--selected]="isSelected(theme)"
+        [attr.data-theme-id]="theme.id"
+      >
+        <div
+          class="themes__strip"
+          [style.background]="
+            'linear-gradient(100deg, ' + theme.primary + ' 0 55%, ' + theme.secondary + ' 55% 100%)'
+          "
+          aria-hidden="true"
+        >
+          @if (theme.isBuiltIn) {
+            <mat-icon
+              class="themes__lock"
+              [style.color]="contrast(theme.primary)"
+              matTooltip="Built-in: read-only"
+              >lock</mat-icon
+            >
+          }
+        </div>
+
+        <div class="themes__body">
+          <div class="themes__title-row">
+            <h3 class="themes__name">{{ theme.name }}</h3>
+            <r2m-status-chip
+              [status]="'neutral'"
+              [icon]="theme.isDark ? 'dark_mode' : 'light_mode'"
+              [label]="theme.isDark ? 'Dark' : 'Light'"
+              compact
+            />
+            @if (isSelected(theme)) {
+              <r2m-status-chip status="ok" label="Active" compact />
+            }
+            @if (isEffective(theme) && !isSelected(theme)) {
+              <r2m-status-chip status="info" label="In use (system)" compact />
+            }
+          </div>
+
+          <div class="themes__swatches" aria-label="Colours">
+            <span
+              class="themes__swatch"
+              [style.background]="theme.primary"
+              matTooltip="Primary"
+            ></span>
+            <span
+              class="themes__swatch"
+              [style.background]="theme.secondary"
+              matTooltip="Secondary"
+            ></span>
+            @if (theme.background) {
+              <span
+                class="themes__swatch"
+                [style.background]="theme.background"
+                matTooltip="Background"
+              ></span>
+            }
+            @if (theme.surface) {
+              <span
+                class="themes__swatch"
+                [style.background]="theme.surface"
+                matTooltip="Surface"
+              ></span>
+            }
+            @if (theme.appbarBackground) {
+              <span
+                class="themes__swatch"
+                [style.background]="theme.appbarBackground"
+                matTooltip="App bar"
+              ></span>
+            }
+            @if (theme.drawerBackground) {
+              <span
+                class="themes__swatch"
+                [style.background]="theme.drawerBackground"
+                matTooltip="Nav rail"
+              ></span>
+            }
+          </div>
+        </div>
+
+        <div class="themes__actions">
+          <button
+            mat-flat-button
+            type="button"
+            (click)="apply(theme)"
+            [disabled]="isSelected(theme) || busyId() === theme.id || busyGlobal()"
+          >
+            {{ isSelected(theme) ? 'Applied' : 'Apply' }}
+          </button>
+          <button
+            mat-icon-button
+            type="button"
+            (click)="edit(theme)"
+            [disabled]="busyGlobal()"
+            [matTooltip]="theme.isBuiltIn ? 'Duplicate and edit' : 'Edit'"
+            [attr.aria-label]="theme.isBuiltIn ? 'Duplicate ' + theme.name : 'Edit ' + theme.name"
+          >
+            <mat-icon>{{ theme.isBuiltIn ? 'content_copy' : 'edit' }}</mat-icon>
+          </button>
+          @if (!theme.isBuiltIn) {
+            <button
+              mat-icon-button
+              type="button"
+              class="themes__delete"
+              (click)="delete(theme)"
+              [disabled]="busyId() === theme.id || busyGlobal()"
+              matTooltip="Delete"
+              [attr.aria-label]="'Delete ' + theme.name"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          }
+        </div>
+      </article>
+    }
+  </div>
+}

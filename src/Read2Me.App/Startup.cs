@@ -1,7 +1,9 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -10,6 +12,7 @@ using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using Read2Me.App.Api;
 using Read2Me.App.Configuration;
+using Read2Me.App.Live;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
@@ -39,6 +42,7 @@ namespace Read2Me.App
             services.AddAppDatabase();
 
             services.AddOpenApi();
+            services.AddLiveHub();
 
             services.AddHttpClient();
             services.AddRazorPages();
@@ -58,8 +62,18 @@ namespace Read2Me.App
                 app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
-            app.UseStaticFiles();
+            // The Angular dev proxy, `npm run api:types` and the host-backed unit tests talk plain HTTP
+            // to :5000 (Node fetch cannot follow a 307 to the self-signed dev cert), so only redirect
+            // outside Development.
+            if (!env.IsDevelopment())
+            {
+                app.UseHttpsRedirection();
+            }
+
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                OnPrepareResponse = ApplyAngularBundleCaching
+            });
 
             var workspacePath = workspaceOptions.Value.FolderPath;
             Directory.CreateDirectory(workspacePath);
@@ -86,6 +100,10 @@ namespace Read2Me.App
             // it should have been measuring has already started.
             app.ApplicationServices.GetRequiredService<ThroughputAggregator>();
 
+            // And the live hub relay: it subscribes in its constructor, so resolving it here means no
+            // event published before the hosted-service start is missed either.
+            app.ApplicationServices.GetRequiredService<LiveRelay>();
+
             app.UseRouting();
 
             app.UseEndpoints(endpoints =>
@@ -94,8 +112,51 @@ namespace Read2Me.App
                 endpoints.MapGet("/audio-preview/{token}", ServeAudioPreviewAsync);
                 endpoints.MapGet("/preview-source/{folder}/{id}", ServePreviewSourceAsync);
                 endpoints.MapAgentApi();
+                endpoints.MapLiveHub();
+                // The Angular app owns /app; its SPA fallback must run before Blazor's _Host catch-all.
+                endpoints.MapFallback("/app", ctx => ServeAngularAppAsync(ctx, env));
+                endpoints.MapFallback("/app/{**path}", ctx => ServeAngularAppAsync(ctx, env));
                 endpoints.MapFallbackToPage("/_Host");
             });
+        }
+
+        private const string AngularBundleIndex = "app/index.html";
+        private const string AngularMissingPage = "app-missing.html";
+
+        // Angular emits content-hashed file names (main-UP4C2GUA.js, styles-CQKAZ5MM.css,
+        // InterVariable-AM3KRH5U.woff2). Anything under /app/ carrying a hash is immutable;
+        // everything else there (index.html, favicon, licences) must be revalidated.
+        private static readonly Regex HashedAssetName = new(@"-[A-Z0-9]{8}\.[a-z0-9]+$", RegexOptions.Compiled);
+
+        private static void ApplyAngularBundleCaching(StaticFileResponseContext ctx)
+        {
+            var path = ctx.Context.Request.Path.Value;
+            if (path is null || !path.StartsWith("/app/", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            ctx.Context.Response.Headers.CacheControl = HashedAssetName.IsMatch(path)
+                ? "public, max-age=31536000, immutable"
+                : "no-cache";
+        }
+
+        /// SPA fallback for the Angular app: every unmatched /app/... URL gets the bundle's index.html
+        /// so client-side routes deep-link. When the bundle has not been built the same URLs get a
+        /// static "how to build it" page instead — never Blazor's _Host.
+        ///
+        /// The bundle is looked up on the physical web root (one stat per request) rather than the
+        /// WebRootFileProvider: in Development that provider is a composite over the static-web-assets
+        /// manifest, which would surface a developer's local ng build inside a test host that meant
+        /// to run without one. The not-built page is a checked-in asset, so it goes through the provider.
+        private static Task ServeAngularAppAsync(HttpContext context, IWebHostEnvironment env)
+        {
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.Headers.CacheControl = "no-cache";
+
+            var index = Path.Combine(env.WebRootPath, AngularBundleIndex);
+            return File.Exists(index)
+                ? context.Response.SendFileAsync(index, context.RequestAborted)
+                : context.Response.SendFileAsync(env.WebRootFileProvider.GetFileInfo(AngularMissingPage), context.RequestAborted);
         }
 
         /// Serves an item's Preview Source — the unprocessed side of the A/B preview. It lives in a

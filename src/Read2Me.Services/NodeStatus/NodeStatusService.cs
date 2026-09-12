@@ -97,6 +97,20 @@ namespace Read2Me.Services.NodeStatus
             Changed?.Invoke();
         }
 
+        /// <summary>Every Chapter, Part and Volume id a seeded folder rolls up to; empty when unseeded.</summary>
+        public IReadOnlyCollection<Guid> NodeIds(ProjectFolderId folder)
+        {
+            var ids = new HashSet<Guid>();
+            foreach (var (key, status) in _entries)
+            {
+                if (key.Folder != folder) continue;
+                ids.Add(status.ChapterId);
+                ids.Add(status.PartId);
+                ids.Add(status.VolumeId);
+            }
+            return ids;
+        }
+
         public int AudioRemainingForFolder(ProjectFolderId folder)
         {
             int audio = 0;

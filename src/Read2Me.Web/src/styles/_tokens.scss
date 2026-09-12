@@ -1,0 +1,109 @@
+// Design tokens (design §3.3, §5, §7). Component SCSS consumes these; it never hard-codes values.
+// Everything colour-related that the app owns is a CSS custom property so a runtime theme
+// (ticket 04) can override it; status colours are fixed per scheme and never themed.
+
+// ---- Sass-side scale (compile-time helpers) -------------------------------------------------
+$space-unit: 4px;
+@function space($n) {
+  @return $n * $space-unit;
+}
+
+$radius-sm: 4px;
+$radius-md: 8px;
+$radius-lg: 12px;
+$radius-pill: 999px;
+
+$shell-appbar-height: 48px;
+$shell-rail-collapsed: 72px;
+$shell-rail-expanded: 240px;
+$shell-activity-bar-height: 40px;
+$shell-activity-drawer-width: 420px;
+$shell-narrow-breakpoint: 900px;
+
+// ---- Speaker hue colours -------------------------------------------------------------------------
+// The hue comes from speakerHue(id) and is set per element as --r2m-speaker-hue, so the derived
+// colours must be declared on that element too (custom properties resolve where they are declared).
+// Saturation/lightness per scheme mirror speakerColor() in src/app/shared/speaker-color.ts.
+@mixin speaker-colors($hue: var(--r2m-speaker-hue)) {
+  --r2m-speaker-fg: light-dark(hsl(#{$hue} 55% 36%), hsl(#{$hue} 60% 74%));
+  --r2m-speaker-bg: light-dark(hsl(#{$hue} 55% 93%), hsl(#{$hue} 60% 20%));
+}
+
+// ---- CSS custom properties -----------------------------------------------------------------
+@mixin css-tokens {
+  // spacing (4-pt grid)
+  --r2m-space-1: 4px;
+  --r2m-space-2: 8px;
+  --r2m-space-3: 12px;
+  --r2m-space-4: 16px;
+  --r2m-space-5: 20px;
+  --r2m-space-6: 24px;
+  --r2m-space-8: 32px;
+  --r2m-space-10: 40px;
+
+  // radii
+  --r2m-radius-sm: #{$radius-sm};
+  --r2m-radius-md: #{$radius-md};
+  --r2m-radius-lg: #{$radius-lg};
+  --r2m-radius-pill: #{$radius-pill};
+
+  // elevation (scheme aware)
+  --r2m-shadow-1: light-dark(0 1px 2px rgb(0 0 0 / 0.16), 0 1px 2px rgb(0 0 0 / 0.5));
+  --r2m-shadow-2: light-dark(0 2px 6px rgb(0 0 0 / 0.16), 0 2px 6px rgb(0 0 0 / 0.55));
+  --r2m-shadow-3: light-dark(0 6px 16px rgb(0 0 0 / 0.18), 0 6px 16px rgb(0 0 0 / 0.6));
+
+  // typography
+  --r2m-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --r2m-font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --r2m-text-xs: 0.6875rem; // 11px
+  --r2m-text-sm: 0.75rem; // 12px
+  --r2m-text-md: 0.875rem; // 14px
+  --r2m-text-lg: 1rem; // 16px
+  --r2m-text-xl: 1.25rem; // 20px
+  --r2m-text-2xl: 1.5rem; // 24px
+  --r2m-line-tight: 1.25;
+  --r2m-line-normal: 1.5;
+
+  // shell geometry
+  --r2m-appbar-height: #{$shell-appbar-height};
+  --r2m-rail-collapsed: #{$shell-rail-collapsed};
+  --r2m-rail-expanded: #{$shell-rail-expanded};
+  --r2m-activity-bar-height: #{$shell-activity-bar-height};
+  --r2m-activity-drawer-width: #{$shell-activity-drawer-width};
+
+  // app-owned surfaces, defaulting to the Material system tokens (design §3.2)
+  --r2m-accent: var(--mat-sys-primary);
+  --r2m-appbar-bg: var(--mat-sys-surface-container);
+  --r2m-appbar-fg: var(--mat-sys-on-surface);
+  --r2m-nav-bg: var(--mat-sys-surface-container-low);
+  --r2m-nav-fg: var(--mat-sys-on-surface-variant);
+  --r2m-nav-active-bg: var(--mat-sys-secondary-container);
+  --r2m-nav-active-fg: var(--mat-sys-on-secondary-container);
+  --r2m-activity-bg: var(--mat-sys-surface-container);
+  --r2m-surface: var(--mat-sys-surface);
+  --r2m-surface-low: var(--mat-sys-surface-container-low);
+  --r2m-surface-high: var(--mat-sys-surface-container-high);
+  --r2m-outline: var(--mat-sys-outline-variant);
+  --r2m-text: var(--mat-sys-on-surface);
+  --r2m-text-muted: var(--mat-sys-on-surface-variant);
+
+  // status colours — fixed per scheme, WCAG AA on surface and surface-container (design §3.3).
+  // Each has a strong (text/icon) and a soft (chip background) variant.
+  --r2m-status-ok: light-dark(#1b7f3b, #6fd58a);
+  --r2m-status-ok-soft: light-dark(#dcf5e3, #163d22);
+  --r2m-status-warn: light-dark(#9a5b00, #f2bf5e);
+  --r2m-status-warn-soft: light-dark(#fff1d6, #46320a);
+  --r2m-status-error: light-dark(#b3261e, #ff8a80);
+  --r2m-status-error-soft: light-dark(#fde7e5, #4d1a17);
+  --r2m-status-info: light-dark(#0b5cad, #8ec5ff);
+  --r2m-status-info-soft: light-dark(#e0edfb, #12304d);
+  --r2m-status-busy: light-dark(#5b3fb3, #c3b0ff);
+  --r2m-status-busy-soft: light-dark(#ece6fb, #2b1f52);
+  --r2m-status-neutral: var(--mat-sys-on-surface-variant);
+  --r2m-status-neutral-soft: var(--mat-sys-surface-container-high);
+
+  // count badge kinds
+  --r2m-badge-attribution: var(--r2m-status-info);
+  --r2m-badge-audio: var(--r2m-status-busy);
+  --r2m-badge-review: var(--r2m-status-warn);
+}

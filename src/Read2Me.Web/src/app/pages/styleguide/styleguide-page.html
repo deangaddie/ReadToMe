@@ -1,0 +1,518 @@
+<r2m-page-header
+  title="Style guide"
+  subtitle="Every r2m-* component in every state, in both colour schemes."
+>
+  <mat-button-toggle-group
+    actions
+    hideSingleSelectionIndicator
+    aria-label="Preview scheme"
+    [value]="schemeChoice()"
+    (change)="schemeChoice.set($event.value)"
+  >
+    <mat-button-toggle value="both">Both</mat-button-toggle>
+    <mat-button-toggle value="light"><mat-icon>light_mode</mat-icon> Light</mat-button-toggle>
+    <mat-button-toggle value="dark"><mat-icon>dark_mode</mat-icon> Dark</mat-button-toggle>
+  </mat-button-toggle-group>
+</r2m-page-header>
+
+<nav class="sg__toc" aria-label="Components">
+  @for (entry of toc; track entry.anchor) {
+    <a [href]="'#' + entry.anchor" class="sg__toc-link">{{ entry.label }}</a>
+  }
+</nav>
+
+<!-- ===================================================== tokens -->
+<app-story name="Design tokens" anchor="tokens" [body]="tokensTpl" [schemes]="schemes()" />
+<ng-template #tokensTpl><app-tokens-table /></ng-template>
+
+<!-- ===================================================== page header -->
+<app-story
+  name="Page header"
+  selector="r2m-page-header"
+  anchor="page-header"
+  note="Title, subtitle, breadcrumb slot and actions slot. Used by every page."
+  [body]="pageHeaderTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #pageHeaderTpl>
+  <div class="sg__block">
+    <r2m-page-header title="Foundation" subtitle="Isaac Asimov · 3 415 items">
+      <span breadcrumb>Projects › Foundation</span>
+      <button actions mat-stroked-button type="button">Reread…</button>
+      <button actions mat-flat-button type="button">Read book</button>
+    </r2m-page-header>
+    <r2m-page-header title="Title only" />
+  </div>
+</ng-template>
+
+<!-- ===================================================== empty state -->
+<app-story
+  name="Empty state"
+  selector="r2m-empty-state"
+  anchor="empty-state"
+  note="Regular and compact; the action slot is optional."
+  [body]="emptyStateTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #emptyStateTpl>
+  <div class="sg__block sg__block--bordered">
+    <r2m-empty-state
+      icon="library_books"
+      headline="No projects yet"
+      hint="Import an epub or text file to create your first audiobook project."
+    >
+      <button action mat-flat-button type="button"><mat-icon>add</mat-icon> New project</button>
+    </r2m-empty-state>
+  </div>
+  <div class="sg__block sg__block--bordered sg__block--narrow">
+    <r2m-empty-state compact icon="pending_actions" headline="No background work" />
+  </div>
+</ng-template>
+
+<!-- ===================================================== status chip -->
+<app-story
+  name="Status chip"
+  selector="r2m-status-chip"
+  anchor="status-chip"
+  note="Colour + icon + text, never colour alone. Busy shows a 14 px spinner. Compact variant for tree rows."
+  [body]="statusChipTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #statusChipTpl>
+  @for (s of statuses; track s) {
+    <r2m-status-chip [status]="s" [label]="s" [tooltip]="'status: ' + s" />
+  }
+  <span class="sg__divider"></span>
+  <r2m-status-chip status="ok" label="Done" icon="task_alt" compact />
+  <r2m-status-chip status="info" label="12 queued" compact />
+  <r2m-status-chip status="busy" label="Attributing" compact />
+  <r2m-status-chip status="warn" label="Needs review" compact />
+  <r2m-status-chip status="error" label="Failed" compact />
+</ng-template>
+
+<!-- ===================================================== count badge -->
+<app-story
+  name="Count badge"
+  selector="r2m-count-badge"
+  anchor="count-badge"
+  note="Tree nodes and the pipeline stepper. Hidden at zero unless showZero."
+  [body]="countBadgeTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #countBadgeTpl>
+  <r2m-count-badge [count]="8" kind="attribution" title="8 items to attribute" />
+  <r2m-count-badge [count]="240" kind="audio" title="240 items need audio" />
+  <r2m-count-badge [count]="3" kind="review" title="3 items to review" />
+  <r2m-count-badge [count]="0" kind="review" showZero title="nothing to review" />
+  <span class="sg__label">count 0 without showZero renders nothing:</span>
+  <r2m-count-badge [count]="0" kind="audio" />
+</ng-template>
+
+<!-- ===================================================== key value -->
+<app-story
+  name="Key / value"
+  selector="r2m-key-value"
+  anchor="key-value"
+  note="Label/value rows for overview and detail panels. Null shows an em dash."
+  [body]="keyValueTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #keyValueTpl>
+  <div class="sg__block"><r2m-key-value [rows]="kvRows" /></div>
+  <div class="sg__block"><r2m-key-value [rows]="kvRows" dense /></div>
+</ng-template>
+
+<!-- ===================================================== inline edit -->
+<app-story
+  name="Inline edit"
+  selector="r2m-inline-edit"
+  anchor="inline-edit"
+  note="Click to edit; Enter saves, Escape cancels, blur saves. Unchanged text emits nothing."
+  [body]="inlineEditTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #inlineEditTpl>
+  <div class="sg__stack">
+    <r2m-inline-edit [value]="inlineValue()" required (save)="onInlineSave($event)" />
+    <r2m-inline-edit value="" placeholder="Untitled chapter" />
+  </div>
+</ng-template>
+
+<!-- ===================================================== file drop -->
+<app-story
+  name="File drop"
+  selector="r2m-file-drop"
+  anchor="file-drop"
+  note="Drag-and-drop plus a button; validates type against accept and size against maxBytes."
+  [body]="fileDropTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #fileDropTpl>
+  <div class="sg__stack">
+    <r2m-file-drop
+      accept=".epub,.txt"
+      [maxBytes]="20 * 1024 * 1024"
+      label="Drop an epub or text file"
+      hint="Up to 20 MB"
+      (files)="onFiles($event)"
+      (rejected)="onRejected($event)"
+    />
+    @for (f of droppedFiles(); track f) {
+      <r2m-status-chip status="ok" [label]="f" compact />
+    }
+    @for (r of rejectedFiles(); track r) {
+      <r2m-status-chip status="error" [label]="r" compact />
+    }
+  </div>
+</ng-template>
+
+<!-- ===================================================== sparkline -->
+<app-story
+  name="Sparkline"
+  selector="r2m-sparkline"
+  anchor="sparkline"
+  note="Inline SVG over number[]; flat series draws a centred line."
+  [body]="sparklineTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #sparklineTpl>
+  <r2m-sparkline [values]="sparkValues" label="tokens/s" />
+  <r2m-sparkline [values]="sparkValues" [width]="200" [height]="40" stroke="var(--r2m-status-ok)" />
+  <r2m-sparkline [values]="flatValues" label="flat" />
+  <r2m-sparkline [values]="[]" label="empty" />
+</ng-template>
+
+<!-- ===================================================== toast -->
+<app-story
+  name="Toast"
+  selector="ToastService"
+  anchor="toast"
+  note="Severity-styled snackbars; ProblemDetails detail shown verbatim. Global, so it follows the app scheme."
+  [body]="toastTpl"
+  [schemes]="['light']"
+/>
+<ng-template #toastTpl>
+  <button mat-stroked-button type="button" (click)="toastSuccess()">Success</button>
+  <button mat-stroked-button type="button" (click)="toastInfo()">Info</button>
+  <button mat-stroked-button type="button" (click)="toastWarn()">Warn</button>
+  <button mat-stroked-button type="button" (click)="toastError()">Problem (409)</button>
+</ng-template>
+
+<!-- ===================================================== job pill -->
+<app-story
+  name="Job pill"
+  selector="r2m-job-pill"
+  anchor="job-pill"
+  note="Activity bar: one per active job. Click opens the drawer; × cancels when cancellable."
+  [body]="jobPillTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #jobPillTpl>
+  @for (job of jobs; track job.id) {
+    <r2m-job-pill [job]="job" (open)="onJob('open', $event)" (cancel)="onJob('cancel', $event)" />
+  }
+</ng-template>
+
+<!-- ===================================================== job card -->
+<app-story
+  name="Job card"
+  selector="r2m-job-card"
+  anchor="job-card"
+  note="Activity drawer Jobs tab: full numbers, progress, throughput history, Cancel / Dismiss."
+  [body]="jobCardTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #jobCardTpl>
+  <div class="sg__stack">
+    @for (job of jobs; track job.id) {
+      <r2m-job-card
+        [job]="job"
+        [history]="job.kind === 'attribution' ? jobHistory : undefined"
+        (cancel)="onJob('cancel', $event)"
+        (dismiss)="onJob('dismiss', $event)"
+      />
+    }
+  </div>
+</ng-template>
+
+<!-- ===================================================== config list -->
+<app-story
+  name="Config list"
+  selector="r2m-config-list"
+  anchor="config-list"
+  note="Settings master list: search, Active marker, row menu (Make active / Duplicate / Delete), New."
+  [body]="configListTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #configListTpl>
+  <div class="sg__block sg__block--narrow">
+    <r2m-config-list
+      [items]="configItems"
+      [selectedId]="selectedConfig()"
+      (select)="selectedConfig.set($event)"
+      (makeActive)="onJob('make active', $event)"
+      (duplicate)="onJob('duplicate', $event)"
+      (delete)="onJob('delete', $event)"
+      (create)="onJob('create', 'new')"
+    />
+  </div>
+  <div class="sg__block sg__block--narrow">
+    <r2m-config-list [items]="[]" (create)="onJob('create', 'new')" />
+  </div>
+</ng-template>
+
+<!-- ===================================================== config editor frame -->
+<app-story
+  name="Config editor frame"
+  selector="r2m-config-editor-frame"
+  anchor="config-editor-frame"
+  note="Settings detail panel: title, projected form body, Save / Cancel with dirty and saving states."
+  [body]="editorFrameTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #editorFrameTpl>
+  <div class="sg__stack">
+    <r2m-config-editor-frame
+      title="Gemma 26B"
+      subtitle="registry-llama"
+      [dirty]="editorDirty()"
+      [saving]="editorSaving()"
+      (save)="saveEditor()"
+      (cancel)="editorDirty.set(false)"
+    >
+      <p>Form body goes here.</p>
+      <button mat-stroked-button type="button" (click)="editorDirty.set(true)">Make dirty</button>
+    </r2m-config-editor-frame>
+    <r2m-config-editor-frame title="Read only" [dirty]="true" [canSave]="false">
+      <p>canSave = false keeps Save disabled even when dirty.</p>
+    </r2m-config-editor-frame>
+  </div>
+</ng-template>
+
+<!-- ===================================================== settings form -->
+<app-story
+  name="Settings form"
+  selector="r2m-settings-form"
+  anchor="settings-form"
+  note="Schema-driven. Defaults mode edits full values; override mode emits a sparse patch with per-field reset and an overridden dot."
+  [body]="settingsFormTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #settingsFormTpl>
+  <div class="sg__stack">
+    <span class="sg__label">defaults mode</span>
+    <r2m-settings-form
+      [schema]="ttsSchema"
+      mode="defaults"
+      [values]="defaultsValues()"
+      (valuesChange)="defaultsValues.set($event)"
+    />
+    <span class="sg__label"
+      >override mode — patch: {{ overrideValues() | json }} · valid: {{ overrideValid() }}</span
+    >
+    <r2m-settings-form
+      [schema]="ttsSchema"
+      mode="override"
+      [values]="overrideValues()"
+      (valuesChange)="overrideValues.set($event)"
+      (validChange)="overrideValid.set($event)"
+    />
+    <span class="sg__label">disabled</span>
+    <r2m-settings-form [schema]="ttsSchema" [values]="defaultsValues()" disabled />
+  </div>
+</ng-template>
+
+<!-- ===================================================== docker controls -->
+<app-story
+  name="Docker controls"
+  selector="r2m-docker-controls"
+  anchor="docker-controls"
+  note="Status chip plus Start / Restart / Shutdown / Refresh, enabled per status; all off while busy."
+  [body]="dockerTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #dockerTpl>
+  <div class="sg__stack">
+    @for (s of dockerStatuses; track s) {
+      <r2m-docker-controls
+        [status]="s"
+        serviceName="read2me-llama"
+        (start)="onJob('start', s)"
+        (restart)="onJob('restart', s)"
+        (shutdown)="onJob('shutdown', s)"
+        (refresh)="onJob('refresh', s)"
+      />
+    }
+    <r2m-docker-controls status="Ready" serviceName="busy" busy />
+  </div>
+</ng-template>
+
+<!-- ===================================================== preflight sheet -->
+<app-story
+  name="Preflight sheet"
+  selector="r2m-preflight-sheet"
+  anchor="preflight-sheet"
+  note="Plan → running → done | failed. Presentational; the bottom sheet and service arrive in slice 25."
+  [body]="preflightTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #preflightTpl>
+  <div class="sg__stack">
+    <span class="sg__label">plan</span>
+    <r2m-preflight-sheet taskLabel="Character attribution" phase="plan" [plan]="preflightPlan" />
+    <span class="sg__label">running</span>
+    <r2m-preflight-sheet
+      taskLabel="Character attribution"
+      phase="running"
+      [plan]="preflightPlan"
+      [progress]="preflightProgress"
+    />
+    <span class="sg__label">done</span>
+    <r2m-preflight-sheet taskLabel="Character attribution" phase="done" [plan]="preflightPlan" />
+    <span class="sg__label">failed</span>
+    <r2m-preflight-sheet
+      taskLabel="Character attribution"
+      phase="failed"
+      [plan]="preflightPlan"
+      [progress]="preflightFailed"
+      error="llama did not become ready"
+    />
+  </div>
+</ng-template>
+
+<!-- ===================================================== stream llm -->
+<app-story
+  name="LLM stream"
+  selector="r2m-stream-llm"
+  anchor="stream-llm"
+  note="Turn list folded from LlmStreamEvent[]: completed, in-flight, failed, plus escalation and run markers."
+  [body]="streamLlmTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #streamLlmTpl>
+  <div class="sg__block sg__block--tall"><r2m-stream-llm [events]="llmEvents" /></div>
+</ng-template>
+
+<!-- ===================================================== stream audio -->
+<app-story
+  name="Audio stream"
+  selector="r2m-stream-audio"
+  anchor="stream-audio"
+  note="Pipeline cards folded from AudioGenEvent[] with the five phase steps: verified, in progress with a warning, failed."
+  [body]="streamAudioTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #streamAudioTpl>
+  <div class="sg__block sg__block--tall"><r2m-stream-audio [events]="audioEvents" /></div>
+</ng-template>
+
+<!-- ===================================================== speaker chip -->
+<app-story
+  name="Speaker chip"
+  selector="r2m-speaker-chip"
+  anchor="speaker-chip"
+  note="Stable per-character hue from the id. States: named, unknown, mixed, narration, narrator-linked. With a roster it opens the speaker menu."
+  [body]="speakerChipTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #speakerChipTpl>
+  @for (entry of roster; track entry.id) {
+    <r2m-speaker-chip [name]="entry.name" [characterId]="entry.id" />
+  }
+  <span class="sg__divider"></span>
+  @for (s of speakerStates; track s) {
+    <r2m-speaker-chip name="Hardin" characterId="hardin" [state]="s" />
+  }
+  <span class="sg__divider"></span>
+  <r2m-speaker-chip name="Hardin" characterId="hardin" compact />
+  <r2m-speaker-chip state="unknown" compact />
+  <span class="sg__label">interactive with roster (opens the menu):</span>
+  <r2m-speaker-chip
+    [name]="pickedSpeaker() ?? ''"
+    [characterId]="pickedSpeaker() ?? undefined"
+    [state]="pickedSpeaker() ? 'named' : 'unknown'"
+    interactive
+    [roster]="roster"
+    (pick)="onPick($event)"
+    (clear)="pickedSpeaker.set(null)"
+    (create)="onJob('create character', $event)"
+  />
+</ng-template>
+
+<!-- ===================================================== speaker menu -->
+<app-story
+  name="Speaker menu"
+  selector="r2m-speaker-menu"
+  anchor="speaker-menu"
+  note="Roster search with narrator first, arrow keys + Enter, Clear speaker and New character…"
+  [body]="speakerMenuTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #speakerMenuTpl>
+  <div class="sg__block sg__block--narrow sg__block--bordered">
+    <r2m-speaker-menu
+      [roster]="roster"
+      [selectedId]="pickedSpeaker() ?? undefined"
+      (pick)="onPick($event)"
+      (clear)="pickedSpeaker.set(null)"
+      (create)="onJob('create character', $event)"
+    />
+  </div>
+</ng-template>
+
+<!-- ===================================================== dialogs -->
+<app-story
+  name="Confirm and text prompt dialogs"
+  selector="ConfirmService · PromptService"
+  anchor="dialogs"
+  note="Promise-returning services over MatDialog. Destructive confirms are red. Dialogs follow the app scheme."
+  [body]="dialogsTpl"
+  [schemes]="['light']"
+/>
+<ng-template #dialogsTpl>
+  <button mat-stroked-button type="button" (click)="openConfirm(false)">Confirm</button>
+  <button mat-stroked-button type="button" (click)="openConfirm(true)">Destructive confirm</button>
+  <button mat-stroked-button type="button" (click)="openPrompt(false)">Text prompt</button>
+  <button mat-stroked-button type="button" (click)="openPrompt(true)">Multiline prompt</button>
+  @if (dialogResult()) {
+    <r2m-status-chip status="info" [label]="dialogResult()" />
+  }
+</ng-template>
+
+<!-- ===================================================== audio player -->
+<app-story
+  name="Audio player"
+  selector="r2m-audio-player"
+  anchor="audio-player"
+  note="Native audio with play/pause, scrubber and clock; cache-buster input; A/B variant swaps sources keeping position. Sources here are generated tones."
+  [body]="audioPlayerTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #audioPlayerTpl>
+  <div class="sg__stack">
+    <r2m-audio-player [src]="toneA" label="Hardin — Deep (440 Hz)" />
+    <r2m-audio-player [src]="toneA" compact />
+    <r2m-audio-player [src]="toneA" [srcB]="toneB" labelA="Original" labelB="Processed" />
+    <r2m-audio-player src="/workspace/nope/missing.wav" label="Missing file (error state)" />
+    <r2m-audio-player [src]="null" label="No source" />
+  </div>
+</ng-template>
+
+<!-- ===================================================== live hub -->
+<app-story
+  name="Live"
+  selector="LiveService"
+  anchor="live"
+  note="Dev aid (ticket 07): the hub connection state and the latest message received per family. Stop and restart the .NET host to watch the dot go amber, then green, and the snapshot refresh."
+  [body]="liveTpl"
+  [schemes]="['light']"
+/>
+<ng-template #liveTpl>
+  <div class="sg__stack">
+    <r2m-status-chip [status]="liveStatusKind()" [label]="liveLabel()" />
+    <span class="sg__label">Snapshot state</span>
+    <r2m-key-value [rows]="liveStateRows()" dense />
+    <span class="sg__label">Latest message per family</span>
+    <r2m-key-value [rows]="liveRows()" dense />
+  </div>
+</ng-template>
