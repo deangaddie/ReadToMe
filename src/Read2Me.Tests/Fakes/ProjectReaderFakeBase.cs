@@ -43,6 +43,8 @@ namespace Read2Me.Tests.Fakes
         public virtual Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
             ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default) =>
             Task.FromResult(new BulkAssignPreview(0, 0));
+        public virtual Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default) =>
+            Task.FromResult(new CastCounts(0, 0, 0));
         public virtual Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) =>
             Task.FromResult(new List<(Guid, string)>());
         public virtual Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false) =>

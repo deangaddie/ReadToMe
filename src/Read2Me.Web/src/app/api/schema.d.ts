@@ -272,6 +272,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries and the book revision they were read at. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/nodes/{level}/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Roll-up for one volume/part/chapter: attribution/audio/review paragraphs remaining and attribution in flight. A node with no speech paragraphs answers zeros. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    level: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/book": {
         parameters: {
             query?: never;

@@ -18,9 +18,15 @@ export const routes: Routes = [
   },
   {
     path: 'projects/:folder',
-    data: routeMeta({ section: 'project', title: 'Overview', slice: 9 }),
+    // The project shell loads the project and holds its hub group for every child route.
+    loadComponent: () => import('./pages/project/project-shell').then((m) => m.ProjectShell),
+    data: routeMeta({ section: 'project', title: 'Overview' }),
     children: [
-      { path: '', pathMatch: 'full', loadComponent: placeholder },
+      {
+        path: '',
+        pathMatch: 'full',
+        loadComponent: () => import('./pages/project/overview-page').then((m) => m.OverviewPage),
+      },
       {
         path: 'book',
         loadComponent: placeholder,

@@ -1,12 +1,5 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -27,6 +20,7 @@ import { filter, map, startWith } from 'rxjs';
 import { LiveService } from '@app/live/live.service';
 import { RouteMeta } from '@app/route-meta';
 import { EmptyState } from '@app/ui/empty-state/empty-state';
+import { ProjectTitles } from './project-titles';
 import { RailState } from './rail-state';
 import { SchemePreference, ThemeService } from '@app/theme/theme.service';
 import {
@@ -71,6 +65,7 @@ export class Shell {
   private readonly rail = inject(RailState);
   private readonly theme = inject(ThemeService);
   private readonly live = inject(LiveService);
+  private readonly projectTitles = inject(ProjectTitles);
 
   /** Deepest activated route's data + params, refreshed on every navigation. */
   private readonly context = toSignal(
@@ -94,23 +89,16 @@ export class Shell {
 
   readonly contextItems = computed(() => contextNavItems(this.context()));
   readonly globalItems = GLOBAL_NAV_ITEMS;
-  readonly crumbs = computed(() => breadcrumb(this.context()));
+  /** The project crumb reads the title the project shell loaded, the folder name until then. */
+  readonly crumbs = computed(() => {
+    const ctx = this.context();
+    return breadcrumb(ctx, ctx.folder ? this.projectTitles.titles()[ctx.folder] : undefined);
+  });
   readonly schemePreference = this.theme.preference;
 
   /** Live hub connection dot (ticket 07): green connected, amber (re)connecting, red disconnected. */
   readonly connection = this.live.state;
   readonly connectionLabel = this.live.statusLabel;
-
-  constructor() {
-    // Design §9: the project shell holds `project:{folder}` while any project route is active;
-    // child routes never join. Until ticket 09 lands a dedicated project shell, this is it.
-    effect((onCleanup) => {
-      const folder = this.context().folder;
-      if (!folder) return;
-      void this.live.joinProject(folder);
-      onCleanup(() => void this.live.leaveProject(folder));
-    });
-  }
 
   toggleRail(): void {
     if (this.narrow()) this.railOpen.update((open) => !open);

@@ -6,7 +6,7 @@
  * fails when a family name or a `kind` string drifts.
  */
 
-import { Guid, QueueItemStatus } from '@app/api';
+import { Guid, NodeStatusSummaryDto, QueueItemStatus } from '@app/api';
 
 // ---- families (ILiveClient.cs [HubMethodName]) --------------------------------------------------
 
@@ -108,15 +108,8 @@ export interface QueueMessage {
 
 // ---- nodeStatus / itemStatus (group project:{folder}, debounced deltas) -------------------------
 
-/** `NodeStatusService.NodeStatusSummary`. */
-export interface NodeStatusSummary {
-  attributionRemaining: number;
-  audioRemaining: number;
-  review: number;
-  attributionProcessing: boolean;
-  attributionQueued: number;
-  isDone: boolean;
-}
+/** `NodeStatusService.NodeStatusSummary`: the same record `GET /api/projects/{folder}/status` returns. */
+export type NodeStatusSummary = NodeStatusSummaryDto;
 
 /** A `null` entry means the node no longer rolls up. */
 export interface NodeStatusMessage {

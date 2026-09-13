@@ -42,6 +42,15 @@ describe('shell-nav', () => {
     ]);
   });
 
+  it('names the project crumb by its loaded title, keeping the folder link', () => {
+    const crumbs = breadcrumb(
+      { section: 'project', title: 'Cast', folder: 'dune' },
+      'Dune Messiah',
+    );
+    expect(crumbs.map((c) => c.label)).toEqual(['Projects', 'Dune Messiah', 'Cast']);
+    expect(crumbs[1]?.link).toEqual(['/projects', 'dune']);
+  });
+
   it('carries the folder param into the context only when present', () => {
     expect(toShellContext({ section: 'project', title: 'Book' }, { folder: 'dracula' })).toEqual({
       section: 'project',

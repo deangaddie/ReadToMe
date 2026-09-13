@@ -56,14 +56,17 @@ export const GLOBAL_NAV_ITEMS: readonly NavItem[] = [
   { label: 'Style guide', icon: 'style', link: ['/styleguide'] },
 ];
 
-/** Breadcrumb for the app bar: project › section, or settings › page. */
-export function breadcrumb(ctx: ShellContext): Crumb[] {
+/**
+ * Breadcrumb for the app bar: project › section, or settings › page. The project crumb shows
+ * `projectTitle` once the project shell has loaded it, the folder name before.
+ */
+export function breadcrumb(ctx: ShellContext, projectTitle?: string): Crumb[] {
   switch (ctx.section) {
     case 'project':
       return ctx.folder
         ? [
             { label: 'Projects', link: ['/projects'] },
-            { label: ctx.folder, link: ['/projects', ctx.folder] },
+            { label: projectTitle || ctx.folder, link: ['/projects', ctx.folder] },
             ...(ctx.title === 'Overview' ? [] : [{ label: ctx.title }]),
           ]
         : [{ label: 'Projects', link: ['/projects'] }];

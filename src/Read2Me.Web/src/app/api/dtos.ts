@@ -110,6 +110,37 @@ export interface ProjectDetailDto {
 
 export type ImportRequest = Schema['ImportRequest'];
 
+// ---- Project roll-ups (`ProjectStatusEndpoints.cs`) -----------------------------------------------
+
+/** `NodeStatusService.NodeStatusSummary`: paragraph counts under one volume/part/chapter. */
+export interface NodeStatusSummaryDto {
+  attributionRemaining: number;
+  audioRemaining: number;
+  review: number;
+  attributionProcessing: boolean;
+  attributionQueued: number;
+  isDone: boolean;
+}
+
+/**
+ * `GET /api/projects/{folder}/status`. Item counts are items; `attribution`, `audio` and `review`
+ * count paragraphs, like the node summaries. `revision` is the book revision the reads started at.
+ */
+export interface ProjectStatusDto {
+  hasContent: boolean;
+  characters: number;
+  charactersWithLines: number;
+  readyVoices: number;
+  items: { total: number; withAudio: number; unattributed: number };
+  attribution: { remaining: number; processing: boolean; queued: number };
+  audio: { remaining: number };
+  review: number;
+  /** Book order. */
+  volumeIds: Guid[];
+  nodes: Record<string, NodeStatusSummaryDto>;
+  revision: number;
+}
+
 // ---- Book reads (`BookEndpoints.cs`) ---------------------------------------------------------------
 
 export interface NodeDto {

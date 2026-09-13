@@ -4,7 +4,11 @@ import type {
   CoverImageResponse,
   CreateProjectRequest,
   CreateProjectResponse,
+  Guid,
+  NodeLevel,
+  NodeStatusSummaryDto,
   ProjectDetailDto,
+  ProjectStatusDto,
   ProjectSummary,
   UpdateProjectRequest,
 } from './dtos';
@@ -70,6 +74,15 @@ export class ProjectsApi {
 
   deleteCover(folder: string): Promise<void> {
     return this.api.delete(`${projectUrl(folder)}/cover`);
+  }
+
+  /** Whole-project roll-up (`ProjectStatusEndpoints.cs`); the hub's `nodeStatus` deltas keep `nodes` current. */
+  status(folder: string): Promise<ProjectStatusDto> {
+    return this.api.get<ProjectStatusDto>(`${projectUrl(folder)}/status`);
+  }
+
+  nodeStatus(folder: string, level: NodeLevel, id: Guid): Promise<NodeStatusSummaryDto> {
+    return this.api.get<NodeStatusSummaryDto>(`${projectUrl(folder)}/nodes/${level}/${id}/status`);
   }
 }
 

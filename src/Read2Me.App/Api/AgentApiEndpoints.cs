@@ -14,6 +14,7 @@ namespace Read2Me.App.Api
         public static void MapAgentApi(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapProjectEndpoints();
+            endpoints.MapProjectStatusEndpoints();
             endpoints.MapBookEndpoints();
             endpoints.MapCommandEndpoints();
             endpoints.MapAttributionEndpoints();

@@ -270,6 +270,33 @@ namespace Read2Me.Services
             return new BulkAssignPreview(perParagraph.Count, perParagraph.Sum());
         }
 
+        public async Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            var characters = await db.Characters.CountAsync(c => !c.IsNarrator, ct);
+            var speakerIds = await db.ParagraphItems
+                .Where(ParagraphItemKinds.IsSpeechExpression)
+                .Where(i => i.CharacterId != null)
+                .Select(i => i.CharacterId!.Value)
+                .Distinct()
+                .ToListAsync(ct);
+
+            // Narration belongs to whoever narrates: the linked character speaks it with their voice.
+            var narrator = await NarratorIdentity.LoadAsync(db, ct);
+            var speakers = speakerIds
+                .Select(id => id == ProjectDbContext.NarratorId ? narrator.CharacterId : id)
+                .ToHashSet();
+
+            var withAudio = await db.Voices
+                .Where(v => v.AudioFileName != null && v.AudioFileName != "")
+                .Select(v => v.CharacterId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            return new CastCounts(characters, speakers.Count, withAudio.Count(speakers.Contains));
+        }
+
         public async Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);

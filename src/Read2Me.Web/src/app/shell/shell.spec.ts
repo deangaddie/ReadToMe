@@ -1,5 +1,7 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, withRouterConfig } from '@angular/router';
+import { provideRouter, withComponentInputBinding, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { routes } from '@app/app.routes';
 import { RailState } from './rail-state';
@@ -81,7 +83,16 @@ describe('Shell', () => {
   async function mount(path: string) {
     await TestBed.configureTestingModule({
       imports: [Shell],
-      providers: [provideRouter(routes, withRouterConfig({ paramsInheritanceStrategy: 'always' }))],
+      providers: [
+        // Project routes mount the project shell, which fetches the project.
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter(
+          routes,
+          withComponentInputBinding(),
+          withRouterConfig({ paramsInheritanceStrategy: 'always' }),
+        ),
+      ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(path);

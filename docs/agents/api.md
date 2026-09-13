@@ -92,6 +92,24 @@ curl -s -X DELETE http://localhost:5000/api/projects/{folder}/cover   # → 204,
 The cover is served at `/workspace/{folder}/{coverImage}`; `GET /api/projects` lists
 `coverImage` and `fileType` (`Epub` | `Text`) per project alongside the audio counters.
 
+Where the project stands, in one read:
+
+```bash
+curl -s http://localhost:5000/api/projects/{folder}/status
+# { hasContent, characters, charactersWithLines, readyVoices,
+#   items: { total, withAudio, unattributed },            ← items
+#   attribution: { remaining, processing, queued },       ← paragraphs
+#   audio: { remaining }, review,                         ← paragraphs
+#   volumeIds, nodes: { <volume|part|chapter id>: { attributionRemaining, audioRemaining,
+#   review, attributionProcessing, attributionQueued, isDone } }, revision }
+curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/status   # one node's summary
+```
+
+`characters` excludes the seed Narrator row; `charactersWithLines` counts speakers (narration
+included, credited to the linked narrator when there is one) and `readyVoices` how many of them
+have a voice with audio. Both reads reseed the node roll-ups from the database, so they are
+current even with no UI open, and hub clients receive the corrected `nodeStatus` deltas.
+
 ## 2. Discover characters, attribute dialog
 
 ```bash
@@ -210,7 +228,8 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
-only computed for folders `NodeStatusService` has seeded. Example with the .NET client:
+only computed for folders `NodeStatusService` has seeded — call `GET /api/projects/{folder}/status`
+after joining (the Angular project shell does) to seed it. Example with the .NET client:
 
 ```csharp
 var conn = new HubConnectionBuilder().WithUrl("http://localhost:5000/hubs/live").Build();

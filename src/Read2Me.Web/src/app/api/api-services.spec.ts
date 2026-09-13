@@ -62,6 +62,19 @@ describe('per-area API services', () => {
     await call;
   });
 
+  it('ProjectsApi status reads the project and node roll-ups', async () => {
+    const api = TestBed.inject(ProjectsApi);
+    const project = api.status('My Book');
+    http.expectOne({ method: 'GET', url: '/api/projects/My%20Book/status' }).flush({ revision: 3 });
+    await expect(project).resolves.toEqual({ revision: 3 });
+
+    const node = api.nodeStatus('f', 'chapter', 'c1');
+    http
+      .expectOne({ method: 'GET', url: '/api/projects/f/nodes/chapter/c1/status' })
+      .flush({ attributionRemaining: 2 });
+    await expect(node).resolves.toEqual({ attributionRemaining: 2 });
+  });
+
   it('ProjectsApi cover: PUT multipart file, DELETE to clear', async () => {
     const api = TestBed.inject(ProjectsApi);
     const upload = api.uploadCover('f', new File(['x'], 'cover.png', { type: 'image/png' }));

@@ -214,7 +214,18 @@ namespace Read2Me.Services
         /// </summary>
         Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
             ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default);
+
+        /// <summary>The cast figures behind the pipeline's Cast and Voices steps, in one read.</summary>
+        Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default);
     }
+
+    /// <summary>
+    /// <see cref="Characters"/> excludes the seed Narrator row. <see cref="CharactersWithLines"/>
+    /// counts distinct speakers of speech items, narration included, with narration credited to the
+    /// linked narrator when there is one (ADR-0004: they share one voice). <see cref="ReadyVoices"/>
+    /// is how many of those speakers have at least one voice with audio.
+    /// </summary>
+    public sealed record CastCounts(int Characters, int CharactersWithLines, int ReadyVoices);
 
     /// <summary>
     /// The two figures behind the bulk-assign confirm. The third the dialog wants — selected

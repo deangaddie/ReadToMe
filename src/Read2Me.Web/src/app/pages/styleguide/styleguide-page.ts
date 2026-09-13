@@ -25,6 +25,8 @@ import { JobPill } from '@app/ui/job-pill/job-pill';
 import { KeyValue, KeyValueRow } from '@app/ui/key-value/key-value';
 import { PageHeader } from '@app/ui/page-header/page-header';
 import { ProjectCard } from '@app/ui/project-card/project-card';
+import { Pipeline, PipelineActionEvent } from '@app/ui/pipeline/pipeline';
+import { derivePipeline } from '@app/pages/project/pipeline-steps';
 import {
   PreflightPlan,
   PreflightServiceProgress,
@@ -59,6 +61,7 @@ interface TocEntry {
     MatIconModule,
     PageHeader,
     ProjectCard,
+    Pipeline,
     EmptyState,
     StatusChip,
     CountBadge,
@@ -277,6 +280,42 @@ export class StyleguidePage {
   readonly flatValues = [5, 5, 5, 5, 5];
 
   // ---- toasts ------------------------------------------------------------------------------------
+  /** A book mid-production: imported and cast, attribution running, voices and audio outstanding. */
+  readonly pipelineSteps = derivePipeline({
+    status: {
+      hasContent: true,
+      characters: 14,
+      charactersWithLines: 11,
+      readyVoices: 7,
+      items: { total: 1240, withAudio: 310, unattributed: 96 },
+      attribution: { remaining: 38, processing: true, queued: 12 },
+      audio: { remaining: 402 },
+      review: 3,
+      volumeIds: ['v1'],
+      nodes: {},
+      revision: 42,
+    },
+    nodes: {
+      v1: {
+        attributionRemaining: 38,
+        audioRemaining: 402,
+        review: 3,
+        attributionProcessing: true,
+        attributionQueued: 12,
+        isDone: false,
+      },
+    },
+    folderAudioRemaining: 402,
+    audioInFlight: 0,
+    voiceBatchRunning: false,
+    assemblyRunning: false,
+  });
+  readonly pipelineBusy = signal<string | null>(null);
+
+  onPipeline(event: PipelineActionEvent): void {
+    this.toast.info(`${event.step}: ${event.action}`);
+  }
+
   onShelf(action: string, project: ProjectSummary): void {
     this.toast.info(`${action}: ${project.title}`);
   }

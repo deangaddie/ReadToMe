@@ -187,6 +187,32 @@
   </div>
 </ng-template>
 
+<!-- ===================================================== pipeline -->
+<app-story
+  name="Pipeline"
+  selector="r2m-pipeline"
+  anchor="pipeline"
+  note="Project overview stepper: numbered markers (check when done, icon on the next step), status chip, detail line and per-step actions; busyAction spins one button and disables the rest."
+  [body]="pipelineTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #pipelineTpl>
+  <div class="sg__stack">
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="pipelineBusy.set(pipelineBusy() ? null : 'attribute:attribute')"
+    >
+      Toggle busy
+    </button>
+    <r2m-pipeline
+      [steps]="pipelineSteps"
+      [busyAction]="pipelineBusy()"
+      (act)="onPipeline($event)"
+    />
+  </div>
+</ng-template>
+
 <!-- ===================================================== sparkline -->
 <app-story
   name="Sparkline"

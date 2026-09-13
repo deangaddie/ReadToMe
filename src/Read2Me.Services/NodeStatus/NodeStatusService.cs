@@ -68,13 +68,13 @@ namespace Read2Me.Services.NodeStatus
 
         public void Seed(ProjectFolderId folder, IEnumerable<ParagraphStatusSeedRow> rows)
         {
-            // Remove existing entries for this folder.
-            foreach (var key in _entries.Keys)
-                if (key.Folder == folder) _entries.TryRemove(key, out _);
-
+            // Upsert first, then drop what the new rows no longer name: a concurrent read (the hub
+            // relay, a status endpoint, another reseed) never sees the folder half-emptied.
+            var seeded = new HashSet<ParagraphKey>();
             foreach (var row in rows)
             {
                 var key = new ParagraphKey(folder, row.ParagraphId);
+                seeded.Add(key);
                 _entries[key] = new ParagraphStatus
                 {
                     Unattributed = row.Unattributed,
@@ -85,6 +85,9 @@ namespace Read2Me.Services.NodeStatus
                     VolumeId = row.VolumeId,
                 };
             }
+
+            foreach (var key in _entries.Keys)
+                if (key.Folder == folder && !seeded.Contains(key)) _entries.TryRemove(key, out _);
 
             Changed?.Invoke();
         }
