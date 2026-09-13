@@ -127,6 +127,20 @@ describe('per-area API services', () => {
     await queue;
   });
 
+  it('BookApi.chapterVoices reads the chapter voices route', async () => {
+    const voices = TestBed.inject(BookApi).chapterVoices('f', 'c1');
+    http
+      .expectOne({ method: 'GET', url: '/api/projects/f/nodes/chapter/c1/voices' })
+      .flush({ i1: { voiceName: 'Deep', narratedBy: null } });
+    await expect(voices).resolves.toEqual({ i1: { voiceName: 'Deep', narratedBy: null } });
+  });
+
+  it('AudioApi.reviews reads the project review map', async () => {
+    const reviews = TestBed.inject(AudioApi).reviews('f');
+    http.expectOne({ method: 'GET', url: '/api/projects/f/audio/reviews' }).flush({});
+    await expect(reviews).resolves.toEqual({});
+  });
+
   it('AudioApi.itemStatus reads the per-item route and cancel posts globally', async () => {
     const api = TestBed.inject(AudioApi);
     const status = api.itemStatus('f', 'i1');

@@ -66,7 +66,11 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/import \
 `reread: true` clears existing content first (safe way to re-import).
 Inspect the result: `GET /api/projects/{folder}/book` (overview), then walk
 `GET /api/projects/{folder}/nodes/{level}/{id}/children` (volume → part → chapter;
-chapter children carry the paragraphs with their items).
+chapter children carry the paragraphs with their items). Each paragraph has
+`isPauseParagraph` (no items, or a single pause item); each item has `id`, `itemType`
+(`Narration` | `Character` | a pause kind), `text`, `characterId`, `audioFileName`,
+`voiceInstructions`, `orderKey` (fractional position key, items arrive in that order) and
+`isPause`.
 
 `GET /api/projects/{folder}` returns the project metadata, including
 `narrator: { characterId, displayName, isLinked }` — who narrates the book.
@@ -159,6 +163,16 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/audio/enqueue \
   -d '{ "level": "chapter", "nodeId": "<chapterId>", "needsAudioOnly": true }'
 # poll /api/audio/queue; per-item:
 curl -s http://localhost:5000/api/projects/{folder}/audio/items/{itemId}
+
+# which voice each speech item of a chapter will be spoken in (null voiceName = none resolves;
+# narratedBy = the linked narrator's name on narration items):
+curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/voices
+# → { "<itemId>": { "voiceName": "Deep", "narratedBy": null }, … }
+
+# items whose audio failed normalize/verify (sparse — absent = passed; state NeedsReview | Dismissed):
+curl -s http://localhost:5000/api/projects/{folder}/audio/reviews
+# → { "<itemId>": { state, normalizeOk, normalizeReason, verifyOk, wer, verifyReason,
+#                   transcript, originalTextSnapshot } }
 ```
 
 Enqueueing is idempotent (already-queued items dedupe) and `needsAudioOnly: true`

@@ -3,6 +3,7 @@ import { ApiClient } from './api-client';
 import type { BookCommand } from './book-commands';
 import type {
   BookOverviewDto,
+  ChapterVoicesDto,
   CharacterDto,
   CommandResponse,
   Guid,
@@ -28,6 +29,13 @@ export class BookApi {
   /** volume → parts, part → chapters, chapter → paragraphs with their items. */
   children(folder: string, level: NodeLevel, id: Guid): Promise<NodeChildrenDto> {
     return this.api.get<NodeChildrenDto>(`${projectUrl(folder)}/nodes/${level}/${id}/children`);
+  }
+
+  /** The voice each speech item of a chapter resolves to, keyed by item id. */
+  chapterVoices(folder: string, chapterId: Guid): Promise<ChapterVoicesDto> {
+    return this.api.get<ChapterVoicesDto>(
+      `${projectUrl(folder)}/nodes/chapter/${chapterId}/voices`,
+    );
   }
 
   characters(folder: string): Promise<CharacterDto[]> {

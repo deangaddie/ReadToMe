@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
-import { ProjectSummary } from '@app/api';
+import { ParagraphDto, ParagraphItemDto, ProjectSummary } from '@app/api';
 import { AudioGenEvent, LlmStreamEvent } from '@app/live/hub-events';
 import { LIVE_FAMILIES, LiveFamily } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
@@ -27,6 +27,8 @@ import { PageHeader } from '@app/ui/page-header/page-header';
 import { ProjectCard } from '@app/ui/project-card/project-card';
 import { Pipeline, PipelineActionEvent } from '@app/ui/pipeline/pipeline';
 import { derivePipeline } from '@app/pages/project/pipeline-steps';
+import { ParagraphRow } from '@app/pages/book/paragraph-row';
+import { ReaderMode, RowContext } from '@app/pages/book/reader-rows';
 import {
   PreflightPlan,
   PreflightServiceProgress,
@@ -62,6 +64,7 @@ interface TocEntry {
     PageHeader,
     ProjectCard,
     Pipeline,
+    ParagraphRow,
     EmptyState,
     StatusChip,
     CountBadge,
@@ -203,6 +206,7 @@ export class StyleguidePage {
     { anchor: 'inline-edit', label: 'Inline edit' },
     { anchor: 'file-drop', label: 'File drop' },
     { anchor: 'project-card', label: 'Project card' },
+    { anchor: 'reader-rows', label: 'Reader paragraph' },
     { anchor: 'sparkline', label: 'Sparkline' },
     { anchor: 'toast', label: 'Toast' },
     { anchor: 'job-pill', label: 'Job pill' },
@@ -311,6 +315,58 @@ export class StyleguidePage {
     assemblyRunning: false,
   });
   readonly pipelineBusy = signal<string | null>(null);
+
+  // ---- reader rows -------------------------------------------------------------------------------
+  readonly readerMode = signal<ReaderMode>('speakers');
+  readonly readerParagraphs: ParagraphDto[] = [
+    readerParagraph('sg-p1', [
+      readerItem('sg-n1', 'Narration', 'Hardin leaned back in his chair.', 'sg-narrator'),
+    ]),
+    readerParagraph('sg-p2', [
+      readerItem(
+        'sg-d1',
+        'Character',
+        '“The Encyclopedia comes first,”',
+        'sg-pirenne',
+        'audio/x.wav',
+      ),
+      readerItem('sg-n2', 'Narration', 'said Pirenne.', 'sg-narrator'),
+    ]),
+    readerParagraph('sg-p3', [
+      readerItem('sg-d2', 'Character', '“Then you’ll have to face the Anacreonians.”', null),
+    ]),
+  ];
+  readonly readerCtx = computed<RowContext>(() => ({
+    folder: 'styleguide',
+    mode: this.readerMode(),
+    speakers: {
+      names: { 'sg-pirenne': 'Pirenne' },
+      narrator: { characterId: 'sg-narrator', displayName: 'Narrator', isLinked: false },
+    },
+    paragraphStatus: { 'sg-p3': { status: 'Queued' } },
+    itemStatus: {
+      'sg-d1': { audioVersion: 2 },
+      'sg-d2': { outcome: { kind: 'Failed', reason: 'TTS timed out' } },
+    },
+    voices: {
+      'sg-n1': { voiceName: 'Deep', narratedBy: null },
+      'sg-n2': { voiceName: 'Deep', narratedBy: null },
+      'sg-d1': { voiceName: 'Pirenne — Dry', narratedBy: null },
+      'sg-d2': { voiceName: null, narratedBy: null },
+    },
+    reviews: {
+      'sg-d1': {
+        state: 'NeedsReview',
+        normalizeOk: true,
+        normalizeReason: null,
+        verifyOk: false,
+        wer: 0.31,
+        verifyReason: 'WER above threshold',
+        transcript: null,
+        originalTextSnapshot: null,
+      },
+    },
+  }));
 
   onPipeline(event: PipelineActionEvent): void {
     this.toast.info(`${event.step}: ${event.action}`);
@@ -599,4 +655,27 @@ function tone(frequency: number, seconds: number): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   }
   return `data:audio/wav;base64,${btoa(binary)}`;
+}
+
+function readerItem(
+  id: string,
+  itemType: 'Narration' | 'Character',
+  text: string,
+  characterId: string | null,
+  audioFileName: string | null = null,
+): ParagraphItemDto {
+  return {
+    id,
+    itemType,
+    text,
+    characterId,
+    audioFileName,
+    voiceInstructions: null,
+    orderKey: id,
+    isPause: false,
+  };
+}
+
+function readerParagraph(id: string, items: ParagraphItemDto[]): ParagraphDto {
+  return { id, items, isPauseParagraph: false };
 }

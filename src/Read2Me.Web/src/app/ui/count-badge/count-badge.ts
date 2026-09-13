@@ -51,6 +51,10 @@ const DEFAULT_ICONS: Record<CountBadgeKind, string> = {
       background: color-mix(in srgb, var(--_fg) 14%, transparent);
       --_fg: var(--r2m-text-muted);
     }
+    /* The display above would otherwise beat the UA stylesheet's [hidden]. */
+    :host([hidden]) {
+      display: none;
+    }
     :host(.r2m-count-badge--attribution) {
       --_fg: var(--r2m-badge-attribution);
     }

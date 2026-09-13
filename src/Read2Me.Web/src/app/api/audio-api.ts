@@ -4,6 +4,7 @@ import type {
   AudioEnqueueRequest,
   AudioItemStatusDto,
   AudioQueueSnapshot,
+  AudioReviewsDto,
   EnqueueResponse,
   Guid,
 } from './dtos';
@@ -17,6 +18,11 @@ export class AudioApi {
   /** 202 with the number of items queued; 400 on an unknown level, 409 when no TTS config is active. */
   enqueue(folder: string, request: AudioEnqueueRequest): Promise<EnqueueResponse> {
     return this.api.post<EnqueueResponse>(`${projectUrl(folder)}/audio/enqueue`, request);
+  }
+
+  /** Sparse: only items whose audio needs review or had it dismissed. */
+  reviews(folder: string): Promise<AudioReviewsDto> {
+    return this.api.get<AudioReviewsDto>(`${projectUrl(folder)}/audio/reviews`);
   }
 
   itemStatus(folder: string, itemId: Guid): Promise<AudioItemStatusDto> {

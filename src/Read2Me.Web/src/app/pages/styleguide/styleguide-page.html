@@ -213,6 +213,33 @@
   </div>
 </ng-template>
 
+<!-- ===================================================== reader rows -->
+<app-story
+  name="Reader paragraph"
+  selector="r2m-paragraph / r2m-item"
+  anchor="reader-rows"
+  note="Book reader rows (ticket 10): gutter checkbox (inert until selection lands) and speaker rail, then prose with one paragraph chip in Read, or one item row per item in Speakers (unknown highlighted) and Audio (voice line, review and queue chips, player)."
+  [body]="readerTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #readerTpl>
+  <div class="sg__stack">
+    <mat-button-toggle-group
+      hideSingleSelectionIndicator
+      aria-label="Reader mode"
+      [value]="readerMode()"
+      (change)="readerMode.set($event.value)"
+    >
+      <mat-button-toggle value="read">Read</mat-button-toggle>
+      <mat-button-toggle value="speakers">Speakers</mat-button-toggle>
+      <mat-button-toggle value="audio">Audio</mat-button-toggle>
+    </mat-button-toggle-group>
+    @for (paragraph of readerParagraphs; track paragraph.id) {
+      <r2m-paragraph [paragraph]="paragraph" [ctx]="readerCtx()" />
+    }
+  </div>
+</ng-template>
+
 <!-- ===================================================== sparkline -->
 <app-story
   name="Sparkline"

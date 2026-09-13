@@ -29,8 +29,8 @@ export const routes: Routes = [
       },
       {
         path: 'book',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'project', title: 'Book', slice: 10 }),
+        loadComponent: () => import('./pages/book/book-page').then((m) => m.BookPage),
+        data: routeMeta({ section: 'project', title: 'Book' }),
       },
       {
         path: 'cast',

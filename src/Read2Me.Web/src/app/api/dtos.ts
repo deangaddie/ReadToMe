@@ -155,16 +155,51 @@ export type ParagraphItemType = 'Narration' | 'Character' | PauseKind;
 
 export interface ParagraphItemDto {
   id: Guid;
+  /** Kept for older readers; new code reads {@link isPause} and the speaker. */
   itemType: ParagraphItemType;
   text: string | null;
   characterId: Guid | null;
   audioFileName: string | null;
+  voiceInstructions: string | null;
+  /** Fractional position key within the paragraph; items already arrive in this order. */
+  orderKey: string;
+  isPause: boolean;
 }
 
 export interface ParagraphDto {
   id: Guid;
   items: ParagraphItemDto[];
+  /** No items, or a single pause item. */
+  isPauseParagraph: boolean;
 }
+
+/** `GET …/nodes/chapter/{id}/voices` entry. */
+export interface ItemVoiceDto {
+  /** null when no voice resolves for the item. */
+  voiceName: string | null;
+  /** The linked narrator's name on a narration item. */
+  narratedBy: string | null;
+}
+
+/** Keyed by speech item id. */
+export type ChapterVoicesDto = Record<Guid, ItemVoiceDto>;
+
+export type AudioReviewStateName = 'NeedsReview' | 'Dismissed';
+
+/** `AudioEndpoints.AudioReviewDto`: the hub's `AudioReviewInfo` with nulls sent explicitly. */
+export interface AudioReviewDto {
+  state: AudioReviewStateName;
+  normalizeOk: boolean;
+  normalizeReason: string | null;
+  verifyOk: boolean;
+  wer: number | null;
+  verifyReason: string | null;
+  transcript: string | null;
+  originalTextSnapshot: string | null;
+}
+
+/** `GET …/audio/reviews`: sparse, keyed by item id. */
+export type AudioReviewsDto = Record<Guid, AudioReviewDto>;
 
 /** Exactly one of the three lists is present, chosen by the requested level. */
 export interface NodeChildrenDto {
