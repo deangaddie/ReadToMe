@@ -211,7 +211,7 @@ export class SpeakerMenuRow implements Highlightable {
   `,
 })
 export class SpeakerMenu implements OnDestroy {
-  readonly roster = input.required<SpeakerRosterEntry[]>();
+  readonly roster = input.required<readonly SpeakerRosterEntry[]>();
   readonly selectedId = input<string>();
   readonly allowClear = input(true, { transform: booleanAttribute });
   readonly allowCreate = input(true, { transform: booleanAttribute });

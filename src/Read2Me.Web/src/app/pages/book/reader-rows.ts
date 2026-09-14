@@ -8,7 +8,9 @@ import {
 } from '@app/api';
 import { AudioReviewInfo, ItemStatusEntry, ParagraphStatusEntry } from '@app/live/live-messages';
 import { SpeakerChipState } from '@app/ui/speaker-chip/speaker-chip';
+import { SpeakerRosterEntry } from '@app/ui/speaker-menu/speaker-menu';
 import { StatusKind } from '@app/ui/status-chip/status-chip';
+import { ChapterParents } from './book-tree';
 
 /**
  * What the reader rows show (design §6.3), as pure functions of the loaded data. Components bind
@@ -156,17 +158,32 @@ export interface RowContext {
   itemStatus: Readonly<Record<string, ItemStatusEntry | null>>;
   voices: Readonly<Record<string, ItemVoiceDto>>;
   reviews: Readonly<Record<string, AudioReviewDto>>;
+  /** Paragraph selection (ticket 12): on in Read and Speakers modes, off in Audio (ticket 13's). */
+  selectable: boolean;
+  selected: ReadonlySet<string>;
+  /** Part and volume per loaded chapter, for the roll-up of a ticked row. */
+  ancestry: Readonly<Record<string, ChapterParents>>;
+  /** What the speaker menus offer; empty until the roster is known. */
+  roster: readonly SpeakerRosterEntry[];
+}
+
+/** Queued or processing: the server rejects edits, so the row shows a lock (design §8). */
+export function isBusy(entry: ParagraphStatusEntry | ItemStatusEntry | null | undefined): boolean {
+  return entry?.status === 'Queued' || entry?.status === 'Processing';
+}
+
+/** A settled outcome (Failed/Unfinished) the user may clear by hand; null while queued or clean. */
+export function clearableOutcome(
+  entry: ParagraphStatusEntry | null | undefined,
+): ParagraphStatusEntry['outcome'] | null {
+  if (!entry || isBusy(entry)) return null;
+  return entry.outcome ?? null;
 }
 
 /** The hub's per-item review wins once it has reported one; the REST map covers the rest. */
 export function reviewOf(ctx: RowContext, itemId: string): AudioReviewInfo | AudioReviewDto | null {
   const live = ctx.itemStatus[itemId]?.review;
   return live !== undefined ? live : (ctx.reviews[itemId] ?? null);
-}
-
-/** Queued or processing: the server rejects edits, so the row shows a lock (design §8). */
-export function isBusy(entry: ParagraphStatusEntry | ItemStatusEntry | null | undefined): boolean {
-  return entry?.status === 'Queued' || entry?.status === 'Processing';
 }
 
 // ---- rows ---------------------------------------------------------------------------------------

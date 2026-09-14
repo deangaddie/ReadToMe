@@ -161,7 +161,7 @@ export class SpeakerChip {
   readonly state = input<SpeakerChipState>('named');
   readonly interactive = input(false, { transform: booleanAttribute });
   readonly compact = input(false, { transform: booleanAttribute });
-  readonly roster = input<SpeakerRosterEntry[]>();
+  readonly roster = input<readonly SpeakerRosterEntry[]>();
 
   readonly open = output<void>();
   readonly pick = output<string>();

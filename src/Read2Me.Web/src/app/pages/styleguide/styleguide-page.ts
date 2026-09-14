@@ -28,6 +28,8 @@ import { ProjectCard } from '@app/ui/project-card/project-card';
 import { Pipeline, PipelineActionEvent } from '@app/ui/pipeline/pipeline';
 import { derivePipeline } from '@app/pages/project/pipeline-steps';
 import { BookEditor } from '@app/pages/book/book-editor';
+import { SelectionStore } from '@app/pages/book/selection-store';
+import { SpeakerAssigner } from '@app/pages/book/speaker-assigner';
 import { ParagraphRow } from '@app/pages/book/paragraph-row';
 import { ReaderMode, RowContext } from '@app/pages/book/reader-rows';
 import {
@@ -92,8 +94,17 @@ interface TocEntry {
   styleUrl: './styleguide-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [
-    // The paragraph story renders row menus; here they must never write anything.
+    // The paragraph story renders row menus and speaker chips; here they must never write anything.
     { provide: BookEditor, useValue: { locked: signal(false), run: async () => false } },
+    SelectionStore,
+    {
+      provide: SpeakerAssigner,
+      useValue: {
+        assign: async () => undefined,
+        createAndAssign: async () => undefined,
+        clearOutcome: async () => undefined,
+      },
+    },
   ],
 })
 export class StyleguidePage {
@@ -371,6 +382,14 @@ export class StyleguidePage {
         originalTextSnapshot: null,
       },
     },
+    selectable: this.readerMode() !== 'audio',
+    selected: new Set(['sg-p2']),
+    ancestry: {},
+    roster: [
+      { id: 'sg-narrator', name: 'Narrator', isNarrator: true },
+      { id: 'sg-pirenne', name: 'Pirenne' },
+      { id: 'sg-hardin', name: 'Hardin', aliases: ['Salvor'] },
+    ],
   }));
 
   onPipeline(event: PipelineActionEvent): void {

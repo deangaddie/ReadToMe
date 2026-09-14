@@ -4,6 +4,7 @@ import {
   Component,
   Injector,
   afterNextRender,
+  booleanAttribute,
   effect,
   inject,
   input,
@@ -17,14 +18,17 @@ import { CountBadge } from '@app/ui/count-badge/count-badge';
 import { StatusChip } from '@app/ui/status-chip/status-chip';
 import { TreeNode } from './book-tree';
 import { NodeMenu } from './node-menu';
-import { NodeMenuTarget } from './node-menu-entries';
+import { ActionEntryId, NodeMenuTarget } from './node-menu-entries';
+import { TriState } from './selection';
 
 /**
  * The reader's navigation (design §6.3): volumes / parts / chapters with roll-up badges from the
  * project's node status map. Expanding a node asks for its children; clicking a chapter asks the
  * reader to show it. Expansion is owned by the caller (`expandedIds`), so a re-created tree reopens
  * the nodes the reader left open. Each node carries its menu (ticket 11); a node whose
- * attribution is queued or processing has it disabled.
+ * attribution is queued or processing has it disabled. When `selectable` (ticket 12) every node
+ * has a tri-state checkbox over its Character paragraphs, and the menu offers the selection
+ * shortcuts; the tree only reports the gesture, the page does the read.
  */
 @Component({
   selector: 'app-structure-tree',
@@ -63,6 +67,18 @@ import { NodeMenuTarget } from './node-menu-entries';
           </button>
         } @else {
           <span class="tree__toggle" aria-hidden="true"></span>
+        }
+
+        @if (selectable()) {
+          <input
+            type="checkbox"
+            class="tree__select"
+            [attr.aria-label]="'Select paragraphs of ' + node.title"
+            [checked]="stateOf(node) === 'checked'"
+            [indeterminate]="stateOf(node) === 'indeterminate'"
+            (click)="$event.stopPropagation()"
+            (change)="onToggle(node, $event)"
+          />
         }
 
         <button
@@ -116,6 +132,7 @@ import { NodeMenuTarget } from './node-menu-entries';
           class="tree__menu"
           [target]="targetOf(node)"
           [disabled]="isBusy(node)"
+          (action)="onAction(node, $event)"
           (click)="$event.stopPropagation()"
         />
       </cdk-tree-node>
@@ -154,6 +171,13 @@ import { NodeMenuTarget } from './node-menu-entries';
       background: transparent;
       color: inherit;
       cursor: pointer;
+    }
+    .tree__select {
+      flex: 0 0 auto;
+      margin: 0 2px 0 0;
+      width: 13px;
+      height: 13px;
+      accent-color: var(--r2m-accent);
     }
     .tree__title {
       flex: 1 1 auto;
@@ -208,9 +232,20 @@ export class StructureTree {
   /** Ids of the nodes to show expanded. */
   readonly expandedIds = input<ReadonlySet<string>>(new Set());
 
+  /** Paragraph selection is on: checkboxes per node and the selection menu entries. */
+  readonly selectable = input(false, { transform: booleanAttribute });
+  /** Each node's roll-up over the current selection; absent reads as unchecked. */
+  readonly nodeStates = input<Readonly<Record<string, TriState>>>({});
+
   /** The user expanded or collapsed a node. */
   readonly expandedChange = output<{ node: TreeNode; expanded: boolean }>();
   readonly selectChapter = output<string>();
+  /** The node's checkbox: select (`on`) or deselect every Character paragraph under it. */
+  readonly toggleNode = output<{ node: TreeNode; on: boolean }>();
+  /** "Select unprocessed": add the node's still-unattributed paragraphs to the selection. */
+  readonly selectUnprocessed = output<TreeNode>();
+  /** "Attribute unprocessed": queue the node's still-unattributed paragraphs. */
+  readonly attributeNode = output<TreeNode>();
 
   private readonly tree = viewChild(CdkTree<TreeNode, string>);
   private readonly injector = inject(Injector);
@@ -247,6 +282,19 @@ export class StructureTree {
     if (node.level === 'chapter') this.selectChapter.emit(node.id);
   }
 
+  protected stateOf(node: TreeNode): TriState {
+    return this.nodeStates()[node.id] ?? 'unchecked';
+  }
+
+  protected onToggle(node: TreeNode, event: Event): void {
+    this.toggleNode.emit({ node, on: (event.target as HTMLInputElement).checked });
+  }
+
+  protected onAction(node: TreeNode, action: ActionEntryId): void {
+    if (action === 'select-unprocessed') this.selectUnprocessed.emit(node);
+    else this.attributeNode.emit(node);
+  }
+
   protected targetOf(node: TreeNode): NodeMenuTarget {
     return {
       kind: node.level,
@@ -254,6 +302,7 @@ export class StructureTree {
       text: node.rawTitle,
       isFirst: node.isFirst,
       isLast: node.isLast,
+      selectable: this.selectable(),
     };
   }
 

@@ -9,6 +9,8 @@ using Read2Me.Services.UseCases;
 namespace Read2Me.App.Api
 {
     public sealed record NodeEnqueueRequest(string Level, Guid NodeId, bool UnprocessedOnly = true);
+    /// <summary>An explicit selection. Ids that are not Character paragraphs are ignored.</summary>
+    public sealed record ParagraphsEnqueueRequest(Guid[] ParagraphIds);
     public sealed record EnqueueResponse(int Enqueued);
     /// <summary>
     /// Queue state only. Attribution results are per item now — read them from the book endpoint's
@@ -22,8 +24,12 @@ namespace Read2Me.App.Api
         {
             endpoints.MapPost("/api/projects/{folder}/attribution/enqueue", EnqueueAsync)
                 .WithSummary("Queue LLM character attribution for the paragraphs under a node (level: volume|part|chapter). Poll /api/attribution/queue.");
+            endpoints.MapPost("/api/projects/{folder}/attribution/enqueue-paragraphs", EnqueueParagraphsAsync)
+                .WithSummary("Queue LLM character attribution for an explicit list of paragraph ids (a selection). Ids without dialog are ignored; the count answers with what was queued.");
             endpoints.MapGet("/api/projects/{folder}/attribution/paragraphs/{paragraphId:guid}", GetParagraphStatus)
                 .WithSummary("Per-paragraph attribution queue state: queued/processing status and any failure/unknown outcome. Results are on the paragraph's items.");
+            endpoints.MapDelete("/api/projects/{folder}/attribution/paragraphs/{paragraphId:guid}/outcome", ClearOutcome)
+                .WithSummary("Forget a paragraph's Failed/Unfinished attribution outcome (the chip goes away). 204 whether or not one was recorded.");
             endpoints.MapPost("/api/attribution/cancel",
                     (CharacterQueueService queue) => { queue.CancelAll(); return Results.Ok(); })
                 .WithSummary("Cancel all queued attribution work.");
@@ -40,6 +46,26 @@ namespace Read2Me.App.Api
 
             var enqueued = await useCases.EnqueueAttributionAsync(folderId, level, request.NodeId, request.UnprocessedOnly);
             return Results.Accepted(value: new EnqueueResponse(enqueued));
+        }
+
+        private static async Task<IResult> EnqueueParagraphsAsync(
+            string folder, ParagraphsEnqueueRequest request, IFileSystem fs, EnqueueUseCases useCases)
+        {
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+
+            var enqueued = await useCases.EnqueueAttributionAsync(folderId, request.ParagraphIds ?? []);
+            return Results.Accepted(value: new EnqueueResponse(enqueued));
+        }
+
+        private static IResult ClearOutcome(
+            string folder, Guid paragraphId, IFileSystem fs, CharacterQueueService queue)
+        {
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+
+            queue.ClearOutcome(folderId, paragraphId);
+            return Results.NoContent();
         }
 
         private static IResult GetParagraphStatus(

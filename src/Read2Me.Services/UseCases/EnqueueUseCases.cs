@@ -20,6 +20,21 @@ namespace Read2Me.Services.UseCases
             ProjectFolderId folder, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = true)
         {
             var refs = await characterReader.GetCharacterParagraphsAsync(folder, level, nodeId, unprocessedOnly);
+            return await EnqueueAttributionAsync(folder, refs);
+        }
+
+        /// <summary>
+        /// The web reader's selection: an explicit id list rather than a node. Ids that are not
+        /// Character paragraphs are dropped by the read, so the answer counts what was queued.
+        /// </summary>
+        public virtual async Task<int> EnqueueAttributionAsync(ProjectFolderId folder, IReadOnlyList<Guid> paragraphIds)
+        {
+            var refs = await characterReader.GetCharacterParagraphRefsAsync(folder, paragraphIds);
+            return await EnqueueAttributionAsync(folder, refs);
+        }
+
+        private async Task<int> EnqueueAttributionAsync(ProjectFolderId folder, List<CharacterParagraphRef> refs)
+        {
             if (refs.Count == 0)
                 return 0;
 

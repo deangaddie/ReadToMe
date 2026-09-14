@@ -3,12 +3,15 @@ import { ApiClient } from './api-client';
 import type { BookCommand } from './book-commands';
 import type {
   BookOverviewDto,
+  BulkAssignPreviewDto,
+  BulkAssignPreviewRequest,
   ChapterVoicesDto,
   CharacterDto,
   CommandResponse,
   Guid,
   NodeChildrenDto,
   NodeLevel,
+  ParagraphRefDto,
 } from './dtos';
 import { projectUrl } from './projects-api';
 
@@ -38,8 +41,33 @@ export class BookApi {
     );
   }
 
+  /**
+   * The Character paragraphs under a node with their ancestry (ticket 12): what a tree checkbox
+   * selects; `unprocessedOnly` keeps those still holding an unattributed line.
+   */
+  paragraphIds(
+    folder: string,
+    level: NodeLevel,
+    id: Guid,
+    unprocessedOnly = false,
+  ): Promise<ParagraphRefDto[]> {
+    return this.api.get<ParagraphRefDto[]>(
+      `${projectUrl(folder)}/nodes/${level}/${id}/paragraph-ids`,
+      unprocessedOnly ? { unprocessedOnly: true } : undefined,
+    );
+  }
+
   characters(folder: string): Promise<CharacterDto[]> {
     return this.api.get<CharacterDto[]>(`${projectUrl(folder)}/characters`);
+  }
+
+  /** What a bulk speaker assign over the paragraphs would write (the confirm quotes it). */
+  bulkAssignPreview(folder: string, paragraphIds: Guid[]): Promise<BulkAssignPreviewDto> {
+    const request: BulkAssignPreviewRequest = { paragraphIds };
+    return this.api.post<BulkAssignPreviewDto>(
+      `${projectUrl(folder)}/characters/bulk-assign-preview`,
+      request,
+    );
   }
 
   execute(folder: string, command: BookCommand): Promise<CommandResponse> {

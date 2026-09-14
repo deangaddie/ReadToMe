@@ -497,6 +497,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/nodes/{level}/{id}/paragraph-ids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Character paragraphs under a node (level: volume|part|chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects. */
+        get: {
+            parameters: {
+                query?: {
+                    unprocessedOnly?: boolean;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                    level: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/characters": {
         parameters: {
             query?: never;
@@ -527,6 +567,46 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/bulk-assign-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BulkAssignPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -613,6 +693,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/attribution/enqueue-paragraphs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue LLM character attribution for an explicit list of paragraph ids (a selection). Ids without dialog are ignored; the count answers with what was queued. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ParagraphsEnqueueRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/attribution/paragraphs/{paragraphId}": {
         parameters: {
             query?: never;
@@ -645,6 +765,43 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget a paragraph's Failed/Unfinished attribution outcome (the chip goes away). 204 whether or not one was recorded. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    paragraphId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -2602,6 +2759,9 @@ export interface components {
             /** Format: int32 */
             chunkPauseMs?: null | number | string;
         };
+        BulkAssignPreviewRequest: {
+            paragraphIds: string[];
+        };
         ImportRequest: {
             /** @default false */
             reread: boolean;
@@ -2647,6 +2807,9 @@ export interface components {
             nodeId: string;
             /** @default true */
             unprocessedOnly: boolean;
+        };
+        ParagraphsEnqueueRequest: {
+            paragraphIds: string[];
         };
         ParagraphTtsServiceConfig: {
             /** Format: int32 */

@@ -4,6 +4,8 @@ import { ParagraphDto, ParagraphItemDto } from '@app/api';
 import { BookEditor } from './book-editor';
 import { ParagraphRow } from './paragraph-row';
 import { RowContext } from './reader-rows';
+import { SelectionStore } from './selection-store';
+import { SpeakerAssigner } from './speaker-assigner';
 
 const NARRATOR_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -36,6 +38,17 @@ const PARAGRAPH: ParagraphDto = {
   ],
 };
 
+const NARRATION_ONLY: ParagraphDto = {
+  id: 'p2',
+  isPauseParagraph: false,
+  items: [item('n2', { itemType: 'Narration', characterId: NARRATOR_ID, text: 'Rain fell.' })],
+};
+
+const ROSTER = [
+  { id: NARRATOR_ID, name: 'Narrator', isNarrator: true },
+  { id: 'h', name: 'Hardin' },
+];
+
 function ctx(overrides: Partial<RowContext> = {}): RowContext {
   return {
     folder: 'dune',
@@ -48,6 +61,10 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     itemStatus: {},
     voices: {},
     reviews: {},
+    selectable: true,
+    selected: new Set(),
+    ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
+    roster: ROSTER,
     ...overrides,
   };
 }
@@ -55,6 +72,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
 function render(context: RowContext, paragraph = PARAGRAPH) {
   const fixture = TestBed.createComponent(ParagraphRow);
   fixture.componentRef.setInput('paragraph', paragraph);
+  fixture.componentRef.setInput('chapterId', 'c1');
   fixture.componentRef.setInput('ctx', context);
   fixture.detectChanges();
   return fixture.nativeElement as HTMLElement;
@@ -63,12 +81,27 @@ function render(context: RowContext, paragraph = PARAGRAPH) {
 const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
 describe('ParagraphRow', () => {
-  beforeEach(() =>
+  let assigner: { assign: ReturnType<typeof vi.fn>; createAndAssign: ReturnType<typeof vi.fn>; clearOutcome: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    assigner = {
+      assign: vi.fn().mockResolvedValue(undefined),
+      createAndAssign: vi.fn().mockResolvedValue(undefined),
+      clearOutcome: vi.fn().mockResolvedValue(undefined),
+    };
     TestBed.configureTestingModule({
       imports: [ParagraphRow],
-      providers: [{ provide: BookEditor, useValue: { locked: signal(false), run: vi.fn() } }],
-    }),
-  );
+      providers: [
+        SelectionStore,
+        { provide: BookEditor, useValue: { locked: signal(false), run: vi.fn() } },
+        { provide: SpeakerAssigner, useValue: assigner },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
+  });
 
   describe('read mode', () => {
     it('renders prose with one paragraph speaker chip and no item rows', () => {
@@ -94,10 +127,105 @@ describe('ParagraphRow', () => {
       );
       expect(text(el.querySelector('r2m-status-chip'))).toContain('Unknown');
     });
+  });
 
-    it('the gutter checkbox is present but disabled', () => {
-      const box = render(ctx()).querySelector<HTMLInputElement>('input[type=checkbox]');
-      expect(box?.disabled).toBe(true);
+  describe('selection (ticket 12)', () => {
+    it('a Character paragraph has a live checkbox that toggles the store with its ancestry', () => {
+      const el = render(ctx());
+      const box = el.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+      expect(box.disabled).toBe(false);
+      expect(box.checked).toBe(false);
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      const store = TestBed.inject(SelectionStore);
+      expect(store.selection()).toEqual({ p1: { chapterId: 'c1', partId: 'pt1', volumeId: 'v1' } });
+
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      expect(store.count()).toBe(0);
+    });
+
+    it('reflects the selection from the context and highlights the row', () => {
+      const el = render(ctx({ selected: new Set(['p1']) }));
+      expect(el.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
+      expect(el.classList.contains('r2m-paragraph--selected')).toBe(true);
+    });
+
+    it('narration-only paragraphs and Audio mode offer no checkbox', () => {
+      expect(render(ctx(), NARRATION_ONLY).querySelector('input[type=checkbox]')).toBeNull();
+      expect(
+        render(ctx({ mode: 'audio', selectable: false })).querySelector('input[type=checkbox]'),
+      ).toBeNull();
+    });
+  });
+
+  describe('speaker menu (ticket 12)', () => {
+    const openMenu = (el: HTMLElement, chip: Element) => {
+      chip.querySelector<HTMLButtonElement>('button')!.click();
+      return Array.from(document.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__row'));
+    };
+
+    it('the Read chip opens the roster and a pick assigns the whole paragraph', () => {
+      const el = render(ctx());
+      const rows = openMenu(el, el.querySelector('r2m-speaker-chip')!);
+      expect(rows.map((r) => text(r.querySelector('.r2m-speaker-menu__name')))).toEqual([
+        'Narrator',
+        'Hardin',
+      ]);
+      rows[1]!.click();
+      expect(assigner.assign).toHaveBeenCalledWith({ kind: 'paragraph', paragraphId: 'p1' }, 'h');
+    });
+
+    it('Clear speaker and New character go through the assigner too', () => {
+      const el = render(ctx());
+      openMenu(el, el.querySelector('r2m-speaker-chip')!);
+      const actions = document.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__action');
+      actions[0]!.click();
+      expect(assigner.assign).toHaveBeenCalledWith({ kind: 'paragraph', paragraphId: 'p1' }, null);
+      actions[1]!.click();
+      expect(assigner.createAndAssign).toHaveBeenCalledWith(
+        { kind: 'paragraph', paragraphId: 'p1' },
+        '',
+      );
+    });
+
+    it('in Speakers mode each item chip assigns that item', () => {
+      const el = render(ctx({ mode: 'speakers' }));
+      const chips = el.querySelectorAll('r2m-item r2m-speaker-chip');
+      const rows = openMenu(el, chips[2]!);
+      rows[0]!.click();
+      expect(assigner.assign).toHaveBeenCalledWith(
+        { kind: 'item', itemId: 'u', paragraphId: 'p1' },
+        NARRATOR_ID,
+      );
+    });
+
+    it('a queued paragraph keeps its chips inert', () => {
+      const el = render(ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }));
+      expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+      const read = render(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
+      expect(read.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    });
+  });
+
+  describe('outcomes (ticket 12)', () => {
+    it('a Failed chip carries the reason and clears the outcome on click', () => {
+      const el = render(
+        ctx({ paragraphStatus: { p1: { outcome: { kind: 'Failed', reason: 'LLM timed out' } } } }),
+      );
+      const button = el.querySelector<HTMLButtonElement>('.r2m-paragraph__outcome')!;
+      expect(text(button)).toContain('Failed');
+      button.click();
+      expect(assigner.clearOutcome).toHaveBeenCalledWith('p1');
+    });
+
+    it('a queued paragraph with a stale outcome shows Queued and nothing to clear', () => {
+      const el = render(
+        ctx({ paragraphStatus: { p1: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+      );
+      expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
+      expect(text(el.querySelector('r2m-status-chip'))).toContain('Queued');
     });
   });
 
@@ -132,6 +260,7 @@ describe('ParagraphRow', () => {
   describe('audio mode', () => {
     const audio = ctx({
       mode: 'audio',
+      selectable: false,
       voices: {
         n: { voiceName: 'Deep', narratedBy: null },
         d: { voiceName: 'Hardin Voice', narratedBy: null },
@@ -190,6 +319,10 @@ describe('ParagraphRow', () => {
       const menu = el.querySelector<HTMLButtonElement>('.r2m-paragraph__menu button');
       expect(menu?.disabled).toBe(true);
     });
+
+    it('item chips are not interactive in Audio mode', () => {
+      expect(render(audio).querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    });
   });
 
   describe('menus (ticket 11)', () => {
@@ -208,7 +341,9 @@ describe('ParagraphRow', () => {
     });
 
     it('an audio-queued item disables only its own menu', () => {
-      const el = render(ctx({ mode: 'audio', itemStatus: { d: { status: 'Queued' } } }));
+      const el = render(
+        ctx({ mode: 'audio', selectable: false, itemStatus: { d: { status: 'Queued' } } }),
+      );
       const items = Array.from(el.querySelectorAll('r2m-item'));
       const disabled = items.map(
         (i) => i.querySelector<HTMLButtonElement>('r2m-node-menu button')!.disabled,

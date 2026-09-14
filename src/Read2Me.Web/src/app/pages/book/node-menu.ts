@@ -5,6 +5,7 @@ import {
   computed,
   inject,
   input,
+  output,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
@@ -14,12 +15,20 @@ import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
 import { PromptService } from '@app/ui/text-prompt-dialog/text-prompt-dialog';
 import { BookEditor } from './book-editor';
 import { commandFor } from './node-menu-commands';
-import { MenuEntry, MenuEntryId, NodeMenuTarget, menuEntries } from './node-menu-entries';
+import {
+  ActionEntryId,
+  MenuEntry,
+  MenuEntryId,
+  NodeMenuTarget,
+  isActionEntry,
+  menuEntries,
+} from './node-menu-entries';
 
 /**
  * The node menu (ticket 11, design §6.3): one component for every level of the book, the entry set
  * decided by {@link menuEntries} from the target's kind and position. A chosen entry runs its
  * dialog flow and posts the command through {@link BookEditor}; nothing here patches the rows.
+ * The selection entries (ticket 12) are not commands: they are emitted as `action` for the tree.
  * Disabled by the caller for a busy row, and by the editor while stale or mid-write (design §8).
  */
 @Component({
@@ -124,6 +133,8 @@ export class NodeMenu {
   readonly target = input.required<NodeMenuTarget>();
   /** The row is queued or processing: the server would refuse, so the menu is off. */
   readonly disabled = input(false, { transform: booleanAttribute });
+  /** A selection entry was chosen (tree nodes only). */
+  readonly action = output<ActionEntryId>();
 
   protected readonly isDisabled = computed(() => this.disabled() || this.editor.locked());
   protected readonly label = computed(
@@ -153,6 +164,10 @@ export class NodeMenu {
   }
 
   protected async choose(id: MenuEntryId): Promise<void> {
+    if (isActionEntry(id)) {
+      this.action.emit(id);
+      return;
+    }
     const command = await commandFor(id, this.target(), {
       text: (o) => this.prompt.text(o),
       confirm: (o) => this.confirm.confirm(o),

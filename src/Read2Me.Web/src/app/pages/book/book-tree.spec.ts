@@ -1,5 +1,11 @@
 import { NodeDto } from '@app/api';
-import { TreeNode, buildTree, chapterSequence, firstUnloaded } from './book-tree';
+import {
+  TreeNode,
+  buildTree,
+  chapterAncestry,
+  chapterSequence,
+  firstUnloaded,
+} from './book-tree';
 
 const node = (id: string, title: string | null = null): NodeDto => ({ id, title });
 
@@ -122,5 +128,16 @@ describe('firstUnloaded', () => {
       id: 'v2',
     });
     expect(firstUnloaded(volumes, { v1: [], v2: [] })).toBeNull();
+  });
+});
+
+describe('chapterAncestry', () => {
+  it('maps every loaded chapter to its part and volume', () => {
+    const volumes = [node('v1'), node('v2')];
+    const children = { v1: [node('p1'), node('p2')], p1: [node('c1')], p2: [node('c2')], v2: [node('p3')] };
+    expect(chapterAncestry(volumes, children)).toEqual({
+      c1: { partId: 'p1', volumeId: 'v1' },
+      c2: { partId: 'p2', volumeId: 'v1' },
+    });
   });
 });

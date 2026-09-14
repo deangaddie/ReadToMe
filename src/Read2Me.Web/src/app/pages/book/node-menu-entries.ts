@@ -18,9 +18,16 @@ export interface NodeMenuTarget {
   isLast: boolean;
   /** Items only: a pause item anchors no item insert. */
   isPause?: boolean;
+  /** Tree nodes only (ticket 12): the selection shortcuts and node attribute are on offer. */
+  selectable?: boolean;
 }
 
+/** Entries that are not commands: the menu emits them for the tree to act on. */
+export const ACTION_ENTRIES = ['select-unprocessed', 'attribute-node'] as const;
+export type ActionEntryId = (typeof ACTION_ENTRIES)[number];
+
 export type MenuEntryId =
+  | ActionEntryId
   | 'edit-title'
   | 'edit-text'
   | 'split'
@@ -31,7 +38,14 @@ export type MenuEntryId =
   | `pause-${Lowercase<InsertPosition>}:${PauseKind}`
   | 'delete';
 
-export type MenuGroup = 'edit' | 'structure' | 'insert' | 'pause-before' | 'pause-after' | 'delete';
+export type MenuGroup =
+  | 'select'
+  | 'edit'
+  | 'structure'
+  | 'insert'
+  | 'pause-before'
+  | 'pause-after'
+  | 'delete';
 
 export interface MenuEntry {
   id: MenuEntryId;
@@ -76,11 +90,21 @@ export const HAS_CHILDREN: Record<NodeMenuKind, boolean> = {
   'pause-paragraph': false,
 };
 
+export function isActionEntry(id: MenuEntryId): id is ActionEntryId {
+  return (ACTION_ENTRIES as readonly string[]).includes(id);
+}
+
 export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
   const { kind } = target;
   const entries: MenuEntry[] = [];
 
   if (kind === 'volume' || kind === 'part' || kind === 'chapter') {
+    if (target.selectable) {
+      entries.push(
+        { id: 'select-unprocessed', label: 'Select unprocessed', icon: 'checklist', group: 'select' },
+        { id: 'attribute-node', label: 'Attribute unprocessed', icon: 'auto_awesome', group: 'select' },
+      );
+    }
     entries.push({ id: 'edit-title', label: 'Edit title', icon: 'edit', group: 'edit' });
   } else if (kind === 'item') {
     entries.push({ id: 'edit-text', label: 'Edit text', icon: 'edit', group: 'edit' });

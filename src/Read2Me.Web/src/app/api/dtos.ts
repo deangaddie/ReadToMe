@@ -229,6 +229,25 @@ export interface NodeChildrenDto {
   paragraphs: ParagraphDto[] | null;
 }
 
+/** `GET …/nodes/{level}/{id}/paragraph-ids` entry: a Character paragraph and the nodes it rolls up into. */
+export interface ParagraphRefDto {
+  id: Guid;
+  chapterId: Guid;
+  partId: Guid;
+  volumeId: Guid;
+}
+
+/** `POST …/characters/bulk-assign-preview` body. */
+export interface BulkAssignPreviewRequest {
+  paragraphIds: Guid[];
+}
+
+/** What a bulk speaker assign would write; paragraphs without dialog count in neither. */
+export interface BulkAssignPreviewDto {
+  paragraphsWithCharacterItems: number;
+  characterItems: number;
+}
+
 export interface CharacterAliasDto {
   id: Guid;
   name: string;
@@ -258,6 +277,11 @@ export interface CommandResponse {
 
 export type NodeEnqueueRequest = Schema['NodeEnqueueRequest'];
 export type AudioEnqueueRequest = Schema['AudioEnqueueRequest'];
+
+/** `POST …/attribution/enqueue-paragraphs` body: an explicit selection; ids without dialog are ignored. */
+export interface ParagraphsEnqueueRequest {
+  paragraphIds: Guid[];
+}
 
 export interface EnqueueResponse {
   enqueued: number;

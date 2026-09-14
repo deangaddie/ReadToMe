@@ -127,6 +127,28 @@ export function chapterSequence(volumes: readonly NodeDto[], children: ChildrenM
   return out;
 }
 
+/** The part and volume a chapter rolls up into. */
+export interface ChapterParents {
+  partId: string;
+  volumeId: string;
+}
+
+/** {@link ChapterParents} for every chapter whose structure is loaded. */
+export function chapterAncestry(
+  volumes: readonly NodeDto[],
+  children: ChildrenMap,
+): Record<string, ChapterParents> {
+  const out: Record<string, ChapterParents> = {};
+  for (const volume of volumes) {
+    for (const part of children[volume.id] ?? []) {
+      for (const chapter of children[part.id] ?? []) {
+        out[chapter.id] = { partId: part.id, volumeId: volume.id };
+      }
+    }
+  }
+  return out;
+}
+
 /** The first volume or part, in book order, whose children are not loaded; null when all are. */
 export function firstUnloaded(volumes: readonly NodeDto[], children: ChildrenMap): NodeRef | null {
   for (const volume of volumes) {

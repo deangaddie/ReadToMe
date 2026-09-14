@@ -69,6 +69,21 @@ describe('BookEditor', () => {
     expect(problems).toEqual([]);
   });
 
+  it('execute answers with the host response, so a create can use the id it resolved', async () => {
+    execute.mockResolvedValueOnce({ newEntityId: 'c-new' });
+    const created = editor.execute({ type: 'CreateCharacter', name: 'Gaal' });
+    await flush();
+    store.settle(true);
+    await expect(created).resolves.toEqual({ newEntityId: 'c-new' });
+
+    // The import writes answer nothing, and a reread still reports plain success.
+    importFile.mockResolvedValueOnce(undefined);
+    const reread = editor.reread();
+    await flush();
+    store.settle(true);
+    await expect(reread).resolves.toBe(true);
+  });
+
   it('reloads by hand when no own receipt comes back in time', async () => {
     const run = editor.run({ type: 'AddPauses' });
     await flush();

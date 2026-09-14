@@ -149,14 +149,30 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/discover/
 curl -s -X POST http://localhost:5000/api/projects/{folder}/attribution/enqueue \
   -H 'content-type: application/json' \
   -d '{ "level": "chapter", "nodeId": "<chapterId>", "unprocessedOnly": true }'
+# or an explicit selection (ids without dialog are ignored; enqueued = what was queued):
+curl -s -X POST http://localhost:5000/api/projects/{folder}/attribution/enqueue-paragraphs \
+  -H 'content-type: application/json' \
+  -d '{ "paragraphIds": ["<paragraphId>", "<paragraphId>"] }'
+# the Character paragraphs under a node with their chapter/part/volume ids
+# (what a selection holds); unprocessedOnly=true keeps those still unattributed:
+curl -s 'http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/paragraph-ids?unprocessedOnly=true'
 # poll /api/attribution/queue; per-paragraph queue state (status + failure/unknown outcome):
 curl -s http://localhost:5000/api/projects/{folder}/attribution/paragraphs/{paragraphId}
+# forget a paragraph's Failed/Unfinished outcome (204):
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome
 # the attribution itself is per item — read it off the paragraph's items:
 curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/children
 ```
 
 Manual fixes go through the generic commands endpoint (section 5), e.g.
-`SetParagraphCharacter`.
+`SetParagraphCharacter`, or `SetParagraphsCharacter` for a whole selection — preview what it
+would write first:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/bulk-assign-preview \
+  -H 'content-type: application/json' -d '{ "paragraphIds": ["<paragraphId>"] }'
+# → { "paragraphsWithCharacterItems": 1, "characterItems": 2 }
+```
 
 ## 3. Voices
 

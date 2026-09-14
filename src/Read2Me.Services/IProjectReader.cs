@@ -203,6 +203,14 @@ namespace Read2Me.Services
         Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
             ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false);
 
+        /// <summary>
+        /// The Character paragraphs among <paramref name="paragraphIds"/>, with their ancestry. Ids
+        /// that name no paragraph, or a paragraph with no dialog (all narration, a lone pause), are
+        /// left out: a selection made by id is enqueued exactly like one made by node.
+        /// </summary>
+        Task<List<CharacterParagraphRef>> GetCharacterParagraphRefsAsync(
+            ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds);
+
         // All volume/part/chapter node ids that contain at least one character paragraph.
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);
 

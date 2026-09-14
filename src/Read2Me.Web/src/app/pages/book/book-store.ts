@@ -19,6 +19,7 @@ import {
   NodeRef,
   TreeNode,
   buildTree,
+  chapterAncestry,
   chapterSequence,
   firstUnloaded,
 } from './book-tree';
@@ -89,6 +90,11 @@ export class BookStore {
 
   readonly sequence = computed(() =>
     chapterSequence(this._overview()?.volumes ?? [], this._children()),
+  );
+
+  /** Part and volume per loaded chapter, so a ticked row knows what it rolls up into. */
+  readonly ancestry = computed(() =>
+    chapterAncestry(this._overview()?.volumes ?? [], this._children()),
   );
 
   /** The loaded window, in reading order, as the reader renders it. */

@@ -10,10 +10,12 @@
 import type {
   AppTheme,
   AudioProcessingUpdateRequest,
+  BulkAssignPreviewRequest,
   LlmServerConfig,
   ManualImportRequest,
   NarratorOnlyModeRequest,
   ParagraphTtsServiceConfig,
+  ParagraphsEnqueueRequest,
   Schema,
   SemanticSimilarityServiceConfig,
   SetActiveRequest,
@@ -44,4 +46,6 @@ export type SchemaPins = [
   Pin<NarratorOnlyModeRequest, Schema['NarratorOnlyModeRequest']>,
   Pin<ManualImportRequest, Schema['ManualImportRequest']>,
   Pin<SplitRuleRequest, Schema['SplitRuleRequest']>,
+  Pin<ParagraphsEnqueueRequest, Schema['ParagraphsEnqueueRequest']>,
+  Pin<BulkAssignPreviewRequest, Schema['BulkAssignPreviewRequest']>,
 ];

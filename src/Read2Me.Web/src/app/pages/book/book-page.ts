@@ -19,14 +19,20 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { BookCommand, ManualImportRequest } from '@app/api';
+import { AttributionApi, BookApi, BookCommand, ManualImportRequest, toApiError } from '@app/api';
+import { LiveService } from '@app/live/live.service';
+import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@app/ui/empty-state/empty-state';
+import { SpeakerMenu } from '@app/ui/speaker-menu/speaker-menu';
+import { ToastService } from '@app/ui/toast/toast.service';
 import { firstValueFrom } from 'rxjs';
 import { ProjectStore } from '../project/project-store';
 import { BookEditor } from './book-editor';
 import { BookStore, WINDOW_CAP } from './book-store';
+import { TreeNode } from './book-tree';
 import { ManualRereadDialog } from './manual-reread-dialog';
 import { MeasuredScrollDirective } from './measured-scroll';
 import { NodeMenu } from './node-menu';
@@ -40,6 +46,10 @@ import {
   buildRows,
   parseMode,
 } from './reader-rows';
+import { TriState, chapterDialogTotals } from './selection';
+import { SelectionStore } from './selection-store';
+import { SpeakerAssigner } from './speaker-assigner';
+import { buildRoster } from './speaker-roster';
 import { StructureTree } from './structure-tree';
 
 /** Load the adjacent chapter when the viewport is this close to either end. */
@@ -55,7 +65,9 @@ const MODE_LABELS: Record<ReaderMode, string> = {
  * `/projects/{folder}/book` (ticket 10, design §6.3): the structure tree beside a virtual-scrolled
  * window of adjacent chapters. The mode (`?mode=`) changes what each row shows, never where it is.
  * Ticket 11 adds the node menus on every row and the book-level actions in the toolbar overflow
- * (titles, pauses, reread, manual reread); all of them post through {@link BookEditor}.
+ * (titles, pauses, reread, manual reread); all of them post through {@link BookEditor}. Ticket 12
+ * adds the paragraph selection (row and tree checkboxes, "Select unprocessed") and the selection
+ * action bar — Attribute, Bulk assign speaker, Clear — over the {@link SelectionStore}.
  */
 @Component({
   selector: 'app-book-page',
@@ -66,11 +78,13 @@ const MODE_LABELS: Record<ReaderMode, string> = {
     MatDividerModule,
     MatIconModule,
     MatMenuModule,
+    MatTooltipModule,
     RouterLink,
     EmptyState,
     MeasuredScrollDirective,
     NodeMenu,
     ParagraphRow,
+    SpeakerMenu,
     StructureTree,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -95,6 +109,47 @@ const MODE_LABELS: Record<ReaderMode, string> = {
           <mat-button-toggle [value]="m">{{ modeLabels[m] }}</mat-button-toggle>
         }
       </mat-button-toggle-group>
+
+      @if (selectable() && selection.count() > 0) {
+        <div class="book__selection" role="group" aria-label="Selection" data-testid="selection-bar">
+          <span class="book__selection-count" data-testid="selection-count">
+            {{ selection.count() }} paragraph{{ selection.count() === 1 ? '' : 's' }}
+          </span>
+          <button
+            mat-flat-button
+            type="button"
+            data-action="attribute-selection"
+            [disabled]="working() || editor.locked()"
+            (click)="attributeSelection()"
+          >
+            <mat-icon>auto_awesome</mat-icon>
+            Attribute
+          </button>
+          <button
+            mat-stroked-button
+            type="button"
+            data-action="bulk-assign"
+            [matMenuTriggerFor]="bulk"
+            [disabled]="working() || editor.locked() || queueBusy()"
+            [matTooltip]="queueBusy() ? 'Bulk assign waits until attribution has finished' : ''"
+          >
+            <mat-icon>group</mat-icon>
+            Bulk assign speaker
+            <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+          </button>
+          <mat-menu #bulk="matMenu" class="book__bulk-menu">
+            <r2m-speaker-menu
+              [roster]="roster()"
+              (pick)="bulkAssign($event)"
+              (clear)="bulkAssign(null)"
+              (create)="bulkCreate($event)"
+            />
+          </mat-menu>
+          <button mat-button type="button" data-action="clear-selection" (click)="selection.clear()">
+            Clear
+          </button>
+        </div>
+      }
 
       <span class="book__spacer"></span>
 
@@ -168,8 +223,13 @@ const MODE_LABELS: Record<ReaderMode, string> = {
               [statuses]="project.nodes()"
               [currentChapterId]="store.currentChapterId()"
               [expandedIds]="store.expanded()"
+              [selectable]="selectable()"
+              [nodeStates]="nodeStates()"
               (expandedChange)="store.setExpanded($event.node, $event.expanded)"
               (selectChapter)="openChapter($event)"
+              (toggleNode)="toggleNode($event.node, $event.on)"
+              (selectUnprocessed)="selectUnprocessed($event)"
+              (attributeNode)="attributeNode($event)"
             />
           </nav>
         }
@@ -200,6 +260,7 @@ const MODE_LABELS: Record<ReaderMode, string> = {
                 @case ('paragraph') {
                   <r2m-paragraph
                     [paragraph]="row.paragraph"
+                    [chapterId]="row.chapterId"
                     [ctx]="ctx()"
                     [isFirst]="row.isFirst"
                     [isLast]="row.isLast"
@@ -236,6 +297,18 @@ const MODE_LABELS: Record<ReaderMode, string> = {
     }
     .book__spacer {
       flex: 1 1 auto;
+    }
+    .book__selection {
+      display: flex;
+      align-items: center;
+      gap: var(--r2m-space-2);
+      padding: 2px var(--r2m-space-2) 2px var(--r2m-space-3);
+      border-radius: var(--r2m-radius-pill);
+      background: color-mix(in srgb, var(--r2m-accent) 10%, transparent);
+    }
+    .book__selection-count {
+      font-weight: 600;
+      white-space: nowrap;
     }
     .book__stale {
       display: flex;
@@ -326,6 +399,13 @@ export class BookPage {
   protected readonly project = inject(ProjectStore);
   protected readonly store = inject(BookStore);
   protected readonly editor = inject(BookEditor);
+  protected readonly selection = inject(SelectionStore);
+  private readonly assigner = inject(SpeakerAssigner);
+  private readonly attribution = inject(AttributionApi);
+  private readonly book = inject(BookApi);
+  private readonly live = inject(LiveService);
+  private readonly preflight = inject(Preflight);
+  private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
@@ -357,6 +437,30 @@ export class BookPage {
   });
   protected readonly keys = computed(() => this.rows().map((r) => r.key));
 
+  /** Paragraph selection lives in Read and Speakers modes; Audio selects items (ticket 13). */
+  protected readonly selectable = computed(() => this.store.mode() !== 'audio');
+  /** A selection read or enqueue in flight: the action bar waits for it. */
+  protected readonly working = signal(false);
+  /** Bulk assign is disarmed while attribution runs anywhere (research §3). */
+  protected readonly queueBusy = computed(() => this.live.queue()?.attribution.isBusy ?? false);
+
+  protected readonly roster = computed(() =>
+    buildRoster(this.store.overview()?.characters ?? [], this.project.detail()?.narrator ?? null),
+  );
+
+  /** Every tree node's checkbox state over the current selection. */
+  protected readonly nodeStates = computed(() => {
+    const states: Record<string, TriState> = {};
+    const walk = (nodes: readonly TreeNode[]) => {
+      for (const node of nodes) {
+        states[node.id] = this.selection.nodeState(node.level, node.id);
+        walk(node.children);
+      }
+    };
+    walk(this.store.tree());
+    return states;
+  });
+
   protected readonly ctx = computed<RowContext>(() => ({
     folder: this.store.folder() ?? '',
     mode: this.store.mode(),
@@ -365,6 +469,10 @@ export class BookPage {
     itemStatus: this.project.items(),
     voices: this.store.itemVoices(),
     reviews: this.store.reviews(),
+    selectable: this.selectable(),
+    selected: this.selection.selected(),
+    ancestry: this.store.ancestry(),
+    roster: this.roster(),
   }));
 
   protected readonly trackRow = (_: number, row: ReaderRow) => row.key;
@@ -373,6 +481,12 @@ export class BookPage {
     effect(() => {
       const mode = parseMode(this.mode());
       untracked(() => this.store.setMode(mode));
+    });
+
+    // A loaded chapter tells the selection how many Character paragraphs it holds.
+    effect(() => {
+      const totals = chapterDialogTotals(this.store.chapters());
+      untracked(() => this.selection.learnTotals(totals));
     });
 
     effect(() => {
@@ -432,6 +546,90 @@ export class BookPage {
 
   protected run(command: BookCommand): void {
     void this.editor.run(command);
+  }
+
+  // ---- selection (ticket 12) --------------------------------------------------------------------
+
+  /** A tree checkbox: every Character paragraph under the node joins or leaves the selection. */
+  protected async toggleNode(node: TreeNode, on: boolean): Promise<void> {
+    await this.withSelectionRead(async (folder) => {
+      const refs = await this.book.paragraphIds(folder, node.level, node.id);
+      // A full read is the node's total, whichever way the box went.
+      this.selection.learnTotals({ [node.id]: refs.length });
+      if (on) this.selection.add(refs);
+      else this.selection.remove(refs.map((r) => r.id));
+    });
+  }
+
+  /** "Select unprocessed": what Blazor selects, without loading every chapter. */
+  protected async selectUnprocessed(node: TreeNode): Promise<void> {
+    await this.withSelectionRead(async (folder) => {
+      this.selection.add(await this.book.paragraphIds(folder, node.level, node.id, true));
+    });
+  }
+
+  /** "Attribute unprocessed" on a node: the node-scoped enqueue the overview also uses. */
+  protected async attributeNode(node: TreeNode): Promise<void> {
+    await this.enqueue((folder) =>
+      this.attribution.enqueue(folder, { level: node.level, nodeId: node.id, unprocessedOnly: true }),
+    );
+  }
+
+  /** The action bar's Attribute: queue the selection, then let it go (Blazor clears too). */
+  protected async attributeSelection(): Promise<void> {
+    const ids = this.selection.ids();
+    if (ids.length === 0) return;
+    const queued = await this.enqueue((folder) => this.attribution.enqueueParagraphs(folder, ids));
+    if (queued) this.selection.clear();
+  }
+
+  protected bulkAssign(characterId: string | null): void {
+    void this.assigner.assign(
+      { kind: 'selection', paragraphIds: this.selection.ids() },
+      characterId,
+    );
+  }
+
+  protected bulkCreate(name: string): void {
+    void this.assigner.createAndAssign(
+      { kind: 'selection', paragraphIds: this.selection.ids() },
+      name,
+    );
+  }
+
+  /** Preflight, then one enqueue; the toast says how many. True when something was queued. */
+  private async enqueue(
+    request: (folder: string) => Promise<{ enqueued: number }>,
+  ): Promise<boolean> {
+    const folder = this.store.folder();
+    if (!folder || this.working()) return false;
+    this.working.set(true);
+    try {
+      if (!(await this.preflight.ensureReady('attribution'))) return false;
+      const { enqueued } = await request(folder);
+      this.toast.success(
+        enqueued === 0 ? 'Nothing to queue' : `Queued ${enqueued} paragraph${enqueued === 1 ? '' : 's'}`,
+      );
+      return enqueued > 0;
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+      return false;
+    } finally {
+      this.working.set(false);
+    }
+  }
+
+  private async withSelectionRead(read: (folder: string) => Promise<void>): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder) return;
+    this.working.set(true);
+    try {
+      await read(folder);
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+    } finally {
+      this.working.set(false);
+    }
   }
 
   protected async reread(): Promise<void> {

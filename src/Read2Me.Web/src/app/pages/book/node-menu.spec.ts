@@ -92,6 +92,29 @@ describe('NodeMenu', () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it('a selection entry is emitted as an action, never posted as a command', async () => {
+    const fixture = render({
+      kind: 'chapter',
+      id: 'c1',
+      text: 'One',
+      isFirst: true,
+      isLast: true,
+      selectable: true,
+    });
+    const actions: string[] = [];
+    fixture.componentInstance.action.subscribe((a) => actions.push(a));
+
+    const entries = open(fixture);
+    expect(entries.slice(0, 2).map((e) => e.dataset['entry'])).toEqual([
+      'select-unprocessed',
+      'attribute-node',
+    ]);
+    entries[0]!.click();
+    await fixture.whenStable();
+    expect(actions).toEqual(['select-unprocessed']);
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('is disabled for a busy row and while the editor is locked', () => {
     const target: NodeMenuTarget = { kind: 'volume', id: 'v', text: 'V', isFirst: true, isLast: true };
     expect(trigger(render(target, true)).disabled).toBe(true);

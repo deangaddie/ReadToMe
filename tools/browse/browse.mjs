@@ -83,7 +83,8 @@ export function waitForServer(url, timeoutMs = 120_000) {
 export const api = async (path, init) => {
   const r = await fetch(`${HOST}${path}`, init);
   if (!r.ok) throw new Error(`${r.status} ${path}: ${await r.text()}`);
-  return r.status === 204 ? null : r.json();
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
 };
 export const post = (path, body) =>
   api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });

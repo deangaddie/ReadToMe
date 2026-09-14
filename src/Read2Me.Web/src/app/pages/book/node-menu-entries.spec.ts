@@ -140,3 +140,21 @@ describe('entry decoding', () => {
     expect(pauseInsertOf('insert-after')).toBeNull();
   });
 });
+
+describe('menuEntries selection shortcuts (ticket 12)', () => {
+  it('a selectable tree node leads with Select unprocessed and Attribute unprocessed', () => {
+    for (const kind of ['volume', 'part', 'chapter'] as const) {
+      const entries = menuEntries(target(kind, { selectable: true }));
+      expect(entries.slice(0, 2).map((e) => [e.id, e.group])).toEqual([
+        ['select-unprocessed', 'select'],
+        ['attribute-node', 'select'],
+      ]);
+      expect(entries[2]!.id).toBe('edit-title');
+    }
+  });
+
+  it('rows never get them, selectable or not', () => {
+    expect(ids(target('paragraph', { selectable: true }))).not.toContain('select-unprocessed');
+    expect(ids(target('item', { selectable: true }))).not.toContain('attribute-node');
+  });
+});

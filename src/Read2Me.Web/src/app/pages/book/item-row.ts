@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { ParagraphItemDto, workspaceUrl } from '@app/api';
 import { AudioPlayer } from '@app/ui/audio-player/audio-player';
@@ -16,12 +16,14 @@ import {
   reviewOf,
   voiceLine,
 } from './reader-rows';
+import { SpeakerAssigner } from './speaker-assigner';
 
 /**
  * One paragraph item in Speakers or Audio mode (design §6.3). Speakers: speaker chip and text, an
- * unknown speaker highlighted. Audio: adds the resolved voice, voice instructions, review and
- * queue chips and a player for the generated take (`audioVersion` busts the browser cache).
- * Every item carries its menu (ticket 11), off while the item or its paragraph is queued.
+ * unknown speaker highlighted; the chip opens the speaker menu and assigns this item (ticket 12).
+ * Audio: adds the resolved voice, voice instructions, review and queue chips and a player for the
+ * generated take (`audioVersion` busts the browser cache). Every item carries its menu (ticket 11),
+ * off while the item or its paragraph is queued.
  */
 @Component({
   selector: 'r2m-item',
@@ -44,6 +46,11 @@ import {
           [state]="speaker().state"
           [name]="speaker().name"
           [characterId]="speaker().characterId"
+          [interactive]="assignable()"
+          [roster]="assignable() ? ctx().roster : undefined"
+          (pick)="assign($event)"
+          (clear)="assign(null)"
+          (create)="create($event)"
         />
         <span class="r2m-item__text">{{ item().text }}</span>
         @if (busy()) {
@@ -150,7 +157,11 @@ import {
   `,
 })
 export class ItemRow {
+  private readonly assigner = inject(SpeakerAssigner);
+
   readonly item = input.required<ParagraphItemDto>();
+  /** The paragraph the item is in: an assign forgets that paragraph's attribution outcome. */
+  readonly paragraphId = input<string>('');
   readonly ctx = input.required<RowContext>();
   /** Position among the paragraph's items (merge entries hide at the ends). */
   readonly isFirst = input(false);
@@ -183,4 +194,27 @@ export class ItemRow {
     const file = this.item().audioFileName;
     return file ? workspaceUrl(this.ctx().folder, file) : null;
   });
+
+  /** Speakers mode only; a paragraph the queue holds is the server's to stamp. */
+  protected readonly assignable = computed(
+    () =>
+      this.ctx().mode === 'speakers' &&
+      !this.paragraphBusy() &&
+      !this.busy() &&
+      this.ctx().roster.length > 0,
+  );
+
+  protected assign(characterId: string | null): void {
+    void this.assigner.assign(
+      { kind: 'item', itemId: this.item().id, paragraphId: this.paragraphId() },
+      characterId,
+    );
+  }
+
+  protected create(name: string): void {
+    void this.assigner.createAndAssign(
+      { kind: 'item', itemId: this.item().id, paragraphId: this.paragraphId() },
+      name,
+    );
+  }
 }

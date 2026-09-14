@@ -11,23 +11,48 @@ import { ProjectStore } from '../project/project-store';
 import { BookEditor } from './book-editor';
 import { BookPage } from './book-page';
 import { BookStore } from './book-store';
+import { SelectionStore } from './selection-store';
+import { SpeakerAssigner } from './speaker-assigner';
 
 const BASE = '/api/projects/dune';
 
 const OVERVIEW: BookOverviewDto = {
   hasContent: true,
   volumes: [{ id: 'v1', title: null }],
-  characters: [],
+  characters: [{ id: 'h', name: 'Hardin', aliases: [] }],
   totalParts: 1,
   totalChapters: 2,
 };
 
+const DIALOG = (id: string) => ({
+  id,
+  isPauseParagraph: false,
+  items: [
+    {
+      id: `${id}-i`,
+      itemType: 'Character' as const,
+      text: `"${id}"`,
+      characterId: null,
+      audioFileName: null,
+      voiceInstructions: null,
+      orderKey: 'a',
+      isPause: false,
+    },
+  ],
+});
+
 describe('BookPage', () => {
   let http: HttpTestingController;
+  let toasts: string[];
+  let assigner: { assign: ReturnType<typeof vi.fn>; createAndAssign: ReturnType<typeof vi.fn> };
+  const queue = signal<{ attribution: { isBusy: boolean } } | null>(null);
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
   beforeEach(async () => {
+    toasts = [];
+    queue.set(null);
+    assigner = { assign: vi.fn().mockResolvedValue(undefined), createAndAssign: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [BookPage],
       providers: [
@@ -36,6 +61,8 @@ describe('BookPage', () => {
         provideRouter([]),
         BookStore,
         BookEditor,
+        SelectionStore,
+        { provide: SpeakerAssigner, useValue: assigner },
         {
           provide: ProjectStore,
           useValue: {
@@ -59,9 +86,16 @@ describe('BookPage', () => {
         },
         {
           provide: LiveService,
-          useValue: { receipts$: () => new Subject(), resynced$: new Subject() },
+          useValue: { receipts$: () => new Subject(), resynced$: new Subject(), queue },
         },
-        { provide: ToastService, useValue: { info: () => undefined } },
+        {
+          provide: ToastService,
+          useValue: {
+            info: () => undefined,
+            success: (m: string) => toasts.push(m),
+            problem: (p: { detail?: string }) => toasts.push(`problem:${p.detail}`),
+          },
+        },
       ],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
@@ -70,6 +104,7 @@ describe('BookPage', () => {
   afterEach(() => {
     TestBed.inject(BookStore).close();
     http.verify();
+    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
   });
 
   async function render(mode?: string) {
@@ -80,7 +115,7 @@ describe('BookPage', () => {
     return fixture;
   }
 
-  async function loadBook() {
+  async function loadBook(paragraphs: unknown[] = []) {
     http.expectOne(`${BASE}/book`).flush(OVERVIEW);
     http.expectOne(`${BASE}/audio/reviews`).flush({});
     await settle();
@@ -95,7 +130,7 @@ describe('BookPage', () => {
       ],
     });
     await settle();
-    http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush({ paragraphs: [] });
+    http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush({ paragraphs });
     await settle();
   }
 
@@ -143,5 +178,103 @@ describe('BookPage', () => {
       [],
       expect.objectContaining({ queryParams: { mode: 'speakers' }, queryParamsHandling: 'merge' }),
     );
+  });
+
+  describe('selection (ticket 12)', () => {
+    it('a tree checkbox reads the node paragraph ids, selects them and shows the action bar', async () => {
+      const fixture = await render('speakers');
+      await loadBook([DIALOG('p1'), DIALOG('p2')]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid=selection-bar]')).toBeNull();
+
+      const box = el.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!;
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      http.expectOne(`${BASE}/nodes/chapter/c1/paragraph-ids`).flush([
+        { id: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
+        { id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
+      ]);
+      await settle();
+      fixture.detectChanges();
+
+      const selection = TestBed.inject(SelectionStore);
+      expect(selection.ids()).toEqual(['p1', 'p2']);
+      expect(selection.nodeState('chapter', 'c1')).toBe('checked');
+      expect(el.querySelector('[data-testid=selection-count]')?.textContent?.trim()).toBe(
+        '2 paragraphs',
+      );
+      expect(box.checked).toBe(true);
+      expect(
+        Array.from(el.querySelectorAll<HTMLInputElement>('r2m-paragraph input[type=checkbox]')).map(
+          (b) => b.checked,
+        ),
+      ).toEqual([true, true]);
+
+      // Unticking reads again and removes exactly those.
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      http
+        .expectOne(`${BASE}/nodes/chapter/c1/paragraph-ids`)
+        .flush([{ id: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' }]);
+      await settle();
+      expect(selection.ids()).toEqual(['p2']);
+    });
+
+    it('Attribute posts the selected ids, reports the count and clears the selection', async () => {
+      const fixture = await render('speakers');
+      await loadBook([DIALOG('p1')]);
+      const selection = TestBed.inject(SelectionStore);
+      selection.toggle('p1', { chapterId: 'c1', partId: 'p1', volumeId: 'v1' }, true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el = fixture.nativeElement as HTMLElement;
+      el.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
+      await settle();
+      const request = http.expectOne(`${BASE}/attribution/enqueue-paragraphs`);
+      expect(request.request.body).toEqual({ paragraphIds: ['p1'] });
+      request.flush({ enqueued: 1 }, { status: 202, statusText: 'Accepted' });
+      await settle();
+
+      expect(toasts).toEqual(['Queued 1 paragraph']);
+      expect(selection.count()).toBe(0);
+    });
+
+    it('Bulk assign hands the selection to the assigner and is disarmed while attribution runs', async () => {
+      const fixture = await render();
+      await loadBook([DIALOG('p1')]);
+      const selection = TestBed.inject(SelectionStore);
+      selection.toggle('p1', { chapterId: 'c1', partId: 'p1', volumeId: 'v1' }, true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el = fixture.nativeElement as HTMLElement;
+      const bulk = el.querySelector<HTMLButtonElement>('[data-action=bulk-assign]')!;
+      expect(bulk.disabled).toBe(false);
+      bulk.click();
+      fixture.detectChanges();
+      document.querySelector<HTMLButtonElement>('.r2m-speaker-menu__row')!.click();
+      expect(assigner.assign).toHaveBeenCalledWith({ kind: 'selection', paragraphIds: ['p1'] }, 'h');
+
+      queue.set({ attribution: { isBusy: true } });
+      fixture.detectChanges();
+      expect(bulk.disabled).toBe(true);
+    });
+
+    it('Audio mode hides the checkboxes and the action bar', async () => {
+      const fixture = await render('audio');
+      await loadBook([DIALOG('p1')]);
+      http.match(`${BASE}/nodes/chapter/c1/voices`).forEach((r) => r.flush({}));
+      TestBed.inject(SelectionStore).toggle('p1', { chapterId: 'c1', partId: null, volumeId: null }, true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.tree__select')).toBeNull();
+      expect(el.querySelector('r2m-paragraph input[type=checkbox]')).toBeNull();
+      expect(el.querySelector('[data-testid=selection-bar]')).toBeNull();
+    });
   });
 });

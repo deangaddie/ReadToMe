@@ -241,6 +241,27 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<List<CharacterParagraphRef>> GetCharacterParagraphRefsAsync(
+            ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds)
+        {
+            if (paragraphIds.Count == 0) return [];
+
+            var db = await _session.OpenAsync(folderId);
+
+            // Same IN (SELECT value FROM json_each(@ids)) rendering as the bulk preview: one
+            // parameter at any length.
+            return await db.ParagraphItems
+                .Where(i => paragraphIds.Contains(i.ParagraphId))
+                .Where(NarrationRule.IsDialogExpression)
+                .Select(i => new CharacterParagraphRef(
+                    i.ParagraphId,
+                    i.Paragraph.ChapterId,
+                    i.Paragraph.Chapter.PartId,
+                    i.Paragraph.Chapter.Part.VolumeId))
+                .Distinct()
+                .ToListAsync();
+        }
+
         public async Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId)
         {
             var db = await _session.OpenAsync(folderId);

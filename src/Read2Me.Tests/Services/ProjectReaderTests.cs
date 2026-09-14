@@ -102,6 +102,35 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task CharacterParagraphRefs_KeepOnlyTheDialogBearingIds_WithTheirAncestry()
+        {
+            // The web selection (Angular ticket 12) enqueues by paragraph id, so the refs the queue
+            // needs are looked up from ids rather than from a node: unknown ids and paragraphs with no
+            // dialog (all narration, a lone pause) drop out, the rest carry their ancestry.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddPart("pt", pt => pt.AddChapter("ch", c => c
+                .AddParagraph("narration", p => p.AddNarration("n1", "He walked on."))
+                .AddParagraph("dialog", p => p.AddRawItem("u1", ParagraphItemType.Speech, "\"Who's there?\""))
+                .AddParagraph("stamped", p => p.AddRawItem("f1", ParagraphItemType.Speech, "\"Me,\"", alice.Id))
+                .AddParagraph("pause", p => p.AddPause("pause")))))
+                .BuildAsync();
+
+            var refs = await _reader.GetCharacterParagraphRefsAsync(_folder,
+                [b.ParagraphId("narration"), b.ParagraphId("dialog"), b.ParagraphId("stamped"),
+                 b.ParagraphId("pause"), Guid.NewGuid()]);
+
+            Assert.Equal(
+                new HashSet<Guid> { b.ParagraphId("dialog"), b.ParagraphId("stamped") },
+                refs.Select(r => r.ParagraphId).ToHashSet());
+            var dialog = refs.Single(r => r.ParagraphId == b.ParagraphId("dialog"));
+            Assert.Equal((b.ChapterId("ch"), b.PartId("pt"), b.VolumeId("vol")),
+                (dialog.ChapterId, dialog.PartId, dialog.VolumeId));
+
+            Assert.Empty(await _reader.GetCharacterParagraphRefsAsync(_folder, []));
+        }
+
+        [Fact]
         public async Task CountUnattributedCharacterItems_FullyStampedParagraph_IsZero()
         {
             var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
