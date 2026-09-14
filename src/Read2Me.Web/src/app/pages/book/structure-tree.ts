@@ -16,16 +16,19 @@ import { NodeStatusSummary } from '@app/live/live-messages';
 import { CountBadge } from '@app/ui/count-badge/count-badge';
 import { StatusChip } from '@app/ui/status-chip/status-chip';
 import { TreeNode } from './book-tree';
+import { NodeMenu } from './node-menu';
+import { NodeMenuTarget } from './node-menu-entries';
 
 /**
  * The reader's navigation (design §6.3): volumes / parts / chapters with roll-up badges from the
  * project's node status map. Expanding a node asks for its children; clicking a chapter asks the
  * reader to show it. Expansion is owned by the caller (`expandedIds`), so a re-created tree reopens
- * the nodes the reader left open.
+ * the nodes the reader left open. Each node carries its menu (ticket 11); a node whose
+ * attribution is queued or processing has it disabled.
  */
 @Component({
   selector: 'app-structure-tree',
-  imports: [CdkTreeModule, MatIconModule, CountBadge, StatusChip],
+  imports: [CdkTreeModule, MatIconModule, CountBadge, StatusChip, NodeMenu],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <cdk-tree
@@ -108,6 +111,13 @@ import { TreeNode } from './book-tree';
             }
           </span>
         }
+
+        <r2m-node-menu
+          class="tree__menu"
+          [target]="targetOf(node)"
+          [disabled]="isBusy(node)"
+          (click)="$event.stopPropagation()"
+        />
       </cdk-tree-node>
     </cdk-tree>
   `,
@@ -178,6 +188,16 @@ import { TreeNode } from './book-tree';
       height: 16px;
       color: var(--r2m-status-ok);
     }
+    .tree__menu {
+      flex: 0 0 auto;
+      opacity: 0;
+      transition: opacity 120ms;
+    }
+    .tree__node:hover .tree__menu,
+    .tree__node:focus-within .tree__menu,
+    .tree__node--current .tree__menu {
+      opacity: 1;
+    }
   `,
 })
 export class StructureTree {
@@ -225,5 +245,21 @@ export class StructureTree {
 
   protected onActivate(node: TreeNode): void {
     if (node.level === 'chapter') this.selectChapter.emit(node.id);
+  }
+
+  protected targetOf(node: TreeNode): NodeMenuTarget {
+    return {
+      kind: node.level,
+      id: node.id,
+      text: node.rawTitle,
+      isFirst: node.isFirst,
+      isLast: node.isLast,
+    };
+  }
+
+  /** A node with attribution queued or running under it: its structure is about to change. */
+  protected isBusy(node: TreeNode): boolean {
+    const s = this.statuses()[node.id];
+    return !!s && (s.attributionProcessing || s.attributionQueued > 0);
   }
 }

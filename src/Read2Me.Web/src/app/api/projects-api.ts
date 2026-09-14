@@ -5,6 +5,7 @@ import type {
   CreateProjectRequest,
   CreateProjectResponse,
   Guid,
+  ManualImportRequest,
   NodeLevel,
   NodeStatusSummaryDto,
   ProjectDetailDto,
@@ -54,6 +55,11 @@ export class ProjectsApi {
   /** Reads the stored book file into structure; `reread` clears existing content first. 422 on reader failure. */
   import(folder: string, reread = false): Promise<void> {
     return this.api.post<void>(`${projectUrl(folder)}/import`, { reread });
+  }
+
+  /** Re-splits the stored file by hand-chosen rules, replacing existing content. 400 on a bad form, 422 on reader failure. */
+  importManually(folder: string, request: ManualImportRequest): Promise<void> {
+    return this.api.post<void>(`${projectUrl(folder)}/import/manual`, request);
   }
 
   /** Title / book title / author; 400 when a sent title is blank. Returns the updated detail. */

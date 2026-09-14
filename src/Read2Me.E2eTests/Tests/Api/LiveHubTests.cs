@@ -68,6 +68,45 @@ public class LiveHubTests(E2eAppFixture app)
         Assert.True(live.TryGetProperty("throughput", out _));
     }
 
+    /// <summary>
+    /// The web client's own-write detection (Angular ticket 11): a command sent with
+    /// <c>X-Origin-Id</c> comes back on the hub with that id as <c>originId</c>; one sent without
+    /// comes back unattributed. A manual reread is stamped the same way.
+    /// </summary>
+    [Fact]
+    public async Task Receipts_echo_the_callers_origin_id()
+    {
+        var folder = $"hub-origin-{Guid.NewGuid():N}";
+        var book = await app.SeedProjectAsync(folder, "Origin Book", "Author");
+        await using var conn = Connect();
+        var receipts = new ConcurrentQueue<JsonElement>();
+        conn.On<JsonElement>("receipt", receipts.Enqueue);
+        await conn.StartAsync();
+        await conn.InvokeAsync<JsonElement>("JoinProject", folder);
+        var origin = Guid.NewGuid();
+
+        using (var mine = new HttpRequestMessage(HttpMethod.Post, $"{app.BaseUrl}/api/projects/{folder}/commands"))
+        {
+            mine.Headers.Add("X-Origin-Id", origin.ToString());
+            mine.Content = new StringContent(
+                $$"""{ "type": "UpdateChapterTitle", "chapterId": "{{book.ChapterId("ch1")}}", "title": "Mine" }""",
+                Encoding.UTF8, "application/json");
+            (await Http.SendAsync(mine)).EnsureSuccessStatusCode();
+        }
+        await WaitForAsync(() => receipts.Count >= 1);
+        Assert.True(receipts.TryDequeue(out var own));
+        Assert.Equal(origin, own.GetProperty("originId").GetGuid());
+
+        var theirs = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
+            new StringContent(
+                $$"""{ "type": "UpdateChapterTitle", "chapterId": "{{book.ChapterId("ch1")}}", "title": "Theirs" }""",
+                Encoding.UTF8, "application/json"));
+        theirs.EnsureSuccessStatusCode();
+        await WaitForAsync(() => receipts.Count >= 1);
+        Assert.True(receipts.TryDequeue(out var anonymous));
+        Assert.Equal(Guid.Empty, anonymous.GetProperty("originId").GetGuid());
+    }
+
     [Fact]
     public async Task Invalid_folder_and_unknown_stream_are_rejected()
     {

@@ -177,10 +177,22 @@ export interface LoadedChapterView {
   paragraphs: readonly ParagraphDto[];
 }
 
+/** Position among the chapter's paragraphs: the node menu hides merges at the ends. */
+export interface RowPosition {
+  isFirst: boolean;
+  isLast: boolean;
+}
+
 export type ReaderRow =
   | { kind: 'chapter'; key: string; chapterId: string; title: string }
-  | { kind: 'paragraph'; key: string; chapterId: string; paragraph: ParagraphDto }
-  | { kind: 'pause'; key: string; chapterId: string; paragraph: ParagraphDto; label: string };
+  | ({ kind: 'paragraph'; key: string; chapterId: string; paragraph: ParagraphDto } & RowPosition)
+  | ({
+      kind: 'pause';
+      key: string;
+      chapterId: string;
+      paragraph: ParagraphDto;
+      label: string;
+    } & RowPosition);
 
 const PAUSE_LABELS: Partial<Record<ParagraphItemType, string>> = {
   Pause: 'Pause',
@@ -204,13 +216,15 @@ export function buildRows(chapters: readonly LoadedChapterView[], mode: ReaderMo
       chapterId: chapter.id,
       title: chapter.title,
     });
-    for (const paragraph of chapter.paragraphs) {
+    chapter.paragraphs.forEach((paragraph, i, all) => {
+      const position = { isFirst: i === 0, isLast: i === all.length - 1 };
       if (!paragraph.isPauseParagraph) {
         rows.push({
           kind: 'paragraph',
           key: `paragraph:${paragraph.id}`,
           chapterId: chapter.id,
           paragraph,
+          ...position,
         });
       } else if (mode !== 'read') {
         rows.push({
@@ -219,9 +233,10 @@ export function buildRows(chapters: readonly LoadedChapterView[], mode: ReaderMo
           chapterId: chapter.id,
           paragraph,
           label: pauseLabel(paragraph.items[0]),
+          ...position,
         });
       }
-    }
+    });
   }
   return rows;
 }

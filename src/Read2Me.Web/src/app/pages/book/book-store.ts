@@ -54,6 +54,10 @@ export class BookStore {
   /** One "updated elsewhere" toast per receipt burst. */
   private toasted = false;
   private readonly inFlight = new Set<string>();
+  /** Children reads by parent id, so a second asker waits for the first instead of re-reading. */
+  private readonly childLoads = new Map<string, Promise<void>>();
+  /** Writers waiting for this tab's next own receipt (see {@link expectOwnReceipt}). */
+  private readonly ownWaiters = new Set<(hit: boolean) => void>();
 
   private readonly _folder = signal<string | null>(null);
   private readonly _overview = signal<BookOverviewDto | null>(null);
@@ -134,6 +138,8 @@ export class BookStore {
     this.batchTimer = null;
     this.pending = null;
     this.inFlight.clear();
+    this.childLoads.clear();
+    this.settleOwnWaiters(false);
     this._folder.set(null);
     this._overview.set(null);
     this._children.set({});
@@ -177,25 +183,33 @@ export class BookStore {
     }
   }
 
-  /** Loads a volume's parts or a part's chapters; a single part is followed through to its chapters. */
-  private async loadChildren(ref: NodeRef): Promise<void> {
+  /**
+   * Loads a volume's parts or a part's chapters; a single part is followed through to its chapters.
+   * A read already under way for the same parent is shared, not skipped: a caller that loops until
+   * the children are known (see {@link findChapter}) must actually wait for them.
+   */
+  private loadChildren(ref: NodeRef): Promise<void> {
     const folder = this._folder();
-    if (!folder || ref.level === 'chapter' || this._children()[ref.id]) return;
-    const key = `children:${ref.id}`;
-    if (this.inFlight.has(key)) return;
-    this.inFlight.add(key);
-    try {
-      const result = await this.book.children(folder, ref.level, ref.id);
-      if (this._folder() !== folder) return;
-      const nodes = childNodes(ref, result);
-      this._children.update((c) => ({ ...c, [ref.id]: nodes }));
-      const [only] = nodes;
-      if (ref.level === 'volume' && only && nodes.length === 1) {
-        await this.loadChildren({ level: 'part', id: only.id });
+    if (!folder || ref.level === 'chapter' || this._children()[ref.id]) return Promise.resolve();
+    const existing = this.childLoads.get(ref.id);
+    if (existing) return existing;
+
+    const load = (async () => {
+      try {
+        const result = await this.book.children(folder, ref.level, ref.id);
+        if (this._folder() !== folder) return;
+        const nodes = childNodes(ref, result);
+        this._children.update((c) => ({ ...c, [ref.id]: nodes }));
+        const [only] = nodes;
+        if (ref.level === 'volume' && only && nodes.length === 1) {
+          await this.loadChildren({ level: 'part', id: only.id });
+        }
+      } finally {
+        this.childLoads.delete(ref.id);
       }
-    } finally {
-      this.inFlight.delete(key);
-    }
+    })();
+    this.childLoads.set(ref.id, load);
+    return load;
   }
 
   // ---- reader window ----------------------------------------------------------------------------
@@ -283,6 +297,9 @@ export class BookStore {
       const missing = firstUnloaded(this._overview()?.volumes ?? [], this._children());
       if (!missing) return null;
       await this.loadChildren(missing);
+      // A read that left the node unloaded (the store closed or moved on) must not be asked again
+      // in a loop that would never end.
+      if (!this._children()[missing.id]) return null;
     }
   }
 
@@ -389,6 +406,28 @@ export class BookStore {
 
   // ---- receipts ---------------------------------------------------------------------------------
 
+  /**
+   * A writer's handle on its own commit: `settled` resolves true when the next receipt stamped with
+   * this tab's origin arrives (the reload it plans is already scheduled), false after `timeoutMs`,
+   * on `cancel()` (the request failed, nothing is coming) or when the store closes.
+   */
+  expectOwnReceipt(timeoutMs: number): { settled: Promise<boolean>; cancel(): void } {
+    let resolve!: (hit: boolean) => void;
+    const settled = new Promise<boolean>((r) => (resolve = r));
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    const finish = (hit: boolean) => {
+      clearTimeout(timer);
+      this.ownWaiters.delete(finish);
+      resolve(hit);
+    };
+    this.ownWaiters.add(finish);
+    return { settled, cancel: () => finish(false) };
+  }
+
+  private settleOwnWaiters(hit: boolean): void {
+    for (const waiter of [...this.ownWaiters]) waiter(hit);
+  }
+
   private loadedIndex(): LoadedChapter[] {
     const paragraphs = this._paragraphs();
     return this._window()
@@ -411,6 +450,7 @@ export class BookStore {
     }
     if (plan.toast) this.toastOnce();
     this.schedule(plan);
+    if (receipt.isOwn) this.settleOwnWaiters(true);
   }
 
   private onResync(snapshot: LiveSnapshot): void {

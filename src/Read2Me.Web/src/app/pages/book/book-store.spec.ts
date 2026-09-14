@@ -138,6 +138,9 @@ describe('BookStore', () => {
       id,
       level: 'part',
       title: id,
+      rawTitle: id,
+      isFirst: true,
+      isLast: true,
       expandable: true,
       loaded: false,
       loadTarget: { level: 'part', id },
@@ -171,6 +174,40 @@ describe('BookStore', () => {
     await open();
     expect(store.tree().map((n) => `${n.level}:${n.title}`)).toEqual(['part:One', 'part:Two']);
     expect(store.speakers().names).toEqual({ h: 'Hardin' });
+  });
+
+  it('openFirstChapter while the volume is still loading waits for that read instead of re-asking', async () => {
+    const opened = store.open('dune');
+    http.expectOne(`${BASE}/book`).flush(OVERVIEW);
+    http.expectOne(`${BASE}/audio/reviews`).flush({});
+    await settle();
+    // The volume read is in flight; a concurrent first-chapter request must share it.
+    const first = store.openFirstChapter();
+    await settle();
+    http.expectOne(`${BASE}/nodes/volume/v1/children`).flush({
+      parts: [
+        { id: 'p1', title: 'One' },
+        { id: 'p2', title: 'Two' },
+      ],
+    });
+    await opened;
+    await settle();
+    http.expectOne(`${BASE}/nodes/part/p1/children`).flush({ chapters: [{ id: 'c1', title: 'C1' }] });
+    await settle();
+    http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a'));
+    await first;
+    expect(store.window()).toEqual(['c1']);
+  });
+
+  it('a children read that leaves the node unloaded ends the search instead of looping', async () => {
+    await open();
+    const first = store.openFirstChapter();
+    await settle();
+    // Closing mid-read: the store forgets the folder, the read is discarded, and the search ends.
+    store.close();
+    http.expectOne(`${BASE}/nodes/part/p1/children`).flush({ chapters: [{ id: 'c1', title: 'C1' }] });
+    await expect(first).resolves.toBeUndefined();
+    expect(store.window()).toEqual([]);
   });
 
   it('openFirstChapter loads structure down to the first chapter and asks the reader to scroll', async () => {
@@ -219,6 +256,30 @@ describe('BookStore', () => {
   });
 
   describe('receipts', () => {
+    it('expectOwnReceipt settles true on this tab’s receipt, false on timeout, cancel or close', async () => {
+      await open();
+
+      const own = store.expectOwnReceipt(1000);
+      const foreign = store.expectOwnReceipt(1000);
+      live.receipts.next(receipt(6, 'NodeTitle', {}, false));
+      live.receipts.next(receipt(7, 'NodeTitle', {}, true));
+      await expect(own.settled).resolves.toBe(true);
+      await expect(foreign.settled).resolves.toBe(true);
+
+      const late = store.expectOwnReceipt(10);
+      await expect(late.settled).resolves.toBe(false);
+
+      const cancelled = store.expectOwnReceipt(1000);
+      cancelled.cancel();
+      await expect(cancelled.settled).resolves.toBe(false);
+
+      const closed = store.expectOwnReceipt(1000);
+      store.close();
+      await expect(closed.settled).resolves.toBe(false);
+      await settle(RECEIPT_BATCH_MS + 20);
+      http.match(() => true).forEach((r) => r.flush({}));
+    });
+
     it('a speaker change on a loaded paragraph reloads that chapter, batched, with no toast', async () => {
       await open();
       await openFirst();

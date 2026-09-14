@@ -7,6 +7,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.UseCases;
 
 namespace Read2Me.App.Api
@@ -24,7 +25,12 @@ namespace Read2Me.App.Api
             endpoints.MapDelete("/api/projects/{folder}", Delete)
                 .WithSummary("Delete a project folder and everything in it.");
             endpoints.MapPost("/api/projects/{folder}/import", ImportAsync)
-                .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first.");
+                .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. " +
+                             "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
+            endpoints.MapPost("/api/projects/{folder}/import/manual", ImportManuallyAsync)
+                .WithSummary("Re-split the stored book file by hand-chosen rules (replaces existing content). " +
+                             "Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. " +
+                             "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPatch("/api/projects/{folder}", UpdateAsync)
                 .WithSummary("Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes.");
             endpoints.MapPut("/api/projects/{folder}/narrator-only-mode", SetNarratorOnlyModeAsync)
@@ -188,18 +194,37 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<IResult> ImportAsync(
-            string folder, ImportRequest? body, IFileSystem fs, BookUseCases useCases, CancellationToken ct)
+            string folder, ImportRequest? body, HttpRequest request, IFileSystem fs, BookUseCases useCases,
+            MutationOrigin origin, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
             // An import that changed nothing is still a legal import, and the wire contract has one
             // success: 200 for a Book that was replaced and for one there was nothing to replace.
-            var outcome = await useCases.ImportAsync(folderId, body?.Reread ?? false, ct);
-            return outcome is BookImportOutcome.Failed failed
+            OriginHeader.Apply(request, origin);
+            return ImportResult(await useCases.ImportAsync(folderId, body?.Reread ?? false, ct));
+        }
+
+        private static async Task<IResult> ImportManuallyAsync(
+            string folder, ManualImportRequest? body, HttpRequest request, IFileSystem fs, BookUseCases useCases,
+            MutationOrigin origin, CancellationToken ct)
+        {
+            if (!TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+            if (body is null)
+                return Results.Problem("Expected a JSON body.", statusCode: StatusCodes.Status400BadRequest);
+            if (!body.TryToOptions(out var options, out var error))
+                return Results.Problem(error, statusCode: StatusCodes.Status400BadRequest);
+
+            OriginHeader.Apply(request, origin);
+            return ImportResult(await useCases.ImportManuallyAsync(folderId, options!, ct));
+        }
+
+        private static IResult ImportResult(BookImportOutcome outcome) =>
+            outcome is BookImportOutcome.Failed failed
                 ? Results.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
                 : Results.Ok();
-        }
 
         /// Both gates in one place: the name must parse as a single path segment
         /// (traversal guard) and must exist on disk — anything else is a 404.

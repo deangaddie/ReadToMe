@@ -145,7 +145,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. */
+        /** Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         post: {
             parameters: {
                 query?: never;
@@ -158,6 +158,46 @@ export interface paths {
             requestBody?: {
                 content: {
                     "application/json": null | components["schemas"]["ImportRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/import/manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-split the stored book file by hand-chosen rules (replaces existing content). Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ManualImportRequest"];
                 };
             };
             responses: {
@@ -502,7 +542,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute a book command. Body: { "type": "<Name>", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. */
+        /** Execute a book command. Body: { "type": "<Name>", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         post: {
             parameters: {
                 query?: never;
@@ -2591,6 +2631,13 @@ export interface components {
             promptStyle?: components["schemas"]["AttributionPromptStyle"];
             supportsModelSwitch?: boolean;
         };
+        ManualImportRequest: {
+            hasMultipleVolumes: boolean;
+            hasMultipleParts: boolean;
+            volume: null | components["schemas"]["SplitRuleRequest"];
+            part: null | components["schemas"]["SplitRuleRequest"];
+            chapter: null | components["schemas"]["SplitRuleRequest"];
+        };
         NarratorOnlyModeRequest: {
             enabled: boolean;
         };
@@ -2626,6 +2673,10 @@ export interface components {
         SetActiveRequest: {
             /** Format: int32 */
             id: number | string;
+        };
+        SplitRuleRequest: {
+            mode: null | string;
+            prefix?: null | string;
         };
         TextSubstitutionStep: {
             id?: string;

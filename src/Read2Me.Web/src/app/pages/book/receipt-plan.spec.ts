@@ -55,6 +55,18 @@ describe('planReceipt', () => {
     expect(planReceipt(receipt(effects), ctx()).reloadChapters).toEqual(chapters);
   });
 
+  it('an exact Structure receipt naming only a node that is not loaded (an inserted pause) reloads the visible chapter', () => {
+    const plan = planReceipt(receipt({ facets: 'Structure', paragraphIds: ['p-new'] }), ctx());
+    expect(plan.reloadChapters).toEqual(['c1']);
+    expect(plan.dropOtherChapters).toBe(false);
+    // A non-structural facet with unknown ids still reloads nothing.
+    expect(planReceipt(receipt({ facets: 'ItemText', paragraphIds: ['p-new'] }), ctx()).reloadChapters).toEqual([]);
+    expect(
+      planReceipt(receipt({ facets: 'Structure', paragraphIds: ['p-new'] }), ctx({ visibleChapterId: null }))
+        .reloadChapters,
+    ).toEqual([]);
+  });
+
   it('a WholeProject receipt with a content facet reloads the visible chapter only', () => {
     const plan = planReceipt(receipt({ scope: 'WholeProject', facets: 'Audio' }), ctx());
     expect(plan.reloadChapters).toEqual(['c1']);

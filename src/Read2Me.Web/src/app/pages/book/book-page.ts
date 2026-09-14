@@ -15,12 +15,22 @@ import {
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatDialog } from '@angular/material/dialog';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { BookCommand, ManualImportRequest } from '@app/api';
+import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@app/ui/empty-state/empty-state';
+import { firstValueFrom } from 'rxjs';
 import { ProjectStore } from '../project/project-store';
+import { BookEditor } from './book-editor';
 import { BookStore, WINDOW_CAP } from './book-store';
+import { ManualRereadDialog } from './manual-reread-dialog';
 import { MeasuredScrollDirective } from './measured-scroll';
+import { NodeMenu } from './node-menu';
+import { NodeMenuTarget } from './node-menu-entries';
 import { ParagraphRow } from './paragraph-row';
 import {
   READER_MODES,
@@ -44,7 +54,8 @@ const MODE_LABELS: Record<ReaderMode, string> = {
 /**
  * `/projects/{folder}/book` (ticket 10, design §6.3): the structure tree beside a virtual-scrolled
  * window of adjacent chapters. The mode (`?mode=`) changes what each row shows, never where it is.
- * Read-only in this slice: no selection, no menus.
+ * Ticket 11 adds the node menus on every row and the book-level actions in the toolbar overflow
+ * (titles, pauses, reread, manual reread); all of them post through {@link BookEditor}.
  */
 @Component({
   selector: 'app-book-page',
@@ -52,10 +63,13 @@ const MODE_LABELS: Record<ReaderMode, string> = {
     ScrollingModule,
     MatButtonModule,
     MatButtonToggleModule,
+    MatDividerModule,
     MatIconModule,
+    MatMenuModule,
     RouterLink,
     EmptyState,
     MeasuredScrollDirective,
+    NodeMenu,
     ParagraphRow,
     StructureTree,
   ],
@@ -81,6 +95,52 @@ const MODE_LABELS: Record<ReaderMode, string> = {
           <mat-button-toggle [value]="m">{{ modeLabels[m] }}</mat-button-toggle>
         }
       </mat-button-toggle-group>
+
+      <span class="book__spacer"></span>
+
+      @if (!noContent()) {
+        <button
+          mat-icon-button
+          type="button"
+          aria-label="Book actions"
+          data-testid="book-actions"
+          [matMenuTriggerFor]="actions"
+          [disabled]="editor.locked()"
+        >
+          <mat-icon>more_vert</mat-icon>
+        </button>
+        <mat-menu #actions="matMenu">
+          <button mat-menu-item type="button" data-action="add-book-title" (click)="run({ type: 'AddBookTitle' })">
+            <mat-icon>title</mat-icon><span>Add book title</span>
+          </button>
+          @if (titleActions().volumes) {
+            <button mat-menu-item type="button" data-action="add-volume-titles" (click)="run({ type: 'AddVolumeTitles' })">
+              <mat-icon>library_books</mat-icon><span>Add volume titles</span>
+            </button>
+          }
+          @if (titleActions().parts) {
+            <button mat-menu-item type="button" data-action="add-part-titles" (click)="run({ type: 'AddPartTitles' })">
+              <mat-icon>bookmark</mat-icon><span>Add part titles</span>
+            </button>
+          }
+          @if (titleActions().chapters) {
+            <button mat-menu-item type="button" data-action="add-chapter-titles" (click)="run({ type: 'AddChapterTitles' })">
+              <mat-icon>menu_book</mat-icon><span>Add chapter titles</span>
+            </button>
+          }
+          <mat-divider></mat-divider>
+          <button mat-menu-item type="button" data-action="add-pauses" (click)="run({ type: 'AddPauses' })">
+            <mat-icon>pause</mat-icon><span>Add pauses</span>
+          </button>
+          <mat-divider></mat-divider>
+          <button mat-menu-item type="button" data-action="reread" (click)="reread()">
+            <mat-icon>restart_alt</mat-icon><span>Reread…</span>
+          </button>
+          <button mat-menu-item type="button" data-action="manual-reread" (click)="rereadManually()">
+            <mat-icon>tune</mat-icon><span>Manual reread…</span>
+          </button>
+        </mat-menu>
+      }
     </div>
 
     @if (store.stale(); as reason) {
@@ -138,11 +198,18 @@ const MODE_LABELS: Record<ReaderMode, string> = {
                   <h2 class="book__chapter">{{ row.title }}</h2>
                 }
                 @case ('paragraph') {
-                  <r2m-paragraph [paragraph]="row.paragraph" [ctx]="ctx()" />
+                  <r2m-paragraph
+                    [paragraph]="row.paragraph"
+                    [ctx]="ctx()"
+                    [isFirst]="row.isFirst"
+                    [isLast]="row.isLast"
+                  />
                 }
                 @case ('pause') {
                   <div class="book__pause" role="separator" [attr.aria-label]="row.label">
                     <span class="book__pause-label">{{ row.label }}</span>
+                    <span class="book__pause-rule"></span>
+                    <r2m-node-menu class="book__pause-menu" [target]="pauseTarget(row)" />
                   </div>
                 }
               }
@@ -166,6 +233,9 @@ const MODE_LABELS: Record<ReaderMode, string> = {
       align-items: center;
       gap: var(--r2m-space-3);
       padding-bottom: var(--r2m-space-3);
+    }
+    .book__spacer {
+      flex: 1 1 auto;
     }
     .book__stale {
       display: flex;
@@ -224,10 +294,17 @@ const MODE_LABELS: Record<ReaderMode, string> = {
       color: var(--r2m-text-muted);
       font-size: var(--r2m-text-xs);
     }
-    .book__pause::after {
-      content: '';
+    .book__pause-rule {
       flex: 1 1 auto;
       border-top: 1px dashed var(--r2m-outline);
+    }
+    .book__pause-menu {
+      opacity: 0;
+      transition: opacity 120ms;
+    }
+    .book__pause:hover .book__pause-menu,
+    .book__pause:focus-within .book__pause-menu {
+      opacity: 1;
     }
     .book__skeleton {
       position: absolute;
@@ -248,6 +325,9 @@ const MODE_LABELS: Record<ReaderMode, string> = {
 export class BookPage {
   protected readonly project = inject(ProjectStore);
   protected readonly store = inject(BookStore);
+  protected readonly editor = inject(BookEditor);
+  private readonly confirm = inject(ConfirmService);
+  private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly injector = inject(Injector);
@@ -266,6 +346,15 @@ export class BookPage {
 
   protected readonly noContent = computed(() => this.store.overview()?.hasContent === false);
   protected readonly rows = computed(() => buildRows(this.store.chapters(), this.store.mode()));
+
+  /** Which "Add … titles" entries apply (research §3 Toolbar): only levels that add navigation. */
+  protected readonly titleActions = computed(() => {
+    const overview = this.store.overview();
+    const volumes = overview?.volumes.length ?? 0;
+    const parts = overview?.totalParts ?? 0;
+    const chapters = overview?.totalChapters ?? 0;
+    return { volumes: volumes > 1, parts: parts > volumes, chapters: chapters > parts };
+  });
   protected readonly keys = computed(() => this.rows().map((r) => r.key));
 
   protected readonly ctx = computed<RowContext>(() => ({
@@ -329,6 +418,41 @@ export class BookPage {
 
   protected refresh(): void {
     void this.store.refresh();
+  }
+
+  protected pauseTarget(row: Extract<ReaderRow, { kind: 'pause' }>): NodeMenuTarget {
+    return {
+      kind: 'pause-paragraph',
+      id: row.paragraph.id,
+      text: row.label,
+      isFirst: row.isFirst,
+      isLast: row.isLast,
+    };
+  }
+
+  protected run(command: BookCommand): void {
+    void this.editor.run(command);
+  }
+
+  protected async reread(): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: 'Reread the book?',
+      message:
+        'This deletes all book data — attribution, generated audio, and edits — and ' +
+        'reprocesses the source file from scratch. This cannot be undone.',
+      destructive: true,
+      confirmLabel: 'Delete and reread',
+    });
+    if (ok) await this.editor.reread();
+  }
+
+  protected async rereadManually(): Promise<void> {
+    const ref = this.dialog.open<ManualRereadDialog, void, ManualImportRequest>(ManualRereadDialog, {
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
+    });
+    const request = await firstValueFrom(ref.afterClosed());
+    if (request) await this.editor.rereadManually(request);
   }
 
   private async start(folder: string): Promise<void> {

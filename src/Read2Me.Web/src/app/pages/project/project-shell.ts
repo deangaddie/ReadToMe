@@ -7,6 +7,7 @@ import {
   untracked,
 } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { BookEditor } from '../book/book-editor';
 import { BookStore } from '../book/book-store';
 import { ProjectStore } from './project-store';
 
@@ -15,12 +16,12 @@ import { ProjectStore } from './project-store';
  * holds the `project:{folder}` hub group while any of them is active and provides the
  * {@link ProjectStore} they read. Child routes never join or fetch the project themselves.
  * The {@link BookStore} lives here too so the reader keeps its place across child routes; it
- * loads lazily when the book page first opens it.
+ * loads lazily when the book page first opens it. The {@link BookEditor} is its write side.
  */
 @Component({
   selector: 'app-project-shell',
   imports: [RouterOutlet],
-  providers: [ProjectStore, BookStore],
+  providers: [ProjectStore, BookStore, BookEditor],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<router-outlet />`,
 })

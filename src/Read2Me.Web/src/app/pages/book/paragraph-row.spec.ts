@@ -1,5 +1,7 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ParagraphDto, ParagraphItemDto } from '@app/api';
+import { BookEditor } from './book-editor';
 import { ParagraphRow } from './paragraph-row';
 import { RowContext } from './reader-rows';
 
@@ -61,7 +63,12 @@ function render(context: RowContext, paragraph = PARAGRAPH) {
 const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
 describe('ParagraphRow', () => {
-  beforeEach(() => TestBed.configureTestingModule({ imports: [ParagraphRow] }));
+  beforeEach(() =>
+    TestBed.configureTestingModule({
+      imports: [ParagraphRow],
+      providers: [{ provide: BookEditor, useValue: { locked: signal(false), run: vi.fn() } }],
+    }),
+  );
 
   describe('read mode', () => {
     it('renders prose with one paragraph speaker chip and no item rows', () => {
@@ -176,9 +183,37 @@ describe('ParagraphRow', () => {
       expect(el.querySelectorAll('r2m-item')[1]!.querySelector('r2m-status-chip')).toBeNull();
     });
 
-    it('does not show the paragraph attribution chip', () => {
+    it('does not show the paragraph attribution chip, but keeps the paragraph menu (disabled while queued)', () => {
       const el = render({ ...audio, paragraphStatus: { p1: { status: 'Queued' } } });
-      expect(el.querySelector('.r2m-paragraph__status')).toBeNull();
+      expect(el.querySelector('.r2m-paragraph__status r2m-status-chip')).toBeNull();
+      expect(el.querySelector('.r2m-paragraph__status .r2m-paragraph__lock')).toBeNull();
+      const menu = el.querySelector<HTMLButtonElement>('.r2m-paragraph__menu button');
+      expect(menu?.disabled).toBe(true);
+    });
+  });
+
+  describe('menus (ticket 11)', () => {
+    it('every row has a menu: the paragraph in all modes, the items in split modes', () => {
+      const read = render(ctx());
+      expect(read.querySelectorAll('r2m-node-menu').length).toBe(1);
+      const speakers = render(ctx({ mode: 'speakers' }));
+      expect(speakers.querySelectorAll('r2m-node-menu').length).toBe(4);
+    });
+
+    it('a queued paragraph disables the paragraph menu and every item menu', () => {
+      const el = render(ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }));
+      const triggers = Array.from(el.querySelectorAll<HTMLButtonElement>('r2m-node-menu button'));
+      expect(triggers.length).toBe(4);
+      expect(triggers.every((b) => b.disabled)).toBe(true);
+    });
+
+    it('an audio-queued item disables only its own menu', () => {
+      const el = render(ctx({ mode: 'audio', itemStatus: { d: { status: 'Queued' } } }));
+      const items = Array.from(el.querySelectorAll('r2m-item'));
+      const disabled = items.map(
+        (i) => i.querySelector<HTMLButtonElement>('r2m-node-menu button')!.disabled,
+      );
+      expect(disabled).toEqual([false, true, false]);
     });
   });
 });

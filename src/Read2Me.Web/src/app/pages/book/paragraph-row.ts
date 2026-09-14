@@ -5,16 +5,19 @@ import { speakerHue } from '@app/shared/speaker-color';
 import { SpeakerChip } from '@app/ui/speaker-chip/speaker-chip';
 import { StatusChip } from '@app/ui/status-chip/status-chip';
 import { ItemRow } from './item-row';
+import { NodeMenu } from './node-menu';
+import { NodeMenuTarget } from './node-menu-entries';
 import { RowContext, isBusy, paragraphSpeaker, paragraphText, queueChip } from './reader-rows';
 
 /**
  * One paragraph in the reader (design §6.3): a gutter with the selection checkbox (inert until
  * tickets 12/13) and a rail in the speaker's colour, then the body the mode chooses — prose with one
- * paragraph speaker chip in Read, one {@link ItemRow} per item in Speakers and Audio.
+ * paragraph speaker chip in Read, one {@link ItemRow} per item in Speakers and Audio. The
+ * paragraph menu (ticket 11) sits at the right in every mode, off while attribution is queued.
  */
 @Component({
   selector: 'r2m-paragraph',
-  imports: [MatIconModule, ItemRow, SpeakerChip, StatusChip],
+  imports: [MatIconModule, ItemRow, NodeMenu, SpeakerChip, StatusChip],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'r2m-paragraph',
@@ -41,13 +44,19 @@ import { RowContext, isBusy, paragraphSpeaker, paragraphText, queueChip } from '
         <p class="r2m-paragraph__prose">{{ text() }}</p>
       } @else {
         @for (item of paragraph().items; track item.id) {
-          <r2m-item [item]="item" [ctx]="ctx()" />
+          <r2m-item
+            [item]="item"
+            [ctx]="ctx()"
+            [isFirst]="$first"
+            [isLast]="$last"
+            [paragraphBusy]="busy()"
+          />
         }
       }
     </div>
 
-    @if (ctx().mode !== 'audio') {
-      <div class="r2m-paragraph__status">
+    <div class="r2m-paragraph__status">
+      @if (ctx().mode !== 'audio') {
         @if (queue(); as chip) {
           <r2m-status-chip
             compact
@@ -60,8 +69,9 @@ import { RowContext, isBusy, paragraphSpeaker, paragraphText, queueChip } from '
         @if (busy()) {
           <mat-icon class="r2m-paragraph__lock" aria-label="Locked while queued">lock</mat-icon>
         }
-      </div>
-    }
+      }
+      <r2m-node-menu class="r2m-paragraph__menu" [target]="menuTarget()" [disabled]="busy()" />
+    </div>
   `,
   styles: `
     @use 'tokens';
@@ -123,11 +133,30 @@ import { RowContext, isBusy, paragraphSpeaker, paragraphText, queueChip } from '
       height: 16px;
       color: var(--r2m-text-muted);
     }
+    .r2m-paragraph__menu {
+      opacity: 0;
+      transition: opacity 120ms;
+    }
+    :host(:hover) .r2m-paragraph__menu,
+    :host(:focus-within) .r2m-paragraph__menu {
+      opacity: 1;
+    }
   `,
 })
 export class ParagraphRow {
   readonly paragraph = input.required<ParagraphDto>();
   readonly ctx = input.required<RowContext>();
+  /** Position among the chapter's paragraphs (merge entries hide at the ends). */
+  readonly isFirst = input(false);
+  readonly isLast = input(false);
+
+  protected readonly menuTarget = computed<NodeMenuTarget>(() => ({
+    kind: 'paragraph',
+    id: this.paragraph().id,
+    text: paragraphText(this.paragraph()),
+    isFirst: this.isFirst(),
+    isLast: this.isLast(),
+  }));
 
   protected readonly speaker = computed(() =>
     paragraphSpeaker(this.paragraph(), this.ctx().speakers),

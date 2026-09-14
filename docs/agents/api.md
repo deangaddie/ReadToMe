@@ -64,6 +64,26 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/import \
 ```
 
 `reread: true` clears existing content first (safe way to re-import).
+
+A manual reread re-splits the stored file by hand-chosen rules instead of the automatic
+reader (the Blazor "Manual Reread" dialog on the wire). It also replaces existing content:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/import/manual \
+  -H 'content-type: application/json' \
+  -d '{ "hasMultipleVolumes": false, "hasMultipleParts": true,
+        "part": { "mode": "Prefix", "prefix": "Part" },
+        "chapter": { "mode": "Roman" } }'
+```
+
+`mode` is `Prefix` (needs a non-blank `prefix`), `Arabic` (bare numbers) or `Roman`. `volume` is
+read only when `hasMultipleVolumes`, `part` only when `hasMultipleParts`; `chapter` is always
+required. A switched-on level without a valid rule is 400; a reader failure is 422.
+
+Every write (`/commands` and both imports) accepts an optional `X-Origin-Id` header (a GUID).
+It is echoed as `originId` on the mutation receipt the live hub publishes, so a client can
+recognise its own commits among everyone else's. Absent or malformed, the receipt is unattributed.
+
 Inspect the result: `GET /api/projects/{folder}/book` (overview), then walk
 `GET /api/projects/{folder}/nodes/{level}/{id}/children` (volume → part → chapter;
 chapter children carry the paragraphs with their items). Each paragraph has

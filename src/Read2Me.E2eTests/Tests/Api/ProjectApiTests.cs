@@ -63,6 +63,86 @@ public class ProjectApiTests(E2eAppFixture app)
         Assert.Equal(folder, project.RootElement.GetProperty("folderName").GetString());
     }
 
+    /// <summary>
+    /// The manual reread (Angular ticket 11): a text book whose chapters are bare Roman numerals
+    /// splits the way the Blazor dialog's "Roman numerals" choice splits it, and replaces whatever the
+    /// automatic import made of the same file.
+    /// </summary>
+    [Fact]
+    public async Task Manual_import_with_roman_chapters_replaces_the_structure()
+    {
+        var title = $"api-manual-{Guid.NewGuid():N}";
+        var create = await Http.PostAsync($"{app.BaseUrl}/api/projects", CreateForm(title,
+            text: "I\n\nThe first chapter.\n\nII\n\nThe second chapter.\n\nIII\n\nThe third chapter."));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var folder = JsonDocument.Parse(await create.Content.ReadAsStringAsync())
+            .RootElement.GetProperty("folderName").GetString();
+
+        var auto = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/import", new { reread = false });
+        Assert.Equal(HttpStatusCode.OK, auto.StatusCode);
+        var before = await BookAsync(folder!);
+        Assert.True(before.GetProperty("hasContent").GetBoolean());
+
+        var manual = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/import/manual", new
+        {
+            hasMultipleVolumes = false,
+            hasMultipleParts = false,
+            chapter = new { mode = "Roman" },
+        });
+        Assert.Equal(HttpStatusCode.OK, manual.StatusCode);
+
+        var after = await BookAsync(folder!);
+        Assert.True(after.GetProperty("hasContent").GetBoolean());
+        Assert.Equal(1, after.GetProperty("volumes").GetArrayLength());
+        Assert.Equal(1, after.GetProperty("totalParts").GetInt32());
+        Assert.Equal(3, after.GetProperty("totalChapters").GetInt32());
+
+        var volumeId = after.GetProperty("volumes")[0].GetProperty("id").GetGuid();
+        var parts = await GetJsonAsync($"/api/projects/{folder}/nodes/volume/{volumeId}/children");
+        var partId = parts.GetProperty("parts")[0].GetProperty("id").GetGuid();
+        var chapters = (await GetJsonAsync($"/api/projects/{folder}/nodes/part/{partId}/children")).GetProperty("chapters");
+        Assert.Equal(["I", "II", "III"], chapters.EnumerateArray().Select(c => c.GetProperty("title").GetString()));
+    }
+
+    [Fact]
+    public async Task Manual_import_rejects_a_bad_form_and_an_unknown_project()
+    {
+        var folder = await CreateProjectAsync("api-manual-bad");
+
+        var blankPrefix = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/import/manual", new
+        {
+            hasMultipleVolumes = true,
+            hasMultipleParts = false,
+            volume = new { mode = "Prefix", prefix = "  " },
+            chapter = new { mode = "Arabic" },
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, blankPrefix.StatusCode);
+        Assert.Equal("application/problem+json", blankPrefix.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("Volume prefix", await blankPrefix.Content.ReadAsStringAsync());
+
+        var noChapter = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/import/manual", new
+        {
+            hasMultipleVolumes = false,
+            hasMultipleParts = false,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, noChapter.StatusCode);
+        Assert.False((await BookAsync(folder)).GetProperty("hasContent").GetBoolean());
+
+        var missing = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/no-such-project-xyz/import/manual",
+            new { hasMultipleVolumes = false, hasMultipleParts = false, chapter = new { mode = "Roman" } });
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    private Task<JsonElement> BookAsync(string folder) => GetJsonAsync($"/api/projects/{folder}/book");
+
+    private async Task<JsonElement> GetJsonAsync(string path)
+    {
+        var response = await Http.GetAsync($"{app.BaseUrl}{path}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
+    }
+
     [Fact]
     public async Task Create_duplicate_title_is_422()
     {

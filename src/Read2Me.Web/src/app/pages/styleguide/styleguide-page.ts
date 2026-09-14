@@ -27,6 +27,7 @@ import { PageHeader } from '@app/ui/page-header/page-header';
 import { ProjectCard } from '@app/ui/project-card/project-card';
 import { Pipeline, PipelineActionEvent } from '@app/ui/pipeline/pipeline';
 import { derivePipeline } from '@app/pages/project/pipeline-steps';
+import { BookEditor } from '@app/pages/book/book-editor';
 import { ParagraphRow } from '@app/pages/book/paragraph-row';
 import { ReaderMode, RowContext } from '@app/pages/book/reader-rows';
 import {
@@ -90,6 +91,10 @@ interface TocEntry {
   templateUrl: './styleguide-page.html',
   styleUrl: './styleguide-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [
+    // The paragraph story renders row menus; here they must never write anything.
+    { provide: BookEditor, useValue: { locked: signal(false), run: async () => false } },
+  ],
 })
 export class StyleguidePage {
   private readonly toast = inject(ToastService);

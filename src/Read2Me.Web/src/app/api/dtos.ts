@@ -110,6 +110,27 @@ export interface ProjectDetailDto {
 
 export type ImportRequest = Schema['ImportRequest'];
 
+/** `SplitRuleRequest.mode`: how a level's headings are recognised (`ManualImportRequest.cs`). */
+export type SplitRuleMode = 'Prefix' | 'Arabic' | 'Roman';
+
+export interface SplitRuleRequest {
+  mode: SplitRuleMode;
+  /** Required (non-blank) when `mode` is `Prefix`; ignored otherwise. */
+  prefix?: string | null;
+}
+
+/**
+ * `POST /api/projects/{folder}/import/manual`: `volume` is read only when `hasMultipleVolumes`,
+ * `part` only when `hasMultipleParts`; `chapter` always. 400 when a switched-on level lacks a rule.
+ */
+export interface ManualImportRequest {
+  hasMultipleVolumes: boolean;
+  hasMultipleParts: boolean;
+  volume: SplitRuleRequest | null;
+  part: SplitRuleRequest | null;
+  chapter: SplitRuleRequest;
+}
+
 // ---- Project roll-ups (`ProjectStatusEndpoints.cs`) -----------------------------------------------
 
 /** `NodeStatusService.NodeStatusSummary`: paragraph counts under one volume/part/chapter. */

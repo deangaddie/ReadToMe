@@ -30,6 +30,7 @@ public sealed class BookMutations(
     BookRevisionSequence revisions,
     IOptions<BookMutationOptions> options,
     EventBroadcaster<BookMutationReceipt> receipts,
+    MutationOrigin origin,
     ILogger<BookMutations> logger)
 {
     private BookMutationOptions Options => options.Value;
@@ -37,6 +38,12 @@ public sealed class BookMutations(
     public async Task<BookMutationOutcome> CommitAsync(BookMutation mutation, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(mutation);
+
+        // A mutation that names its origin keeps it; one that does not takes the scope's, so a
+        // request-scoped caller (the API) is recognised on its receipt without every handler
+        // between it and here knowing about origins.
+        if (mutation.OriginId == Guid.Empty && origin.Id != Guid.Empty)
+            mutation = mutation with { OriginId = origin.Id };
 
         // Resolved before the lock: an unregistered mutation is a wiring defect, not a conflict.
         var implementation = ResolveImplementation(mutation);

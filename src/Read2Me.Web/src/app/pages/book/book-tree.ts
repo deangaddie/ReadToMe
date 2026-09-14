@@ -12,6 +12,11 @@ export interface TreeNode {
   id: string;
   level: NodeLevel;
   title: string;
+  /** The stored title, null when untitled ({@link title} then carries the positional fallback). */
+  rawTitle: string | null;
+  /** Position among siblings of the same level: the node menu hides merges at the ends. */
+  isFirst: boolean;
+  isLast: boolean;
   expandable: boolean;
   /** Children are known (possibly none). */
   loaded: boolean;
@@ -42,20 +47,26 @@ export function nodeTitle(node: NodeDto, level: NodeLevel, index: number): strin
  * volume with one part shows that part's chapters directly.
  */
 export function buildTree(volumes: readonly NodeDto[], children: ChildrenMap): TreeNode[] {
-  const volumeNodes = volumes.map((v, i) => volumeNode(v, i, children));
+  const volumeNodes = volumes.map((v, i) => volumeNode(v, i, volumes.length, children));
   const [only] = volumeNodes;
   if (only && volumeNodes.length === 1) return only.children;
   return volumeNodes;
 }
 
-function volumeNode(volume: NodeDto, index: number, children: ChildrenMap): TreeNode {
-  const parts = children[volume.id];
-  const base = {
-    id: volume.id,
-    level: 'volume' as const,
-    title: nodeTitle(volume, 'volume', index),
-    expandable: true,
+function identity(node: NodeDto, level: NodeLevel, index: number, count: number) {
+  return {
+    id: node.id,
+    level,
+    title: nodeTitle(node, level, index),
+    rawTitle: node.title,
+    isFirst: index === 0,
+    isLast: index === count - 1,
   };
+}
+
+function volumeNode(volume: NodeDto, index: number, count: number, children: ChildrenMap): TreeNode {
+  const parts = children[volume.id];
+  const base = { ...identity(volume, 'volume', index, count), expandable: true };
   if (!parts) {
     return { ...base, loaded: false, loadTarget: { level: 'volume', id: volume.id }, children: [] };
   }
@@ -66,35 +77,31 @@ function volumeNode(volume: NodeDto, index: number, children: ChildrenMap): Tree
       ...base,
       loaded: chapters !== undefined,
       loadTarget: { level: 'part', id: onlyPart.id },
-      children: (chapters ?? []).map((c, i) => chapterNode(c, i)),
+      children: (chapters ?? []).map((c, i, all) => chapterNode(c, i, all.length)),
     };
   }
   return {
     ...base,
     loaded: true,
     loadTarget: { level: 'volume', id: volume.id },
-    children: parts.map((p, i) => partNode(p, i, children)),
+    children: parts.map((p, i) => partNode(p, i, parts.length, children)),
   };
 }
 
-function partNode(part: NodeDto, index: number, children: ChildrenMap): TreeNode {
+function partNode(part: NodeDto, index: number, count: number, children: ChildrenMap): TreeNode {
   const chapters = children[part.id];
   return {
-    id: part.id,
-    level: 'part',
-    title: nodeTitle(part, 'part', index),
+    ...identity(part, 'part', index, count),
     expandable: true,
     loaded: chapters !== undefined,
     loadTarget: { level: 'part', id: part.id },
-    children: (chapters ?? []).map((c, i) => chapterNode(c, i)),
+    children: (chapters ?? []).map((c, i, all) => chapterNode(c, i, all.length)),
   };
 }
 
-function chapterNode(chapter: NodeDto, index: number): TreeNode {
+function chapterNode(chapter: NodeDto, index: number, count: number): TreeNode {
   return {
-    id: chapter.id,
-    level: 'chapter',
-    title: nodeTitle(chapter, 'chapter', index),
+    ...identity(chapter, 'chapter', index, count),
     expandable: false,
     loaded: true,
     loadTarget: { level: 'chapter', id: chapter.id },

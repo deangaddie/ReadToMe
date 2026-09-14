@@ -56,6 +56,28 @@ describe('buildTree', () => {
     expect(tree[1]!.children[1]!.children.map((n) => n.title)).toEqual(['Chapter 1', 'Chapter 2']);
   });
 
+  it('nodes know their stored title and their position among siblings', () => {
+    const tree = buildTree([node('v1', 'I'), node('v2'), node('v3', 'III')], {
+      v2: [node('p1', 'A'), node('p2')],
+      p1: [node('c1'), node('c2', 'Two'), node('c3')],
+    });
+    expect(tree.map((n) => [n.rawTitle, n.isFirst, n.isLast])).toEqual([
+      ['I', true, false],
+      [null, false, false],
+      ['III', false, true],
+    ]);
+    const parts = tree[1]!.children;
+    expect(parts.map((n) => [n.isFirst, n.isLast])).toEqual([
+      [true, false],
+      [false, true],
+    ]);
+    expect(parts[0]!.children.map((n) => [n.rawTitle, n.isFirst, n.isLast])).toEqual([
+      [null, true, false],
+      ['Two', false, false],
+      [null, false, true],
+    ]);
+  });
+
   it('chapters are leaves', () => {
     const [chapter] = buildTree([node('v1')], { v1: [node('p1')], p1: [node('c1')] });
     expect(chapter).toMatchObject({ level: 'chapter', expandable: false, loaded: true });

@@ -8,6 +8,7 @@ import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast/toast.service';
 import { Subject } from 'rxjs';
 import { ProjectStore } from '../project/project-store';
+import { BookEditor } from './book-editor';
 import { BookPage } from './book-page';
 import { BookStore } from './book-store';
 
@@ -34,6 +35,7 @@ describe('BookPage', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         BookStore,
+        BookEditor,
         {
           provide: ProjectStore,
           useValue: {

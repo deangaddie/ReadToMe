@@ -4,6 +4,8 @@ import { ParagraphItemDto, workspaceUrl } from '@app/api';
 import { AudioPlayer } from '@app/ui/audio-player/audio-player';
 import { SpeakerChip } from '@app/ui/speaker-chip/speaker-chip';
 import { StatusChip } from '@app/ui/status-chip/status-chip';
+import { NodeMenu } from './node-menu';
+import { NodeMenuTarget } from './node-menu-entries';
 import {
   RowContext,
   isBusy,
@@ -19,10 +21,11 @@ import {
  * One paragraph item in Speakers or Audio mode (design §6.3). Speakers: speaker chip and text, an
  * unknown speaker highlighted. Audio: adds the resolved voice, voice instructions, review and
  * queue chips and a player for the generated take (`audioVersion` busts the browser cache).
+ * Every item carries its menu (ticket 11), off while the item or its paragraph is queued.
  */
 @Component({
   selector: 'r2m-item',
-  imports: [MatIconModule, AudioPlayer, SpeakerChip, StatusChip],
+  imports: [MatIconModule, AudioPlayer, SpeakerChip, StatusChip, NodeMenu],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'r2m-item',
@@ -46,6 +49,11 @@ import {
         @if (busy()) {
           <mat-icon class="r2m-item__lock" aria-label="Locked while queued">lock</mat-icon>
         }
+        <r2m-node-menu
+          class="r2m-item__menu"
+          [target]="menuTarget()"
+          [disabled]="busy() || paragraphBusy()"
+        />
       </div>
 
       @if (ctx().mode === 'audio') {
@@ -109,6 +117,15 @@ import {
       height: 16px;
       color: var(--r2m-text-muted);
     }
+    .r2m-item__menu {
+      align-self: center;
+      opacity: 0;
+      transition: opacity 120ms;
+    }
+    :host(:hover) .r2m-item__menu,
+    :host(:focus-within) .r2m-item__menu {
+      opacity: 1;
+    }
     .r2m-item__audio {
       display: flex;
       flex-wrap: wrap;
@@ -135,6 +152,20 @@ import {
 export class ItemRow {
   readonly item = input.required<ParagraphItemDto>();
   readonly ctx = input.required<RowContext>();
+  /** Position among the paragraph's items (merge entries hide at the ends). */
+  readonly isFirst = input(false);
+  readonly isLast = input(false);
+  /** The paragraph's attribution is queued or running: the server would refuse an item edit. */
+  readonly paragraphBusy = input(false);
+
+  protected readonly menuTarget = computed<NodeMenuTarget>(() => ({
+    kind: 'item',
+    id: this.item().id,
+    text: this.item().text,
+    isFirst: this.isFirst(),
+    isLast: this.isLast(),
+    isPause: this.item().isPause,
+  }));
 
   protected readonly speaker = computed(() => itemSpeaker(this.item(), this.ctx().speakers));
   protected readonly unknown = computed(

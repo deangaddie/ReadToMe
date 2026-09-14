@@ -77,7 +77,14 @@ export function planReceipt(receipt: Receipt, context: ReceiptContext): ReceiptP
         if (context.visibleChapterId) reload.add(context.visibleChapterId);
         plan.dropOtherChapters = true;
       } else {
-        for (const chapter of affectedChapters(receipt, context.loaded)) reload.add(chapter);
+        const affected = affectedChapters(receipt, context.loaded);
+        for (const chapter of affected) reload.add(chapter);
+        // A structural change whose ids name nothing loaded is usually a node that did not exist
+        // when this chapter was read (an inserted pause paragraph names only itself). The reader
+        // cannot place it, so it rereads what is on screen rather than miss it.
+        if (affected.length === 0 && hasFacet(effects.facets, 'Structure') && context.visibleChapterId) {
+          reload.add(context.visibleChapterId);
+        }
       }
     }
     if (any(OVERVIEW_FACETS)) plan.reloadOverview = true;
