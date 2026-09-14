@@ -41,4 +41,4 @@ npm run api:check    # fail if schema.d.ts is stale against the running host (sk
 
 - Standalone components, signals, zoneless change detection, `OnPush` everywhere.
 - TypeScript `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`.
-- Unit tests sit next to the code as `*.spec.ts`. End-to-end tests live in `src/Read2Me.E2eTests`.
+- Unit tests sit next to the code as `*.spec.ts`. End-to-end tests live in `src/Read2Me.E2eTests/Tests/Web/` on `WebE2eTestBase`, which stages the bundle from `npm run build` into the in-proc host and skips when it is absent. For ad-hoc driving of a running host see `tools/browse/README.md`.

@@ -1,38 +1,46 @@
 ---
 name: verify
-description: Launch ReadToMe and drive the Blazor UI in a browser to observe a change working end to end. Use when verifying a change to the app (settings pages, book tree, audio generation) rather than running tests.
+description: Launch ReadToMe and drive either UI in a browser — Blazor at / or the Angular web app at /app — to see a change working or reproduce a bug against the real host. Use for verifying a change or hunting a bug in the running app rather than running tests.
 ---
 
-# Verifying ReadToMe
+# Verifying ReadToMe in a browser
 
-Blazor Server app. The surface is the browser — drive it, don't import-and-call.
+Two UIs on one host: Blazor Server at `/`, the Angular web app at `/app` (dev server `:4200`
+proxies to the host). The surface is the browser — drive it, don't import-and-call.
 
 ## Launch
 
 ```bash
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/Read2Me.App --urls http://localhost:5099
+dotnet run --project src/Read2Me.App --urls http://localhost:5000        # Development: no HTTPS redirect
+cd src/Read2Me.Web && npm start                                          # only for web-app checks; :4200/app/
 ```
 
 Development config points the workspace at `D:\Dev\Read\WS`, which holds real projects with
 generated audio (`foundation` ~314 wavs, `pride-and-prejudice` ~41,
-`alices-adventures-in-wonderland` ~16). App settings (ffmpeg path, TTS configs) live in
-`D:\Dev\Read\WS\app.db`, so a fresh run already has state.
+`alices-adventures-in-wonderland` ~16) and app settings in `app.db`. Mutate a throwaway project
+(`throwawayProject` below), never those.
 
-Stop it with `taskkill //F //IM Read2Me.App.exe` — Ctrl-C from a background Bash task won't.
+Start both detached with their output redirected to a file. A `dotnet run` piped through
+`Select-Object -First N` gets killed when the pipe closes; a `| Select-Object -Last N` shows
+nothing until exit. Stop the host with `taskkill //F //IM Read2Me.App.exe`.
 
 ## Drive
 
-No global playwright. Install `playwright-core` into the scratchpad (browsers are already in
-`%LOCALAPPDATA%\ms-playwright`) and launch with `chromium.launch({ channel: 'chromium' })`:
+Use the checked-in harness `tools/browse/` (`npm ci` there once; it reuses the Chromium the E2E
+tests installed). Read its `README.md` for the helper list and the example script; the helpers
+cover launch with a watchdog, throwaway projects, the web app's node menus and dialogs, tree
+waits, and Blazor's circuit wait.
 
-```bash
-cd <scratchpad> && npm i playwright-core
-```
+Both UIs re-render after the click resolves — Blazor over SignalR, the web app from the hub's
+receipt — so **wait on the DOM state you expect**, never on a timeout, and never on a count the
+stale DOM already satisfies (a tree that shows two parts also has "two titles" before it reloads
+as two volumes: wait on the exact titles).
 
-Blazor re-renders over SignalR, so a click's effect lands after the click resolves. Never
-`waitForTimeout` and assume: `waitForFunction` on the DOM state you expect (a changed `src`, a
-button label that flipped back). A too-early click gets silently dropped by in-flight guards and
-you'll read stale state as if it were the result.
+Web-app selectors that are stable: `r2m-paragraph`, `r2m-item`, `.r2m-paragraph__menu`,
+`r2m-node-menu`, `.mat-mdc-menu-panel [data-entry=...]`, `r2m-text-prompt-dialog`,
+`r2m-confirm-dialog`, `.tree__title`, `.book__chapter`, `[data-testid=book-actions]`,
+`.r2m-toast-panel`. Blazor: `.mud-treeview-item`, `.paragraph-hover-block`, `.mud-menu-item`
+(force the click), `.mud-dialog`.
 
 To compare audio, fetch inside the page (same origin) and hash — sizes match for same-length PCM,
 so length alone proves nothing:
@@ -47,6 +55,8 @@ await page.evaluate(async url => {
 
 ## Gotchas
 
+- **A frozen tab is a defect, not a slow page.** A screenshot that times out means the renderer is
+  spinning (a microtask loop in a store); capture the API calls the page made and look for a loop.
 - **ffmpeg is not on PATH.** It lives at `D:\Dev\ffmpeg\bin\ffmpeg.exe`; the path is stored in
   settings (Audio Processing → ffmpeg). Any ffmpeg-dependent step silently *falls back* rather than
   failing, so an unset path looks like "the filter did nothing".

@@ -24,6 +24,21 @@ jobs:
       - name: Unit tests
         run: dotnet test src/Read2Me.Tests --configuration Release --no-build
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/Read2Me.Web/package-lock.json
+
+      # Lint, typecheck, unit tests and the production build into src/Read2Me.App/wwwroot/app —
+      # the bundle the Angular E2E tests (Tests/Web) stage into the in-proc host; without it they skip.
+      - name: Web check and build
+        working-directory: src/Read2Me.Web
+        run: |
+          npm ci
+          npm run check
+
       - name: Install Playwright browsers
         run: pwsh src/Read2Me.E2eTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
 

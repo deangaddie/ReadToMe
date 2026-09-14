@@ -37,6 +37,10 @@ npm start                               # ng serve on http://localhost:4200/app/
 npm run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored)
 npm run check                           # lint + typecheck + test + build
 npm run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
+
+# Browser tests (both UIs): src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
+dotnet test src/Read2Me.E2eTests         # Angular tests (Tests/Web) skip unless `npm run build` has emitted wwwroot/app
+# Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 ```
 
 ## Architecture
