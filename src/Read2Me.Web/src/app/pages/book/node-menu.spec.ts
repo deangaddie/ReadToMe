@@ -99,7 +99,7 @@ describe('NodeMenu', () => {
       text: 'One',
       isFirst: true,
       isLast: true,
-      selectable: true,
+      selection: 'paragraphs',
     });
     const actions: string[] = [];
     fixture.componentInstance.action.subscribe((a) => actions.push(a));

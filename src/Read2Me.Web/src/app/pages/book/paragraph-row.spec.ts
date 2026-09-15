@@ -1,6 +1,8 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ParagraphDto, ParagraphItemDto } from '@app/api';
+import { AudioGenerator } from './audio-generator';
+import { AudioSelectionStore } from './audio-selection-store';
 import { BookEditor } from './book-editor';
 import { ParagraphRow } from './paragraph-row';
 import { RowContext } from './reader-rows';
@@ -63,6 +65,9 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     reviews: {},
     selectable: true,
     selected: new Set(),
+    itemSelectable: false,
+    selectedItems: new Set(),
+    narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
     roster: ROSTER,
     ...overrides,
@@ -93,6 +98,8 @@ describe('ParagraphRow', () => {
       imports: [ParagraphRow],
       providers: [
         SelectionStore,
+        AudioSelectionStore,
+        { provide: AudioGenerator, useValue: { retry: vi.fn(), dismissReview: vi.fn(), working: signal(false) } },
         { provide: BookEditor, useValue: { locked: signal(false), run: vi.fn() } },
         { provide: SpeakerAssigner, useValue: assigner },
       ],

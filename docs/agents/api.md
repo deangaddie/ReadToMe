@@ -197,6 +197,15 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characte
 curl -s -X POST http://localhost:5000/api/projects/{folder}/audio/enqueue \
   -H 'content-type: application/json' \
   -d '{ "level": "chapter", "nodeId": "<chapterId>", "needsAudioOnly": true }'
+# or an explicit selection / a single retry (unknown ids ignored; enqueued = what was queued;
+# 409 when no paragraph TTS service is active):
+curl -s -X POST http://localhost:5000/api/projects/{folder}/audio/enqueue-items \
+  -H 'content-type: application/json' \
+  -d '{ "itemIds": ["<itemId>", "<itemId>"] }'
+# the speech items under a node that have a speaker to read them, with their
+# paragraph/chapter/part/volume ids (what an audio selection holds); needsAudioOnly=true keeps
+# those still missing a WAV, narratorOnlyMode=true counts unattributed lines as readable:
+curl -s 'http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/item-ids?needsAudioOnly=true'
 # poll /api/audio/queue; per-item:
 curl -s http://localhost:5000/api/projects/{folder}/audio/items/{itemId}
 

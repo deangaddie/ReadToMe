@@ -30,13 +30,15 @@ import { SpeakerMenu } from '@app/ui/speaker-menu/speaker-menu';
 import { ToastService } from '@app/ui/toast/toast.service';
 import { firstValueFrom } from 'rxjs';
 import { ProjectStore } from '../project/project-store';
+import { AudioGenerator } from './audio-generator';
+import { AudioSelectionStore } from './audio-selection-store';
 import { BookEditor } from './book-editor';
 import { BookStore, WINDOW_CAP } from './book-store';
 import { TreeNode } from './book-tree';
 import { ManualRereadDialog } from './manual-reread-dialog';
 import { MeasuredScrollDirective } from './measured-scroll';
 import { NodeMenu } from './node-menu';
-import { NodeMenuTarget } from './node-menu-entries';
+import { NodeMenuTarget, SelectionKind } from './node-menu-entries';
 import { ParagraphRow } from './paragraph-row';
 import {
   READER_MODES,
@@ -46,7 +48,7 @@ import {
   buildRows,
   parseMode,
 } from './reader-rows';
-import { TriState, chapterDialogTotals } from './selection';
+import { TriState, chapterDialogTotals, chapterVoicedTotals } from './selection';
 import { SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 import { buildRoster } from './speaker-roster';
@@ -67,7 +69,9 @@ const MODE_LABELS: Record<ReaderMode, string> = {
  * Ticket 11 adds the node menus on every row and the book-level actions in the toolbar overflow
  * (titles, pauses, reread, manual reread); all of them post through {@link BookEditor}. Ticket 12
  * adds the paragraph selection (row and tree checkboxes, "Select unprocessed") and the selection
- * action bar — Attribute, Bulk assign speaker, Clear — over the {@link SelectionStore}.
+ * action bar — Attribute, Bulk assign speaker, Clear — over the {@link SelectionStore}. Ticket 13
+ * does the same for Audio mode over the {@link AudioSelectionStore}: item and tree checkboxes,
+ * "Select needs audio", and a bar with Generate audio and Clear through the {@link AudioGenerator}.
  */
 @Component({
   selector: 'app-book-page',
@@ -110,7 +114,26 @@ const MODE_LABELS: Record<ReaderMode, string> = {
         }
       </mat-button-toggle-group>
 
-      @if (selectable() && selection.count() > 0) {
+      @if (audioSelectable() && audioSelection.count() > 0) {
+        <div class="book__selection" role="group" aria-label="Selection" data-testid="selection-bar">
+          <span class="book__selection-count" data-testid="selection-count">
+            {{ audioSelection.count() }} item{{ audioSelection.count() === 1 ? '' : 's' }}
+          </span>
+          <button
+            mat-flat-button
+            type="button"
+            data-action="generate-audio-selection"
+            [disabled]="working() || generator.working() || editor.locked()"
+            (click)="generateSelection()"
+          >
+            <mat-icon>graphic_eq</mat-icon>
+            Generate audio
+          </button>
+          <button mat-button type="button" data-action="clear-selection" (click)="audioSelection.clear()">
+            Clear
+          </button>
+        </div>
+      } @else if (selectable() && selection.count() > 0) {
         <div class="book__selection" role="group" aria-label="Selection" data-testid="selection-bar">
           <span class="book__selection-count" data-testid="selection-count">
             {{ selection.count() }} paragraph{{ selection.count() === 1 ? '' : 's' }}
@@ -223,13 +246,15 @@ const MODE_LABELS: Record<ReaderMode, string> = {
               [statuses]="project.nodes()"
               [currentChapterId]="store.currentChapterId()"
               [expandedIds]="store.expanded()"
-              [selectable]="selectable()"
+              [selection]="selectionKind()"
               [nodeStates]="nodeStates()"
               (expandedChange)="store.setExpanded($event.node, $event.expanded)"
               (selectChapter)="openChapter($event)"
               (toggleNode)="toggleNode($event.node, $event.on)"
               (selectUnprocessed)="selectUnprocessed($event)"
               (attributeNode)="attributeNode($event)"
+              (selectNeedsAudio)="selectNeedsAudio($event)"
+              (generateAudioNode)="generateAudioNode($event)"
             />
           </nav>
         }
@@ -400,6 +425,8 @@ export class BookPage {
   protected readonly store = inject(BookStore);
   protected readonly editor = inject(BookEditor);
   protected readonly selection = inject(SelectionStore);
+  protected readonly audioSelection = inject(AudioSelectionStore);
+  protected readonly generator = inject(AudioGenerator);
   private readonly assigner = inject(SpeakerAssigner);
   private readonly attribution = inject(AttributionApi);
   private readonly book = inject(BookApi);
@@ -439,6 +466,18 @@ export class BookPage {
 
   /** Paragraph selection lives in Read and Speakers modes; Audio selects items (ticket 13). */
   protected readonly selectable = computed(() => this.store.mode() !== 'audio');
+  protected readonly audioSelectable = computed(() => this.store.mode() === 'audio');
+  protected readonly selectionKind = computed<SelectionKind>(() =>
+    this.audioSelectable() ? 'items' : 'paragraphs',
+  );
+  /** Narrator-only mode reads unattributed lines too, so they count as voiced. */
+  protected readonly narratorOnlyMode = computed(
+    () => this.project.detail()?.narratorOnlyMode ?? false,
+  );
+  /** The selection the mode is in: items in Audio, paragraphs otherwise. */
+  private readonly activeSelection = computed(() =>
+    this.audioSelectable() ? this.audioSelection : this.selection,
+  );
   /** A selection read or enqueue in flight: the action bar waits for it. */
   protected readonly working = signal(false);
   /** Bulk assign is disarmed while attribution runs anywhere (research §3). */
@@ -448,12 +487,13 @@ export class BookPage {
     buildRoster(this.store.overview()?.characters ?? [], this.project.detail()?.narrator ?? null),
   );
 
-  /** Every tree node's checkbox state over the current selection. */
+  /** Every tree node's checkbox state over the selection the mode is in. */
   protected readonly nodeStates = computed(() => {
+    const active = this.activeSelection();
     const states: Record<string, TriState> = {};
     const walk = (nodes: readonly TreeNode[]) => {
       for (const node of nodes) {
-        states[node.id] = this.selection.nodeState(node.level, node.id);
+        states[node.id] = active.nodeState(node.level, node.id);
         walk(node.children);
       }
     };
@@ -471,6 +511,9 @@ export class BookPage {
     reviews: this.store.reviews(),
     selectable: this.selectable(),
     selected: this.selection.selected(),
+    itemSelectable: this.audioSelectable(),
+    selectedItems: this.audioSelection.selected(),
+    narratorOnlyMode: this.narratorOnlyMode(),
     ancestry: this.store.ancestry(),
     roster: this.roster(),
   }));
@@ -483,10 +526,14 @@ export class BookPage {
       untracked(() => this.store.setMode(mode));
     });
 
-    // A loaded chapter tells the selection how many Character paragraphs it holds.
+    // A loaded chapter tells each selection how many rows of its kind it holds.
     effect(() => {
       const totals = chapterDialogTotals(this.store.chapters());
       untracked(() => this.selection.learnTotals(totals));
+    });
+    effect(() => {
+      const totals = chapterVoicedTotals(this.store.chapters(), this.narratorOnlyMode());
+      untracked(() => this.audioSelection.learnTotals(totals));
     });
 
     effect(() => {
@@ -550,14 +597,22 @@ export class BookPage {
 
   // ---- selection (ticket 12) --------------------------------------------------------------------
 
-  /** A tree checkbox: every Character paragraph under the node joins or leaves the selection. */
+  /**
+   * A tree checkbox: everything the mode's selection holds under the node — Character paragraphs,
+   * or voiced items in Audio mode — joins or leaves it.
+   */
   protected async toggleNode(node: TreeNode, on: boolean): Promise<void> {
     await this.withSelectionRead(async (folder) => {
-      const refs = await this.book.paragraphIds(folder, node.level, node.id);
+      const store = this.activeSelection();
+      const refs = this.audioSelectable()
+        ? await this.book.itemIds(folder, node.level, node.id, {
+            narratorOnlyMode: this.narratorOnlyMode(),
+          })
+        : await this.book.paragraphIds(folder, node.level, node.id);
       // A full read is the node's total, whichever way the box went.
-      this.selection.learnTotals({ [node.id]: refs.length });
-      if (on) this.selection.add(refs);
-      else this.selection.remove(refs.map((r) => r.id));
+      store.learnTotals({ [node.id]: refs.length });
+      if (on) store.add(refs);
+      else store.remove(refs.map((r) => r.id));
     });
   }
 
@@ -573,6 +628,31 @@ export class BookPage {
     await this.enqueue((folder) =>
       this.attribution.enqueue(folder, { level: node.level, nodeId: node.id, unprocessedOnly: true }),
     );
+  }
+
+  // ---- audio selection (ticket 13) ----------------------------------------------------------------
+
+  /** "Select needs audio": the node's Generatable items (voiced, still missing a WAV), without loading chapters. */
+  protected async selectNeedsAudio(node: TreeNode): Promise<void> {
+    await this.withSelectionRead(async (folder) => {
+      this.audioSelection.add(
+        await this.book.itemIds(folder, node.level, node.id, {
+          needsAudioOnly: true,
+          narratorOnlyMode: this.narratorOnlyMode(),
+        }),
+      );
+    });
+  }
+
+  /** "Generate audio for this node": the node-scoped enqueue the overview also uses. */
+  protected async generateAudioNode(node: TreeNode): Promise<void> {
+    await this.generator.enqueueNode(node.level, node.id, this.narratorOnlyMode());
+  }
+
+  /** The action bar's Generate audio: queue the selection, then let it go (Blazor clears too). */
+  protected async generateSelection(): Promise<void> {
+    const queued = await this.generator.enqueueItems(this.audioSelection.ids());
+    if (queued) this.audioSelection.clear();
   }
 
   /** The action bar's Attribute: queue the selection, then let it go (Blazor clears too). */

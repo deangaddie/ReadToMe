@@ -8,6 +8,8 @@ import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast/toast.service';
 import { Subject } from 'rxjs';
 import { ProjectStore } from '../project/project-store';
+import { AudioGenerator } from './audio-generator';
+import { AudioSelectionStore } from './audio-selection-store';
 import { BookEditor } from './book-editor';
 import { BookPage } from './book-page';
 import { BookStore } from './book-store';
@@ -23,6 +25,23 @@ const OVERVIEW: BookOverviewDto = {
   totalParts: 1,
   totalChapters: 2,
 };
+
+const NARRATION = (id: string) => ({
+  id,
+  isPauseParagraph: false,
+  items: [
+    {
+      id: `${id}-i`,
+      itemType: 'Narration' as const,
+      text: id,
+      characterId: '00000000-0000-0000-0000-000000000001',
+      audioFileName: null,
+      voiceInstructions: null,
+      orderKey: 'a',
+      isPause: false,
+    },
+  ],
+});
 
 const DIALOG = (id: string) => ({
   id,
@@ -45,14 +64,26 @@ describe('BookPage', () => {
   let http: HttpTestingController;
   let toasts: string[];
   let assigner: { assign: ReturnType<typeof vi.fn>; createAndAssign: ReturnType<typeof vi.fn> };
+  let generator: {
+    enqueueItems: ReturnType<typeof vi.fn>;
+    enqueueNode: ReturnType<typeof vi.fn>;
+    working: ReturnType<typeof signal<boolean>>;
+  };
   const queue = signal<{ attribution: { isBusy: boolean } } | null>(null);
+  const detail = signal<{ narratorOnlyMode: boolean; narrator: null } | null>(null);
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
   beforeEach(async () => {
     toasts = [];
     queue.set(null);
+    detail.set(null);
     assigner = { assign: vi.fn().mockResolvedValue(undefined), createAndAssign: vi.fn() };
+    generator = {
+      enqueueItems: vi.fn().mockResolvedValue(true),
+      enqueueNode: vi.fn().mockResolvedValue(true),
+      working: signal(false),
+    };
     await TestBed.configureTestingModule({
       imports: [BookPage],
       providers: [
@@ -62,14 +93,16 @@ describe('BookPage', () => {
         BookStore,
         BookEditor,
         SelectionStore,
+        AudioSelectionStore,
         { provide: SpeakerAssigner, useValue: assigner },
+        { provide: AudioGenerator, useValue: generator },
         {
           provide: ProjectStore,
           useValue: {
             folder: signal('dune'),
             revision: signal(1),
             status: signal({}),
-            detail: signal(null),
+            detail,
             nodes: signal({
               c1: {
                 attributionRemaining: 3,
@@ -263,7 +296,7 @@ describe('BookPage', () => {
       expect(bulk.disabled).toBe(true);
     });
 
-    it('Audio mode hides the checkboxes and the action bar', async () => {
+    it('Audio mode hides the paragraph checkboxes and bar; the paragraph selection is kept aside', async () => {
       const fixture = await render('audio');
       await loadBook([DIALOG('p1')]);
       http.match(`${BASE}/nodes/chapter/c1/voices`).forEach((r) => r.flush({}));
@@ -272,9 +305,79 @@ describe('BookPage', () => {
       await fixture.whenStable();
 
       const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('.tree__select')).toBeNull();
-      expect(el.querySelector('r2m-paragraph input[type=checkbox]')).toBeNull();
+      expect(el.querySelector('r2m-paragraph > .r2m-paragraph__gutter input[type=checkbox]')).toBeNull();
       expect(el.querySelector('[data-testid=selection-bar]')).toBeNull();
+      expect(TestBed.inject(SelectionStore).count()).toBe(1);
+    });
+  });
+
+  describe('audio selection (ticket 13)', () => {
+    async function renderAudio(paragraphs: unknown[]) {
+      const fixture = await render('audio');
+      await loadBook(paragraphs);
+      http.match(`${BASE}/nodes/chapter/c1/voices`).forEach((r) => r.flush({}));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      return fixture;
+    }
+
+    it('a tree checkbox reads the node item ids, selects them and shows the item action bar', async () => {
+      const fixture = await renderAudio([NARRATION('p1'), DIALOG('p2')]);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid=selection-bar]')).toBeNull();
+
+      const box = el.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!;
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      http.expectOne(`${BASE}/nodes/chapter/c1/item-ids`).flush([
+        { id: 'p1-i', paragraphId: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
+      ]);
+      await settle();
+      fixture.detectChanges();
+
+      const selection = TestBed.inject(AudioSelectionStore);
+      expect(selection.ids()).toEqual(['p1-i']);
+      expect(selection.nodeState('chapter', 'c1')).toBe('checked');
+      expect(box.checked).toBe(true);
+      expect(el.querySelector('[data-testid=selection-count]')?.textContent?.trim()).toBe('1 item');
+      const rows = Array.from(el.querySelectorAll<HTMLInputElement>('r2m-item input[type=checkbox]'));
+      expect(rows.map((b) => [b.checked, b.disabled])).toEqual([
+        [true, false],
+        [false, true],
+      ]);
+      expect(TestBed.inject(SelectionStore).count()).toBe(0);
+    });
+
+    it('Select needs audio reads with the filter and narrator-only flag; Generate audio queues and clears', async () => {
+      detail.set({ narratorOnlyMode: true, narrator: null });
+      const fixture = await renderAudio([NARRATION('p1')]);
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLButtonElement>('[data-node-id=c1] r2m-node-menu button')!.click();
+      fixture.detectChanges();
+      document.querySelector<HTMLButtonElement>('[data-entry=select-needs-audio]')!.click();
+      http
+        .expectOne(`${BASE}/nodes/chapter/c1/item-ids?needsAudioOnly=true&narratorOnlyMode=true`)
+        .flush([{ id: 'p1-i', paragraphId: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' }]);
+      await settle();
+      fixture.detectChanges();
+
+      const selection = TestBed.inject(AudioSelectionStore);
+      expect(selection.ids()).toEqual(['p1-i']);
+      el.querySelector<HTMLButtonElement>('[data-action=generate-audio-selection]')!.click();
+      await settle();
+      expect(generator.enqueueItems).toHaveBeenCalledWith(['p1-i']);
+      expect(selection.count()).toBe(0);
+    });
+
+    it('Generate audio for this node hands the node to the generator', async () => {
+      const fixture = await renderAudio([NARRATION('p1')]);
+      const el = fixture.nativeElement as HTMLElement;
+      el.querySelector<HTMLButtonElement>('[data-node-id=c1] r2m-node-menu button')!.click();
+      fixture.detectChanges();
+      document.querySelector<HTMLButtonElement>('[data-entry=generate-audio-node]')!.click();
+      await settle();
+      expect(generator.enqueueNode).toHaveBeenCalledWith('chapter', 'c1', false);
     });
   });
 });

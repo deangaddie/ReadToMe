@@ -11,6 +11,7 @@ import type {
   AppTheme,
   AudioProcessingUpdateRequest,
   BulkAssignPreviewRequest,
+  ItemsEnqueueRequest,
   LlmServerConfig,
   ManualImportRequest,
   NarratorOnlyModeRequest,
@@ -48,4 +49,5 @@ export type SchemaPins = [
   Pin<SplitRuleRequest, Schema['SplitRuleRequest']>,
   Pin<ParagraphsEnqueueRequest, Schema['ParagraphsEnqueueRequest']>,
   Pin<BulkAssignPreviewRequest, Schema['BulkAssignPreviewRequest']>,
+  Pin<ItemsEnqueueRequest, Schema['ItemsEnqueueRequest']>,
 ];

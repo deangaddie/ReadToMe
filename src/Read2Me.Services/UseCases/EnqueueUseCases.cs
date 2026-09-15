@@ -58,7 +58,19 @@ namespace Read2Me.Services.UseCases
             if (refs.Count == 0)
                 return 0;
 
-            var ordered = await audioReader.GetOrderedAudioItemRefsAsync(folder, refs.Select(r => r.ParagraphItemId));
+            return await EnqueueAudioAsync(folder, refs.Select(r => r.ParagraphItemId).ToList());
+        }
+
+        /// <summary>
+        /// The web reader's audio selection or a single retry: an explicit item id list rather than a
+        /// node. Ids that name nothing drop out of the ordering read, so the answer counts what was queued.
+        /// </summary>
+        public virtual async Task<int> EnqueueAudioAsync(ProjectFolderId folder, IReadOnlyList<Guid> itemIds)
+        {
+            if (itemIds.Count == 0)
+                return 0;
+
+            var ordered = await audioReader.GetOrderedAudioItemRefsAsync(folder, itemIds);
             audioQueue.Enqueue(ordered.Select(r => new QueuedAudioItem(folder, r)));
             return ordered.Count;
         }

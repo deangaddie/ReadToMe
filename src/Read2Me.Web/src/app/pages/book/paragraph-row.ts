@@ -16,7 +16,7 @@ import {
   paragraphText,
   queueChip,
 } from './reader-rows';
-import { isDialogParagraph } from './selection';
+import { ancestryFor, isDialogParagraph } from './selection';
 import { SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 
@@ -76,6 +76,7 @@ import { SpeakerAssigner } from './speaker-assigner';
           <r2m-item
             [item]="item"
             [paragraphId]="paragraph().id"
+            [chapterId]="chapterId()"
             [ctx]="ctx()"
             [isFirst]="$first"
             [isLast]="$last"
@@ -250,13 +251,7 @@ export class ParagraphRow {
 
   protected toggle(event: Event): void {
     const on = (event.target as HTMLInputElement).checked;
-    const chapterId = this.chapterId();
-    const parents = this.ctx().ancestry[chapterId];
-    this.selection.toggle(
-      this.paragraph().id,
-      { chapterId, partId: parents?.partId ?? null, volumeId: parents?.volumeId ?? null },
-      on,
-    );
+    this.selection.toggle(this.paragraph().id, ancestryFor(this.ctx().ancestry, this.chapterId()), on);
   }
 
   protected assign(characterId: string | null): void {

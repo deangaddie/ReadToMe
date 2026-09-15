@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { ApiClient } from './api-client';
 import type { BookCommand } from './book-commands';
 import type {
+  AudioItemRefDto,
   BookOverviewDto,
   BulkAssignPreviewDto,
   BulkAssignPreviewRequest,
@@ -54,6 +55,26 @@ export class BookApi {
     return this.api.get<ParagraphRefDto[]>(
       `${projectUrl(folder)}/nodes/${level}/${id}/paragraph-ids`,
       unprocessedOnly ? { unprocessedOnly: true } : undefined,
+    );
+  }
+
+  /**
+   * The speech items under a node that have a speaker to read them, with their ancestry (ticket
+   * 13): what an audio tree checkbox selects; `needsAudioOnly` keeps those still missing a WAV;
+   * `narratorOnlyMode` counts unattributed lines as readable.
+   */
+  itemIds(
+    folder: string,
+    level: NodeLevel,
+    id: Guid,
+    options: { needsAudioOnly?: boolean; narratorOnlyMode?: boolean } = {},
+  ): Promise<AudioItemRefDto[]> {
+    const params: Record<string, boolean> = {};
+    if (options.needsAudioOnly) params["needsAudioOnly"] = true;
+    if (options.narratorOnlyMode) params["narratorOnlyMode"] = true;
+    return this.api.get<AudioItemRefDto[]>(
+      `${projectUrl(folder)}/nodes/${level}/${id}/item-ids`,
+      Object.keys(params).length > 0 ? params : undefined,
     );
   }
 

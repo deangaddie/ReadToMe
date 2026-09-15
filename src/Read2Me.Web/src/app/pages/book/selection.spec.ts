@@ -1,8 +1,10 @@
 import { ParagraphDto, ParagraphItemDto } from '@app/api';
 import {
   SelectionMap,
+  chapterVoicedTotals,
   chapterDialogTotals,
   isDialogParagraph,
+  isVoicedItem,
   nodeState,
   selectedUnder,
 } from './selection';
@@ -96,5 +98,42 @@ describe('chapterDialogTotals', () => {
       { id: 'c2', title: 'Two', paragraphs: [] },
     ]);
     expect(totals).toEqual({ c1: 2, c2: 0 });
+  });
+});
+
+describe('isVoicedItem (ticket 13)', () => {
+  it('narration and attributed lines have a speaker; an unattributed line or a pause does not', () => {
+    expect(isVoicedItem(item({ itemType: 'Narration', characterId: 'n' }), false)).toBe(true);
+    expect(isVoicedItem(item({ itemType: 'Character', characterId: 'h' }), false)).toBe(true);
+    expect(isVoicedItem(item({ itemType: 'Character' }), false)).toBe(false);
+    expect(isVoicedItem(item({ itemType: 'Pause', isPause: true }), false)).toBe(false);
+  });
+
+  it('narrator-only mode reads an unattributed line in the narrator voice, but never a pause', () => {
+    expect(isVoicedItem(item({ itemType: 'Character' }), true)).toBe(true);
+    expect(isVoicedItem(item({ itemType: 'Pause', isPause: true }), true)).toBe(false);
+  });
+
+  it('an item that already has audio can be generated again', () => {
+    expect(isVoicedItem(item({ itemType: 'Narration', characterId: 'n', audioFileName: 'a.wav' }), false)).toBe(true);
+  });
+});
+
+describe('chapterVoicedTotals', () => {
+  it('counts the voiced items of each loaded chapter', () => {
+    const chapters = [
+      {
+        id: 'c1',
+        title: 'One',
+        paragraphs: [
+          paragraph('p1', item({ itemType: 'Narration', characterId: 'n' })),
+          paragraph('p2', item({ itemType: 'Character' }), item({ itemType: 'Character', characterId: 'h' })),
+          paragraph('p3', item({ itemType: 'Pause', isPause: true })),
+        ],
+      },
+      { id: 'c2', title: 'Two', paragraphs: [] },
+    ];
+    expect(chapterVoicedTotals(chapters, false)).toEqual({ c1: 2, c2: 0 });
+    expect(chapterVoicedTotals(chapters, true)).toEqual({ c1: 3, c2: 0 });
   });
 });

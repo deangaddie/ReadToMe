@@ -1,15 +1,23 @@
-import { NodeLevel, ParagraphDto, ParagraphRefDto } from '@app/api';
+import { NodeLevel, ParagraphDto, ParagraphItemDto } from '@app/api';
 import { ChapterParents } from './book-tree';
 import { LoadedChapterView } from './reader-rows';
 
 /**
- * The paragraph selection's pure rules (ticket 12, design §6.3): which paragraphs can be selected,
- * how a selection rolls up into a tree node's tri-state, and how many a node holds. The
- * `SelectionStore` keeps the state; everything decidable from the data is decided here and
- * table-tested once.
+ * The reader selections' pure rules (design §6.3): which paragraphs (ticket 12) and which items
+ * (ticket 13) can be selected, how a selection rolls up into a tree node's tri-state, and how
+ * many a node holds. The `SelectionStore` / `AudioSelectionStore` keep the state; everything
+ * decidable from the data is decided here and table-tested once.
  */
 
-/** The nodes a selected paragraph rolls up into; part and volume may be unknown for a row ticked
+/** What a node read answers per row: the row's id and the nodes it rolls up into. */
+export interface SelectionRef {
+  id: string;
+  chapterId: string;
+  partId: string;
+  volumeId: string;
+}
+
+/** The nodes a selected row rolls up into; part and volume may be unknown for a row ticked
  * before its structure loaded, in which case it counts under no part or volume. */
 export interface ParagraphAncestry {
   chapterId: string;
@@ -28,6 +36,26 @@ export type TriState = 'unchecked' | 'indeterminate' | 'checked';
  */
 export function isDialogParagraph(paragraph: ParagraphDto): boolean {
   return paragraph.items.some((i) => !i.isPause && i.itemType === 'Character');
+}
+
+/**
+ * A voiced item (CONTEXT.md "Voiced item", the host's `voicedOnly` rule): a spoken item with
+ * somebody to read it — any speaker at all (narration carries the narrator, ADR-0006), or any
+ * line in narrator-only mode. Existing audio is no obstacle: a take can be regenerated. What the
+ * audio selection can hold; the subset still missing a WAV is the glossary's Generatable item.
+ */
+export function isVoicedItem(item: ParagraphItemDto, narratorOnlyMode: boolean): boolean {
+  if (item.isPause) return false;
+  return item.characterId !== null || narratorOnlyMode;
+}
+
+/** The ancestry a ticked row records, from what the reader knows of its chapter so far. */
+export function ancestryFor(
+  ancestry: Readonly<Record<string, ChapterParents>>,
+  chapterId: string,
+): ParagraphAncestry {
+  const parents = ancestry[chapterId];
+  return { chapterId, partId: parents?.partId ?? null, volumeId: parents?.volumeId ?? null };
 }
 
 export function selectedUnder(selection: SelectionMap, level: NodeLevel, nodeId: string): number {
@@ -65,6 +93,22 @@ export function chapterDialogTotals(chapters: readonly LoadedChapterView[]): Rec
   return totals;
 }
 
-export function ancestryOf(ref: ParagraphRefDto): ParagraphAncestry {
+/** How many voiced items each loaded chapter holds — the audio totals the tree can know without a read. */
+export function chapterVoicedTotals(
+  chapters: readonly LoadedChapterView[],
+  narratorOnlyMode: boolean,
+): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const chapter of chapters) {
+    let n = 0;
+    for (const paragraph of chapter.paragraphs) {
+      for (const item of paragraph.items) if (isVoicedItem(item, narratorOnlyMode)) n++;
+    }
+    totals[chapter.id] = n;
+  }
+  return totals;
+}
+
+export function ancestryOf(ref: SelectionRef): ParagraphAncestry {
   return { chapterId: ref.chapterId, partId: ref.partId, volumeId: ref.volumeId };
 }

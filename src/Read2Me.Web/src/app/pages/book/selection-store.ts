@@ -1,12 +1,20 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { NodeLevel, ParagraphRefDto } from '@app/api';
-import { ParagraphAncestry, SelectionMap, TriState, ancestryOf, nodeState } from './selection';
+import { NodeLevel } from '@app/api';
+import {
+  ParagraphAncestry,
+  SelectionMap,
+  SelectionRef,
+  TriState,
+  ancestryOf,
+  nodeState,
+} from './selection';
 
 /**
  * The reader's paragraph selection (ticket 12, design §6.3), provided by the project shell so it
  * survives child-route changes. Holds selected paragraph ids with the nodes each rolls up into,
  * and the totals it has learnt per node (from a `paragraph-ids` read, or from a loaded chapter)
- * so a tree checkbox can say "all of them". The rules are in `selection.ts`.
+ * so a tree checkbox can say "all of them". The rules are in `selection.ts`. The audio selection
+ * ({@link AudioSelectionStore}) is the same store over item ids.
  */
 @Injectable()
 export class SelectionStore {
@@ -18,7 +26,7 @@ export class SelectionStore {
   readonly count = computed(() => this.ids().length);
   /** The ids as a set, for a row's "am I selected" without scanning. */
   readonly selected = computed<ReadonlySet<string>>(() => new Set(this.ids()));
-  /** Character paragraphs per node, as far as known. */
+  /** Rows of this selection's kind per node (Character paragraphs, or voiced items), as far as known. */
   readonly totals = this._totals.asReadonly();
 
   has(id: string): boolean {
@@ -36,7 +44,7 @@ export class SelectionStore {
   }
 
   /** Adds every ref (a node's paragraphs); an already selected one keeps its place. */
-  add(refs: readonly ParagraphRefDto[]): void {
+  add(refs: readonly SelectionRef[]): void {
     if (refs.length === 0) return;
     this._selection.update((s) => {
       const next = { ...s };
@@ -58,7 +66,7 @@ export class SelectionStore {
     if (this.count() > 0) this._selection.set({});
   }
 
-  /** A node's Character-paragraph total became known (a full `paragraph-ids` read, a loaded chapter). */
+  /** A node's total became known (a full `paragraph-ids` / `item-ids` read, a loaded chapter). */
   learnTotals(totals: Readonly<Record<string, number>>): void {
     this._totals.update((t) => ({ ...t, ...totals }));
   }

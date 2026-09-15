@@ -498,6 +498,42 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task GetOrderedAudioItemRefsAsync_DropsPauseItemsAndUnknownIds()
+        {
+            // The web reader enqueues by item id (Angular ticket 13); a pause or a stale id must
+            // not reach the audio queue.
+            var (_, narrationNoWav, _, _, charWithWav, _, pause) = await SeedAudioItemsAsync();
+
+            var refs = await _reader.GetOrderedAudioItemRefsAsync(
+                _folder, [pause, charWithWav, Guid.NewGuid(), narrationNoWav]);
+
+            Assert.Equal(new HashSet<Guid> { narrationNoWav, charWithWav }, refs.Select(r => r.ParagraphItemId).ToHashSet());
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_VoicedOnly_KeepsEverySpokenItemWithASpeaker_WavOrNot()
+        {
+            // The web reader's audio tree checkbox (Angular ticket 13) selects everything a node could
+            // (re)generate: narration and attributed lines whether or not a WAV exists; an unattributed
+            // line has nobody to read it, and a pause is not spoken at all.
+            var (chId, narrationNoWav, charAttributedNoWav, charUnattributed, charWithWav, narrationWithWav, pause) =
+                await SeedAudioItemsAsync();
+
+            var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, voicedOnly: true);
+
+            Assert.Equal(
+                new HashSet<Guid> { narrationNoWav, charAttributedNoWav, charWithWav, narrationWithWav },
+                refs.Select(r => r.ParagraphItemId).ToHashSet());
+            Assert.DoesNotContain(refs, r => r.ParagraphItemId == charUnattributed || r.ParagraphItemId == pause);
+
+            // Narrator-only mode reads the unattributed line in the narrator's voice, so it counts.
+            var narratorOnly = await _reader.GetAudioItemRefsAsync(
+                _folder, BookNodeLevel.Chapter, chId, narratorOnlyMode: true, voicedOnly: true);
+            Assert.Contains(narratorOnly, r => r.ParagraphItemId == charUnattributed);
+            Assert.Equal(5, narratorOnly.Count);
+        }
+
+        [Fact]
         public async Task GetAudioItemRefsAsync_NeedsAudioOnly_NarratorOnlyMode_ExcludesUnattributedCharacterWithExistingWav()
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);

@@ -18,12 +18,24 @@ export interface NodeMenuTarget {
   isLast: boolean;
   /** Items only: a pause item anchors no item insert. */
   isPause?: boolean;
-  /** Tree nodes only (ticket 12): the selection shortcuts and node attribute are on offer. */
-  selectable?: boolean;
+  /**
+   * Tree nodes only: which selection the reader is in, so the shortcuts on offer are the
+   * paragraph ones (ticket 12: select unprocessed, attribute) or the item ones (ticket 13: select
+   * needs audio, generate audio). Absent when nothing is selectable.
+   */
+  selection?: SelectionKind;
 }
 
+/** What the reader selects: paragraphs (Read/Speakers modes) or items (Audio mode). */
+export type SelectionKind = 'paragraphs' | 'items';
+
 /** Entries that are not commands: the menu emits them for the tree to act on. */
-export const ACTION_ENTRIES = ['select-unprocessed', 'attribute-node'] as const;
+export const ACTION_ENTRIES = [
+  'select-unprocessed',
+  'attribute-node',
+  'select-needs-audio',
+  'generate-audio-node',
+] as const;
 export type ActionEntryId = (typeof ACTION_ENTRIES)[number];
 
 export type MenuEntryId =
@@ -99,10 +111,15 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
   const entries: MenuEntry[] = [];
 
   if (kind === 'volume' || kind === 'part' || kind === 'chapter') {
-    if (target.selectable) {
+    if (target.selection === 'paragraphs') {
       entries.push(
         { id: 'select-unprocessed', label: 'Select unprocessed', icon: 'checklist', group: 'select' },
         { id: 'attribute-node', label: 'Attribute unprocessed', icon: 'auto_awesome', group: 'select' },
+      );
+    } else if (target.selection === 'items') {
+      entries.push(
+        { id: 'select-needs-audio', label: 'Select needs audio', icon: 'checklist', group: 'select' },
+        { id: 'generate-audio-node', label: 'Generate audio for this node', icon: 'graphic_eq', group: 'select' },
       );
     }
     entries.push({ id: 'edit-title', label: 'Edit title', icon: 'edit', group: 'edit' });

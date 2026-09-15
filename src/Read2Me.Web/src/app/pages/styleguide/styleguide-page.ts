@@ -28,6 +28,8 @@ import { ProjectCard } from '@app/ui/project-card/project-card';
 import { Pipeline, PipelineActionEvent } from '@app/ui/pipeline/pipeline';
 import { derivePipeline } from '@app/pages/project/pipeline-steps';
 import { BookEditor } from '@app/pages/book/book-editor';
+import { AudioGenerator } from '@app/pages/book/audio-generator';
+import { AudioSelectionStore } from '@app/pages/book/audio-selection-store';
 import { SelectionStore } from '@app/pages/book/selection-store';
 import { SpeakerAssigner } from '@app/pages/book/speaker-assigner';
 import { ParagraphRow } from '@app/pages/book/paragraph-row';
@@ -97,6 +99,11 @@ interface TocEntry {
     // The paragraph story renders row menus and speaker chips; here they must never write anything.
     { provide: BookEditor, useValue: { locked: signal(false), run: async () => false } },
     SelectionStore,
+    AudioSelectionStore,
+    {
+      provide: AudioGenerator,
+      useValue: { retry: async () => false, dismissReview: async () => false, working: signal(false) },
+    },
     {
       provide: SpeakerAssigner,
       useValue: {
@@ -384,6 +391,9 @@ export class StyleguidePage {
     },
     selectable: this.readerMode() !== 'audio',
     selected: new Set(['sg-p2']),
+    itemSelectable: this.readerMode() === 'audio',
+    selectedItems: new Set(),
+    narratorOnlyMode: false,
     ancestry: {},
     roster: [
       { id: 'sg-narrator', name: 'Narrator', isNarrator: true },

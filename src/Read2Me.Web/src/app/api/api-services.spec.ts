@@ -135,6 +135,30 @@ describe('per-area API services', () => {
     await expect(voices).resolves.toEqual({ i1: { voiceName: 'Deep', narratedBy: null } });
   });
 
+  it('BookApi.itemIds reads the node item refs with only the filters that are on', async () => {
+    const book = TestBed.inject(BookApi);
+    const all = book.itemIds('f', 'chapter', 'c1');
+    http.expectOne({ method: 'GET', url: '/api/projects/f/nodes/chapter/c1/item-ids' }).flush([]);
+    await expect(all).resolves.toEqual([]);
+
+    const needs = book.itemIds('f', 'volume', 'v1', { needsAudioOnly: true, narratorOnlyMode: true });
+    http
+      .expectOne({
+        method: 'GET',
+        url: '/api/projects/f/nodes/volume/v1/item-ids?needsAudioOnly=true&narratorOnlyMode=true',
+      })
+      .flush([{ id: 'i1', paragraphId: 'p1', chapterId: 'c1', partId: 'pt1', volumeId: 'v1' }]);
+    await expect(needs).resolves.toHaveLength(1);
+  });
+
+  it('AudioApi.enqueueItems posts the item ids', async () => {
+    const enqueue = TestBed.inject(AudioApi).enqueueItems('f', ['i1', 'i2']);
+    const req = http.expectOne({ method: 'POST', url: '/api/projects/f/audio/enqueue-items' });
+    expect(req.request.body).toEqual({ itemIds: ['i1', 'i2'] });
+    req.flush({ enqueued: 2 }, { status: 202, statusText: 'Accepted' });
+    await expect(enqueue).resolves.toEqual({ enqueued: 2 });
+  });
+
   it('AudioApi.reviews reads the project review map', async () => {
     const reviews = TestBed.inject(AudioApi).reviews('f');
     http.expectOne({ method: 'GET', url: '/api/projects/f/audio/reviews' }).flush({});

@@ -537,6 +537,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/nodes/{level}/{id}/item-ids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The speech items under a node (level: volume|part|chapter) that have a speaker to read them, with their paragraph/chapter/part/volume ids; needsAudioOnly=true keeps those still missing a WAV; narratorOnlyMode=true counts unattributed lines as readable. What an audio tree checkbox or 'Select needs audio' selects. */
+        get: {
+            parameters: {
+                query?: {
+                    needsAudioOnly?: boolean;
+                    narratorOnlyMode?: boolean;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                    level: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/characters": {
         parameters: {
             query?: never;
@@ -1488,6 +1529,46 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["AudioEnqueueRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/audio/enqueue-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue TTS audio generation for an explicit list of item ids (a selection, or one item to retry). Unknown ids are ignored; the count answers with what was queued. 409 when no paragraph TTS service is active. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ItemsEnqueueRequest"];
                 };
             };
             responses: {
@@ -2765,6 +2846,9 @@ export interface components {
         ImportRequest: {
             /** @default false */
             reread: boolean;
+        };
+        ItemsEnqueueRequest: {
+            itemIds: string[];
         };
         JsonObject: Record<string, never>;
         LlmApiType: number;

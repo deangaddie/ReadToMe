@@ -37,6 +37,8 @@ namespace Read2Me.App.Api
         IReadOnlyList<ParagraphDto>? Paragraphs);
     /// <summary>A Character paragraph and the nodes it rolls up into — what a selection holds per row.</summary>
     public sealed record ParagraphRefDto(Guid Id, Guid ChapterId, Guid PartId, Guid VolumeId);
+    /// <summary>A speech item audio can be generated for, and the nodes it rolls up into (<see cref="AudioItemRef"/> on the wire).</summary>
+    public sealed record AudioItemRefDto(Guid Id, Guid ParagraphId, Guid ChapterId, Guid PartId, Guid VolumeId);
     public sealed record BulkAssignPreviewRequest(Guid[] ParagraphIds);
     /// <summary><see cref="BulkAssignPreview"/> on the wire: what a bulk assign over the ids would write.</summary>
     public sealed record BulkAssignPreviewDto(int ParagraphsWithCharacterItems, int CharacterItems);
@@ -61,6 +63,8 @@ namespace Read2Me.App.Api
                 .WithSummary("Resolved voice per speech item of a chapter: { itemId: { voiceName, narratedBy } }. voiceName null = no voice resolves; narratedBy = the linked narrator's name on narration items.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/paragraph-ids", GetParagraphIdsAsync)
                 .WithSummary("The Character paragraphs under a node (level: volume|part|chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects.");
+            endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/item-ids", GetItemIdsAsync)
+                .WithSummary("The speech items under a node (level: volume|part|chapter) that have a speaker to read them, with their paragraph/chapter/part/volume ids; needsAudioOnly=true keeps those still missing a WAV; narratorOnlyMode=true counts unattributed lines as readable. What an audio tree checkbox or 'Select needs audio' selects.");
             endpoints.MapGet("/api/projects/{folder}/characters", GetCharactersAsync)
                 .WithSummary("All characters with their aliases.");
             endpoints.MapPost("/api/projects/{folder}/characters/bulk-assign-preview", BulkAssignPreviewAsync)
@@ -133,6 +137,23 @@ namespace Read2Me.App.Api
             var refs = await reader.GetCharacterParagraphsAsync(folderId, nodeLevel, id, unprocessedOnly);
             return Results.Ok(refs
                 .Select(r => new ParagraphRefDto(r.ParagraphId, r.ChapterId, r.PartId, r.VolumeId))
+                .ToList());
+        }
+
+        private static async Task<IResult> GetItemIdsAsync(
+            string folder, string level, Guid id, IFileSystem fs, IAudioItemReader reader,
+            bool needsAudioOnly = false, bool narratorOnlyMode = false)
+        {
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+            if (!Enum.TryParse<BookNodeLevel>(level, ignoreCase: true, out var nodeLevel))
+                return Results.Problem($"Unknown level '{level}'. Expected volume, part or chapter.",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            var refs = await reader.GetAudioItemRefsAsync(
+                folderId, nodeLevel, id, needsAudioOnly, narratorOnlyMode, voicedOnly: true);
+            return Results.Ok(refs
+                .Select(r => new AudioItemRefDto(r.ParagraphItemId, r.ParagraphId, r.ChapterId, r.PartId, r.VolumeId))
                 .ToList());
         }
 

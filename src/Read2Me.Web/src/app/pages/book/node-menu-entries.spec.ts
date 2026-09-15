@@ -141,10 +141,10 @@ describe('entry decoding', () => {
   });
 });
 
-describe('menuEntries selection shortcuts (ticket 12)', () => {
-  it('a selectable tree node leads with Select unprocessed and Attribute unprocessed', () => {
+describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
+  it('a tree node in a paragraph selection leads with Select unprocessed and Attribute unprocessed', () => {
     for (const kind of ['volume', 'part', 'chapter'] as const) {
-      const entries = menuEntries(target(kind, { selectable: true }));
+      const entries = menuEntries(target(kind, { selection: 'paragraphs' }));
       expect(entries.slice(0, 2).map((e) => [e.id, e.group])).toEqual([
         ['select-unprocessed', 'select'],
         ['attribute-node', 'select'],
@@ -153,8 +153,20 @@ describe('menuEntries selection shortcuts (ticket 12)', () => {
     }
   });
 
-  it('rows never get them, selectable or not', () => {
-    expect(ids(target('paragraph', { selectable: true }))).not.toContain('select-unprocessed');
-    expect(ids(target('item', { selectable: true }))).not.toContain('attribute-node');
+  it('a tree node in an item selection leads with Select needs audio and Generate audio', () => {
+    for (const kind of ['volume', 'part', 'chapter'] as const) {
+      const entries = menuEntries(target(kind, { selection: 'items' }));
+      expect(entries.slice(0, 2).map((e) => [e.id, e.group])).toEqual([
+        ['select-needs-audio', 'select'],
+        ['generate-audio-node', 'select'],
+      ]);
+      expect(entries[2]!.id).toBe('edit-title');
+      expect(ids(target(kind, { selection: 'items' }))).not.toContain('select-unprocessed');
+    }
+  });
+
+  it('rows never get them, whatever the selection', () => {
+    expect(ids(target('paragraph', { selection: 'paragraphs' }))).not.toContain('select-unprocessed');
+    expect(ids(target('item', { selection: 'items' }))).not.toContain('generate-audio-node');
   });
 });

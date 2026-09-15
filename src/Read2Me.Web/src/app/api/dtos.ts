@@ -237,6 +237,15 @@ export interface ParagraphRefDto {
   volumeId: Guid;
 }
 
+/** `GET …/nodes/{level}/{id}/item-ids` entry: a speech item with a speaker and the nodes it rolls up into. */
+export interface AudioItemRefDto {
+  id: Guid;
+  paragraphId: Guid;
+  chapterId: Guid;
+  partId: Guid;
+  volumeId: Guid;
+}
+
 /** `POST …/characters/bulk-assign-preview` body. */
 export interface BulkAssignPreviewRequest {
   paragraphIds: Guid[];
@@ -281,6 +290,11 @@ export type AudioEnqueueRequest = Schema['AudioEnqueueRequest'];
 /** `POST …/attribution/enqueue-paragraphs` body: an explicit selection; ids without dialog are ignored. */
 export interface ParagraphsEnqueueRequest {
   paragraphIds: Guid[];
+}
+
+/** `POST …/audio/enqueue-items` body: an explicit item selection, or one item to retry; unknown ids are ignored. */
+export interface ItemsEnqueueRequest {
+  itemIds: Guid[];
 }
 
 export interface EnqueueResponse {

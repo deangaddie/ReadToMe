@@ -11,7 +11,7 @@ namespace Read2Me.Services
     public partial class ProjectReader
     {
         public async Task<List<AudioItemRef>> GetAudioItemRefsAsync(
-            ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false)
+            ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false, bool voicedOnly = false)
         {
             var db = await _session.OpenAsync(folderId);
 
@@ -29,9 +29,9 @@ namespace Read2Me.Services
             // it carries the narrator; only an unattributed item has nobody (ADR-0006). Narrator-only
             // mode reads everything in the narrator's voice, so a missing speaker is no obstacle.
             if (needsAudioOnly)
-                q = narratorOnlyMode
-                    ? q.Where(i => i.AudioFileName == null)
-                    : q.Where(i => i.AudioFileName == null && i.CharacterId != null);
+                q = q.Where(i => i.AudioFileName == null);
+            if ((needsAudioOnly || voicedOnly) && !narratorOnlyMode)
+                q = q.Where(i => i.CharacterId != null);
 
             return await q
                 .Select(i => new AudioItemRef(
@@ -49,7 +49,9 @@ namespace Read2Me.Services
             var ids = paragraphItemIds.ToHashSet();
             var db = await _session.OpenAsync(folderId);
 
+            // Only spoken items are ever generated: a pause id names nothing the queue can do.
             return await db.ParagraphItems
+                .Where(ParagraphItemKinds.IsSpeechExpression)
                 .Where(i => ids.Contains(i.Id))
                 .OrderBy(i => i.Paragraph.Chapter.Part.Volume.Order)
                 .ThenBy(i => i.Paragraph.Chapter.Part.Order)

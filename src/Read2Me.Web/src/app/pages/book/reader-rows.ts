@@ -6,7 +6,12 @@ import {
   ParagraphItemDto,
   ParagraphItemType,
 } from '@app/api';
-import { AudioReviewInfo, ItemStatusEntry, ParagraphStatusEntry } from '@app/live/live-messages';
+import {
+  AudioReviewInfo,
+  ItemStatusEntry,
+  OutcomeEntry,
+  ParagraphStatusEntry,
+} from '@app/live/live-messages';
 import { SpeakerChipState } from '@app/ui/speaker-chip/speaker-chip';
 import { SpeakerRosterEntry } from '@app/ui/speaker-menu/speaker-menu';
 import { StatusKind } from '@app/ui/status-chip/status-chip';
@@ -158,9 +163,14 @@ export interface RowContext {
   itemStatus: Readonly<Record<string, ItemStatusEntry | null>>;
   voices: Readonly<Record<string, ItemVoiceDto>>;
   reviews: Readonly<Record<string, AudioReviewDto>>;
-  /** Paragraph selection (ticket 12): on in Read and Speakers modes, off in Audio (ticket 13's). */
+  /** Paragraph selection (ticket 12): on in Read and Speakers modes. */
   selectable: boolean;
   selected: ReadonlySet<string>;
+  /** Item selection (ticket 13): on in Audio mode. */
+  itemSelectable: boolean;
+  selectedItems: ReadonlySet<string>;
+  /** Narrator-only mode reads unattributed lines too, so they can be selected for audio. */
+  narratorOnlyMode: boolean;
   /** Part and volume per loaded chapter, for the roll-up of a ticked row. */
   ancestry: Readonly<Record<string, ChapterParents>>;
   /** What the speaker menus offer; empty until the roster is known. */
@@ -172,10 +182,13 @@ export function isBusy(entry: ParagraphStatusEntry | ItemStatusEntry | null | un
   return entry?.status === 'Queued' || entry?.status === 'Processing';
 }
 
-/** A settled outcome (Failed/Unfinished) the user may clear by hand; null while queued or clean. */
+/**
+ * A settled outcome (Failed/Unfinished) the user may act on by hand — clear it on a paragraph,
+ * retry the item; null while queued or clean.
+ */
 export function clearableOutcome(
-  entry: ParagraphStatusEntry | null | undefined,
-): ParagraphStatusEntry['outcome'] | null {
+  entry: ParagraphStatusEntry | ItemStatusEntry | null | undefined,
+): OutcomeEntry | null {
   if (!entry || isBusy(entry)) return null;
   return entry.outcome ?? null;
 }

@@ -4,7 +4,6 @@ import {
   Component,
   Injector,
   afterNextRender,
-  booleanAttribute,
   effect,
   inject,
   input,
@@ -18,7 +17,7 @@ import { CountBadge } from '@app/ui/count-badge/count-badge';
 import { StatusChip } from '@app/ui/status-chip/status-chip';
 import { TreeNode } from './book-tree';
 import { NodeMenu } from './node-menu';
-import { ActionEntryId, NodeMenuTarget } from './node-menu-entries';
+import { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
 import { TriState } from './selection';
 
 /**
@@ -26,9 +25,10 @@ import { TriState } from './selection';
  * project's node status map. Expanding a node asks for its children; clicking a chapter asks the
  * reader to show it. Expansion is owned by the caller (`expandedIds`), so a re-created tree reopens
  * the nodes the reader left open. Each node carries its menu (ticket 11); a node whose
- * attribution is queued or processing has it disabled. When `selectable` (ticket 12) every node
- * has a tri-state checkbox over its Character paragraphs, and the menu offers the selection
- * shortcuts; the tree only reports the gesture, the page does the read.
+ * attribution is queued or processing has it disabled. With a `selection` kind every node has a
+ * tri-state checkbox — over its Character paragraphs (ticket 12) or its generatable items (ticket
+ * 13) — and the menu offers that selection's shortcuts; the tree only reports the gesture, the
+ * page does the read.
  */
 @Component({
   selector: 'app-structure-tree',
@@ -69,11 +69,11 @@ import { TriState } from './selection';
           <span class="tree__toggle" aria-hidden="true"></span>
         }
 
-        @if (selectable()) {
+        @if (selection(); as kind) {
           <input
             type="checkbox"
             class="tree__select"
-            [attr.aria-label]="'Select paragraphs of ' + node.title"
+            [attr.aria-label]="'Select ' + kind + ' of ' + node.title"
             [checked]="stateOf(node) === 'checked'"
             [indeterminate]="stateOf(node) === 'indeterminate'"
             (click)="$event.stopPropagation()"
@@ -232,20 +232,24 @@ export class StructureTree {
   /** Ids of the nodes to show expanded. */
   readonly expandedIds = input<ReadonlySet<string>>(new Set());
 
-  /** Paragraph selection is on: checkboxes per node and the selection menu entries. */
-  readonly selectable = input(false, { transform: booleanAttribute });
+  /** Which selection is on (checkboxes per node and that selection's menu entries); null for none. */
+  readonly selection = input<SelectionKind | null>(null);
   /** Each node's roll-up over the current selection; absent reads as unchecked. */
   readonly nodeStates = input<Readonly<Record<string, TriState>>>({});
 
   /** The user expanded or collapsed a node. */
   readonly expandedChange = output<{ node: TreeNode; expanded: boolean }>();
   readonly selectChapter = output<string>();
-  /** The node's checkbox: select (`on`) or deselect every Character paragraph under it. */
+  /** The node's checkbox: select (`on`) or deselect everything the selection holds under it. */
   readonly toggleNode = output<{ node: TreeNode; on: boolean }>();
   /** "Select unprocessed": add the node's still-unattributed paragraphs to the selection. */
   readonly selectUnprocessed = output<TreeNode>();
   /** "Attribute unprocessed": queue the node's still-unattributed paragraphs. */
   readonly attributeNode = output<TreeNode>();
+  /** "Select needs audio": add the node's generatable items still missing audio to the selection. */
+  readonly selectNeedsAudio = output<TreeNode>();
+  /** "Generate audio for this node": queue the node's items still missing audio. */
+  readonly generateAudioNode = output<TreeNode>();
 
   private readonly tree = viewChild(CdkTree<TreeNode, string>);
   private readonly injector = inject(Injector);
@@ -291,19 +295,28 @@ export class StructureTree {
   }
 
   protected onAction(node: TreeNode, action: ActionEntryId): void {
-    if (action === 'select-unprocessed') this.selectUnprocessed.emit(node);
-    else this.attributeNode.emit(node);
+    switch (action) {
+      case 'select-unprocessed':
+        return this.selectUnprocessed.emit(node);
+      case 'attribute-node':
+        return this.attributeNode.emit(node);
+      case 'select-needs-audio':
+        return this.selectNeedsAudio.emit(node);
+      case 'generate-audio-node':
+        return this.generateAudioNode.emit(node);
+    }
   }
 
   protected targetOf(node: TreeNode): NodeMenuTarget {
-    return {
+    const target: NodeMenuTarget = {
       kind: node.level,
       id: node.id,
       text: node.rawTitle,
       isFirst: node.isFirst,
       isLast: node.isLast,
-      selectable: this.selectable(),
     };
+    const selection = this.selection();
+    return selection ? { ...target, selection } : target;
   }
 
   /** A node with attribution queued or running under it: its structure is about to change. */
