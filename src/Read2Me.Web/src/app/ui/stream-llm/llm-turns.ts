@@ -28,6 +28,15 @@ export interface LlmMarker {
 
 export type LlmStreamRow = LlmTurn | LlmMarker;
 
+/** The status dock's escalation text, shared by the stream marker and the attribution job card. */
+export function escalationBanner(
+  itemCount: number,
+  configName: string | null | undefined,
+  step: number,
+): string {
+  return `Escalating ${itemCount} ${itemCount === 1 ? 'item' : 'items'} → ${configName || '?'} (step ${step})`;
+}
+
 /**
  * Folds a flat event list into turn cards and marker rows (research/live-events.md §1.1). Deltas
  * append to the most recent open turn; completion events close it. Keeps the last `maxTurns` turns
@@ -92,7 +101,7 @@ export function foldLlmTurns(events: readonly LlmStreamEvent[], maxTurns = 50): 
           kind: 'marker',
           seq,
           icon: 'trending_up',
-          text: `Escalating ${e.itemCount} ${e.itemCount === 1 ? 'item' : 'items'} → ${e.configName} (step ${e.step})`,
+          text: escalationBanner(e.itemCount, e.configName, e.step),
         });
         break;
       case 'runStarted':

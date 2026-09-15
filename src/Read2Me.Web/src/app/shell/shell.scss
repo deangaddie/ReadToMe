@@ -179,19 +179,6 @@
   border-left: 1px solid var(--r2m-outline);
 }
 
-.shell__drawer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: var(--r2m-appbar-height);
-  padding: 0 var(--r2m-space-2) 0 var(--r2m-space-4);
-  border-bottom: 1px solid var(--r2m-outline);
-}
-
-.shell__drawer-title {
-  font-weight: 600;
-}
-
 // ---- activity bar ------------------------------------------------------------------------------
 .shell__activity {
   flex: 0 0 var(--r2m-activity-bar-height);
@@ -204,18 +191,6 @@
   font-size: var(--r2m-text-sm);
   color: var(--r2m-text-muted);
   z-index: 3;
-}
-
-.shell__activity-idle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--r2m-space-1);
-
-  mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-  }
 }
 
 @media (max-width: #{tokens.$shell-narrow-breakpoint - 0.02px}) {

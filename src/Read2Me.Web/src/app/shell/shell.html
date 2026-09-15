@@ -128,23 +128,10 @@
     [opened]="drawerOpen()"
     (closedStart)="drawerOpen.set(false)"
   >
-    <div class="shell__drawer-head">
-      <span class="shell__drawer-title">Activity</span>
-      <button
-        mat-icon-button
-        type="button"
-        (click)="toggleDrawer()"
-        aria-label="Close activity drawer"
-      >
-        <mat-icon>close</mat-icon>
-      </button>
-    </div>
-    <r2m-empty-state
-      compact
-      icon="pending_actions"
-      headline="No background work"
-      hint="Jobs, LLM and audio streams and service status appear here (slice 14)."
-    />
+    <!-- Mounted only while open so a stream tab's hub group is left when the drawer closes. -->
+    @if (drawerOpen()) {
+      <app-activity-drawer />
+    }
   </mat-sidenav>
 
   <mat-sidenav-content class="shell__content">
@@ -155,19 +142,5 @@
 </mat-sidenav-container>
 
 <footer class="shell__activity" aria-label="Background activity">
-  <span class="shell__activity-idle">
-    <mat-icon aria-hidden="true">hourglass_empty</mat-icon>
-    <span>No background work</span>
-  </span>
-  <span class="shell__spacer"></span>
-  <button
-    mat-icon-button
-    type="button"
-    (click)="toggleDrawer()"
-    [attr.aria-expanded]="drawerOpen()"
-    aria-label="Toggle activity drawer"
-    matTooltip="Activity"
-  >
-    <mat-icon>{{ drawerOpen() ? 'expand_more' : 'expand_less' }}</mat-icon>
-  </button>
+  <app-activity-bar [narrow]="narrow()" />
 </footer>

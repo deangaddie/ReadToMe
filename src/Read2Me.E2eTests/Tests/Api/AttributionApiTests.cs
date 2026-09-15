@@ -70,4 +70,14 @@ public class AttributionApiTests(E2eAppFixture app)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [Fact]
+    public async Task Dismiss_returns_ok_and_is_idempotent()
+    {
+        var first = await Http.PostAsync($"{app.BaseUrl}/api/attribution/dismiss", null);
+        var second = await Http.PostAsync($"{app.BaseUrl}/api/attribution/dismiss", null);
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+    }
 }

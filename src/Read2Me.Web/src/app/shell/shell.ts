@@ -19,7 +19,9 @@ import {
 import { filter, map, startWith } from 'rxjs';
 import { LiveService } from '@app/live/live.service';
 import { RouteMeta } from '@app/route-meta';
-import { EmptyState } from '@app/ui/empty-state/empty-state';
+import { ActivityBar } from '@app/activity/activity-bar';
+import { ActivityDrawer } from '@app/activity/activity-drawer';
+import { ActivityStore } from '@app/activity/activity-store';
 import { ProjectTitles } from './project-titles';
 import { RailState } from './rail-state';
 import { SchemePreference, ThemeService } from '@app/theme/theme.service';
@@ -34,9 +36,9 @@ import {
 const NARROW_QUERY = '(max-width: 899.98px)';
 
 /**
- * Application shell (design §5): app bar, nav rail, main outlet, activity bar host and activity
- * drawer host. The activity surfaces are empty hosts here; ticket 14 fills them. Below 900 px the
- * rail becomes a modal drawer and the activity bar collapses to one summary pill.
+ * Application shell (design §5): app bar, nav rail, main outlet, activity bar and activity drawer
+ * (ticket 14: both read {@link ActivityStore}). Below 900 px the rail becomes a modal drawer and
+ * the activity bar collapses to one summary pill.
  */
 @Component({
   selector: 'app-shell',
@@ -51,7 +53,8 @@ const NARROW_QUERY = '(max-width: 899.98px)';
     MatButtonModule,
     MatMenuModule,
     MatTooltipModule,
-    EmptyState,
+    ActivityBar,
+    ActivityDrawer,
   ],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
@@ -66,6 +69,7 @@ export class Shell {
   private readonly theme = inject(ThemeService);
   private readonly live = inject(LiveService);
   private readonly projectTitles = inject(ProjectTitles);
+  private readonly activity = inject(ActivityStore);
 
   /** Deepest activated route's data + params, refreshed on every navigation. */
   private readonly context = toSignal(
@@ -85,7 +89,8 @@ export class Shell {
   readonly railExpanded = this.rail.expanded;
   /** Modal rail visibility on narrow screens; ignored when the rail is docked. */
   readonly railOpen = signal(false);
-  readonly drawerOpen = signal(false);
+  /** The activity drawer (ticket 14); pills and the ▲ open it through the store. */
+  readonly drawerOpen = this.activity.drawerOpen;
 
   readonly contextItems = computed(() => contextNavItems(this.context()));
   readonly globalItems = GLOBAL_NAV_ITEMS;
@@ -110,7 +115,7 @@ export class Shell {
   }
 
   toggleDrawer(): void {
-    this.drawerOpen.update((open) => !open);
+    this.activity.toggleDrawer();
   }
 
   /** Theme quick menu (design §5): writes the shared selection through the API. */

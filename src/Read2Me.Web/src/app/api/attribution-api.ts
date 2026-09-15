@@ -48,4 +48,9 @@ export class AttributionApi {
   cancel(): Promise<void> {
     return this.api.post<void>('/api/attribution/cancel');
   }
+
+  /** Retires the finished run's throughput summary on the host (ticket 14); 200 whether or not one was showing. */
+  dismiss(): Promise<void> {
+    return this.api.post<void>('/api/attribution/dismiss');
+  }
 }

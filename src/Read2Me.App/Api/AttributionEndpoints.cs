@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.App.State;
 using Read2Me.Services.Characters;
 using Read2Me.Services.UseCases;
 
@@ -33,6 +34,9 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/attribution/cancel",
                     (CharacterQueueService queue) => { queue.CancelAll(); return Results.Ok(); })
                 .WithSummary("Cancel all queued attribution work.");
+            endpoints.MapPost("/api/attribution/dismiss",
+                    (AttributionProgressState progress) => { progress.Dismiss(); return Results.Ok(); })
+                .WithSummary("Dismiss the finished attribution run's throughput summary (the status dock's Dismiss). 200 whether or not one was showing.");
         }
 
         private static async Task<IResult> EnqueueAsync(
