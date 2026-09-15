@@ -160,6 +160,9 @@ curl -s 'http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/p
 curl -s http://localhost:5000/api/projects/{folder}/attribution/paragraphs/{paragraphId}
 # forget a paragraph's Failed/Unfinished outcome (204):
 curl -s -X DELETE http://localhost:5000/api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome
+# cancel everything queued (200); dismiss retires the finished run's throughput summary in the UI (200, idempotent):
+curl -s -X POST http://localhost:5000/api/attribution/cancel
+curl -s -X POST http://localhost:5000/api/attribution/dismiss
 # the attribution itself is per item — read it off the paragraph's items:
 curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/children
 ```
