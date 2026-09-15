@@ -28,6 +28,12 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     /// </summary>
     public FakeLlmModelStore LlmModels { get; set; } = FakeLlmModelStore.AllLoaded(DefaultModel);
 
+    /// <summary>
+    /// Per-test hook: how long each LLM completion takes before answering, so a browser test can
+    /// watch the queue while it is still busy. Zero by default.
+    /// </summary>
+    public TimeSpan LlmDelay { get; set; } = TimeSpan.Zero;
+
     /// <summary>Text of the last /api/stream TTS request; echoed back by fake-whisper.</summary>
     private volatile string _lastTtsText = "";
 
@@ -41,6 +47,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     public void Reset()
     {
         LlmReply = p => FakeAiResponses.AttributionReply(p, "Narrator");
+        LlmDelay = TimeSpan.Zero;
         LlmModels = FakeLlmModelStore.AllLoaded(DefaultModel);
         _lastTtsText = "";
         lock (LlmPromptsSeen) LlmPromptsSeen.Clear();
@@ -79,6 +86,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             LlmModels.NoteRequest(ExtractModel(body));
             var prompt = ExtractPrompt(body);
             lock (LlmPromptsSeen) LlmPromptsSeen.Add(prompt);
+            if (LlmDelay > TimeSpan.Zero) await Task.Delay(LlmDelay, ct);
             var sse = FakeAiResponses.OpenAiSse(LlmReply(prompt));
             var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
