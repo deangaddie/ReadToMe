@@ -144,6 +144,8 @@ curl -s -X POST 'http://localhost:5000/api/projects/{folder}/characters/discover
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/discover/apply \
   -H 'content-type: application/json' \
   -d '[ { "name": "Alice", "aliases": ["Al"] } ]'
+# each discovered row carries existingCharacterId when it resolves onto a roster character (by name
+# or alias); collisions lists names two characters would share once every row is applied.
 
 # queue attribution per chapter (or part/volume):
 curl -s -X POST http://localhost:5000/api/projects/{folder}/attribution/enqueue \
@@ -165,6 +167,13 @@ curl -s -X POST http://localhost:5000/api/attribution/cancel
 curl -s -X POST http://localhost:5000/api/attribution/dismiss
 # the attribution itself is per item — read it off the paragraph's items:
 curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/children
+# the cast page's reads: every character as a roster row (narrator first; lineCount, voiceCount,
+# readyVoiceCount, isNarrator = the seed row, narratesBook = the linked narrator), a character's
+# lines in book order, and a line's surrounding paragraphs (before/after each 0..10, default 3/2;
+# 404 when the paragraph is not in the chapter) with the speaker name per item:
+curl -s http://localhost:5000/api/projects/{folder}/characters/summary
+curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/lines
+curl -s 'http://localhost:5000/api/projects/{folder}/paragraphs/{paragraphId}/context?chapterId={chapterId}&before=3&after=2'
 ```
 
 Manual fixes go through the generic commands endpoint (section 5), e.g.

@@ -16,6 +16,15 @@ namespace Read2Me.Services.Characters
             c.Aliases.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>
+        /// The roster character a discovered row will resolve onto when applied — by the row's
+        /// <b>name</b> only, exactly as <see cref="ApplyDiscoveredAsync"/> resolves it. A row whose
+        /// alias belongs to someone else is not that someone: applying it creates a second owner,
+        /// which is what <c>AliasCollisions</c> is there to warn about.
+        /// </summary>
+        public static Character? FindDiscovered(IEnumerable<Character> roster, string name) =>
+            roster.FirstOrDefault(c => Matches(c, name));
+
+        /// <summary>
         /// Returns the id of an existing Character matching <paramref name="name"/> by canonical name
         /// or alias (case-insensitively), creating a new Character if none matches.
         /// <para>

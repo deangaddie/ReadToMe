@@ -14,9 +14,9 @@ import {
 import { LiveService } from '@app/live/live.service';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { Subscription } from 'rxjs';
+import { Debounced, REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 
-/** Receipts arrive in bursts (an attribution run commits per paragraph); refetch once per burst. */
-export const REFETCH_DEBOUNCE_MS = 250;
+export { REFETCH_DEBOUNCE_MS };
 
 /** Facets that move a `/status` count: structure, speakers, audio, reviews, cast and voices. */
 const STATUS_FACETS: readonly BookFacet[] = [
@@ -218,26 +218,6 @@ export class ProjectStore {
   private isMine(folder: string): boolean {
     const mine = this._folder();
     return mine !== null && sameFolder(mine, folder);
-  }
-}
-
-/** Runs a refetch once, {@link REFETCH_DEBOUNCE_MS} after the first of a burst of requests for it. */
-class Debounced {
-  private timer: ReturnType<typeof setTimeout> | null = null;
-
-  constructor(private readonly run: () => Promise<void>) {}
-
-  schedule(): void {
-    if (this.timer) return;
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      void this.run().catch(() => undefined);
-    }, REFETCH_DEBOUNCE_MS);
-  }
-
-  cancel(): void {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
   }
 }
 

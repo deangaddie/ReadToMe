@@ -200,6 +200,13 @@ namespace Read2Me.Services
         Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId);
         Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId);
 
+        /// <summary>
+        /// Every character as a cast-list row (narrator first, then by name): aliases, line count,
+        /// and planned versus ready voices, in one query instead of a roster read plus a per-row
+        /// count.
+        /// </summary>
+        Task<List<CharacterSummary>> GetCharacterSummariesAsync(ProjectFolderId folderId);
+
         Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
             ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false);
 

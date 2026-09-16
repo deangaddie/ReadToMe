@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Read2Me.Core.Models;
 
 namespace Read2Me.App.State
 {
@@ -20,5 +21,8 @@ namespace Read2Me.App.State
         /// from "this row collides with Elizabeth".
         /// </summary>
         public Guid? ExistingCharacterId { get; set; }
+
+        /// <summary>This row as a collision-check owner (<see cref="AliasCollisions"/>).</summary>
+        public AliasClaim ToClaim() => new(Name, Aliases, ExistingCharacterId);
     }
 }

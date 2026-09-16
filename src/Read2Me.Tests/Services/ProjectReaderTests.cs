@@ -612,5 +612,47 @@ namespace Read2Me.Tests.Services
             Assert.Contains(rows, r => r.Info.State == Read2Me.Core.Models.AudioReviewState.NeedsReview && r.Info.Wer == 0.3);
             Assert.Contains(rows, r => r.Info.State == Read2Me.Core.Models.AudioReviewState.Dismissed && r.Info.NormalizeReason == "clip");
         }
+
+        [Fact]
+        public async Task GetCharacterSummaries_CountsLinesAndReadyVoices_NarratorFirst()
+        {
+            var alice = new Character
+            {
+                Id = Guid.NewGuid(), Name = "Alice",
+                Aliases = [new CharacterAlias { Name = "Al" }],
+                Voices =
+                [
+                    new Read2Me.Data.Entities.Voice { Name = "Warm", AudioFileName = "warm.wav" },
+                    new Read2Me.Data.Entities.Voice { Name = "Planned", AudioFileName = null },
+                ],
+            };
+            var bob = new Character { Id = Guid.NewGuid(), Name = "Bob" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice).WithCharacter("bob", bob);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p.AddNarration("n0", "Narration"))
+                .AddParagraph("p1", p => p
+                    .AddCharacterLine("i1", "\"Hi,\"", speaker: "alice")
+                    .AddCharacterLine("i2", "\"Again,\"", speaker: "alice"))
+                .AddParagraph("p2", p => p.AddRawItem("i3", ParagraphItemType.Speech, "Unknown"))))
+                .BuildAsync();
+
+            var rows = await _reader.GetCharacterSummariesAsync(_folder);
+
+            Assert.Equal(["Narrator", "Alice", "Bob"], rows.Select(r => r.Name).ToArray());
+            var narrator = rows[0];
+            Assert.True(narrator.IsNarrator);
+            Assert.Equal(1, narrator.LineCount);
+            var a = rows[1];
+            Assert.Equal(alice.Id, a.Id);
+            Assert.False(a.IsNarrator);
+            Assert.Equal(2, a.LineCount);
+            Assert.Equal(2, a.VoiceCount);
+            Assert.Equal(1, a.ReadyVoiceCount);
+            var alias = Assert.Single(a.Aliases);
+            Assert.Equal("Al", alias.Name);
+            Assert.NotEqual(Guid.Empty, alias.Id);
+            Assert.Equal(0, rows[2].LineCount);
+            Assert.Equal(0, rows[2].VoiceCount);
+        }
     }
 }

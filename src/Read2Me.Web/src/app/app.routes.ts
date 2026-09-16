@@ -34,13 +34,13 @@ export const routes: Routes = [
       },
       {
         path: 'cast',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'project', title: 'Cast', slice: 15 }),
+        loadComponent: () => import('./pages/cast/cast-page').then((m) => m.CastPage),
+        data: routeMeta({ section: 'project', title: 'Cast' }),
       },
       {
         path: 'cast/:characterId',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'project', title: 'Cast', slice: 15 }),
+        loadComponent: () => import('./pages/cast/cast-page').then((m) => m.CastPage),
+        data: routeMeta({ section: 'project', title: 'Cast' }),
       },
       {
         path: 'voices/:voiceId/editor',

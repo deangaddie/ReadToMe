@@ -349,12 +349,16 @@ export type DiscoveryStatus = 'Ok' | 'Failed' | 'ServiceUnavailable';
 export interface DiscoveredCharacterDto {
   name: string;
   aliases: string[];
+  /** The roster character the row resolves onto by name or alias — the "Already exists" row. */
+  existingCharacterId: Guid | null;
 }
 
 export interface DiscoveryOutcomeDto {
   status: DiscoveryStatus;
   reason: string | null;
   characters: DiscoveredCharacterDto[];
+  /** Names two characters would own once every row is applied; advisory, recomputed client-side as rows change. */
+  collisions: string[];
 }
 
 export type ApplyDiscoveryRow = Schema['ApplyDiscoveryRow'];
@@ -571,3 +575,48 @@ export interface ThemeSelection {
 }
 
 export type ThemeSelectionUpdate = Partial<ThemeSelection>;
+
+// ---- Cast (`CharacterEndpoints.cs`, ticket 15) ---------------------------------------------------
+
+/**
+ * A cast-list row. `isNarrator` marks the seed Narrator row; `narratesBook` the character the
+ * narrator link points at. Aliases carry their ids so the detail can offer removal directly.
+ */
+export interface CharacterSummaryDto {
+  id: Guid;
+  name: string;
+  aliases: CharacterAliasDto[];
+  lineCount: number;
+  voiceCount: number;
+  readyVoiceCount: number;
+  isNarrator: boolean;
+  narratesBook: boolean;
+}
+
+/** One item a character speaks, with where it sits so the reader can open there. */
+export interface CharacterLineDto {
+  itemId: Guid;
+  paragraphId: Guid;
+  chapterId: Guid;
+  text: string;
+}
+
+/** `speaker` is null on a dialog item whose speaker is not yet attributed, and on narration. */
+export interface ContextItemDto {
+  itemId: Guid;
+  text: string;
+  isDialog: boolean;
+  speaker: string | null;
+}
+
+export interface ContextParagraphDto {
+  text: string;
+  items: ContextItemDto[];
+}
+
+/** Nearest neighbour last in `before`, first in `after`. */
+export interface ParagraphContextDto {
+  before: ContextParagraphDto[];
+  paragraph: ContextParagraphDto;
+  after: ContextParagraphDto[];
+}

@@ -11,6 +11,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Mutations;
+using Read2Me.Services.Voice;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.App.State
@@ -331,8 +332,7 @@ namespace Read2Me.App.State
             NotifyStateChanged();
         }
 
-        public static int ReadyVoiceCount(Character character) =>
-            character.Voices?.Count(v => !string.IsNullOrEmpty(v.AudioFileName)) ?? 0;
+        public static int ReadyVoiceCount(Character character) => VoiceReadiness.ReadyCount(character);
 
         /// <summary>
         /// Applies a mutation to the in-memory <see cref="VoiceEntity"/> with the

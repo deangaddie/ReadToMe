@@ -1,21 +1,17 @@
-using Read2Me.App.State;
-using Read2Me.Data.Entities;
+using Read2Me.Core.Models;
 using Xunit;
 
-namespace Read2Me.Tests.State
+namespace Read2Me.Tests.Core
 {
+    /// <summary>
+    /// Fixtures mirrored by <c>alias-collisions.spec.ts</c> in the web client; keep the two in step.
+    /// </summary>
     public class AliasCollisionsTests
     {
-        private static DiscoveredCharacterRow Row(string name, params string[] aliases) =>
-            new() { Name = name, Aliases = [.. aliases] };
+        private static AliasClaim Row(string name, params string[] aliases) => new(name, aliases);
 
-        private static Character Existing(string name, params string[] aliases) =>
-            new()
-            {
-                Id = Guid.NewGuid(),
-                Name = name,
-                Aliases = [.. aliases.Select(a => new CharacterAlias { Name = a })],
-            };
+        private static AliasOwner Existing(string name, params string[] aliases) =>
+            new(Guid.NewGuid(), name, aliases);
 
         [Fact]
         public void NoSharedNames_NoCollisions()
@@ -65,23 +61,9 @@ namespace Read2Me.Tests.State
             // Re-running discovery re-proposes characters that already exist. A row merging into
             // Elizabeth is Elizabeth — counting the roster row too would flag every alias it keeps.
             var elizabeth = Existing("Elizabeth Bennet", "Lizzy");
-            var row = Row("Elizabeth Bennet", "Lizzy");
-            row.AlreadyExists = true;
-            row.ExistingCharacterId = elizabeth.Id;
+            var row = Row("Elizabeth Bennet", "Lizzy") with { ExistingCharacterId = elizabeth.Id };
 
             Assert.Empty(AliasCollisions.Find([row], [elizabeth]));
-        }
-
-        [Fact]
-        public void ExcludedRows_DoNotCollide()
-        {
-            var jane = Row("Jane Bennet", "Miss Bennet");
-            jane.Included = false;
-
-            var found = AliasCollisions.Find(
-                [Row("Elizabeth Bennet", "Miss Bennet"), jane], []);
-
-            Assert.Empty(found);
         }
 
         [Fact]

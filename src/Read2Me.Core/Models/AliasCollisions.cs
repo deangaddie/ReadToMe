@@ -1,7 +1,16 @@
-using Read2Me.Data.Entities;
-
-namespace Read2Me.App.State
+namespace Read2Me.Core.Models
 {
+    /// <summary>
+    /// One owner of identity strings in a collision check: a discovery row about to be applied, or
+    /// a character already on the roster. <see cref="ExistingCharacterId"/> on a row names the roster
+    /// character it will resolve onto, so that character is folded into the row rather than counted
+    /// as a second owner.
+    /// </summary>
+    public sealed record AliasClaim(string Name, IReadOnlyList<string> Aliases, Guid? ExistingCharacterId = null);
+
+    /// <summary>A roster character in a collision check: its id, primary name and aliases.</summary>
+    public sealed record AliasOwner(Guid Id, string Name, IReadOnlyList<string> Aliases);
+
     /// <summary>
     /// Finds identity strings — a character's name or one of its aliases — that would end up
     /// claimed by more than one character once the discovery rows are applied.
@@ -11,20 +20,19 @@ namespace Read2Me.App.State
     /// ordered roster (<c>CharacterResolver.ResolveOrCreateAsync</c>), so a string owned by two
     /// characters silently binds to whichever sorts first, in every scene. Discovery is where these
     /// arrive: asked for the cast of <i>Pride and Prejudice</i>, the LLM handed <c>Miss Bennet</c> to
-    /// all five Bennet daughters. This is advisory — the review dialog surfaces it and the user
-    /// removes the offending alias. Nothing here blocks an apply.
+    /// all five Bennet daughters. This is advisory — the review surfaces it and the user removes the
+    /// offending alias. Nothing here blocks an apply. The web client carries a line-for-line port
+    /// (<c>alias-collisions.ts</c>) tested against the same fixtures.
     /// </remarks>
     public static class AliasCollisions
     {
         /// <summary>
         /// Returns the strings owned by two or more characters, comparing case-insensitively.
-        /// Only included rows count — an excluded row is never applied. A roster character that an
-        /// included row resolves onto is folded into that row rather than counted as a second owner.
+        /// Pass only the rows that will be applied — an excluded row is never applied.
         /// </summary>
-        public static IReadOnlySet<string> Find(
-            IEnumerable<DiscoveredCharacterRow> rows, IEnumerable<Character> roster)
+        public static IReadOnlySet<string> Find(IEnumerable<AliasClaim> rows, IEnumerable<AliasOwner> roster)
         {
-            var included = rows.Where(r => r.Included).ToList();
+            var included = rows.ToList();
             var claimed = included
                 .Where(r => r.ExistingCharacterId is { } id)
                 .Select(r => r.ExistingCharacterId!.Value)
@@ -34,7 +42,7 @@ namespace Read2Me.App.State
                 .Select(r => r.Aliases.Prepend(r.Name))
                 .Concat(roster
                     .Where(c => !claimed.Contains(c.Id))
-                    .Select(c => c.Aliases.Select(a => a.Name).Prepend(c.Name)));
+                    .Select(c => c.Aliases.Prepend(c.Name)));
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var collisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

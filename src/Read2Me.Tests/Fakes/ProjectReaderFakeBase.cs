@@ -34,6 +34,7 @@ namespace Read2Me.Tests.Fakes
         public virtual Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult<Guid?>(null);
         public virtual Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<VoiceRuleRow>());
         public virtual Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<CharacterLine>());
+        public virtual Task<List<CharacterSummary>> GetCharacterSummariesAsync(ProjectFolderId folderId) => Task.FromResult(new List<CharacterSummary>());
         public virtual Task<int> GetTotalPartCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
         public virtual Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
         public virtual Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false) =>

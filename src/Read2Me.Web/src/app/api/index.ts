@@ -14,6 +14,7 @@ export * from './book-api';
 export * from './attribution-api';
 export * from './audio-api';
 export * from './discovery-api';
+export * from './characters-api';
 export * from './voices-api';
 export * from './assembly-api';
 export * from './settings-api';

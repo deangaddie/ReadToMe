@@ -213,6 +213,26 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<List<CharacterSummary>> GetCharacterSummariesAsync(ProjectFolderId folderId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.Characters
+                .OrderBy(c => c.IsNarrator ? 0 : 1)
+                .ThenBy(c => c.Name)
+                .Select(c => new CharacterSummary(
+                    c.Id,
+                    c.Name,
+                    c.Aliases.OrderBy(a => a.Name).Select(a => new CharacterAliasRef(a.Id, a.Name)).ToList(),
+                    // The speaker alone says whose line this is (ADR-0006) — same rule as
+                    // GetCharacterLinesAsync, so the count and the list agree.
+                    db.ParagraphItems.Count(i => i.CharacterId == c.Id),
+                    c.Voices.Count,
+                    // VoiceReadiness.IsReady, spelled out for the query translator.
+                    c.Voices.Count(v => v.AudioFileName != null && v.AudioFileName != ""),
+                    c.IsNarrator))
+                .ToListAsync();
+        }
+
         public async Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
             ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
         {
