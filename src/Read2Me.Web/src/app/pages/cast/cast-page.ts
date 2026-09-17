@@ -16,9 +16,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { CharacterSummaryDto, Guid, NarratorDto, VoicesApi } from '@app/api';
+import { CharacterSummaryDto, Guid, NarratorDto, VoicesApi, toApiError } from '@app/api';
+import { ActivityStore } from '@app/activity/activity-store';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
+import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@app/ui/empty-state/empty-state';
 import { PageHeader } from '@app/ui/page-header/page-header';
 import { StatusChip } from '@app/ui/status-chip/status-chip';
@@ -38,14 +40,16 @@ import {
 import { CastStore } from './cast-store';
 import { CharacterDetail } from './character-detail';
 import { openDiscoveryDialog } from './discovery-dialog';
+import { promptBatchRequest } from './voices/voice-logic';
+import { openVoiceScopeDialog } from './voices/voice-scope-dialog';
 import { NarratorBanner } from './narrator-banner';
 import { NarratorSignpost } from './narrator-signpost';
 
 /**
  * `/projects/{folder}/cast[/{characterId}]` (design §6.4, ticket 15): the roster on the left —
  * search, sort, narrator banner, rows with readiness — and the selected character on the right.
- * On narrow screens the list is the page and the detail is the pushed route. The toolbar's voice
- * batches arrive with the voices slice (16); their buttons are placeholders here.
+ * On narrow screens the list is the page and the detail is the pushed route. The toolbar starts the
+ * two voice batches (16): prompts behind the scope dialog when voices exist, audio directly.
  * `?discover=1` (from the overview's pipeline) opens the discovery dialog on arrival.
  */
 @Component({
@@ -90,8 +94,9 @@ import { NarratorSignpost } from './narrator-signpost';
             mat-stroked-button
             type="button"
             data-action="generate-prompts"
-            disabled
-            matTooltip="Arrives with the voices slice"
+            [disabled]="toolbarLocked()"
+            matTooltip="One LLM voice plan per character; progress in the activity centre"
+            (click)="generatePrompts()"
           >
             <mat-icon>record_voice_over</mat-icon> Generate voice prompts
           </button>
@@ -99,8 +104,9 @@ import { NarratorSignpost } from './narrator-signpost';
             mat-stroked-button
             type="button"
             data-action="generate-audio"
-            disabled
-            matTooltip="Arrives with the voices slice"
+            [disabled]="toolbarLocked()"
+            matTooltip="Synthesise every prompt voice without audio; progress in the activity centre"
+            (click)="generateAudio()"
           >
             <mat-icon>graphic_eq</mat-icon> Generate audio
           </button>
@@ -337,6 +343,8 @@ export class CastPage {
   protected readonly project = inject(ProjectStore);
   private readonly live = inject(LiveService);
   private readonly voices = inject(VoicesApi);
+  private readonly activity = inject(ActivityStore);
+  private readonly confirm = inject(ConfirmService);
   private readonly preflight = inject(Preflight);
   private readonly prompt = inject(PromptService);
   private readonly dialog = inject(MatDialog);
@@ -445,6 +453,50 @@ export class CastPage {
   protected goToLinked(): void {
     const id = this.narrator()?.characterId;
     if (id) void this.goTo(id);
+  }
+
+  /**
+   * The prompt batch (research §4): when any character already has voices, the scope dialog asks
+   * whether to plan only the characters without voices or clear and replan every one. Progress
+   * lives in the activity centre; the store patches cards from the batch's hub events.
+   */
+  protected async generatePrompts(): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder || this.toolbarLocked()) return;
+    const anyVoices = this.store.anyVoices();
+    const request = promptBatchRequest(
+      anyVoices,
+      anyVoices ? await openVoiceScopeDialog(this.dialog) : null,
+    );
+    if (!request) return;
+    if (request.confirm) {
+      const ok = await this.confirm.confirm({
+        title: 'Clear and regenerate all voices',
+        message: request.confirm,
+        confirmLabel: 'Delete and regenerate',
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    if (!(await this.preflight.ensureReady('voicePrompt'))) return;
+    await this.startBatch(() => this.voices.startPromptBatch(folder, request.regenerateAll));
+  }
+
+  protected async generateAudio(): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder || this.toolbarLocked()) return;
+    if (!(await this.preflight.ensureReady('voiceDesign'))) return;
+    await this.startBatch(() => this.voices.startAudioBatch(folder));
+  }
+
+  private async startBatch(start: () => Promise<unknown>): Promise<void> {
+    try {
+      await start();
+      this.activity.drawerOpen.set(true);
+    } catch (error) {
+      // 409: a batch is already running — the host's message says so.
+      this.toast.problem(toApiError(error).toProblem());
+    }
   }
 
   private async runDiscovery(): Promise<void> {

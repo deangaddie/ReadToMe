@@ -11,6 +11,7 @@ import type {
   AppTheme,
   AudioProcessingUpdateRequest,
   BulkAssignPreviewRequest,
+  GenerateDesignPromptRequest,
   ItemsEnqueueRequest,
   LlmServerConfig,
   ManualImportRequest,
@@ -50,4 +51,5 @@ export type SchemaPins = [
   Pin<ParagraphsEnqueueRequest, Schema['ParagraphsEnqueueRequest']>,
   Pin<BulkAssignPreviewRequest, Schema['BulkAssignPreviewRequest']>,
   Pin<ItemsEnqueueRequest, Schema['ItemsEnqueueRequest']>,
+  Pin<GenerateDesignPromptRequest, Schema['GenerateDesignPromptRequest']>,
 ];

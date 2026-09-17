@@ -41,7 +41,7 @@ namespace Read2Me.App.Api
                 .WithSummary("Remove the cover image; a project without one still answers 204.");
         }
 
-        private static readonly string[] CoverExtensions = [".jpg", ".jpeg", ".png", ".webp"];
+        private static readonly HashSet<string> CoverExtensions = new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp" };
         private const long MaxCoverBytes = 10L * 1024 * 1024;
 
         private static async Task<IResult> ListAsync(ProjectUseCases useCases)
@@ -141,35 +141,18 @@ namespace Read2Me.App.Api
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
-            if (!request.HasFormContentType)
-                return Results.Problem("Expected multipart form data.", statusCode: StatusCodes.Status400BadRequest);
-
-            IFormFile? file;
-            try
-            {
-                file = (await request.ReadFormAsync()).Files.GetFile("file");
-            }
-            catch (InvalidDataException ex)
-            {
-                // A malformed multipart body (no boundary parts, truncated) is the client's error.
-                return Results.Problem(ex.Message, statusCode: StatusCodes.Status400BadRequest);
-            }
-            if (file is null)
-                return Results.Problem("Field 'file' is required.", statusCode: StatusCodes.Status400BadRequest);
 
             // The stored name is the client's base name: it is what the detail DTO echoes and what
-            // /workspace serves, so a path in it would be both a traversal and a broken link.
-            var fileName = Path.GetFileName(file.FileName);
-            var extension = Path.GetExtension(fileName).ToLowerInvariant();
-            if (!CoverExtensions.Contains(extension))
-                return Results.Problem("Unsupported format. Use .jpg, .png, or .webp.", statusCode: StatusCodes.Status400BadRequest);
-            if (file.Length > MaxCoverBytes)
-                return Results.Problem("Cover image must be 10 MB or smaller.", statusCode: StatusCodes.Status400BadRequest);
+            // /workspace serves.
+            var (upload, refusal) = await UploadedFile.ReadAsync(
+                request, CoverExtensions, MaxCoverBytes, "Cover image must be 10 MB or smaller.");
+            if (upload is null)
+                return refusal!;
 
-            await using var stream = file.OpenReadStream();
-            var result = await useCases.SaveCoverImageAsync(folderId.Value, fileName, stream);
+            await using var stream = upload.File.OpenReadStream();
+            var result = await useCases.SaveCoverImageAsync(folderId.Value, upload.FileName, stream);
             return result.IsSuccess
-                ? Results.Ok(new CoverImageResponse(fileName))
+                ? Results.Ok(new CoverImageResponse(upload.FileName))
                 : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 

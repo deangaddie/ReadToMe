@@ -33,6 +33,7 @@ const SCHEMA: SettingsSchema = {
     },
     { key: 'name', label: 'Name', kind: 'string', default: '' },
     { key: 'notes', label: 'Notes', kind: 'text', default: '' },
+    { key: 'topK', label: 'Top K', kind: 'number', min: 1, default: null, nullable: true },
   ],
 };
 
@@ -76,6 +77,13 @@ describe('settings-form helpers', () => {
     expect(isFieldValid(cfg, Number.NaN)).toBe(false);
     expect(isFieldValid(SCHEMA.fields[2]!, 'anything')).toBe(true);
   });
+
+  it('isFieldValid accepts null only on a nullable number', () => {
+    const topK = SCHEMA.fields.find((f) => f.key === 'topK')!;
+    expect(isFieldValid(topK, null)).toBe(true);
+    expect(isFieldValid(topK, 0)).toBe(false);
+    expect(isFieldValid(SCHEMA.fields[1]!, null)).toBe(false);
+  });
 });
 
 describe('r2m-settings-form', () => {
@@ -114,7 +122,18 @@ describe('r2m-settings-form', () => {
       lang: 'en',
       name: '',
       notes: '',
+      topK: null,
     });
+  });
+
+  it('a nullable number renders blank at null and blank means null again', async () => {
+    const fixture = await mount('override', { topK: 40 });
+    const input = field(fixture, 'topK').querySelector('input[type="number"]') as HTMLInputElement;
+    expect(input.value).toBe('40');
+    typeNumber(field(fixture, 'topK'), 'input[type="number"]', '');
+    await fixture.whenStable();
+    expect(fixture.componentInstance.emitted.at(-1)).toEqual({});
+    expect(fixture.componentInstance.valid).toBe(true);
   });
 
   it('override mode emits a sparse patch, shows the dot, and reset removes the key', async () => {

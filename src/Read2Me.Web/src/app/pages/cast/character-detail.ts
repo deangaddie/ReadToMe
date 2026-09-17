@@ -21,6 +21,7 @@ import { ProjectStore } from '../project/project-store';
 import { CastStore } from './cast-store';
 import { CharacterLines } from './character-lines';
 import { openMergeDialog } from './merge-dialog';
+import { VoicesSection } from './voices/voices-section';
 
 /** The extra note on Delete when the character narrates the book (research §4). */
 export function linkedNarratorDeleteMessage(name: string): string {
@@ -34,7 +35,7 @@ export function linkedNarratorDeleteMessage(name: string): string {
  */
 @Component({
   selector: 'app-character-detail',
-  imports: [MatButtonModule, MatIconModule, InlineEdit, StatusChip, CharacterLines],
+  imports: [MatButtonModule, MatIconModule, InlineEdit, StatusChip, CharacterLines, VoicesSection],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'character-detail' },
   template: `
@@ -118,6 +119,10 @@ export function linkedNarratorDeleteMessage(name: string): string {
         </div>
       </section>
     }
+
+    <section class="character-detail__section" aria-label="Voices">
+      <app-voices-section [character]="character()" />
+    </section>
 
     <section class="character-detail__section" aria-label="Lines">
       <h3 class="character-detail__heading">
@@ -274,7 +279,8 @@ export class CharacterDetail {
     const ok = await this.confirm.confirm({
       title: 'Delete character',
       message:
-        `Delete ${character.name}? Its lines become unattributed and its voices are removed.` + note,
+        `Delete ${character.name}? Its lines become unattributed and its voices are removed.` +
+        note,
       confirmLabel: 'Delete',
       destructive: true,
     });

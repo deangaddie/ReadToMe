@@ -371,14 +371,68 @@ export interface ApplyDiscoveryResponse {
 
 export type VoiceSource = 'Uploaded' | 'Generated';
 
+/**
+ * A voice as the cast page shows it. `isEdited` is the host's on-disk invariant: the audio has
+ * been through the voice editor, so fresh audio would discard that edit. The override JSONs are
+ * sparse patches keyed as the provider's settings schema lists them (ticket 16).
+ */
 export interface VoiceDto {
   id: Guid;
+  characterId: Guid;
   name: string;
   description: string | null;
   source: VoiceSource;
   designPrompt: string | null;
   transcript: string | null;
   audioFileName: string | null;
+  isEdited: boolean;
+  voiceDesignSettingsOverrideJson: string | null;
+  ttsSettingsOverrideJson: string | null;
+}
+
+export interface TranscribeVoiceResponse {
+  transcript: string;
+}
+
+export interface RenderedDesignPromptResponse {
+  prompt: string;
+}
+
+export interface GenerateDesignPromptRequest {
+  prompt: string;
+}
+
+export interface GenerateDesignPromptResponse {
+  designPrompt: string;
+}
+
+// ---- Provider settings schemas (`ProviderSettingsSchema.cs`) ----------------------------------------
+
+export type ProviderSettingsFieldKind = 'number' | 'boolean' | 'enum' | 'string' | 'text';
+
+export interface ProviderSettingsOption {
+  value: string;
+  label?: string | null;
+}
+
+/** One editable field of a provider's settings; `key` is the settingsJson property name. */
+export interface ProviderSettingsField {
+  key: string;
+  label: string;
+  kind: ProviderSettingsFieldKind;
+  min?: number | null;
+  max?: number | null;
+  step?: number | null;
+  options?: ProviderSettingsOption[] | null;
+  default: unknown;
+  help?: string | null;
+  /** A number that may be left blank, meaning "use the server's default". */
+  nullable: boolean;
+}
+
+export interface ProviderSettingsSchema {
+  type: string;
+  fields: ProviderSettingsField[];
 }
 
 export interface CharacterVoicesDto {

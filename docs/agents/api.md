@@ -200,7 +200,29 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/voice-batch/audio
 
 # inspect / regenerate one voice:
 curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices
+curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}
+# → { id, characterId, name, source: "Uploaded"|"Generated", designPrompt, transcript, audioFileName,
+#     isEdited, voiceDesignSettingsOverrideJson, ttsSettingsOverrideJson }
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio
+
+# reference audio: upload/replace (multipart 'file', 200 MB max; normalised + committed), then transcribe:
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/voices/{voiceId}/audio -F 'file=@sample.wav'
+curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/transcribe
+# → { "transcript": "..." } (also stored on the voice)
+
+# design prompt without persisting: render the template, edit, send to the LLM, then SetVoiceDesignPrompt:
+curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/design-prompt/render
+# → { "prompt": "<rendered template>" }
+curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/design-prompt/generate \
+  -H 'content-type: application/json' -d '{ "prompt": "<rendered or edited>" }'
+# → { "designPrompt": "..." }
+
+# per-voice settings overrides are sparse patches keyed by the provider's settingsJson names;
+# the schema per provider type (ranges, defaults) drives an editor:
+curl -s 'http://localhost:5000/api/settings/paragraph-tts/schema?type=VoxCpm2'   # VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base
+curl -s 'http://localhost:5000/api/settings/voice-design/schema?type=Qwen3'      # VoxCpm2|Qwen3
+# → { type, fields: [{ key, label, kind: number|boolean|enum|string|text, min?, max?, step?, options?, default, help?, nullable }] }
+# then: SetVoiceTtsSettingsOverride / SetVoiceSettingsOverride commands with json = '{"cfg_value":3.5}' (null clears)
 ```
 
 ## 4. Generate paragraph audio

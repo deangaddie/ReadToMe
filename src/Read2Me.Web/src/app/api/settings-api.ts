@@ -4,6 +4,9 @@ import { ApiError } from './api-error';
 import type {
   LlmServerConfig,
   ParagraphTtsServiceConfig,
+  ParagraphTtsServiceType,
+  ProviderSettingsSchema,
+  VoiceDesignServiceType,
   SemanticSimilarityServiceConfig,
   SettingsConfig,
   TranscriptionServiceConfig,
@@ -12,11 +15,7 @@ import type {
 
 /** The five generic config areas `SettingsEndpoints.MapArea` serves. */
 export type SettingsArea =
-  | 'llm'
-  | 'paragraph-tts'
-  | 'voice-design'
-  | 'transcription'
-  | 'semantic-similarity';
+  'llm' | 'paragraph-tts' | 'voice-design' | 'transcription' | 'semantic-similarity';
 
 /**
  * One instance per area of the generic `/api/settings/{area}` surface: list / create / update /
@@ -75,15 +74,29 @@ export class LlmSettingsApi extends SettingsApi<LlmServerConfig> {
 
 @Injectable({ providedIn: 'root' })
 export class ParagraphTtsSettingsApi extends SettingsApi<ParagraphTtsServiceConfig> {
+  private readonly client = inject(ApiClient);
+
   constructor() {
     super('paragraph-tts');
+  }
+
+  /** The editable fields of one TTS provider type with ranges and recommended defaults (ticket 16). */
+  schema(type: ParagraphTtsServiceType): Promise<ProviderSettingsSchema> {
+    return this.client.get<ProviderSettingsSchema>('/api/settings/paragraph-tts/schema', { type });
   }
 }
 
 @Injectable({ providedIn: 'root' })
 export class VoiceDesignSettingsApi extends SettingsApi<VoiceDesignServiceConfig> {
+  private readonly client = inject(ApiClient);
+
   constructor() {
     super('voice-design');
+  }
+
+  /** The editable fields of one voice-design provider type with ranges and recommended defaults (ticket 16). */
+  schema(type: VoiceDesignServiceType): Promise<ProviderSettingsSchema> {
+    return this.client.get<ProviderSettingsSchema>('/api/settings/voice-design/schema', { type });
   }
 }
 

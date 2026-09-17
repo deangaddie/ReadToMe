@@ -52,6 +52,7 @@ namespace Read2Me.App.Api
 
             MapPromptEndpoints(endpoints);
             MapAudioProcessingEndpoints(endpoints);
+            MapSchemaEndpoints(endpoints);
 
             // Anything else under /api/settings is not an area — 404 instead of the Blazor fallback.
             endpoints.MapFallback("/api/settings/{**rest}", () => Results.NotFound());
@@ -144,6 +145,30 @@ namespace Read2Me.App.Api
                 .WithMetadata(new AcceptsMetadata(["application/json"], typeof(SetActiveRequest), isOptional: false))
                 .WithSummary($"Select the active {area} config.");
         }
+
+        // ── provider settings schemas (Angular ticket 16) ────────────────────
+
+        private static void MapSchemaEndpoints(IEndpointRouteBuilder endpoints)
+        {
+            endpoints.MapGet("/api/settings/paragraph-tts/schema", (string? type) =>
+                    TryParseType<ParagraphTtsServiceType>(type, out var t)
+                        ? Results.Ok(ProviderSettingsSchema.ParagraphTts(t))
+                        : UnknownProviderType(type, typeof(ParagraphTtsServiceType)))
+                .WithSummary("The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+            endpoints.MapGet("/api/settings/voice-design/schema", (string? type) =>
+                    TryParseType<VoiceDesignServiceType>(type, out var t)
+                        ? Results.Ok(ProviderSettingsSchema.VoiceDesign(t))
+                        : UnknownProviderType(type, typeof(VoiceDesignServiceType)))
+                .WithSummary("The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+        }
+
+        private static bool TryParseType<TEnum>(string? raw, out TEnum type) where TEnum : struct, Enum =>
+            Enum.TryParse(raw, ignoreCase: true, out type) && Enum.IsDefined(type);
+
+        private static IResult UnknownProviderType(string? raw, Type enumType) =>
+            Results.Problem(
+                $"Unknown provider type '{raw}'. Expected one of: {string.Join(", ", Enum.GetNames(enumType))}.",
+                statusCode: StatusCodes.Status400BadRequest);
 
         // ── prompts ──────────────────────────────────────────────────────────
 

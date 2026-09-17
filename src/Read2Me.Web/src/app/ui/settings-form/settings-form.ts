@@ -31,6 +31,8 @@ export interface SettingsField {
   options?: { value: string; label?: string }[];
   default: unknown;
   help?: string;
+  /** A number that may be left blank (null), meaning "use the server's default". */
+  nullable?: boolean;
 }
 
 export interface SettingsSchema {
@@ -60,6 +62,7 @@ export function sparsePatch(schema: SettingsSchema, values: SettingsValues): Set
 
 export function isFieldValid(field: SettingsField, value: unknown): boolean {
   if (field.kind !== 'number') return true;
+  if (value == null) return !!field.nullable;
   if (typeof value !== 'number' || Number.isNaN(value)) return false;
   if (field.min !== undefined && value < field.min) return false;
   if (field.max !== undefined && value > field.max) return false;
@@ -135,7 +138,7 @@ export function isFieldValid(field: SettingsField, value: unknown): boolean {
                 >
                   <input
                     matSliderThumb
-                    [value]="numberValue(field)"
+                    [value]="sliderValue(field)"
                     (valueChange)="setValue(field, $event)"
                   />
                 </mat-slider>
@@ -148,7 +151,7 @@ export function isFieldValid(field: SettingsField, value: unknown): boolean {
                   [step]="field.step ?? 'any'"
                   [value]="numberValue(field)"
                   [disabled]="disabled()"
-                  (input)="setValue(field, parseNumber($any($event.target).value))"
+                  (input)="setValue(field, parseNumber(field, $any($event.target).value))"
                 />
               </div>
             } @else {
@@ -160,7 +163,7 @@ export function isFieldValid(field: SettingsField, value: unknown): boolean {
                   [step]="field.step ?? 'any'"
                   [value]="numberValue(field)"
                   [disabled]="disabled()"
-                  (input)="setValue(field, parseNumber($any($event.target).value))"
+                  (input)="setValue(field, parseNumber(field, $any($event.target).value))"
                 />
               </mat-form-field>
             }
@@ -225,7 +228,8 @@ export function isFieldValid(field: SettingsField, value: unknown): boolean {
         @if (!fieldValid(field)) {
           <p class="r2m-settings-form__error" role="alert">
             Must be a number{{ field.min !== undefined ? ' ≥ ' + field.min : ''
-            }}{{ field.max !== undefined ? ' ≤ ' + field.max : '' }}.
+            }}{{ field.max !== undefined ? ' ≤ ' + field.max : ''
+            }}{{ field.nullable ? ', or blank' : '' }}.
           </p>
         } @else if (field.help) {
           <p class="r2m-settings-form__help">{{ field.help }}</p>
@@ -345,9 +349,16 @@ export class SettingsForm {
     return effectiveValue(field, this.working());
   }
 
-  protected numberValue(field: SettingsField): number {
+  /** Blank for a nullable field left at null; the slider thumb falls back to the range start. */
+  protected numberValue(field: SettingsField): number | string {
     const v = this.value(field);
-    return typeof v === 'number' ? v : Number(v ?? 0);
+    if (v == null) return field.nullable ? '' : 0;
+    return typeof v === 'number' ? v : Number(v);
+  }
+
+  protected sliderValue(field: SettingsField): number {
+    const v = this.numberValue(field);
+    return typeof v === 'number' && !Number.isNaN(v) ? v : (field.min ?? 0);
   }
 
   protected stringValue(field: SettingsField): string {
@@ -363,8 +374,10 @@ export class SettingsForm {
     return isFieldValid(field, this.value(field));
   }
 
-  protected parseNumber(raw: string): number {
-    return raw.trim() === '' ? Number.NaN : Number(raw);
+  /** Blank means null on a nullable field and "not a number" (invalid) on any other. */
+  protected parseNumber(field: SettingsField, raw: string): number | null {
+    if (raw.trim() === '') return field.nullable ? null : Number.NaN;
+    return Number(raw);
   }
 
   protected setValue(field: SettingsField, value: unknown): void {
