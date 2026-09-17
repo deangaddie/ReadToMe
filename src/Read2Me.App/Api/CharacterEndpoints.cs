@@ -5,6 +5,7 @@ using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Voice;
 
 namespace Read2Me.App.Api
 {
@@ -30,7 +31,22 @@ namespace Read2Me.App.Api
     public sealed record ParagraphContextDto(
         IReadOnlyList<ContextParagraphDto> Before, ContextParagraphDto Paragraph, IReadOnlyList<ContextParagraphDto> After);
 
-    /// <summary>The cast page's reads (Angular ticket 15): roster rows, a character's lines, a line's surroundings.</summary>
+    /// <summary>
+    /// One voice rule as the cast page lists it. Levels are <see cref="VoiceAnchorLevel"/> names
+    /// (null on the default rule and on an open "from here on" end); a dangling anchor names a
+    /// node that no longer exists, so its title is null. <see cref="Order"/> is the fractional rank
+    /// the list is sorted by (lower first; the last passing rule wins).
+    /// </summary>
+    public sealed record VoiceRuleDto(
+        Guid RuleId, Guid VoiceId, string VoiceName, bool IsDefault,
+        string? FromLevel, Guid? FromNodeId, string? FromTitle, bool FromDangling,
+        string? ToLevel, Guid? ToNodeId, string? ToTitle, bool ToDangling,
+        string Order);
+
+    /// <summary>The voice a character's rules pick at the start of a chapter; null when none resolves.</summary>
+    public sealed record ChapterVoicePreviewDto(Guid ChapterId, string ChapterTitle, string? VoiceName);
+
+    /// <summary>The cast page's reads (Angular tickets 15, 17): roster rows, a character's lines, a line's surroundings, voice rules and their preview.</summary>
     public static class CharacterEndpoints
     {
         /// <summary>The widest context window a client may ask for on either side.</summary>
@@ -38,6 +54,10 @@ namespace Read2Me.App.Api
 
         public static void MapCharacterEndpoints(this IEndpointRouteBuilder endpoints)
         {
+            endpoints.MapGet("/api/projects/{folder}/characters/{id:guid}/voice-rules", GetVoiceRulesAsync)
+                .WithSummary("A character's voice rules in evaluation order (default first): voice, anchor levels/ids/titles, dangling flags. Empty for an unknown character.");
+            endpoints.MapGet("/api/projects/{folder}/characters/{id:guid}/voice-rules/preview", GetVoiceRulePreviewAsync)
+                .WithSummary("The voice the character's rules pick at the start of every chapter, in book order (null voiceName = none resolves). Rules anchored inside a chapter are below this grain.");
             endpoints.MapGet("/api/projects/{folder}/characters/summary", GetSummaryAsync)
                 .WithSummary("Every character as a cast-list row (narrator first, then by name): aliases, line count, planned vs ready voices, isNarrator (the seed row) and narratesBook (the linked narrator).");
             endpoints.MapGet("/api/projects/{folder}/characters/{id:guid}/lines", GetLinesAsync)
@@ -87,6 +107,29 @@ namespace Read2Me.App.Api
                 context.Preceding.Select(ToDto).ToList(),
                 ToDto(context.Query),
                 context.Following.Select(ToDto).ToList()));
+        }
+
+        private static async Task<IResult> GetVoiceRulesAsync(string folder, Guid id, IFileSystem fs, ICharacterReader reader)
+        {
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+
+            var rules = await reader.GetCharacterVoiceRulesAsync(folderId, id);
+            return Results.Ok(rules.Select(r => new VoiceRuleDto(
+                r.Id, r.VoiceId, r.VoiceName, r.IsDefault,
+                r.FromLevel?.ToString(), r.FromNodeId, r.FromDangling ? null : r.FromDisplayName, r.FromDangling,
+                r.ToLevel?.ToString(), r.ToNodeId, r.ToDangling ? null : r.ToDisplayName, r.ToDangling,
+                r.Rank)).ToList());
+        }
+
+        private static async Task<IResult> GetVoiceRulePreviewAsync(
+            string folder, Guid id, IFileSystem fs, IVoiceRulePreview preview, CancellationToken ct)
+        {
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+
+            var rows = await preview.PreviewChaptersAsync(folderId, id, ct);
+            return Results.Ok(rows.Select(r => new ChapterVoicePreviewDto(r.ChapterId, r.ChapterTitle, r.VoiceName)).ToList());
         }
 
         private static ContextParagraphDto ToDto(ContextParagraph p) => new(

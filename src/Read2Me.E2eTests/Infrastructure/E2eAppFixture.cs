@@ -90,6 +90,11 @@ public sealed class E2eAppFixture : IAsyncLifetime
         WorkspaceSeeder.SeedMisSplitParagraphProjectAsync(
             Services, WorkspaceDir, folderName, title, author, characterName);
 
+    public Task<TestUtils.BookHierarchyBuilder> SeedMultiChapterProjectAsync(
+        string folderName, string title, string author, int chapters = 5, string characterName = "Alice") =>
+        WorkspaceSeeder.SeedMultiChapterProjectAsync(
+            Services, WorkspaceDir, folderName, title, author, chapters, characterName);
+
     public Task SeedItemAudioAsync(string folderName, Guid itemId, Guid characterId) =>
         WorkspaceSeeder.SeedItemAudioAsync(Services, WorkspaceDir, folderName, itemId, characterId);
 

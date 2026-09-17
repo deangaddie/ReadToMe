@@ -23,6 +23,8 @@ class FakeLive {
 
 const VOICES = '/api/projects/dune/characters/alice/voices';
 const LINES = '/api/projects/dune/characters/alice/lines';
+const RULES = '/api/projects/dune/characters/alice/voice-rules';
+const PREVIEW = '/api/projects/dune/characters/alice/voice-rules/preview';
 
 function voiceList(voices: Partial<VoiceDto>[]): CharacterVoicesDto {
   return {
@@ -135,6 +137,8 @@ describe('CastStore', () => {
       .expectOne({ method: 'GET', url: LINES })
       .flush([{ itemId: 'i1', paragraphId: 'p1', chapterId: 'c1', text: 'Hi' }]);
     http.expectOne({ method: 'GET', url: VOICES }).flush(voiceList([{ name: 'Main' }]));
+    http.expectOne(RULES).flush([]);
+    http.expectOne(PREVIEW).flush([]);
     await selecting;
     expect(store.selected()?.name).toBe('Alice');
     expect(store.lines().map((l) => l.text)).toEqual(['Hi']);
@@ -151,6 +155,8 @@ describe('CastStore', () => {
     const selecting = store.select('alice');
     http.expectOne(LINES).flush([]);
     http.expectOne(VOICES).flush(voiceList([]));
+    http.expectOne(RULES).flush([]);
+    http.expectOne(PREVIEW).flush([]);
     await selecting;
 
     live.receipts.next(receipt('Characters'));
@@ -160,6 +166,8 @@ describe('CastStore', () => {
     http.expectOne(SUMMARY).flush([row('Narrator'), row('Alice', 3)]);
     http.expectOne(LINES).flush([]);
     http.expectOne(VOICES).flush(voiceList([{ name: 'New' }]));
+    http.expectOne(RULES).flush([]);
+    http.expectOne(PREVIEW).flush([]);
     await settle();
     expect(store.selected()?.lineCount).toBe(3);
     expect(store.voices().voices.map((v) => v.name)).toEqual(['New']);
@@ -170,6 +178,8 @@ describe('CastStore', () => {
     const selecting = store.select('alice');
     http.expectOne(LINES).flush([]);
     http.expectOne(VOICES).flush(voiceList([{ id: 'v1' }, { id: 'v2', name: 'Other' }]));
+    http.expectOne(RULES).flush([]);
+    http.expectOne(PREVIEW).flush([]);
     await selecting;
 
     live.voiceBatch.next({
@@ -200,6 +210,8 @@ describe('CastStore', () => {
     const selecting = store.select('alice');
     http.expectOne(LINES).flush([]);
     http.expectOne(VOICES).flush(voiceList([]));
+    http.expectOne(RULES).flush([]);
+    http.expectOne(PREVIEW).flush([]);
     await selecting;
 
     live.voiceBatch.next({
@@ -213,8 +225,53 @@ describe('CastStore', () => {
     http.expectOne(SUMMARY).flush([row('Narrator'), row('Alice', 2)]);
     http.expectOne(LINES).flush([]);
     http.expectOne(VOICES).flush(voiceList([{ id: 'v-new', designPrompt: 'x' }]));
+    http.expectOne(RULES).flush([]);
+    http.expectOne(PREVIEW).flush([]);
     await settle();
     expect(store.voices().voices.map((v) => v.id)).toEqual(['v-new']);
+  });
+
+  it('a VoiceRules or Structure receipt reloads the selected rules and preview, but only with a selection', async () => {
+    await open();
+    live.receipts.next(receipt('Structure'));
+    await settle(REFETCH_DEBOUNCE_MS + 20);
+    http.expectNone(SUMMARY);
+
+    const selecting = store.select('alice');
+    http.expectOne(LINES).flush([]);
+    http.expectOne(VOICES).flush(voiceList([]));
+    http.expectOne(RULES).flush([]);
+    http.expectOne(PREVIEW).flush([]);
+    await selecting;
+    expect(store.voiceRules()).toEqual([]);
+
+    live.receipts.next(receipt('VoiceRules'));
+    await settle(REFETCH_DEBOUNCE_MS + 20);
+    http.expectOne(SUMMARY).flush([row('Narrator'), row('Alice', 2)]);
+    http.expectOne(LINES).flush([]);
+    http.expectOne(VOICES).flush(voiceList([]));
+    http.expectOne(RULES).flush([
+      {
+        ruleId: 'r1',
+        voiceId: 'v1',
+        voiceName: 'Main',
+        isDefault: true,
+        fromLevel: null,
+        fromNodeId: null,
+        fromTitle: null,
+        fromDangling: false,
+        toLevel: null,
+        toNodeId: null,
+        toTitle: null,
+        toDangling: false,
+        order: 'a0',
+      },
+    ]);
+    http.expectOne(PREVIEW).flush([{ chapterId: 'c1', chapterTitle: 'One', voiceName: 'Main' }]);
+    await settle();
+    expect(store.voiceRules().map((r) => r.voiceName)).toEqual(['Main']);
+    expect(store.voiceRulePreview().map((p) => p.voiceName)).toEqual(['Main']);
+    expect(store.voiceRulesLoading()).toBe(false);
   });
 
   it('ignores receipts that touch nothing the roster shows', async () => {

@@ -274,4 +274,36 @@ public static class WorkspaceSeeder
         });
         await db.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// Creates a project with one volume and <paramref name="chapters"/> chapters titled
+    /// "Chapter 1".. (the builder names too), each holding one narration item and one line spoken
+    /// by the known character — the shape the Voice rules preview needs (Angular ticket 17).
+    /// Returns the builder for named-id lookups.
+    /// </summary>
+    public static async Task<BookHierarchyBuilder> SeedMultiChapterProjectAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string title, string author, int chapters = 5, string characterName = "Alice")
+    {
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        var folderPath = Path.Combine(workspaceDir, folderName);
+
+        var builder = new BookHierarchyBuilder(() => factory.CreateAsync(folderPath));
+        builder
+            .WithProject(title: title, author: author)
+            .WithCharacter(characterName, new Character { Id = Guid.NewGuid(), Name = characterName })
+            .AddVolume("v1", v =>
+            {
+                for (var i = 1; i <= chapters; i++)
+                {
+                    var n = i;
+                    v.AddChapter($"Chapter {n}", c => c
+                        .AddParagraph($"p{n}", p => p.AddNarration($"n{n}", $"Chapter {n} opens."))
+                        .AddParagraph($"q{n}", p => p.AddCharacterLine($"line{n}", $"“Line {n},” she said.", characterName)));
+                }
+            });
+        await builder.BuildAsync();
+
+        return builder;
+    }
 }

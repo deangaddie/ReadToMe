@@ -223,6 +223,18 @@ curl -s 'http://localhost:5000/api/settings/paragraph-tts/schema?type=VoxCpm2'  
 curl -s 'http://localhost:5000/api/settings/voice-design/schema?type=Qwen3'      # VoxCpm2|Qwen3
 # → { type, fields: [{ key, label, kind: number|boolean|enum|string|text, min?, max?, step?, options?, default, help?, nullable }] }
 # then: SetVoiceTtsSettingsOverride / SetVoiceSettingsOverride commands with json = '{"cfg_value":3.5}' (null clears)
+
+# voice rules: which voice a character speaks in where. The first voice brings the default rule;
+# CreateVoiceRule adds an anchored one (fromLevel Volume|Part|Chapter|Paragraph|ParagraphItem +
+# fromNodeId; leave to* out for "from here on", repeat the anchor for "just this node"). Rules are
+# evaluated in list order and the last passing rule wins; MoveVoiceRule Up|Down reorders the
+# non-default ones, DeleteVoiceRule removes one (never the default).
+curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voice-rules
+# → [{ ruleId, voiceId, voiceName, isDefault, fromLevel, fromNodeId, fromTitle, fromDangling,
+#      toLevel, toNodeId, toTitle, toDangling, order }]   (dangling = the anchor node was deleted; skipped)
+curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voice-rules/preview
+# → [{ chapterId, chapterTitle, voiceName }] in book order — the voice at each chapter's start
+#   (null = none resolves; a rule anchored inside a chapter is below this grain — see the chapter voices read in §4)
 ```
 
 ## 4. Generate paragraph audio

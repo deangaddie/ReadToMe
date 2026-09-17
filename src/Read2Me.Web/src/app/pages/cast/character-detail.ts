@@ -21,6 +21,7 @@ import { ProjectStore } from '../project/project-store';
 import { CastStore } from './cast-store';
 import { CharacterLines } from './character-lines';
 import { openMergeDialog } from './merge-dialog';
+import { VoiceRulesSection } from './voice-rules/voice-rules-section';
 import { VoicesSection } from './voices/voices-section';
 
 /** The extra note on Delete when the character narrates the book (research §4). */
@@ -35,7 +36,15 @@ export function linkedNarratorDeleteMessage(name: string): string {
  */
 @Component({
   selector: 'app-character-detail',
-  imports: [MatButtonModule, MatIconModule, InlineEdit, StatusChip, CharacterLines, VoicesSection],
+  imports: [
+    MatButtonModule,
+    MatIconModule,
+    InlineEdit,
+    StatusChip,
+    CharacterLines,
+    VoicesSection,
+    VoiceRulesSection,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'character-detail' },
   template: `
@@ -122,6 +131,10 @@ export function linkedNarratorDeleteMessage(name: string): string {
 
     <section class="character-detail__section" aria-label="Voices">
       <app-voices-section [character]="character()" />
+    </section>
+
+    <section class="character-detail__section" aria-label="Voice rules">
+      <app-voice-rules-section [character]="character()" />
     </section>
 
     <section class="character-detail__section" aria-label="Lines">

@@ -55,6 +55,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IUnattributedItemCounter>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IAudioItemReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IVoiceResolver, VoiceResolver>();
+        services.AddScoped<IVoiceRulePreview, VoiceRulePreview>();
         services.AddBookCommandHandlers();
         services.Configure<BookMutationOptions>(configuration.GetSection(BookMutationOptions.SectionName));
         

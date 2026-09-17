@@ -5,9 +5,11 @@ import {
   CharacterLineDto,
   CharacterSummaryDto,
   CharacterVoicesDto,
+  ChapterVoicePreviewDto,
   CharactersApi,
   CommandResponse,
   Guid,
+  VoiceRuleDto,
   VoicesApi,
   toApiError,
 } from '@app/api';
@@ -24,6 +26,13 @@ import { applyVoiceUpdated } from './voices/voice-logic';
  * attribution (line counts, and the selected character's lines).
  */
 const CAST_FACETS: readonly BookFacet[] = ['Characters', 'Narrator', 'Voices', 'Attribution'];
+
+/**
+ * Facets that change the selected character's voice rules or their preview (ticket 17): the rules
+ * themselves, voices (a rename shows in the rows) and structure (a deleted node dangles a rule,
+ * a new chapter adds a preview row).
+ */
+const VOICE_RULE_FACETS: readonly BookFacet[] = ['VoiceRules', 'Voices', 'Structure'];
 
 const NO_VOICES: CharacterVoicesDto = { defaultVoiceId: null, voices: [] };
 
@@ -55,6 +64,9 @@ export class CastStore {
   private readonly _linesLoading = signal(false);
   private readonly _voices = signal<CharacterVoicesDto>(NO_VOICES);
   private readonly _voicesLoading = signal(false);
+  private readonly _voiceRules = signal<VoiceRuleDto[]>([]);
+  private readonly _voiceRulePreview = signal<ChapterVoicePreviewDto[]>([]);
+  private readonly _voiceRulesLoading = signal(false);
   private readonly _audioVersions = signal<Record<Guid, number>>({});
   private readonly _busy = signal(false);
 
@@ -68,6 +80,10 @@ export class CastStore {
   /** The selected character's voices and default voice id. */
   readonly voices = this._voices.asReadonly();
   readonly voicesLoading = this._voicesLoading.asReadonly();
+  /** The selected character's voice rules in evaluation order, and the voice each chapter resolves to. */
+  readonly voiceRules = this._voiceRules.asReadonly();
+  readonly voiceRulePreview = this._voiceRulePreview.asReadonly();
+  readonly voiceRulesLoading = this._voiceRulesLoading.asReadonly();
   /**
    * Per-voice cache-buster: bumped whenever this tab learns a voice's audio changed (upload,
    * generation, a batch's `voiceUpdated`), so a regenerated file under the same name is refetched.
@@ -119,6 +135,8 @@ export class CastStore {
     this._selectedId.set(null);
     this._lines.set([]);
     this._voices.set(NO_VOICES);
+    this._voiceRules.set([]);
+    this._voiceRulePreview.set([]);
   }
 
   /** Selects a character and loads its lines and voices; null clears the detail. */
@@ -126,8 +144,10 @@ export class CastStore {
     this._selectedId.set(id);
     this._lines.set([]);
     this._voices.set(NO_VOICES);
+    this._voiceRules.set([]);
+    this._voiceRulePreview.set([]);
     if (id === null) return;
-    await Promise.all([this.loadLines(id), this.loadVoices(id)]);
+    await Promise.all([this.loadLines(id), this.loadVoices(id), this.loadVoiceRules(id)]);
   }
 
   /** Reloads the roster and, when one is selected, its lines and voices. */
@@ -139,6 +159,7 @@ export class CastStore {
       this.characters.summary(folder),
       selected ? this.loadLines(selected) : Promise.resolve(),
       selected ? this.loadVoices(selected) : Promise.resolve(),
+      selected ? this.loadVoiceRules(selected) : Promise.resolve(),
     ]);
     if (this._folder() === folder) this._rows.set(rows);
   }
@@ -198,8 +219,27 @@ export class CastStore {
     }
   }
 
+  private async loadVoiceRules(id: Guid): Promise<void> {
+    const folder = this._folder();
+    if (!folder) return;
+    this._voiceRulesLoading.set(true);
+    try {
+      const [rules, preview] = await Promise.all([
+        this.characters.voiceRules(folder, id),
+        this.characters.voiceRulePreview(folder, id),
+      ]);
+      if (this._selectedId() === id) {
+        this._voiceRules.set(rules);
+        this._voiceRulePreview.set(preview);
+      }
+    } finally {
+      if (this._selectedId() === id) this._voiceRulesLoading.set(false);
+    }
+  }
+
   private onReceipt(r: Receipt): void {
-    if (CAST_FACETS.some((f) => hasFacet(r.effects.facets, f))) this.refetch.schedule();
+    const facets = this._selectedId() ? [...CAST_FACETS, ...VOICE_RULE_FACETS] : CAST_FACETS;
+    if (facets.some((f) => hasFacet(r.effects.facets, f))) this.refetch.schedule();
   }
 
   /**

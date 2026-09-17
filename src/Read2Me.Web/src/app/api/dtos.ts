@@ -11,6 +11,7 @@
  * entity enums as their integer value, `ToString()`-ed enums as their member name.
  */
 import type { components } from './schema';
+import type { VoiceAnchorLevel } from './book-commands';
 
 /** Component schemas the host's OpenAPI document declares (request bodies + settings entities). */
 export type Schema = components['schemas'];
@@ -392,6 +393,35 @@ export interface VoiceDto {
 
 export interface TranscribeVoiceResponse {
   transcript: string;
+}
+
+/**
+ * One voice rule as `GET …/characters/{id}/voice-rules` lists it (ticket 17), in evaluation
+ * order: the default rule first, then by `order` (the fractional rank; the last passing rule
+ * wins). Levels are `VoiceAnchorLevel` names, null on the default rule and on an open "from here
+ * on" end. A dangling anchor names a node that no longer exists, so its title is null.
+ */
+export interface VoiceRuleDto {
+  ruleId: Guid;
+  voiceId: Guid;
+  voiceName: string;
+  isDefault: boolean;
+  fromLevel: VoiceAnchorLevel | null;
+  fromNodeId: Guid | null;
+  fromTitle: string | null;
+  fromDangling: boolean;
+  toLevel: VoiceAnchorLevel | null;
+  toNodeId: Guid | null;
+  toTitle: string | null;
+  toDangling: boolean;
+  order: string;
+}
+
+/** `GET …/characters/{id}/voice-rules/preview` row: the voice the rules pick at the chapter's start (null = none). */
+export interface ChapterVoicePreviewDto {
+  chapterId: Guid;
+  chapterTitle: string;
+  voiceName: string | null;
 }
 
 export interface RenderedDesignPromptResponse {
