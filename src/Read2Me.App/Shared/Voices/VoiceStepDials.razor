@@ -45,15 +45,16 @@
         break;
 
     case AudioPostProcessStepIds.SilenceTrim:
-        @* -30 dB is the line where speech starts going, so the voice-side dial stops at -35. *@
         <MudSlider T="double" Value="@Row.ThresholdDb"
                    ValueChanged="@((double v) => Model.EditDial(() => Row.ThresholdDb = v))"
-                   Min="-60" Max="-35" Step="1" ValueLabel="true" data-testid="dial-threshold">
+                   Min="@SilenceTrimSettings.VoiceMinThresholdDb" Max="@SilenceTrimSettings.VoiceMaxThresholdDb"
+                   Step="@SilenceTrimSettings.VoiceThresholdStepDb" ValueLabel="true" data-testid="dial-threshold">
             Threshold: @Row.ThresholdDb.ToString("0") dB
         </MudSlider>
         <MudSlider T="int" Value="@Row.PadMs"
                    ValueChanged="@((int v) => Model.EditDial(() => Row.PadMs = v))"
-                   Min="0" Max="500" Step="10" ValueLabel="true" data-testid="dial-pad">
+                   Min="@SilenceTrimSettings.VoiceMinPadMs" Max="@SilenceTrimSettings.VoiceMaxPadMs"
+                   Step="@SilenceTrimSettings.VoicePadStepMs" ValueLabel="true" data-testid="dial-pad">
             Pad: @Row.PadMs ms
         </MudSlider>
         break;

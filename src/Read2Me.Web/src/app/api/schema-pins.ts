@@ -9,6 +9,7 @@
  */
 import type {
   AppTheme,
+  ApplyPreviewRequest,
   AudioProcessingUpdateRequest,
   BulkAssignPreviewRequest,
   GenerateDesignPromptRequest,
@@ -18,6 +19,7 @@ import type {
   NarratorOnlyModeRequest,
   ParagraphTtsServiceConfig,
   ParagraphsEnqueueRequest,
+  PreviewRequest,
   Schema,
   SemanticSimilarityServiceConfig,
   SetActiveRequest,
@@ -52,4 +54,6 @@ export type SchemaPins = [
   Pin<BulkAssignPreviewRequest, Schema['BulkAssignPreviewRequest']>,
   Pin<ItemsEnqueueRequest, Schema['ItemsEnqueueRequest']>,
   Pin<GenerateDesignPromptRequest, Schema['GenerateDesignPromptRequest']>,
+  Pin<PreviewRequest, Schema['PreviewRequest']>,
+  Pin<ApplyPreviewRequest, Schema['ApplyPreviewRequest']>,
 ];

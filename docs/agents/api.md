@@ -224,6 +224,21 @@ curl -s 'http://localhost:5000/api/settings/voice-design/schema?type=Qwen3'     
 # → { type, fields: [{ key, label, kind: number|boolean|enum|string|text, min?, max?, step?, options?, default, help?, nullable }] }
 # then: SetVoiceTtsSettingsOverride / SetVoiceSettingsOverride commands with json = '{"cfg_value":3.5}' (null clears)
 
+# voice audio editor: clean up a voice's reference audio with post-process steps. The catalog lists
+# the voice-scope steps in chain order with their dials (settings-form fields) and defaults; preview
+# renders the steps you name (any order — the host orders them) over the voice's ORIGINAL audio and
+# answers one playable stage per step; apply names the previewId so what is written is what was heard.
+curl -s 'http://localhost:5000/api/audio/steps/catalog?scope=voice'
+# → [{ stepId, label, blurb, dials: [<settings-form fields>], defaults }]   (de-plosive, denoise, hiss-reduce, consonant-soften, silence-trim)
+curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/editor/preview \
+  -H 'content-type: application/json' \
+  -d '{ "steps": [ { "stepId": "denoise", "settings": { "strength": 30 } }, { "stepId": "silence-trim", "settings": { "thresholdDb": -40, "padMs": 100 } } ] }'
+# → { previewId, stages: [{ stepId, applied, reason?, url }] }   url = /api/previews/{previewId}/{stepId}.wav, valid 30 min
+curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/editor/apply \
+  -H 'content-type: application/json' -d '{ "previewId": "<from preview>" }'      # → VoiceDto with isEdited=true; 422 if expired / another voice's
+curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}/original.wav  # the pre-edit audio (404 while unedited)
+curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/editor/restore   # → VoiceDto, original back, edit forgotten
+
 # voice rules: which voice a character speaks in where. The first voice brings the default rule;
 # CreateVoiceRule adds an anchored one (fromLevel Volume|Part|Chapter|Paragraph|ParagraphItem +
 # fromNodeId; leave to* out for "from here on", repeat the anchor for "just this node"). Rules are

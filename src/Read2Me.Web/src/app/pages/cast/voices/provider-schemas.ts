@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { ParagraphTtsSettingsApi, ProviderSettingsSchema, VoiceDesignSettingsApi } from '@app/api';
 import { LiveService } from '@app/live/live.service';
+import { toFormField } from '@app/shared/settings-schema';
 import { SettingsSchema } from '@app/ui/settings-form/settings-form';
 import { overrideValues } from './voice-logic';
 
@@ -70,26 +71,11 @@ export function toFormSchema(
   const configured = overrideValues(configSettingsJson);
   return {
     type: schema.type,
-    fields: schema.fields.map((f) => ({
-      key: f.key,
-      label: f.label,
-      kind: f.kind,
-      ...(f.min != null ? { min: f.min } : {}),
-      ...(f.max != null ? { max: f.max } : {}),
-      ...(f.step != null ? { step: f.step } : {}),
-      ...(f.options
-        ? {
-            options: f.options.map((o) => ({
-              value: o.value,
-              ...(o.label ? { label: o.label } : {}),
-            })),
-          }
-        : {}),
-      default: Object.prototype.hasOwnProperty.call(configured, f.key)
-        ? configured[f.key]
-        : f.default,
-      ...(f.help ? { help: f.help } : {}),
-      ...(f.nullable ? { nullable: true } : {}),
-    })),
+    fields: schema.fields.map((f) =>
+      toFormField(
+        f,
+        Object.prototype.hasOwnProperty.call(configured, f.key) ? configured[f.key] : f.default,
+      ),
+    ),
   };
 }

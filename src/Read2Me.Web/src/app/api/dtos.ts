@@ -704,3 +704,43 @@ export interface ParagraphContextDto {
   paragraph: ContextParagraphDto;
   after: ContextParagraphDto[];
 }
+
+// ---- Voice audio editor (`VoiceEditorEndpoints.cs`) ------------------------------------------------
+
+/**
+ * One step of the voice editor's checklist: its dials share `ProviderSettingsField`'s shape so
+ * `r2m-settings-form` renders them; `defaults` holds the dial keys' starting values.
+ */
+export interface StepCatalogEntryDto {
+  stepId: string;
+  label: string;
+  blurb: string;
+  dials: ProviderSettingsField[];
+  defaults: Record<string, unknown>;
+}
+
+export interface PreviewStepRequest {
+  stepId: string;
+  settings: Record<string, unknown>;
+}
+
+export interface PreviewRequest {
+  steps: PreviewStepRequest[];
+}
+
+/** `applied` false means the step fell back to its input; `reason` says why. */
+export interface PreviewStageDto {
+  stepId: string;
+  applied: boolean;
+  reason: string | null;
+  url: string;
+}
+
+export interface PreviewResponse {
+  previewId: string;
+  stages: PreviewStageDto[];
+}
+
+export interface ApplyPreviewRequest {
+  previewId: string;
+}

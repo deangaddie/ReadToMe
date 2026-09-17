@@ -44,8 +44,9 @@ export const routes: Routes = [
       },
       {
         path: 'voices/:voiceId/editor',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'project', title: 'Voice editor', slice: 18 }),
+        loadComponent: () =>
+          import('./pages/voice-editor/voice-editor-page').then((m) => m.VoiceEditorPage),
+        data: routeMeta({ section: 'project', title: 'Voice editor' }),
       },
       {
         path: 'export',

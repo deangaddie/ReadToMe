@@ -30,6 +30,9 @@ public sealed class E2eAppFixture : IAsyncLifetime
 
     private IHost? _host;
 
+    /// <summary>The preview store's clock; advance it to expire voice-editor previews.</summary>
+    public TestUtils.ManualTimeProvider Clock { get; } = new(DateTimeOffset.UtcNow);
+
     public async ValueTask InitializeAsync()
     {
         WorkspaceDir = Path.Combine(Path.GetTempPath(), "r2me-e2e", Guid.NewGuid().ToString("N"));
@@ -58,6 +61,8 @@ public sealed class E2eAppFixture : IAsyncLifetime
                 s.AddSingleton<Read2Me.Services.Health.IAiServiceControl>(FakeControl);
                 s.AddSingleton<IAudioNormalizer, PassThroughAudioNormalizer>();
                 s.AddSingleton<IFfmpegProber, FakeFfmpegProber>();
+                // Voice-editor previews expire on this clock, so a test can age them without waiting.
+                s.AddSingleton<IPreviewStore>(new PreviewStore(Clock));
             })
             .Build();
 

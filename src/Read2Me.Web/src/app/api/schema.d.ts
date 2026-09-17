@@ -1590,6 +1590,235 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audio/steps/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The post-process steps a scope offers, in chain order, each with its dials (settings-form fields) and defaults. Only scope=voice is served. */
+        get: {
+            parameters: {
+                query?: {
+                    scope?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/voices/{voiceId}/editor/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Render a chain of steps over the voice's original audio. Steps run in catalog order whatever order they are sent; settings are dial values merged over the step's defaults. Answers a previewId (valid 30 minutes) and one playable stage per step. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    voiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["PreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/previews/{previewId}/{stepId}.wav": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The audio after one stage of a rendered preview. 404 once the preview has expired. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    previewId: string;
+                    stepId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/voices/{voiceId}/editor/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Write a rendered preview's final stage over the voice's audio, keeping the original for restore. 422 when the preview is unknown, expired or belongs to another voice. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    voiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ApplyPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/voices/{voiceId}/editor/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put the voice's original audio back and forget the edit. A no-op for a voice that was never edited. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    voiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/voices/{voiceId}/original.wav": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The voice's audio as it was before the editor touched it. 404 while the voice is unedited — the live WAV is the original then. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    voiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/assembly": {
         parameters: {
             query?: never;
@@ -3285,6 +3514,9 @@ export interface components {
             name: string;
             aliases: null | string[];
         };
+        ApplyPreviewRequest: {
+            previewId: null | string;
+        };
         AppTheme: {
             /** Format: int32 */
             id?: number | string;
@@ -3336,6 +3568,7 @@ export interface components {
         ItemsEnqueueRequest: {
             itemIds: string[];
         };
+        JsonElement: unknown;
         JsonObject: Record<string, never>;
         LlmApiType: number;
         LlmServerConfig: {
@@ -3392,6 +3625,13 @@ export interface components {
             toSentenceCaseConfig?: null | components["schemas"]["ToSentenceCaseConfig"];
         };
         ParagraphTtsServiceType: number;
+        PreviewRequest: {
+            steps: null | components["schemas"]["PreviewStepRequest"][];
+        };
+        PreviewStepRequest: {
+            stepId: null | string;
+            settings: null | components["schemas"]["JsonElement"];
+        };
         PromptTemplateRequest: {
             template: string;
         };

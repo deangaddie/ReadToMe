@@ -149,6 +149,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IVoicePreviewRenderer, VoicePreviewRenderer>();
         services.AddScoped<IVoiceOriginalStore, VoiceOriginalStore>();
         services.AddScoped<IVoiceAudioEditor, VoiceAudioEditor>();
+        // Process-wide, not circuit-bound: the HTTP API renders a preview in one request and applies it in another.
+        services.AddSingleton<IPreviewStore>(_ => new PreviewStore(TimeProvider.System));
         services.AddScoped<IRecentAudioSampleFinder, RecentAudioSampleFinder>();
         services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.Assembly.AssemblyEvent>>();
         services.AddSingleton<IAudiobookEncoder, AudiobookEncoder>();

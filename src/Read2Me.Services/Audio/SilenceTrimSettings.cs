@@ -17,5 +17,19 @@ namespace Read2Me.Services.Audio
     /// A property of <c>(step, scope)</c> rather than of the step — a reference voice that trims down
     /// to under a second has gone wrong, but a paragraph item that does has not.
     /// </param>
-    public sealed record SilenceTrimSettings(double ThresholdDb = -50, int PadMs = 50, double MinOutputMs = 200);
+    public sealed record SilenceTrimSettings(double ThresholdDb = -50, int PadMs = 50, double MinOutputMs = 200)
+    {
+        /// <summary>
+        /// The voice editor's dial range for <see cref="ThresholdDb"/>. −30 dB is the line where
+        /// speech starts going, so the voice-side dial stops at −35. Shared by the Blazor dials and
+        /// the API's step catalog so the two editors offer (and the API enforces) the same range.
+        /// </summary>
+        public const double VoiceMinThresholdDb = -60;
+        public const double VoiceMaxThresholdDb = -35;
+        public const double VoiceThresholdStepDb = 1;
+
+        public const int VoiceMinPadMs = 0;
+        public const int VoiceMaxPadMs = 500;
+        public const int VoicePadStepMs = 10;
+    }
 }

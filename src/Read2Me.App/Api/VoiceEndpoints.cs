@@ -79,7 +79,7 @@ namespace Read2Me.App.Api
                 .WithSummary("Cancel the running voice batch.");
         }
 
-        private static VoiceDto ToDto(ProjectFolderId folderId, VoiceEntity v, IVoiceOriginalStore originals) => new(
+        internal static VoiceDto ToDto(ProjectFolderId folderId, VoiceEntity v, IVoiceOriginalStore originals) => new(
             v.Id, v.CharacterId, v.Name, v.Description, v.Source.ToString(),
             v.DesignPrompt, v.Transcript, v.AudioFileName,
             originals.Exists(folderId, v.CharacterId, v.Id),

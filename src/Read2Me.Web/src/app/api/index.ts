@@ -16,6 +16,7 @@ export * from './audio-api';
 export * from './discovery-api';
 export * from './characters-api';
 export * from './voices-api';
+export * from './voice-editor-api';
 export * from './assembly-api';
 export * from './settings-api';
 export * from './prompts-api';
