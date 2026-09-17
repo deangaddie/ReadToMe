@@ -1,4 +1,5 @@
 using Read2Me.Services.Audio;
+using Read2Me.Services.BookEdits;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
@@ -135,6 +136,32 @@ public sealed record AudioGenMessage(
 
 /// <summary>Which settings area changed, so other clients refresh their list.</summary>
 public sealed record SettingsChangedMessage(string Area);
+
+/// <summary>
+/// <c>kind</c>: progress | done | failed — one AI book-edit proposal run (Angular ticket 19), sent
+/// to the connection that started it. <c>program</c> is the session id the run belongs to;
+/// <c>done</c> carries every row the run landed (all of them, or the partial set a cancel kept).
+/// </summary>
+public sealed record BookEditMessage(
+    string Kind,
+    string Program,
+    int? Done = null,
+    int? Total = null,
+    bool? Cancelled = null,
+    IReadOnlyList<BookEditRowDto>? Rows = null,
+    string? Reason = null);
+
+/// <summary>
+/// <see cref="ProposedEdit"/> on the wire; enums as member names. Shared with the REST reads of a
+/// proposal run (<c>BookEditEndpoints</c>) on purpose: a row a client got pushed and a row it read
+/// back after missing the push have to be the same shape, or a review screen would need two.
+/// </summary>
+public sealed record BookEditRowDto(
+    string Kind, Guid Id, string DisplayPath, string OldValue, string? NewValue, string Status, string? FailureReason)
+{
+    public static BookEditRowDto From(ProposedEdit p) =>
+        new(p.Kind.ToString(), p.Id, p.DisplayPath, p.OldValue, p.NewValue, p.Status.ToString(), p.FailureReason);
+}
 
 /// <summary>Everything a project group member needs on join: current revision plus full status maps.</summary>
 public sealed record ProjectSnapshot(

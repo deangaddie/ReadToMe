@@ -315,6 +315,47 @@ Unlike its siblings it rejects rather than no-ops: a `characterId` naming no cha
 in this project, or the seed Narrator row itself (a self-link *is* the unlinked state),
 comes back **422** with the reason.
 
+### Edit with AI
+
+Say what to change in plain language and let the LLM write the edits. Four steps: plan (what the
+instruction means and what it matches), propose (a new value per matched item), review (yours to
+correct), apply (one `ApplyBookEdits` command). The plan stays on the host under the opaque
+`program` id — you hold ids and values, never the plan. A session expires two hours after its last
+use; `DELETE` it when you are done. Titles and paragraph text only.
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/plan \
+  -H 'content-type: application/json' \
+  -d '{ "instruction": "rename every chapter to Chapter {n}", "thinking": false }'
+# → { status, reason, summary, program, transform, targetCount, requestCount, warnings[] }
+# status Ok carries the program; NoLlmConfigured | Unsupported | ServiceUnavailable | Failed |
+# NoTargets explain themselves in reason instead. transform Llm means one LLM request per 8 items
+# (requestCount says how many) and per-row retries; RegexReplace / SetTemplate run in code.
+
+# start the run (202) and follow it on the hub as bookEdit { kind: progress | done | failed } —
+# pass the connectionId you want it pushed to, or leave it out and poll the session instead:
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/propose \
+  -H 'content-type: application/json' -d '{ "thinking": false, "connectionId": null }'
+curl -s http://localhost:5000/api/projects/{folder}/book-edits/{program}
+# → { status: Idle|Running|Completed|Cancelled|Failed, done, total, reason,
+#     rows: [{ kind, id, displayPath, oldValue, newValue, status, failureReason }] }
+# row status: Proposed (usable) | NoChange (the value equals the current text) | Failed
+
+# stop early — the rows already computed stay reviewable and appliable:
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/cancel
+
+# re-ask for one row, steered by a hint (Llm plans only):
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/propose-one \
+  -H 'content-type: application/json' \
+  -d '{ "targetId": "<row id>", "hint": "keep the original spelling of names", "thinking": true }'
+
+# apply the rows you kept — one command, one commit, values yours to edit first:
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' \
+  -d '{ "type": "ApplyBookEdits", "edits": [ { "kind": "ChapterTitle", "id": "<row id>", "newValue": "Chapter 1" } ] }'
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/book-edits/{program}   # 204
+```
+
 ## 6. Assemble the m4b
 
 ```bash
@@ -346,6 +387,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone |
 | server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
+| server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
 only computed for folders `NodeStatusService` has seeded — call `GET /api/projects/{folder}/status`

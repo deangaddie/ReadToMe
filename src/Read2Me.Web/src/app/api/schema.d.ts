@@ -1182,6 +1182,223 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/book-edits/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["PlanBookEditRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/{program}/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ProposeBookEditRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/{program}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The session's proposal run: status Idle | Running | Completed | Cancelled | Failed, progress and the rows landed so far (a cancelled run keeps the rows it computed). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Drop the session, cancelling any run in flight (204; 404 when unknown or expired). */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/{program}/propose-one": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask the AI again for one matched item, optionally steered by a hint; answers the new row. Llm plans only — a deterministic plan answers a Failed row. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ProposeOneBookEditRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/{program}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop the running proposal; the rows computed so far stay reviewable. 200 whether or not a run was in flight. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/characters/{characterId}/voices": {
         parameters: {
             query?: never;
@@ -3625,6 +3842,11 @@ export interface components {
             toSentenceCaseConfig?: null | components["schemas"]["ToSentenceCaseConfig"];
         };
         ParagraphTtsServiceType: number;
+        PlanBookEditRequest: {
+            instruction: null | string;
+            /** @default false */
+            thinking: boolean;
+        };
         PreviewRequest: {
             steps: null | components["schemas"]["PreviewStepRequest"][];
         };
@@ -3634,6 +3856,18 @@ export interface components {
         };
         PromptTemplateRequest: {
             template: string;
+        };
+        ProposeBookEditRequest: {
+            /** @default false */
+            thinking: boolean;
+            connectionId?: null | string;
+        };
+        ProposeOneBookEditRequest: {
+            /** Format: uuid */
+            targetId: string;
+            hint?: null | string;
+            /** @default false */
+            thinking: boolean;
         };
         SemanticSimilarityServiceConfig: {
             /** Format: int32 */

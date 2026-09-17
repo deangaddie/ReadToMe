@@ -28,6 +28,8 @@ export function reconnectDelayMs(previousRetryCount: number): number {
  */
 export interface LiveConnection {
   readonly state: HubConnectionState;
+  /** Null until connected; changes on every reconnect, so read it per request, never cache it. */
+  readonly connectionId: string | null;
   start(): Promise<void>;
   stop(): Promise<void>;
   invoke<T = void>(methodName: string, ...args: unknown[]): Promise<T>;

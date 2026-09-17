@@ -19,7 +19,10 @@ import type {
   NarratorOnlyModeRequest,
   ParagraphTtsServiceConfig,
   ParagraphsEnqueueRequest,
+  PlanBookEditRequest,
   PreviewRequest,
+  ProposeBookEditRequest,
+  ProposeOneBookEditRequest,
   Schema,
   SemanticSimilarityServiceConfig,
   SetActiveRequest,
@@ -56,4 +59,7 @@ export type SchemaPins = [
   Pin<GenerateDesignPromptRequest, Schema['GenerateDesignPromptRequest']>,
   Pin<PreviewRequest, Schema['PreviewRequest']>,
   Pin<ApplyPreviewRequest, Schema['ApplyPreviewRequest']>,
+  Pin<PlanBookEditRequest, Schema['PlanBookEditRequest']>,
+  Pin<ProposeBookEditRequest, Schema['ProposeBookEditRequest']>,
+  Pin<ProposeOneBookEditRequest, Schema['ProposeOneBookEditRequest']>,
 ];

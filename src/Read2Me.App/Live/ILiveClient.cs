@@ -32,4 +32,6 @@ public interface ILiveClient
     Task Throughput(ThroughputSnapshot snapshot);
     [HubMethodName("settingsChanged")]
     Task SettingsChanged(SettingsChangedMessage message);
+    [HubMethodName("bookEdit")]
+    Task BookEdit(BookEditMessage message);
 }

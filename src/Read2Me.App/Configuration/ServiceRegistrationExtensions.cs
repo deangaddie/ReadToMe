@@ -216,6 +216,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Read2Me.Services.BookEdits.ScopeResolver>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditPlanner>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditProposalService>();
+        // Process-wide, not circuit-bound: the HTTP API plans in one request and proposes/applies in others.
+        services.AddSingleton<Read2Me.Services.BookEdits.IBookEditSessionStore>(_ => new Read2Me.Services.BookEdits.BookEditSessionStore(TimeProvider.System));
+        services.AddSingleton<Read2Me.App.Live.BookEditRunCoordinator>();
 
         // Character discovery
         services.AddScoped<Read2Me.Services.Characters.CharacterDiscoveryService>();

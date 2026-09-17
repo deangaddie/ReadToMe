@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import {
+  ApiError,
   BookApi,
   BookCommand,
   CommandResponse,
@@ -47,19 +48,46 @@ export class BookEditor {
     return (await this.settle((folder) => this.book.execute(folder, command)))?.value;
   }
 
+  /**
+   * Posts one command and answers the refusal rather than toasting it, for a dialog that keeps
+   * itself open and shows the detail inline (design §8). Null means the host accepted it; the
+   * view catches up the same way as {@link run}.
+   */
+  async tryExecute(command: BookCommand): Promise<ApiError | null> {
+    // Read before the await: `settle` declining is only explicable from the state it saw.
+    const declined = this.declineReason();
+    const outcome = await this.settle((folder) => this.book.execute(folder, command), true);
+    return outcome === null ? new ApiError(0, declined ?? 'The change was not sent.') : outcome.error;
+  }
+
+  /** Why a write would not be sent right now, or null when it would. */
+  private declineReason(): string | null {
+    if (!this.store.folder()) return 'No project is open.';
+    if (this._busy()) return 'Another change is still being saved.';
+    return null;
+  }
+
   /** Rereads the source file from scratch (the caller has already confirmed). */
   async reread(): Promise<boolean> {
-    return (await this.settle((folder) => this.projects.import(folder, true))) !== null;
+    return (await this.settle((folder) => this.projects.import(folder, true)))?.error === null;
   }
 
   async rereadManually(request: ManualImportRequest): Promise<boolean> {
     return (
-      (await this.settle((folder) => this.projects.importManually(folder, request))) !== null
+      (await this.settle((folder) => this.projects.importManually(folder, request)))?.error ===
+      null
     );
   }
 
-  /** Runs one write; resolves its (possibly empty) result once the view has caught up, null when it failed. */
-  private async settle<T>(write: (folder: string) => Promise<T>): Promise<{ value: T } | null> {
+  /**
+   * Runs one write; resolves once the view has caught up. Null means nothing was sent (no project,
+   * or a write already in flight). `quiet` hands the refusal back on `error` instead of toasting
+   * it, for a caller that shows it itself.
+   */
+  private async settle<T>(
+    write: (folder: string) => Promise<T>,
+    quiet = false,
+  ): Promise<{ value?: T; error: ApiError | null } | null> {
     const folder = this.store.folder();
     if (!folder || this._busy()) return null;
 
@@ -72,8 +100,9 @@ export class BookEditor {
     } catch (error) {
       receipt.cancel();
       this._busy.set(false);
-      this.toast.problem(toApiError(error).toProblem());
-      return null;
+      const failure = toApiError(error);
+      if (!quiet) this.toast.problem(failure.toProblem());
+      return { error: failure };
     }
 
     try {
@@ -81,6 +110,6 @@ export class BookEditor {
     } finally {
       this._busy.set(false);
     }
-    return { value };
+    return { value, error: null };
   }
 }

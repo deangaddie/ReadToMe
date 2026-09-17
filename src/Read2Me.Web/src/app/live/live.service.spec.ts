@@ -20,6 +20,7 @@ type Handler = (...args: unknown[]) => void;
 
 class FakeConnection implements LiveConnection {
   state = HubConnectionState.Disconnected;
+  connectionId: string | null = 'conn-1';
   readonly handlers = new Map<string, Handler>();
   readonly invocations: { method: string; args: unknown[] }[] = [];
   /** Per-method canned results; a function may throw to simulate a dropped connection. */
@@ -257,6 +258,7 @@ describe('LiveService', () => {
       [
         'assembly',
         'audioGen',
+        'bookEdit',
         'itemStatus',
         'llm',
         'nodeStatus',
@@ -268,6 +270,18 @@ describe('LiveService', () => {
         'watchdog',
       ].sort(),
     );
+  });
+
+  it('answers the connection id only while connected', async () => {
+    expect(service.connectionId()).toBeNull();
+
+    service.start();
+    await settle();
+    expect(service.connectionId()).toBe('conn-1');
+
+    // A reconnect mints a new id, so callers must read it per request rather than hold it.
+    current().connectionId = 'conn-2';
+    expect(service.connectionId()).toBe('conn-2');
   });
 
   it('retries a failed initial start with the backoff and reports disconnected meanwhile', async () => {

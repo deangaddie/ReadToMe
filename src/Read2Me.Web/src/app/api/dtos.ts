@@ -11,7 +11,7 @@
  * entity enums as their integer value, `ToString()`-ed enums as their member name.
  */
 import type { components } from './schema';
-import type { VoiceAnchorLevel } from './book-commands';
+import type { BookEditTargetKind, VoiceAnchorLevel } from './book-commands';
 
 /** Component schemas the host's OpenAPI document declares (request bodies + settings entities). */
 export type Schema = components['schemas'];
@@ -743,4 +743,72 @@ export interface PreviewResponse {
 
 export interface ApplyPreviewRequest {
   previewId: string;
+}
+
+// ---- AI book edits (`BookEditEndpoints.cs`) --------------------------------------------------------
+
+/** `Ok` is the only status that carries a program; the rest explain why there is nothing to do. */
+export type BookEditPlanStatus =
+  | 'Ok'
+  | 'NoLlmConfigured'
+  | 'Unsupported'
+  | 'ServiceUnavailable'
+  | 'Failed'
+  | 'NoTargets';
+
+/** `TransformKind`: only `Llm` plans send a request per item, so only they offer per-row retries. */
+export type BookEditTransformKind = 'RegexReplace' | 'SetTemplate' | 'Llm';
+
+export type ProposalStatus = 'Proposed' | 'NoChange' | 'Failed';
+
+export type BookEditRunStatus = 'Idle' | 'Running' | 'Completed' | 'Cancelled' | 'Failed';
+
+export interface PlanBookEditRequest {
+  instruction: string;
+  thinking: boolean;
+}
+
+/** `program` is the opaque session id every later call names; null unless `status` is `Ok`. */
+export interface PlanBookEditResponse {
+  status: BookEditPlanStatus;
+  reason: string | null;
+  summary: string | null;
+  program: string | null;
+  transform: BookEditTransformKind | null;
+  targetCount: number;
+  /** LLM requests the proposal will send; 0 for a deterministic plan. */
+  requestCount: number;
+  warnings: string[];
+}
+
+/** `connectionId` names the hub connection the run's `bookEdit` messages go to. */
+export interface ProposeBookEditRequest {
+  thinking: boolean;
+  connectionId?: string | null;
+}
+
+export interface ProposeOneBookEditRequest {
+  targetId: Guid;
+  hint?: string | null;
+  thinking: boolean;
+}
+
+/** `ProposedEdit` on the wire; `newValue` is null on a `Failed` row. */
+export interface BookEditRow {
+  kind: BookEditTargetKind;
+  id: Guid;
+  displayPath: string;
+  oldValue: string;
+  newValue?: string | null;
+  status: ProposalStatus;
+  failureReason?: string | null;
+}
+
+/** The session's proposal run — what a client that missed the hub reads back. */
+export interface BookEditRunDto {
+  status: BookEditRunStatus;
+  done: number;
+  total: number;
+  rows: BookEditRow[];
+  reason: string | null;
 }

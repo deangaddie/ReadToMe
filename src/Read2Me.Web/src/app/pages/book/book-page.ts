@@ -35,6 +35,7 @@ import { AudioSelectionStore } from './audio-selection-store';
 import { BookEditor } from './book-editor';
 import { BookStore, WINDOW_CAP } from './book-store';
 import { TreeNode } from './book-tree';
+import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { ManualRereadDialog } from './manual-reread-dialog';
 import { MeasuredScrollDirective } from './measured-scroll';
 import { NodeMenu } from './node-menu';
@@ -209,6 +210,10 @@ const MODE_LABELS: Record<ReaderMode, string> = {
           <mat-divider></mat-divider>
           <button mat-menu-item type="button" data-action="add-pauses" (click)="run({ type: 'AddPauses' })">
             <mat-icon>pause</mat-icon><span>Add pauses</span>
+          </button>
+          <mat-divider></mat-divider>
+          <button mat-menu-item type="button" data-action="edit-with-ai" (click)="editWithAi()">
+            <mat-icon>auto_fix_high</mat-icon><span>Edit with AI…</span>
           </button>
           <mat-divider></mat-divider>
           <button mat-menu-item type="button" data-action="reread" (click)="reread()">
@@ -731,6 +736,19 @@ export class BookPage {
     });
     const request = await firstValueFrom(ref.afterClosed());
     if (request) await this.editor.rereadManually(request);
+  }
+
+  /**
+   * Edit with AI. The dialog applies through {@link BookEditor} itself, so the reader is already
+   * showing the result when it closes; this only reports what landed.
+   */
+  protected async editWithAi(): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder) return;
+    const result = await openEditWithAiDialog(this.dialog, { folder }, this.injector);
+    if (result) {
+      this.toast.success(`Applied ${result.applied} edit${result.applied === 1 ? '' : 's'}.`);
+    }
   }
 
   private async start(folder: string): Promise<void> {

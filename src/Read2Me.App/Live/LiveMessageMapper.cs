@@ -1,6 +1,7 @@
 using Read2Me.App.Characters;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
+using Read2Me.Services.BookEdits;
 using Read2Me.Services.Health;
 using Read2Me.Services.Llm;
 
@@ -103,4 +104,16 @@ public static class LiveMessageMapper
         ServiceDown d => new WatchdogMessage("serviceDown", d.Service, d.LastError),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped WatchdogEvent"),
     };
+
+    // The bookEdit family has no in-process event record: the run coordinator builds each message
+    // as it goes. They are minted here all the same so the TS mirror's contract test sees the kinds.
+    public static BookEditMessage BookEditProgress(string program, int done, int total) =>
+        new BookEditMessage("progress", program, Done: done, Total: total);
+
+    public static BookEditMessage BookEditDone(string program, IReadOnlyList<ProposedEdit> rows, int total, bool cancelled) =>
+        new BookEditMessage("done", program, Done: rows.Count, Total: total, Cancelled: cancelled,
+            Rows: [.. rows.Select(BookEditRowDto.From)]);
+
+    public static BookEditMessage BookEditFailed(string program, string reason) =>
+        new BookEditMessage("failed", program, Reason: reason);
 }

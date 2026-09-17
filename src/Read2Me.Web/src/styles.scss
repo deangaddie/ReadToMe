@@ -106,3 +106,18 @@ a {
   --mat-snack-bar-container-color: transparent;
   box-shadow: none;
 }
+
+// A dialog that owns the screen for the length of a task (Edit with AI): its content, not the
+// dialog, scrolls, so the stepper and the actions stay put while a long review is read.
+.r2m-fullscreen-dialog {
+  max-height: 100vh;
+
+  .mat-mdc-dialog-surface {
+    border-radius: 0;
+  }
+
+  .mat-mdc-dialog-content {
+    max-height: none;
+    flex: 1 1 auto;
+  }
+}

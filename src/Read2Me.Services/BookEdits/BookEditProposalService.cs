@@ -31,7 +31,8 @@ namespace Read2Me.Services.BookEdits
         IProjectCatalogReader catalog,
         ILogger<BookEditProposalService> logger)
     {
-        private const int BatchSize = 8;
+        /// <summary>Targets per LLM request. The plan's request count is derived from it.</summary>
+        public const int BatchSize = 8;
         private const string MissingItemMessage = "The AI response did not include this item.";
         private const string NoConfigMessage = "No active LLM server configured";
         private const string RunFailed = "The AI request failed.";

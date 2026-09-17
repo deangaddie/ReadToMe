@@ -8,7 +8,8 @@ export type PreflightTask =
   | 'voicePrompt'
   | 'voiceDesign'
   | 'transcription'
-  | 'assembly';
+  | 'assembly'
+  | 'bookEdit';
 
 /**
  * Design principle 4: every AI action is preceded by readiness. Callers already go through this

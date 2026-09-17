@@ -122,6 +122,15 @@ export class LiveService implements OnDestroy {
    */
   readonly resynced$: Observable<LiveSnapshot> = this.resyncedSubject.asObservable();
 
+  /**
+   * This tab's hub connection id, or null while disconnected. An endpoint that pushes back to one
+   * caller (the AI book-edit proposal run) takes it in the request body. It changes on every
+   * reconnect, so it is read at call time rather than held.
+   */
+  connectionId(): string | null {
+    return this.connection?.connectionId ?? null;
+  }
+
   /** Typed stream of one family's messages. */
   on<K extends LiveFamily>(family: K): Observable<LiveMessageMap[K]> {
     return this.subjects[family].asObservable();

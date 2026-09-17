@@ -6,7 +6,7 @@
  * fails when a family name or a `kind` string drifts.
  */
 
-import { Guid, NodeStatusSummaryDto, QueueItemStatus } from '@app/api';
+import { BookEditRow, Guid, NodeStatusSummaryDto, QueueItemStatus } from '@app/api';
 
 // ---- families (ILiveClient.cs [HubMethodName]) --------------------------------------------------
 
@@ -22,6 +22,7 @@ export const LIVE_FAMILIES = [
   'audioGen',
   'throughput',
   'settingsChanged',
+  'bookEdit',
 ] as const;
 
 export type LiveFamily = (typeof LIVE_FAMILIES)[number];
@@ -62,6 +63,7 @@ export const LIVE_KINDS = {
     'verified',
     'failed',
   ],
+  bookEdit: ['progress', 'done', 'failed'],
 } as const;
 
 export type AssemblyKind = (typeof LIVE_KINDS.assembly)[number];
@@ -69,6 +71,7 @@ export type VoiceBatchKind = (typeof LIVE_KINDS.voiceBatch)[number];
 export type WatchdogKind = (typeof LIVE_KINDS.watchdog)[number];
 export type LlmKind = (typeof LIVE_KINDS.llm)[number];
 export type AudioGenKind = (typeof LIVE_KINDS.audioGen)[number];
+export type BookEditKind = (typeof LIVE_KINDS.bookEdit)[number];
 
 // ---- queue (group global, debounced) ------------------------------------------------------------
 
@@ -345,6 +348,22 @@ export interface SettingsChangedMessage {
   area: string;
 }
 
+// ---- bookEdit (one connection) ------------------------------------------------------------------
+
+/**
+ * One proposal run, sent only to the connection that started it. `done` carries every row the run
+ * landed — all of them, or the partial set a cancel kept, with `cancelled` saying which.
+ */
+export interface BookEditMessage {
+  kind: BookEditKind;
+  program: string;
+  done?: number | null;
+  total?: number | null;
+  cancelled?: boolean | null;
+  rows?: BookEditRow[] | null;
+  reason?: string | null;
+}
+
 // ---- snapshots ----------------------------------------------------------------------------------
 
 /** Answer to `JoinProject` and one entry of {@link LiveSnapshot.projects}. */
@@ -381,4 +400,5 @@ export interface LiveMessageMap {
   audioGen: AudioGenMessage;
   throughput: ThroughputSnapshot;
   settingsChanged: SettingsChangedMessage;
+  bookEdit: BookEditMessage;
 }
