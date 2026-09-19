@@ -336,6 +336,7 @@ export class StyleguidePage {
     audioInFlight: 0,
     voiceBatchRunning: false,
     assemblyRunning: false,
+    lastBuild: null,
   });
   readonly pipelineBusy = signal<string | null>(null);
 

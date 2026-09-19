@@ -50,8 +50,8 @@ export const routes: Routes = [
       },
       {
         path: 'export',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'project', title: 'Export', slice: 20 }),
+        loadComponent: () => import('./pages/export/export-page').then((m) => m.ExportPage),
+        data: routeMeta({ section: 'project', title: 'Export' }),
       },
     ],
   },

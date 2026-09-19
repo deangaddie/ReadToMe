@@ -20,6 +20,8 @@ export const IDLE_ASSEMBLY: AssemblyState = {
   encodePercent: 0,
   lastError: null,
   audioRemainingCount: 0,
+  folder: null,
+  outputFileName: null,
 };
 
 export const IDLE_VOICE_BATCH: VoiceBatchState = {
@@ -33,23 +35,41 @@ export const IDLE_VOICE_BATCH: VoiceBatchState = {
 };
 
 export function applyAssembly(state: AssemblyState, m: AssemblyMessage): AssemblyState {
+  // Every kind names the run's project; a host that does not leaves what is known alone.
+  const folder = m.folder ?? state.folder ?? null;
   switch (m.kind) {
     case 'phaseStarted':
       return {
         ...state,
+        folder,
         isRunning: true,
         currentPhase: m.phase ?? null,
         lastError: null,
+        outputFileName: null,
         encodePercent: m.phase === 'Encode' ? 0 : state.encodePercent,
       };
     case 'progress':
-      return { ...state, isRunning: true, encodePercent: (m.fraction ?? 0) * 100 };
+      return { ...state, folder, isRunning: true, encodePercent: (m.fraction ?? 0) * 100 };
     case 'completed':
-      return { ...state, isRunning: false, currentPhase: null, encodePercent: 100 };
+      return {
+        ...state,
+        folder,
+        isRunning: false,
+        currentPhase: null,
+        encodePercent: 100,
+        outputFileName: m.outputFileName ?? null,
+      };
     case 'failed':
-      return { ...state, isRunning: false, currentPhase: null, lastError: m.reason ?? 'failed' };
+      return {
+        ...state,
+        folder,
+        isRunning: false,
+        currentPhase: null,
+        lastError: m.reason ?? 'failed',
+        outputFileName: null,
+      };
     case 'cancelled':
-      return { ...state, isRunning: false, currentPhase: null };
+      return { ...state, folder, isRunning: false, currentPhase: null, outputFileName: null };
   }
 }
 

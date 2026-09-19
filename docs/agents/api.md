@@ -362,8 +362,17 @@ curl -s -X DELETE http://localhost:5000/api/projects/{folder}/book-edits/{progra
 curl -s -X POST http://localhost:5000/api/projects/{folder}/assembly \
   -H 'content-type: application/json' -d '{ "allowPartial": false }'
 # 409 with audioRemainingCount → items still need audio (or pass allowPartial:true)
-# poll /api/assembly/status (phases: Gather, Silence, ProbeConcat, Encode, Finalize)
+# poll /api/assembly/status (phases: Gather, Silence, ProbeConcat, Encode, Finalize);
+# it names the job's folder, and outputFileName once the job completed
+
+curl -s http://localhost:5000/api/projects/{folder}/assembly/outputs
+# → [{ fileName, sizeBytes, createdAt, isPartial }], newest first
+curl -s -OJ http://localhost:5000/api/projects/{folder}/assembly/outputs/{fileName}   # audio/mp4 attachment, Range supported
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/assembly/outputs/{fileName}   # 204
 ```
+
+`{fileName}` must be one of the listed `.m4b` names; anything else — a path, a `.tmp` encode in
+flight, a missing file — is a 404.
 
 Output lands at `<workspace>/{folder}/output/<book title>.m4b`
 (`_partial_<date>` suffix for partial builds). Requires a valid ffmpeg path in
@@ -384,7 +393,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
 | server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
 | server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
-| server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone |
+| server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
 | server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
 | server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |

@@ -1,9 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiClient } from './api-client';
-import type { AssemblyStatusDto, StartedResponse } from './dtos';
+import type { AssemblyOutputDto, AssemblyStatusDto, StartedResponse } from './dtos';
 import { projectUrl } from './projects-api';
 
-/** `AssemblyEndpoints.cs`: m4b assembly start, progress and cancel (one global run). */
+/** `AssemblyEndpoints.cs`: m4b assembly start, progress and cancel (one global run), and outputs. */
 @Injectable({ providedIn: 'root' })
 export class AssemblyApi {
   private readonly api = inject(ApiClient);
@@ -24,4 +24,18 @@ export class AssemblyApi {
   cancel(): Promise<void> {
     return this.api.post<void>('/api/assembly/cancel');
   }
+
+  /** The project's assembled audiobooks, newest first. */
+  outputs(folder: string): Promise<AssemblyOutputDto[]> {
+    return this.api.get<AssemblyOutputDto[]>(`${projectUrl(folder)}/assembly/outputs`);
+  }
+
+  deleteOutput(folder: string, fileName: string): Promise<void> {
+    return this.api.delete(assemblyOutputUrl(folder, fileName));
+  }
+}
+
+/** Download link for one output: the host answers an `audio/mp4` attachment, so a plain anchor saves it. */
+export function assemblyOutputUrl(folder: string, fileName: string): string {
+  return `${projectUrl(folder)}/assembly/outputs/${encodeURIComponent(fileName)}`;
 }

@@ -68,11 +68,18 @@ public sealed record ReceiptMessage(
         new(r.FolderId.Value, r.MutationName, r.MutationId, r.Revision, r.Effects, r.OriginId);
 }
 
-/// <summary><c>kind</c>: phaseStarted | progress | completed | failed | cancelled.</summary>
-public sealed record AssemblyMessage(string Kind, string? Phase = null, double? Fraction = null, string? Reason = null);
+/// <summary>
+/// <c>kind</c>: phaseStarted | progress | completed | failed | cancelled. <c>Folder</c> is the project the
+/// (single, global) run belongs to; <c>OutputFileName</c> rides on <c>completed</c>.
+/// </summary>
+public sealed record AssemblyMessage(
+    string Kind, string? Phase = null, double? Fraction = null, string? Reason = null,
+    string? Folder = null, string? OutputFileName = null);
 
 /// <summary>Assembly service state for the connect-time snapshot.</summary>
-public sealed record AssemblyState(bool IsRunning, string? CurrentPhase, double EncodePercent, string? LastError, int AudioRemainingCount);
+public sealed record AssemblyState(
+    bool IsRunning, string? CurrentPhase, double EncodePercent, string? LastError, int AudioRemainingCount,
+    string? Folder = null, string? OutputFileName = null);
 
 /// <summary><c>kind</c>: started | progress | voiceUpdated | completed | cancelled.</summary>
 public sealed record VoiceBatchMessage(

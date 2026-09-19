@@ -182,7 +182,7 @@ public class LiveRelayTests : IAsyncLifetime
         _assembly.Publish(new AssemblyPhaseStarted(AssemblyPhase.Encode));
         for (var i = 0; i <= 90; i++) _assembly.Publish(new AssemblyEncodeProgress(i / 10_000.0)); // 0 → 0.9 %
         _assembly.Publish(new AssemblyEncodeProgress(0.5));
-        _assembly.Publish(new AssemblyCompleted());
+        _assembly.Publish(new AssemblyCompleted("Dune.m4b") { Folder = "dune" });
 
         await WaitForAsync(() => _hub.Method("assembly").Any(m => ((AssemblyMessage)m.Payload).Kind == "completed"));
 
@@ -191,6 +191,8 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.Equal(0.0, kinds[1].Fraction);
         Assert.Equal(0.5, kinds[2].Fraction);
         Assert.Equal("Encode", kinds[0].Phase);
+        Assert.Equal("Dune.m4b", kinds[3].OutputFileName);
+        Assert.Equal("dune", kinds[3].Folder);
     }
 
     [Fact]

@@ -23,6 +23,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
 {
     public FakeAiRoutingHandler FakeAi { get; } = new();
     public FakeAiServiceControl FakeControl { get; } = new();
+    public FakeAudiobookEncoder Encoder { get; } = new();
     public string WorkspaceDir { get; private set; } = "";
     public string WebRootDir { get; private set; } = "";
     public string BaseUrl { get; private set; } = "";
@@ -61,6 +62,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
                 s.AddSingleton<Read2Me.Services.Health.IAiServiceControl>(FakeControl);
                 s.AddSingleton<IAudioNormalizer, PassThroughAudioNormalizer>();
                 s.AddSingleton<IFfmpegProber, FakeFfmpegProber>();
+                s.AddSingleton<Read2Me.Services.Audio.Assembly.IAudiobookEncoder>(Encoder);
                 // Voice-editor previews expire on this clock, so a test can age them without waiting.
                 s.AddSingleton<IPreviewStore>(new PreviewStore(Clock));
             })
@@ -102,6 +104,10 @@ public sealed class E2eAppFixture : IAsyncLifetime
 
     public Task SeedItemAudioAsync(string folderName, Guid itemId, Guid characterId) =>
         WorkspaceSeeder.SeedItemAudioAsync(Services, WorkspaceDir, folderName, itemId, characterId);
+
+    /// <summary>Gives every speech item audio, so the project assembles without a partial prompt.</summary>
+    public Task SeedAllItemAudioAsync(string folderName) =>
+        WorkspaceSeeder.SeedAllItemAudioAsync(Services, WorkspaceDir, folderName);
 
     public Task<Guid> SeedEditableVoiceAsync(string folderName, Guid characterId, string voiceName = "Alice Voice") =>
         WorkspaceSeeder.SeedEditableVoiceAsync(Services, WorkspaceDir, folderName, characterId, voiceName);

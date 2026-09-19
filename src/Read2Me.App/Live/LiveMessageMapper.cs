@@ -75,11 +75,11 @@ public static class LiveMessageMapper
 
     public static AssemblyMessage Map(AssemblyEvent e) => e switch
     {
-        AssemblyPhaseStarted p => new AssemblyMessage("phaseStarted", Phase: p.Phase.ToString()),
-        AssemblyEncodeProgress p => new AssemblyMessage("progress", Fraction: p.Fraction),
-        AssemblyCompleted => new AssemblyMessage("completed"),
-        AssemblyFailed f => new AssemblyMessage("failed", Reason: f.Reason),
-        AssemblyCancelled => new AssemblyMessage("cancelled"),
+        AssemblyPhaseStarted p => new AssemblyMessage("phaseStarted", Phase: p.Phase.ToString(), Folder: e.Folder),
+        AssemblyEncodeProgress p => new AssemblyMessage("progress", Fraction: p.Fraction, Folder: e.Folder),
+        AssemblyCompleted c => new AssemblyMessage("completed", Folder: e.Folder, OutputFileName: c.OutputFileName),
+        AssemblyFailed f => new AssemblyMessage("failed", Reason: f.Reason, Folder: e.Folder),
+        AssemblyCancelled => new AssemblyMessage("cancelled", Folder: e.Folder),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped AssemblyEvent"),
     };
 

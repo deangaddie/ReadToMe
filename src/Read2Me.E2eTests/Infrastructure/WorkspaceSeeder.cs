@@ -164,6 +164,22 @@ public static class WorkspaceSeeder
         await db.SaveChangesAsync();
     }
 
+    public static async Task SeedAllItemAudioAsync(IServiceProvider services, string workspaceDir, string folderName)
+    {
+        var folderPath = Path.Combine(workspaceDir, folderName);
+        Directory.CreateDirectory(Path.Combine(folderPath, "audio"));
+
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        await using var db = await factory.CreateAsync(folderPath);
+
+        foreach (var item in db.ParagraphItems.ToList().Where(i => !ParagraphItemKinds.IsPause(i.ItemType)))
+        {
+            item.AudioFileName = $"audio/{item.Id}.wav";
+            await File.WriteAllBytesAsync(Path.Combine(folderPath, "audio", $"{item.Id}.wav"), FakeAiResponses.SilentWav());
+        }
+        await db.SaveChangesAsync();
+    }
+
     /// <summary>
     /// Gives a character an uploaded voice whose reference audio is a real, editable Canonical WAV —
     /// dead air, a tone, dead air — so the voice audio editor has something a filter can visibly change.

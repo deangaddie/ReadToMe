@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { AiServicesApi } from './ai-services-api';
-import { AssemblyApi } from './assembly-api';
+import { AssemblyApi, assemblyOutputUrl } from './assembly-api';
 import { AttributionApi } from './attribution-api';
 import { AudioApi } from './audio-api';
 import { AudioProcessingApi } from './audio-processing-api';
@@ -141,7 +141,10 @@ describe('per-area API services', () => {
     http.expectOne({ method: 'GET', url: '/api/projects/f/nodes/chapter/c1/item-ids' }).flush([]);
     await expect(all).resolves.toEqual([]);
 
-    const needs = book.itemIds('f', 'volume', 'v1', { needsAudioOnly: true, narratorOnlyMode: true });
+    const needs = book.itemIds('f', 'volume', 'v1', {
+      needsAudioOnly: true,
+      narratorOnlyMode: true,
+    });
     http
       .expectOne({
         method: 'GET',
@@ -201,6 +204,27 @@ describe('per-area API services', () => {
     expect(req.request.body).toEqual({ allowPartial: false });
     req.flush({}, { status: 202, statusText: 'Accepted' });
     await call;
+  });
+
+  it('AssemblyApi lists and deletes outputs, escaping the file name', async () => {
+    const api = TestBed.inject(AssemblyApi);
+
+    const list = api.outputs('f');
+    http.expectOne({ method: 'GET', url: '/api/projects/f/assembly/outputs' }).flush([]);
+    await expect(list).resolves.toEqual([]);
+
+    const removed = api.deleteOutput('f', 'My Book #1.m4b');
+    http
+      .expectOne({
+        method: 'DELETE',
+        url: '/api/projects/f/assembly/outputs/My%20Book%20%231.m4b',
+      })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await removed;
+
+    expect(assemblyOutputUrl('f', 'My Book #1.m4b')).toBe(
+      '/api/projects/f/assembly/outputs/My%20Book%20%231.m4b',
+    );
   });
 
   it('SettingsApi subclasses target their area; active() maps 404 to null', async () => {

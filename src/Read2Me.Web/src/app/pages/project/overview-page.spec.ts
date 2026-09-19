@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { ProjectDetailDto, ProjectStatusDto } from '@app/api';
+import { AssemblyOutputDto, ProjectDetailDto, ProjectStatusDto } from '@app/api';
 import { OverviewPage } from './overview-page';
 import { ProjectStore } from './project-store';
 
@@ -71,13 +71,15 @@ describe('OverviewPage', () => {
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
-  async function render(s = status()) {
+  async function render(s = status(), outputs: AssemblyOutputDto[] = []) {
     const store = TestBed.inject(ProjectStore);
     const opened = store.open('dune');
     http.expectOne('/api/projects/dune').flush(DETAIL);
     http.expectOne('/api/projects/dune/status').flush(s);
     await opened;
     const fixture = TestBed.createComponent(OverviewPage);
+    await settle();
+    http.expectOne('/api/projects/dune/assembly/outputs').flush(outputs);
     await fixture.whenStable();
     return { fixture, el: fixture.nativeElement as HTMLElement };
   }

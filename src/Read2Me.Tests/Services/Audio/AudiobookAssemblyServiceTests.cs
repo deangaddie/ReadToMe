@@ -253,6 +253,44 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Contains(h.Events, e => e is AssemblyCompleted);
         }
 
+        // ── Output announcement ───────────────────────────────────────────────
+
+        [Fact]
+        public async Task StartAsync_Success_AnnouncesOutputFileNameAndFolder()
+        {
+            var manifest = new List<AssemblyManifestEntry> { AudioEntry(Guid.NewGuid(), "audio/a.wav") };
+            var h = BuildHarness(manifest);
+            Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
+            await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
+
+            h.Sut.StartAsync(Folder);
+            Assert.Equal(_folderName, h.Sut.Folder);
+            await WaitForIdleAsync(h.Sut);
+
+            var completed = Assert.Single(h.Events.OfType<AssemblyCompleted>());
+            Assert.Equal(Path.GetFileName(h.Encoder.LastOutputPath![..^".tmp".Length]), completed.OutputFileName);
+            Assert.Equal(completed.OutputFileName, h.Sut.OutputFileName);
+            Assert.All(h.Events, e => Assert.Equal(_folderName, e.Folder));
+            Assert.Equal(_folderName, h.Sut.Folder);
+        }
+
+        [Fact]
+        public async Task StartAsync_ClearsThePreviousOutputFileName()
+        {
+            var manifest = new List<AssemblyManifestEntry> { AudioEntry(Guid.NewGuid(), "audio/a.wav") };
+            var h = BuildHarness(manifest, encodeDelayMs: 300);
+            Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
+            await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
+
+            h.Sut.StartAsync(Folder);
+            await WaitForIdleAsync(h.Sut);
+            Assert.NotNull(h.Sut.OutputFileName);
+
+            h.Sut.StartAsync(Folder);
+            Assert.Null(h.Sut.OutputFileName);
+            await WaitForIdleAsync(h.Sut);
+        }
+
         [Fact]
         public async Task StartAsync_Success_ForwardsEncodeProgress()
         {

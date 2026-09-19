@@ -235,14 +235,23 @@ export interface AssemblyMessage {
   fraction?: number | null;
   /** On `failed`. */
   reason?: string | null;
+  /** Project the (single, global) run belongs to; on every kind. */
+  folder?: string | null;
+  /** The m4b's name under the project's outputs; on `completed`. */
+  outputFileName?: string | null;
 }
 
 export interface AssemblyState {
   isRunning: boolean;
   currentPhase?: string | null;
+  /** 0..100. */
   encodePercent: number;
   lastError?: string | null;
   audioRemainingCount: number;
+  /** Project of the running (or most recent) job. */
+  folder?: string | null;
+  /** What the most recent job produced; null while running and after a failure or cancel. */
+  outputFileName?: string | null;
 }
 
 // ---- voiceBatch (group global) ------------------------------------------------------------------

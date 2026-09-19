@@ -504,6 +504,20 @@ export interface AssemblyStatusDto {
   encodePercent: number;
   lastError: string | null;
   audioRemainingCount: number;
+  /** Project of the running (or most recent) job; null until the first start. */
+  folder: string | null;
+  /** Set once that job completed: a file name under its assembly outputs. */
+  outputFileName: string | null;
+}
+
+/** One assembled audiobook under `<workspace>/{folder}/output/`. */
+export interface AssemblyOutputDto {
+  fileName: string;
+  sizeBytes: number;
+  /** ISO 8601, UTC: when the file was last written. */
+  createdAt: string;
+  /** A build that skipped items without audio (`_partial_` in the name). */
+  isPartial: boolean;
 }
 
 // ---- Settings entities (`SettingsEndpoints.cs`, `Read2Me.AppData.Entities`) -----------------------
@@ -749,12 +763,7 @@ export interface ApplyPreviewRequest {
 
 /** `Ok` is the only status that carries a program; the rest explain why there is nothing to do. */
 export type BookEditPlanStatus =
-  | 'Ok'
-  | 'NoLlmConfigured'
-  | 'Unsupported'
-  | 'ServiceUnavailable'
-  | 'Failed'
-  | 'NoTargets';
+  'Ok' | 'NoLlmConfigured' | 'Unsupported' | 'ServiceUnavailable' | 'Failed' | 'NoTargets';
 
 /** `TransformKind`: only `Llm` plans send a request per item, so only they offer per-row retries. */
 export type BookEditTransformKind = 'RegexReplace' | 'SetTemplate' | 'Llm';

@@ -51,6 +51,7 @@ function input(s: ProjectStatusDto, overrides: Partial<PipelineInput> = {}): Pip
     audioInFlight: 0,
     voiceBatchRunning: false,
     assemblyRunning: false,
+    lastBuild: null,
     ...overrides,
   };
 }
@@ -167,6 +168,34 @@ describe('derivePipeline', () => {
         .filter((s) => s.next)
         .map((s) => s.id),
     ).toEqual(['export']);
+  });
+
+  it('shows the last build on the export step; only a full build finishes it', () => {
+    const exportStep = (i: PipelineInput) => derivePipeline(i).find((s) => s.id === 'export')!;
+
+    const none = exportStep(input(status()));
+    expect(none.state).toBe('notStarted');
+    expect(none.detail).toBe('Assemble the .m4b audiobook with chapters and cover art.');
+
+    const full = exportStep(
+      input(status(), { lastBuild: { date: '19 Sep 2026', isPartial: false } }),
+    );
+    expect(full.state).toBe('done');
+    expect(full.detail).toBe('Last build: 19 Sep 2026');
+
+    const partial = exportStep(
+      input(status(), { lastBuild: { date: '19 Sep 2026', isPartial: true } }),
+    );
+    expect(partial.state).toBe('notStarted');
+    expect(partial.detail).toBe('Last build: 19 Sep 2026 (partial)');
+
+    const running = exportStep(
+      input(status(), {
+        assemblyRunning: true,
+        lastBuild: { date: '19 Sep 2026', isPartial: false },
+      }),
+    );
+    expect(running.state).toBe('running');
   });
 
   it('offers Read book before import and a destructive Reread after', () => {

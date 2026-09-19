@@ -427,8 +427,11 @@ public sealed class LiveRelay : IHostedService, IDisposable
 
     public LiveSnapshot BuildSnapshot(IEnumerable<string> folders) => new(
         BuildQueueMessage(),
+        // The service tracks encode progress as a 0..1 fraction; the wire state is a percentage,
+        // which is what a client folding `progress` messages arrives at too.
         new AssemblyState(_assemblyService.IsRunning, _assemblyService.CurrentPhase?.ToString(),
-            _assemblyService.EncodePercent, _assemblyService.LastError, _assemblyService.AudioRemainingCount),
+            _assemblyService.EncodePercent * 100, _assemblyService.LastError, _assemblyService.AudioRemainingCount,
+            _assemblyService.Folder, _assemblyService.OutputFileName),
         new VoiceBatchState(_batchRunner.IsRunning, _batchRunner.Processed, _batchRunner.Total, _batchRunner.Failed,
             _batchRunner.CurrentVoiceName, _batchRunner.CurrentOperation, _batchRunner.LastError),
         new Dictionary<string, string>(_watchdogLast, StringComparer.OrdinalIgnoreCase),

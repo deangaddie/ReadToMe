@@ -1,6 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { formatDate } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  LOCALE_ID,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import { AttributionApi, AudioApi, ProjectsApi, toApiError } from '@app/api';
+import {
+  AssemblyApi,
+  AssemblyOutputDto,
+  AttributionApi,
+  AudioApi,
+  ProjectsApi,
+  toApiError,
+} from '@app/api';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
@@ -73,6 +91,8 @@ export class OverviewPage {
   private readonly projects = inject(ProjectsApi);
   private readonly attribution = inject(AttributionApi);
   private readonly audio = inject(AudioApi);
+  private readonly assembly = inject(AssemblyApi);
+  private readonly locale = inject(LOCALE_ID);
   private readonly preflight = inject(Preflight);
   private readonly confirm = inject(ConfirmService);
   private readonly toast = inject(ToastService);
@@ -80,6 +100,27 @@ export class OverviewPage {
 
   /** `step:action` of the command in flight; the stepper disables its actions meanwhile. */
   readonly busy = signal<string | null>(null);
+
+  /** Newest assembled audiobook, for the Export step's "Last build". */
+  private readonly lastOutput = signal<AssemblyOutputDto | null>(null);
+
+  constructor() {
+    effect(() => {
+      const folder = this.store.folder();
+      untracked(() => {
+        this.lastOutput.set(null);
+        if (folder) void this.loadLastOutput(folder);
+      });
+    });
+    this.live
+      .on('assembly')
+      .pipe(takeUntilDestroyed())
+      .subscribe((m) => {
+        const folder = this.store.folder();
+        if (m.kind === 'completed' && folder && (m.folder ?? folder) === folder)
+          void this.loadLastOutput(folder);
+      });
+  }
 
   readonly steps = computed(() => {
     const status = this.store.status();
@@ -91,8 +132,29 @@ export class OverviewPage {
       audioInFlight: this.store.audioInFlight(),
       voiceBatchRunning: this.live.voiceBatch().isRunning,
       assemblyRunning: this.live.assembly().isRunning,
+      lastBuild: this.lastBuild(),
     });
   });
+
+  private readonly lastBuild = computed(() => {
+    const output = this.lastOutput();
+    return output
+      ? {
+          date: formatDate(output.createdAt, 'mediumDate', this.locale),
+          isPartial: output.isPartial,
+        }
+      : null;
+  });
+
+  /** The stepper works without it, so a failure just leaves the step saying nothing was built. */
+  private async loadLastOutput(folder: string): Promise<void> {
+    try {
+      const [newest] = await this.assembly.outputs(folder);
+      if (this.store.folder() === folder) this.lastOutput.set(newest ?? null);
+    } catch {
+      // Left as it was.
+    }
+  }
 
   async onAction({ step, action }: PipelineActionEvent): Promise<void> {
     const folder = this.store.folder();

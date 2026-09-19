@@ -44,6 +44,8 @@ export interface PipelineInput {
   audioInFlight: number;
   voiceBatchRunning: boolean;
   assemblyRunning: boolean;
+  /** The newest assembled audiobook, its date already formatted for display; null when there is none. */
+  lastBuild: { date: string; isPartial: boolean } | null;
 }
 
 const CHIP: Record<
@@ -133,7 +135,12 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
   const audioLabel =
     audioState === 'running' ? `${input.audioInFlight} in flight` : `${audioRemaining} remaining`;
 
-  const exportState: StepState = input.assemblyRunning ? 'running' : 'notStarted';
+  // A partial build leaves the step open: the book is not finished until a full one exists.
+  const exportState: StepState = input.assemblyRunning
+    ? 'running'
+    : input.lastBuild && !input.lastBuild.isPartial
+      ? 'done'
+      : 'notStarted';
 
   const steps: Omit<PipelineStep, 'next'>[] = [
     {
@@ -260,7 +267,9 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       icon: 'download',
       state: exportState,
       chip: chipFor(exportState),
-      detail: 'Assemble the .m4b audiobook with chapters and cover art.',
+      detail: input.lastBuild
+        ? `Last build: ${input.lastBuild.date}${input.lastBuild.isPartial ? ' (partial)' : ''}`
+        : 'Assemble the .m4b audiobook with chapters and cover art.',
       actions: [
         {
           id: 'assemble',
