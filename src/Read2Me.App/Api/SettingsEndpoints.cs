@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -30,25 +31,25 @@ namespace Read2Me.App.Api
                 Handlers<ParagraphTtsSettingsService, ParagraphTtsServiceConfig>(
                     s => s.GetAllConfigsAsync(), s => s.GetActiveConfigAsync(), (s, id) => s.SetActiveConfigAsync(id),
                     (s, c) => s.CreateConfigAsync(c), (s, c) => s.UpdateConfigAsync(c), (s, id) => s.DeleteConfigAsync(id),
-                    c => c.Id, (c, id) => c.Id = id, "paragraph-tts"));
+                    c => c.Id, (c, id) => c.Id = id, "paragraph-tts", ProviderSettingsJson.Canonicalize));
 
             MapArea(endpoints, "voice-design", typeof(VoiceDesignServiceConfig),
                 Handlers<VoiceDesignSettingsService, VoiceDesignServiceConfig>(
                     s => s.GetAllConfigsAsync(), s => s.GetActiveConfigAsync(), (s, id) => s.SetActiveConfigAsync(id),
                     (s, c) => s.CreateConfigAsync(c), (s, c) => s.UpdateConfigAsync(c), (s, id) => s.DeleteConfigAsync(id),
-                    c => c.Id, (c, id) => c.Id = id, "voice-design"));
+                    c => c.Id, (c, id) => c.Id = id, "voice-design", ProviderSettingsJson.Canonicalize));
 
             MapArea(endpoints, "transcription", typeof(TranscriptionServiceConfig),
                 Handlers<TranscriptionSettingsService, TranscriptionServiceConfig>(
                     s => s.GetAllConfigsAsync(), s => s.GetActiveConfigAsync(), (s, id) => s.SetActiveConfigAsync(id),
                     (s, c) => s.CreateConfigAsync(c), (s, c) => s.UpdateConfigAsync(c), (s, id) => s.DeleteConfigAsync(id),
-                    c => c.Id, (c, id) => c.Id = id, "transcription"));
+                    c => c.Id, (c, id) => c.Id = id, "transcription", ProviderSettingsJson.Canonicalize));
 
             MapArea(endpoints, "semantic-similarity", typeof(SemanticSimilarityServiceConfig),
                 Handlers<SemanticSimilaritySettingsService, SemanticSimilarityServiceConfig>(
                     s => s.GetAllConfigsAsync(), s => s.GetActiveConfigAsync(), (s, id) => s.SetActiveConfigAsync(id),
                     (s, c) => s.CreateConfigAsync(c), (s, c) => s.UpdateConfigAsync(c), (s, id) => s.DeleteConfigAsync(id),
-                    c => c.Id, (c, id) => c.Id = id, "semantic-similarity"));
+                    c => c.Id, (c, id) => c.Id = id, "semantic-similarity", ProviderSettingsJson.Canonicalize));
 
             MapPromptEndpoints(endpoints);
             MapAudioProcessingEndpoints(endpoints);
@@ -80,10 +81,26 @@ namespace Read2Me.App.Api
             Func<TService, int, Task> delete,
             Func<TConfig, int> getId,
             Action<TConfig, int> setId,
-            string area)
+            string area,
+            Action<TConfig>? canonicalize = null)
             where TService : class where TConfig : class
         {
             TService Svc(HttpContext ctx) => ctx.RequestServices.GetRequiredService<TService>();
+
+            // Null when the config is fit to store; the provider areas rewrite settingsJson on the way.
+            IResult? Refusal(TConfig config)
+            {
+                try
+                {
+                    canonicalize?.Invoke(config);
+                    return null;
+                }
+                catch (JsonException ex)
+                {
+                    return Results.Problem($"settingsJson is not this provider type's settings: {ex.Message}",
+                        statusCode: StatusCodes.Status400BadRequest);
+                }
+            }
 
             return new AreaHandlers(
                 List: async ctx => Results.Ok(await getAll(Svc(ctx))),
@@ -91,6 +108,8 @@ namespace Read2Me.App.Api
                 {
                     if (await ctx.Request.ReadFromJsonAsync<TConfig>() is not { } config)
                         return Results.Problem("Missing config body.", statusCode: StatusCodes.Status400BadRequest);
+                    if (Refusal(config) is { } refusal)
+                        return refusal;
                     setId(config, 0);
                     var created = await create(Svc(ctx), config);
                     return Results.Created($"/api/settings/{area}/{getId(created)}", created);
@@ -102,6 +121,8 @@ namespace Read2Me.App.Api
                     var svc = Svc(ctx);
                     if ((await getAll(svc)).All(c => getId(c) != id))
                         return Results.NotFound();
+                    if (Refusal(config) is { } refusal)
+                        return refusal;
                     setId(config, id);
                     await update(svc, config);
                     return Results.Ok(config);
@@ -160,6 +181,16 @@ namespace Read2Me.App.Api
                         ? Results.Ok(ProviderSettingsSchema.VoiceDesign(t))
                         : UnknownProviderType(type, typeof(VoiceDesignServiceType)))
                 .WithSummary("The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+            endpoints.MapGet("/api/settings/transcription/schema", (string? type) =>
+                    TryParseType<TranscriptionServiceType>(type, out var t)
+                        ? Results.Ok(ProviderSettingsSchema.Transcription(t))
+                        : UnknownProviderType(type, typeof(TranscriptionServiceType)))
+                .WithSummary("The editable fields of one transcription provider type (?type=LocalWhisper, name or number) beyond its base URL — none today.");
+            endpoints.MapGet("/api/settings/semantic-similarity/schema", (string? type) =>
+                    TryParseType<SemanticSimilarityServiceType>(type, out var t)
+                        ? Results.Ok(ProviderSettingsSchema.SemanticSimilarity(t))
+                        : UnknownProviderType(type, typeof(SemanticSimilarityServiceType)))
+                .WithSummary("The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, name or number) beyond its base URL: the pass threshold.");
         }
 
         private static bool TryParseType<TEnum>(string? raw, out TEnum type) where TEnum : struct, Enum =>

@@ -2238,6 +2238,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/paragraph-tts/{id}/text-steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The text-processing steps a TTS config may enable (its enabledStepIds): the built-ins, then the config's own substitutions in order. Id 0 lists the built-ins for a config not yet saved. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/voice-design/sample-text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The sentence voice design speaks: the stored override (null when none) and the built-in default. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Override the voice-design sample sentence. Null, blank or the default text clears the override. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["VoiceDesignSampleTextRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/voice-design/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Design a voice from a prompt with one config, speaking the sample text; answers the audio as base64. 60 s timeout. 422 with the reason when the provider fails. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["VoiceDesignTestRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/transcription/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Transcribe an uploaded audio file (multipart field 'file': wav, mp3 or aac, at most 50 MB) with one config. 422 with the reason when the provider fails. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/semantic-similarity/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Score two texts with one config against its pass threshold. 422 with the reason when the provider fails. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SimilarityTestRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/prompts": {
         parameters: {
             query?: never;
@@ -2432,6 +2640,78 @@ export interface paths {
             cookie?: never;
         };
         /** The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/transcription/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The editable fields of one transcription provider type (?type=LocalWhisper, name or number) beyond its base URL — none today. */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/semantic-similarity/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, name or number) beyond its base URL: the pass threshold. */
         get: {
             parameters: {
                 query?: {
@@ -3080,7 +3360,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stop the running test send. Harmless when nothing is running. */
+        /** Stop the running test send (one runs at a time, whichever config it targets). Harmless when nothing is running. */
         post: {
             parameters: {
                 query?: never;
@@ -4230,6 +4510,10 @@ export interface components {
             /** Format: int32 */
             id: number | string;
         };
+        SimilarityTestRequest: {
+            text1?: null | string;
+            text2?: null | string;
+        };
         SplitRuleRequest: {
             mode: null | string;
             prefix?: null | string;
@@ -4238,7 +4522,6 @@ export interface components {
             id?: string;
             /** Format: int32 */
             paragraphTtsServiceConfigId?: number | string;
-            config?: components["schemas"]["ParagraphTtsServiceConfig"];
             fromText?: string;
             toText?: string;
             /** Format: int32 */
@@ -4254,7 +4537,6 @@ export interface components {
             id?: number | string;
             /** Format: int32 */
             paragraphTtsServiceConfigId?: number | string;
-            config?: components["schemas"]["ParagraphTtsServiceConfig"];
             paragraphEnabled?: boolean;
             wordEnabled?: boolean;
             /** Format: int32 */
@@ -4277,6 +4559,9 @@ export interface components {
             /** @default false */
             regenerateAll: boolean;
         };
+        VoiceDesignSampleTextRequest: {
+            text?: null | string;
+        };
         VoiceDesignServiceConfig: {
             /** Format: int32 */
             id?: number | string;
@@ -4285,6 +4570,9 @@ export interface components {
             settingsJson?: string;
         };
         VoiceDesignServiceType: number;
+        VoiceDesignTestRequest: {
+            prompt?: null | string;
+        };
     };
     responses: never;
     parameters: never;

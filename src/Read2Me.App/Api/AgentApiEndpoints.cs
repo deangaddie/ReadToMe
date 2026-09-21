@@ -26,6 +26,7 @@ namespace Read2Me.App.Api
             endpoints.MapAssemblyEndpoints();
             endpoints.MapThemeEndpoints(); // before MapSettingsEndpoints: it owns the /api/settings 404 fallback
             endpoints.MapLlmSettingsEndpoints();
+            endpoints.MapProviderSettingsEndpoints();
             endpoints.MapSettingsEndpoints();
             endpoints.MapAiServiceEndpoints();
             endpoints.MapOpenApi();

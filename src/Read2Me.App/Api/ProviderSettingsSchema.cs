@@ -1,5 +1,6 @@
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.ParagraphTts.Settings;
+using Read2Me.Services.Audio.SemanticSimilarity.Settings;
 using Read2Me.Services.Audio.VoiceDesign.Settings;
 
 namespace Read2Me.App.Api
@@ -75,6 +76,17 @@ namespace Read2Me.App.Api
             VoiceDesignServiceType.Qwen3 => new(type.ToString(), Qwen3VoiceDesignFields()),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "No settings schema for this voice-design provider."),
         };
+
+        /// <summary>A Whisper server is its base URL and nothing else.</summary>
+        public static SettingsSchemaDto Transcription(TranscriptionServiceType type) => new(type.ToString(), []);
+
+        /// <summary>Both similarity models share one record; the key is its (unnamed, so PascalCase) JSON property.</summary>
+        public static SettingsSchemaDto SemanticSimilarity(SemanticSimilarityServiceType type) => new(type.ToString(),
+        [
+            new(nameof(SemanticSimilaritySettings.PassThreshold), "Pass Threshold", "number", Min: 0.0, Max: 1.0, Step: 0.01,
+                Default: new SemanticSimilaritySettings().PassThreshold,
+                Help: "Similarity at or above this passes the semantic accuracy check. (0–1, exclusive)"),
+        ]);
 
         /// <summary>Shared by the VoxCPM2 TTS and voice-design records: same JSON names, same ranges.</summary>
         private static IReadOnlyList<SettingsFieldDto> VoxCpm2Fields(

@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   computed,
   effect,
   inject,
@@ -19,9 +18,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import {
-  AiServiceDto,
-  AiServiceStatus,
-  AiServicesApi,
   AttributionPromptStyle,
   LlmApiType,
   LlmServerConfig,
@@ -29,14 +25,13 @@ import {
   toApiError,
 } from '@app/api';
 import { ConfigEditorFrame } from '@app/ui/config-editor-frame/config-editor-frame';
-import { DockerControls } from '@app/ui/docker-controls/docker-controls';
 import { ToastService } from '@app/ui/toast/toast.service';
+import { ManagedServiceStatus } from '../shared/managed-service-status';
 import {
   API_TYPE_LABELS,
   EMPTY_LLM_FORM,
   LlmConfigForm,
   buildLlmConfig,
-  isAbsoluteUrl,
   sameLlmForm,
   validateLlmForm,
 } from './llm-config-form';
@@ -50,9 +45,6 @@ export interface LlmEditTarget {
   /** The opening draft — differs from `baseline` for a duplicate. */
   draft: LlmConfigForm;
 }
-
-/** Typing a base URL asks the host which container it is once, not per keystroke. */
-const RESOLVE_DEBOUNCE_MS = 400;
 
 const NUMERIC_FIELDS = [
   { key: 'temperature', label: 'Temperature' },
@@ -79,7 +71,7 @@ const NUMERIC_FIELDS = [
     MatProgressSpinnerModule,
     MatSelectModule,
     ConfigEditorFrame,
-    DockerControls,
+    ManagedServiceStatus,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -92,16 +84,8 @@ const NUMERIC_FIELDS = [
       (cancel)="reset()"
     >
       <div class="llm-editor">
-        @if (service(); as svc) {
-          <r2m-docker-controls
-            class="llm-editor__docker"
-            statusOnly
-            [serviceName]="svc.containerName"
-            [status]="serviceStatus()"
-            [busy]="probing()"
-            (refresh)="probe()"
-          />
-        }
+        <!-- Follows the draft, not the saved config: a duplicate or a retyped URL shows its container. -->
+        <app-managed-service-status [baseUrl]="form().baseUrl" />
 
         <mat-form-field appearance="outline">
           <mat-label>Name</mat-label>
@@ -301,7 +285,6 @@ const NUMERIC_FIELDS = [
 export class LlmConfigEditor {
   private readonly store = inject(LlmSettingsStore);
   private readonly api = inject(LlmSettingsApi);
-  private readonly aiServices = inject(AiServicesApi);
   private readonly toast = inject(ToastService);
 
   readonly target = input.required<LlmEditTarget>();
@@ -334,49 +317,16 @@ export class LlmConfigEditor {
     return current && !models.includes(current) ? [current, ...models] : models;
   });
 
-  protected readonly service = signal<AiServiceDto | null>(null);
-  protected readonly serviceStatus = signal<AiServiceStatus>('Unknown');
-  protected readonly probing = signal(false);
-
   readonly dirty = computed(() => !sameLlmForm(this.form(), this.target().baseline));
 
   /** Which target the async answers belong to; one for an earlier target is dropped. */
   private generation = 0;
-
-  /** The draft's base URL once it is one worth asking the host about. */
-  private readonly managedUrl = computed(() => {
-    const url = this.form().baseUrl.trim();
-    return isAbsoluteUrl(url) ? url : '';
-  });
-  private resolveTimer: ReturnType<typeof setTimeout> | null = null;
-  private resolveSeq = 0;
 
   constructor() {
     effect(() => {
       const target = this.target();
       untracked(() => this.open(target));
     });
-    // Follows the draft, not the saved config: a duplicate or a retyped URL shows its container.
-    effect(() => {
-      const url = this.managedUrl();
-      untracked(() => this.scheduleResolve(url));
-    });
-    inject(DestroyRef).onDestroy(() => this.cancelResolve());
-  }
-
-  private cancelResolve(): void {
-    if (this.resolveTimer) clearTimeout(this.resolveTimer);
-    this.resolveTimer = null;
-    this.resolveSeq++;
-  }
-
-  private scheduleResolve(url: string): void {
-    this.cancelResolve();
-    this.service.set(null);
-    this.serviceStatus.set('Unknown');
-    this.probing.set(false);
-    if (!url) return;
-    this.resolveTimer = setTimeout(() => void this.resolveService(url), RESOLVE_DEBOUNCE_MS);
   }
 
   private open(target: LlmEditTarget): void {
@@ -442,33 +392,6 @@ export class LlmConfigEditor {
       this.error.set(toApiError(e).message);
     } finally {
       this.saving.set(false);
-    }
-  }
-
-  private async resolveService(baseUrl: string): Promise<void> {
-    const seq = this.resolveSeq;
-    try {
-      const service = await this.aiServices.resolve(baseUrl);
-      if (seq !== this.resolveSeq) return;
-      this.service.set(service);
-      if (service) await this.probe();
-    } catch {
-      // Not knowing whether the URL is a managed container only hides the status row.
-    }
-  }
-
-  protected async probe(): Promise<void> {
-    const service = this.service();
-    if (!service) return;
-    const seq = this.resolveSeq;
-    this.probing.set(true);
-    try {
-      const { status } = await this.aiServices.status(service.name);
-      if (seq === this.resolveSeq) this.serviceStatus.set(status);
-    } catch {
-      if (seq === this.resolveSeq) this.serviceStatus.set('Unknown');
-    } finally {
-      if (seq === this.resolveSeq) this.probing.set(false);
     }
   }
 }

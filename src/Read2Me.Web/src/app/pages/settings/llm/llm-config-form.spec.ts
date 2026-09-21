@@ -3,7 +3,6 @@ import {
   EMPTY_LLM_FORM,
   LlmConfigForm,
   buildLlmConfig,
-  duplicateName,
   toLlmForm,
   validateLlmForm,
 } from './llm-config-form';
@@ -111,13 +110,5 @@ describe('LLM config form', () => {
     expect(form.temperature).toBe('0');
     expect(form.maxTokens).toBe('');
     expect(buildLlmConfig(form, config.id)).toEqual(config);
-  });
-
-  it('names a duplicate so it does not collide', () => {
-    expect(duplicateName('Local', ['Local'])).toBe('Local (copy)');
-    expect(duplicateName('Local', ['Local', 'Local (copy)'])).toBe('Local (copy 2)');
-    expect(duplicateName('Local', ['Local', 'local (COPY)', 'Local (copy 2)'])).toBe(
-      'Local (copy 3)',
-    );
   });
 });

@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { LlmServerConfig, toApiError } from '@app/api';
+import { duplicateName } from '@app/shared/config-form';
 import { HasUnsavedChanges, confirmDiscard } from '@app/shared/unsaved-changes.guard';
 import { ConfigList, ConfigListItem } from '@app/ui/config-list/config-list';
 import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
@@ -21,7 +22,6 @@ import { LlmConfigEditor, LlmEditTarget } from './llm-config-editor';
 import {
   API_TYPE_LABELS,
   EMPTY_LLM_FORM,
-  duplicateName,
   sameLlmForm,
   toLlmForm,
 } from './llm-config-form';

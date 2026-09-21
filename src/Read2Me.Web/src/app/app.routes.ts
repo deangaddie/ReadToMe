@@ -10,6 +10,10 @@ import { unsavedChangesGuard } from './shared/unsaved-changes.guard';
 const placeholder = () =>
   import('./pages/placeholder/placeholder-page').then((m) => m.PlaceholderPage);
 
+/** One page serves the four provider areas (ticket 22); each route's `providerArea` data says which. */
+const providerSettingsPage = () =>
+  import('./pages/settings/providers/provider-settings-page').then((m) => m.ProviderSettingsPage);
+
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'projects' },
   {
@@ -75,23 +79,27 @@ export const routes: Routes = [
       },
       {
         path: 'tts',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'settings', title: 'Paragraph TTS', slice: 22 }),
+        loadComponent: providerSettingsPage,
+        canDeactivate: [unsavedChangesGuard],
+        data: { ...routeMeta({ section: 'settings', title: 'Paragraph TTS' }), providerArea: 'paragraph-tts' },
       },
       {
         path: 'voice-design',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'settings', title: 'Voice design', slice: 22 }),
+        loadComponent: providerSettingsPage,
+        canDeactivate: [unsavedChangesGuard],
+        data: { ...routeMeta({ section: 'settings', title: 'Voice design' }), providerArea: 'voice-design' },
       },
       {
         path: 'transcription',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'settings', title: 'Transcription', slice: 22 }),
+        loadComponent: providerSettingsPage,
+        canDeactivate: [unsavedChangesGuard],
+        data: { ...routeMeta({ section: 'settings', title: 'Transcription' }), providerArea: 'transcription' },
       },
       {
         path: 'similarity',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'settings', title: 'Similarity', slice: 22 }),
+        loadComponent: providerSettingsPage,
+        canDeactivate: [unsavedChangesGuard],
+        data: { ...routeMeta({ section: 'settings', title: 'Similarity' }), providerArea: 'semantic-similarity' },
       },
       {
         path: 'audio',

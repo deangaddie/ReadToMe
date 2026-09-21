@@ -33,6 +33,8 @@ export interface SettingsField {
   help?: string;
   /** A number that may be left blank (null), meaning "use the server's default". */
   nullable?: boolean;
+  /** A string that is a credential: typed masked and kept out of the browser's autofill. */
+  secret?: boolean;
 }
 
 export interface SettingsSchema {
@@ -215,7 +217,8 @@ export function isFieldValid(field: SettingsField, value: unknown): boolean {
             >
               <input
                 matInput
-                type="text"
+                [type]="field.secret ? 'password' : 'text'"
+                [attr.autocomplete]="field.secret ? 'new-password' : 'off'"
                 [attr.aria-label]="field.label"
                 [value]="stringValue(field)"
                 [disabled]="disabled()"

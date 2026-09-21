@@ -13,7 +13,17 @@ import type {
   ProviderSettingsSchema,
   VoiceDesignServiceType,
   SemanticSimilarityServiceConfig,
+  SemanticSimilarityServiceType,
   SettingsConfig,
+  SimilarityTestRequest,
+  SimilarityTestResponse,
+  TextStep,
+  TranscriptionServiceType,
+  TranscriptionTestResponse,
+  VoiceDesignSampleText,
+  VoiceDesignSampleTextRequest,
+  VoiceDesignTestRequest,
+  VoiceDesignTestResponse,
   TranscriptionServiceConfig,
   VoiceDesignServiceConfig,
 } from './dtos';
@@ -123,6 +133,11 @@ export class ParagraphTtsSettingsApi extends SettingsApi<ParagraphTtsServiceConf
   schema(type: ParagraphTtsServiceType): Promise<ProviderSettingsSchema> {
     return this.client.get<ProviderSettingsSchema>('/api/settings/paragraph-tts/schema', { type });
   }
+
+  /** The built-in steps, then config `id`'s substitutions; id 0 lists the built-ins only. */
+  textSteps(id: number): Promise<TextStep[]> {
+    return this.client.get<TextStep[]>(`/api/settings/paragraph-tts/${id}/text-steps`);
+  }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -137,18 +152,71 @@ export class VoiceDesignSettingsApi extends SettingsApi<VoiceDesignServiceConfig
   schema(type: VoiceDesignServiceType): Promise<ProviderSettingsSchema> {
     return this.client.get<ProviderSettingsSchema>('/api/settings/voice-design/schema', { type });
   }
+
+  sampleText(): Promise<VoiceDesignSampleText> {
+    return this.client.get<VoiceDesignSampleText>('/api/settings/voice-design/sample-text');
+  }
+
+  /** Null, blank or the default text clears the override. */
+  setSampleText(text: string | null): Promise<VoiceDesignSampleText> {
+    const request: VoiceDesignSampleTextRequest = { text };
+    return this.client.put<VoiceDesignSampleText>('/api/settings/voice-design/sample-text', request);
+  }
+
+  /** Designs a voice with the stored config `id` (up to 60 s); 422 carries the provider's reason. */
+  test(id: number, prompt: string): Promise<VoiceDesignTestResponse> {
+    const request: VoiceDesignTestRequest = { prompt };
+    return this.client.post<VoiceDesignTestResponse>(
+      `/api/settings/voice-design/${id}/test`,
+      request,
+    );
+  }
 }
 
 @Injectable({ providedIn: 'root' })
 export class TranscriptionSettingsApi extends SettingsApi<TranscriptionServiceConfig> {
+  private readonly client = inject(ApiClient);
+
   constructor() {
     super('transcription');
+  }
+
+  schema(type: TranscriptionServiceType): Promise<ProviderSettingsSchema> {
+    return this.client.get<ProviderSettingsSchema>('/api/settings/transcription/schema', { type });
+  }
+
+  /** Transcribes a wav / mp3 / aac (≤ 50 MB) with the stored config `id`; 422 carries the provider's reason. */
+  async test(id: number, audio: File): Promise<string> {
+    const form = new FormData();
+    form.append('file', audio, audio.name);
+    const response = await this.client.postForm<TranscriptionTestResponse>(
+      `/api/settings/transcription/${id}/test`,
+      form,
+    );
+    return response.transcript;
   }
 }
 
 @Injectable({ providedIn: 'root' })
 export class SemanticSimilaritySettingsApi extends SettingsApi<SemanticSimilarityServiceConfig> {
+  private readonly client = inject(ApiClient);
+
   constructor() {
     super('semantic-similarity');
+  }
+
+  schema(type: SemanticSimilarityServiceType): Promise<ProviderSettingsSchema> {
+    return this.client.get<ProviderSettingsSchema>('/api/settings/semantic-similarity/schema', {
+      type,
+    });
+  }
+
+  /** Scores two texts with the stored config `id`; 422 carries the provider's reason. */
+  test(id: number, text1: string, text2: string): Promise<SimilarityTestResponse> {
+    const request: SimilarityTestRequest = { text1, text2 };
+    return this.client.post<SimilarityTestResponse>(
+      `/api/settings/semantic-similarity/${id}/test`,
+      request,
+    );
   }
 }

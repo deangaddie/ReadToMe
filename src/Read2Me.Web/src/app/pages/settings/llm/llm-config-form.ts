@@ -1,4 +1,5 @@
 import { AttributionPromptStyle, LlmApiType, LlmServerConfig } from '@app/api';
+import { isAbsoluteUrl } from '@app/shared/config-form';
 
 /**
  * Edit-state for an `LlmServerConfig`, mirroring Blazor's `LlmServerConfigForm`: numeric fields are
@@ -64,7 +65,6 @@ export function toLlmForm(config: LlmServerConfig): LlmConfigForm {
 const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 const WHOLE = /^[+-]?\d+$/;
 const INT32_MAX = 2147483647;
-const ABSOLUTE_URL = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i;
 
 /** Blank parses to null; `undefined` means the text is not a number of that kind. */
 function parse(value: string, pattern: RegExp): number | null | undefined {
@@ -74,11 +74,6 @@ function parse(value: string, pattern: RegExp): number | null | undefined {
   const parsed = Number(trimmed);
   // The host binds whole numbers to int32, as Blazor's int.TryParse did.
   return pattern === WHOLE && Math.abs(parsed) > INT32_MAX ? undefined : parsed;
-}
-
-export function isAbsoluteUrl(value: string): boolean {
-  const trimmed = value.trim();
-  return ABSOLUTE_URL.test(trimmed) && URL.canParse(trimmed);
 }
 
 /** The first problem, worded and ordered as Blazor's `LlmServerConfigForm.Validate`; null when valid. */
@@ -125,13 +120,4 @@ export function buildLlmConfig(form: LlmConfigForm, id: number): LlmServerConfig
 
 export function sameLlmForm(a: LlmConfigForm, b: LlmConfigForm): boolean {
   return (Object.keys(a) as (keyof LlmConfigForm)[]).every((key) => a[key] === b[key]);
-}
-
-/** "Name (copy)", then "(copy 2)", … — whichever no existing config already uses, ignoring case. */
-export function duplicateName(name: string, existing: readonly string[]): string {
-  const taken = new Set(existing.map((n) => n.trim().toLowerCase()));
-  for (let n = 1; ; n++) {
-    const candidate = n === 1 ? `${name} (copy)` : `${name} (copy ${n})`;
-    if (!taken.has(candidate.toLowerCase())) return candidate;
-  }
 }

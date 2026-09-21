@@ -638,6 +638,53 @@ export interface SetActiveRequest {
   id: number;
 }
 
+// ---- Provider settings pages (`ProviderSettingsEndpoints.cs`, ticket 22) ---------------------------
+
+/** One text-processing step a TTS config may enable; `options` are the step's own switches. */
+export interface TextStep {
+  stepId: string;
+  label: string;
+  description: string;
+  /** False for one of the config's own substitutions. */
+  builtIn: boolean;
+  options?: ProviderSettingsField[] | null;
+}
+
+export interface VoiceDesignSampleText {
+  /** The stored override; null while the built-in `default` is in use. */
+  text: string | null;
+  default: string;
+}
+
+export interface VoiceDesignSampleTextRequest {
+  /** Null, blank or the default text clears the override. */
+  text: string | null;
+}
+
+export interface VoiceDesignTestRequest {
+  prompt: string;
+}
+
+export interface SimilarityTestRequest {
+  text1: string;
+  text2: string;
+}
+
+export interface VoiceDesignTestResponse {
+  audioBase64: string;
+  contentType: string;
+}
+
+export interface TranscriptionTestResponse {
+  transcript: string;
+}
+
+export interface SimilarityTestResponse {
+  score: number;
+  threshold: number;
+  pass: boolean;
+}
+
 // ---- Prompts + audio processing (`SettingsEndpoints.cs`) -------------------------------------------
 
 export const PROMPT_KINDS = [

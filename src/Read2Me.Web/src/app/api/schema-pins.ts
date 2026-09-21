@@ -28,13 +28,16 @@ import type {
   Schema,
   SemanticSimilarityServiceConfig,
   SetActiveRequest,
+  SimilarityTestRequest,
   SplitRuleRequest,
   TextSubstitutionStep,
   ThemeSelectionUpdate,
   ToSentenceCaseConfig,
   TranscriptionServiceConfig,
   UpdateProjectRequest,
+  VoiceDesignSampleTextRequest,
   VoiceDesignServiceConfig,
+  VoiceDesignTestRequest,
 } from './dtos';
 
 type Pin<THand extends TGenerated, TGenerated> = THand;
@@ -66,4 +69,7 @@ export type SchemaPins = [
   Pin<ProposeOneBookEditRequest, Schema['ProposeOneBookEditRequest']>,
   Pin<LlmTestRequest, Schema['LlmTestRequest']>,
   Pin<AttributionChainRequest, Schema['AttributionChainRequest']>,
+  Pin<VoiceDesignSampleTextRequest, Schema['VoiceDesignSampleTextRequest']>,
+  Pin<VoiceDesignTestRequest, Schema['VoiceDesignTestRequest']>,
+  Pin<SimilarityTestRequest, Schema['SimilarityTestRequest']>,
 ];

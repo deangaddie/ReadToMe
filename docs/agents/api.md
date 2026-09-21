@@ -53,6 +53,20 @@ default config) and `available` (every config). Deleting a config removes its st
 `llmTest` on `connectionId`. `POST …/{id}/test/cancel` stops it; `GET /api/settings/llm/test`
 answers `{ running, configId }`.
 
+Provider extras (`paragraph-tts`, `voice-design`, `transcription`, `semantic-similarity`): a config's
+provider settings live in `settingsJson`, and every create / update rewrites it into the provider
+record's own key case and order — send the keys in any case; text that is not the provider's shape
+is 400. `GET /api/settings/{area}/schema?type=` lists a provider type's editable fields beyond its
+base URL (none for transcription, `PassThreshold` for similarity).
+`GET /api/settings/paragraph-tts/{id}/text-steps` → `[{ stepId, label, description, builtIn, options? }]`:
+the ids a TTS config may put in `enabledStepIds` (built-ins, then its own `substitutionSteps`; id 0 =
+built-ins only). `GET/PUT /api/settings/voice-design/sample-text` → `{ text, default }` (`text` null =
+default; PUT `{ text }`, null or the default text clears it).
+Test one stored config — a provider that is down answers 422 with its reason:
+`POST /api/settings/voice-design/{id}/test` `{ prompt }` → `{ audioBase64, contentType }` (60 s timeout),
+`POST /api/settings/transcription/{id}/test` multipart `file` (wav/mp3/aac, ≤ 50 MB) → `{ transcript }`,
+`POST /api/settings/semantic-similarity/{id}/test` `{ text1, text2 }` → `{ score, threshold, pass }`.
+
 Prompt templates: `GET /api/settings/prompts` (all kinds, resolved),
 `PUT /api/settings/prompts/{kind}` to override, `DELETE` to reset.
 Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`.
