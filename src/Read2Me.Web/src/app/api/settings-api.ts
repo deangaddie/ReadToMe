@@ -2,7 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { ApiClient } from './api-client';
 import { ApiError } from './api-error';
 import type {
+  AttributionChainRequest,
+  AttributionChainResponse,
+  LlmModelsResponse,
   LlmServerConfig,
+  LlmTestRequest,
+  LlmTestStatusResponse,
   ParagraphTtsServiceConfig,
   ParagraphTtsServiceType,
   ProviderSettingsSchema,
@@ -67,8 +72,42 @@ export abstract class SettingsApi<TConfig extends SettingsConfig> {
 
 @Injectable({ providedIn: 'root' })
 export class LlmSettingsApi extends SettingsApi<LlmServerConfig> {
+  private readonly client = inject(ApiClient);
+
   constructor() {
     super('llm');
+  }
+
+  /** Model ids the server behind `config` offers; the config need not be saved. 422 carries the reason. */
+  async models(config: LlmServerConfig): Promise<string[]> {
+    const response = await this.client.post<LlmModelsResponse>('/api/settings/llm/models', config);
+    return response.models;
+  }
+
+  /** 202; tokens arrive on `stream:llm` and the outcome as `llmTest` on `connectionId`. 409 while one runs. */
+  startTest(id: number, request: LlmTestRequest): Promise<void> {
+    return this.client.post<void>(`/api/settings/llm/${id}/test`, request);
+  }
+
+  cancelTest(id: number): Promise<void> {
+    return this.client.post<void>(`/api/settings/llm/${id}/test/cancel`, null);
+  }
+
+  /** For a page that may have missed its `llmTest` message. */
+  testStatus(): Promise<LlmTestStatusResponse> {
+    return this.client.get<LlmTestStatusResponse>('/api/settings/llm/test');
+  }
+
+  attributionChain(): Promise<AttributionChainResponse> {
+    return this.client.get<AttributionChainResponse>('/api/settings/llm/attribution-chain');
+  }
+
+  /** Replaces the chain and the self-consistency flag; 422 when a step names no config. */
+  setAttributionChain(request: AttributionChainRequest): Promise<AttributionChainResponse> {
+    return this.client.put<AttributionChainResponse>(
+      '/api/settings/llm/attribution-chain',
+      request,
+    );
   }
 }
 

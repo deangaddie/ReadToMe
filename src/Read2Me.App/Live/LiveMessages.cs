@@ -159,6 +159,12 @@ public sealed record BookEditMessage(
     string? Reason = null);
 
 /// <summary>
+/// <c>kind</c>: done | failed | cancelled — how the LLM settings test send ended (Angular ticket 21),
+/// sent to the connection that started it. The tokens themselves travel on <c>stream:llm</c>.
+/// </summary>
+public sealed record LlmTestMessage(string Kind, int ConfigId, string? Reason = null);
+
+/// <summary>
 /// <see cref="ProposedEdit"/> on the wire; enums as member names. Shared with the REST reads of a
 /// proposal run (<c>BookEditEndpoints</c>) on purpose: a row a client got pushed and a row it read
 /// back after missing the push have to be the same shape, or a review screen would need two.

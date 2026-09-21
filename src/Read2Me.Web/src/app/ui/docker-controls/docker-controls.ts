@@ -12,19 +12,23 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { StatusChip, StatusKind } from '@app/ui/status-chip/status-chip';
 
 /** Mirrors `AiServiceStatus` in `Read2Me.Services/Health/IAiServiceControl.cs` (serialised as the member name). */
-export type AiServiceStatus = 'NotFound' | 'Stopped' | 'Starting' | 'Ready' | 'Unknown';
+export type AiServiceStatus =
+  'NotFound' | 'Stopped' | 'Starting' | 'Ready' | 'Recovering' | 'Down' | 'Unknown';
 
 const STATUS_VIEW: Record<AiServiceStatus, { kind: StatusKind; label: string }> = {
   Ready: { kind: 'ok', label: 'Ready' },
   Starting: { kind: 'busy', label: 'Starting' },
   Stopped: { kind: 'neutral', label: 'Stopped' },
+  Recovering: { kind: 'busy', label: 'Recovering' },
+  Down: { kind: 'error', label: 'Down' },
   NotFound: { kind: 'warn', label: 'Not found' },
   Unknown: { kind: 'neutral', label: 'Unknown' },
 };
 
 /**
  * Presentational Start / Restart / Shutdown / Refresh controls for a managed container (design §7).
- * Ticket 25 wires the outputs to the AI services store.
+ * Ticket 25 wires the outputs to the AI services store; until then a settings page shows it
+ * `statusOnly` — the chip and Refresh, no container buttons.
  */
 @Component({
   selector: 'r2m-docker-controls',
@@ -37,36 +41,38 @@ const STATUS_VIEW: Record<AiServiceStatus, { kind: StatusKind; label: string }> 
     }
     <r2m-status-chip [status]="view().kind" [label]="view().label" compact />
     <span class="r2m-docker-controls__buttons">
-      <button
-        mat-icon-button
-        type="button"
-        [disabled]="busy() || !canStart()"
-        (click)="start.emit()"
-        aria-label="Start"
-        matTooltip="Start"
-      >
-        <mat-icon>play_arrow</mat-icon>
-      </button>
-      <button
-        mat-icon-button
-        type="button"
-        [disabled]="busy() || !canStop()"
-        (click)="restart.emit()"
-        aria-label="Restart"
-        matTooltip="Restart"
-      >
-        <mat-icon>restart_alt</mat-icon>
-      </button>
-      <button
-        mat-icon-button
-        type="button"
-        [disabled]="busy() || !canStop()"
-        (click)="shutdown.emit()"
-        aria-label="Shutdown"
-        matTooltip="Shutdown"
-      >
-        <mat-icon>stop</mat-icon>
-      </button>
+      @if (!statusOnly()) {
+        <button
+          mat-icon-button
+          type="button"
+          [disabled]="busy() || !canStart()"
+          (click)="start.emit()"
+          aria-label="Start"
+          matTooltip="Start"
+        >
+          <mat-icon>play_arrow</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [disabled]="busy() || !canStop()"
+          (click)="restart.emit()"
+          aria-label="Restart"
+          matTooltip="Restart"
+        >
+          <mat-icon>restart_alt</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [disabled]="busy() || !canStop()"
+          (click)="shutdown.emit()"
+          aria-label="Shutdown"
+          matTooltip="Shutdown"
+        >
+          <mat-icon>stop</mat-icon>
+        </button>
+      }
       <button
         mat-icon-button
         type="button"
@@ -102,6 +108,7 @@ const STATUS_VIEW: Record<AiServiceStatus, { kind: StatusKind; label: string }> 
 export class DockerControls {
   readonly status = input<AiServiceStatus>('Unknown');
   readonly busy = input(false, { transform: booleanAttribute });
+  readonly statusOnly = input(false, { transform: booleanAttribute });
   readonly serviceName = input<string>();
 
   readonly start = output<void>();

@@ -69,7 +69,7 @@ export interface ConfigListItem {
               <span class="r2m-config-list__badge">{{ item.badge }}</span>
             }
             @if (item.isActive) {
-              <r2m-status-chip status="ok" label="Active" compact />
+              <r2m-status-chip status="ok" [label]="activeLabel()" compact />
             }
             <button
               mat-icon-button
@@ -94,7 +94,7 @@ export interface ConfigListItem {
           [disabled]="item.isActive"
           (click)="makeActive.emit(item.id)"
         >
-          <mat-icon>check_circle</mat-icon><span>Make active</span>
+          <mat-icon>check_circle</mat-icon><span>Make {{ activeLabel().toLowerCase() }}</span>
         </button>
         <button mat-menu-item type="button" (click)="duplicate.emit(item.id)">
           <mat-icon>content_copy</mat-icon><span>Duplicate</span>
@@ -211,6 +211,8 @@ export class ConfigList {
   readonly items = input.required<ConfigListItem[]>();
   readonly selectedId = input<string | null>(null);
   readonly busy = input(false, { transform: booleanAttribute });
+  /** What the area calls its selected config: "Active" for providers, "Default" for LLM. */
+  readonly activeLabel = input('Active');
 
   // eslint-disable-next-line @angular-eslint/no-output-native -- name fixed by the design vocabulary (design §7)
   readonly select = output<string>();

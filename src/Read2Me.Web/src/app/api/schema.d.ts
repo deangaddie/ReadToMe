@@ -2494,6 +2494,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai-services/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The managed service behind a config base URL (?baseUrl=, matched on scheme/host/port), 404 when the URL is not one the watchdog manages. */
+        get: {
+            parameters: {
+                query?: {
+                    baseUrl?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai-services/{name}/status": {
         parameters: {
             query?: never;
@@ -2938,6 +2974,210 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["ThemeSelectionUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Model ids the server behind a config offers. The body is an LLM config and need not be saved. 422 with the reason when the server cannot be asked. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LlmServerConfig"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a free-text test prompt to one config (202). Tokens stream on /hubs/live group stream:llm, wrapped in runStarted/runEnded; llmTest { kind: done | failed | cancelled } goes to the connectionId in the body. 409 while a test is already running. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LlmTestRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm/{id}/test/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop the running test send. Harmless when nothing is running. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether a test send is in flight, for a client that missed its llmTest message. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm/attribution-chain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The attribution escalation chain: stored steps in order, the self-consistency flag, the chain as attribution resolves it (an empty chain falls back to the default config) and every config a step may name. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Replace the attribution chain and the self-consistency flag. Exact duplicate steps collapse. 422 when a step names no config. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AttributionChainRequest"];
                 };
             };
             responses: {
@@ -3847,6 +4087,17 @@ export interface components {
             /** @default false */
             allowPartial: boolean;
         };
+        AttributionChainRequest: {
+            steps?: null | components["schemas"]["AttributionChainStepDto"][];
+            /** @default false */
+            selfConsistency: boolean;
+        };
+        AttributionChainStepDto: {
+            /** Format: int32 */
+            configId: number | string;
+            thinking: boolean;
+            promptStyle?: null | components["schemas"]["AttributionPromptStyle"];
+        };
         AttributionPromptStyle: number;
         AudioEnqueueRequest: {
             level: string;
@@ -3904,6 +4155,10 @@ export interface components {
             attributionBatchSize?: number | string;
             promptStyle?: components["schemas"]["AttributionPromptStyle"];
             supportsModelSwitch?: boolean;
+        };
+        LlmTestRequest: {
+            prompt?: null | string;
+            connectionId?: null | string;
         };
         ManualImportRequest: {
             hasMultipleVolumes: boolean;

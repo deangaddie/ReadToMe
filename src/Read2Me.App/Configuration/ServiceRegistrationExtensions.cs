@@ -219,6 +219,7 @@ public static class ServiceRegistrationExtensions
         // Process-wide, not circuit-bound: the HTTP API plans in one request and proposes/applies in others.
         services.AddSingleton<Read2Me.Services.BookEdits.IBookEditSessionStore>(_ => new Read2Me.Services.BookEdits.BookEditSessionStore(TimeProvider.System));
         services.AddSingleton<Read2Me.App.Live.BookEditRunCoordinator>();
+        services.AddSingleton<Read2Me.App.Live.LlmTestRunCoordinator>();
 
         // Character discovery
         services.AddScoped<Read2Me.Services.Characters.CharacterDiscoveryService>();

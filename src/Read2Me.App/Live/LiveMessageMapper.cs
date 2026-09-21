@@ -116,4 +116,11 @@ public static class LiveMessageMapper
 
     public static BookEditMessage BookEditFailed(string program, string reason) =>
         new BookEditMessage("failed", program, Reason: reason);
+
+    public static LlmTestMessage LlmTestDone(int configId) => new LlmTestMessage("done", configId);
+
+    public static LlmTestMessage LlmTestFailed(int configId, string reason) =>
+        new LlmTestMessage("failed", configId, reason);
+
+    public static LlmTestMessage LlmTestCancelled(int configId) => new LlmTestMessage("cancelled", configId);
 }

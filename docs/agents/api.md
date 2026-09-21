@@ -41,6 +41,18 @@ curl -s -X PUT http://localhost:5000/api/settings/llm/active \
   -H 'content-type: application/json' -d '{ "id": 1 }'
 ```
 
+LLM extras: `POST /api/settings/llm/models` takes an LLM config (saved or not) and answers
+`{ models }`, or 422 with the reason when the server cannot be asked.
+`GET/PUT /api/settings/llm/attribution-chain` reads and replaces the attribution escalation chain —
+`{ steps: [{ configId, thinking, promptStyle }], selfConsistency }` (`promptStyle` 0 = Full,
+1 = Simple, null = inherit the config's; exact duplicate steps collapse; 422 when a step names no
+config). GET adds `resolved` (the chain as attribution runs it — an empty chain falls back to the
+default config) and `available` (every config). Deleting a config removes its steps.
+`POST /api/settings/llm/{id}/test` with `{ prompt, connectionId }` sends a free-text test prompt
+(202; 409 while one is running): tokens stream on hub group `stream:llm`, the ending arrives as
+`llmTest` on `connectionId`. `POST …/{id}/test/cancel` stops it; `GET /api/settings/llm/test`
+answers `{ running, configId }`.
+
 Prompt templates: `GET /api/settings/prompts` (all kinds, resolved),
 `PUT /api/settings/prompts/{kind}` to override, `DELETE` to reset.
 Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`.
@@ -49,7 +61,8 @@ Themes (shared with both UIs): `GET/POST /api/settings/themes`, `PUT/DELETE /api
 (`{ selectedThemeId, followSystemPreference }`, both optional on PUT).
 
 Container health (read-only): `GET /api/ai-services`,
-`GET /api/ai-services/{name}/status`. Remember the GPU fits one model at a time —
+`GET /api/ai-services/{name}/status`, and `GET /api/ai-services/resolve?baseUrl=` for the managed
+service behind a config's base URL (404 when it is not one of ours). Remember the GPU fits one model at a time —
 start only the containers the current step needs (`docker compose` in `Infra/`).
 
 ## 1. Create a project and import the book
@@ -396,6 +409,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
 | server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
+| server → client | `llmTest` | how an LLM settings test send ended (`done`, `failed` with `reason`, `cancelled`), sent only to the `connectionId` that started it; the tokens are on `stream:llm` |
 | server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is

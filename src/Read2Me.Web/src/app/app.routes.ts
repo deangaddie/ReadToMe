@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { routeMeta } from './route-meta';
+import { unsavedChangesGuard } from './shared/unsaved-changes.guard';
 
 /**
  * Information architecture from design §4. Every leaf is lazy; until its slice lands it resolves
@@ -62,8 +63,10 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'llm' },
       {
         path: 'llm',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'settings', title: 'LLM', slice: 21 }),
+        loadComponent: () =>
+          import('./pages/settings/llm/llm-settings-page').then((m) => m.LlmSettingsPage),
+        canDeactivate: [unsavedChangesGuard],
+        data: routeMeta({ section: 'settings', title: 'LLM' }),
       },
       {
         path: 'prompts',

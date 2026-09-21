@@ -18,6 +18,13 @@ namespace Read2Me.App.Api
                         .ToList()))
                 .WithSummary("Catalog of the Docker-hosted AI services the watchdog manages.");
 
+            endpoints.MapGet("/api/ai-services/resolve",
+                    (string? baseUrl, DockerAiServiceRegistry registry) =>
+                        registry.TryGetByBaseUrl(baseUrl ?? "", out var s)
+                            ? Results.Ok(new AiServiceDto(s.Name, s.ContainerName, s.BaseUrl, s.UsesGpu))
+                            : Results.NotFound())
+                .WithSummary("The managed service behind a config base URL (?baseUrl=, matched on scheme/host/port), 404 when the URL is not one the watchdog manages.");
+
             endpoints.MapGet("/api/ai-services/{name}/status", GetStatusAsync)
                 .WithSummary("Live status of one AI service (single health probe): NotFound, Stopped, Starting, Ready, Recovering, Down or Unknown.");
         }

@@ -23,6 +23,7 @@ export const LIVE_FAMILIES = [
   'throughput',
   'settingsChanged',
   'bookEdit',
+  'llmTest',
 ] as const;
 
 export type LiveFamily = (typeof LIVE_FAMILIES)[number];
@@ -64,6 +65,7 @@ export const LIVE_KINDS = {
     'failed',
   ],
   bookEdit: ['progress', 'done', 'failed'],
+  llmTest: ['done', 'failed', 'cancelled'],
 } as const;
 
 export type AssemblyKind = (typeof LIVE_KINDS.assembly)[number];
@@ -72,6 +74,7 @@ export type WatchdogKind = (typeof LIVE_KINDS.watchdog)[number];
 export type LlmKind = (typeof LIVE_KINDS.llm)[number];
 export type AudioGenKind = (typeof LIVE_KINDS.audioGen)[number];
 export type BookEditKind = (typeof LIVE_KINDS.bookEdit)[number];
+export type LlmTestKind = (typeof LIVE_KINDS.llmTest)[number];
 
 // ---- queue (group global, debounced) ------------------------------------------------------------
 
@@ -373,6 +376,15 @@ export interface BookEditMessage {
   reason?: string | null;
 }
 
+// ---- llmTest (one connection) -------------------------------------------------------------------
+
+/** How the LLM settings test send ended (ticket 21); the tokens travel on `stream:llm`. */
+export interface LlmTestMessage {
+  kind: LlmTestKind;
+  configId: number;
+  reason?: string | null;
+}
+
 // ---- snapshots ----------------------------------------------------------------------------------
 
 /** Answer to `JoinProject` and one entry of {@link LiveSnapshot.projects}. */
@@ -410,4 +422,5 @@ export interface LiveMessageMap {
   throughput: ThroughputSnapshot;
   settingsChanged: SettingsChangedMessage;
   bookEdit: BookEditMessage;
+  llmTest: LlmTestMessage;
 }

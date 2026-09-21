@@ -8,6 +8,7 @@ import { AiServiceStatus, DockerControls } from './docker-controls';
     serviceName="llama"
     [status]="status()"
     [busy]="busy()"
+    [statusOnly]="statusOnly()"
     (start)="log.push('start')"
     (restart)="log.push('restart')"
     (shutdown)="log.push('shutdown')"
@@ -17,6 +18,7 @@ import { AiServiceStatus, DockerControls } from './docker-controls';
 class HostCmp {
   readonly status = signal<AiServiceStatus>('Stopped');
   readonly busy = signal(false);
+  readonly statusOnly = signal(false);
   log: string[] = [];
 }
 
@@ -58,6 +60,29 @@ describe('r2m-docker-controls', () => {
     expect(fixture.nativeElement.querySelector('r2m-status-chip')?.classList).toContain(
       'r2m-status-chip--busy',
     );
+  });
+
+  it('shows the recovering and down statuses the host reports', async () => {
+    const fixture = await mount();
+    const chip = () => fixture.nativeElement.querySelector('r2m-status-chip') as HTMLElement;
+    fixture.componentInstance.status.set('Recovering');
+    await fixture.whenStable();
+    expect(chip().textContent).toContain('Recovering');
+    expect(chip().classList).toContain('r2m-status-chip--busy');
+
+    fixture.componentInstance.status.set('Down');
+    await fixture.whenStable();
+    expect(chip().textContent).toContain('Down');
+    expect(chip().classList).toContain('r2m-status-chip--error');
+  });
+
+  it('status-only keeps the chip and Refresh and drops the container buttons', async () => {
+    const fixture = await mount();
+    fixture.componentInstance.statusOnly.set(true);
+    await fixture.whenStable();
+    expect(buttons(fixture).map((b) => b.getAttribute('aria-label'))).toEqual(['Refresh status']);
+    buttons(fixture)[0]!.click();
+    expect(fixture.componentInstance.log).toEqual(['refresh']);
   });
 
   it('disables everything while busy and flags NotFound as a warning', async () => {

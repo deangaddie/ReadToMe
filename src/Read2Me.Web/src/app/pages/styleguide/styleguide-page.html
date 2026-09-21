@@ -256,6 +256,22 @@
   <r2m-sparkline [values]="[]" label="empty" />
 </ng-template>
 
+<!-- ===================================================== throughput -->
+<app-story
+  name="Throughput"
+  selector="r2m-throughput"
+  anchor="throughput"
+  note="One Throughput Run: live rate while it runs; overall rate and the per-config table once it ends."
+  [body]="throughputTpl"
+  [schemes]="schemes()"
+/>
+<ng-template #throughputTpl>
+  <div class="sg__stack">
+    <r2m-throughput [snapshot]="throughputRunning" />
+    <r2m-throughput [snapshot]="throughputEnded" />
+  </div>
+</ng-template>
+
 <!-- ===================================================== toast -->
 <app-story
   name="Toast"
@@ -418,6 +434,7 @@
       />
     }
     <r2m-docker-controls status="Ready" serviceName="busy" busy />
+    <r2m-docker-controls status="Ready" serviceName="status only" statusOnly />
   </div>
 </ng-template>
 

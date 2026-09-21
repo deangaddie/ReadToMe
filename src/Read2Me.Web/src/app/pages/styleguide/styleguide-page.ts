@@ -5,7 +5,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { ParagraphDto, ParagraphItemDto, ProjectSummary } from '@app/api';
 import { AudioGenEvent, LlmStreamEvent } from '@app/live/hub-events';
-import { LIVE_FAMILIES, LiveFamily } from '@app/live/live-messages';
+import { LIVE_FAMILIES, LiveFamily, ThroughputSnapshot } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { AudioPlayer } from '@app/ui/audio-player/audio-player';
 import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
@@ -41,6 +41,7 @@ import {
 } from '@app/ui/preflight-sheet/preflight-sheet';
 import { SettingsForm, SettingsSchema, SettingsValues } from '@app/ui/settings-form/settings-form';
 import { Sparkline } from '@app/ui/sparkline/sparkline';
+import { Throughput } from '@app/ui/throughput/throughput';
 import { StatusChip, StatusKind } from '@app/ui/status-chip/status-chip';
 import { StreamAudio } from '@app/ui/stream-audio/stream-audio';
 import { StreamLlm } from '@app/ui/stream-llm/stream-llm';
@@ -77,6 +78,7 @@ interface TocEntry {
     InlineEdit,
     FileDrop,
     Sparkline,
+    Throughput,
     JobPill,
     JobCard,
     ConfigList,
@@ -102,7 +104,11 @@ interface TocEntry {
     AudioSelectionStore,
     {
       provide: AudioGenerator,
-      useValue: { retry: async () => false, dismissReview: async () => false, working: signal(false) },
+      useValue: {
+        retry: async () => false,
+        dismissReview: async () => false,
+        working: signal(false),
+      },
     },
     {
       provide: SpeakerAssigner,
@@ -231,6 +237,7 @@ export class StyleguidePage {
     { anchor: 'project-card', label: 'Project card' },
     { anchor: 'reader-rows', label: 'Reader paragraph' },
     { anchor: 'sparkline', label: 'Sparkline' },
+    { anchor: 'throughput', label: 'Throughput' },
     { anchor: 'toast', label: 'Toast' },
     { anchor: 'job-pill', label: 'Job pill' },
     { anchor: 'job-card', label: 'Job card' },
@@ -305,6 +312,41 @@ export class StyleguidePage {
     12, 14, 13, 18, 22, 21, 25, 24, 28, 30, 27, 31, 29, 33, 35, 34, 36, 38, 37, 40,
   ];
   readonly flatValues = [5, 5, 5, 5, 5];
+
+  // ---- throughput --------------------------------------------------------------------------------
+  readonly throughputRunning: ThroughputSnapshot = {
+    hasRun: true,
+    isRunActive: true,
+    runThroughput: null,
+    generationRate: 38.4,
+    generationRateHistory: this.sparkValues,
+    perConfig: [],
+  };
+  readonly throughputEnded: ThroughputSnapshot = {
+    hasRun: true,
+    isRunActive: false,
+    runThroughput: 31.2,
+    generationRate: null,
+    generationRateHistory: this.sparkValues,
+    perConfig: [
+      {
+        configId: 1,
+        configName: 'gemma-4b',
+        requests: 42,
+        tokensOut: 5120,
+        generationMs: 148000,
+        tokensPerSecond: 34.6,
+      },
+      {
+        configId: 2,
+        configName: 'gemma-26b (thinking)',
+        requests: 6,
+        tokensOut: 2210,
+        generationMs: 86000,
+        tokensPerSecond: 25.7,
+      },
+    ],
+  };
 
   // ---- toasts ------------------------------------------------------------------------------------
   /** A book mid-production: imported and cast, attribution running, voices and audio outstanding. */
@@ -552,6 +594,8 @@ export class StyleguidePage {
     'Ready',
     'Starting',
     'Stopped',
+    'Recovering',
+    'Down',
     'NotFound',
     'Unknown',
   ];

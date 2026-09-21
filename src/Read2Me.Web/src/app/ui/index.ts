@@ -27,6 +27,7 @@ export * from './docker-controls/docker-controls';
 export * from './preflight-sheet/preflight-sheet';
 export * from './stream-llm/llm-turns';
 export * from './stream-llm/stream-llm';
+export * from './throughput/throughput';
 export * from './stream-audio/audio-cards';
 export * from './stream-audio/stream-audio';
 export * from './project-card/project-card';

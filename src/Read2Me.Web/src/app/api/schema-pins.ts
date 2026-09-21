@@ -10,11 +10,13 @@
 import type {
   AppTheme,
   ApplyPreviewRequest,
+  AttributionChainRequest,
   AudioProcessingUpdateRequest,
   BulkAssignPreviewRequest,
   GenerateDesignPromptRequest,
   ItemsEnqueueRequest,
   LlmServerConfig,
+  LlmTestRequest,
   ManualImportRequest,
   NarratorOnlyModeRequest,
   ParagraphTtsServiceConfig,
@@ -62,4 +64,6 @@ export type SchemaPins = [
   Pin<PlanBookEditRequest, Schema['PlanBookEditRequest']>,
   Pin<ProposeBookEditRequest, Schema['ProposeBookEditRequest']>,
   Pin<ProposeOneBookEditRequest, Schema['ProposeOneBookEditRequest']>,
+  Pin<LlmTestRequest, Schema['LlmTestRequest']>,
+  Pin<AttributionChainRequest, Schema['AttributionChainRequest']>,
 ];

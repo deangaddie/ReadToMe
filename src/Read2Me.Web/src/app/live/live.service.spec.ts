@@ -261,6 +261,7 @@ describe('LiveService', () => {
         'bookEdit',
         'itemStatus',
         'llm',
+        'llmTest',
         'nodeStatus',
         'queue',
         'receipt',

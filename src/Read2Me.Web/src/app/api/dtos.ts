@@ -539,6 +539,48 @@ export interface LlmServerConfig {
   supportsModelSwitch: boolean;
 }
 
+// ---- LLM settings page (`LlmSettingsEndpoints.cs`, ticket 21) -------------------------------------
+
+export interface LlmModelsResponse {
+  models: string[];
+}
+
+export interface LlmTestRequest {
+  prompt: string;
+  /** The live hub connection that receives the run's `llmTest` message. */
+  connectionId?: string | null;
+}
+
+export interface LlmTestStatusResponse {
+  running: boolean;
+  configId: number | null;
+}
+
+/** One stored chain rung. A null `promptStyle` inherits the config's own. */
+export interface AttributionChainStep {
+  configId: number;
+  thinking: boolean;
+  promptStyle: AttributionPromptStyle | null;
+}
+
+export interface AttributionChainRequest {
+  steps: AttributionChainStep[];
+  selfConsistency: boolean;
+}
+
+/** A rung as attribution runs it; `promptStyle` is the effective style. */
+export interface ResolvedChainStep {
+  config: LlmServerConfig;
+  thinking: boolean;
+  promptStyle: AttributionPromptStyle;
+}
+
+export interface AttributionChainResponse extends AttributionChainRequest {
+  /** The chain attribution resolves: deduped, and the default config alone when `steps` is empty. */
+  resolved: ResolvedChainStep[];
+  available: LlmServerConfig[];
+}
+
 export interface TextSubstitutionStep {
   id: string;
   paragraphTtsServiceConfigId: number;

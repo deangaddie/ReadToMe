@@ -52,7 +52,7 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : WebE
         await Expect(pill).ToHaveCountAsync(0);
         await Page.GetByLabel("Toggle activity drawer").ClickAsync();
         await Page.Locator("a[mat-tab-link][data-tab='jobs']").ClickAsync();
-        var table = Page.Locator("app-jobs-tab .activity-jobs__table");
+        var table = Page.Locator("app-jobs-tab .r2m-throughput__table");
         await Expect(table).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await Expect(table.Locator("tbody tr")).ToHaveCountAsync(1);
         await Page.Locator("app-jobs-tab button", new() { HasText = "Dismiss" }).ClickAsync();

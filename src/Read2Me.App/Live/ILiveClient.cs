@@ -34,4 +34,6 @@ public interface ILiveClient
     Task SettingsChanged(SettingsChangedMessage message);
     [HubMethodName("bookEdit")]
     Task BookEdit(BookEditMessage message);
+    [HubMethodName("llmTest")]
+    Task LlmTest(LlmTestMessage message);
 }
