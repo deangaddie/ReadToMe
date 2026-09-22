@@ -277,6 +277,54 @@ describe('per-area API services', () => {
     await expect(call).resolves.toMatchObject({ werThreshold: 0.2 });
   });
 
+  it('AudioProcessingApi.saveStep puts the config under its step id', async () => {
+    const config = {
+      stepId: 'silence-trim',
+      enabled: true,
+      settings: { thresholdDb: -40, padMs: 0 },
+    };
+    const call = TestBed.inject(AudioProcessingApi).saveStep(config);
+    const req = http.expectOne({
+      method: 'PUT',
+      url: '/api/settings/audio-processing/steps/silence-trim',
+    });
+    expect(req.request.body).toEqual(config);
+    req.flush(config);
+    await expect(call).resolves.toEqual(config);
+  });
+
+  it('AudioProcessingApi.previewStep posts the sample and the unsaved settings', async () => {
+    const call = TestBed.inject(AudioProcessingApi).previewStep('consonant-soften', {
+      sample: { folder: 'book', itemId: 'item-1' },
+      settings: { engine: 'adyneq', preset: 'light' },
+    });
+    const req = http.expectOne({
+      method: 'POST',
+      url: '/api/settings/audio-processing/steps/consonant-soften/preview',
+    });
+    expect(req.request.body).toEqual({
+      sample: { folder: 'book', itemId: 'item-1' },
+      settings: { engine: 'adyneq', preset: 'light' },
+    });
+    req.flush({
+      previewId: 'p1',
+      originalUrl: '/o',
+      processedUrl: '/p',
+      removedMs: null,
+      reason: null,
+      appliedOk: true,
+    });
+    await expect(call).resolves.toMatchObject({ previewId: 'p1' });
+  });
+
+  it('AudioProcessingApi.recentSamples passes the limit', async () => {
+    const call = TestBed.inject(AudioProcessingApi).recentSamples(5);
+    const req = http.expectOne((r) => r.url === '/api/audio/samples/recent');
+    expect(req.request.params.get('limit')).toBe('5');
+    req.flush([]);
+    await expect(call).resolves.toEqual([]);
+  });
+
   it('AiServicesApi.status encodes the service name', async () => {
     const call = TestBed.inject(AiServicesApi).status('qwen3 tts');
     http

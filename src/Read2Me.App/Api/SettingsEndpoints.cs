@@ -25,11 +25,6 @@ namespace Read2Me.App.Api
         string DefaultTemplate,
         bool IsOverridden,
         IReadOnlyList<string> Warnings);
-    public sealed record AudioProcessingUpdateRequest(
-        string? FfmpegPath = null,
-        double? WerThreshold = null,
-        int? AudioMaxAttempts = null,
-        int? ChunkPauseMs = null);
 
     public static class SettingsEndpoints
     {
@@ -66,7 +61,7 @@ namespace Read2Me.App.Api
                     c => c.Id, (c, id) => c.Id = id, "semantic-similarity", ProviderSettingsJson.Canonicalize));
 
             MapPromptEndpoints(endpoints);
-            MapAudioProcessingEndpoints(endpoints);
+            endpoints.MapAudioProcessingEndpoints();
             MapSchemaEndpoints(endpoints);
 
             // Anything else under /api/settings is not an area — 404 instead of the Blazor fallback.
@@ -287,32 +282,5 @@ namespace Read2Me.App.Api
         private static IResult UnknownPromptKind(string kind) =>
             Results.Problem($"Unknown prompt kind '{kind}'. Known kinds: {string.Join(", ", PromptCatalog.Kinds.Select(k => k.Kind).OrderBy(k => k))}.",
                 statusCode: StatusCodes.Status400BadRequest);
-
-        // ── audio processing (single row) ────────────────────────────────────
-
-        private static void MapAudioProcessingEndpoints(IEndpointRouteBuilder endpoints)
-        {
-            endpoints.MapGet("/api/settings/audio-processing", GetAudioProcessingAsync)
-                .WithSummary("Audio post-processing scalars: ffmpeg path, WER threshold, retry count, pause durations.");
-            endpoints.MapPut("/api/settings/audio-processing", UpdateAudioProcessingAsync)
-                .WithSummary("Update audio post-processing scalars; only supplied fields change.");
-        }
-
-        private static async Task<IResult> GetAudioProcessingAsync(AudioProcessingSettingsService svc) =>
-            Results.Ok(await svc.GetAsync());
-
-        private static async Task<IResult> UpdateAudioProcessingAsync(
-            AudioProcessingUpdateRequest request, AudioProcessingSettingsService svc)
-        {
-            if (request.FfmpegPath is not null)
-                await svc.SetFfmpegPathAsync(request.FfmpegPath);
-            if (request.WerThreshold is { } wer)
-                await svc.SetWerThresholdAsync(wer);
-            if (request.AudioMaxAttempts is { } attempts)
-                await svc.SetAudioMaxAttemptsAsync(attempts);
-            if (request.ChunkPauseMs is { } chunk)
-                await svc.SetChunkPauseAsync(chunk);
-            return Results.Ok(await svc.GetAsync());
-        }
     }
 }

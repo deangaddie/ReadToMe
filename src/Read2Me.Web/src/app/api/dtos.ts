@@ -745,6 +745,129 @@ export interface AudioProcessingUpdateRequest {
   chunkPauseMs?: number;
 }
 
+// ---- Audio processing page (`AudioProcessingEndpoints.cs`, ticket 24) ------------------------------
+
+/** The assembler's per-kind silences; `PUT /api/settings/audio-processing/pauses` takes the same shape. */
+export interface PauseDurations {
+  volumeMs: number;
+  partMs: number;
+  chapterMs: number;
+  paragraphMs: number;
+  pauseMs: number;
+}
+
+/** The two paragraph post-process steps, in pipeline order. */
+export const AUDIO_STEP_IDS = {
+  silenceTrim: 'silence-trim',
+  consonantSoften: 'consonant-soften',
+} as const;
+
+/**
+ * One step's stored config (`AudioPostProcessStepConfig`): its enabled flag and the step's own
+ * settings payload — `SilenceTrimSettings` or `ConsonantSoftenSettings` below.
+ */
+export interface AudioPostProcessStepConfig {
+  stepId: string;
+  enabled: boolean;
+  settings: Record<string, unknown> | null;
+}
+
+export interface SilenceTrimSettings {
+  thresholdDb: number;
+  padMs: number;
+  /** Fixed server-side; carried through so a save round-trips the stored value. */
+  minOutputMs?: number;
+}
+
+export type ConsonantSoftenEngine = 'adyneq' | 'deesser';
+export type ConsonantSoftenPreset = 'light' | 'medium' | 'strong' | 'custom';
+
+/** Full adynEQ parameter set; threshold in dB (the host converts to linear amplitude). */
+export interface AdynEqParams {
+  thresholdDb: number;
+  ratio: number;
+  rangeDb: number;
+  detectFrequencyHz: number;
+  detectQ: number;
+  targetFrequencyHz: number;
+  targetQ: number;
+  attackMs: number;
+  releaseMs: number;
+  shelfFrequencyHz: number;
+  shelfGainDb: number;
+  /** Optional 1-pole highpass cutoff; presets never set it. */
+  highpassHz?: number;
+}
+
+export interface DeesserParams {
+  intensity: number;
+  makeupAmount: number;
+  frequency: number;
+  shelfFrequencyHz: number;
+  shelfGainDb: number;
+  highpassHz?: number;
+}
+
+/** A preset reference: raw params are present only when `preset` is `custom`. */
+export interface ConsonantSoftenSettings {
+  engine: ConsonantSoftenEngine;
+  preset: ConsonantSoftenPreset;
+  adynEq?: AdynEqParams | null;
+  deesser?: DeesserParams | null;
+}
+
+/** `GET /api/settings/audio-processing/full`: everything the page shows, in one read. */
+export interface AudioProcessingFull {
+  ffmpegPath: string | null;
+  werThreshold: number;
+  sentenceSplitEnabled: boolean;
+  chunkPauseMs: number;
+  audioMaxAttempts: number;
+  pauses: PauseDurations;
+  steps: AudioPostProcessStepConfig[];
+}
+
+export interface FfmpegTestRequest {
+  /** Persisted before the probe; blank means "rely on PATH". */
+  ffmpegPath?: string | null;
+}
+
+export interface FfmpegProbeResult {
+  success: boolean;
+  message: string;
+}
+
+/** One row of the A/B preview picker: a generated item that still holds a Preview Source. */
+export interface RecentAudioSample {
+  itemId: Guid;
+  folder: string;
+  text: string;
+  characterName: string | null;
+  voiceName: string | null;
+  projectTitle: string;
+}
+
+export interface PreviewSampleRef {
+  folder: string;
+  itemId: Guid;
+}
+
+export interface StepPreviewRequest {
+  sample: PreviewSampleRef;
+  /** The card's *unsaved* settings payload. */
+  settings: Record<string, unknown> | null;
+}
+
+/** `appliedOk` false means the step fell back: `processedUrl` plays the unprocessed audio and `reason` says why. */
+export interface StepPreviewResponse {
+  previewId: string;
+  originalUrl: string;
+  processedUrl: string;
+  removedMs: number | null;
+  reason: string | null;
+  appliedOk: boolean;
+}
+
 // ---- AI services (`AiServiceEndpoints.cs`) ----------------------------------------------------------
 
 export interface AiServiceDto {

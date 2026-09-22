@@ -75,7 +75,18 @@ Prompt templates: `GET /api/settings/prompts` (all kinds, resolved),
 `warnings` carries the compatibility problems the settings pages show, e.g. a Full attribution override
 without `{{narrator_identity}}`). `POST /api/settings/prompts/{kind}/preview` with `{ template }` answers
 `{ rendered }`: the given text (saved or not) filled with the kind's sample book, the same values both UIs preview with.
-Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`.
+Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`. The settings page's full view is
+`GET /api/settings/audio-processing/full` (scalars + `pauses { volumeMs, partMs, chapterMs, paragraphMs, pauseMs }` +
+`steps[]`, the paragraph post-process step configs `{ stepId, enabled, settings }` in pipeline order: `silence-trim`
+`{ thresholdDb, padMs, minOutputMs }`, `consonant-soften` `{ engine, preset, adynEq?, deesser? }`).
+`PUT /api/settings/audio-processing/pauses` saves the five pauses together (400 on a negative);
+`PUT /api/settings/audio-processing/steps/{stepId}` upserts one step (400 for a step outside the paragraph pipeline).
+`POST /api/settings/audio-processing/ffmpeg/test` with `{ ffmpegPath? }` persists the path, then probes it → `{ success, message }`.
+A/B preview of an unsaved step draft: `GET /api/audio/samples/recent?limit=20` lists recently generated items that still
+hold a Preview Source (`{ itemId, folder, text, characterName, voiceName, projectTitle }`), then
+`POST /api/settings/audio-processing/steps/{stepId}/preview` with `{ sample: { folder, itemId }, settings }` answers
+`{ previewId, originalUrl, processedUrl, removedMs?, reason?, appliedOk }` — both URLs serve WAVs; `appliedOk` false means
+the step fell back and the processed side is the unprocessed audio (404 unknown folder, 422 evicted sample).
 Themes (shared with both UIs): `GET/POST /api/settings/themes`, `PUT/DELETE /api/settings/themes/{id}`
 (built-in rows are read-only → 400), `GET/PUT /api/settings/themes/selection`
 (`{ selectedThemeId, followSystemPreference }`, both optional on PUT).

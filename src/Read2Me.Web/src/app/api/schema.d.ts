@@ -2670,6 +2670,232 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/audio-processing/full": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The scalars plus the assembler pause durations and the paragraph post-process step configs (silence-trim, consonant-soften), in pipeline order. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/audio-processing/pauses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save the five assembler pause durations together. 400 on a negative value. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PauseDurationsDto"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/audio-processing/steps/{stepId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save one paragraph post-process step's enabled flag and settings; the other step keeps its config. 400 for a step outside the paragraph pipeline or a body whose stepId differs from the route. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    stepId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["AudioPostProcessStepConfig"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/audio-processing/ffmpeg/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist the given ffmpeg path (blank = rely on PATH), then probe it. Answers { success, message }. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["FfmpegTestRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/audio-processing/steps/{stepId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Render one step with unsaved settings over a recent sample's Preview Source. Answers the unprocessed and processed WAV URLs; appliedOk false means the step fell back and reason says why. 404 unknown folder, 422 when the sample's preview source has been evicted. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    stepId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["StepPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audio/samples/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The most recently generated paragraph items that still hold a Preview Source, newest first (?limit=20, max 50). The A/B preview picker's rows. */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/paragraph-tts/schema": {
         parameters: {
             query?: never;
@@ -4462,6 +4688,11 @@ export interface components {
             /** @default false */
             narratorOnlyMode: boolean;
         };
+        AudioPostProcessStepConfig: {
+            stepId: string;
+            enabled: boolean;
+            settings: null | components["schemas"]["JsonElement"];
+        };
         AudioProcessingUpdateRequest: {
             ffmpegPath?: null | string;
             /** Format: double */
@@ -4473,6 +4704,9 @@ export interface components {
         };
         BulkAssignPreviewRequest: {
             paragraphIds: string[];
+        };
+        FfmpegTestRequest: {
+            ffmpegPath?: null | string;
         };
         GenerateDesignPromptRequest: {
             prompt: string;
@@ -4545,6 +4779,18 @@ export interface components {
             toSentenceCaseConfig?: null | components["schemas"]["ToSentenceCaseConfig"];
         };
         ParagraphTtsServiceType: number;
+        PauseDurationsDto: {
+            /** Format: int32 */
+            volumeMs: number | string;
+            /** Format: int32 */
+            partMs: number | string;
+            /** Format: int32 */
+            chapterMs: number | string;
+            /** Format: int32 */
+            paragraphMs: number | string;
+            /** Format: int32 */
+            pauseMs: number | string;
+        };
         PlanBookEditRequest: {
             instruction: null | string;
             /** @default false */
@@ -4552,6 +4798,11 @@ export interface components {
         };
         PreviewRequest: {
             steps: null | components["schemas"]["PreviewStepRequest"][];
+        };
+        PreviewSampleRef: {
+            folder: null | string;
+            /** Format: uuid */
+            itemId: string;
         };
         PreviewStepRequest: {
             stepId: null | string;
@@ -4594,6 +4845,10 @@ export interface components {
         SplitRuleRequest: {
             mode: null | string;
             prefix?: null | string;
+        };
+        StepPreviewRequest: {
+            sample: null | components["schemas"]["PreviewSampleRef"];
+            settings: null | components["schemas"]["JsonElement"];
         };
         TextSubstitutionStep: {
             id?: string;

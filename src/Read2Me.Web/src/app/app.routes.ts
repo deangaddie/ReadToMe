@@ -83,30 +83,44 @@ export const routes: Routes = [
         path: 'tts',
         loadComponent: providerSettingsPage,
         canDeactivate: [unsavedChangesGuard],
-        data: { ...routeMeta({ section: 'settings', title: 'Paragraph TTS' }), providerArea: 'paragraph-tts' },
+        data: {
+          ...routeMeta({ section: 'settings', title: 'Paragraph TTS' }),
+          providerArea: 'paragraph-tts',
+        },
       },
       {
         path: 'voice-design',
         loadComponent: providerSettingsPage,
         canDeactivate: [unsavedChangesGuard],
-        data: { ...routeMeta({ section: 'settings', title: 'Voice design' }), providerArea: 'voice-design' },
+        data: {
+          ...routeMeta({ section: 'settings', title: 'Voice design' }),
+          providerArea: 'voice-design',
+        },
       },
       {
         path: 'transcription',
         loadComponent: providerSettingsPage,
         canDeactivate: [unsavedChangesGuard],
-        data: { ...routeMeta({ section: 'settings', title: 'Transcription' }), providerArea: 'transcription' },
+        data: {
+          ...routeMeta({ section: 'settings', title: 'Transcription' }),
+          providerArea: 'transcription',
+        },
       },
       {
         path: 'similarity',
         loadComponent: providerSettingsPage,
         canDeactivate: [unsavedChangesGuard],
-        data: { ...routeMeta({ section: 'settings', title: 'Similarity' }), providerArea: 'semantic-similarity' },
+        data: {
+          ...routeMeta({ section: 'settings', title: 'Similarity' }),
+          providerArea: 'semantic-similarity',
+        },
       },
       {
         path: 'audio',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'settings', title: 'Audio processing', slice: 24 }),
+        loadComponent: () =>
+          import('./pages/settings/audio/audio-settings-page').then((m) => m.AudioSettingsPage),
+        canDeactivate: [unsavedChangesGuard],
+        data: routeMeta({ section: 'settings', title: 'Audio processing' }),
       },
       {
         path: 'services',
