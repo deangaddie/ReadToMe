@@ -74,6 +74,12 @@ describe('BookPage', () => {
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
+  // jsdom has no Element.scrollTo; the CDK viewport calls it when the page scrolls to a chapter,
+  // and the resulting unhandled error used to cascade through every later test in the file.
+  beforeAll(() => {
+    Element.prototype.scrollTo ??= () => undefined;
+  });
+
   beforeEach(async () => {
     toasts = [];
     queue.set(null);
@@ -136,6 +142,11 @@ describe('BookPage', () => {
 
   afterEach(() => {
     TestBed.inject(BookStore).close();
+    // The page polls the viewport edges every 250 ms and jsdom's zero-height viewport is always
+    // "near the end", so a slow test can leave an edge load for the next chapter in flight. It is
+    // timing noise, not behaviour under test: drop it (and audio mode's voices read that comes
+    // with it) rather than let verify() fail on it.
+    http.match((r) => /\/nodes\/chapter\/[^/]+\/(children|voices)$/.test(r.url));
     http.verify();
     document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
   });
@@ -289,7 +300,10 @@ describe('BookPage', () => {
       bulk.click();
       fixture.detectChanges();
       document.querySelector<HTMLButtonElement>('.r2m-speaker-menu__row')!.click();
-      expect(assigner.assign).toHaveBeenCalledWith({ kind: 'selection', paragraphIds: ['p1'] }, 'h');
+      expect(assigner.assign).toHaveBeenCalledWith(
+        { kind: 'selection', paragraphIds: ['p1'] },
+        'h',
+      );
 
       queue.set({ attribution: { isBusy: true } });
       fixture.detectChanges();
@@ -300,12 +314,18 @@ describe('BookPage', () => {
       const fixture = await render('audio');
       await loadBook([DIALOG('p1')]);
       http.match(`${BASE}/nodes/chapter/c1/voices`).forEach((r) => r.flush({}));
-      TestBed.inject(SelectionStore).toggle('p1', { chapterId: 'c1', partId: null, volumeId: null }, true);
+      TestBed.inject(SelectionStore).toggle(
+        'p1',
+        { chapterId: 'c1', partId: null, volumeId: null },
+        true,
+      );
       fixture.detectChanges();
       await fixture.whenStable();
 
       const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('r2m-paragraph > .r2m-paragraph__gutter input[type=checkbox]')).toBeNull();
+      expect(
+        el.querySelector('r2m-paragraph > .r2m-paragraph__gutter input[type=checkbox]'),
+      ).toBeNull();
       expect(el.querySelector('[data-testid=selection-bar]')).toBeNull();
       expect(TestBed.inject(SelectionStore).count()).toBe(1);
     });
@@ -329,9 +349,9 @@ describe('BookPage', () => {
       const box = el.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!;
       box.checked = true;
       box.dispatchEvent(new Event('change'));
-      http.expectOne(`${BASE}/nodes/chapter/c1/item-ids`).flush([
-        { id: 'p1-i', paragraphId: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
-      ]);
+      http
+        .expectOne(`${BASE}/nodes/chapter/c1/item-ids`)
+        .flush([{ id: 'p1-i', paragraphId: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' }]);
       await settle();
       fixture.detectChanges();
 
@@ -340,7 +360,9 @@ describe('BookPage', () => {
       expect(selection.nodeState('chapter', 'c1')).toBe('checked');
       expect(box.checked).toBe(true);
       expect(el.querySelector('[data-testid=selection-count]')?.textContent?.trim()).toBe('1 item');
-      const rows = Array.from(el.querySelectorAll<HTMLInputElement>('r2m-item input[type=checkbox]'));
+      const rows = Array.from(
+        el.querySelectorAll<HTMLInputElement>('r2m-item input[type=checkbox]'),
+      );
       expect(rows.map((b) => [b.checked, b.disabled])).toEqual([
         [true, false],
         [false, true],
