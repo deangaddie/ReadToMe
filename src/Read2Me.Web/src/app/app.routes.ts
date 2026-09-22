@@ -74,8 +74,10 @@ export const routes: Routes = [
       },
       {
         path: 'prompts',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'settings', title: 'Prompts', slice: 23 }),
+        loadComponent: () =>
+          import('./pages/settings/prompts/prompts-page').then((m) => m.PromptsPage),
+        canDeactivate: [unsavedChangesGuard],
+        data: routeMeta({ section: 'settings', title: 'Prompts' }),
       },
       {
         path: 'tts',

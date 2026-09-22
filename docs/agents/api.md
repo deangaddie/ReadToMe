@@ -69,6 +69,12 @@ Test one stored config — a provider that is down answers 422 with its reason:
 
 Prompt templates: `GET /api/settings/prompts` (all kinds, resolved),
 `PUT /api/settings/prompts/{kind}` to override, `DELETE` to reset.
+`GET /api/settings/prompts/catalog` describes every kind —
+`{ kind, title, description, tokens[], expectedResponse, template, defaultTemplate, isOverridden, warnings[] }`
+(`template` is the resolved text, `isOverridden` says it differs from the built-in default,
+`warnings` carries the compatibility problems the settings pages show, e.g. a Full attribution override
+without `{{narrator_identity}}`). `POST /api/settings/prompts/{kind}/preview` with `{ template }` answers
+`{ rendered }`: the given text (saved or not) filled with the kind's sample book, the same values both UIs preview with.
 Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`.
 Themes (shared with both UIs): `GET/POST /api/settings/themes`, `PUT/DELETE /api/settings/themes/{id}`
 (built-in rows are read-only → 400), `GET/PUT /api/settings/themes/selection`

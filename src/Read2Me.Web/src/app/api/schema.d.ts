@@ -2480,6 +2480,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/prompts/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every prompt kind with its description, tokens, expected response, resolved and default templates, override flag and compatibility warnings. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/prompts/{kind}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Render a template (saved or not) with the kind's sample values. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    kind: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PromptPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/prompts/{kind}": {
         parameters: {
             query?: never;
@@ -4482,6 +4556,9 @@ export interface components {
         PreviewStepRequest: {
             stepId: null | string;
             settings: null | components["schemas"]["JsonElement"];
+        };
+        PromptPreviewRequest: {
+            template: string;
         };
         PromptTemplateRequest: {
             template: string;

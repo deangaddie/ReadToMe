@@ -701,6 +701,29 @@ export type PromptKind = (typeof PROMPT_KINDS)[number];
 
 export type PromptTemplateRequest = Schema['PromptTemplateRequest'];
 
+export type PromptPreviewRequest = Schema['PromptPreviewRequest'];
+
+export interface PromptPreviewResponse {
+  rendered: string;
+}
+
+/** `GET /api/settings/prompts/catalog`: one prompt kind as the settings page shows it. */
+export interface PromptCatalogEntry {
+  kind: PromptKind;
+  title: string;
+  description: string;
+  /** Token names without braces, e.g. `book_title`. */
+  tokens: string[];
+  /** The JSON shape the LLM must answer with; null for a plain-text prompt (voice). */
+  expectedResponse: string | null;
+  /** The resolved template: the stored override, else `defaultTemplate`. */
+  template: string;
+  defaultTemplate: string;
+  isOverridden: boolean;
+  /** Compatibility warnings, e.g. "Stored override missing {{narrator_identity}}". */
+  warnings: string[];
+}
+
 /** `AudioProcessingSettingsService.GetAsync()`; the PUT only accepts the four scalars below. */
 export interface AudioProcessingSettings {
   ffmpegPath: string;

@@ -6,11 +6,25 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Llm;
 
 namespace Read2Me.App.Api
 {
     public sealed record SetActiveRequest(int Id);
     public sealed record PromptTemplateRequest(string Template);
+    public sealed record PromptPreviewRequest(string Template);
+    public sealed record PromptPreviewResponse(string Rendered);
+    /// <summary>One prompt kind as the settings pages show it; <c>Template</c> is the resolved text.</summary>
+    public sealed record PromptCatalogEntry(
+        string Kind,
+        string Title,
+        string Description,
+        IReadOnlyList<string> Tokens,
+        string? ExpectedResponse,
+        string Template,
+        string DefaultTemplate,
+        bool IsOverridden,
+        IReadOnlyList<string> Warnings);
     public sealed record AudioProcessingUpdateRequest(
         string? FfmpegPath = null,
         double? WerThreshold = null,
@@ -202,36 +216,17 @@ namespace Read2Me.App.Api
                 statusCode: StatusCodes.Status400BadRequest);
 
         // ── prompts ──────────────────────────────────────────────────────────
-
-        private sealed record PromptKind(
-            Func<LlmPromptService, Task<string>> Get,
-            Func<LlmPromptService, string, Task> Set,
-            Func<LlmPromptService, Task> Reset);
-
-        private static readonly Dictionary<string, PromptKind> PromptKinds = new()
-        {
-            ["character"] = new(s => s.GetCharacterPromptAsync(AttributionPromptStyle.Full),
-                (s, t) => s.SetCharacterPromptAsync(t), s => s.ResetCharacterPromptAsync()),
-            ["simple-character"] = new(s => s.GetCharacterPromptAsync(AttributionPromptStyle.Simple),
-                (s, t) => s.SetSimpleCharacterPromptAsync(t), s => s.ResetSimpleCharacterPromptAsync()),
-            ["batch-character"] = new(s => s.GetBatchCharacterPromptAsync(AttributionPromptStyle.Full),
-                (s, t) => s.SetBatchCharacterPromptAsync(t), s => s.ResetBatchCharacterPromptAsync()),
-            ["simple-batch-character"] = new(s => s.GetBatchCharacterPromptAsync(AttributionPromptStyle.Simple),
-                (s, t) => s.SetSimpleBatchCharacterPromptAsync(t), s => s.ResetSimpleBatchCharacterPromptAsync()),
-            ["voice"] = new(s => s.GetVoicePromptAsync(),
-                (s, t) => s.SetVoicePromptAsync(t), s => s.ResetVoicePromptAsync()),
-            ["voice-plan"] = new(s => s.GetVoicePlanPromptAsync(),
-                (s, t) => s.SetVoicePlanPromptAsync(t), s => s.ResetVoicePlanPromptAsync()),
-            ["narrator-voice-plan"] = new(s => s.GetNarratorVoicePlanPromptAsync(),
-                (s, t) => s.SetNarratorVoicePlanPromptAsync(t), s => s.ResetNarratorVoicePlanPromptAsync()),
-            ["discover-characters"] = new(s => s.GetDiscoverCharactersPromptAsync(),
-                (s, t) => s.SetDiscoverCharactersPromptAsync(t), s => s.ResetDiscoverCharactersPromptAsync()),
-        };
+        // The kinds, their copy, tokens, defaults and sample values are the catalog's; the API only
+        // adds the resolved template, the override flag and the compatibility warnings.
 
         private static void MapPromptEndpoints(IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/settings/prompts", GetAllPromptsAsync)
                 .WithSummary("Every prompt template, resolved (stored override or built-in default), keyed by kind.");
+            endpoints.MapGet("/api/settings/prompts/catalog", GetPromptCatalogAsync)
+                .WithSummary("Every prompt kind with its description, tokens, expected response, resolved and default templates, override flag and compatibility warnings.");
+            endpoints.MapPost("/api/settings/prompts/{kind}/preview", PreviewPrompt)
+                .WithSummary("Render a template (saved or not) with the kind's sample values.");
             endpoints.MapPut("/api/settings/prompts/{kind}", SetPromptAsync)
                 .WithSummary("Override one prompt template.");
             endpoints.MapDelete("/api/settings/prompts/{kind}", ResetPromptAsync)
@@ -241,29 +236,56 @@ namespace Read2Me.App.Api
         private static async Task<IResult> GetAllPromptsAsync(LlmPromptService svc)
         {
             var result = new Dictionary<string, string>();
-            foreach (var (kind, ops) in PromptKinds)
-                result[kind] = await ops.Get(svc);
+            foreach (var kind in PromptCatalog.Kinds)
+                result[kind.Kind] = await kind.Get(svc);
             return Results.Ok(result);
+        }
+
+        private static async Task<IResult> GetPromptCatalogAsync(LlmPromptService svc)
+        {
+            var compatibility = await svc.GetAttributionPromptCompatibilityAsync();
+            var entries = new List<PromptCatalogEntry>(PromptCatalog.Kinds.Count);
+            foreach (var kind in PromptCatalog.Kinds)
+            {
+                var template = await kind.Get(svc);
+                entries.Add(new PromptCatalogEntry(
+                    kind.Kind, kind.Title, kind.Description, kind.Tokens, kind.ExpectedResponse,
+                    template, kind.DefaultTemplate,
+                    IsOverridden: !string.Equals(template, kind.DefaultTemplate, StringComparison.Ordinal),
+                    kind.Warnings(compatibility)));
+            }
+            return Results.Ok(entries);
+        }
+
+        private static IResult PreviewPrompt(string kind, PromptPreviewRequest request)
+        {
+            var descriptor = PromptCatalog.Find(kind);
+            if (descriptor is null)
+                return UnknownPromptKind(kind);
+            return Results.Ok(new PromptPreviewResponse(
+                PromptTemplates.Render(request.Template ?? string.Empty, descriptor.SampleValues)));
         }
 
         private static async Task<IResult> SetPromptAsync(string kind, PromptTemplateRequest request, LlmPromptService svc)
         {
-            if (!PromptKinds.TryGetValue(kind, out var ops))
+            var descriptor = PromptCatalog.Find(kind);
+            if (descriptor is null)
                 return UnknownPromptKind(kind);
-            await ops.Set(svc, request.Template);
+            await descriptor.Set(svc, request.Template);
             return Results.Ok();
         }
 
         private static async Task<IResult> ResetPromptAsync(string kind, LlmPromptService svc)
         {
-            if (!PromptKinds.TryGetValue(kind, out var ops))
+            var descriptor = PromptCatalog.Find(kind);
+            if (descriptor is null)
                 return UnknownPromptKind(kind);
-            await ops.Reset(svc);
+            await descriptor.Reset(svc);
             return Results.Ok();
         }
 
         private static IResult UnknownPromptKind(string kind) =>
-            Results.Problem($"Unknown prompt kind '{kind}'. Known kinds: {string.Join(", ", PromptKinds.Keys.OrderBy(k => k))}.",
+            Results.Problem($"Unknown prompt kind '{kind}'. Known kinds: {string.Join(", ", PromptCatalog.Kinds.Select(k => k.Kind).OrderBy(k => k))}.",
                 statusCode: StatusCodes.Status400BadRequest);
 
         // ── audio processing (single row) ────────────────────────────────────

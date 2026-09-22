@@ -254,6 +254,21 @@ describe('per-area API services', () => {
     await call;
   });
 
+  it('PromptsApi.catalog gets the catalog', async () => {
+    const call = TestBed.inject(PromptsApi).catalog();
+    const req = http.expectOne({ method: 'GET', url: '/api/settings/prompts/catalog' });
+    req.flush([{ kind: 'voice', title: 'Character Voice Prompt' }]);
+    await expect(call).resolves.toEqual([{ kind: 'voice', title: 'Character Voice Prompt' }]);
+  });
+
+  it('PromptsApi.preview posts the unsaved template and unwraps the rendering', async () => {
+    const call = TestBed.inject(PromptsApi).preview('voice', 'Voice for {{character_name}}');
+    const req = http.expectOne({ method: 'POST', url: '/api/settings/prompts/voice/preview' });
+    expect(req.request.body).toEqual({ template: 'Voice for {{character_name}}' });
+    req.flush({ rendered: 'Voice for Gandalf' });
+    await expect(call).resolves.toBe('Voice for Gandalf');
+  });
+
   it('AudioProcessingApi.update puts the patch to the single row', async () => {
     const call = TestBed.inject(AudioProcessingApi).update({ werThreshold: 0.2 });
     const req = http.expectOne({ method: 'PUT', url: '/api/settings/audio-processing' });
