@@ -52,6 +52,8 @@ public sealed class RecordingHubContext : IHubContext<LiveHub, ILiveClient>
         public Task Assembly(AssemblyMessage message) => Record("assembly", message);
         public Task VoiceBatch(VoiceBatchMessage message) => Record("voiceBatch", message);
         public Task Watchdog(WatchdogMessage message) => Record("watchdog", message);
+        public Task ServiceStatus(ServiceStatusMessage message) => Record("serviceStatus", message);
+        public Task Preflight(PreflightMessage message) => Record("preflight", message);
         public Task Llm(LlmMessage message) => Record("llm", message);
         public Task AudioGen(AudioGenMessage message) => Record("audioGen", message);
         public Task Throughput(ThroughputSnapshot snapshot) => Record("throughput", snapshot);

@@ -117,6 +117,28 @@ public static class LiveMessageMapper
     public static BookEditMessage BookEditFailed(string program, string reason) =>
         new BookEditMessage("failed", program, Reason: reason);
 
+    public static ServiceStatusMessage Map(ServiceStatusChanged c) =>
+        new ServiceStatusMessage(c.Service, c.Status.ToString(), c.Op, c.Ok, c.Error);
+
+    /// <summary>
+    /// The status a probe would report while the watchdog holds this opinion — the same mapping
+    /// <c>AiServiceControl.GetStatusAsync</c> applies before it looks at the container.
+    /// </summary>
+    public static ServiceStatusMessage ImpliedStatus(WatchdogEvent e) => e switch
+    {
+        RecoveryStarted r => new ServiceStatusMessage(r.Service, nameof(AiServiceStatus.Recovering)),
+        ContainerRestarted c => new ServiceStatusMessage(c.Service, nameof(AiServiceStatus.Recovering)),
+        ServiceHealthy h => new ServiceStatusMessage(h.Service, nameof(AiServiceStatus.Ready)),
+        ServiceDown d => new ServiceStatusMessage(d.Service, nameof(AiServiceStatus.Down)),
+        _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped WatchdogEvent"),
+    };
+
+    public static PreflightMessage PreflightStage(string run, string name, string stage, string? error = null) =>
+        new PreflightMessage("stage", run, Name: name, Stage: stage, Error: error);
+
+    public static PreflightMessage PreflightDone(string run, bool ok, string? reason = null) =>
+        new PreflightMessage("done", run, Ok: ok, Reason: reason);
+
     public static LlmTestMessage LlmTestDone(int configId) => new LlmTestMessage("done", configId);
 
     public static LlmTestMessage LlmTestFailed(int configId, string reason) =>

@@ -12,6 +12,7 @@ import { AudioGenerator } from './audio-generator';
 import { AudioSelectionStore } from './audio-selection-store';
 import { BookEditor } from './book-editor';
 import { BookPage } from './book-page';
+import { Preflight } from '@app/shared/preflight';
 import { BookStore } from './book-store';
 import { SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
@@ -97,6 +98,7 @@ describe('BookPage', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         BookStore,
+        { provide: Preflight, useValue: { ensureReady: () => Promise.resolve(true) } },
         BookEditor,
         SelectionStore,
         AudioSelectionStore,

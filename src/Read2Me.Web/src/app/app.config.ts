@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { MatIconRegistry } from '@angular/material/icon';
 import { provideRouter, withComponentInputBinding, withRouterConfig } from '@angular/router';
+import { AiServicesStore } from './ai-services/ai-services-store';
 import { ApiErrorHandler } from './api/api-error-handler';
 import { routes } from './app.routes';
 import { LiveService } from './live/live.service';
@@ -34,5 +35,7 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => inject(ThemeService).load()),
     // Open the live hub once for the app's lifetime (ticket 07); it reconnects on its own.
     provideEnvironmentInitializer(() => inject(LiveService).start()),
+    // The AI services store listens from the start so the watchdog log misses nothing (ticket 25).
+    provideEnvironmentInitializer(() => void inject(AiServicesStore)),
   ],
 };

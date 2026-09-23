@@ -6,7 +6,13 @@
  * fails when a family name or a `kind` string drifts.
  */
 
-import { BookEditRow, Guid, NodeStatusSummaryDto, QueueItemStatus } from '@app/api';
+import {
+  AiServiceStatus,
+  BookEditRow,
+  Guid,
+  NodeStatusSummaryDto,
+  QueueItemStatus,
+} from '@app/api';
 
 // ---- families (ILiveClient.cs [HubMethodName]) --------------------------------------------------
 
@@ -18,6 +24,8 @@ export const LIVE_FAMILIES = [
   'assembly',
   'voiceBatch',
   'watchdog',
+  'serviceStatus',
+  'preflight',
   'llm',
   'audioGen',
   'throughput',
@@ -66,6 +74,7 @@ export const LIVE_KINDS = {
   ],
   bookEdit: ['progress', 'done', 'failed'],
   llmTest: ['done', 'failed', 'cancelled'],
+  preflight: ['stage', 'done'],
 } as const;
 
 export type AssemblyKind = (typeof LIVE_KINDS.assembly)[number];
@@ -75,6 +84,7 @@ export type LlmKind = (typeof LIVE_KINDS.llm)[number];
 export type AudioGenKind = (typeof LIVE_KINDS.audioGen)[number];
 export type BookEditKind = (typeof LIVE_KINDS.bookEdit)[number];
 export type LlmTestKind = (typeof LIVE_KINDS.llmTest)[number];
+export type PreflightKind = (typeof LIVE_KINDS.preflight)[number];
 
 // ---- queue (group global, debounced) ------------------------------------------------------------
 
@@ -294,6 +304,46 @@ export interface WatchdogMessage {
 /** Last known watchdog kind per service name. */
 export type WatchdogState = Record<string, WatchdogKind | string>;
 
+// ---- serviceStatus (group global) ---------------------------------------------------------------
+
+export type ServiceOp = 'start' | 'restart' | 'shutdown';
+
+/**
+ * A managed service's status as last observed (`AiServiceStatus` member name), after every probe,
+ * lifecycle op and watchdog transition. `op` with `ok` / `error` is present only when a lifecycle
+ * op produced the observation — that is what a client toasts.
+ */
+export interface ServiceStatusMessage {
+  name: string;
+  status: AiServiceStatus;
+  op?: ServiceOp | null;
+  ok?: boolean | null;
+  error?: string | null;
+}
+
+/** Last observed `AiServiceStatus` per service name. */
+export type ServiceStatusState = Record<string, AiServiceStatus>;
+
+// ---- preflight (one connection) -----------------------------------------------------------------
+
+export type PreflightStage =
+  'waitingToStop' | 'stopping' | 'stopped' | 'waitingToStart' | 'starting' | 'ready' | 'failed';
+
+/**
+ * One pre-flight run (`POST /api/preflight/{taskKind}/run`), sent only to the connection that
+ * started it. `stage` names a service and where it is; `done` carries `ok` and, on failure, the
+ * summary `reason`. `run` is the id the 202 answered with.
+ */
+export interface PreflightMessage {
+  kind: PreflightKind;
+  run: string;
+  name?: string | null;
+  stage?: PreflightStage | null;
+  error?: string | null;
+  ok?: boolean | null;
+  reason?: string | null;
+}
+
 // ---- llm (group stream:llm) ---------------------------------------------------------------------
 
 export interface LlmMessage {
@@ -403,6 +453,7 @@ export interface LiveSnapshot {
   assembly: AssemblyState;
   voiceBatch: VoiceBatchState;
   watchdog: WatchdogState;
+  serviceStatus: ServiceStatusState;
   throughput: ThroughputSnapshot;
   projects: Record<string, ProjectSnapshot>;
 }
@@ -417,6 +468,8 @@ export interface LiveMessageMap {
   assembly: AssemblyMessage;
   voiceBatch: VoiceBatchMessage;
   watchdog: WatchdogMessage;
+  serviceStatus: ServiceStatusMessage;
+  preflight: PreflightMessage;
   llm: LlmMessage;
   audioGen: AudioGenMessage;
   throughput: ThroughputSnapshot;

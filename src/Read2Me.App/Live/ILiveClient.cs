@@ -24,6 +24,10 @@ public interface ILiveClient
     Task VoiceBatch(VoiceBatchMessage message);
     [HubMethodName("watchdog")]
     Task Watchdog(WatchdogMessage message);
+    [HubMethodName("serviceStatus")]
+    Task ServiceStatus(ServiceStatusMessage message);
+    [HubMethodName("preflight")]
+    Task Preflight(PreflightMessage message);
     [HubMethodName("llm")]
     Task Llm(LlmMessage message);
     [HubMethodName("audioGen")]

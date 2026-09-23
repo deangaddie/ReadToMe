@@ -16,6 +16,7 @@ class FakeLive {
   readonly assembly = signal(IDLE_ASSEMBLY);
   readonly voiceBatch = signal(IDLE_VOICE_BATCH);
   readonly watchdog = signal({ llama: 'serviceHealthy' });
+  readonly serviceStatus = signal({ llama: 'Ready' });
   readonly throughput = signal(null);
   readonly resynced$ = new Subject<LiveSnapshot>().asObservable();
   readonly joined: StreamKind[] = [];
@@ -49,6 +50,7 @@ describe('ActivityDrawer', () => {
         {
           provide: AiServicesApi,
           useValue: {
+            statusAll: async () => [],
             list: async () => [
               { name: 'llama', containerName: 'read2me-llama', baseUrl: '', usesGpu: true },
             ],
@@ -93,14 +95,15 @@ describe('ActivityDrawer', () => {
     expect(live.left).toEqual(['llm']);
   });
 
-  it('lists managed services with the watchdog status on the Services tab', async () => {
+  it('lists managed services with the hub-fed status and controls on the Services tab', async () => {
     const { store, fixture, el } = setup();
     store.tab.set('services');
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(el.textContent).toContain('read2me-llama');
-    expect(el.textContent).toContain('Healthy');
+    expect(el.querySelector('r2m-docker-controls r2m-status-chip')?.textContent).toContain('Ready');
+    expect(el.querySelector('r2m-docker-controls button[aria-label="Shutdown"]')).not.toBeNull();
     expect(el.querySelector('a[href="/settings/services"]')).not.toBeNull();
   });
 

@@ -238,8 +238,19 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<AiServiceHealthMonitor>();
         services.AddSingleton<IAiServiceReporter, AiServiceReporter>();
         services.AddSingleton<IAiServiceControl, AiServiceControl>();
-        // Pre-flight is scoped: it shows a dialog, and IDialogService lives per circuit.
+        // Status observations for /hubs/live: every UI-facing probe and op (API, pre-flight, Blazor
+        // controls) goes through the observed facade so every client's chips follow (Angular ticket 25).
+        services.AddSingleton<EventBroadcaster<ServiceStatusChanged>>();
+        services.AddSingleton(sp => new ObservedAiServiceControl(
+            sp.GetRequiredService<IAiServiceControl>(), sp.GetRequiredService<EventBroadcaster<ServiceStatusChanged>>()));
+        services.AddSingleton<Read2Me.App.Live.AiServiceOpCoordinator>();
+        services.AddSingleton<Read2Me.App.Live.PreflightRunCoordinator>();
+        // Scoped: the resolver reads per-circuit settings services and the gate shows a dialog.
         services.AddScoped<IAiTaskRequirementsResolver, AiTaskRequirementsResolver>();
+        services.AddScoped<IAiPreflightPlanner>(sp => new AiPreflightPlanner(
+            sp.GetRequiredService<IAiTaskRequirementsResolver>(),
+            sp.GetRequiredService<ObservedAiServiceControl>(),
+            sp.GetRequiredService<DockerAiServiceRegistry>()));
         services.AddScoped<IAiPreflight, AiPreflight>();
         return services;
     }

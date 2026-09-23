@@ -47,7 +47,8 @@ function statusKind(status: string): StatusKind {
 
 /**
  * Readiness sheet shown before every AI action (design principle 4, §7). Presentational: the
- * bottom-sheet wrapper, plan/run calls and hub-fed progress arrive with ticket 25.
+ * bottom-sheet wrapper, plan/run calls and hub-fed progress live in `PreflightSheetHost`
+ * (`app/shared/preflight-sheet-host.ts`), opened by `Preflight.ensureReady`.
  */
 @Component({
   selector: 'r2m-preflight-sheet',

@@ -91,10 +91,22 @@ Themes (shared with both UIs): `GET/POST /api/settings/themes`, `PUT/DELETE /api
 (built-in rows are read-only → 400), `GET/PUT /api/settings/themes/selection`
 (`{ selectedThemeId, followSystemPreference }`, both optional on PUT).
 
-Container health (read-only): `GET /api/ai-services`,
-`GET /api/ai-services/{name}/status`, and `GET /api/ai-services/resolve?baseUrl=` for the managed
-service behind a config's base URL (404 when it is not one of ours). Remember the GPU fits one model at a time —
-start only the containers the current step needs (`docker compose` in `Infra/`).
+Container health and lifecycle: `GET /api/ai-services`, `GET /api/ai-services/status` (every service,
+one probe each), `GET /api/ai-services/{name}/status`, and `GET /api/ai-services/resolve?baseUrl=` for the
+managed service behind a config's base URL (404 when it is not one of ours).
+`POST /api/ai-services/{name}/start | restart | shutdown` answer 202 (409 while that service already has an
+op in flight); the outcome arrives on `/hubs/live` as `serviceStatus { name, status, op, ok, error? }`, which
+every probe and watchdog transition also emits. Remember the GPU fits one model at a time — start only the
+containers the current step needs.
+
+Preflight — the readiness gate every AI action passes: `POST /api/preflight/{taskKind}/plan` →
+`{ ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }` (task kinds `CharacterAttribution`,
+`AudioGeneration`, `VoicePromptGeneration`, `CharacterDiscovery`, `VoiceDesignAudio`, `Transcription`,
+`BookEdit`; 400 otherwise). `POST /api/preflight/{taskKind}/run` `{ connectionId }` → 202 `{ run }` re-plans,
+stops the conflicts, then starts what is missing one at a time; progress reaches that connection as
+`preflight { kind: stage, run, name, stage, error? }` (`waitingToStop | stopping | stopped | waitingToStart |
+starting | ready | failed`) then `{ kind: done, run, ok, reason? }`. Call `plan` before an AI step and `run`
+only when the user agreed — cancelling must start nothing.
 
 ## 1. Create a project and import the book
 
@@ -433,7 +445,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 |---|---|---|
 | client → server | `JoinProject(folder)` / `LeaveProject(folder)` | joins `project:{folder}`; `JoinProject` returns a `ProjectSnapshot` (`revision`, `nodes`, `paragraphs`, `items`, `folderAudioRemaining`) |
 | client → server | `JoinStream("llm" \| "audio")` / `LeaveStream(kind)` | joins `stream:llm` / `stream:audio`; the current in-progress turn is replayed to the caller first |
-| client → server | `GetSnapshot()` | `{ queue, assembly, voiceBatch, watchdog, throughput, projects }` for the projects this connection joined |
+| client → server | `GetSnapshot()` | `{ queue, assembly, voiceBatch, watchdog, serviceStatus, throughput, projects }` for the projects this connection joined |
 | server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
 | server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
 | server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
@@ -442,6 +454,8 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
 | server → client | `llmTest` | how an LLM settings test send ended (`done`, `failed` with `reason`, `cancelled`), sent only to the `connectionId` that started it; the tokens are on `stream:llm` |
 | server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
+| server → client | `serviceStatus` | `{ name, status, op?, ok?, error? }` — a managed service's last observed `AiServiceStatus`, after every probe, lifecycle op (then `op` names it with its outcome) and watchdog transition; everyone |
+| server → client | `preflight` | one pre-flight run (`stage` with `name` + `stage` + `error?`, then `done` with `ok` + `reason?`), sent only to the `connectionId` that started it; every message carries the `run` id the 202 answered |
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
 only computed for folders `NodeStatusService` has seeded — call `GET /api/projects/{folder}/status`

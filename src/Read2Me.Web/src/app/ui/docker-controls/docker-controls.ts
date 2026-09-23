@@ -27,8 +27,10 @@ const STATUS_VIEW: Record<AiServiceStatus, { kind: StatusKind; label: string }> 
 
 /**
  * Presentational Start / Restart / Shutdown / Refresh controls for a managed container (design §7).
- * Ticket 25 wires the outputs to the AI services store; until then a settings page shows it
- * `statusOnly` — the chip and Refresh, no container buttons.
+ * The services page, the drawer's Services tab and the config editors wire the outputs to the
+ * app-wide AI services store; `statusOnly` keeps just the chip and Refresh. Button availability
+ * mirrors the Blazor presenter: Stopped / Not found can be started, a live or Down container can be
+ * restarted or shut down.
  */
 @Component({
   selector: 'r2m-docker-controls',
@@ -117,8 +119,10 @@ export class DockerControls {
   readonly refresh = output<void>();
 
   protected readonly view = computed(() => STATUS_VIEW[this.status()]);
-  protected readonly canStart = computed(() => this.status() === 'Stopped');
+  protected readonly canStart = computed(
+    () => this.status() === 'Stopped' || this.status() === 'NotFound',
+  );
   protected readonly canStop = computed(
-    () => this.status() === 'Starting' || this.status() === 'Ready',
+    () => this.status() === 'Starting' || this.status() === 'Ready' || this.status() === 'Down',
   );
 }

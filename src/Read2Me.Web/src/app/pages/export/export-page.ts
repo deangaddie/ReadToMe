@@ -22,7 +22,6 @@ import {
   toApiError,
 } from '@app/api';
 import { LiveService } from '@app/live/live.service';
-import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@app/ui/empty-state/empty-state';
 import { KeyValue, KeyValueRow } from '@app/ui/key-value/key-value';
@@ -339,7 +338,6 @@ export class ExportPage {
   private readonly live = inject(LiveService);
   private readonly api = inject(AssemblyApi);
   private readonly audioProcessing = inject(AudioProcessingApi);
-  private readonly preflight = inject(Preflight);
   private readonly confirm = inject(ConfirmService);
   private readonly toast = inject(ToastService);
 
@@ -477,7 +475,6 @@ export class ExportPage {
   async assemble(): Promise<void> {
     const folder = this.store.folder();
     if (!folder || !this.canAssemble()) return;
-    if (!(await this.preflight.ensureReady('assembly'))) return;
 
     this.starting.set(true);
     try {

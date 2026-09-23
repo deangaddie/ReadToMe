@@ -124,8 +124,9 @@ export const routes: Routes = [
       },
       {
         path: 'services',
-        loadComponent: placeholder,
-        data: routeMeta({ section: 'settings', title: 'AI services', slice: 25 }),
+        loadComponent: () =>
+          import('./pages/settings/services/ai-services-page').then((m) => m.AiServicesPage),
+        data: routeMeta({ section: 'settings', title: 'AI services' }),
       },
       {
         path: 'themes',

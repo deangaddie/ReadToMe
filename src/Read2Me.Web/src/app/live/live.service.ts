@@ -19,6 +19,7 @@ import {
   ProjectSnapshot,
   QueueMessage,
   Receipt,
+  ServiceStatusState,
   StreamKind,
   ThroughputSnapshot,
   VoiceBatchState,
@@ -79,6 +80,7 @@ export class LiveService implements OnDestroy {
   private readonly _assembly = signal<AssemblyState>(IDLE_ASSEMBLY);
   private readonly _voiceBatch = signal<VoiceBatchState>(IDLE_VOICE_BATCH);
   private readonly _watchdog = signal<WatchdogState>({});
+  private readonly _serviceStatus = signal<ServiceStatusState>({});
   private readonly _throughput = signal<ThroughputSnapshot | null>(null);
   private readonly _projects = signal<Record<string, ProjectSnapshot>>({});
   private readonly _latest = signal<Partial<Record<LiveFamily, unknown>>>({});
@@ -110,6 +112,8 @@ export class LiveService implements OnDestroy {
   );
   /** Last known watchdog kind per service. */
   readonly watchdog = this._watchdog.asReadonly();
+  /** Last observed `AiServiceStatus` per service (probes, lifecycle ops, watchdog transitions). */
+  readonly serviceStatus = this._serviceStatus.asReadonly();
   readonly throughput = this._throughput.asReadonly();
   /** Current status maps per joined project (snapshot + applied deltas), keyed by folder as joined. */
   readonly projects = this._projects.asReadonly();
@@ -331,6 +335,7 @@ export class LiveService implements OnDestroy {
     this._assembly.set(snapshot.assembly);
     this._voiceBatch.set(snapshot.voiceBatch);
     this._watchdog.set(snapshot.watchdog ?? {});
+    this._serviceStatus.set(snapshot.serviceStatus ?? {});
     this._throughput.set(snapshot.throughput);
     for (const [folder, project] of Object.entries(snapshot.projects ?? {})) {
       this.setProject(folder, project);
@@ -380,6 +385,11 @@ export class LiveService implements OnDestroy {
       case 'watchdog': {
         const m = message as LiveMessageMap['watchdog'];
         this._watchdog.update((w) => ({ ...w, [m.service]: m.kind }));
+        break;
+      }
+      case 'serviceStatus': {
+        const m = message as LiveMessageMap['serviceStatus'];
+        this._serviceStatus.update((s) => ({ ...s, [m.name]: m.status }));
         break;
       }
       case 'throughput':

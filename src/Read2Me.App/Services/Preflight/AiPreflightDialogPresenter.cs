@@ -3,10 +3,11 @@ using Read2Me.Services.Health;
 namespace Read2Me.App.Services.Preflight
 {
     /// <summary>
-    /// UI-agnostic state machine behind <c>AiPreflightDialog</c>. Runs the plan sequentially —
-    /// conflicts stopped first to free VRAM, then required services started (docker start →
-    /// health poll → warm-up, one at a time so the 8 GB GPU never double-loads). The first
-    /// failure aborts the rest; the razor dialog only maps rows to chrome.
+    /// UI-agnostic state machine behind <c>AiPreflightDialog</c> and the <c>/api/preflight</c>
+    /// run. Runs the plan sequentially — conflicts stopped first to free VRAM, then required
+    /// services started (docker start → health poll → warm-up, one at a time so the 8 GB GPU never
+    /// double-loads). The first failure aborts the rest; the razor dialog only maps rows to chrome
+    /// and the API coordinator only maps <see cref="StageChanged"/> to hub messages.
     /// </summary>
     public sealed class AiPreflightDialogPresenter(IAiServiceControl control)
     {
@@ -35,6 +36,16 @@ namespace Read2Me.App.Services.Preflight
         /// <summary>Raised on every row/stage transition; the dialog calls StateHasChanged.</summary>
         public event Action? Changed;
 
+        /// <summary>Raised with the row that just moved stage — the per-service feed the API pushes.</summary>
+        public event Action<Row>? StageChanged;
+
+        private void Move(Row row, ServiceStage stage)
+        {
+            row.Stage = stage;
+            StageChanged?.Invoke(row);
+            Changed?.Invoke();
+        }
+
         public void Load(AiPreflightPlan plan)
         {
             _rows.Clear();
@@ -57,8 +68,7 @@ namespace Read2Me.App.Services.Preflight
             {
                 foreach (var row in _rows)
                 {
-                    row.Stage = row.IsConflict ? ServiceStage.Stopping : ServiceStage.Starting;
-                    Changed?.Invoke();
+                    Move(row, row.IsConflict ? ServiceStage.Stopping : ServiceStage.Starting);
 
                     var result = row.IsConflict
                         ? await control.ShutdownAsync(row.Service, ct)
@@ -66,17 +76,15 @@ namespace Read2Me.App.Services.Preflight
 
                     if (!result.Succeeded)
                     {
-                        row.Stage = ServiceStage.Failed;
                         row.Error = result.Error ?? "Operation failed.";
                         HasFailed = true;
                         var verb = row.IsConflict ? "stop" : "start";
                         FailureMessage = $"Failed to {verb} {row.Service.Name}: {row.Error}";
-                        Changed?.Invoke();
+                        Move(row, ServiceStage.Failed);
                         return false;
                     }
 
-                    row.Stage = row.IsConflict ? ServiceStage.Stopped : ServiceStage.Ready;
-                    Changed?.Invoke();
+                    Move(row, row.IsConflict ? ServiceStage.Stopped : ServiceStage.Ready);
                 }
 
                 return true;

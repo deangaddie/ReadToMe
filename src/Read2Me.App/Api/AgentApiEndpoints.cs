@@ -29,6 +29,7 @@ namespace Read2Me.App.Api
             endpoints.MapProviderSettingsEndpoints();
             endpoints.MapSettingsEndpoints();
             endpoints.MapAiServiceEndpoints();
+            endpoints.MapPreflightEndpoints();
             endpoints.MapOpenApi();
             endpoints.MapAudioEndpoints();
             endpoints.MapQueueStatusEndpoints();

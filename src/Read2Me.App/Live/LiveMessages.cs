@@ -103,6 +103,30 @@ public sealed record VoiceBatchState(
 public sealed record WatchdogMessage(string Kind, string Service, string? Reason = null);
 
 /// <summary>
+/// A managed service's status as last observed (<c>AiServiceStatus</c> member name), pushed after
+/// every probe, lifecycle op and watchdog transition so chips follow without polling (Angular
+/// ticket 25). <c>op</c> (start | restart | shutdown) with <c>ok</c> / <c>error</c> is present only
+/// when a lifecycle op produced the observation — that is what a client toasts.
+/// </summary>
+public sealed record ServiceStatusMessage(
+    string Name, string Status, string? Op = null, bool? Ok = null, string? Error = null);
+
+/// <summary>
+/// <c>kind</c>: stage | done — one pre-flight run (Angular ticket 25), sent to the connection that
+/// started it. <c>stage</c> carries a service and its stage (waitingToStop | stopping | stopped |
+/// waitingToStart | starting | ready | failed); <c>done</c> carries <c>ok</c> and, on failure, the
+/// summary <c>reason</c>. <c>run</c> is the id the 202 answered with.
+/// </summary>
+public sealed record PreflightMessage(
+    string Kind,
+    string Run,
+    string? Name = null,
+    string? Stage = null,
+    string? Error = null,
+    bool? Ok = null,
+    string? Reason = null);
+
+/// <summary>
 /// <c>kind</c>: runStarted | runEnded | requestStarted | delta | streamCompleted | streamFailed |
 /// streamAborted | escalationStarted. <c>delta</c> is a 100 ms batch of thinking + content text.
 /// Stream group only.
@@ -191,5 +215,6 @@ public sealed record LiveSnapshot(
     AssemblyState Assembly,
     VoiceBatchState VoiceBatch,
     IReadOnlyDictionary<string, string> Watchdog,
+    IReadOnlyDictionary<string, string> ServiceStatus,
     ThroughputSnapshot Throughput,
     IReadOnlyDictionary<string, ProjectSnapshot> Projects);

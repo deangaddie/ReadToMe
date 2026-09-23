@@ -1,61 +1,47 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
-import { AiServiceDto, AiServicesApi, toApiError } from '@app/api';
-import { WatchdogState } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
+import { AiServicesStore } from '@app/ai-services/ai-services-store';
+import { DockerControls } from '@app/ui/docker-controls/docker-controls';
 import { EmptyState } from '@app/ui/empty-state/empty-state';
-import { StatusChip, StatusKind } from '@app/ui/status-chip/status-chip';
-import { watchdogView } from './activity-jobs';
-
-interface ServiceRow {
-  name: string;
-  containerName: string;
-  usesGpu: boolean;
-  status: StatusKind;
-  label: string;
-}
-
-export function serviceRows(
-  services: readonly AiServiceDto[],
-  watchdog: WatchdogState,
-): ServiceRow[] {
-  const byName = new Map(Object.entries(watchdog).map(([k, v]) => [k.toLowerCase(), v]));
-  return services.map((s) => {
-    const { status, label } = watchdogView(byName.get(s.name.toLowerCase()));
-    return { name: s.name, containerName: s.containerName, usesGpu: s.usesGpu, status, label };
-  });
-}
 
 /**
- * The drawer's Services tab (ticket 14): the managed AI services with the watchdog's last word on
- * each. Read-only here — the services page (ticket 25) starts, restarts and probes them.
+ * The drawer's Services tab (tickets 14, 25): the compact form of `/settings/services` — one row
+ * per managed container with the same hub-fed status chip and Start / Restart / Shutdown / Refresh,
+ * all through the app-wide {@link AiServicesStore}.
  */
 @Component({
   selector: 'app-services-tab',
-  imports: [MatButtonModule, MatIconModule, RouterLink, EmptyState, StatusChip],
+  imports: [MatButtonModule, MatIconModule, RouterLink, DockerControls, EmptyState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'activity-services' },
   template: `
-    @if (error(); as message) {
+    @if (store.error(); as message) {
       <r2m-empty-state compact icon="cloud_off" headline="Services unavailable" [hint]="message" />
-    } @else if (services() === null) {
+    } @else if (store.services() === null) {
       <p class="activity-services__loading">Loading services…</p>
-    } @else if (rows().length === 0) {
+    } @else if (store.services()!.length === 0) {
       <r2m-empty-state compact icon="dns" headline="No managed services" />
     } @else {
       <ul class="activity-services__list">
-        @for (row of rows(); track row.name) {
-          <li class="activity-services__row">
+        @for (svc of store.services(); track svc.name) {
+          <li class="activity-services__row" [attr.data-service]="svc.name">
             <mat-icon class="activity-services__icon" aria-hidden="true">{{
-              row.usesGpu ? 'memory' : 'dns'
+              svc.usesGpu ? 'memory' : 'dns'
             }}</mat-icon>
             <span class="activity-services__name">
-              <span>{{ row.name }}</span>
-              <span class="activity-services__container">{{ row.containerName }}</span>
+              <span>{{ svc.name }}</span>
+              <span class="activity-services__container">{{ svc.containerName }}</span>
             </span>
-            <r2m-status-chip [status]="row.status" [label]="row.label" compact />
+            <r2m-docker-controls
+              [status]="store.statusOf(svc.name)"
+              [busy]="store.isBusy(svc.name)"
+              (start)="store.start(svc.name)"
+              (restart)="store.restart(svc.name)"
+              (shutdown)="store.shutdown(svc.name)"
+              (refresh)="store.refresh(svc.name)"
+            />
           </li>
         }
       </ul>
@@ -124,24 +110,9 @@ export function serviceRows(
   `,
 })
 export class ServicesTab {
-  private readonly api = inject(AiServicesApi);
-  private readonly live = inject(LiveService);
-
-  protected readonly services = signal<AiServiceDto[] | null>(null);
-  protected readonly error = signal<string | null>(null);
-  protected readonly rows = computed(() =>
-    serviceRows(this.services() ?? [], this.live.watchdog()),
-  );
+  protected readonly store = inject(AiServicesStore);
 
   constructor() {
-    void this.load();
-  }
-
-  private async load(): Promise<void> {
-    try {
-      this.services.set(await this.api.list());
-    } catch (error) {
-      this.error.set(toApiError(error).message);
-    }
+    void this.store.ensureLoaded();
   }
 }

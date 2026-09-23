@@ -9,7 +9,8 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { AiServiceDto, AiServiceStatus, AiServicesApi } from '@app/api';
+import { AiServiceDto, AiServicesApi } from '@app/api';
+import { AiServicesStore } from '@app/ai-services/ai-services-store';
 import { isAbsoluteUrl } from '@app/shared/config-form';
 import { DockerControls } from '@app/ui/docker-controls/docker-controls';
 
@@ -17,9 +18,11 @@ import { DockerControls } from '@app/ui/docker-controls/docker-controls';
 const RESOLVE_DEBOUNCE_MS = 400;
 
 /**
- * The managed container behind a config's base URL, status-only (`r2m-docker-controls[statusOnly]`:
- * chip + Refresh) — nothing when the watchdog does not manage that URL. Settings editors feed it the
- * *draft* URL, so a duplicate or a retyped URL shows its own container (tickets 21–22).
+ * The managed container behind a config's base URL as `r2m-docker-controls` — chip plus Start /
+ * Restart / Shutdown / Refresh through the app-wide {@link AiServicesStore}, so the LLM and provider
+ * editors act on the same status every other surface shows. Nothing when the watchdog does not
+ * manage that URL. Settings editors feed it the *draft* URL, so a duplicate or a retyped URL shows
+ * its own container (tickets 21–22, 25).
  */
 @Component({
   selector: 'app-managed-service-status',
@@ -28,11 +31,13 @@ const RESOLVE_DEBOUNCE_MS = 400;
   template: `
     @if (service(); as svc) {
       <r2m-docker-controls
-        statusOnly
         [serviceName]="svc.containerName"
-        [status]="status()"
-        [busy]="probing()"
-        (refresh)="probe()"
+        [status]="store.statusOf(svc.name)"
+        [busy]="store.isBusy(svc.name)"
+        (start)="store.start(svc.name)"
+        (restart)="store.restart(svc.name)"
+        (shutdown)="store.shutdown(svc.name)"
+        (refresh)="store.refresh(svc.name)"
       />
     }
   `,
@@ -45,12 +50,11 @@ const RESOLVE_DEBOUNCE_MS = 400;
 })
 export class ManagedServiceStatus {
   private readonly aiServices = inject(AiServicesApi);
+  protected readonly store = inject(AiServicesStore);
 
   readonly baseUrl = input.required<string>();
 
   protected readonly service = signal<AiServiceDto | null>(null);
-  protected readonly status = signal<AiServiceStatus>('Unknown');
-  protected readonly probing = signal(false);
 
   /** The URL once it is one worth asking the host about. */
   private readonly managedUrl = computed(() => {
@@ -78,8 +82,6 @@ export class ManagedServiceStatus {
   private schedule(url: string): void {
     this.cancel();
     this.service.set(null);
-    this.status.set('Unknown');
-    this.probing.set(false);
     if (!url) return;
     this.timer = setTimeout(() => void this.resolve(url), RESOLVE_DEBOUNCE_MS);
   }
@@ -90,24 +92,12 @@ export class ManagedServiceStatus {
       const service = await this.aiServices.resolve(baseUrl);
       if (seq !== this.seq) return;
       this.service.set(service);
-      if (service) await this.probe();
+      // A status nobody has observed yet is probed once; a known one is left to the hub.
+      if (service && this.store.statusOf(service.name) === 'Unknown') {
+        await this.store.refresh(service.name);
+      }
     } catch {
       // Not knowing whether the URL is a managed container only hides the status row.
-    }
-  }
-
-  protected async probe(): Promise<void> {
-    const service = this.service();
-    if (!service) return;
-    const seq = this.seq;
-    this.probing.set(true);
-    try {
-      const { status } = await this.aiServices.status(service.name);
-      if (seq === this.seq) this.status.set(status);
-    } catch {
-      if (seq === this.seq) this.status.set('Unknown');
-    } finally {
-      if (seq === this.seq) this.probing.set(false);
     }
   }
 }

@@ -143,6 +143,7 @@ function snapshot(projects: Record<string, ProjectSnapshot> = {}): LiveSnapshot 
       lastError: null,
     },
     watchdog: { llama: 'serviceHealthy' },
+    serviceStatus: { llama: 'Ready' },
     throughput: {
       hasRun: false,
       isRunActive: false,
@@ -248,6 +249,7 @@ describe('LiveService', () => {
       itemCount: 3,
     });
     expect(service.watchdog()).toEqual({ llama: 'serviceHealthy' });
+    expect(service.serviceStatus()).toEqual({ llama: 'Ready' });
     expect(service.assembly().audioRemainingCount).toBe(4);
   });
 
@@ -263,8 +265,10 @@ describe('LiveService', () => {
         'llm',
         'llmTest',
         'nodeStatus',
+        'preflight',
         'queue',
         'receipt',
+        'serviceStatus',
         'settingsChanged',
         'throughput',
         'voiceBatch',
@@ -436,6 +440,13 @@ describe('LiveService', () => {
 
     current().emit('watchdog', { kind: 'serviceDown', service: 'llama', reason: 'timeout' });
     expect(service.watchdog()['llama']).toBe('serviceDown');
+    current().emit('serviceStatus', {
+      name: 'whisper',
+      status: 'Stopped',
+      op: 'shutdown',
+      ok: true,
+    });
+    expect(service.serviceStatus()).toEqual({ llama: 'Ready', whisper: 'Stopped' });
 
     current().emit('nodeStatus', {
       folder: 'FOUNDATION',

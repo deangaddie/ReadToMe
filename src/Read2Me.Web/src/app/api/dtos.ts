@@ -885,6 +885,33 @@ export interface AiServiceStatusDto {
   status: AiServiceStatus;
 }
 
+// ---- Preflight (`PreflightEndpoints.cs`, ticket 25) -------------------------------------------------
+
+/** `AiTaskKind` member names — the route segment of `/api/preflight/{taskKind}`. */
+export type AiTaskKind =
+  | 'CharacterAttribution'
+  | 'AudioGeneration'
+  | 'VoicePromptGeneration'
+  | 'CharacterDiscovery'
+  | 'VoiceDesignAudio'
+  | 'Transcription'
+  | 'BookEdit';
+
+/** `ready` means nothing to start and nothing to stop: the task may run now. */
+export interface PreflightPlanDto {
+  ready: boolean;
+  toStart: { name: string; status: AiServiceStatus }[];
+  conflicts: { name: string; reason: string }[];
+}
+
+export interface PreflightRunRequest {
+  connectionId?: string | null;
+}
+
+export interface PreflightRunResponse {
+  run: string;
+}
+
 // ---- Themes (`ThemeEndpoints.cs`, ticket 04) --------------------------------------------------------
 
 export interface AppTheme {

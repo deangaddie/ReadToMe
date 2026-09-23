@@ -23,4 +23,5 @@ export * from './settings-api';
 export * from './prompts-api';
 export * from './audio-processing-api';
 export * from './ai-services-api';
+export * from './preflight-api';
 export * from './themes-api';

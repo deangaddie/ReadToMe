@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { AssemblyOutputDto, ProjectDetailDto, ProjectStatusDto } from '@app/api';
+import { Preflight } from '@app/shared/preflight';
 import { OverviewPage } from './overview-page';
 import { ProjectStore } from './project-store';
 
@@ -58,7 +59,13 @@ describe('OverviewPage', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [OverviewPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([]), ProjectStore],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        ProjectStore,
+        { provide: Preflight, useValue: { ensureReady: () => Promise.resolve(true) } },
+      ],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
   });

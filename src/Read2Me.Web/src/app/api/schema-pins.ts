@@ -25,6 +25,7 @@ import type {
   ParagraphsEnqueueRequest,
   PauseDurations,
   PlanBookEditRequest,
+  PreflightRunRequest,
   PreviewRequest,
   PromptPreviewRequest,
   ProposeBookEditRequest,
@@ -49,6 +50,7 @@ type Pin<THand extends TGenerated, TGenerated> = THand;
 
 export type SchemaPins = [
   Pin<LlmServerConfig, Schema['LlmServerConfig']>,
+  Pin<PreflightRunRequest, Schema['PreflightRunRequest']>,
   Pin<ParagraphTtsServiceConfig, Schema['ParagraphTtsServiceConfig']>,
   Pin<TextSubstitutionStep, Schema['TextSubstitutionStep']>,
   Pin<ToSentenceCaseConfig, Schema['ToSentenceCaseConfig']>,

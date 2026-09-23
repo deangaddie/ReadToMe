@@ -39,6 +39,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private sealed record AssemblyItem(AssemblyEvent Event) : Item;
     private sealed record VoiceBatchItem(VoiceBatchEvent Event) : Item;
     private sealed record WatchdogItem(WatchdogEvent Event) : Item;
+    private sealed record ServiceStatusItem(ServiceStatusChanged Change) : Item;
     private sealed record ReceiptItem(BookMutationReceipt Receipt) : Item;
     private sealed record SettingsItem(SettingsChanged Change) : Item;
     private sealed record QueuePulse : Item;
@@ -60,6 +61,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly EventBroadcaster<AssemblyEvent> _assembly;
     private readonly EventBroadcaster<VoiceBatchEvent> _voiceBatch;
     private readonly EventBroadcaster<WatchdogEvent> _watchdog;
+    private readonly EventBroadcaster<ServiceStatusChanged> _serviceStatus;
     private readonly EventBroadcaster<BookMutationReceipt> _receipts;
     private readonly EventBroadcaster<SettingsChanged> _settings;
     private readonly CharacterQueueService _attributionQueue;
@@ -89,6 +91,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private VoiceBatchMessage? _pendingBatchProgress;
     private readonly Dictionary<string, LastSent> _lastSent = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _watchdogLast = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _serviceStatusLast = new(StringComparer.OrdinalIgnoreCase);
 
     private CancellationTokenSource? _cts;
     private Task? _drain;
@@ -105,6 +108,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         EventBroadcaster<AssemblyEvent> assembly,
         EventBroadcaster<VoiceBatchEvent> voiceBatch,
         EventBroadcaster<WatchdogEvent> watchdog,
+        EventBroadcaster<ServiceStatusChanged> serviceStatus,
         EventBroadcaster<BookMutationReceipt> receipts,
         EventBroadcaster<SettingsChanged> settings,
         CharacterQueueService attributionQueue,
@@ -126,6 +130,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _assembly = assembly;
         _voiceBatch = voiceBatch;
         _watchdog = watchdog;
+        _serviceStatus = serviceStatus;
         _receipts = receipts;
         _settings = settings;
         _attributionQueue = attributionQueue;
@@ -144,6 +149,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _assembly.Event += OnAssembly;
         _voiceBatch.Event += OnVoiceBatch;
         _watchdog.Event += OnWatchdog;
+        _serviceStatus.Event += OnServiceStatus;
         _receipts.Event += OnReceipt;
         _settings.Event += OnSettings;
         _attributionQueue.Changed += OnQueueChanged;
@@ -166,6 +172,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private void OnAssembly(AssemblyEvent e) => Post(new AssemblyItem(e));
     private void OnVoiceBatch(VoiceBatchEvent e) => Post(new VoiceBatchItem(e));
     private void OnWatchdog(WatchdogEvent e) => Post(new WatchdogItem(e));
+    private void OnServiceStatus(ServiceStatusChanged c) => Post(new ServiceStatusItem(c));
     private void OnReceipt(BookMutationReceipt r) => Post(new ReceiptItem(r));
     private void OnSettings(SettingsChanged c) => Post(new SettingsItem(c));
     private void OnProgressChanged() => Post(new QueuePulse());
@@ -221,6 +228,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _assembly.Event -= OnAssembly;
         _voiceBatch.Event -= OnVoiceBatch;
         _watchdog.Event -= OnWatchdog;
+        _serviceStatus.Event -= OnServiceStatus;
         _receipts.Event -= OnReceipt;
         _settings.Event -= OnSettings;
         _attributionQueue.Changed -= OnQueueChanged;
@@ -332,6 +340,17 @@ public sealed class LiveRelay : IHostedService, IDisposable
                 var message = LiveMessageMapper.Map(e);
                 _watchdogLast[message.Service] = message.Kind;
                 await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).Watchdog(message));
+                // Recovery is a status flip too: the watchdog's opinion is what a probe would report
+                // (AiServiceControl.GetStatusAsync), so chips follow it without anyone probing.
+                var implied = LiveMessageMapper.ImpliedStatus(e);
+                _serviceStatusLast[implied.Name] = implied.Status;
+                await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).ServiceStatus(implied));
+                break;
+
+            case ServiceStatusItem { Change: var c }:
+                var status = LiveMessageMapper.Map(c);
+                _serviceStatusLast[status.Name] = status.Status;
+                await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).ServiceStatus(status));
                 break;
 
             case ReceiptItem { Receipt: var r }:
@@ -435,6 +454,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         new VoiceBatchState(_batchRunner.IsRunning, _batchRunner.Processed, _batchRunner.Total, _batchRunner.Failed,
             _batchRunner.CurrentVoiceName, _batchRunner.CurrentOperation, _batchRunner.LastError),
         new Dictionary<string, string>(_watchdogLast, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, string>(_serviceStatusLast, StringComparer.OrdinalIgnoreCase),
         _throughput.Snapshot,
         folders.Distinct(StringComparer.OrdinalIgnoreCase)
             .ToDictionary(f => f, f => _status.Snapshot(new ProjectFolderId(f)), StringComparer.OrdinalIgnoreCase));

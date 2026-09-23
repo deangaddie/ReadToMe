@@ -32,6 +32,7 @@ public class LiveRelayTests : IAsyncLifetime
     private readonly EventBroadcaster<AssemblyEvent> _assembly = new();
     private readonly EventBroadcaster<VoiceBatchEvent> _voiceBatch = new();
     private readonly EventBroadcaster<WatchdogEvent> _watchdog = new();
+    private readonly EventBroadcaster<ServiceStatusChanged> _serviceStatus = new();
     private readonly EventBroadcaster<BookMutationReceipt> _receipts = new();
     private readonly EventBroadcaster<SettingsChanged> _settings = new();
     private readonly CharacterQueueService _attribution = new();
@@ -53,7 +54,7 @@ public class LiveRelayTests : IAsyncLifetime
         var throughput = new ThroughputAggregator(_llm, new EventBroadcaster<LlmTimingsSample>());
         var status = new ProjectStatusSource(_nodes, _attribution, _audio, _reviews, new BookRevisionSequence());
 
-        _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _receipts,
+        _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts,
             _settings, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
             NullLogger<LiveRelay>.Instance);
         await _relay.StartAsync(CancellationToken.None);
@@ -64,6 +65,27 @@ public class LiveRelayTests : IAsyncLifetime
         _hub.Gate?.TrySetResult();
         await _relay.StopAsync(CancellationToken.None);
         _relay.Dispose();
+    }
+
+    [Fact]
+    public async Task Service_status_observations_and_watchdog_transitions_reach_global_and_the_snapshot()
+    {
+        _serviceStatus.Publish(new ServiceStatusChanged("llama", AiServiceStatus.Stopped, "shutdown", true, null));
+        _watchdog.Publish(new ServiceDown("whisper", "gave up"));
+
+        await WaitForAsync(() => _hub.Method("serviceStatus").Count == 2);
+
+        var sent = _hub.Method("serviceStatus");
+        Assert.All(sent, s => Assert.Equal("global", s.Target));
+        var op = Assert.IsType<ServiceStatusMessage>(sent[0].Payload);
+        Assert.Equal(new ServiceStatusMessage("llama", "Stopped", "shutdown", true, null), op);
+        var implied = Assert.IsType<ServiceStatusMessage>(sent[1].Payload);
+        Assert.Equal(new ServiceStatusMessage("whisper", "Down"), implied);
+
+        var snapshot = _relay.BuildSnapshot([]);
+        Assert.Equal("Stopped", snapshot.ServiceStatus["llama"]);
+        Assert.Equal("Down", snapshot.ServiceStatus["whisper"]);
+        Assert.Equal("serviceDown", snapshot.Watchdog["whisper"]);
     }
 
     [Fact]
