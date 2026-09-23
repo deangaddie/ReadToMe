@@ -30,22 +30,24 @@ docker compose stop <service>
 docker compose up -d --build            # After Dockerfile/entrypoint changes
 docker logs -f read2me-llama
 
-# Web front end (Angular, src/Read2Me.Web — see its README.md)
+# Web front end (Angular, src/Read2Me.Web — see its README.md and docs/agents/web.md)
+pwsh scripts/build-web.ps1              # npm ci + npm run build from anywhere; -Check runs npm run check instead
 cd src/Read2Me.Web
 npm ci                                  # Node 24 / npm 11 pinned in engines
 npm start                               # ng serve on http://localhost:4200/app/, proxies /api,/hubs,/workspace,/openapi to :5000
-npm run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored)
-npm run check                           # lint + typecheck + test + build
+npm run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored); host serves it at /app
+npm run check                           # lint + typecheck + api:check + test + build
 npm run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
 
 # Browser tests (both UIs): src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
-dotnet test src/Read2Me.E2eTests         # Angular tests (Tests/Web) skip unless `npm run build` has emitted wwwroot/app
+dotnet test src/Read2Me.E2eTests         # Angular tests (Tests/Web) skip unless a bundle exists in wwwroot/app
+dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the Angular suite
 # Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 ```
 
 ## Architecture
 
-**ReadToMe** is a Blazor Server app that orchestrates AI-powered audiobook production from text scripts.
+**ReadToMe** is a Blazor Server app that orchestrates AI-powered audiobook production from text scripts. A second front end (Angular, `src/Read2Me.Web`) is served by the same host at `/app` as a thin client over the agent API and the live hub — see `docs/agents/web.md` and ADR 0008.
 
 ### .NET App (`src/Read2Me.App`)
 

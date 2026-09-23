@@ -13,3 +13,4 @@ Domain vocabulary for ReadToMe. Use these terms exactly in code, tests, and disc
 | Semantic verification | [context/semantic-verification.md](context/semantic-verification.md) | Semantic Similarity Check, Semantic Rescue, `ISemanticVerifier` |
 | Audiobook assembly & live-event infra | [context/assembly.md](context/assembly.md) | Audiobook Assembly, manifest, pauses, concat/chapters/cover, `EventBroadcaster<T>`, `VoiceBatchRunner`, Sweep Phase |
 | Container health dashboard | [context/container-health-dashboard.md](context/container-health-dashboard.md) | Service Adapter, shared operator-console boundary |
+| Web front end (Angular) | [context/web.md](context/web.md) | Web app vs Blazor UI, Live relay + event family, Activity centre, Reader mode, Pipeline step, Preflight sheet, Managed service status, `r2m-*` component library, Web E2E |

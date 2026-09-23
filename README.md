@@ -19,6 +19,22 @@ dotnet run --project src/Read2Me.App
 
 `Workspace.FolderPath` in `appsettings.json` (or `appsettings.Development.json`) sets the root data directory. All project folders, databases, audio files, and logs are written here. Leave empty to use the current directory.
 
+### Two front ends, one host
+
+The host serves the Blazor UI at `/` and, once it has been built, the Angular web app at `/app`. They
+share the workspace, the API and the live hub, so a change made in one shows in the other.
+
+```bash
+pwsh scripts/build-web.ps1                 # npm ci + npm run build → src/Read2Me.App/wwwroot/app (git-ignored)
+dotnet run --project src/Read2Me.App       # Blazor at http://localhost:5000/, web app at http://localhost:5000/app/
+```
+
+For web development with live reload run the host as above and, in a second terminal, `npm start` in
+`src/Read2Me.Web` (Node 24 / npm 11): the dev server on <http://localhost:4200/app/> proxies the API and hub to
+`:5000`. Until a bundle exists, `/app` answers with a page that says how to build one. Structure, conventions
+and how to add a page: [docs/agents/web.md](docs/agents/web.md); the web project's own
+[README](src/Read2Me.Web/README.md) lists every npm script.
+
 ## Infrastructure services
 
 GPU-backed AI services live in `Infra/`. Run from that directory:

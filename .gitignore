@@ -411,6 +411,8 @@ ASALocalRun/
  
 # Temporary analysis artifacts created during code review
 /scripts/*.ps1
+# ...except the checked-in web build script (see docs/agents/web.md)
+!/scripts/build-web.ps1
 dotnet-format-analyzers-report.json
 roslynator*.txt
 MSBuild_Logs/

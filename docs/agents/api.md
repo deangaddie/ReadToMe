@@ -29,8 +29,10 @@ done
 ## 0. Configure services (once)
 
 Config areas: `llm`, `paragraph-tts`, `voice-design`, `transcription`,
-`semantic-similarity` — same CRUD per area, `PUT /active` selects. The first config
-created in an area auto-activates.
+`semantic-similarity` — same CRUD per area (`GET` list, `POST` create, `PUT /{id}`
+update, `DELETE /{id}` delete — deleting the active one reassigns or clears the
+selection), `PUT /active` selects and `GET /active` answers the active config (404
+when none). The first config created in an area auto-activates.
 
 ```bash
 curl -s http://localhost:5000/api/settings/llm                       # list
@@ -167,6 +169,8 @@ curl -s -X PUT http://localhost:5000/api/projects/{folder}/narrator-only-mode \
 curl -s -X PUT http://localhost:5000/api/projects/{folder}/cover \
   -F file=@/path/to/cover.jpg                        # jpg/jpeg/png/webp ≤ 10 MB → { "coverImage": "cover.jpg" }
 curl -s -X DELETE http://localhost:5000/api/projects/{folder}/cover   # → 204, also when there was none
+
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}          # → 204; the folder and everything in it
 ```
 
 The cover is served at `/workspace/{folder}/{coverImage}`; `GET /api/projects` lists
@@ -228,6 +232,7 @@ curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/ch
 # lines in book order, and a line's surrounding paragraphs (before/after each 0..10, default 3/2;
 # 404 when the paragraph is not in the chapter) with the speaker name per item:
 curl -s http://localhost:5000/api/projects/{folder}/characters/summary
+curl -s http://localhost:5000/api/projects/{folder}/characters            # the plain roster: id, name, aliases
 curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/lines
 curl -s 'http://localhost:5000/api/projects/{folder}/paragraphs/{paragraphId}/context?chapterId={chapterId}&before=3&after=2'
 ```
@@ -252,7 +257,8 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/voice-batch/prompts 
 
 # synthesise reference audio for every planned voice:
 curl -s -X POST http://localhost:5000/api/projects/{folder}/voice-batch/audio
-# poll /api/voice-batch/status
+# poll /api/voice-batch/status; stop a running batch early (voices done so far stay):
+curl -s -X POST http://localhost:5000/api/voice-batch/cancel
 
 # inspect / regenerate one voice:
 curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices
@@ -420,6 +426,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/assembly \
 # 409 with audioRemainingCount → items still need audio (or pass allowPartial:true)
 # poll /api/assembly/status (phases: Gather, Silence, ProbeConcat, Encode, Finalize);
 # it names the job's folder, and outputFileName once the job completed
+curl -s -X POST http://localhost:5000/api/assembly/cancel      # stop the running assembly (status → Cancelled)
 
 curl -s http://localhost:5000/api/projects/{folder}/assembly/outputs
 # → [{ fileName, sizeBytes, createdAt, isPartial }], newest first
