@@ -16,10 +16,20 @@ public class HostSmokeTests(E2eAppFixture app)
         await app.SeedProjectAsync("smoke-book", "Smoke Test Book", "Smokey Author");
 
         using var http = new HttpClient();
-        var html = await http.GetStringAsync(app.BaseUrl + "/");
+        var html = await http.GetStringAsync(app.BaseUrl + "/blazor");
 
         Assert.Contains("Smoke Test Book", html);
         Assert.Contains("Smokey Author", html);
+    }
+
+    [Fact]
+    public async Task Root_redirects_to_the_web_app()
+    {
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        var response = await http.GetAsync(app.BaseUrl + "/");
+
+        Assert.Equal(System.Net.HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/app/", response.Headers.Location?.OriginalString);
     }
 
     /// <summary>

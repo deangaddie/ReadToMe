@@ -1,12 +1,12 @@
 # Web front end (Angular) — how it is built and how to extend it
 
-The Angular app in `src/Read2Me.Web` is the second front end beside the Blazor UI ([ADR 0008](../adr/0008-second-front-end-angular-beside-blazor.md)). It is a thin view over the agent API ([api.md](api.md)) and the live hub; it holds no book logic of its own. Vocabulary: [context/web.md](../../context/web.md).
+The Angular app in `src/Read2Me.Web` is the default UI; `/` redirects to it ([ADR 0008](../adr/0008-second-front-end-angular-beside-blazor.md), [ADR 0009](../adr/0009-angular-is-the-default-ui.md)). It is a thin view over the agent API ([api.md](api.md)) and the live hub; it holds no book logic of its own. The legacy Blazor UI stays beside it until it is removed. Vocabulary: [context/web.md](../../context/web.md).
 
 ## Run, build, test
 
 | Want | Do |
 |---|---|
-| Both UIs on one host | `pwsh scripts/build-web.ps1` then `dotnet run --project src/Read2Me.App` → Blazor at `/`, web app at `/app` |
+| Both UIs on one host | `pwsh scripts/build-web.ps1` then `dotnet run --project src/Read2Me.App` → web app at `/app` (`/` redirects there), Blazor home at `/blazor` |
 | Web dev loop with live reload | host running on `:5000`, then `npm start` in `src/Read2Me.Web` → `http://localhost:4200/app/` (proxy for `/api`, `/hubs`, `/workspace`, `/openapi`) |
 | PR gate for the web project | `npm run check` (lint + typecheck + `api:check` + Vitest + build) or `pwsh scripts/build-web.ps1 -Check` |
 | Browser tests for the web app | build the bundle, then `dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"`; without a bundle every web test skips with the command to run |

@@ -14,7 +14,7 @@ dotnet build src/Read2Me.App
 
 # Run (Kestrel)
 dotnet run --project src/Read2Me.App
-# https://localhost:5001 / http://localhost:5000
+# https://localhost:5001 / http://localhost:5000 — `/` redirects to the Angular app at /app (default UI, ADR 0009); legacy Blazor home at /blazor
 
 # Infrastructure services (run from Infra/)
 docker compose up -d llama              # LLM service
@@ -47,7 +47,7 @@ dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # onl
 
 ## Architecture
 
-**ReadToMe** is a Blazor Server app that orchestrates AI-powered audiobook production from text scripts. A second front end (Angular, `src/Read2Me.Web`) is served by the same host at `/app` as a thin client over the agent API and the live hub — see `docs/agents/web.md` and ADR 0008.
+**ReadToMe** orchestrates AI-powered audiobook production from text scripts. The default UI is the Angular app (`src/Read2Me.Web`), served by the host at `/app` as a thin client over the agent API and the live hub — see `docs/agents/web.md` and ADRs 0008/0009. The legacy Blazor Server UI (home at `/blazor`) remains until it is removed; add new UI work to the Angular app only.
 
 ### .NET App (`src/Read2Me.App`)
 

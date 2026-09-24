@@ -76,12 +76,12 @@ public class WebHostingTests(E2eAppFixture app)
     }
 
     [Fact]
-    public async Task Blazor_root_and_api_are_untouched_by_the_app_fallback()
+    public async Task Blazor_home_and_api_are_untouched_by_the_app_fallback()
     {
         StageBundle();
         try
         {
-            var root = await Http.GetAsync(app.BaseUrl + "/");
+            var root = await Http.GetAsync(app.BaseUrl + "/blazor");
             var rootHtml = await root.Content.ReadAsStringAsync();
             var api = await Http.GetAsync(app.BaseUrl + "/api/projects");
 

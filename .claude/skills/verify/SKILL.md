@@ -1,11 +1,11 @@
 ---
 name: verify
-description: Launch ReadToMe and drive either UI in a browser — Blazor at / or the Angular web app at /app — to see a change working or reproduce a bug against the real host. Use for verifying a change or hunting a bug in the running app rather than running tests.
+description: Launch ReadToMe and drive either UI in a browser — the Angular web app at /app (the default) or Blazor at /blazor — to see a change working or reproduce a bug against the real host. Use for verifying a change or hunting a bug in the running app rather than running tests.
 ---
 
 # Verifying ReadToMe in a browser
 
-Two UIs on one host: Blazor Server at `/`, the Angular web app at `/app` (dev server `:4200`
+Two UIs on one host: the Angular web app at `/app` (the default: `/` redirects there), Blazor Server at `/blazor` and its other root-level routes (dev server `:4200`
 proxies to the host). The surface is the browser — drive it, don't import-and-call.
 
 ## Launch

@@ -12,7 +12,7 @@ cd tools/browse && npm ci            # playwright-core only; Chromium is the one
 Start what the script needs:
 
 ```bash
-dotnet run --project src/Read2Me.App --urls http://localhost:5000     # host (Blazor at /, API, hub)
+dotnet run --project src/Read2Me.App --urls http://localhost:5000     # host (web app at /app, Blazor home at /blazor, API, hub)
 cd src/Read2Me.Web && npm start                                       # Angular dev server at :4200 (web scripts only)
 ```
 

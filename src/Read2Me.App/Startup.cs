@@ -113,6 +113,12 @@ namespace Read2Me.App
                 endpoints.MapGet("/preview-source/{folder}/{id}", ServePreviewSourceAsync);
                 endpoints.MapAgentApi();
                 endpoints.MapLiveHub();
+                // The Angular app is the default UI (ADR 0009); the Blazor home lives at /blazor.
+                endpoints.MapGet("/", ctx =>
+                {
+                    ctx.Response.Redirect("/app/");
+                    return Task.CompletedTask;
+                });
                 // The Angular app owns /app; its SPA fallback must run before Blazor's _Host catch-all.
                 endpoints.MapFallback("/app", ctx => ServeAngularAppAsync(ctx, env));
                 endpoints.MapFallback("/app/{**path}", ctx => ServeAngularAppAsync(ctx, env));
