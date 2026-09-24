@@ -1,0 +1,13 @@
+{
+  "name": "read2me-browse",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Drive a running ReadToMe host (Blazor at / or Angular at /app) from a Node script.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.18 <25"
+  },
+  "dependencies": {
+    "playwright-core": "1.61.0"
+  }
+}

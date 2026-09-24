@@ -1,0 +1,88 @@
+<h2 mat-dialog-title>New project</h2>
+
+<mat-dialog-content class="new-project mat-typography">
+  <mat-form-field appearance="outline" class="new-project__field">
+    <mat-label>Book title</mat-label>
+    <input
+      matInput
+      name="bookTitle"
+      required
+      [value]="draft().bookTitle"
+      (input)="setBookTitle($any($event.target).value)"
+      cdkFocusInitial
+    />
+    @if (error('bookTitle'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="new-project__field">
+    <mat-label>Project title</mat-label>
+    <input
+      matInput
+      name="title"
+      required
+      [value]="draft().title"
+      (input)="setTitle($any($event.target).value)"
+    />
+    <mat-hint>Names the project folder. Follows the book title until you change it.</mat-hint>
+    @if (error('title'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="new-project__field">
+    <mat-label>Author</mat-label>
+    <input
+      matInput
+      name="author"
+      required
+      [value]="draft().author"
+      (input)="setAuthor($any($event.target).value)"
+    />
+    @if (error('author'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <r2m-file-drop
+    [accept]="accept"
+    [maxBytes]="maxBytes"
+    label="Drop the book here"
+    hint="epub or txt, up to 100 MB"
+    (files)="onFiles($event)"
+    (rejected)="onRejected($event)"
+  />
+
+  <div class="new-project__file">
+    @if (draft().file; as file) {
+      <r2m-status-chip status="ok" icon="description" [label]="file.name" compact />
+    }
+    @if (draft().fileError; as message) {
+      <r2m-status-chip status="error" [label]="message" compact />
+    } @else if (error('file'); as message) {
+      <r2m-status-chip status="warn" [label]="message" compact />
+    }
+  </div>
+
+  @if (submitError(); as message) {
+    <r2m-status-chip class="new-project__submit-error" status="error" [label]="message" />
+  }
+</mat-dialog-content>
+
+@if (busy()) {
+  <mat-progress-bar mode="indeterminate" aria-label="Uploading" />
+}
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()" [disabled]="busy()">Cancel</button>
+  <button
+    mat-flat-button
+    type="button"
+    class="new-project__create"
+    (click)="create()"
+    [disabled]="!valid() || busy()"
+  >
+    <mat-icon>add</mat-icon> Create
+  </button>
+</mat-dialog-actions>

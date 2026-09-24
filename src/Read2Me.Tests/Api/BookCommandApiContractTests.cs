@@ -168,6 +168,33 @@ namespace Read2Me.Tests.Api
         }
 
         /// <summary>
+        /// The caller's origin reaches the receipt without any handler forwarding it: the endpoint
+        /// stamps the request scope's <see cref="MutationOrigin"/> once and <see cref="BookMutations"/>
+        /// applies it to whatever commits. A scope with no origin stays unattributed.
+        /// </summary>
+        [Fact]
+        public async Task ACommandRunInAScopeWithAnOrigin_PublishesAReceiptThatEchoesIt()
+        {
+            var b = await SeedAsync();
+            var receipts = new List<BookMutationReceipt>();
+            _receipts.Event += receipts.Add;
+            var origin = Guid.NewGuid();
+            _request.ServiceProvider.GetRequiredService<MutationOrigin>().Id = origin;
+
+            await _api.ExecuteAsync(
+                new UpdateChapterTitleCommand(_folder, b.ChapterId("ch1"), "Mine"), CancellationToken.None);
+
+            Assert.Equal(origin, Assert.Single(receipts).OriginId);
+
+            await using var other = _root.CreateAsyncScope();
+            var anonymous = new BookCommandApiAdapter(other.ServiceProvider.GetRequiredService<BookCommandDispatcher>());
+            await anonymous.ExecuteAsync(
+                new UpdateChapterTitleCommand(_folder, b.ChapterId("ch1"), "Theirs"), CancellationToken.None);
+
+            Assert.Equal(Guid.Empty, receipts[1].OriginId);
+        }
+
+        /// <summary>
         /// The receipt an API command publishes is the same factual receipt the same operation
         /// publishes from inside the app — same mutation identity, same facets, same scope — which is
         /// what lets every open Book View reconcile from it without knowing who wrote.

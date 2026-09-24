@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Read2Me.App.Live;
 using Read2Me.App.State;
 using Read2Me.App.State.Projection;
 using Read2Me.Core.Configuration;
@@ -125,8 +126,10 @@ public class OneConsistencyModelTests : ProjectDbTestBase
             .Order()
             .ToList();
 
-        // BookMutations is the publisher; BookViewProjection is the subscriber. Nothing else.
-        Assert.Equal([nameof(BookMutations), nameof(BookViewProjection)], consumers);
+        // BookMutations is the publisher; BookViewProjection is the subscriber. LiveRelay is neither:
+        // it forwards each receipt verbatim to hub clients and derives no Book state from it — the
+        // Angular client runs its own projection from the same receipts (ADR 0007, spec D6).
+        Assert.Equal([nameof(BookMutations), nameof(BookViewProjection), nameof(LiveRelay)], consumers);
     }
 
     /// <summary>

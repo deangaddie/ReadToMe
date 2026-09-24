@@ -24,6 +24,12 @@ namespace Read2Me.Services.Audio.Assembly
         public string? LastError { get; private set; }
         public int AudioRemainingCount { get; private set; }
 
+        /// <summary>The project of the running (or most recent) job; null until the first start.</summary>
+        public string? Folder { get; private set; }
+
+        /// <summary>The m4b the most recent job produced; null while running and after a failure or cancel.</summary>
+        public string? OutputFileName { get; private set; }
+
         public AudiobookAssemblyService(
             IServiceScopeFactory scopeFactory,
             IAudiobookEncoder encoder,
@@ -53,6 +59,8 @@ namespace Read2Me.Services.Audio.Assembly
                 LastError = null;
                 EncodePercent = 0;
                 CurrentPhase = null;
+                Folder = folder.Value;
+                OutputFileName = null;
 
                 _cts = new CancellationTokenSource();
                 var ct = _cts.Token;
@@ -83,7 +91,7 @@ namespace Read2Me.Services.Audio.Assembly
                 var audioSettings = await settingsSvc.GetAsync();
 
                 // ── Phase 1: Gather ───────────────────────────────────────────
-                SetPhase(AssemblyPhase.Gather);
+                SetPhase(folder, AssemblyPhase.Gather);
                 ct.ThrowIfCancellationRequested();
 
                 var rawManifest = await reader.GetAssemblyManifestAsync(folder, ct);
@@ -115,7 +123,7 @@ namespace Read2Me.Services.Audio.Assembly
                 var projectFolder = _fs.GetProjectFolderPath(folder.Value);
 
                 // ── Phase 2: Silence ──────────────────────────────────────────
-                SetPhase(AssemblyPhase.Silence);
+                SetPhase(folder, AssemblyPhase.Silence);
                 ct.ThrowIfCancellationRequested();
 
                 var distinctPauseMs = manifest
@@ -133,7 +141,7 @@ namespace Read2Me.Services.Audio.Assembly
                 silencePathsForCleanup = silencePaths.Values.ToList();
 
                 // ── Phase 3: Probe / build concat ─────────────────────────────
-                SetPhase(AssemblyPhase.ProbeConcat);
+                SetPhase(folder, AssemblyPhase.ProbeConcat);
                 ct.ThrowIfCancellationRequested();
 
                 var concatEntries = AudiobookAssemblyPlanner.BuildConcatEntries(manifest, audioSettings);
@@ -177,22 +185,20 @@ namespace Read2Me.Services.Audio.Assembly
                 var coverAbsPath = coverRelPath != null ? Path.Combine(projectFolder, coverRelPath) : null;
 
                 // ── Phase 4: Encode ───────────────────────────────────────────
-                SetPhase(AssemblyPhase.Encode);
+                SetPhase(folder, AssemblyPhase.Encode);
                 ct.ThrowIfCancellationRequested();
 
-                var outputDir = Path.Combine(projectFolder, "output");
+                var outputDir = AssemblyOutputs.DirectoryOf(projectFolder);
                 Directory.CreateDirectory(outputDir);
 
-                var outputSuffix = allowPartial
-                    ? $"_partial_{DateTime.Today:yyyyMMdd}"
-                    : string.Empty;
-                var finalPath = Path.Combine(outputDir, SanitizeFileName(bookTitle) + outputSuffix + ".m4b");
+                var outputFileName = AssemblyOutputs.FileName(bookTitle, allowPartial, DateTime.Today);
+                var finalPath = Path.Combine(outputDir, outputFileName);
                 tmpPath = finalPath + ".tmp";
 
                 var progress = new Progress<double>(f =>
                 {
                     lock (_lock) { EncodePercent = f; }
-                    _broadcaster.Publish(new AssemblyEncodeProgress(f));
+                    _broadcaster.Publish(new AssemblyEncodeProgress(f) { Folder = folder.Value });
                 });
 
                 await _encoder.EncodeAsync(
@@ -201,7 +207,7 @@ namespace Read2Me.Services.Audio.Assembly
                     audioSettings.FfmpegPath, ct);
 
                 // ── Phase 5: Finalize ─────────────────────────────────────────
-                SetPhase(AssemblyPhase.Finalize);
+                SetPhase(folder, AssemblyPhase.Finalize);
 
                 File.Move(tmpPath, finalPath, overwrite: true);
                 tmpPath = null;
@@ -216,8 +222,9 @@ namespace Read2Me.Services.Audio.Assembly
                     IsRunning = false;
                     CurrentPhase = null;
                     EncodePercent = 1.0;
+                    OutputFileName = outputFileName;
                 }
-                _broadcaster.Publish(new AssemblyCompleted());
+                _broadcaster.Publish(new AssemblyCompleted(outputFileName) { Folder = folder.Value });
             }
             catch (OperationCanceledException)
             {
@@ -225,7 +232,7 @@ namespace Read2Me.Services.Audio.Assembly
                 TryDelete(concatListPath);
                 TryDelete(ffmetaPath);
                 lock (_lock) { IsRunning = false; CurrentPhase = null; }
-                _broadcaster.Publish(new AssemblyCancelled());
+                _broadcaster.Publish(new AssemblyCancelled { Folder = folder.Value });
             }
             catch (Exception ex)
             {
@@ -239,20 +246,14 @@ namespace Read2Me.Services.Audio.Assembly
                     CurrentPhase = null;
                     LastError = ex.Message;
                 }
-                _broadcaster.Publish(new AssemblyFailed(ex.Message));
+                _broadcaster.Publish(new AssemblyFailed(ex.Message) { Folder = folder.Value });
             }
         }
 
-        private void SetPhase(AssemblyPhase phase)
+        private void SetPhase(ProjectFolderId folder, AssemblyPhase phase)
         {
             lock (_lock) { CurrentPhase = phase; }
-            _broadcaster.Publish(new AssemblyPhaseStarted(phase));
-        }
-
-        private static string SanitizeFileName(string name)
-        {
-            var invalid = Path.GetInvalidFileNameChars();
-            return string.Concat(name.Select(c => Array.IndexOf(invalid, c) >= 0 ? '_' : c));
+            _broadcaster.Publish(new AssemblyPhaseStarted(phase) { Folder = folder.Value });
         }
 
         private void TryDelete(string? path)

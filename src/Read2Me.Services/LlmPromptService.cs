@@ -4,6 +4,8 @@ using Read2Me.AppData;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Llm;
 
+using Read2Me.Services.Events;
+
 namespace Read2Me.Services
 {
     public sealed record AttributionPromptCompatibility(
@@ -16,10 +18,23 @@ namespace Read2Me.Services
         private readonly ILogger<LlmPromptService> _logger;
 
         public event Action? OnChanged;
-        protected virtual void NotifyChanged() => OnChanged?.Invoke();
 
-        public LlmPromptService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<LlmPromptService> logger)
+        private readonly EventBroadcaster<SettingsChanged>? _changes;
+
+        protected virtual void NotifyChanged()
         {
+            OnChanged?.Invoke();
+            _changes?.Publish(new SettingsChanged(SettingsArea.Prompts));
+        }
+
+        /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
+        public LlmPromptService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<LlmPromptService> logger)
+            : this(dbFactory, logger, null) { }
+
+        public LlmPromptService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<LlmPromptService> logger,
+            EventBroadcaster<SettingsChanged>? changes)
+        {
+            _changes = changes;
             _dbFactory = dbFactory;
             _logger = logger;
         }

@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Read2Me.AppData;
 using Read2Me.AppData.Entities;
 
+using Read2Me.Services.Events;
+
 namespace Read2Me.Services
 {
     /// <summary>
@@ -16,8 +18,22 @@ namespace Read2Me.Services
 
         public event Action? OnChanged;
 
-        public ParagraphTtsSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<ParagraphTtsSettingsService> logger)
+        private readonly EventBroadcaster<SettingsChanged>? _changes;
+
+        private void NotifyChanged()
         {
+            OnChanged?.Invoke();
+            _changes?.Publish(new SettingsChanged(SettingsArea.ParagraphTts));
+        }
+
+        /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
+        public ParagraphTtsSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<ParagraphTtsSettingsService> logger)
+            : this(dbFactory, logger, null) { }
+
+        public ParagraphTtsSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<ParagraphTtsSettingsService> logger,
+            EventBroadcaster<SettingsChanged>? changes)
+        {
+            _changes = changes;
             _dbFactory = dbFactory;
             _logger = logger;
             _store = new ServiceConfigStore<ParagraphTtsServiceConfig>(
@@ -28,7 +44,7 @@ namespace Read2Me.Services
                 c => c.Id,
                 (c, id) => c.Id = id,
                 "ParagraphTts");
-            _store.OnChanged += () => OnChanged?.Invoke();
+            _store.OnChanged += () => NotifyChanged();
         }
 
         public async Task<List<ParagraphTtsServiceConfig>> GetAllConfigsAsync()
@@ -103,7 +119,7 @@ namespace Read2Me.Services
             }
 
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         public Task DeleteConfigAsync(int configId) => _store.DeleteConfigAsync(configId);

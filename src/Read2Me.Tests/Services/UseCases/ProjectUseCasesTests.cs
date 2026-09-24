@@ -76,6 +76,27 @@ namespace Read2Me.Tests.Services.UseCases
         }
 
         [Fact]
+        public async Task UpdateMetadataAsync_PassesFieldsThroughAndReturnsOk()
+        {
+            var result = await Sut.UpdateMetadataAsync("my-folder", "T", null, "A");
+
+            Assert.True(result.IsSuccess);
+            await _writer.Received(1).UpdateMetadataAsync(new ProjectFolderId("my-folder"), "T", null, "A");
+        }
+
+        [Fact]
+        public async Task UpdateMetadataAsync_WhenWriterThrows_ReturnsFriendlyMessage()
+        {
+            _writer.UpdateMetadataAsync(default, default, default, default)
+                .ThrowsAsyncForAnyArgs(new IOException("locked"));
+
+            var result = await Sut.UpdateMetadataAsync("my-folder", "T", "B", "A");
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal("Failed to save project details.", result.Error);
+        }
+
+        [Fact]
         public void DeleteProject_OnSuccess_ReturnsOk()
         {
             var result = Sut.DeleteProject("my-folder");

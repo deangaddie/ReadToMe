@@ -1,5 +1,6 @@
 @using Read2Me.App.State
 @using Read2Me.Data.Entities
+@using Read2Me.Core.Models
 @using Read2Me.Services.Characters
 @inject CharacterDiscoveryService Discovery
 @inject IProjectReader Reader
@@ -33,7 +34,9 @@
         }
         else if (_phase == Phase.Review)
         {
-            var collisions = AliasCollisions.Find(_rows, _roster);
+            var collisions = AliasCollisions.Find(
+                _rows.Where(r => r.Included).Select(r => r.ToClaim()),
+                _roster.Select(c => c.ToAliasOwner()));
             @if (collisions.Count > 0)
             {
                 <MudAlert Severity="Severity.Warning" Class="mb-3" Dense="true">
@@ -171,9 +174,7 @@
             _roster = await Reader.GetCharactersWithAliasesAsync(FolderId);
             _rows = outcome.Characters.Select(c =>
             {
-                var existing = _roster.FirstOrDefault(e =>
-                    CharacterResolver.Matches(e, c.Name) ||
-                    c.Aliases.Any(a => CharacterResolver.Matches(e, a)));
+                var existing = CharacterResolver.FindDiscovered(_roster, c.Name);
                 return new DiscoveredCharacterRow
                 {
                     Name = c.Name,

@@ -200,8 +200,23 @@ namespace Read2Me.Services
         Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId);
         Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId);
 
+        /// <summary>
+        /// Every character as a cast-list row (narrator first, then by name): aliases, line count,
+        /// and planned versus ready voices, in one query instead of a roster read plus a per-row
+        /// count.
+        /// </summary>
+        Task<List<CharacterSummary>> GetCharacterSummariesAsync(ProjectFolderId folderId);
+
         Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
             ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false);
+
+        /// <summary>
+        /// The Character paragraphs among <paramref name="paragraphIds"/>, with their ancestry. Ids
+        /// that name no paragraph, or a paragraph with no dialog (all narration, a lone pause), are
+        /// left out: a selection made by id is enqueued exactly like one made by node.
+        /// </summary>
+        Task<List<CharacterParagraphRef>> GetCharacterParagraphRefsAsync(
+            ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds);
 
         // All volume/part/chapter node ids that contain at least one character paragraph.
         Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId);
@@ -214,7 +229,18 @@ namespace Read2Me.Services
         /// </summary>
         Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
             ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default);
+
+        /// <summary>The cast figures behind the pipeline's Cast and Voices steps, in one read.</summary>
+        Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default);
     }
+
+    /// <summary>
+    /// <see cref="Characters"/> excludes the seed Narrator row. <see cref="CharactersWithLines"/>
+    /// counts distinct speakers of speech items, narration included, with narration credited to the
+    /// linked narrator when there is one (ADR-0004: they share one voice). <see cref="ReadyVoices"/>
+    /// is how many of those speakers have at least one voice with audio.
+    /// </summary>
+    public sealed record CastCounts(int Characters, int CharactersWithLines, int ReadyVoices);
 
     /// <summary>
     /// The two figures behind the bulk-assign confirm. The third the dialog wants — selected
@@ -236,11 +262,12 @@ namespace Read2Me.Services
         Task<IReadOnlyList<AudioSampleInfo>> GetAudioSampleInfosAsync(
             ProjectFolderId folderId, IReadOnlyCollection<Guid> itemIds);
 
-        // Returns non-Pause ParagraphItems (Character + Narration) scoped to the given node, for audio selection.
+        // Returns non-Pause (spoken) ParagraphItems scoped to the given node, for audio selection.
         // When needsAudioOnly is true, filters to items missing a WAV and attribution-ready (Narration always; Character only when CharacterId != null, unless narratorOnlyMode is true in which case unattributed Character items are also included).
-        Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false);
+        // When voicedOnly is true, keeps only Voiced items (CONTEXT.md): a speaker to read them, by the same readiness rule, whether or not a WAV exists — what the web reader's whole-node audio selection holds.
+        Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false, bool voicedOnly = false);
 
-        // Returns the given ParagraphItem IDs ordered by book position (Volume→Part→Chapter→Paragraph→Item order).
+        // Returns the given ParagraphItem IDs ordered by book position (Volume→Part→Chapter→Paragraph→Item order). Pause items and unknown ids drop out.
         Task<List<AudioItemRef>> GetOrderedAudioItemRefsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphItemIds);
 
         // Returns per-node (Chapter/Part/Volume) counts of non-Pause ParagraphItems for audio selection roll-up.

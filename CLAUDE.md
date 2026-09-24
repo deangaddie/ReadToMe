@@ -14,7 +14,7 @@ dotnet build src/Read2Me.App
 
 # Run (Kestrel)
 dotnet run --project src/Read2Me.App
-# https://localhost:5001 / http://localhost:5000
+# https://localhost:5001 / http://localhost:5000 — `/` redirects to the Angular app at /app (default UI, ADR 0009); legacy Blazor home at /blazor
 
 # Infrastructure services (run from Infra/)
 docker compose up -d llama              # LLM service
@@ -29,11 +29,25 @@ docker compose up -d mpnet-base-v2     # Semantic similarity
 docker compose stop <service>
 docker compose up -d --build            # After Dockerfile/entrypoint changes
 docker logs -f read2me-llama
+
+# Web front end (Angular, src/Read2Me.Web — see its README.md and docs/agents/web.md)
+pwsh scripts/build-web.ps1              # npm ci + npm run build from anywhere; -Check runs npm run check instead
+cd src/Read2Me.Web
+npm ci                                  # Node 24 / npm 11 pinned in engines
+npm start                               # ng serve on http://localhost:4200/app/, proxies /api,/hubs,/workspace,/openapi to :5000
+npm run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored); host serves it at /app
+npm run check                           # lint + typecheck + api:check + test + build
+npm run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
+
+# Browser tests (both UIs): src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
+dotnet test src/Read2Me.E2eTests         # Angular tests (Tests/Web) skip unless a bundle exists in wwwroot/app
+dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the Angular suite
+# Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 ```
 
 ## Architecture
 
-**ReadToMe** is a Blazor Server app that orchestrates AI-powered audiobook production from text scripts.
+**ReadToMe** orchestrates AI-powered audiobook production from text scripts. The default UI is the Angular app (`src/Read2Me.Web`), served by the host at `/app` as a thin client over the agent API and the live hub — see `docs/agents/web.md` and ADRs 0008/0009. The legacy Blazor Server UI (home at `/blazor`) remains until it is removed; add new UI work to the Angular app only.
 
 ### .NET App (`src/Read2Me.App`)
 

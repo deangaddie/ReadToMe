@@ -55,6 +55,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IUnattributedItemCounter>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IAudioItemReader>(sp => sp.GetRequiredService<ProjectReader>());
         services.AddScoped<IVoiceResolver, VoiceResolver>();
+        services.AddScoped<IVoiceRulePreview, VoiceRulePreview>();
         services.AddBookCommandHandlers();
         services.Configure<BookMutationOptions>(configuration.GetSection(BookMutationOptions.SectionName));
         
@@ -148,6 +149,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IVoicePreviewRenderer, VoicePreviewRenderer>();
         services.AddScoped<IVoiceOriginalStore, VoiceOriginalStore>();
         services.AddScoped<IVoiceAudioEditor, VoiceAudioEditor>();
+        // Process-wide, not circuit-bound: the HTTP API renders a preview in one request and applies it in another.
+        services.AddSingleton<IPreviewStore>(_ => new PreviewStore(TimeProvider.System));
         services.AddScoped<IRecentAudioSampleFinder, RecentAudioSampleFinder>();
         services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.Assembly.AssemblyEvent>>();
         services.AddSingleton<IAudiobookEncoder, AudiobookEncoder>();
@@ -213,6 +216,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Read2Me.Services.BookEdits.ScopeResolver>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditPlanner>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditProposalService>();
+        // Process-wide, not circuit-bound: the HTTP API plans in one request and proposes/applies in others.
+        services.AddSingleton<Read2Me.Services.BookEdits.IBookEditSessionStore>(_ => new Read2Me.Services.BookEdits.BookEditSessionStore(TimeProvider.System));
+        services.AddSingleton<Read2Me.App.Live.BookEditRunCoordinator>();
+        services.AddSingleton<Read2Me.App.Live.LlmTestRunCoordinator>();
 
         // Character discovery
         services.AddScoped<Read2Me.Services.Characters.CharacterDiscoveryService>();
@@ -231,8 +238,19 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<AiServiceHealthMonitor>();
         services.AddSingleton<IAiServiceReporter, AiServiceReporter>();
         services.AddSingleton<IAiServiceControl, AiServiceControl>();
-        // Pre-flight is scoped: it shows a dialog, and IDialogService lives per circuit.
+        // Status observations for /hubs/live: every UI-facing probe and op (API, pre-flight, Blazor
+        // controls) goes through the observed facade so every client's chips follow (Angular ticket 25).
+        services.AddSingleton<EventBroadcaster<ServiceStatusChanged>>();
+        services.AddSingleton(sp => new ObservedAiServiceControl(
+            sp.GetRequiredService<IAiServiceControl>(), sp.GetRequiredService<EventBroadcaster<ServiceStatusChanged>>()));
+        services.AddSingleton<Read2Me.App.Live.AiServiceOpCoordinator>();
+        services.AddSingleton<Read2Me.App.Live.PreflightRunCoordinator>();
+        // Scoped: the resolver reads per-circuit settings services and the gate shows a dialog.
         services.AddScoped<IAiTaskRequirementsResolver, AiTaskRequirementsResolver>();
+        services.AddScoped<IAiPreflightPlanner>(sp => new AiPreflightPlanner(
+            sp.GetRequiredService<IAiTaskRequirementsResolver>(),
+            sp.GetRequiredService<ObservedAiServiceControl>(),
+            sp.GetRequiredService<DockerAiServiceRegistry>()));
         services.AddScoped<IAiPreflight, AiPreflight>();
         return services;
     }

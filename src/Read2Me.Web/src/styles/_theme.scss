@@ -1,0 +1,22 @@
+// One Material 3 theme, emitted as light-dark() pairs so `color-scheme` alone flips the scheme
+// (design §3). Included on <html> and again on any element that pins its own scheme
+// (the style guide's local toggle), because custom properties resolve where they are declared.
+@use '@angular/material' as mat;
+@use 'tokens';
+
+@mixin material-theme {
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: (
+        plain-family: var(--r2m-font-sans),
+        brand-family: var(--r2m-font-sans),
+      ),
+      density: -1,
+    )
+  );
+  @include tokens.css-tokens;
+}

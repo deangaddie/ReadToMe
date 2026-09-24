@@ -1,0 +1,88 @@
+.themes__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--r2m-space-4);
+}
+
+.themes__card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--r2m-outline);
+  border-radius: var(--r2m-radius-lg);
+  background: var(--r2m-surface-low);
+  overflow: hidden;
+  transition: box-shadow 120ms ease;
+
+  &:hover {
+    box-shadow: var(--r2m-shadow-2);
+  }
+}
+
+.themes__card--selected {
+  border-color: var(--r2m-accent);
+  box-shadow: 0 0 0 1px var(--r2m-accent);
+}
+
+.themes__strip {
+  position: relative;
+  height: 56px;
+}
+
+.themes__lock {
+  position: absolute;
+  top: var(--r2m-space-2);
+  right: var(--r2m-space-2);
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  opacity: 0.85;
+}
+
+.themes__body {
+  padding: var(--r2m-space-3) var(--r2m-space-4) var(--r2m-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--r2m-space-2);
+}
+
+.themes__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r2m-space-2);
+}
+
+.themes__name {
+  margin: 0;
+  font-size: var(--r2m-text-lg);
+  font-weight: 600;
+  flex: 1 1 auto;
+}
+
+.themes__swatches {
+  display: flex;
+  gap: var(--r2m-space-1);
+}
+
+.themes__swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--r2m-outline);
+}
+
+.themes__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-1);
+  padding: var(--r2m-space-2) var(--r2m-space-3) var(--r2m-space-3);
+  margin-top: auto;
+
+  > :first-child {
+    margin-right: auto;
+  }
+}
+
+.themes__delete {
+  color: var(--r2m-status-error);
+}

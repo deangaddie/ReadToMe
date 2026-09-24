@@ -23,16 +23,23 @@ public sealed class E2eAppFixture : IAsyncLifetime
 {
     public FakeAiRoutingHandler FakeAi { get; } = new();
     public FakeAiServiceControl FakeControl { get; } = new();
+    public FakeAudiobookEncoder Encoder { get; } = new();
     public string WorkspaceDir { get; private set; } = "";
+    public string WebRootDir { get; private set; } = "";
     public string BaseUrl { get; private set; } = "";
     public IServiceProvider Services => _host!.Services;
 
     private IHost? _host;
 
+    /// <summary>The preview store's clock; advance it to expire voice-editor previews.</summary>
+    public TestUtils.ManualTimeProvider Clock { get; } = new(DateTimeOffset.UtcNow);
+
     public async ValueTask InitializeAsync()
     {
         WorkspaceDir = Path.Combine(Path.GetTempPath(), "r2me-e2e", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(WorkspaceDir);
+        WebRootDir = Path.Combine(WorkspaceDir, "wwwroot");
+        Directory.CreateDirectory(WebRootDir);
 
         // Mirrors Program.CreateHostBuilder minus Serilog, plus test overrides.
         // IHostBuilder.ConfigureServices delegates run after Startup.ConfigureServices,
@@ -43,6 +50,10 @@ public sealed class E2eAppFixture : IAsyncLifetime
                 new Dictionary<string, string?> { ["Workspace:FolderPath"] = WorkspaceDir }))
             .ConfigureWebHostDefaults(web => web
                 .UseStartup<Startup>()
+                // Isolated physical web root so tests can stage (or withhold) the Angular bundle
+                // without depending on whether a developer has run ng build. Blazor/MudBlazor static
+                // assets still resolve through the Development static-web-assets manifest.
+                .UseWebRoot(WebRootDir)
                 .UseUrls("http://127.0.0.1:0"))
             .ConfigureServices(s =>
             {
@@ -51,6 +62,9 @@ public sealed class E2eAppFixture : IAsyncLifetime
                 s.AddSingleton<Read2Me.Services.Health.IAiServiceControl>(FakeControl);
                 s.AddSingleton<IAudioNormalizer, PassThroughAudioNormalizer>();
                 s.AddSingleton<IFfmpegProber, FakeFfmpegProber>();
+                s.AddSingleton<Read2Me.Services.Audio.Assembly.IAudiobookEncoder>(Encoder);
+                // Voice-editor previews expire on this clock, so a test can age them without waiting.
+                s.AddSingleton<IPreviewStore>(new PreviewStore(Clock));
             })
             .Build();
 
@@ -83,8 +97,17 @@ public sealed class E2eAppFixture : IAsyncLifetime
         WorkspaceSeeder.SeedMisSplitParagraphProjectAsync(
             Services, WorkspaceDir, folderName, title, author, characterName);
 
+    public Task<TestUtils.BookHierarchyBuilder> SeedMultiChapterProjectAsync(
+        string folderName, string title, string author, int chapters = 5, string characterName = "Alice") =>
+        WorkspaceSeeder.SeedMultiChapterProjectAsync(
+            Services, WorkspaceDir, folderName, title, author, chapters, characterName);
+
     public Task SeedItemAudioAsync(string folderName, Guid itemId, Guid characterId) =>
         WorkspaceSeeder.SeedItemAudioAsync(Services, WorkspaceDir, folderName, itemId, characterId);
+
+    /// <summary>Gives every speech item audio, so the project assembles without a partial prompt.</summary>
+    public Task SeedAllItemAudioAsync(string folderName) =>
+        WorkspaceSeeder.SeedAllItemAudioAsync(Services, WorkspaceDir, folderName);
 
     public Task<Guid> SeedEditableVoiceAsync(string folderName, Guid characterId, string voiceName = "Alice Voice") =>
         WorkspaceSeeder.SeedEditableVoiceAsync(Services, WorkspaceDir, folderName, characterId, voiceName);

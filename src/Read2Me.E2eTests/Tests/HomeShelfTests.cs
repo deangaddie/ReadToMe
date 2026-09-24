@@ -10,7 +10,7 @@ public class HomeShelfTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBa
     {
         await App.SeedProjectAsync("shelf-book", "The Shelf Book", "Shelby Author");
 
-        await GotoAsync("/");
+        await GotoAsync("/blazor");
 
         var card = Page.Locator(".project-card", new() { HasText = "The Shelf Book" });
         await Expect(card).ToBeVisibleAsync();

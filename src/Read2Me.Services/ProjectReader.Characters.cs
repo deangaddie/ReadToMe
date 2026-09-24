@@ -213,6 +213,26 @@ namespace Read2Me.Services
                 .ToListAsync();
         }
 
+        public async Task<List<CharacterSummary>> GetCharacterSummariesAsync(ProjectFolderId folderId)
+        {
+            var db = await _session.OpenAsync(folderId);
+            return await db.Characters
+                .OrderBy(c => c.IsNarrator ? 0 : 1)
+                .ThenBy(c => c.Name)
+                .Select(c => new CharacterSummary(
+                    c.Id,
+                    c.Name,
+                    c.Aliases.OrderBy(a => a.Name).Select(a => new CharacterAliasRef(a.Id, a.Name)).ToList(),
+                    // The speaker alone says whose line this is (ADR-0006) — same rule as
+                    // GetCharacterLinesAsync, so the count and the list agree.
+                    db.ParagraphItems.Count(i => i.CharacterId == c.Id),
+                    c.Voices.Count,
+                    // VoiceReadiness.IsReady, spelled out for the query translator.
+                    c.Voices.Count(v => v.AudioFileName != null && v.AudioFileName != ""),
+                    c.IsNarrator))
+                .ToListAsync();
+        }
+
         public async Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(
             ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false)
         {
@@ -232,6 +252,27 @@ namespace Read2Me.Services
                 q = q.Where(i => i.CharacterId == null);
 
             return await q
+                .Select(i => new CharacterParagraphRef(
+                    i.ParagraphId,
+                    i.Paragraph.ChapterId,
+                    i.Paragraph.Chapter.PartId,
+                    i.Paragraph.Chapter.Part.VolumeId))
+                .Distinct()
+                .ToListAsync();
+        }
+
+        public async Task<List<CharacterParagraphRef>> GetCharacterParagraphRefsAsync(
+            ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds)
+        {
+            if (paragraphIds.Count == 0) return [];
+
+            var db = await _session.OpenAsync(folderId);
+
+            // Same IN (SELECT value FROM json_each(@ids)) rendering as the bulk preview: one
+            // parameter at any length.
+            return await db.ParagraphItems
+                .Where(i => paragraphIds.Contains(i.ParagraphId))
+                .Where(NarrationRule.IsDialogExpression)
                 .Select(i => new CharacterParagraphRef(
                     i.ParagraphId,
                     i.Paragraph.ChapterId,
@@ -268,6 +309,33 @@ namespace Read2Me.Services
                 .ToListAsync(ct);
 
             return new BulkAssignPreview(perParagraph.Count, perParagraph.Sum());
+        }
+
+        public async Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default)
+        {
+            var db = await _session.OpenAsync(folderId);
+
+            var characters = await db.Characters.CountAsync(c => !c.IsNarrator, ct);
+            var speakerIds = await db.ParagraphItems
+                .Where(ParagraphItemKinds.IsSpeechExpression)
+                .Where(i => i.CharacterId != null)
+                .Select(i => i.CharacterId!.Value)
+                .Distinct()
+                .ToListAsync(ct);
+
+            // Narration belongs to whoever narrates: the linked character speaks it with their voice.
+            var narrator = await NarratorIdentity.LoadAsync(db, ct);
+            var speakers = speakerIds
+                .Select(id => id == ProjectDbContext.NarratorId ? narrator.CharacterId : id)
+                .ToHashSet();
+
+            var withAudio = await db.Voices
+                .Where(v => v.AudioFileName != null && v.AudioFileName != "")
+                .Select(v => v.CharacterId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            return new CastCounts(characters, speakers.Count, withAudio.Count(speakers.Contains));
         }
 
         public async Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId)

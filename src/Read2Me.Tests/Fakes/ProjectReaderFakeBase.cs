@@ -34,18 +34,23 @@ namespace Read2Me.Tests.Fakes
         public virtual Task<Guid?> GetDefaultVoiceIdAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult<Guid?>(null);
         public virtual Task<List<VoiceRuleRow>> GetCharacterVoiceRulesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<VoiceRuleRow>());
         public virtual Task<List<CharacterLine>> GetCharacterLinesAsync(ProjectFolderId folderId, Guid characterId) => Task.FromResult(new List<CharacterLine>());
+        public virtual Task<List<CharacterSummary>> GetCharacterSummariesAsync(ProjectFolderId folderId) => Task.FromResult(new List<CharacterSummary>());
         public virtual Task<int> GetTotalPartCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
         public virtual Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
         public virtual Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false) =>
+            Task.FromResult(new List<CharacterParagraphRef>());
+        public virtual Task<List<CharacterParagraphRef>> GetCharacterParagraphRefsAsync(ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds) =>
             Task.FromResult(new List<CharacterParagraphRef>());
         public virtual Task<HashSet<Guid>> GetNodesWithCharacterParagraphsAsync(ProjectFolderId folderId) => Task.FromResult(new HashSet<Guid>());
         public virtual Task<int> CountUnattributedCharacterItemsAsync(ProjectFolderId folderId, Guid paragraphId) => Task.FromResult(0);
         public virtual Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
             ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default) =>
             Task.FromResult(new BulkAssignPreview(0, 0));
+        public virtual Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default) =>
+            Task.FromResult(new CastCounts(0, 0, 0));
         public virtual Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) =>
             Task.FromResult(new List<(Guid, string)>());
-        public virtual Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false) =>
+        public virtual Task<List<AudioItemRef>> GetAudioItemRefsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool needsAudioOnly = false, bool narratorOnlyMode = false, bool voicedOnly = false) =>
             Task.FromResult(new List<AudioItemRef>());
         public virtual Task<List<AudioItemRef>> GetOrderedAudioItemRefsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphItemIds) =>
             Task.FromResult(new List<AudioItemRef>());

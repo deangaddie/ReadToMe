@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Events;
 
 namespace Read2Me.Services
 {
@@ -14,8 +15,22 @@ namespace Read2Me.Services
 
         public event Action? OnChanged;
 
-        public TranscriptionSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<TranscriptionSettingsService> logger)
+        private readonly EventBroadcaster<SettingsChanged>? _changes;
+
+        private void NotifyChanged()
         {
+            OnChanged?.Invoke();
+            _changes?.Publish(new SettingsChanged(SettingsArea.Transcription));
+        }
+
+        /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
+        public TranscriptionSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<TranscriptionSettingsService> logger)
+            : this(dbFactory, logger, null) { }
+
+        public TranscriptionSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<TranscriptionSettingsService> logger,
+            EventBroadcaster<SettingsChanged>? changes)
+        {
+            _changes = changes;
             _store = new ServiceConfigStore<TranscriptionServiceConfig>(
                 dbFactory, logger,
                 db => db.TranscriptionServiceConfigs,
@@ -24,7 +39,7 @@ namespace Read2Me.Services
                 c => c.Id,
                 (c, id) => c.Id = id,
                 "Transcription");
-            _store.OnChanged += () => OnChanged?.Invoke();
+            _store.OnChanged += () => NotifyChanged();
         }
 
         public Task<List<TranscriptionServiceConfig>> GetAllConfigsAsync() => _store.GetAllConfigsAsync();

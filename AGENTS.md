@@ -1,6 +1,6 @@
 # AGENTS for ReadToMe
 
-This repository is a Blazor Server app plus AI inference infrastructure for audiobook production, with GPU-backed generation services and CPU-only transcription/semantic services.
+This repository is a Blazor Server app (with a second, Angular front end served at `/app` — see `docs/agents/web.md`) plus AI inference infrastructure for audiobook production, with GPU-backed generation services and CPU-only transcription/semantic services.
 
 ## Use when
 
@@ -54,6 +54,7 @@ docker logs -f <container>     # follow logs
 ## Relevant files
 
 - `CLAUDE.md` — repository overview, build/run commands, and architecture summary
+- `docs/agents/web.md` — the Angular web front end (`src/Read2Me.Web`, served at `/app` beside the Blazor UI): layout, lint rules, adding a page, the live hub contract, browser tests; vocabulary in `context/web.md`
 - `CONTEXT.md` — domain glossary index; read before any architecture work, then load only the `context/*.md` section file(s) for the area you're touching
 - `Infra/README.md` — Docker service details, ports, supported endpoints, and usage notes
 - `Infra/docker-compose.yml` — container orchestration for all services

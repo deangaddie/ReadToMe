@@ -29,8 +29,10 @@ done
 ## 0. Configure services (once)
 
 Config areas: `llm`, `paragraph-tts`, `voice-design`, `transcription`,
-`semantic-similarity` — same CRUD per area, `PUT /active` selects. The first config
-created in an area auto-activates.
+`semantic-similarity` — same CRUD per area (`GET` list, `POST` create, `PUT /{id}`
+update, `DELETE /{id}` delete — deleting the active one reassigns or clears the
+selection), `PUT /active` selects and `GET /active` answers the active config (404
+when none). The first config created in an area auto-activates.
 
 ```bash
 curl -s http://localhost:5000/api/settings/llm                       # list
@@ -41,13 +43,72 @@ curl -s -X PUT http://localhost:5000/api/settings/llm/active \
   -H 'content-type: application/json' -d '{ "id": 1 }'
 ```
 
+LLM extras: `POST /api/settings/llm/models` takes an LLM config (saved or not) and answers
+`{ models }`, or 422 with the reason when the server cannot be asked.
+`GET/PUT /api/settings/llm/attribution-chain` reads and replaces the attribution escalation chain —
+`{ steps: [{ configId, thinking, promptStyle }], selfConsistency }` (`promptStyle` 0 = Full,
+1 = Simple, null = inherit the config's; exact duplicate steps collapse; 422 when a step names no
+config). GET adds `resolved` (the chain as attribution runs it — an empty chain falls back to the
+default config) and `available` (every config). Deleting a config removes its steps.
+`POST /api/settings/llm/{id}/test` with `{ prompt, connectionId }` sends a free-text test prompt
+(202; 409 while one is running): tokens stream on hub group `stream:llm`, the ending arrives as
+`llmTest` on `connectionId`. `POST …/{id}/test/cancel` stops it; `GET /api/settings/llm/test`
+answers `{ running, configId }`.
+
+Provider extras (`paragraph-tts`, `voice-design`, `transcription`, `semantic-similarity`): a config's
+provider settings live in `settingsJson`, and every create / update rewrites it into the provider
+record's own key case and order — send the keys in any case; text that is not the provider's shape
+is 400. `GET /api/settings/{area}/schema?type=` lists a provider type's editable fields beyond its
+base URL (none for transcription, `PassThreshold` for similarity).
+`GET /api/settings/paragraph-tts/{id}/text-steps` → `[{ stepId, label, description, builtIn, options? }]`:
+the ids a TTS config may put in `enabledStepIds` (built-ins, then its own `substitutionSteps`; id 0 =
+built-ins only). `GET/PUT /api/settings/voice-design/sample-text` → `{ text, default }` (`text` null =
+default; PUT `{ text }`, null or the default text clears it).
+Test one stored config — a provider that is down answers 422 with its reason:
+`POST /api/settings/voice-design/{id}/test` `{ prompt }` → `{ audioBase64, contentType }` (60 s timeout),
+`POST /api/settings/transcription/{id}/test` multipart `file` (wav/mp3/aac, ≤ 50 MB) → `{ transcript }`,
+`POST /api/settings/semantic-similarity/{id}/test` `{ text1, text2 }` → `{ score, threshold, pass }`.
+
 Prompt templates: `GET /api/settings/prompts` (all kinds, resolved),
 `PUT /api/settings/prompts/{kind}` to override, `DELETE` to reset.
-Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`.
+`GET /api/settings/prompts/catalog` describes every kind —
+`{ kind, title, description, tokens[], expectedResponse, template, defaultTemplate, isOverridden, warnings[] }`
+(`template` is the resolved text, `isOverridden` says it differs from the built-in default,
+`warnings` carries the compatibility problems the settings pages show, e.g. a Full attribution override
+without `{{narrator_identity}}`). `POST /api/settings/prompts/{kind}/preview` with `{ template }` answers
+`{ rendered }`: the given text (saved or not) filled with the kind's sample book, the same values both UIs preview with.
+Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`. The settings page's full view is
+`GET /api/settings/audio-processing/full` (scalars + `pauses { volumeMs, partMs, chapterMs, paragraphMs, pauseMs }` +
+`steps[]`, the paragraph post-process step configs `{ stepId, enabled, settings }` in pipeline order: `silence-trim`
+`{ thresholdDb, padMs, minOutputMs }`, `consonant-soften` `{ engine, preset, adynEq?, deesser? }`).
+`PUT /api/settings/audio-processing/pauses` saves the five pauses together (400 on a negative);
+`PUT /api/settings/audio-processing/steps/{stepId}` upserts one step (400 for a step outside the paragraph pipeline).
+`POST /api/settings/audio-processing/ffmpeg/test` with `{ ffmpegPath? }` persists the path, then probes it → `{ success, message }`.
+A/B preview of an unsaved step draft: `GET /api/audio/samples/recent?limit=20` lists recently generated items that still
+hold a Preview Source (`{ itemId, folder, text, characterName, voiceName, projectTitle }`), then
+`POST /api/settings/audio-processing/steps/{stepId}/preview` with `{ sample: { folder, itemId }, settings }` answers
+`{ previewId, originalUrl, processedUrl, removedMs?, reason?, appliedOk }` — both URLs serve WAVs; `appliedOk` false means
+the step fell back and the processed side is the unprocessed audio (404 unknown folder, 422 evicted sample).
+Themes (shared with both UIs): `GET/POST /api/settings/themes`, `PUT/DELETE /api/settings/themes/{id}`
+(built-in rows are read-only → 400), `GET/PUT /api/settings/themes/selection`
+(`{ selectedThemeId, followSystemPreference }`, both optional on PUT).
 
-Container health (read-only): `GET /api/ai-services`,
-`GET /api/ai-services/{name}/status`. Remember the GPU fits one model at a time —
-start only the containers the current step needs (`docker compose` in `Infra/`).
+Container health and lifecycle: `GET /api/ai-services`, `GET /api/ai-services/status` (every service,
+one probe each), `GET /api/ai-services/{name}/status`, and `GET /api/ai-services/resolve?baseUrl=` for the
+managed service behind a config's base URL (404 when it is not one of ours).
+`POST /api/ai-services/{name}/start | restart | shutdown` answer 202 (409 while that service already has an
+op in flight); the outcome arrives on `/hubs/live` as `serviceStatus { name, status, op, ok, error? }`, which
+every probe and watchdog transition also emits. Remember the GPU fits one model at a time — start only the
+containers the current step needs.
+
+Preflight — the readiness gate every AI action passes: `POST /api/preflight/{taskKind}/plan` →
+`{ ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }` (task kinds `CharacterAttribution`,
+`AudioGeneration`, `VoicePromptGeneration`, `CharacterDiscovery`, `VoiceDesignAudio`, `Transcription`,
+`BookEdit`; 400 otherwise). `POST /api/preflight/{taskKind}/run` `{ connectionId }` → 202 `{ run }` re-plans,
+stops the conflicts, then starts what is missing one at a time; progress reaches that connection as
+`preflight { kind: stage, run, name, stage, error? }` (`waitingToStop | stopping | stopped | waitingToStart |
+starting | ready | failed`) then `{ kind: done, run, ok, reason? }`. Call `plan` before an AI step and `run`
+only when the user agreed — cancelling must start nothing.
 
 ## 1. Create a project and import the book
 
@@ -61,15 +122,77 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/import \
 ```
 
 `reread: true` clears existing content first (safe way to re-import).
+
+A manual reread re-splits the stored file by hand-chosen rules instead of the automatic
+reader (the Blazor "Manual Reread" dialog on the wire). It also replaces existing content:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/import/manual \
+  -H 'content-type: application/json' \
+  -d '{ "hasMultipleVolumes": false, "hasMultipleParts": true,
+        "part": { "mode": "Prefix", "prefix": "Part" },
+        "chapter": { "mode": "Roman" } }'
+```
+
+`mode` is `Prefix` (needs a non-blank `prefix`), `Arabic` (bare numbers) or `Roman`. `volume` is
+read only when `hasMultipleVolumes`, `part` only when `hasMultipleParts`; `chapter` is always
+required. A switched-on level without a valid rule is 400; a reader failure is 422.
+
+Every write (`/commands` and both imports) accepts an optional `X-Origin-Id` header (a GUID).
+It is echoed as `originId` on the mutation receipt the live hub publishes, so a client can
+recognise its own commits among everyone else's. Absent or malformed, the receipt is unattributed.
+
 Inspect the result: `GET /api/projects/{folder}/book` (overview), then walk
 `GET /api/projects/{folder}/nodes/{level}/{id}/children` (volume → part → chapter;
-chapter children carry the paragraphs with their items).
+chapter children carry the paragraphs with their items). Each paragraph has
+`isPauseParagraph` (no items, or a single pause item); each item has `id`, `itemType`
+(`Narration` | `Character` | a pause kind), `text`, `characterId`, `audioFileName`,
+`voiceInstructions`, `orderKey` (fractional position key, items arrive in that order) and
+`isPause`.
 
 `GET /api/projects/{folder}` returns the project metadata, including
 `narrator: { characterId, displayName, isLinked }` — who narrates the book.
 `isLinked: false` is the normal case: nobody in the cast narrates, `characterId` is
 the seed Narrator row and `displayName` is `"Narrator"`. There is no null case. Set
 or clear the link with `SetNarratorCharacter` (section 5).
+
+Project-level metadata and the cover image:
+
+```bash
+curl -s -X PATCH http://localhost:5000/api/projects/{folder} \
+  -H 'content-type: application/json' -d '{ "title": "New title", "author": "A. Author" }'
+  # omitted fields stay as they are; a blank title/bookTitle is 400; the folder name never changes
+
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/narrator-only-mode \
+  -H 'content-type: application/json' -d '{ "enabled": true }'     # → 204
+
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/cover \
+  -F file=@/path/to/cover.jpg                        # jpg/jpeg/png/webp ≤ 10 MB → { "coverImage": "cover.jpg" }
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/cover   # → 204, also when there was none
+
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}          # → 204; the folder and everything in it
+```
+
+The cover is served at `/workspace/{folder}/{coverImage}`; `GET /api/projects` lists
+`coverImage` and `fileType` (`Epub` | `Text`) per project alongside the audio counters.
+
+Where the project stands, in one read:
+
+```bash
+curl -s http://localhost:5000/api/projects/{folder}/status
+# { hasContent, characters, charactersWithLines, readyVoices,
+#   items: { total, withAudio, unattributed },            ← items
+#   attribution: { remaining, processing, queued },       ← paragraphs
+#   audio: { remaining }, review,                         ← paragraphs
+#   volumeIds, nodes: { <volume|part|chapter id>: { attributionRemaining, audioRemaining,
+#   review, attributionProcessing, attributionQueued, isDone } }, revision }
+curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/status   # one node's summary
+```
+
+`characters` excludes the seed Narrator row; `charactersWithLines` counts speakers (narration
+included, credited to the linked narrator when there is one) and `readyVoices` how many of them
+have a voice with audio. Both reads reseed the node roll-ups from the database, so they are
+current even with no UI open, and hub clients receive the corrected `nodeStatus` deltas.
 
 ## 2. Discover characters, attribute dialog
 
@@ -81,19 +204,48 @@ curl -s -X POST 'http://localhost:5000/api/projects/{folder}/characters/discover
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/discover/apply \
   -H 'content-type: application/json' \
   -d '[ { "name": "Alice", "aliases": ["Al"] } ]'
+# each discovered row carries existingCharacterId when it resolves onto a roster character (by name
+# or alias); collisions lists names two characters would share once every row is applied.
 
 # queue attribution per chapter (or part/volume):
 curl -s -X POST http://localhost:5000/api/projects/{folder}/attribution/enqueue \
   -H 'content-type: application/json' \
   -d '{ "level": "chapter", "nodeId": "<chapterId>", "unprocessedOnly": true }'
+# or an explicit selection (ids without dialog are ignored; enqueued = what was queued):
+curl -s -X POST http://localhost:5000/api/projects/{folder}/attribution/enqueue-paragraphs \
+  -H 'content-type: application/json' \
+  -d '{ "paragraphIds": ["<paragraphId>", "<paragraphId>"] }'
+# the Character paragraphs under a node with their chapter/part/volume ids
+# (what a selection holds); unprocessedOnly=true keeps those still unattributed:
+curl -s 'http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/paragraph-ids?unprocessedOnly=true'
 # poll /api/attribution/queue; per-paragraph queue state (status + failure/unknown outcome):
 curl -s http://localhost:5000/api/projects/{folder}/attribution/paragraphs/{paragraphId}
+# forget a paragraph's Failed/Unfinished outcome (204):
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome
+# cancel everything queued (200); dismiss retires the finished run's throughput summary in the UI (200, idempotent):
+curl -s -X POST http://localhost:5000/api/attribution/cancel
+curl -s -X POST http://localhost:5000/api/attribution/dismiss
 # the attribution itself is per item — read it off the paragraph's items:
 curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/children
+# the cast page's reads: every character as a roster row (narrator first; lineCount, voiceCount,
+# readyVoiceCount, isNarrator = the seed row, narratesBook = the linked narrator), a character's
+# lines in book order, and a line's surrounding paragraphs (before/after each 0..10, default 3/2;
+# 404 when the paragraph is not in the chapter) with the speaker name per item:
+curl -s http://localhost:5000/api/projects/{folder}/characters/summary
+curl -s http://localhost:5000/api/projects/{folder}/characters            # the plain roster: id, name, aliases
+curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/lines
+curl -s 'http://localhost:5000/api/projects/{folder}/paragraphs/{paragraphId}/context?chapterId={chapterId}&before=3&after=2'
 ```
 
 Manual fixes go through the generic commands endpoint (section 5), e.g.
-`SetParagraphCharacter`.
+`SetParagraphCharacter`, or `SetParagraphsCharacter` for a whole selection — preview what it
+would write first:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/bulk-assign-preview \
+  -H 'content-type: application/json' -d '{ "paragraphIds": ["<paragraphId>"] }'
+# → { "paragraphsWithCharacterItems": 1, "characterItems": 2 }
+```
 
 ## 3. Voices
 
@@ -105,11 +257,61 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/voice-batch/prompts 
 
 # synthesise reference audio for every planned voice:
 curl -s -X POST http://localhost:5000/api/projects/{folder}/voice-batch/audio
-# poll /api/voice-batch/status
+# poll /api/voice-batch/status; stop a running batch early (voices done so far stay):
+curl -s -X POST http://localhost:5000/api/voice-batch/cancel
 
 # inspect / regenerate one voice:
 curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices
+curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}
+# → { id, characterId, name, source: "Uploaded"|"Generated", designPrompt, transcript, audioFileName,
+#     isEdited, voiceDesignSettingsOverrideJson, ttsSettingsOverrideJson }
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio
+
+# reference audio: upload/replace (multipart 'file', 200 MB max; normalised + committed), then transcribe:
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/voices/{voiceId}/audio -F 'file=@sample.wav'
+curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/transcribe
+# → { "transcript": "..." } (also stored on the voice)
+
+# design prompt without persisting: render the template, edit, send to the LLM, then SetVoiceDesignPrompt:
+curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/design-prompt/render
+# → { "prompt": "<rendered template>" }
+curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/design-prompt/generate \
+  -H 'content-type: application/json' -d '{ "prompt": "<rendered or edited>" }'
+# → { "designPrompt": "..." }
+
+# per-voice settings overrides are sparse patches keyed by the provider's settingsJson names;
+# the schema per provider type (ranges, defaults) drives an editor:
+curl -s 'http://localhost:5000/api/settings/paragraph-tts/schema?type=VoxCpm2'   # VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base
+curl -s 'http://localhost:5000/api/settings/voice-design/schema?type=Qwen3'      # VoxCpm2|Qwen3
+# → { type, fields: [{ key, label, kind: number|boolean|enum|string|text, min?, max?, step?, options?, default, help?, nullable }] }
+# then: SetVoiceTtsSettingsOverride / SetVoiceSettingsOverride commands with json = '{"cfg_value":3.5}' (null clears)
+
+# voice audio editor: clean up a voice's reference audio with post-process steps. The catalog lists
+# the voice-scope steps in chain order with their dials (settings-form fields) and defaults; preview
+# renders the steps you name (any order — the host orders them) over the voice's ORIGINAL audio and
+# answers one playable stage per step; apply names the previewId so what is written is what was heard.
+curl -s 'http://localhost:5000/api/audio/steps/catalog?scope=voice'
+# → [{ stepId, label, blurb, dials: [<settings-form fields>], defaults }]   (de-plosive, denoise, hiss-reduce, consonant-soften, silence-trim)
+curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/editor/preview \
+  -H 'content-type: application/json' \
+  -d '{ "steps": [ { "stepId": "denoise", "settings": { "strength": 30 } }, { "stepId": "silence-trim", "settings": { "thresholdDb": -40, "padMs": 100 } } ] }'
+# → { previewId, stages: [{ stepId, applied, reason?, url }] }   url = /api/previews/{previewId}/{stepId}.wav, valid 30 min
+curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/editor/apply \
+  -H 'content-type: application/json' -d '{ "previewId": "<from preview>" }'      # → VoiceDto with isEdited=true; 422 if expired / another voice's
+curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}/original.wav  # the pre-edit audio (404 while unedited)
+curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/editor/restore   # → VoiceDto, original back, edit forgotten
+
+# voice rules: which voice a character speaks in where. The first voice brings the default rule;
+# CreateVoiceRule adds an anchored one (fromLevel Volume|Part|Chapter|Paragraph|ParagraphItem +
+# fromNodeId; leave to* out for "from here on", repeat the anchor for "just this node"). Rules are
+# evaluated in list order and the last passing rule wins; MoveVoiceRule Up|Down reorders the
+# non-default ones, DeleteVoiceRule removes one (never the default).
+curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voice-rules
+# → [{ ruleId, voiceId, voiceName, isDefault, fromLevel, fromNodeId, fromTitle, fromDangling,
+#      toLevel, toNodeId, toTitle, toDangling, order }]   (dangling = the anchor node was deleted; skipped)
+curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voice-rules/preview
+# → [{ chapterId, chapterTitle, voiceName }] in book order — the voice at each chapter's start
+#   (null = none resolves; a rule anchored inside a chapter is below this grain — see the chapter voices read in §4)
 ```
 
 ## 4. Generate paragraph audio
@@ -118,8 +320,27 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characte
 curl -s -X POST http://localhost:5000/api/projects/{folder}/audio/enqueue \
   -H 'content-type: application/json' \
   -d '{ "level": "chapter", "nodeId": "<chapterId>", "needsAudioOnly": true }'
+# or an explicit selection / a single retry (unknown ids ignored; enqueued = what was queued;
+# 409 when no paragraph TTS service is active):
+curl -s -X POST http://localhost:5000/api/projects/{folder}/audio/enqueue-items \
+  -H 'content-type: application/json' \
+  -d '{ "itemIds": ["<itemId>", "<itemId>"] }'
+# the speech items under a node that have a speaker to read them, with their
+# paragraph/chapter/part/volume ids (what an audio selection holds); needsAudioOnly=true keeps
+# those still missing a WAV, narratorOnlyMode=true counts unattributed lines as readable:
+curl -s 'http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/item-ids?needsAudioOnly=true'
 # poll /api/audio/queue; per-item:
 curl -s http://localhost:5000/api/projects/{folder}/audio/items/{itemId}
+
+# which voice each speech item of a chapter will be spoken in (null voiceName = none resolves;
+# narratedBy = the linked narrator's name on narration items):
+curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/voices
+# → { "<itemId>": { "voiceName": "Deep", "narratedBy": null }, … }
+
+# items whose audio failed normalize/verify (sparse — absent = passed; state NeedsReview | Dismissed):
+curl -s http://localhost:5000/api/projects/{folder}/audio/reviews
+# → { "<itemId>": { state, normalizeOk, normalizeReason, verifyOk, wer, verifyReason,
+#                   transcript, originalTextSnapshot } }
 ```
 
 Enqueueing is idempotent (already-queued items dedupe) and `needsAudioOnly: true`
@@ -156,15 +377,100 @@ Unlike its siblings it rejects rather than no-ops: a `characterId` naming no cha
 in this project, or the seed Narrator row itself (a self-link *is* the unlinked state),
 comes back **422** with the reason.
 
+### Edit with AI
+
+Say what to change in plain language and let the LLM write the edits. Four steps: plan (what the
+instruction means and what it matches), propose (a new value per matched item), review (yours to
+correct), apply (one `ApplyBookEdits` command). The plan stays on the host under the opaque
+`program` id — you hold ids and values, never the plan. A session expires two hours after its last
+use; `DELETE` it when you are done. Titles and paragraph text only.
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/plan \
+  -H 'content-type: application/json' \
+  -d '{ "instruction": "rename every chapter to Chapter {n}", "thinking": false }'
+# → { status, reason, summary, program, transform, targetCount, requestCount, warnings[] }
+# status Ok carries the program; NoLlmConfigured | Unsupported | ServiceUnavailable | Failed |
+# NoTargets explain themselves in reason instead. transform Llm means one LLM request per 8 items
+# (requestCount says how many) and per-row retries; RegexReplace / SetTemplate run in code.
+
+# start the run (202) and follow it on the hub as bookEdit { kind: progress | done | failed } —
+# pass the connectionId you want it pushed to, or leave it out and poll the session instead:
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/propose \
+  -H 'content-type: application/json' -d '{ "thinking": false, "connectionId": null }'
+curl -s http://localhost:5000/api/projects/{folder}/book-edits/{program}
+# → { status: Idle|Running|Completed|Cancelled|Failed, done, total, reason,
+#     rows: [{ kind, id, displayPath, oldValue, newValue, status, failureReason }] }
+# row status: Proposed (usable) | NoChange (the value equals the current text) | Failed
+
+# stop early — the rows already computed stay reviewable and appliable:
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/cancel
+
+# re-ask for one row, steered by a hint (Llm plans only):
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/propose-one \
+  -H 'content-type: application/json' \
+  -d '{ "targetId": "<row id>", "hint": "keep the original spelling of names", "thinking": true }'
+
+# apply the rows you kept — one command, one commit, values yours to edit first:
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' \
+  -d '{ "type": "ApplyBookEdits", "edits": [ { "kind": "ChapterTitle", "id": "<row id>", "newValue": "Chapter 1" } ] }'
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/book-edits/{program}   # 204
+```
+
 ## 6. Assemble the m4b
 
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/assembly \
   -H 'content-type: application/json' -d '{ "allowPartial": false }'
 # 409 with audioRemainingCount → items still need audio (or pass allowPartial:true)
-# poll /api/assembly/status (phases: Gather, Silence, ProbeConcat, Encode, Finalize)
+# poll /api/assembly/status (phases: Gather, Silence, ProbeConcat, Encode, Finalize);
+# it names the job's folder, and outputFileName once the job completed
+curl -s -X POST http://localhost:5000/api/assembly/cancel      # stop the running assembly (status → Cancelled)
+
+curl -s http://localhost:5000/api/projects/{folder}/assembly/outputs
+# → [{ fileName, sizeBytes, createdAt, isPartial }], newest first
+curl -s -OJ http://localhost:5000/api/projects/{folder}/assembly/outputs/{fileName}   # audio/mp4 attachment, Range supported
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/assembly/outputs/{fileName}   # 204
 ```
+
+`{fileName}` must be one of the listed `.m4b` names; anything else — a path, a `.tmp` encode in
+flight, a missing file — is a 404.
 
 Output lands at `<workspace>/{folder}/output/<book title>.m4b`
 (`_partial_<date>` suffix for partial builds). Requires a valid ffmpeg path in
 `/api/settings/audio-processing`.
+
+## 7. Live hub (`/hubs/live`, SignalR)
+
+Push channel for anything that changes without a request: queue roll-ups, per-node and per-item
+status, mutation receipts, assembly / voice-batch / watchdog progress, LLM and audio-gen streams,
+throughput, and settings changes. Payloads are camelCase JSON, enums as names, nulls omitted;
+multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.App/Live/LiveMessages.cs`.
+
+| Direction | Name | Notes |
+|---|---|---|
+| client → server | `JoinProject(folder)` / `LeaveProject(folder)` | joins `project:{folder}`; `JoinProject` returns a `ProjectSnapshot` (`revision`, `nodes`, `paragraphs`, `items`, `folderAudioRemaining`) |
+| client → server | `JoinStream("llm" \| "audio")` / `LeaveStream(kind)` | joins `stream:llm` / `stream:audio`; the current in-progress turn is replayed to the caller first |
+| client → server | `GetSnapshot()` | `{ queue, assembly, voiceBatch, watchdog, serviceStatus, throughput, projects }` for the projects this connection joined |
+| server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
+| server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
+| server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
+| server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
+| server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
+| server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
+| server → client | `llmTest` | how an LLM settings test send ended (`done`, `failed` with `reason`, `cancelled`), sent only to the `connectionId` that started it; the tokens are on `stream:llm` |
+| server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
+| server → client | `serviceStatus` | `{ name, status, op?, ok?, error? }` — a managed service's last observed `AiServiceStatus`, after every probe, lifecycle op (then `op` names it with its outcome) and watchdog transition; everyone |
+| server → client | `preflight` | one pre-flight run (`stage` with `name` + `stage` + `error?`, then `done` with `ok` + `reason?`), sent only to the `connectionId` that started it; every message carries the `run` id the 202 answered |
+
+Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
+only computed for folders `NodeStatusService` has seeded — call `GET /api/projects/{folder}/status`
+after joining (the Angular project shell does) to seed it. Example with the .NET client:
+
+```csharp
+var conn = new HubConnectionBuilder().WithUrl("http://localhost:5000/hubs/live").Build();
+conn.On<JsonElement>("receipt", r => Console.WriteLine(r));
+await conn.StartAsync();
+var snapshot = await conn.InvokeAsync<JsonElement>("JoinProject", "dracula");
+```

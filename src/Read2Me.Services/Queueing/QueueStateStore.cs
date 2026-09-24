@@ -91,6 +91,12 @@ namespace Read2Me.Services.Queueing
         /// <summary>Clears any outcome for the key. Returns whether anything was removed.</summary>
         public bool ClearOutcome(TKey key) => _outcomes.TryRemove(key, out _);
 
+        /// <summary>Every key currently Queued or Processing (a moment-in-time copy).</summary>
+        public IReadOnlyCollection<TKey> TrackedKeys() => _status.Keys.ToArray();
+
+        /// <summary>Every key holding a terminal outcome (a moment-in-time copy).</summary>
+        public IReadOnlyCollection<TKey> OutcomeKeys() => _outcomes.Keys.ToArray();
+
         public QueueItemStatus? StatusOf(TKey key)
             => _status.TryGetValue(key, out var s) ? s : null;
 

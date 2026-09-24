@@ -20,6 +20,21 @@ namespace Read2Me.Services.UseCases
             ProjectFolderId folder, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = true)
         {
             var refs = await characterReader.GetCharacterParagraphsAsync(folder, level, nodeId, unprocessedOnly);
+            return await EnqueueAttributionAsync(folder, refs);
+        }
+
+        /// <summary>
+        /// The web reader's selection: an explicit id list rather than a node. Ids that are not
+        /// Character paragraphs are dropped by the read, so the answer counts what was queued.
+        /// </summary>
+        public virtual async Task<int> EnqueueAttributionAsync(ProjectFolderId folder, IReadOnlyList<Guid> paragraphIds)
+        {
+            var refs = await characterReader.GetCharacterParagraphRefsAsync(folder, paragraphIds);
+            return await EnqueueAttributionAsync(folder, refs);
+        }
+
+        private async Task<int> EnqueueAttributionAsync(ProjectFolderId folder, List<CharacterParagraphRef> refs)
+        {
             if (refs.Count == 0)
                 return 0;
 
@@ -43,7 +58,19 @@ namespace Read2Me.Services.UseCases
             if (refs.Count == 0)
                 return 0;
 
-            var ordered = await audioReader.GetOrderedAudioItemRefsAsync(folder, refs.Select(r => r.ParagraphItemId));
+            return await EnqueueAudioAsync(folder, refs.Select(r => r.ParagraphItemId).ToList());
+        }
+
+        /// <summary>
+        /// The web reader's audio selection or a single retry: an explicit item id list rather than a
+        /// node. Ids that name nothing drop out of the ordering read, so the answer counts what was queued.
+        /// </summary>
+        public virtual async Task<int> EnqueueAudioAsync(ProjectFolderId folder, IReadOnlyList<Guid> itemIds)
+        {
+            if (itemIds.Count == 0)
+                return 0;
+
+            var ordered = await audioReader.GetOrderedAudioItemRefsAsync(folder, itemIds);
             audioQueue.Enqueue(ordered.Select(r => new QueuedAudioItem(folder, r)));
             return ordered.Count;
         }

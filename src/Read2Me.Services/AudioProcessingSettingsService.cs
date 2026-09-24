@@ -5,6 +5,8 @@ using Read2Me.AppData;
 using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio;
 
+using Read2Me.Services.Events;
+
 namespace Read2Me.Services
 {
     /// <summary>
@@ -46,11 +48,25 @@ namespace Read2Me.Services
 
         public event Action? OnChanged;
 
+        private readonly EventBroadcaster<SettingsChanged>? _changes;
+
+        private void NotifyChanged()
+        {
+            OnChanged?.Invoke();
+            _changes?.Publish(new SettingsChanged(SettingsArea.AudioProcessing));
+        }
+
+        /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
+        public AudioProcessingSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, IFfmpegProber prober, ILogger<AudioProcessingSettingsService> logger)
+            : this(dbFactory, prober, logger, null) { }
+
         public AudioProcessingSettingsService(
             IDbContextFactory<Read2MeDbContext> dbFactory,
             IFfmpegProber prober,
-            ILogger<AudioProcessingSettingsService> logger)
+            ILogger<AudioProcessingSettingsService> logger,
+            EventBroadcaster<SettingsChanged>? changes)
         {
+            _changes = changes;
             _dbFactory = dbFactory;
             _prober = prober;
             _logger = logger;
@@ -80,7 +96,7 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.FfmpegPath = normalized);
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         /// <summary>Saves the WER pass threshold.</summary>
@@ -89,7 +105,7 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.WerThreshold = werThreshold);
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         /// <summary>Saves the total audio-generation attempts per item. Values below 1 clamp to 1.</summary>
@@ -99,7 +115,7 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.AudioMaxAttempts = clamped);
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         /// <summary>Saves the pause between stitched audio chunks.</summary>
@@ -108,7 +124,7 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.ChunkPauseMs = pauseMs);
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         /// <summary>Saves the per-kind pause durations used by the audiobook assembler.</summary>
@@ -124,7 +140,7 @@ namespace Read2Me.Services
                 s.PauseMs = pauseMs;
             });
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         /// <summary>
@@ -149,7 +165,7 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.AudioPostProcessStepsJson = json);
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         /// <summary>Saves one step's config, keeping every other step's.</summary>

@@ -14,14 +14,22 @@ namespace Read2Me.App.Api
         public static void MapAgentApi(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapProjectEndpoints();
+            endpoints.MapProjectStatusEndpoints();
             endpoints.MapBookEndpoints();
+            endpoints.MapCharacterEndpoints();
             endpoints.MapCommandEndpoints();
             endpoints.MapAttributionEndpoints();
             endpoints.MapDiscoveryEndpoints();
+            endpoints.MapBookEditEndpoints();
             endpoints.MapVoiceEndpoints();
+            endpoints.MapVoiceEditorEndpoints();
             endpoints.MapAssemblyEndpoints();
+            endpoints.MapThemeEndpoints(); // before MapSettingsEndpoints: it owns the /api/settings 404 fallback
+            endpoints.MapLlmSettingsEndpoints();
+            endpoints.MapProviderSettingsEndpoints();
             endpoints.MapSettingsEndpoints();
             endpoints.MapAiServiceEndpoints();
+            endpoints.MapPreflightEndpoints();
             endpoints.MapOpenApi();
             endpoints.MapAudioEndpoints();
             endpoints.MapQueueStatusEndpoints();

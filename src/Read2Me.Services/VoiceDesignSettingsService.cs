@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Events;
 
 namespace Read2Me.Services
 {
@@ -15,8 +16,22 @@ namespace Read2Me.Services
 
         public event Action? OnChanged;
 
-        public VoiceDesignSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<VoiceDesignSettingsService> logger)
+        private readonly EventBroadcaster<SettingsChanged>? _changes;
+
+        private void NotifyChanged()
         {
+            OnChanged?.Invoke();
+            _changes?.Publish(new SettingsChanged(SettingsArea.VoiceDesign));
+        }
+
+        /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
+        public VoiceDesignSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<VoiceDesignSettingsService> logger)
+            : this(dbFactory, logger, null) { }
+
+        public VoiceDesignSettingsService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<VoiceDesignSettingsService> logger,
+            EventBroadcaster<SettingsChanged>? changes)
+        {
+            _changes = changes;
             _dbFactory = dbFactory;
             _store = new ServiceConfigStore<VoiceDesignServiceConfig>(
                 dbFactory, logger,
@@ -26,7 +41,7 @@ namespace Read2Me.Services
                 c => c.Id,
                 (c, id) => c.Id = id,
                 "VoiceDesign");
-            _store.OnChanged += () => OnChanged?.Invoke();
+            _store.OnChanged += () => NotifyChanged();
         }
 
         public Task<List<VoiceDesignServiceConfig>> GetAllConfigsAsync() => _store.GetAllConfigsAsync();
@@ -49,7 +64,7 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.VoiceDesignSampleText = sampleText);
             await db.SaveChangesAsync();
-            OnChanged?.Invoke();
+            NotifyChanged();
         }
 
         private static async Task MutateSettingsAsync(Read2MeDbContext db, Action<AppSettings> mutate)

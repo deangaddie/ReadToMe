@@ -1,0 +1,343 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { AiServicesApi } from './ai-services-api';
+import { AssemblyApi, assemblyOutputUrl } from './assembly-api';
+import { AttributionApi } from './attribution-api';
+import { AudioApi } from './audio-api';
+import { AudioProcessingApi } from './audio-processing-api';
+import { BookApi } from './book-api';
+import { DiscoveryApi } from './discovery-api';
+import { ProjectsApi, projectUrl } from './projects-api';
+import { PromptsApi } from './prompts-api';
+import { LlmSettingsApi, ParagraphTtsSettingsApi } from './settings-api';
+import { ThemesApi } from './themes-api';
+import { VoicesApi } from './voices-api';
+
+/**
+ * One request per service: right verb, right URL, right body. ProblemDetails mapping and the origin
+ * header are covered once in api-client.spec.ts.
+ */
+describe('per-area API services', () => {
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  it('projectUrl encodes the folder segment', () => {
+    expect(projectUrl('My Book/2')).toBe('/api/projects/My%20Book%2F2');
+  });
+
+  it('ProjectsApi.create posts multipart form fields', async () => {
+    const file = new File(['x'], 'book.epub');
+    const call = TestBed.inject(ProjectsApi).create({ title: 'T', file });
+    const req = http.expectOne({ method: 'POST', url: '/api/projects' });
+    const form = req.request.body as FormData;
+    expect(form.get('title')).toBe('T');
+    expect(form.get('bookTitle')).toBe('');
+    expect(form.get('file')).toBeInstanceOf(File);
+    req.flush({ folderName: 'T' }, { status: 201, statusText: 'Created' });
+    await expect(call).resolves.toEqual({ folderName: 'T' });
+  });
+
+  it('ProjectsApi.update patches only the fields given and resolves the detail', async () => {
+    const call = TestBed.inject(ProjectsApi).update('f', { title: 'New' });
+    const req = http.expectOne({ method: 'PATCH', url: '/api/projects/f' });
+    expect(req.request.body).toEqual({ title: 'New' });
+    req.flush({ folderName: 'f', title: 'New' });
+    await expect(call).resolves.toEqual({ folderName: 'f', title: 'New' });
+  });
+
+  it('ProjectsApi.setNarratorOnlyMode puts the flag', async () => {
+    const call = TestBed.inject(ProjectsApi).setNarratorOnlyMode('f', true);
+    const req = http.expectOne({ method: 'PUT', url: '/api/projects/f/narrator-only-mode' });
+    expect(req.request.body).toEqual({ enabled: true });
+    req.flush(null, { status: 204, statusText: 'No Content' });
+    await call;
+  });
+
+  it('ProjectsApi status reads the project and node roll-ups', async () => {
+    const api = TestBed.inject(ProjectsApi);
+    const project = api.status('My Book');
+    http.expectOne({ method: 'GET', url: '/api/projects/My%20Book/status' }).flush({ revision: 3 });
+    await expect(project).resolves.toEqual({ revision: 3 });
+
+    const node = api.nodeStatus('f', 'chapter', 'c1');
+    http
+      .expectOne({ method: 'GET', url: '/api/projects/f/nodes/chapter/c1/status' })
+      .flush({ attributionRemaining: 2 });
+    await expect(node).resolves.toEqual({ attributionRemaining: 2 });
+  });
+
+  it('ProjectsApi cover: PUT multipart file, DELETE to clear', async () => {
+    const api = TestBed.inject(ProjectsApi);
+    const upload = api.uploadCover('f', new File(['x'], 'cover.png', { type: 'image/png' }));
+    const put = http.expectOne({ method: 'PUT', url: '/api/projects/f/cover' });
+    const form = put.request.body as FormData;
+    expect((form.get('file') as File).name).toBe('cover.png');
+    put.flush({ coverImage: 'cover.png' });
+    await expect(upload).resolves.toEqual({ coverImage: 'cover.png' });
+
+    const clear = api.deleteCover('f');
+    http
+      .expectOne({ method: 'DELETE', url: '/api/projects/f/cover' })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await clear;
+  });
+
+  it('ProjectsApi.import posts the reread flag', async () => {
+    const call = TestBed.inject(ProjectsApi).import('f', true);
+    const req = http.expectOne({ method: 'POST', url: '/api/projects/f/import' });
+    expect(req.request.body).toEqual({ reread: true });
+    req.flush(null);
+    await call;
+  });
+
+  it('BookApi.children addresses the node route and execute posts the command as-is', async () => {
+    const book = TestBed.inject(BookApi);
+    const children = book.children('f', 'chapter', 'abc');
+    http
+      .expectOne({ method: 'GET', url: '/api/projects/f/nodes/chapter/abc/children' })
+      .flush({ paragraphs: [] });
+    await expect(children).resolves.toEqual({ paragraphs: [] });
+
+    const exec = book.execute('f', { type: 'CreateCharacter', name: 'Hari' });
+    const req = http.expectOne({ method: 'POST', url: '/api/projects/f/commands' });
+    expect(req.request.body).toEqual({ type: 'CreateCharacter', name: 'Hari' });
+    req.flush({ newEntityId: 'id-1' });
+    await expect(exec).resolves.toEqual({ newEntityId: 'id-1' });
+  });
+
+  it('AttributionApi.enqueue posts the node request; queue is global', async () => {
+    const api = TestBed.inject(AttributionApi);
+    const enqueue = api.enqueue('f', { level: 'chapter', nodeId: 'c1', unprocessedOnly: true });
+    const req = http.expectOne({ method: 'POST', url: '/api/projects/f/attribution/enqueue' });
+    expect(req.request.body).toEqual({ level: 'chapter', nodeId: 'c1', unprocessedOnly: true });
+    req.flush({ enqueued: 3 }, { status: 202, statusText: 'Accepted' });
+    await expect(enqueue).resolves.toEqual({ enqueued: 3 });
+
+    const queue = api.queue();
+    http.expectOne({ method: 'GET', url: '/api/attribution/queue' }).flush({});
+    await queue;
+  });
+
+  it('BookApi.chapterVoices reads the chapter voices route', async () => {
+    const voices = TestBed.inject(BookApi).chapterVoices('f', 'c1');
+    http
+      .expectOne({ method: 'GET', url: '/api/projects/f/nodes/chapter/c1/voices' })
+      .flush({ i1: { voiceName: 'Deep', narratedBy: null } });
+    await expect(voices).resolves.toEqual({ i1: { voiceName: 'Deep', narratedBy: null } });
+  });
+
+  it('BookApi.itemIds reads the node item refs with only the filters that are on', async () => {
+    const book = TestBed.inject(BookApi);
+    const all = book.itemIds('f', 'chapter', 'c1');
+    http.expectOne({ method: 'GET', url: '/api/projects/f/nodes/chapter/c1/item-ids' }).flush([]);
+    await expect(all).resolves.toEqual([]);
+
+    const needs = book.itemIds('f', 'volume', 'v1', {
+      needsAudioOnly: true,
+      narratorOnlyMode: true,
+    });
+    http
+      .expectOne({
+        method: 'GET',
+        url: '/api/projects/f/nodes/volume/v1/item-ids?needsAudioOnly=true&narratorOnlyMode=true',
+      })
+      .flush([{ id: 'i1', paragraphId: 'p1', chapterId: 'c1', partId: 'pt1', volumeId: 'v1' }]);
+    await expect(needs).resolves.toHaveLength(1);
+  });
+
+  it('AudioApi.enqueueItems posts the item ids', async () => {
+    const enqueue = TestBed.inject(AudioApi).enqueueItems('f', ['i1', 'i2']);
+    const req = http.expectOne({ method: 'POST', url: '/api/projects/f/audio/enqueue-items' });
+    expect(req.request.body).toEqual({ itemIds: ['i1', 'i2'] });
+    req.flush({ enqueued: 2 }, { status: 202, statusText: 'Accepted' });
+    await expect(enqueue).resolves.toEqual({ enqueued: 2 });
+  });
+
+  it('AudioApi.reviews reads the project review map', async () => {
+    const reviews = TestBed.inject(AudioApi).reviews('f');
+    http.expectOne({ method: 'GET', url: '/api/projects/f/audio/reviews' }).flush({});
+    await expect(reviews).resolves.toEqual({});
+  });
+
+  it('AudioApi.itemStatus reads the per-item route and cancel posts globally', async () => {
+    const api = TestBed.inject(AudioApi);
+    const status = api.itemStatus('f', 'i1');
+    http
+      .expectOne({ method: 'GET', url: '/api/projects/f/audio/items/i1' })
+      .flush({ status: null, outcome: null, audioVersion: 2 });
+    await expect(status).resolves.toMatchObject({ audioVersion: 2 });
+
+    const cancel = api.cancel();
+    http.expectOne({ method: 'POST', url: '/api/audio/cancel' }).flush(null);
+    await cancel;
+  });
+
+  it('DiscoveryApi.discover sends thinking as a query param', async () => {
+    const call = TestBed.inject(DiscoveryApi).discover('f', true);
+    const req = http.expectOne((r) => r.url === '/api/projects/f/characters/discover');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.params.get('thinking')).toBe('true');
+    req.flush({});
+    await call;
+  });
+
+  it('VoicesApi.startPromptBatch posts regenerateAll', async () => {
+    const call = TestBed.inject(VoicesApi).startPromptBatch('f', true);
+    const req = http.expectOne({ method: 'POST', url: '/api/projects/f/voice-batch/prompts' });
+    expect(req.request.body).toEqual({ regenerateAll: true });
+    req.flush({}, { status: 202, statusText: 'Accepted' });
+    await call;
+  });
+
+  it('AssemblyApi.start posts allowPartial', async () => {
+    const call = TestBed.inject(AssemblyApi).start('f');
+    const req = http.expectOne({ method: 'POST', url: '/api/projects/f/assembly' });
+    expect(req.request.body).toEqual({ allowPartial: false });
+    req.flush({}, { status: 202, statusText: 'Accepted' });
+    await call;
+  });
+
+  it('AssemblyApi lists and deletes outputs, escaping the file name', async () => {
+    const api = TestBed.inject(AssemblyApi);
+
+    const list = api.outputs('f');
+    http.expectOne({ method: 'GET', url: '/api/projects/f/assembly/outputs' }).flush([]);
+    await expect(list).resolves.toEqual([]);
+
+    const removed = api.deleteOutput('f', 'My Book #1.m4b');
+    http
+      .expectOne({
+        method: 'DELETE',
+        url: '/api/projects/f/assembly/outputs/My%20Book%20%231.m4b',
+      })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await removed;
+
+    expect(assemblyOutputUrl('f', 'My Book #1.m4b')).toBe(
+      '/api/projects/f/assembly/outputs/My%20Book%20%231.m4b',
+    );
+  });
+
+  it('SettingsApi subclasses target their area; active() maps 404 to null', async () => {
+    const llm = TestBed.inject(LlmSettingsApi);
+    const list = llm.list();
+    http.expectOne({ method: 'GET', url: '/api/settings/llm' }).flush([]);
+    await expect(list).resolves.toEqual([]);
+
+    const active = TestBed.inject(ParagraphTtsSettingsApi).active();
+    http
+      .expectOne({ method: 'GET', url: '/api/settings/paragraph-tts/active' })
+      .flush({ title: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+    await expect(active).resolves.toBeNull();
+
+    const setActive = llm.setActive(7);
+    const req = http.expectOne({ method: 'PUT', url: '/api/settings/llm/active' });
+    expect(req.request.body).toEqual({ id: 7 });
+    req.flush(null);
+    await setActive;
+  });
+
+  it('PromptsApi.set puts the template by kind', async () => {
+    const call = TestBed.inject(PromptsApi).set('voice-plan', 'Plan {{name}}');
+    const req = http.expectOne({ method: 'PUT', url: '/api/settings/prompts/voice-plan' });
+    expect(req.request.body).toEqual({ template: 'Plan {{name}}' });
+    req.flush(null);
+    await call;
+  });
+
+  it('PromptsApi.catalog gets the catalog', async () => {
+    const call = TestBed.inject(PromptsApi).catalog();
+    const req = http.expectOne({ method: 'GET', url: '/api/settings/prompts/catalog' });
+    req.flush([{ kind: 'voice', title: 'Character Voice Prompt' }]);
+    await expect(call).resolves.toEqual([{ kind: 'voice', title: 'Character Voice Prompt' }]);
+  });
+
+  it('PromptsApi.preview posts the unsaved template and unwraps the rendering', async () => {
+    const call = TestBed.inject(PromptsApi).preview('voice', 'Voice for {{character_name}}');
+    const req = http.expectOne({ method: 'POST', url: '/api/settings/prompts/voice/preview' });
+    expect(req.request.body).toEqual({ template: 'Voice for {{character_name}}' });
+    req.flush({ rendered: 'Voice for Gandalf' });
+    await expect(call).resolves.toBe('Voice for Gandalf');
+  });
+
+  it('AudioProcessingApi.update puts the patch to the single row', async () => {
+    const call = TestBed.inject(AudioProcessingApi).update({ werThreshold: 0.2 });
+    const req = http.expectOne({ method: 'PUT', url: '/api/settings/audio-processing' });
+    expect(req.request.body).toEqual({ werThreshold: 0.2 });
+    req.flush({ werThreshold: 0.2 });
+    await expect(call).resolves.toMatchObject({ werThreshold: 0.2 });
+  });
+
+  it('AudioProcessingApi.saveStep puts the config under its step id', async () => {
+    const config = {
+      stepId: 'silence-trim',
+      enabled: true,
+      settings: { thresholdDb: -40, padMs: 0 },
+    };
+    const call = TestBed.inject(AudioProcessingApi).saveStep(config);
+    const req = http.expectOne({
+      method: 'PUT',
+      url: '/api/settings/audio-processing/steps/silence-trim',
+    });
+    expect(req.request.body).toEqual(config);
+    req.flush(config);
+    await expect(call).resolves.toEqual(config);
+  });
+
+  it('AudioProcessingApi.previewStep posts the sample and the unsaved settings', async () => {
+    const call = TestBed.inject(AudioProcessingApi).previewStep('consonant-soften', {
+      sample: { folder: 'book', itemId: 'item-1' },
+      settings: { engine: 'adyneq', preset: 'light' },
+    });
+    const req = http.expectOne({
+      method: 'POST',
+      url: '/api/settings/audio-processing/steps/consonant-soften/preview',
+    });
+    expect(req.request.body).toEqual({
+      sample: { folder: 'book', itemId: 'item-1' },
+      settings: { engine: 'adyneq', preset: 'light' },
+    });
+    req.flush({
+      previewId: 'p1',
+      originalUrl: '/o',
+      processedUrl: '/p',
+      removedMs: null,
+      reason: null,
+      appliedOk: true,
+    });
+    await expect(call).resolves.toMatchObject({ previewId: 'p1' });
+  });
+
+  it('AudioProcessingApi.recentSamples passes the limit', async () => {
+    const call = TestBed.inject(AudioProcessingApi).recentSamples(5);
+    const req = http.expectOne((r) => r.url === '/api/audio/samples/recent');
+    expect(req.request.params.get('limit')).toBe('5');
+    req.flush([]);
+    await expect(call).resolves.toEqual([]);
+  });
+
+  it('AiServicesApi.status encodes the service name', async () => {
+    const call = TestBed.inject(AiServicesApi).status('qwen3 tts');
+    http
+      .expectOne({ method: 'GET', url: '/api/ai-services/qwen3%20tts/status' })
+      .flush({ name: 'qwen3 tts', status: 'Healthy' });
+    await expect(call).resolves.toMatchObject({ status: 'Healthy' });
+  });
+
+  it('ThemesApi.setSelection puts the partial selection', async () => {
+    const call = TestBed.inject(ThemesApi).setSelection({ followSystemPreference: true });
+    const req = http.expectOne({ method: 'PUT', url: '/api/settings/themes/selection' });
+    expect(req.request.body).toEqual({ followSystemPreference: true });
+    req.flush({ selectedThemeId: null, followSystemPreference: true });
+    await call;
+  });
+});

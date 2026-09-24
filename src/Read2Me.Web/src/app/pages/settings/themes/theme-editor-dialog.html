@@ -1,0 +1,147 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+
+<mat-dialog-content class="editor">
+  <div class="editor__preview" [style.background]="preview().background" aria-hidden="true">
+    <div
+      class="editor__preview-bar"
+      [style.background]="preview().appbar"
+      [style.color]="preview().appbarText"
+    >
+      Read2Me
+    </div>
+    <div class="editor__preview-body">
+      <div
+        class="editor__preview-nav"
+        [style.background]="preview().nav"
+        [style.color]="preview().navText"
+      >
+        ▤
+      </div>
+      <div class="editor__preview-card" [style.background]="preview().surface">
+        <span [style.color]="preview().text">Aa</span>
+        <span
+          class="editor__preview-chip"
+          [style.background]="preview().primary"
+          [style.color]="preview().onPrimary"
+          >Primary</span
+        >
+        <span class="editor__preview-dot" [style.background]="preview().secondary"></span>
+      </div>
+    </div>
+  </div>
+
+  <mat-form-field class="editor__name" appearance="outline">
+    <mat-label>Name</mat-label>
+    <input
+      matInput
+      [value]="draft().name"
+      (input)="setName($any($event.target).value)"
+      required
+      maxlength="60"
+      autocomplete="off"
+    />
+    @if (error('name')) {
+      <mat-error>{{ error('name') }}</mat-error>
+    }
+  </mat-form-field>
+
+  <div class="editor__row">
+    <label class="editor__colour">
+      <span class="editor__colour-label">Primary</span>
+      <input
+        type="color"
+        [value]="pickerValue('primary')"
+        (input)="setColour('primary', $any($event.target).value)"
+        aria-label="Primary colour"
+      />
+      <input
+        class="editor__hex"
+        type="text"
+        [value]="draft().primary"
+        (input)="setColour('primary', $any($event.target).value)"
+        spellcheck="false"
+        aria-label="Primary hex"
+      />
+      @if (error('primary')) {
+        <span class="editor__error">{{ error('primary') }}</span>
+      }
+    </label>
+    <label class="editor__colour">
+      <span class="editor__colour-label">Secondary</span>
+      <input
+        type="color"
+        [value]="pickerValue('secondary')"
+        (input)="setColour('secondary', $any($event.target).value)"
+        aria-label="Secondary colour"
+      />
+      <input
+        class="editor__hex"
+        type="text"
+        [value]="draft().secondary"
+        (input)="setColour('secondary', $any($event.target).value)"
+        spellcheck="false"
+        aria-label="Secondary hex"
+      />
+      @if (error('secondary')) {
+        <span class="editor__error">{{ error('secondary') }}</span>
+      }
+    </label>
+    <mat-slide-toggle [checked]="draft().isDark" (change)="setDark($event.checked)">
+      Dark mode
+    </mat-slide-toggle>
+  </div>
+
+  <button
+    mat-button
+    type="button"
+    class="editor__advanced-toggle"
+    (click)="toggleAdvanced()"
+    [attr.aria-expanded]="showAdvanced()"
+  >
+    <mat-icon>{{ showAdvanced() ? 'expand_less' : 'expand_more' }}</mat-icon>
+    Advanced colours
+  </button>
+
+  @if (showAdvanced()) {
+    <div class="editor__advanced">
+      @for (opt of optionalColours; track opt.key) {
+        <label class="editor__colour editor__colour--optional">
+          <span class="editor__colour-label">{{ opt.label }}</span>
+          <input
+            type="color"
+            [value]="pickerValue(opt.key)"
+            (input)="setColour(opt.key, $any($event.target).value)"
+            [attr.aria-label]="opt.label + ' colour'"
+          />
+          <input
+            class="editor__hex"
+            type="text"
+            [value]="draft()[opt.key]"
+            (input)="setColour(opt.key, $any($event.target).value)"
+            [placeholder]="'default'"
+            spellcheck="false"
+            [attr.aria-label]="opt.label + ' hex'"
+          />
+          <button
+            mat-icon-button
+            type="button"
+            class="editor__clear"
+            (click)="clearColour(opt.key)"
+            [disabled]="!draft()[opt.key]"
+            [attr.aria-label]="'Clear ' + opt.label"
+          >
+            <mat-icon>backspace</mat-icon>
+          </button>
+          <span class="editor__hint">{{ error(opt.key) ?? opt.hint }}</span>
+        </label>
+      }
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()">Cancel</button>
+  <button mat-flat-button type="button" (click)="save()" [disabled]="!valid()">
+    {{ isEdit ? 'Save' : 'Create' }}
+  </button>
+</mat-dialog-actions>

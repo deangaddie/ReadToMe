@@ -1,0 +1,29 @@
+:host {
+  display: block;
+  width: min(560px, 95vw);
+}
+
+.new-project {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r2m-space-2);
+}
+
+.new-project__field {
+  width: 100%;
+}
+
+.new-project__file {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r2m-space-2);
+  min-height: 24px;
+}
+
+.new-project__file:empty {
+  display: none;
+}
+
+.new-project__submit-error {
+  margin-top: var(--r2m-space-2);
+}

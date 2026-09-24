@@ -1,0 +1,208 @@
+@use 'tokens';
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+// ---- app bar ------------------------------------------------------------------------------------
+.shell__appbar {
+  flex: 0 0 var(--r2m-appbar-height);
+  height: var(--r2m-appbar-height);
+  min-height: var(--r2m-appbar-height);
+  padding: 0 var(--r2m-space-2);
+  gap: var(--r2m-space-1);
+  background: var(--r2m-appbar-bg);
+  color: var(--r2m-appbar-fg);
+  box-shadow: var(--r2m-shadow-1);
+  z-index: 3;
+}
+
+.shell__brand {
+  font-weight: 600;
+  font-size: var(--r2m-text-lg);
+  color: inherit;
+  text-decoration: none;
+  margin: 0 var(--r2m-space-3) 0 var(--r2m-space-1);
+}
+
+.shell__crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-1);
+  min-width: 0;
+  font-size: var(--r2m-text-md);
+  font-weight: 400;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.shell__crumb {
+  color: var(--r2m-text-muted);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:hover {
+    color: var(--r2m-text);
+  }
+}
+
+.shell__crumb--current {
+  color: var(--r2m-text);
+  font-weight: 500;
+}
+
+.shell__crumb-sep {
+  color: var(--r2m-text-muted);
+}
+
+.shell__spacer {
+  flex: 1 1 auto;
+}
+
+.shell__conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--r2m-space-2);
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text-muted);
+  cursor: default;
+}
+
+.shell__conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--r2m-status-error);
+}
+
+.shell__conn--connected .shell__conn-dot {
+  background: var(--r2m-status-ok);
+}
+
+.shell__conn--reconnecting .shell__conn-dot,
+.shell__conn--connecting .shell__conn-dot {
+  background: var(--r2m-status-warn);
+}
+
+// ---- body: rail + content + drawer -------------------------------------------------------------
+.shell__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--r2m-surface);
+}
+
+.shell__rail {
+  width: var(--r2m-rail-collapsed);
+  background: var(--r2m-nav-bg);
+  color: var(--r2m-nav-fg);
+  border-right: 1px solid var(--r2m-outline);
+  transition: width 150ms ease;
+
+  &.shell__rail--expanded {
+    width: var(--r2m-rail-expanded);
+  }
+}
+
+.shell__nav {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--r2m-space-2) 0;
+}
+
+.shell__nav-spacer {
+  flex: 1 1 auto;
+}
+
+.shell__nav-group {
+  padding: 0 var(--r2m-space-2);
+
+  --mat-list-active-indicator-shape: var(--r2m-radius-md);
+  --mat-list-list-item-leading-icon-color: var(--r2m-nav-fg);
+  --mat-list-list-item-label-text-color: var(--r2m-nav-fg);
+}
+
+.shell__nav-group--context {
+  border-bottom: 1px solid var(--r2m-outline);
+  padding-bottom: var(--r2m-space-2);
+  margin-bottom: var(--r2m-space-2);
+}
+
+.shell__nav-item--active {
+  --mat-list-list-item-leading-icon-color: var(--r2m-nav-active-fg);
+  --mat-list-list-item-label-text-color: var(--r2m-nav-active-fg);
+  background: var(--r2m-nav-active-bg);
+  border-radius: var(--r2m-radius-md);
+}
+
+// Collapsed rail: icons only, centred.
+.shell__rail:not(.shell__rail--expanded) {
+  .shell__nav-label {
+    display: none;
+  }
+
+  .mat-mdc-list-item {
+    justify-content: center;
+    padding: 0;
+
+    ::ng-deep .mdc-list-item__start {
+      margin: 0 auto;
+    }
+
+    ::ng-deep .mdc-list-item__content {
+      display: none;
+    }
+  }
+}
+
+.shell__content {
+  display: flex;
+  flex-direction: column;
+}
+
+.shell__main {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 var(--r2m-space-6) var(--r2m-space-6);
+  overflow: auto;
+}
+
+.shell__drawer {
+  width: min(var(--r2m-activity-drawer-width), 100vw);
+  background: var(--r2m-surface-low);
+  border-left: 1px solid var(--r2m-outline);
+}
+
+// ---- activity bar ------------------------------------------------------------------------------
+.shell__activity {
+  flex: 0 0 var(--r2m-activity-bar-height);
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-2);
+  padding: 0 var(--r2m-space-1) 0 var(--r2m-space-4);
+  background: var(--r2m-activity-bg);
+  border-top: 1px solid var(--r2m-outline);
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text-muted);
+  z-index: 3;
+}
+
+@media (max-width: #{tokens.$shell-narrow-breakpoint - 0.02px}) {
+  .shell__main {
+    padding: 0 var(--r2m-space-4) var(--r2m-space-4);
+  }
+
+  .shell__crumbs {
+    display: none;
+  }
+
+  .shell__conn-text {
+    display: none;
+  }
+}

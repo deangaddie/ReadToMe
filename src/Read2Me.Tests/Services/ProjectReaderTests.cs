@@ -102,6 +102,35 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task CharacterParagraphRefs_KeepOnlyTheDialogBearingIds_WithTheirAncestry()
+        {
+            // The web selection (Angular ticket 12) enqueues by paragraph id, so the refs the queue
+            // needs are looked up from ids rather than from a node: unknown ids and paragraphs with no
+            // dialog (all narration, a lone pause) drop out, the rest carry their ancestry.
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddPart("pt", pt => pt.AddChapter("ch", c => c
+                .AddParagraph("narration", p => p.AddNarration("n1", "He walked on."))
+                .AddParagraph("dialog", p => p.AddRawItem("u1", ParagraphItemType.Speech, "\"Who's there?\""))
+                .AddParagraph("stamped", p => p.AddRawItem("f1", ParagraphItemType.Speech, "\"Me,\"", alice.Id))
+                .AddParagraph("pause", p => p.AddPause("pause")))))
+                .BuildAsync();
+
+            var refs = await _reader.GetCharacterParagraphRefsAsync(_folder,
+                [b.ParagraphId("narration"), b.ParagraphId("dialog"), b.ParagraphId("stamped"),
+                 b.ParagraphId("pause"), Guid.NewGuid()]);
+
+            Assert.Equal(
+                new HashSet<Guid> { b.ParagraphId("dialog"), b.ParagraphId("stamped") },
+                refs.Select(r => r.ParagraphId).ToHashSet());
+            var dialog = refs.Single(r => r.ParagraphId == b.ParagraphId("dialog"));
+            Assert.Equal((b.ChapterId("ch"), b.PartId("pt"), b.VolumeId("vol")),
+                (dialog.ChapterId, dialog.PartId, dialog.VolumeId));
+
+            Assert.Empty(await _reader.GetCharacterParagraphRefsAsync(_folder, []));
+        }
+
+        [Fact]
         public async Task CountUnattributedCharacterItems_FullyStampedParagraph_IsZero()
         {
             var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
@@ -469,6 +498,42 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task GetOrderedAudioItemRefsAsync_DropsPauseItemsAndUnknownIds()
+        {
+            // The web reader enqueues by item id (Angular ticket 13); a pause or a stale id must
+            // not reach the audio queue.
+            var (_, narrationNoWav, _, _, charWithWav, _, pause) = await SeedAudioItemsAsync();
+
+            var refs = await _reader.GetOrderedAudioItemRefsAsync(
+                _folder, [pause, charWithWav, Guid.NewGuid(), narrationNoWav]);
+
+            Assert.Equal(new HashSet<Guid> { narrationNoWav, charWithWav }, refs.Select(r => r.ParagraphItemId).ToHashSet());
+        }
+
+        [Fact]
+        public async Task GetAudioItemRefsAsync_VoicedOnly_KeepsEverySpokenItemWithASpeaker_WavOrNot()
+        {
+            // The web reader's audio tree checkbox (Angular ticket 13) selects everything a node could
+            // (re)generate: narration and attributed lines whether or not a WAV exists; an unattributed
+            // line has nobody to read it, and a pause is not spoken at all.
+            var (chId, narrationNoWav, charAttributedNoWav, charUnattributed, charWithWav, narrationWithWav, pause) =
+                await SeedAudioItemsAsync();
+
+            var refs = await _reader.GetAudioItemRefsAsync(_folder, BookNodeLevel.Chapter, chId, voicedOnly: true);
+
+            Assert.Equal(
+                new HashSet<Guid> { narrationNoWav, charAttributedNoWav, charWithWav, narrationWithWav },
+                refs.Select(r => r.ParagraphItemId).ToHashSet());
+            Assert.DoesNotContain(refs, r => r.ParagraphItemId == charUnattributed || r.ParagraphItemId == pause);
+
+            // Narrator-only mode reads the unattributed line in the narrator's voice, so it counts.
+            var narratorOnly = await _reader.GetAudioItemRefsAsync(
+                _folder, BookNodeLevel.Chapter, chId, narratorOnlyMode: true, voicedOnly: true);
+            Assert.Contains(narratorOnly, r => r.ParagraphItemId == charUnattributed);
+            Assert.Equal(5, narratorOnly.Count);
+        }
+
+        [Fact]
         public async Task GetAudioItemRefsAsync_NeedsAudioOnly_NarratorOnlyMode_ExcludesUnattributedCharacterWithExistingWav()
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);
@@ -546,6 +611,48 @@ namespace Read2Me.Tests.Services
             Assert.Equal(2, rows.Count);
             Assert.Contains(rows, r => r.Info.State == Read2Me.Core.Models.AudioReviewState.NeedsReview && r.Info.Wer == 0.3);
             Assert.Contains(rows, r => r.Info.State == Read2Me.Core.Models.AudioReviewState.Dismissed && r.Info.NormalizeReason == "clip");
+        }
+
+        [Fact]
+        public async Task GetCharacterSummaries_CountsLinesAndReadyVoices_NarratorFirst()
+        {
+            var alice = new Character
+            {
+                Id = Guid.NewGuid(), Name = "Alice",
+                Aliases = [new CharacterAlias { Name = "Al" }],
+                Voices =
+                [
+                    new Read2Me.Data.Entities.Voice { Name = "Warm", AudioFileName = "warm.wav" },
+                    new Read2Me.Data.Entities.Voice { Name = "Planned", AudioFileName = null },
+                ],
+            };
+            var bob = new Character { Id = Guid.NewGuid(), Name = "Bob" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice).WithCharacter("bob", bob);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p.AddNarration("n0", "Narration"))
+                .AddParagraph("p1", p => p
+                    .AddCharacterLine("i1", "\"Hi,\"", speaker: "alice")
+                    .AddCharacterLine("i2", "\"Again,\"", speaker: "alice"))
+                .AddParagraph("p2", p => p.AddRawItem("i3", ParagraphItemType.Speech, "Unknown"))))
+                .BuildAsync();
+
+            var rows = await _reader.GetCharacterSummariesAsync(_folder);
+
+            Assert.Equal(["Narrator", "Alice", "Bob"], rows.Select(r => r.Name).ToArray());
+            var narrator = rows[0];
+            Assert.True(narrator.IsNarrator);
+            Assert.Equal(1, narrator.LineCount);
+            var a = rows[1];
+            Assert.Equal(alice.Id, a.Id);
+            Assert.False(a.IsNarrator);
+            Assert.Equal(2, a.LineCount);
+            Assert.Equal(2, a.VoiceCount);
+            Assert.Equal(1, a.ReadyVoiceCount);
+            var alias = Assert.Single(a.Aliases);
+            Assert.Equal("Al", alias.Name);
+            Assert.NotEqual(Guid.Empty, alias.Id);
+            Assert.Equal(0, rows[2].LineCount);
+            Assert.Equal(0, rows[2].VoiceCount);
         }
     }
 }

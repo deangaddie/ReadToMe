@@ -25,6 +25,10 @@ namespace Read2Me.Services.Audio
 
         public event Action? Changed;
 
+        /// <summary>Items of <paramref name="folder"/> currently needing review (a moment-in-time copy).</summary>
+        public IReadOnlyCollection<Guid> ItemIds(ProjectFolderId folder)
+            => _reviews.Keys.Where(k => k.Folder.Equals(folder)).Select(k => k.ParagraphItemId).ToArray();
+
         public AudioReviewInfo? ReviewOf(ProjectFolderId folder, Guid paragraphItemId)
             => _reviews.TryGetValue(new AudioReviewKey(folder, paragraphItemId), out var info) ? info : null;
 

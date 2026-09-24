@@ -113,9 +113,12 @@ public static class ServiceCollectionExtensions
         // process-wide facts about a project, not per-circuit ones.
         services.TryAddSingleton<Mutations.ProjectWriteLocks>();
         services.TryAddSingleton<Mutations.BookRevisionSequence>();
+        // Process-wide settings-change signal for the live hub relay (the settings services are scoped).
+        services.TryAddSingleton<Events.EventBroadcaster<Events.SettingsChanged>>();
         services.AddOptions<Mutations.BookMutationOptions>();
         services.TryAddSingleton<Events.EventBroadcaster<Mutations.BookMutationReceipt>>();
         services.AddScoped<Mutations.BookMutations>();
+        services.AddScoped<Mutations.MutationOrigin>();
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.InsertParagraphItemMutation>,
             Mutations.Implementations.InsertParagraphItemMutationImplementation>();

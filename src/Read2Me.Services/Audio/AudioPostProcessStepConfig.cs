@@ -28,7 +28,8 @@ namespace Read2Me.Services.Audio
             }
         }
 
-        /// <summary>Raw settings JSON as passed to the step, or null when absent.</summary>
+        /// <summary>Raw settings JSON as passed to the step, or null when absent. Derived, so kept off the wire.</summary>
+        [JsonIgnore]
         public string? SettingsJson => Settings?.GetRawText();
     }
 

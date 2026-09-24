@@ -6,7 +6,8 @@ namespace Read2Me.Core.Models
         string? Author = null,
         string? CoverImage = null,
         int AudioItemTotal = 0,
-        int AudioItemDone = 0)
+        int AudioItemDone = 0,
+        string? FileType = null)
     {
         public int AudioPercent => AudioItemTotal == 0 ? 0 : (int)(100.0 * AudioItemDone / AudioItemTotal);
     }

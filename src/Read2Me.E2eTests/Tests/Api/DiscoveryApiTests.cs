@@ -28,6 +28,9 @@ public class DiscoveryApiTests(E2eAppFixture app)
         Assert.Equal("Ok", outcome.RootElement.GetProperty("status").GetString());
         var characters = outcome.RootElement.GetProperty("characters");
         Assert.Equal("Link", characters[0].GetProperty("name").GetString());
+        // A fresh roster: nothing exists yet and nothing collides.
+        Assert.Equal(JsonValueKind.Null, characters[0].GetProperty("existingCharacterId").ValueKind);
+        Assert.Equal(0, outcome.RootElement.GetProperty("collisions").GetArrayLength());
 
         var apply = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/characters/discover/apply",
@@ -52,6 +55,22 @@ public class DiscoveryApiTests(E2eAppFixture app)
             await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/characters"));
         Assert.Single(list2.RootElement.EnumerateArray(),
             c => c.GetProperty("name").GetString() == "Link");
+
+        // A second discovery resolves a row onto the roster character by its name ("Already
+        // exists") — the way apply resolves it. A row that merely borrows a roster alias is not
+        // that character: applying it would make a second owner, so it is reported as a collision,
+        // as is an alias two new rows would both own.
+        app.FakeAi.LlmReply = _ =>
+            """{ "reasoning": "again", "characters": [ { "name": "link", "aliases": ["Hero of Time"] }, { "name": "Zelda", "aliases": ["Princess"] }, { "name": "Sheik", "aliases": ["Princess", "Link"] } ] }""";
+        var again = JsonDocument.Parse(await (await Http.PostAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/characters/discover", null)).Content.ReadAsStringAsync());
+        var rows = again.RootElement.GetProperty("characters").EnumerateArray().ToList();
+        Assert.Equal(link.GetProperty("id").GetGuid(), rows[0].GetProperty("existingCharacterId").GetGuid());
+        Assert.Equal(JsonValueKind.Null, rows[1].GetProperty("existingCharacterId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, rows[2].GetProperty("existingCharacterId").ValueKind);
+        Assert.Equal(["Link", "Princess"],
+            again.RootElement.GetProperty("collisions").EnumerateArray().Select(c => c.GetString()!).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]

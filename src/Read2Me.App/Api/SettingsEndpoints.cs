@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -5,16 +6,25 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Llm;
 
 namespace Read2Me.App.Api
 {
     public sealed record SetActiveRequest(int Id);
     public sealed record PromptTemplateRequest(string Template);
-    public sealed record AudioProcessingUpdateRequest(
-        string? FfmpegPath = null,
-        double? WerThreshold = null,
-        int? AudioMaxAttempts = null,
-        int? ChunkPauseMs = null);
+    public sealed record PromptPreviewRequest(string Template);
+    public sealed record PromptPreviewResponse(string Rendered);
+    /// <summary>One prompt kind as the settings pages show it; <c>Template</c> is the resolved text.</summary>
+    public sealed record PromptCatalogEntry(
+        string Kind,
+        string Title,
+        string Description,
+        IReadOnlyList<string> Tokens,
+        string? ExpectedResponse,
+        string Template,
+        string DefaultTemplate,
+        bool IsOverridden,
+        IReadOnlyList<string> Warnings);
 
     public static class SettingsEndpoints
     {
@@ -30,28 +40,29 @@ namespace Read2Me.App.Api
                 Handlers<ParagraphTtsSettingsService, ParagraphTtsServiceConfig>(
                     s => s.GetAllConfigsAsync(), s => s.GetActiveConfigAsync(), (s, id) => s.SetActiveConfigAsync(id),
                     (s, c) => s.CreateConfigAsync(c), (s, c) => s.UpdateConfigAsync(c), (s, id) => s.DeleteConfigAsync(id),
-                    c => c.Id, (c, id) => c.Id = id, "paragraph-tts"));
+                    c => c.Id, (c, id) => c.Id = id, "paragraph-tts", ProviderSettingsJson.Canonicalize));
 
             MapArea(endpoints, "voice-design", typeof(VoiceDesignServiceConfig),
                 Handlers<VoiceDesignSettingsService, VoiceDesignServiceConfig>(
                     s => s.GetAllConfigsAsync(), s => s.GetActiveConfigAsync(), (s, id) => s.SetActiveConfigAsync(id),
                     (s, c) => s.CreateConfigAsync(c), (s, c) => s.UpdateConfigAsync(c), (s, id) => s.DeleteConfigAsync(id),
-                    c => c.Id, (c, id) => c.Id = id, "voice-design"));
+                    c => c.Id, (c, id) => c.Id = id, "voice-design", ProviderSettingsJson.Canonicalize));
 
             MapArea(endpoints, "transcription", typeof(TranscriptionServiceConfig),
                 Handlers<TranscriptionSettingsService, TranscriptionServiceConfig>(
                     s => s.GetAllConfigsAsync(), s => s.GetActiveConfigAsync(), (s, id) => s.SetActiveConfigAsync(id),
                     (s, c) => s.CreateConfigAsync(c), (s, c) => s.UpdateConfigAsync(c), (s, id) => s.DeleteConfigAsync(id),
-                    c => c.Id, (c, id) => c.Id = id, "transcription"));
+                    c => c.Id, (c, id) => c.Id = id, "transcription", ProviderSettingsJson.Canonicalize));
 
             MapArea(endpoints, "semantic-similarity", typeof(SemanticSimilarityServiceConfig),
                 Handlers<SemanticSimilaritySettingsService, SemanticSimilarityServiceConfig>(
                     s => s.GetAllConfigsAsync(), s => s.GetActiveConfigAsync(), (s, id) => s.SetActiveConfigAsync(id),
                     (s, c) => s.CreateConfigAsync(c), (s, c) => s.UpdateConfigAsync(c), (s, id) => s.DeleteConfigAsync(id),
-                    c => c.Id, (c, id) => c.Id = id, "semantic-similarity"));
+                    c => c.Id, (c, id) => c.Id = id, "semantic-similarity", ProviderSettingsJson.Canonicalize));
 
             MapPromptEndpoints(endpoints);
-            MapAudioProcessingEndpoints(endpoints);
+            endpoints.MapAudioProcessingEndpoints();
+            MapSchemaEndpoints(endpoints);
 
             // Anything else under /api/settings is not an area — 404 instead of the Blazor fallback.
             endpoints.MapFallback("/api/settings/{**rest}", () => Results.NotFound());
@@ -79,10 +90,26 @@ namespace Read2Me.App.Api
             Func<TService, int, Task> delete,
             Func<TConfig, int> getId,
             Action<TConfig, int> setId,
-            string area)
+            string area,
+            Action<TConfig>? canonicalize = null)
             where TService : class where TConfig : class
         {
             TService Svc(HttpContext ctx) => ctx.RequestServices.GetRequiredService<TService>();
+
+            // Null when the config is fit to store; the provider areas rewrite settingsJson on the way.
+            IResult? Refusal(TConfig config)
+            {
+                try
+                {
+                    canonicalize?.Invoke(config);
+                    return null;
+                }
+                catch (JsonException ex)
+                {
+                    return Results.Problem($"settingsJson is not this provider type's settings: {ex.Message}",
+                        statusCode: StatusCodes.Status400BadRequest);
+                }
+            }
 
             return new AreaHandlers(
                 List: async ctx => Results.Ok(await getAll(Svc(ctx))),
@@ -90,6 +117,8 @@ namespace Read2Me.App.Api
                 {
                     if (await ctx.Request.ReadFromJsonAsync<TConfig>() is not { } config)
                         return Results.Problem("Missing config body.", statusCode: StatusCodes.Status400BadRequest);
+                    if (Refusal(config) is { } refusal)
+                        return refusal;
                     setId(config, 0);
                     var created = await create(Svc(ctx), config);
                     return Results.Created($"/api/settings/{area}/{getId(created)}", created);
@@ -101,6 +130,8 @@ namespace Read2Me.App.Api
                     var svc = Svc(ctx);
                     if ((await getAll(svc)).All(c => getId(c) != id))
                         return Results.NotFound();
+                    if (Refusal(config) is { } refusal)
+                        return refusal;
                     setId(config, id);
                     await update(svc, config);
                     return Results.Ok(config);
@@ -145,37 +176,52 @@ namespace Read2Me.App.Api
                 .WithSummary($"Select the active {area} config.");
         }
 
-        // ── prompts ──────────────────────────────────────────────────────────
+        // ── provider settings schemas (Angular ticket 16) ────────────────────
 
-        private sealed record PromptKind(
-            Func<LlmPromptService, Task<string>> Get,
-            Func<LlmPromptService, string, Task> Set,
-            Func<LlmPromptService, Task> Reset);
-
-        private static readonly Dictionary<string, PromptKind> PromptKinds = new()
+        private static void MapSchemaEndpoints(IEndpointRouteBuilder endpoints)
         {
-            ["character"] = new(s => s.GetCharacterPromptAsync(AttributionPromptStyle.Full),
-                (s, t) => s.SetCharacterPromptAsync(t), s => s.ResetCharacterPromptAsync()),
-            ["simple-character"] = new(s => s.GetCharacterPromptAsync(AttributionPromptStyle.Simple),
-                (s, t) => s.SetSimpleCharacterPromptAsync(t), s => s.ResetSimpleCharacterPromptAsync()),
-            ["batch-character"] = new(s => s.GetBatchCharacterPromptAsync(AttributionPromptStyle.Full),
-                (s, t) => s.SetBatchCharacterPromptAsync(t), s => s.ResetBatchCharacterPromptAsync()),
-            ["simple-batch-character"] = new(s => s.GetBatchCharacterPromptAsync(AttributionPromptStyle.Simple),
-                (s, t) => s.SetSimpleBatchCharacterPromptAsync(t), s => s.ResetSimpleBatchCharacterPromptAsync()),
-            ["voice"] = new(s => s.GetVoicePromptAsync(),
-                (s, t) => s.SetVoicePromptAsync(t), s => s.ResetVoicePromptAsync()),
-            ["voice-plan"] = new(s => s.GetVoicePlanPromptAsync(),
-                (s, t) => s.SetVoicePlanPromptAsync(t), s => s.ResetVoicePlanPromptAsync()),
-            ["narrator-voice-plan"] = new(s => s.GetNarratorVoicePlanPromptAsync(),
-                (s, t) => s.SetNarratorVoicePlanPromptAsync(t), s => s.ResetNarratorVoicePlanPromptAsync()),
-            ["discover-characters"] = new(s => s.GetDiscoverCharactersPromptAsync(),
-                (s, t) => s.SetDiscoverCharactersPromptAsync(t), s => s.ResetDiscoverCharactersPromptAsync()),
-        };
+            endpoints.MapGet("/api/settings/paragraph-tts/schema", (string? type) =>
+                    TryParseType<ParagraphTtsServiceType>(type, out var t)
+                        ? Results.Ok(ProviderSettingsSchema.ParagraphTts(t))
+                        : UnknownProviderType(type, typeof(ParagraphTtsServiceType)))
+                .WithSummary("The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+            endpoints.MapGet("/api/settings/voice-design/schema", (string? type) =>
+                    TryParseType<VoiceDesignServiceType>(type, out var t)
+                        ? Results.Ok(ProviderSettingsSchema.VoiceDesign(t))
+                        : UnknownProviderType(type, typeof(VoiceDesignServiceType)))
+                .WithSummary("The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+            endpoints.MapGet("/api/settings/transcription/schema", (string? type) =>
+                    TryParseType<TranscriptionServiceType>(type, out var t)
+                        ? Results.Ok(ProviderSettingsSchema.Transcription(t))
+                        : UnknownProviderType(type, typeof(TranscriptionServiceType)))
+                .WithSummary("The editable fields of one transcription provider type (?type=LocalWhisper, name or number) beyond its base URL — none today.");
+            endpoints.MapGet("/api/settings/semantic-similarity/schema", (string? type) =>
+                    TryParseType<SemanticSimilarityServiceType>(type, out var t)
+                        ? Results.Ok(ProviderSettingsSchema.SemanticSimilarity(t))
+                        : UnknownProviderType(type, typeof(SemanticSimilarityServiceType)))
+                .WithSummary("The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, name or number) beyond its base URL: the pass threshold.");
+        }
+
+        private static bool TryParseType<TEnum>(string? raw, out TEnum type) where TEnum : struct, Enum =>
+            Enum.TryParse(raw, ignoreCase: true, out type) && Enum.IsDefined(type);
+
+        private static IResult UnknownProviderType(string? raw, Type enumType) =>
+            Results.Problem(
+                $"Unknown provider type '{raw}'. Expected one of: {string.Join(", ", Enum.GetNames(enumType))}.",
+                statusCode: StatusCodes.Status400BadRequest);
+
+        // ── prompts ──────────────────────────────────────────────────────────
+        // The kinds, their copy, tokens, defaults and sample values are the catalog's; the API only
+        // adds the resolved template, the override flag and the compatibility warnings.
 
         private static void MapPromptEndpoints(IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/settings/prompts", GetAllPromptsAsync)
                 .WithSummary("Every prompt template, resolved (stored override or built-in default), keyed by kind.");
+            endpoints.MapGet("/api/settings/prompts/catalog", GetPromptCatalogAsync)
+                .WithSummary("Every prompt kind with its description, tokens, expected response, resolved and default templates, override flag and compatibility warnings.");
+            endpoints.MapPost("/api/settings/prompts/{kind}/preview", PreviewPrompt)
+                .WithSummary("Render a template (saved or not) with the kind's sample values.");
             endpoints.MapPut("/api/settings/prompts/{kind}", SetPromptAsync)
                 .WithSummary("Override one prompt template.");
             endpoints.MapDelete("/api/settings/prompts/{kind}", ResetPromptAsync)
@@ -185,56 +231,56 @@ namespace Read2Me.App.Api
         private static async Task<IResult> GetAllPromptsAsync(LlmPromptService svc)
         {
             var result = new Dictionary<string, string>();
-            foreach (var (kind, ops) in PromptKinds)
-                result[kind] = await ops.Get(svc);
+            foreach (var kind in PromptCatalog.Kinds)
+                result[kind.Kind] = await kind.Get(svc);
             return Results.Ok(result);
+        }
+
+        private static async Task<IResult> GetPromptCatalogAsync(LlmPromptService svc)
+        {
+            var compatibility = await svc.GetAttributionPromptCompatibilityAsync();
+            var entries = new List<PromptCatalogEntry>(PromptCatalog.Kinds.Count);
+            foreach (var kind in PromptCatalog.Kinds)
+            {
+                var template = await kind.Get(svc);
+                entries.Add(new PromptCatalogEntry(
+                    kind.Kind, kind.Title, kind.Description, kind.Tokens, kind.ExpectedResponse,
+                    template, kind.DefaultTemplate,
+                    IsOverridden: !string.Equals(template, kind.DefaultTemplate, StringComparison.Ordinal),
+                    kind.Warnings(compatibility)));
+            }
+            return Results.Ok(entries);
+        }
+
+        private static IResult PreviewPrompt(string kind, PromptPreviewRequest request)
+        {
+            var descriptor = PromptCatalog.Find(kind);
+            if (descriptor is null)
+                return UnknownPromptKind(kind);
+            return Results.Ok(new PromptPreviewResponse(
+                PromptTemplates.Render(request.Template ?? string.Empty, descriptor.SampleValues)));
         }
 
         private static async Task<IResult> SetPromptAsync(string kind, PromptTemplateRequest request, LlmPromptService svc)
         {
-            if (!PromptKinds.TryGetValue(kind, out var ops))
+            var descriptor = PromptCatalog.Find(kind);
+            if (descriptor is null)
                 return UnknownPromptKind(kind);
-            await ops.Set(svc, request.Template);
+            await descriptor.Set(svc, request.Template);
             return Results.Ok();
         }
 
         private static async Task<IResult> ResetPromptAsync(string kind, LlmPromptService svc)
         {
-            if (!PromptKinds.TryGetValue(kind, out var ops))
+            var descriptor = PromptCatalog.Find(kind);
+            if (descriptor is null)
                 return UnknownPromptKind(kind);
-            await ops.Reset(svc);
+            await descriptor.Reset(svc);
             return Results.Ok();
         }
 
         private static IResult UnknownPromptKind(string kind) =>
-            Results.Problem($"Unknown prompt kind '{kind}'. Known kinds: {string.Join(", ", PromptKinds.Keys.OrderBy(k => k))}.",
+            Results.Problem($"Unknown prompt kind '{kind}'. Known kinds: {string.Join(", ", PromptCatalog.Kinds.Select(k => k.Kind).OrderBy(k => k))}.",
                 statusCode: StatusCodes.Status400BadRequest);
-
-        // ── audio processing (single row) ────────────────────────────────────
-
-        private static void MapAudioProcessingEndpoints(IEndpointRouteBuilder endpoints)
-        {
-            endpoints.MapGet("/api/settings/audio-processing", GetAudioProcessingAsync)
-                .WithSummary("Audio post-processing scalars: ffmpeg path, WER threshold, retry count, pause durations.");
-            endpoints.MapPut("/api/settings/audio-processing", UpdateAudioProcessingAsync)
-                .WithSummary("Update audio post-processing scalars; only supplied fields change.");
-        }
-
-        private static async Task<IResult> GetAudioProcessingAsync(AudioProcessingSettingsService svc) =>
-            Results.Ok(await svc.GetAsync());
-
-        private static async Task<IResult> UpdateAudioProcessingAsync(
-            AudioProcessingUpdateRequest request, AudioProcessingSettingsService svc)
-        {
-            if (request.FfmpegPath is not null)
-                await svc.SetFfmpegPathAsync(request.FfmpegPath);
-            if (request.WerThreshold is { } wer)
-                await svc.SetWerThresholdAsync(wer);
-            if (request.AudioMaxAttempts is { } attempts)
-                await svc.SetAudioMaxAttemptsAsync(attempts);
-            if (request.ChunkPauseMs is { } chunk)
-                await svc.SetChunkPauseAsync(chunk);
-            return Results.Ok(await svc.GetAsync());
-        }
     }
 }
