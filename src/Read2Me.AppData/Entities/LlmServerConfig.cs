@@ -38,7 +38,7 @@ namespace Read2Me.AppData.Entities
         public AttributionPromptStyle PromptStyle { get; set; } = AttributionPromptStyle.Full;
 
         /// <summary>
-        /// True when this endpoint can switch the loaded model on demand (the llama.cpp fork with
+        /// True when this endpoint can switch the loaded model on demand (llama.cpp router with
         /// <c>--models-max 1</c> autoload). Gates the switch-and-wait model-load path; non-switchable
         /// endpoints (remote OpenAI-compatible servers) leave this false.
         /// </summary>

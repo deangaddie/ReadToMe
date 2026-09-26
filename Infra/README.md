@@ -12,7 +12,7 @@ duplicating the service contracts below.
 ```text
 Infra/
 ├── docker-compose.yml          # All AI service containers
-├── Dockerfile.llama            # llama.cpp server (TurboQuant fork, multi-model preset)
+├── Dockerfile.llama            # llama.cpp server (upstream v0.5.0, multi-model preset)
 ├── Dockerfile.chatterbox       # Chatterbox TTS image (standard + turbo variants)
 ├── Dockerfile.qwen3            # Qwen3 TTS image
 ├── llama/
@@ -130,11 +130,11 @@ DNS policy must be absent while a model is being downloaded.
 
 ## llama.cpp
 
-Custom image built from `Dockerfile.llama` using the TurboQuant KV-cache fork pinned at commit `4503343ffc05c09f6b50c309c8ecbabb49c66ea2`. Serves an OpenAI-compatible API (`/v1/chat/completions`, `/v1/models`).
+Custom image built from `Dockerfile.llama` using upstream `ggml-org/llama.cpp` pinned at `v0.5.0` (commit `7fe450e19305b828c199d602c23a8337aaa1f03b`). It replaced the TurboQuant KV-cache fork (`4503343`) after an A/B found the same speed, a VRAM fit, and no breakage (`.scratch/llm-model-upgrade/research/14-bump-ab/STATUS.md`). Serves an OpenAI-compatible API (`/v1/chat/completions`, `/v1/models`).
 
-The fork is frozen until a failure forces a change: there is no update cadence or Dependabot entry. Before any bump, diff the candidate SHA against its upstream `ggml-org/llama.cpp` merge-base and review the fork-specific delta. Any change to networking, file I/O outside the model path, or build scripts blocks the bump.
+The pin is frozen until there is a reason to move it: there is no update cadence or Dependabot entry. Before any bump, review the upstream changes between the two SHAs. Any change to networking, file I/O outside the model path, or build scripts blocks the bump, and a bump needs a replay A/B like ticket 14's.
 
-Model presets are defined in `llama/config/models.ini`. Multiple models can be configured; only one is loaded at a time (`--models-max 1`). Switch without restart via **autoload**: name the target model in an inference request and the fork evicts the currently loaded model to make room. (The request blocks until the new model finishes loading, then responds.)
+Model presets are defined in `llama/config/models.ini`. Multiple models can be configured; only one is loaded at a time (`--models-max 1`). Switch without restart via **autoload**: name the target model in an inference request and the server evicts the currently loaded model to make room. (The request blocks until the new model finishes loading, then responds.)
 
 ```bash
 # Autoload gemma-26b by naming it in a chat-completion request:
@@ -142,7 +142,7 @@ curl http://localhost:8080/v1/chat/completions \
   -d '{"model":"gemma-26b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
 ```
 
-> **Note:** `POST /v1/models` does **not** switch models on this pinned fork build — it 404s. Autoload (above) is the only working switch.
+> **Note:** `POST /v1/models` did **not** switch models on the old fork build (it 404ed) and is untested on upstream. Autoload (above) is the switch the app uses.
 
 Probe which preset is currently loaded with `GET /v1/models` — each preset item carries a `status.value` of `unloaded`, `loading`, or `loaded`:
 

@@ -13,7 +13,7 @@ namespace Read2Me.Services.Llm
 {
     /// <summary>
     /// Serialises model switches on a switchable llama endpoint (the <c>--models-max 1</c> autoload
-    /// fork). Before a request runs, detects whether the target model is loaded via
+    /// router). Before a request runs, detects whether the target model is loaded via
     /// <c>GET /v1/models</c>; if not, triggers an autoload (a <c>max_tokens=1</c> chat completion)
     /// out-of-band and polls until the model reads <c>loaded</c>, so the real request never times out
     /// mid-load. Singleton: the per-endpoint locks must outlive the scoped <see cref="OpenAiLlmClient"/>.
@@ -223,7 +223,7 @@ namespace Read2Me.Services.Llm
             return false;
         }
 
-        // A minimal autoload request: names the target model with max_tokens=1 so the fork evicts the
+        // A minimal autoload request: names the target model with max_tokens=1 so the router evicts the
         // current model and loads the target with negligible generation cost.
         private static string BuildTriggerBody(LlmServerConfig config)
         {

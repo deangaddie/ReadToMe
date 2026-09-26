@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Read2Me.E2eTests.Infrastructure.FakeAi;
 
 /// <summary>
-/// Simulates the llama.cpp <c>--models-max 1</c> autoload fork that <see cref="Read2Me.Services.Llm.ModelLoadGate"/>
+/// Simulates the llama.cpp <c>--models-max 1</c> autoload router that <see cref="Read2Me.Services.Llm.ModelLoadGate"/>
 /// drives: <c>GET /v1/models</c> reports every preset with a per-item <c>status.value</c>
 /// (<c>unloaded</c>/<c>loading</c>/<c>loaded</c>), and a <c>/v1/chat/completions</c> request naming an
 /// unloaded model begins an autoload that flips it <c>unloaded → loading → loaded</c> over subsequent
@@ -77,7 +77,7 @@ public sealed class FakeLlmModelStore
 
     /// <summary>
     /// Renders the <c>GET /v1/models</c> body, advancing any <c>loading</c> model one poll toward
-    /// <c>loaded</c> (unless it never loads). The shape mirrors the fork exactly:
+    /// <c>loaded</c> (unless it never loads). The shape mirrors the llama.cpp router exactly:
     /// <c>{ "data": [ { "id", "object", "status": { "value" } } ] }</c>.
     /// </summary>
     public string RenderJson()

@@ -81,7 +81,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         if (path.EndsWith("v1/chat/completions", StringComparison.Ordinal))
         {
             var body = await request.Content!.ReadAsStringAsync(ct);
-            // Naming a model kicks off its autoload in the model store (the real fork's --models-max 1
+            // Naming a model kicks off its autoload in the model store (the real llama.cpp router's --models-max 1
             // behaviour); the switch-and-wait gate's max_tokens=1 trigger and the real request both land here.
             LlmModels.NoteRequest(ExtractModel(body));
             var prompt = ExtractPrompt(body);

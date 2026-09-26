@@ -560,7 +560,7 @@ namespace Read2Me.Tests.Services.Llm
         [Fact]
         public void TheForksDegenerateFirstChunk_ChartsNoAbsurdRate()
         {
-            // The real sequence off the running fork. Differenced against the origin, the first
+            // The real sequence off the running llama.cpp server. Differenced against the origin, the first
             // reading is 1 token ÷ 0.001ms = 1,000,000 tok/s — which, scaled to the window's own
             // max, crushes every real 13 tok/s bar to 1px for the ring's whole 10s span.
             //
@@ -576,7 +576,7 @@ namespace Read2Me.Tests.Services.Llm
             var charted = Snapshot.GenerationRateHistory.Where(r => r is not null).ToList();
 
             // Three tokens over the 262.964ms the server actually measured between the baseline and
-            // the last reading — ~11.4 tok/s, which is what the fork was really doing.
+            // the last reading — ~11.4 tok/s, which is what the server was really doing.
             Assert.Equal(3 / 262.964 * 1000, Assert.Single(charted)!.Value, 3);
             Assert.All(charted, r => Assert.InRange(r!.Value, 0, SaneCeiling));
         }
@@ -601,7 +601,7 @@ namespace Read2Me.Tests.Services.Llm
             Publish(new RunStarted());
             for (var i = 0; i < 3; i++)
             {
-                // Each request's first reading lands in a bucket of its own, as it does on the fork.
+                // Each request's first reading lands in a bucket of its own, as it does on the real server.
                 var offset = 400 + i * 1000;
                 Publish(Request(1));
                 Sample(1, 0.001, arrivalMs: offset);

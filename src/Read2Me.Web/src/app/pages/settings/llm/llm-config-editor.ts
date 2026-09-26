@@ -216,7 +216,7 @@ const NUMERIC_FIELDS = [
             Supports model switch
           </mat-checkbox>
           <p class="llm-editor__note">
-            This endpoint (e.g. the local llama.cpp fork) can load the configured model on demand.
+            This endpoint (e.g. the local llama.cpp server) can load the configured model on demand.
           </p>
         </div>
 

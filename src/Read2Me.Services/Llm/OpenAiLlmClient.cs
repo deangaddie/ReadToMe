@@ -39,7 +39,7 @@ namespace Read2Me.Services.Llm
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             // On a switchable llama endpoint, ensure the target model is loaded before the real request
-            // runs — otherwise the fork would block the request mid-load and trip the normal timeout.
+            // runs — otherwise the server would block the request mid-load and trip the normal timeout.
             await _modelLoadGate.EnsureModelLoadedAsync(config, ct);
 
             _logger.LogTrace("LLM prompt:\n{Prompt}", prompt);

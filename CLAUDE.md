@@ -73,7 +73,7 @@ Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB
 
 **Chatterbox** requires `reference_audio` (WAV/MP3) on every request — no built-in voices.
 
-**llama.cpp** uses a TurboQuant KV-cache fork. Switch model without restart via autoload — name the target model in an inference request; `--models-max 1` evicts the loaded model (`POST /v1/models` does NOT switch on this fork build — it 404s):
+**llama.cpp** is upstream `v0.5.0` (a TurboQuant fork until 2026-09-26; no `turbo*` KV types now). Switch model without restart via autoload — name the target model in an inference request; `--models-max 1` evicts the loaded model (`POST /v1/models` 404ed on the old fork; the app uses autoload):
 ```bash
 curl http://localhost:8080/v1/chat/completions -d '{"model":"gemma-26b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
 ```

@@ -6,7 +6,9 @@ ARG BASE_CUDA_RUN_CONTAINER=nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_V
 FROM ${BASE_CUDA_DEV_CONTAINER} AS builder
 
 ARG CUDA_DOCKER_ARCH=default
-ARG LLAMA_FORK_SHA=4503343ffc05c09f6b50c309c8ecbabb49c66ea2
+# Upstream llama.cpp v0.5.0 (b11146). Replaced the TurboQuant fork @ 4503343 after the
+# llm-model-upgrade ticket 14 A/B: same speed, fits VRAM, q8_0 V + KV rotation instead of turbo3.
+ARG LLAMA_SHA=7fe450e19305b828c199d602c23a8337aaa1f03b
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc-14 g++-14 build-essential cmake python3 python3-pip git libssl-dev libgomp1 \
@@ -17,8 +19,8 @@ ENV CC=gcc-14 CXX=g++-14 CUDAHOSTCXX=g++-14
 WORKDIR /build
 
 RUN git init . && \
-    git remote add origin https://github.com/TheTom/llama-cpp-turboquant.git && \
-    git fetch --depth=1 origin ${LLAMA_FORK_SHA} && \
+    git remote add origin https://github.com/ggml-org/llama.cpp.git && \
+    git fetch --depth=1 origin ${LLAMA_SHA} && \
     git checkout --detach FETCH_HEAD
 
 # The embedded Web UI is skipped: the shallow clone has no build number, so the
