@@ -263,8 +263,7 @@ public static class ServiceRegistrationExtensions
         return services;
     }
 
-    // Maps each registered service to the gate(s) recovery must hold: llama gates the paragraph
-    // (character-attribution) queue; every TTS/whisper/similarity service gates the audio queue.
+    // Maps each registered service to the gate(s) recovery must hold (see WatchdogGateMap.ForServices).
     private static WatchdogGateMap BuildGateMap(System.IServiceProvider sp)
     {
         var registry = sp.GetRequiredService<DockerAiServiceRegistry>();
@@ -275,15 +274,7 @@ public static class ServiceRegistrationExtensions
             sp.GetRequiredService<IProcessingGate<Read2Me.Services.Audio.QueuedAudioItem>>(),
             sp.GetRequiredService<IQueueSource<Read2Me.Services.Audio.QueuedAudioItem>>());
 
-        var map = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.IReadOnlyList<IWatchdogGate>>(
-            System.StringComparer.OrdinalIgnoreCase);
-        foreach (var svc in registry.All)
-        {
-            map[svc.Name] = svc.Name.Equals("llama", System.StringComparison.OrdinalIgnoreCase)
-                ? new[] { paragraphGate }
-                : new[] { audioGate };
-        }
-        return new WatchdogGateMap(map);
+        return WatchdogGateMap.ForServices(registry.All, paragraphGate, audioGate);
     }
 
     public static IServiceCollection AddAppState(this IServiceCollection services)

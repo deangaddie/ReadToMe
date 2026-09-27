@@ -165,21 +165,21 @@ services:
       - ./cache/voxcpm2:/cache:ro
       - voxcpm2_uploads:/uploads
 
-  # Breeze TTS 2 via audio.cpp (Apache-2.0 runtime; Breeze weights are research/non-commercial).
-  # Spike service for .scratch/breeze-tts; models: breeze-q8 / breeze-q4 (clone), breeze-design (tts).
-  breeze:
+  # audio.cpp: the single TTS runtime (ADR 0010; Apache-2.0 runtime, Breeze weights research/non-commercial).
+  # Models in audiocpp/server.json (lazy-loaded, one resident): breeze-q8, breeze-design, voxcpm2, chatterbox, qwen3-base.
+  audiocpp:
     <<: [*hardened, *gpu]
     image: ghcr.io/0xshug0/audio.cpp:full-cuda12@sha256:5969cc86637cad1e893c6c22120edda9d37fbe1f0f266702dbe7fe7b721ed125
-    container_name: read2me-breeze
+    container_name: read2me-audiocpp
     restart: unless-stopped
-    networks: [breeze]
+    networks: [audiocpp]
     ports:
       - "127.0.0.1:8004:8080"
     environment:
       NVIDIA_VISIBLE_DEVICES: all
     volumes:
       - ${GGUF_MODELS_DIR:-./models}:/models:ro
-      - ./breeze/server.json:/app/server.json:ro
+      - ./audiocpp/server.json:/app/server.json:ro
     command: ["server", "--config", "/app/server.json"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -259,7 +259,7 @@ networks:
   qwen3-tts:
   qwen3-tts-base:
   voxcpm2:
-  breeze:
+  audiocpp:
   whisper:
   minilm-l6:
   mpnet-base-v2:

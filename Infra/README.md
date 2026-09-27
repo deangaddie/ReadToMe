@@ -36,6 +36,7 @@ Infra/
 | Qwen3 TTS            | `read2me-qwen3-tts`         | 8100 | TTS — voice design from text description, no reference audio     |
 | Qwen3 TTS Base       | `read2me-qwen3-tts-base`    | 8101 | TTS — voice cloning from reference audio + transcript            |
 | VoxCPM2              | `read2me-voxcpm2`           | 8003 | TTS — VoxCPM2 voice cloning                                      |
+| audio.cpp            | `read2me-audiocpp`          | 8004 | TTS — audio.cpp runtime (ADR 0010): Breeze TTS 2, migrating models |
 | Whisper.CPP          | `read2me-whisper`           | 9000 | CPU-only transcription for WER and word-level alignment          |
 | MiniLM-L6            | `read2me-minilm-l6`         | 8200 | Semantic similarity — MiniLM-L6-v2                               |
 | MPNet-Base-v2        | `read2me-mpnet-base-v2`     | 8201 | Semantic similarity — all-mpnet-base-v2                          |
@@ -55,6 +56,7 @@ from the machine running Compose. All published ports are bound to
 | Qwen3 TTS | `GET http://localhost:8100/health` | `http://127.0.0.1:8100/health` |
 | Qwen3 TTS Base | `GET http://localhost:8101/health` | `http://127.0.0.1:8101/health` |
 | VoxCPM2 | `GET http://localhost:8003/health` | `http://127.0.0.1:8003/health` |
+| audio.cpp | `GET http://localhost:8004/health` | `http://127.0.0.1:8004/health` |
 | Whisper.CPP | `GET http://127.0.0.1:8080/health` | `http://127.0.0.1:9000/health` |
 | MiniLM-L6 | `GET http://localhost:8200/docs` | `http://127.0.0.1:8200/docs` |
 | MPNet-Base-v2 | `GET http://localhost:8201/docs` | `http://127.0.0.1:8201/docs` |
@@ -77,6 +79,7 @@ Configured for RTX 3070 (8 GB VRAM). GPU-resident services cannot generally run 
 | `read2me-qwen3-tts`         | TTS with voice design from text description      |
 | `read2me-qwen3-tts-base`    | TTS with voice cloning from reference audio      |
 | `read2me-voxcpm2`           | TTS with VoxCPM2 voice cloning                   |
+| `read2me-audiocpp`          | TTS on the audio.cpp runtime (Breeze, and later all models) |
 | `read2me-whisper`           | CPU transcription for WER and word-level alignment |
 | `read2me-minilm-l6`         | Semantic similarity (no GPU — CPU only)          |
 | `read2me-mpnet-base-v2`     | Semantic similarity (no GPU — CPU only)          |

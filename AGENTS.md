@@ -34,6 +34,7 @@ docker compose up -d chatterbox-turbo
 docker compose up -d qwen3-tts
 docker compose up -d qwen3-tts-base
 docker compose up -d voxcpm2
+docker compose up -d audiocpp        # audio.cpp TTS runtime (ADR 0010)
 docker compose up -d whisper
 docker compose up -d minilm-l6
 docker compose up -d mpnet-base-v2

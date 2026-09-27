@@ -16,16 +16,6 @@
       "mode": "offline"
     },
     {
-      "id": "breeze-q4",
-      "family": "breeze_tts",
-      "path": "/models/Breeze-TTS-2-GGUF/breeze-tts-2-bf16.gguf",
-      "task": "clon",
-      "mode": "offline",
-      "session_options": {
-        "weight_type": "q4_k"
-      }
-    },
-    {
       "id": "voxcpm2",
       "family": "voxcpm2",
       "path": "/models/VoxCPM2-GGUF/voxcpm2-q8_0.gguf",

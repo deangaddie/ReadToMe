@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Exceptions;
 using Read2Me.Services;
+using Read2Me.Services.Audio.VoiceDesign.Settings;
 using Read2Me.Services.Health;
 using Read2Me.Services.Llm;
 using Xunit;
@@ -129,7 +131,7 @@ public class DockerAiServiceRegistryTests
     }
 
     [Fact]
-    public void ContainsAllNineComposeServices()
+    public void ContainsEveryComposeService()
     {
         var expected = new[]
         {
@@ -139,6 +141,7 @@ public class DockerAiServiceRegistryTests
             ("qwen3-tts",        "read2me-qwen3-tts",      8100),
             ("qwen3-tts-base",   "read2me-qwen3-tts-base", 8101),
             ("voxcpm2",          "read2me-voxcpm2",        8003),
+            ("audiocpp",         "read2me-audiocpp",       8004),
             ("whisper",          "read2me-whisper",        9000),
             ("minilm-l6",        "read2me-minilm-l6",      8200),
             ("mpnet-base-v2",    "read2me-mpnet-base-v2",  8201),
@@ -172,7 +175,7 @@ public class DockerAiServiceRegistryTests
     [Fact]
     public void UsesGpu_MatchesComposeNvidiaReservations()
     {
-        var gpu = new[] { "llama", "chatterbox", "chatterbox-turbo", "qwen3-tts", "qwen3-tts-base", "voxcpm2" };
+        var gpu = new[] { "llama", "chatterbox", "chatterbox-turbo", "qwen3-tts", "qwen3-tts-base", "voxcpm2", "audiocpp" };
         var cpu = new[] { "whisper", "minilm-l6", "mpnet-base-v2" };
 
         foreach (var name in gpu)
@@ -228,6 +231,32 @@ public class DockerAiServiceRegistryTests
     {
         Assert.Equal("/health", Registry.GetByName("llama").HealthPath);
         Assert.Equal("/health", Registry.GetByName("whisper").HealthPath);
+        Assert.Equal("/health", Registry.GetByName("audiocpp").HealthPath);
         Assert.Equal("/docs", Registry.GetByName("minilm-l6").HealthPath);
+    }
+
+    [Theory]
+    [InlineData("http://localhost:8004")]
+    [InlineData("http://localhost:8004/")]
+    [InlineData("http://127.0.0.1:8004")]
+    public void TryGetByBaseUrl_AudioCppPort_ResolvesAudioCpp(string baseUrl)
+    {
+        // Every provider on the audio.cpp runtime points at :8004, so one entry covers them all.
+        Assert.True(Registry.TryGetByBaseUrl(baseUrl, out var svc));
+        Assert.Equal("audiocpp", svc!.Name);
+    }
+
+    [Fact]
+    public void TryGetByBaseUrl_BreezeVoiceDesignConfig_ResolvesAudioCpp()
+    {
+        var config = new VoiceDesignServiceConfig
+        {
+            Type = VoiceDesignServiceType.Breeze,
+            SettingsJson = JsonSerializer.Serialize(
+                BreezeVoiceDesignSettings.Recommended with { BaseUrl = "http://localhost:8004" }),
+        };
+
+        Assert.True(Registry.TryGetByBaseUrl(ServiceConfigBaseUrls.For(config)!, out var svc));
+        Assert.Equal("audiocpp", svc!.Name);
     }
 }
