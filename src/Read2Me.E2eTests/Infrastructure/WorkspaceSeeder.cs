@@ -53,7 +53,7 @@ public static class WorkspaceSeeder
         {
             Name = "fake",
             Type = ParagraphTtsServiceType.VoxCpm2,
-            SettingsJson = JsonSerializer.Serialize(new VoxCpm2ParagraphTtsSettings { BaseUrl = "http://fake-tts" }),
+            SettingsJson = JsonSerializer.Serialize(new VoxCpm2ParagraphTtsSettings { BaseUrl = "http://fake-audiocpp" }),
         });
 
         // Not active: a test that wants audio.cpp switches to it and back.
@@ -75,7 +75,7 @@ public static class WorkspaceSeeder
         {
             Name = "fake",
             Type = VoiceDesignServiceType.VoxCpm2,
-            SettingsJson = JsonSerializer.Serialize(new VoxCpm2VoiceDesignSettings { BaseUrl = "http://fake-voicedesign" }),
+            SettingsJson = JsonSerializer.Serialize(new VoxCpm2VoiceDesignSettings { BaseUrl = "http://fake-audiocpp" }),
         });
 
         // Not active: a test that wants audio.cpp voice design switches to it and back.

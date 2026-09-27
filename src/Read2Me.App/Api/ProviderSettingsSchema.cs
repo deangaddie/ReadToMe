@@ -46,12 +46,11 @@ namespace Read2Me.App.Api
         public static SettingsSchemaDto ParagraphTts(ParagraphTtsServiceType type) => type switch
         {
             ParagraphTtsServiceType.VoxCpm2 => new(type.ToString(), VoxCpm2Fields(
+                VoxCpm2ParagraphTtsSettings.Recommended.ModelId,
                 VoxCpm2ParagraphTtsSettings.Recommended.CfgValue,
                 VoxCpm2ParagraphTtsSettings.Recommended.InferenceTimesteps,
                 VoxCpm2ParagraphTtsSettings.Recommended.MinLen,
                 VoxCpm2ParagraphTtsSettings.Recommended.MaxLen,
-                VoxCpm2ParagraphTtsSettings.Recommended.Normalize,
-                VoxCpm2ParagraphTtsSettings.Recommended.Denoise,
                 VoxCpm2ParagraphTtsSettings.Recommended.RetryBadcase,
                 VoxCpm2ParagraphTtsSettings.Recommended.RetryBadcaseMaxTimes,
                 VoxCpm2ParagraphTtsSettings.Recommended.RetryBadcaseRatioThreshold)),
@@ -65,12 +64,11 @@ namespace Read2Me.App.Api
         public static SettingsSchemaDto VoiceDesign(VoiceDesignServiceType type) => type switch
         {
             VoiceDesignServiceType.VoxCpm2 => new(type.ToString(), VoxCpm2Fields(
+                VoxCpm2VoiceDesignSettings.Recommended.ModelId,
                 VoxCpm2VoiceDesignSettings.Recommended.CfgValue,
                 VoxCpm2VoiceDesignSettings.Recommended.InferenceTimesteps,
                 VoxCpm2VoiceDesignSettings.Recommended.MinLen,
                 VoxCpm2VoiceDesignSettings.Recommended.MaxLen,
-                VoxCpm2VoiceDesignSettings.Recommended.Normalize,
-                VoxCpm2VoiceDesignSettings.Recommended.Denoise,
                 VoxCpm2VoiceDesignSettings.Recommended.RetryBadcase,
                 VoxCpm2VoiceDesignSettings.Recommended.RetryBadcaseMaxTimes,
                 VoxCpm2VoiceDesignSettings.Recommended.RetryBadcaseRatioThreshold)),
@@ -90,29 +88,32 @@ namespace Read2Me.App.Api
                 Help: "Similarity at or above this passes the semantic accuracy check. (0–1, exclusive)"),
         ]);
 
-        /// <summary>Shared by the VoxCPM2 TTS and voice-design records: same JSON names, same ranges.</summary>
+        /// <summary>
+        /// Shared by the VoxCPM2 TTS and voice-design records: same JSON names, same ranges. The keys are
+        /// the native server's; the client maps them onto audio.cpp's options. A blank seed draws a random one per request.
+        /// </summary>
         private static IReadOnlyList<SettingsFieldDto> VoxCpm2Fields(
-            double cfgValue, int inferenceTimesteps, int minLen, int maxLen, bool normalize, bool denoise,
+            string modelId, double cfgValue, int inferenceTimesteps, int minLen, int maxLen,
             bool retryBadcase, int retryBadcaseMaxTimes, double retryBadcaseRatioThreshold) =>
         [
+            new("modelId", "Model", "string", Default: modelId,
+                Help: "The audio.cpp server.json model entry."),
             new("cfg_value", "CFG Value", "number", Min: 1.0, Max: 5.0, Step: 0.1, Default: cfgValue,
                 Help: "Guidance scale — higher = closer to design prompt. (1.0–5.0)"),
             new("inference_timesteps", "LocDiT Steps", "number", Min: 1, Max: 50, Step: 1, Default: inferenceTimesteps,
                 Help: "Flow-matching diffusion steps — speed vs quality. (1–50)"),
-            new("min_len", "Min Length (s)", "number", Min: 1, Max: 100, Step: 1, Default: minLen,
-                Help: "Minimum output length in seconds."),
+            new("min_len", "Min Length (tokens)", "number", Min: 1, Max: 100, Step: 1, Default: minLen,
+                Help: "Minimum output length in tokens."),
             new("max_len", "Max Length (tokens)", "number", Min: 10, Max: 8192, Step: 1, Default: maxLen,
                 Help: "Maximum output length in tokens (server caps at 8192)."),
-            new("normalize", "Text Normalization", "boolean", Default: normalize,
-                Help: "Expand numbers, dates, abbreviations."),
-            new("denoise", "Denoise Reference Audio", "boolean", Default: denoise,
-                Help: "Clean the reference audio (ZipEnhancer)."),
             new("retry_badcase", "Retry Bad Cases", "boolean", Default: retryBadcase,
                 Help: "Re-synthesize when a bad result is detected."),
             new("retry_badcase_max_times", "Max Retries", "number", Min: 1, Max: 10, Step: 1, Default: retryBadcaseMaxTimes,
                 Help: "Maximum retry attempts."),
             new("retry_badcase_ratio_threshold", "Ratio Threshold", "number", Min: 1.0, Step: 0.1, Default: retryBadcaseRatioThreshold,
                 Help: "Bad-case detection ratio threshold."),
+            new("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
+                Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
         ];
 
         private static IReadOnlyList<SettingsFieldDto> ChatterboxFields()

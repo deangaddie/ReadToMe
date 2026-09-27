@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -7,8 +6,8 @@ namespace Read2Me.E2eTests.Infrastructure.FakeAi;
 
 /// <summary>
 /// Wire-format builders for the fake AI endpoints. Shapes mirror what the real
-/// clients parse: OpenAI SSE chunks (OpenAiStreamParser), VoxCPM2 binary frames
-/// (VoxCpm2ParagraphTtsClient), Whisper.CPP verbose JSON, similarity JSON.
+/// clients parse: OpenAI SSE chunks (OpenAiStreamParser), TTS WAV bodies,
+/// Whisper.CPP verbose JSON, similarity JSON.
 /// </summary>
 public static partial class FakeAiResponses
 {
@@ -64,19 +63,6 @@ public static partial class FakeAiResponses
     [GeneratedRegex(@"""index""\s*:\s*(\d+)")]
     private static partial Regex ItemIndex();
 
-    /// <summary>
-    /// VoxCPM2 /api/stream response: meta frame, one float32 PCM frame (100ms of silence),
-    /// done frame. Frame = [type:1 byte][len:4 bytes LE][payload].
-    /// </summary>
-    public static byte[] VoxCpm2StreamFrames(int sampleRate = 16000)
-    {
-        var ms = new MemoryStream();
-        WriteFrame(ms, 0, JsonSerializer.SerializeToUtf8Bytes(new { type = "meta", sample_rate = sampleRate }));
-        WriteFrame(ms, 1, new byte[sampleRate / 10 * 4]); // 100ms of float32 zeros
-        WriteFrame(ms, 0, JsonSerializer.SerializeToUtf8Bytes(new { type = "done" }));
-        return ms.ToArray();
-    }
-
     /// <summary>Minimal valid 16-bit PCM mono WAV with 100ms of silence.</summary>
     public static byte[] SilentWav(int sampleRate = 16000)
     {
@@ -99,14 +85,5 @@ public static partial class FakeAiResponses
         w.Write(dataLen);
         w.Write(new byte[dataLen]);
         return ms.ToArray();
-    }
-
-    private static void WriteFrame(Stream s, byte type, byte[] payload)
-    {
-        s.WriteByte(type);
-        Span<byte> len = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(len, (uint)payload.Length);
-        s.Write(len);
-        s.Write(payload);
     }
 }

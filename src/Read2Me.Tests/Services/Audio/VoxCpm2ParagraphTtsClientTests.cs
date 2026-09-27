@@ -1,248 +1,192 @@
-using System.Net;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Audio.ParagraphTts.Settings;
+using Read2Me.Services.Events;
 using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
 {
+    /// <summary>
+    /// VoxCPM2 paragraph TTS down to the wire: the VoxCPM2 client over the real audio.cpp client
+    /// and gate, against an in-memory audio.cpp server. Controllable clone — reference audio but no
+    /// transcript, and the instruction rides in the input as <c>(ctl)text</c>.
+    /// </summary>
     public class VoxCpm2ParagraphTtsClientTests
     {
-        private readonly FakeHttpMessageHandler _handler;
-        private readonly FakeHttpClientFactory _httpFactory;
-        private readonly VoxCpm2ParagraphTtsClient _sut;
+        private static readonly byte[] RefAudio = [1, 2, 3, 4, 5];
 
-        private static readonly ParagraphTtsServiceConfig Config = new()
+        private static ParagraphTtsServiceConfig Config(VoxCpm2ParagraphTtsSettings? settings = null) => new()
         {
-            Name = "test",
+            Name = "voxcpm2",
             Type = ParagraphTtsServiceType.VoxCpm2,
-            SettingsJson = """{"BaseUrl":"http://test","MaxLen":4096}""",
+            SettingsJson = JsonSerializer.Serialize(
+                settings ?? VoxCpm2ParagraphTtsSettings.Recommended with { BaseUrl = "http://acpp:8004" }),
         };
 
-        public VoxCpm2ParagraphTtsClientTests()
+        private sealed record Sut(VoxCpm2ParagraphTtsClient Client, FakeAudioCppHandler Handler);
+
+        private static Sut Build(FakeAudioCppHandler? handler = null)
         {
-            _handler = new FakeHttpMessageHandler();
-            _httpFactory = new FakeHttpClientFactory(_handler);
-            _sut = new VoxCpm2ParagraphTtsClient(
-                _httpFactory,
-                NullLogger<VoxCpm2ParagraphTtsClient>.Instance,
-                new FakeAiServiceReporter());
+            handler ??= new FakeAudioCppHandler { LoadedModel = "voxcpm2" };
+            var factory = new SingleHandlerHttpClientFactory(handler);
+            var gate = new AudioCppGate(factory, new EventBroadcaster<AudioGenEvent>());
+            var audioCpp = new AudioCppClient(
+                factory, gate, new FakeAiServiceReporter(),
+                new AudioCppRetryPolicy([TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]),
+                NullLogger<AudioCppClient>.Instance);
+            return new Sut(new VoxCpm2ParagraphTtsClient(audioCpp), handler);
         }
 
-        // ── Frame protocol ──────────────────────────────────────────────────
+        private static Task<Stream> Generate(Sut sut, string? instructions,
+            ParagraphTtsServiceConfig? config = null, string? overrideJson = null) =>
+            sut.Client.GenerateAsync("Hello there.", instructions, new MemoryStream(RefAudio),
+                config ?? Config(), overrideJson, "the reference transcript");
+
+        private static JsonElement Options(Sut sut) =>
+            JsonDocument.Parse(sut.Handler.SpeechBodies.Single().ToJsonString()).RootElement.GetProperty("options");
 
         [Fact]
-        public async Task Parse_MetaThenPcmThenDone_ProducesWavAtSampleRate()
+        public async Task Posts_a_controllable_clone_with_base64_reference_and_no_transcript()
         {
-            var streamFrames = BuildFrames(
-                MetaFrame(24000),
-                PcmFrame(1.0f, -1.0f),
-                DoneFrame());
+            var sut = Build();
 
-            _handler.SetupUploadThenStream(fileId: "abc", streamBody: streamFrames);
+            var wav = await Generate(sut, null);
 
-            using var refAudio = new MemoryStream(new byte[4]);
-            var result = await _sut.GenerateAsync("hello", null, refAudio, Config, null);
-
-            Assert.NotNull(result);
-            var wav = new byte[result.Length];
-            await result.ReadExactlyAsync(wav);
-            Assert.Equal("RIFF", Encoding.ASCII.GetString(wav, 0, 4));
-            Assert.Equal(24000, BitConverter.ToInt32(wav, 24));
-        }
-
-        [Fact]
-        public async Task Parse_ErrorFrame_Throws()
-        {
-            var streamFrames = BuildFrames(ErrorFrame("BOOM"));
-            _handler.SetupUploadThenStream(fileId: "x", streamBody: streamFrames);
-
-            using var refAudio = new MemoryStream(new byte[4]);
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _sut.GenerateAsync("hello", null, refAudio, Config, null));
-            Assert.Equal("BOOM", ex.Message);
+            var body = sut.Handler.SpeechBodies.Single();
+            Assert.Equal("voxcpm2", body["model"]!.GetValue<string>());
+            Assert.Equal("Hello there.", body["input"]!.GetValue<string>());
+            Assert.Equal("base64", body["voice_ref"]!["type"]!.GetValue<string>());
+            Assert.Equal(Convert.ToBase64String(RefAudio), body["voice_ref"]!["data"]!.GetValue<string>());
+            // A transcript would switch VoxCPM2 to "ultimate" clone, which drops the control.
+            Assert.False(body.ContainsKey("reference_text"));
+            Assert.Equal(FakeAudioCppHandler.Wav, ((MemoryStream)wav).ToArray());
         }
 
         [Fact]
-        public async Task Parse_TruncatedHeader_Throws()
+        public async Task An_instructed_item_prefixes_the_input_with_the_control()
         {
-            var truncated = new byte[] { 0, 1, 0, 0 }; // only 4 bytes
-            _handler.SetupUploadThenStream(fileId: "x", streamBody: truncated);
+            var sut = Build();
 
-            using var refAudio = new MemoryStream(new byte[4]);
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _sut.GenerateAsync("hello", null, refAudio, Config, null));
-            Assert.Equal("Truncated frame header.", ex.Message);
+            await Generate(sut, " angry, shouting ");
+
+            Assert.Equal("(angry, shouting)Hello there.", sut.Handler.SpeechBodies.Single()["input"]!.GetValue<string>());
+            Assert.False(Options(sut).TryGetProperty("instruction", out _));
         }
 
-        // ── HTTP call sequence ───────────────────────────────────────────────
-
-        [Fact]
-        public async Task GenerateAsync_UploadsReferenceAudioFirst_ThenStreams()
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task A_plain_item_sends_the_text_unprefixed(string? instructions)
         {
-            var streamFrames = BuildFrames(MetaFrame(24000), DoneFrame());
-            _handler.SetupUploadThenStream(fileId: "file-42", streamBody: streamFrames);
+            var sut = Build();
 
-            using var refAudio = new MemoryStream(Encoding.UTF8.GetBytes("fake-wav"));
-            await _sut.GenerateAsync("text", "control instructions", refAudio, Config, null);
+            await Generate(sut, instructions);
 
-            Assert.Equal(2, _handler.Requests.Count);
-
-            var uploadReq = _handler.Requests[0];
-            Assert.Equal(HttpMethod.Post, uploadReq.Method);
-            Assert.EndsWith("/upload-audio", uploadReq.RequestUri!.AbsolutePath);
-            Assert.IsType<MultipartFormDataContent>(uploadReq.Content);
-
-            var streamReq = _handler.Requests[1];
-            Assert.Equal(HttpMethod.Post, streamReq.Method);
-            Assert.EndsWith("/api/stream", streamReq.RequestUri!.AbsolutePath);
+            Assert.Equal("Hello there.", sut.Handler.SpeechBodies.Single()["input"]!.GetValue<string>());
         }
 
         [Fact]
-        public async Task GenerateAsync_StreamRequestBody_ContainsFileIdAsReferenceWavPath()
+        public async Task Maps_the_settings_onto_audiocpp_option_names_as_invariant_strings()
         {
-            var streamFrames = BuildFrames(MetaFrame(24000), DoneFrame());
-            _handler.SetupUploadThenStream(fileId: "returned-file-id", streamBody: streamFrames);
-
-            using var refAudio = new MemoryStream(new byte[4]);
-            await _sut.GenerateAsync("the text", "my control", refAudio, Config, null);
-
-            var body = _handler.RequestBodies[1];
-            Assert.NotNull(body);
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-
-            Assert.Equal("the text", root.GetProperty("text").GetString());
-            Assert.Equal("my control", root.GetProperty("control").GetString());
-            Assert.Equal("returned-file-id", root.GetProperty("reference_wav_path").GetString());
-        }
-
-        [Fact]
-        public async Task GenerateAsync_OneFieldOverride_PostsAllNineParams_OnlyOverriddenFieldChanges()
-        {
-            var streamFrames = BuildFrames(MetaFrame(24000), DoneFrame());
-            _handler.SetupUploadThenStream(fileId: "f", streamBody: streamFrames);
-
-            // Provider config carries no per-field params except MaxLen -> the rest
-            // resolve to recommended defaults. Override sets only cfg_value.
-            using var refAudio = new MemoryStream(new byte[4]);
-            await _sut.GenerateAsync("the text", "ctrl", refAudio, Config, """{"cfg_value":3.5}""");
-
-            var body = _handler.RequestBodies[1];
-            Assert.NotNull(body);
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-
-            // Overridden field
-            Assert.Equal(3.5, root.GetProperty("cfg_value").GetDouble());
-
-            // Remaining 8 fall back to provider/recommended values
-            Assert.Equal(10, root.GetProperty("inference_timesteps").GetInt32());
-            Assert.Equal(2, root.GetProperty("min_len").GetInt32());
-            Assert.Equal(4096, root.GetProperty("max_len").GetInt32());
-            Assert.False(root.GetProperty("normalize").GetBoolean());
-            Assert.False(root.GetProperty("denoise").GetBoolean());
-            Assert.True(root.GetProperty("retry_badcase").GetBoolean());
-            Assert.Equal(3, root.GetProperty("retry_badcase_max_times").GetInt32());
-            Assert.Equal(6.0, root.GetProperty("retry_badcase_ratio_threshold").GetDouble());
-        }
-
-        // ── Helpers ──────────────────────────────────────────────────────────
-
-        private static byte[] BuildFrames(params byte[][] frames)
-        {
-            int total = 0;
-            foreach (var f in frames) total += f.Length;
-            var buf = new byte[total];
-            int offset = 0;
-            foreach (var f in frames) { f.CopyTo(buf, offset); offset += f.Length; }
-            return buf;
-        }
-
-        private static byte[] MetaFrame(int sampleRate)
-        {
-            var json = $"{{\"type\":\"meta\",\"sample_rate\":{sampleRate}}}";
-            return CreateFrame(0, Encoding.UTF8.GetBytes(json));
-        }
-
-        private static byte[] PcmFrame(params float[] samples)
-        {
-            var data = new byte[samples.Length * 4];
-            for (int i = 0; i < samples.Length; i++)
-                BitConverter.TryWriteBytes(data.AsSpan(i * 4, 4), samples[i]);
-            return CreateFrame(1, data);
-        }
-
-        private static byte[] DoneFrame()
-        {
-            var json = "{\"type\":\"done\"}";
-            return CreateFrame(0, Encoding.UTF8.GetBytes(json));
-        }
-
-        private static byte[] ErrorFrame(string message)
-        {
-            var json = $"{{\"type\":\"error\",\"message\":\"{message}\"}}";
-            return CreateFrame(0, Encoding.UTF8.GetBytes(json));
-        }
-
-        private static byte[] CreateFrame(byte type, byte[] payload)
-        {
-            var frame = new byte[5 + payload.Length];
-            frame[0] = type;
-            BitConverter.TryWriteBytes(frame.AsSpan(1, 4), (uint)payload.Length);
-            if (!BitConverter.IsLittleEndian) Array.Reverse(frame, 1, 4);
-            payload.CopyTo(frame, 5);
-            return frame;
-        }
-
-        // ── Fakes ────────────────────────────────────────────────────────────
-
-        private class FakeHttpClientFactory(FakeHttpMessageHandler handler) : IHttpClientFactory
-        {
-            public HttpClient CreateClient(string name) => new HttpClient(handler);
-        }
-
-        private class FakeHttpMessageHandler : HttpMessageHandler
-        {
-            public List<HttpRequestMessage> Requests { get; } = new();
-            public List<string?> RequestBodies { get; } = new();
-            private string _fileId = "test-file-id";
-            private byte[] _streamBody = Array.Empty<byte>();
-
-            public void SetupUploadThenStream(string fileId, byte[] streamBody)
+            var sut = Build();
+            var config = Config(VoxCpm2ParagraphTtsSettings.Recommended with
             {
-                _fileId = fileId;
-                _streamBody = streamBody;
-            }
+                BaseUrl = "http://acpp:8004",
+                CfgValue = 2.5,
+                InferenceTimesteps = 12,
+                MinLen = 3,
+                MaxLen = 2048,
+                RetryBadcase = false,
+                RetryBadcaseMaxTimes = 4,
+                RetryBadcaseRatioThreshold = 5.5,
+                Seed = 77,
+            });
 
-            protected override async Task<HttpResponseMessage> SendAsync(
-                HttpRequestMessage request, CancellationToken cancellationToken)
-            {
-                // Buffer body before request is disposed
-                string? body = null;
-                if (request.Content is StringContent)
-                    body = await request.Content.ReadAsStringAsync(cancellationToken);
-                RequestBodies.Add(body);
-                Requests.Add(request);
+            await Generate(sut, null, config);
 
-                if (request.RequestUri!.AbsolutePath.EndsWith("/upload-audio"))
+            var options = Options(sut);
+            foreach (var option in options.EnumerateObject())
+                Assert.Equal(JsonValueKind.String, option.Value.ValueKind);
+            Assert.Equal(
+                new Dictionary<string, string>
                 {
-                    var json = JsonSerializer.Serialize(new { file_id = _fileId });
-                    return new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent(json, Encoding.UTF8, "application/json"),
-                    };
-                }
+                    ["guidance_scale"] = "2.5",
+                    ["num_inference_steps"] = "12",
+                    ["min_tokens"] = "3",
+                    ["max_tokens"] = "2048",
+                    ["retry_badcase"] = "false",
+                    ["retry_badcase_max_times"] = "4",
+                    ["retry_badcase_ratio_threshold"] = "5.5",
+                    ["seed"] = "77",
+                },
+                options.EnumerateObject().ToDictionary(o => o.Name, o => o.Value.GetString()!));
+        }
 
-                // /api/stream
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new ByteArrayContent(_streamBody),
-                };
-            }
+        [Fact]
+        public async Task The_recommended_settings_send_the_app_defaults()
+        {
+            var sut = Build();
+
+            await Generate(sut, null);
+
+            var options = Options(sut);
+            Assert.Equal("2", options.GetProperty("guidance_scale").GetString());
+            Assert.Equal("10", options.GetProperty("num_inference_steps").GetString());
+            Assert.Equal("2", options.GetProperty("min_tokens").GetString());
+            Assert.Equal("4096", options.GetProperty("max_tokens").GetString());
+            Assert.Equal("true", options.GetProperty("retry_badcase").GetString());
+            Assert.Equal("3", options.GetProperty("retry_badcase_max_times").GetString());
+            Assert.Equal("6", options.GetProperty("retry_badcase_ratio_threshold").GetString());
+            Assert.True(int.TryParse(options.GetProperty("seed").GetString(), out _));
+        }
+
+        [Fact]
+        public async Task Without_a_pinned_seed_each_request_gets_a_fresh_random_seed()
+        {
+            var sut = Build();
+
+            for (var i = 0; i < 5; i++)
+                await Generate(sut, null);
+
+            var seeds = sut.Handler.SpeechBodies.Select(b => b["options"]!["seed"]!.GetValue<string>()).ToList();
+            Assert.True(seeds.Distinct().Count() > 1);
+        }
+
+        [Fact]
+        public async Task A_per_voice_override_replaces_the_config_defaults()
+        {
+            var sut = Build(new FakeAudioCppHandler { LoadedModel = "voxcpm2-alt" });
+
+            await Generate(sut, null, overrideJson: """{"cfg_value":3.5,"modelId":"voxcpm2-alt"}""");
+
+            Assert.Equal("voxcpm2-alt", sut.Handler.SpeechBodies.Single()["model"]!.GetValue<string>());
+            Assert.Equal("3.5", Options(sut).GetProperty("guidance_scale").GetString());
+        }
+
+        [Fact]
+        public async Task Goes_through_the_tts_gate_before_speaking()
+        {
+            var sut = Build();
+
+            await Generate(sut, null);
+
+            Assert.Equal(["GET /v1/models", "POST /v1/audio/speech"], sut.Handler.Paths);
+        }
+
+        [Fact]
+        public async Task A_503_that_outlasts_the_retries_throws_tts_busy()
+        {
+            var sut = Build(new FakeAudioCppHandler { LoadedModel = "breeze-q8", BusyResponses = 99 });
+
+            var ex = await Assert.ThrowsAsync<TtsBusyException>(() => Generate(sut, null));
+
+            Assert.Equal("voxcpm2", ex.ModelId);
         }
     }
 }

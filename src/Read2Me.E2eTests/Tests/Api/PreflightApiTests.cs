@@ -119,7 +119,7 @@ public class PreflightApiTests(E2eAppFixture app)
     {
         // Acceptance: starting a TTS task while llama runs shows the GPU conflict and stops llama
         // first — even though the TTS server already answers, since llama still holds the VRAM.
-        const string tts = "http://fake-tts";
+        const string tts = "http://fake-audiocpp";
         app.FakeControl.Status = AiServiceStatus.Stopped;
         app.FakeControl.GpuUrls.Add(tts);
         app.FakeControl.StatusByName[tts] = AiServiceStatus.Ready;

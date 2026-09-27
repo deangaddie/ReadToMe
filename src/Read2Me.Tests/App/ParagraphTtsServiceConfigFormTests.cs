@@ -78,8 +78,7 @@ namespace Read2Me.Tests.App
                 InferenceTimesteps = 20,
                 MinLen = 5,
                 MaxLen = 2048,
-                Normalize = true,
-                Denoise = true,
+                Seed = 42,
                 RetryBadcase = false,
                 RetryBadcaseMaxTimes = 7,
                 RetryBadcaseRatioThreshold = 4.0,
@@ -95,11 +94,10 @@ namespace Read2Me.Tests.App
             Assert.Equal(20, s.InferenceTimesteps);
             Assert.Equal(5, s.MinLen);
             Assert.Equal(2048, s.MaxLen);
-            Assert.True(s.Normalize);
-            Assert.True(s.Denoise);
             Assert.False(s.RetryBadcase);
             Assert.Equal(7, s.RetryBadcaseMaxTimes);
             Assert.Equal(4.0, s.RetryBadcaseRatioThreshold);
+            Assert.Equal(42, s.Seed);
         }
 
         [Fact]
@@ -112,8 +110,7 @@ namespace Read2Me.Tests.App
                 InferenceTimesteps = 15,
                 MinLen = 4,
                 MaxLen = 1024,
-                Normalize = true,
-                Denoise = true,
+                Seed = 42,
                 RetryBadcase = false,
                 RetryBadcaseMaxTimes = 5,
                 RetryBadcaseRatioThreshold = 8.0,

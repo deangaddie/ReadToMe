@@ -20,6 +20,7 @@ public class AudioApiTests(E2eAppFixture app)
     [Fact]
     public async Task Enqueue_poll_and_audio_lands_on_disk()
     {
+        app.FakeAi.Reset();
         var folder = $"api-audio-{Guid.NewGuid():N}";
         var builder = await app.SeedProjectAsync(folder, "Audio Api Book", "Author");
         await app.SeedNarratorVoiceAsync(folder);
@@ -43,6 +44,17 @@ public class AudioApiTests(E2eAppFixture app)
         Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("status").ValueKind);
         Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("outcome").ValueKind);
         Assert.NotEqual(JsonValueKind.Null, status.RootElement.GetProperty("audioVersion").ValueKind);
+
+        // The seeded VoxCPM2 config speaks on audio.cpp: a controllable clone, reference but no transcript.
+        List<JsonObject> bodies;
+        lock (app.FakeAi.AudioCppSpeechBodies) bodies = [.. app.FakeAi.AudioCppSpeechBodies];
+        Assert.Contains(bodies, b => b["input"]!.GetValue<string>() == "It was a dark and stormy night.");
+        Assert.All(bodies, b =>
+        {
+            Assert.Equal("voxcpm2", b["model"]!.GetValue<string>());
+            Assert.Equal("base64", b["voice_ref"]!["type"]!.GetValue<string>());
+            Assert.False(b.ContainsKey("reference_text"));
+        });
     }
 
     /// <summary>

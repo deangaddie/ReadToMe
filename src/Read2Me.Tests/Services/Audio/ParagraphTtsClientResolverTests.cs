@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.Transcription;
 using Xunit;
@@ -10,6 +11,13 @@ namespace Read2Me.Tests.Services.Audio
 {
     public class ParagraphTtsClientResolverTests
     {
+        /// <summary>These tests only compose the decorator chain; nothing speaks.</summary>
+        private sealed class UnusedAudioCppClient : IAudioCppClient
+        {
+            public Task<Stream> SpeakAsync(string baseUrl, AudioCppSpeechRequest request, CancellationToken ct) =>
+                throw new NotSupportedException();
+        }
+
         private sealed class FakeTranscriptionSettings()
             : TranscriptionSettingsService(null!, NullLogger<TranscriptionSettingsService>.Instance)
         {
@@ -36,6 +44,7 @@ namespace Read2Me.Tests.Services.Audio
             sc.AddHttpClient();
             sc.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
             sc.AddKeyedScoped<IParagraphTtsClient, VoxCpm2ParagraphTtsClient>(ParagraphTtsServiceType.VoxCpm2);
+            sc.AddSingleton<IAudioCppClient, UnusedAudioCppClient>();
             sc.AddSingleton<Read2Me.Services.Health.IAiServiceReporter, Read2Me.Tests.Fakes.FakeAiServiceReporter>();
             sc.AddSingleton<AudioProcessingSettingsService, FakeAudioSettings>();
             sc.AddScoped<ITranscriptionClientResolver, TranscriptionClientResolver>();

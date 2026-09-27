@@ -109,7 +109,7 @@ export const PARAGRAPH_TTS_AREA: ProviderArea = {
   noun: 'TTS',
   api: ParagraphTtsSettingsApi,
   types: [
-    { value: ParagraphTtsServiceType.VoxCpm2, label: 'VoxCpm2', urlExample: 'http://localhost:8003' },
+    { value: ParagraphTtsServiceType.VoxCpm2, label: 'VoxCpm2', urlExample: 'http://localhost:8004' },
     {
       value: ParagraphTtsServiceType.Chatterbox,
       label: 'Chatterbox',
@@ -145,7 +145,7 @@ export const VOICE_DESIGN_AREA: ProviderArea = {
   noun: 'voice design',
   api: VoiceDesignSettingsApi,
   types: [
-    { value: VoiceDesignServiceType.VoxCpm2, label: 'VoxCpm2', urlExample: 'http://localhost:8003' },
+    { value: VoiceDesignServiceType.VoxCpm2, label: 'VoxCpm2', urlExample: 'http://localhost:8004' },
     { value: VoiceDesignServiceType.Qwen3, label: 'Qwen3', urlExample: 'http://localhost:8100' },
     { value: VoiceDesignServiceType.Breeze, label: 'Breeze', urlExample: 'http://localhost:8004' },
   ],

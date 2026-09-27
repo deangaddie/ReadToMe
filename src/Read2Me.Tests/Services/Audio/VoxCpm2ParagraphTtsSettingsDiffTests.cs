@@ -20,8 +20,6 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(10, r.InferenceTimesteps);
             Assert.Equal(2, r.MinLen);
             Assert.Equal(4096, r.MaxLen);
-            Assert.False(r.Normalize);
-            Assert.False(r.Denoise);
             Assert.True(r.RetryBadcase);
             Assert.Equal(3, r.RetryBadcaseMaxTimes);
             Assert.Equal(6.0, r.RetryBadcaseRatioThreshold);
@@ -56,7 +54,7 @@ namespace Read2Me.Tests.Services.Audio
             var edited = VoxCpm2ParagraphTtsSettings.Recommended with
             {
                 InferenceTimesteps = 25,
-                Normalize = true,
+                Seed = 42,
                 RetryBadcaseMaxTimes = 7,
             };
             var diff = VoxCpm2ParagraphTtsSettingsDiff.Diff(RecommendedJson, edited);
@@ -64,7 +62,7 @@ namespace Read2Me.Tests.Services.Audio
             var obj = JsonNode.Parse(diff)!.AsObject();
             Assert.Equal(3, obj.Count);
             Assert.True(obj.ContainsKey("inference_timesteps"));
-            Assert.True(obj.ContainsKey("normalize"));
+            Assert.True(obj.ContainsKey("seed"));
             Assert.True(obj.ContainsKey("retry_badcase_max_times"));
         }
 
@@ -125,8 +123,6 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(10, restored.InferenceTimesteps);   // from base
             Assert.Equal(2, restored.MinLen);
             Assert.Equal(4096, restored.MaxLen);
-            Assert.False(restored.Normalize);
-            Assert.False(restored.Denoise);
             Assert.True(restored.RetryBadcase);
             Assert.Equal(3, restored.RetryBadcaseMaxTimes);
             Assert.Equal(6.0, restored.RetryBadcaseRatioThreshold);
@@ -150,8 +146,6 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(edited.InferenceTimesteps, restored.InferenceTimesteps);
             Assert.Equal(edited.MinLen, restored.MinLen);
             Assert.Equal(edited.MaxLen, restored.MaxLen);
-            Assert.Equal(edited.Normalize, restored.Normalize);
-            Assert.Equal(edited.Denoise, restored.Denoise);
             Assert.Equal(edited.RetryBadcase, restored.RetryBadcase);
             Assert.Equal(edited.RetryBadcaseMaxTimes, restored.RetryBadcaseMaxTimes);
             Assert.Equal(edited.RetryBadcaseRatioThreshold, restored.RetryBadcaseRatioThreshold);

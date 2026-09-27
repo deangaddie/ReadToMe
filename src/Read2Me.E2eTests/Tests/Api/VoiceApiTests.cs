@@ -65,7 +65,7 @@ public class VoiceApiTests(E2eAppFixture app)
         Assert.Equal("A clear adult voice.", voice.GetProperty("designPrompt").GetString());
         var voiceId = voice.GetProperty("id").GetGuid();
 
-        // Single-voice audio generation against the fake voice-design + whisper services.
+        // Single-voice audio generation against fake-audiocpp + fake-whisper.
         var gen = await Http.PostAsync(
             $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices/{voiceId}/generate-audio", null);
         Assert.Equal(HttpStatusCode.OK, gen.StatusCode);
@@ -74,6 +74,13 @@ public class VoiceApiTests(E2eAppFixture app)
         Assert.False(string.IsNullOrEmpty(audioFileName));
         Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder,
             audioFileName!.Replace('/', Path.DirectorySeparatorChar))));
+
+        // The seeded VoxCPM2 config designs on audio.cpp: no reference, the prompt as the (control) prefix.
+        JsonObject body;
+        lock (app.FakeAi.AudioCppSpeechBodies) body = app.FakeAi.AudioCppSpeechBodies[^1];
+        Assert.Equal("voxcpm2", body["model"]!.GetValue<string>());
+        Assert.StartsWith("(A clear adult voice.)", body["input"]!.GetValue<string>());
+        Assert.False(body.ContainsKey("voice_ref"));
     }
 
     /// <summary>

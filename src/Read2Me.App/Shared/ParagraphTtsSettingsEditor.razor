@@ -68,30 +68,6 @@
         </MudStack>
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <MudCheckBox T="bool" Value="_effective.Normalize" Label="Text Normalization"
-                         Style="@FieldStyle("normalize")"
-                         ValueChanged="@((bool v) => OnFieldChanged(s => s with { Normalize = v }))" />
-            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("normalize"))
-            {
-                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
-                               OnClick="@(() => ResetField(b => _effective with { Normalize = b.Normalize }))" />
-            }
-        </MudStack>
-        <MudText Typo="Typo.caption" Color="Color.Default">Expand numbers, dates, abbreviations.</MudText>
-
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <MudCheckBox T="bool" Value="_effective.Denoise" Label="Denoise Reference Audio"
-                         Style="@FieldStyle("denoise")"
-                         ValueChanged="@((bool v) => OnFieldChanged(s => s with { Denoise = v }))" />
-            @if (Mode == TtsSettingsEditorMode.VoiceOverride && IsOverridden("denoise"))
-            {
-                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
-                               OnClick="@(() => ResetField(b => _effective with { Denoise = b.Denoise }))" />
-            }
-        </MudStack>
-        <MudText Typo="Typo.caption" Color="Color.Default">Clean the reference audio (ZipEnhancer).</MudText>
-
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
             <MudCheckBox T="bool" Value="_effective.RetryBadcase" Label="Retry Bad Cases"
                          Style="@FieldStyle("retry_badcase")"
                          ValueChanged="@((bool v) => OnFieldChanged(s => s with { RetryBadcase = v }))" />

@@ -35,7 +35,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     /// </summary>
     public TimeSpan LlmDelay { get; set; } = TimeSpan.Zero;
 
-    /// <summary>Text of the last /api/stream TTS request; echoed back by fake-whisper.</summary>
+    /// <summary>Text the last TTS request spoke; echoed back by fake-whisper.</summary>
     private volatile string _lastTtsText = "";
 
     public List<string> LlmPromptsSeen { get; } = [];
@@ -74,8 +74,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             "fake-whisper" => Json(FakeAiResponses.WhisperVerboseJson(
                 _lastTtsText.Length > 0 ? _lastTtsText : "transcript")),
             "fake-similarity" => Json("""{"similarity": 1.0}"""),
-            "fake-tts" => await HandleTtsAsync(request, path, ct),
-            "fake-voicedesign" => await HandleTtsAsync(request, path, ct),
+            "fake-tts" => HandleTts(),
             "fake-audiocpp" => await HandleAudioCppAsync(request, path, ct),
             _ => throw new InvalidOperationException(
                 $"FakeAiRoutingHandler: unexpected request to {request.RequestUri} — a real network call escaped the fakes."),
@@ -108,30 +107,11 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         throw new InvalidOperationException($"fake-llm: unexpected path {path}");
     }
 
-    private async Task<HttpResponseMessage> HandleTtsAsync(
-        HttpRequestMessage request, string path, CancellationToken ct)
+    /// <summary>The native TTS services not yet on audio.cpp (Chatterbox, Qwen3): a silent WAV.</summary>
+    private static HttpResponseMessage HandleTts() => new(HttpStatusCode.OK)
     {
-        if (path.EndsWith("/upload-audio", StringComparison.Ordinal))
-            return Json("""{"file_id": "fake-file-id"}""");
-
-        if (path.EndsWith("/api/stream", StringComparison.Ordinal))
-        {
-            var body = await request.Content!.ReadAsStringAsync(ct);
-            using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("text", out var t) && t.GetString() is { } text)
-                _lastTtsText = text;
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new ByteArrayContent(FakeAiResponses.VoxCpm2StreamFrames()),
-            };
-        }
-
-        // Generic TTS endpoint (qwen3 etc.): return a silent WAV.
-        return new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new ByteArrayContent(FakeAiResponses.SilentWav()),
-        };
-    }
+        Content = new ByteArrayContent(FakeAiResponses.SilentWav()),
+    };
 
     /// <summary>
     /// The audio.cpp TTS runtime: <c>GET /v1/models</c> and <c>POST /v1/audio/speech</c> (JSON in,
@@ -142,7 +122,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     {
         if (path == "/v1/models")
         {
-            var models = new[] { "breeze-q8", "breeze-design" }
+            var models = new[] { "breeze-q8", "breeze-design", "voxcpm2" }
                 .Select(id => new { id, loaded = id == _audioCppLoaded });
             return Json(JsonSerializer.Serialize(new { @object = "list", data = models }));
         }
@@ -151,7 +131,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         {
             var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!.AsObject();
             lock (AudioCppSpeechBodies) AudioCppSpeechBodies.Add(body);
-            _lastTtsText = body["input"]?.GetValue<string>() ?? "";
+            _lastTtsText = SpokenText(body);
             _audioCppLoaded = body["model"]?.GetValue<string>();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -160,6 +140,19 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         }
 
         throw new InvalidOperationException($"fake-audiocpp: unexpected path {path}");
+    }
+
+    /// <summary>
+    /// What a real model would say: VoxCPM2 reads a leading <c>(control)</c> as direction, not
+    /// words, so fake-whisper must not hear it either.
+    /// </summary>
+    private static string SpokenText(JsonObject body)
+    {
+        var input = body["input"]?.GetValue<string>() ?? "";
+        if (body["model"]?.GetValue<string>() == "voxcpm2" && input.StartsWith('(')
+            && input.IndexOf(')') is var close and > 0)
+            return input[(close + 1)..];
+        return input;
     }
 
     private static string? ExtractModel(string requestBody)
