@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Services;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
@@ -124,6 +125,10 @@ namespace Read2Me.App.Api
             catch (OperationCanceledException)
             {
                 return ProviderFailed($"No answer within {VoiceDesignTestTimeout.TotalSeconds:0} seconds.");
+            }
+            catch (TtsBusyException)
+            {
+                return Results.Problem(TtsBusyException.UserMessage, statusCode: StatusCodes.Status503ServiceUnavailable);
             }
             catch (Exception ex)
             {

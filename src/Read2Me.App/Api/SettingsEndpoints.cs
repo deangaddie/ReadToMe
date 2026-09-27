@@ -189,7 +189,7 @@ namespace Read2Me.App.Api
                     TryParseType<VoiceDesignServiceType>(type, out var t)
                         ? Results.Ok(ProviderSettingsSchema.VoiceDesign(t))
                         : UnknownProviderType(type, typeof(VoiceDesignServiceType)))
-                .WithSummary("The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+                .WithSummary("The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
             endpoints.MapGet("/api/settings/transcription/schema", (string? type) =>
                     TryParseType<TranscriptionServiceType>(type, out var t)
                         ? Results.Ok(ProviderSettingsSchema.Transcription(t))

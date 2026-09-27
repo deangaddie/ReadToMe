@@ -8,6 +8,9 @@ namespace Read2Me.Services.Audio.AudioCpp
     public sealed class TtsBusyException(string baseUrl, string modelId)
         : Exception($"TTS busy: {baseUrl} is generating with another model; {modelId} will retry.")
     {
+        /// <summary>What a person waiting on a single generation (voice design) is told: nothing failed, retry.</summary>
+        public const string UserMessage = "TTS busy, try again";
+
         public string BaseUrl { get; } = baseUrl;
         public string ModelId { get; } = modelId;
     }

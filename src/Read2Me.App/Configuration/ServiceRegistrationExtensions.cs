@@ -163,6 +163,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IVoiceAudioGenerator>(sp => sp.GetRequiredService<VoiceAudioGenerator>());
         services.AddKeyedScoped<IVoiceDesignClient, VoxCpm2VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.VoxCpm2);
         services.AddKeyedScoped<IVoiceDesignClient, Qwen3VoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.Qwen3);
+        services.AddKeyedScoped<IVoiceDesignClient, BreezeVoiceDesignClient>(Read2Me.AppData.Entities.VoiceDesignServiceType.Breeze);
         services.AddScoped<Read2Me.Core.Audio.IAudioPipeline, FileAudioPipeline>();
         // The arriving half of the Voice audio ordering rule: it needs the pipeline above, which is
         // an application service, so it is registered here rather than with the mutation wiring.

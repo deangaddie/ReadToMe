@@ -1,4 +1,5 @@
 using Read2Me.Core.Audio;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Audio.VoiceDesign
@@ -49,6 +50,10 @@ namespace Read2Me.Services.Audio.VoiceDesign
                     storeReq, sampleText, request.DesignPrompt, ct);
 
                 return VoiceGenerationResult.Success(fileName, sampleText);
+            }
+            catch (TtsBusyException)
+            {
+                return VoiceGenerationResult.Busy();
             }
             catch (Exception ex)
             {

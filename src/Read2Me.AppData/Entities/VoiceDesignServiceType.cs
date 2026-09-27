@@ -6,5 +6,6 @@ namespace Read2Me.AppData.Entities
         VoxCpm2 = 0,
         Qwen3 = 1,
         // Chatterbox = 2,  // reserved — needs reference audio, no prompt-only design mode
+        Breeze = 3,
     }
 }

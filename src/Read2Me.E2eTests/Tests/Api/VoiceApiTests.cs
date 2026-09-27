@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using Read2Me.E2eTests.Infrastructure;
+using Read2Me.Services;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
@@ -71,6 +74,55 @@ public class VoiceApiTests(E2eAppFixture app)
         Assert.False(string.IsNullOrEmpty(audioFileName));
         Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder,
             audioFileName!.Replace('/', Path.DirectorySeparatorChar))));
+    }
+
+    /// <summary>
+    /// Breeze voice design: with the Breeze config active, generating a voice's audio sends its
+    /// design prompt to fake-audiocpp as the instruction on a no-reference <c>breeze-design</c>
+    /// request, and the take lands.
+    /// </summary>
+    [Fact]
+    public async Task A_Breeze_voice_design_config_designs_through_audiocpp()
+    {
+        var folder = $"api-voice-breeze-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Breeze Voice Book", "Author", characterName: "Alice");
+        app.FakeAi.LlmReply = _ => VoicePlanReply;
+        await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/voice-batch/prompts", new { regenerateAll = false });
+        await WaitForBatchAsync();
+
+        var aliceId = await CharacterIdAsync(folder, "Alice");
+        var voiceId = JsonDocument.Parse(await Http.GetStringAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"))
+            .RootElement.GetProperty("voices")[0].GetProperty("id").GetGuid();
+
+        app.FakeAi.Reset();
+        using var scope = app.Services.CreateScope();
+        var design = scope.ServiceProvider.GetRequiredService<VoiceDesignSettingsService>();
+        var previous = await design.GetActiveConfigIdAsync();
+        var breeze = (await design.GetAllConfigsAsync()).Single(c => c.Name == WorkspaceSeeder.BreezeDesignConfigName);
+        await design.SetActiveConfigAsync(breeze.Id);
+        try
+        {
+            var gen = await Http.PostAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices/{voiceId}/generate-audio", null);
+
+            Assert.Equal(HttpStatusCode.OK, gen.StatusCode);
+            var audioFileName = JsonDocument.Parse(await gen.Content.ReadAsStringAsync())
+                .RootElement.GetProperty("audioFileName").GetString();
+            Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder,
+                audioFileName!.Replace('/', Path.DirectorySeparatorChar))));
+
+            JsonObject body;
+            lock (app.FakeAi.AudioCppSpeechBodies) body = Assert.Single(app.FakeAi.AudioCppSpeechBodies);
+            Assert.Equal("breeze-design", body["model"]!.GetValue<string>());
+            Assert.Equal("A clear adult voice.", body["options"]!["instruction"]!.GetValue<string>());
+            Assert.False(body.ContainsKey("voice_ref"));
+        }
+        finally
+        {
+            if (previous is { } id) await design.SetActiveConfigAsync(id);
+        }
     }
 
     [Fact]

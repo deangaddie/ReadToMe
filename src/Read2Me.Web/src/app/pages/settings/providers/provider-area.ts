@@ -147,6 +147,7 @@ export const VOICE_DESIGN_AREA: ProviderArea = {
   types: [
     { value: VoiceDesignServiceType.VoxCpm2, label: 'VoxCpm2', urlExample: 'http://localhost:8003' },
     { value: VoiceDesignServiceType.Qwen3, label: 'Qwen3', urlExample: 'http://localhost:8100' },
+    { value: VoiceDesignServiceType.Breeze, label: 'Breeze', urlExample: 'http://localhost:8004' },
   ],
   hasTextProcessing: false,
   perConfigKeys: [],

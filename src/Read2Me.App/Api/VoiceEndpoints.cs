@@ -64,7 +64,7 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/design-prompt/generate", GenerateDesignPromptAsync)
                 .WithSummary("Ask the LLM for a voice design prompt from a rendered prompt. Synchronous; publishes the LLM run on the live hub. Nothing is persisted — set it on a voice with SetVoiceDesignPrompt.");
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/voices/{voiceId:guid}/generate-audio", GenerateAudioAsync)
-                .WithSummary("Synthesise reference audio for one generated voice from its design prompt. Synchronous; takes tens of seconds.");
+                .WithSummary("Synthesise reference audio for one generated voice from its design prompt. Synchronous; takes tens of seconds. 503 \"TTS busy, try again\" when the TTS runtime is generating with another model.");
             endpoints.MapPost("/api/projects/{folder}/voice-batch/prompts", StartPromptBatch)
                 .WithSummary("Start the voice-plan batch: one LLM call per character without voices (regenerateAll replans every character). Poll /api/voice-batch/status.");
             endpoints.MapPost("/api/projects/{folder}/voice-batch/audio", StartAudioBatch)
@@ -278,10 +278,11 @@ namespace Read2Me.App.Api
                 SettingsOverrideJson = voice.VoiceDesignSettingsOverrideJson,
             }, ct);
 
-            return result.IsSuccess
-                ? Results.Ok(new GenerateVoiceAudioResponse(result.AudioFileName!, result.Transcript ?? string.Empty))
-                : Results.Problem(result.ErrorMessage ?? "Voice audio generation failed.",
-                    statusCode: StatusCodes.Status422UnprocessableEntity);
+            if (result.IsSuccess)
+                return Results.Ok(new GenerateVoiceAudioResponse(result.AudioFileName!, result.Transcript ?? string.Empty));
+            // Busy is transient, not a failed generation: the caller should just try again.
+            return Results.Problem(result.ErrorMessage ?? "Voice audio generation failed.",
+                statusCode: result.IsBusy ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status422UnprocessableEntity);
         }
 
         private static IResult StartPromptBatch(

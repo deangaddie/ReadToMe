@@ -67,6 +67,15 @@ namespace Read2Me.App.Shared
                     form.RepetitionPenalty = q3.RepetitionPenalty;
                     form.MaxNewTokens = q3.MaxNewTokens;
                     break;
+
+                // Legacy UI: connection only; Breeze tuning lives in the Angular app.
+                case VoiceDesignServiceType.Breeze:
+                    var br = string.IsNullOrWhiteSpace(c.SettingsJson)
+                        ? BreezeVoiceDesignSettings.Recommended
+                        : JsonSerializer.Deserialize<BreezeVoiceDesignSettings>(c.SettingsJson) ?? BreezeVoiceDesignSettings.Recommended;
+                    form.BaseUrl = br.BaseUrl;
+                    form.SettingsJson = JsonSerializer.Serialize(br);
+                    break;
             }
 
             return form;
@@ -103,6 +112,7 @@ namespace Read2Me.App.Shared
                         RepetitionPenalty = RepetitionPenalty,
                         MaxNewTokens = MaxNewTokens,
                     }),
+                VoiceDesignServiceType.Breeze => BuildBreezeSettingsJson(),
                 _ => throw new NotSupportedException($"Unsupported voice design type '{Type}'."),
             };
 
@@ -125,6 +135,17 @@ namespace Read2Me.App.Shared
             // BaseUrl owned by the form, not the editor — merge in here
             settings = settings with { BaseUrl = BaseUrl.Trim() };
             return JsonSerializer.Serialize(settings, _jsonOpts);
+        }
+
+        // BaseUrl owned by the form; the tuning keys are kept as loaded (Angular edits them).
+        private string BuildBreezeSettingsJson()
+        {
+            var settings = string.IsNullOrWhiteSpace(SettingsJson)
+                ? BreezeVoiceDesignSettings.Recommended
+                : JsonSerializer.Deserialize<BreezeVoiceDesignSettings>(SettingsJson)
+                  ?? BreezeVoiceDesignSettings.Recommended;
+
+            return JsonSerializer.Serialize(settings with { BaseUrl = BaseUrl.Trim() });
         }
     }
 }

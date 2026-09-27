@@ -40,6 +40,7 @@ namespace Read2Me.Services
             {
                 VoiceDesignServiceType.VoxCpm2 => NullIfBlank(Parse<VoxCpm2VoiceDesignSettings>(config.SettingsJson)?.BaseUrl),
                 VoiceDesignServiceType.Qwen3 => NullIfBlank(Parse<Qwen3VoiceDesignSettings>(config.SettingsJson)?.BaseUrl),
+                VoiceDesignServiceType.Breeze => NullIfBlank(Parse<BreezeVoiceDesignSettings>(config.SettingsJson)?.BaseUrl),
                 _ => null,
             };
 

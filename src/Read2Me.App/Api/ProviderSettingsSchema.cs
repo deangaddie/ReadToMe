@@ -75,6 +75,7 @@ namespace Read2Me.App.Api
                 VoxCpm2VoiceDesignSettings.Recommended.RetryBadcaseMaxTimes,
                 VoxCpm2VoiceDesignSettings.Recommended.RetryBadcaseRatioThreshold)),
             VoiceDesignServiceType.Qwen3 => new(type.ToString(), Qwen3VoiceDesignFields()),
+            VoiceDesignServiceType.Breeze => new(type.ToString(), BreezeVoiceDesignFields()),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "No settings schema for this voice-design provider."),
         };
 
@@ -190,6 +191,21 @@ namespace Read2Me.App.Api
             [
                 new("language", "Language", "enum", Options: Qwen3Languages, Default: r.Language),
                 ..Qwen3SamplingFields("temperature", "topP", "topK", "repetitionPenalty", "maxNewTokens"),
+            ];
+        }
+
+        /// <summary>Breeze TTS 2 voice design on audio.cpp: camelCase JSON names; a blank seed draws a random one per request.</summary>
+        private static IReadOnlyList<SettingsFieldDto> BreezeVoiceDesignFields()
+        {
+            var r = BreezeVoiceDesignSettings.Recommended;
+            return
+            [
+                new("modelId", "Model", "string", Default: r.ModelId,
+                    Help: "The audio.cpp server.json model entry."),
+                new("guidanceScale", "Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1, Default: r.GuidanceScale,
+                    Help: "How closely the voice follows the design prompt. (1.0–5.0)"),
+                new("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
+                    Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so regenerating differs."),
             ];
         }
 

@@ -6,6 +6,7 @@ using Read2Me.Core.Audio;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Tests.Infrastructure;
@@ -21,6 +22,12 @@ namespace Read2Me.Tests.Services.Audio
             {
                 return Task.FromResult<Stream>(new MemoryStream([0x52, 0x49, 0x46, 0x46]));
             }
+        }
+
+        private class BusyVoiceDesignClient : IVoiceDesignClient
+        {
+            public Task<Stream> DesignVoiceAsync(VoiceDesignServiceConfig config, string prompt, string sampleText, string? settingsOverrideJson, CancellationToken ct = default) =>
+                throw new TtsBusyException("http://localhost:8004", "breeze-design");
         }
 
         private class FakeClientResolver(IVoiceDesignClient client) : IVoiceDesignClientResolver
@@ -106,6 +113,40 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal("Calm voice", voiceAudio.DesignPrompt);
             // The take speaks the sample sentence, and that is what a cloning TTS is handed with it.
             Assert.Equal(result.Transcript, voiceAudio.Transcript);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_WhenTheTtsIsBusy_ReportsBusyNotAGenericFailure()
+        {
+            var dbOptions = new DbContextOptionsBuilder<Read2MeDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(TempDir, "app.db")}")
+                .Options;
+            var dbFactory = new TestDbContextFactory<Read2MeDbContext>(dbOptions);
+            await using (var db = dbFactory.CreateDbContext())
+            {
+                await db.Database.EnsureCreatedAsync();
+                db.VoiceDesignServiceConfigs.Add(new VoiceDesignServiceConfig { Id = 1, Name = "Test", Type = VoiceDesignServiceType.Breeze });
+                db.Settings.Add(new AppSettings { ActiveVoiceDesignConfigId = 1 });
+                await db.SaveChangesAsync();
+            }
+
+            var settings = new VoiceDesignSettingsService(dbFactory, NullLogger<VoiceDesignSettingsService>.Instance);
+            var voiceAudio = new RecordingVoiceAudioWriter();
+            var generator = new VoiceAudioGenerator(settings, new FakeClientResolver(new BusyVoiceDesignClient()), voiceAudio);
+
+            var result = await generator.GenerateAsync(new VoiceGenerationRequest
+            {
+                FolderId = new ProjectFolderId(FolderName),
+                CharacterId = Guid.NewGuid(),
+                VoiceId = Guid.NewGuid(),
+                VoiceName = "Alice Voice",
+                DesignPrompt = "Calm voice",
+            }, CancellationToken.None);
+
+            Assert.False(result.IsSuccess);
+            Assert.True(result.IsBusy);
+            Assert.Equal("TTS busy, try again", result.ErrorMessage);
+            Assert.Equal(0, voiceAudio.Calls);
         }
 
         private class TestDbContextFactory<T>(DbContextOptions<T> options) : IDbContextFactory<T> where T : DbContext

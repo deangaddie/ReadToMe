@@ -12,7 +12,7 @@
             </MudSelect>
 
             <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
-                          Placeholder="@(_form.Type == VoiceDesignServiceType.VoxCpm2 ? "http://localhost:8003" : "http://localhost:8100")"
+                          Placeholder="@(_form.Type switch { VoiceDesignServiceType.VoxCpm2 => "http://localhost:8003", VoiceDesignServiceType.Breeze => "http://localhost:8004", _ => "http://localhost:8100" })"
                           Required="true" Immediate="true"
                           UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
 

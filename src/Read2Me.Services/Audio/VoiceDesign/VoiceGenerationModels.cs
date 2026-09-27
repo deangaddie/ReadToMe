@@ -1,4 +1,5 @@
 ﻿using Read2Me.Core.Models;
+using Read2Me.Services.Audio.AudioCpp;
 
 namespace Read2Me.Services.Audio.VoiceDesign
 {
@@ -28,10 +29,23 @@ namespace Read2Me.Services.Audio.VoiceDesign
             Transcript = transcript
         };
 
+        /// <summary>
+        /// The voice-design provider was alive but busy with another model — nothing failed, a
+        /// retry later will do. Callers surface it as "try again", not as a generation failure.
+        /// </summary>
+        public bool IsBusy { get; init; }
+
         public static VoiceGenerationResult Failure(string message) => new()
         {
             IsSuccess = false,
             ErrorMessage = message
+        };
+
+        public static VoiceGenerationResult Busy() => new()
+        {
+            IsSuccess = false,
+            IsBusy = true,
+            ErrorMessage = TtsBusyException.UserMessage
         };
     }
 }

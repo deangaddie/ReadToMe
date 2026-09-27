@@ -16,6 +16,7 @@ namespace Read2Me.Tests.App
         [Theory]
         [InlineData(VoiceDesignServiceType.VoxCpm2, "http://localhost:8003")]
         [InlineData(VoiceDesignServiceType.Qwen3, "http://localhost:8100")]
+        [InlineData(VoiceDesignServiceType.Breeze, "http://localhost:8004")]
         public void BuildConfig_SettingsJson_ResolvesBaseUrlForPreflight(VoiceDesignServiceType type, string url)
         {
             var form = new VoiceDesignServiceConfigForm
@@ -33,6 +34,7 @@ namespace Read2Me.Tests.App
         [Theory]
         [InlineData(VoiceDesignServiceType.VoxCpm2)]
         [InlineData(VoiceDesignServiceType.Qwen3)]
+        [InlineData(VoiceDesignServiceType.Breeze)]
         public void BuildConfig_RoundTripsThroughFromConfig(VoiceDesignServiceType type)
         {
             var form = new VoiceDesignServiceConfigForm

@@ -265,7 +265,7 @@ curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voi
 curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}
 # → { id, characterId, name, source: "Uploaded"|"Generated", designPrompt, transcript, audioFileName,
 #     isEdited, voiceDesignSettingsOverrideJson, ttsSettingsOverrideJson }
-curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio
+curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio # 503 "TTS busy, try again" = retry later
 
 # reference audio: upload/replace (multipart 'file', 200 MB max; normalised + committed), then transcribe:
 curl -s -X PUT http://localhost:5000/api/projects/{folder}/voices/{voiceId}/audio -F 'file=@sample.wav'
@@ -282,7 +282,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characte
 # per-voice settings overrides are sparse patches keyed by the provider's settingsJson names;
 # the schema per provider type (ranges, defaults) drives an editor:
 curl -s 'http://localhost:5000/api/settings/paragraph-tts/schema?type=VoxCpm2'   # VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base|Breeze
-curl -s 'http://localhost:5000/api/settings/voice-design/schema?type=Qwen3'      # VoxCpm2|Qwen3
+curl -s 'http://localhost:5000/api/settings/voice-design/schema?type=Qwen3'      # VoxCpm2|Qwen3|Breeze
 # → { type, fields: [{ key, label, kind: number|boolean|enum|string|text, min?, max?, step?, options?, default, help?, nullable }] }
 # then: SetVoiceTtsSettingsOverride / SetVoiceSettingsOverride commands with json = '{"cfg_value":3.5}' (null clears)
 

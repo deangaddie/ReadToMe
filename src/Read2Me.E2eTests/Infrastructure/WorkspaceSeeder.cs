@@ -24,6 +24,9 @@ public static class WorkspaceSeeder
     /// <summary>The seeded Breeze paragraph-TTS config, pointed at fake-audiocpp. Never the active one.</summary>
     public const string BreezeConfigName = "fake-breeze";
 
+    /// <summary>The seeded Breeze voice-design config, pointed at fake-audiocpp. Never the active one.</summary>
+    public const string BreezeDesignConfigName = "fake-breeze-design";
+
     public static async Task SeedServiceConfigsAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
@@ -73,6 +76,14 @@ public static class WorkspaceSeeder
             Name = "fake",
             Type = VoiceDesignServiceType.VoxCpm2,
             SettingsJson = JsonSerializer.Serialize(new VoxCpm2VoiceDesignSettings { BaseUrl = "http://fake-voicedesign" }),
+        });
+
+        // Not active: a test that wants audio.cpp voice design switches to it and back.
+        await sp.GetRequiredService<VoiceDesignSettingsService>().CreateConfigAsync(new VoiceDesignServiceConfig
+        {
+            Name = BreezeDesignConfigName,
+            Type = VoiceDesignServiceType.Breeze,
+            SettingsJson = JsonSerializer.Serialize(new BreezeVoiceDesignSettings { BaseUrl = "http://fake-audiocpp" }),
         });
     }
 

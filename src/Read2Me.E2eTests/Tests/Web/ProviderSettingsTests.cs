@@ -169,6 +169,17 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : We
     // ── voice design ─────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task A_Breeze_voice_design_config_shows_its_audiocpp_settings()
+    {
+        await GotoAppAsync("/app/settings/voice-design");
+        await Row(WorkspaceSeeder.BreezeDesignConfigName).Locator(".r2m-config-list__main").ClickAsync();
+
+        await Expect(Setting("modelId").Locator("input")).ToHaveValueAsync("breeze-design");
+        await Expect(Setting("guidanceScale").Locator("input[type=number]")).ToHaveValueAsync("3");
+        await Expect(Setting("seed")).ToBeVisibleAsync();
+    }
+
+    [Fact]
     public async Task Voice_design_saves_its_sample_text_and_plays_a_test_design()
     {
         try

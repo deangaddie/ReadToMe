@@ -41,7 +41,7 @@ export const ParagraphTtsServiceType = {
 export type ParagraphTtsServiceType =
   (typeof ParagraphTtsServiceType)[keyof typeof ParagraphTtsServiceType];
 
-export const VoiceDesignServiceType = { VoxCpm2: 0, Qwen3: 1 } as const;
+export const VoiceDesignServiceType = { VoxCpm2: 0, Qwen3: 1, Breeze: 3 } as const;
 export type VoiceDesignServiceType =
   (typeof VoiceDesignServiceType)[keyof typeof VoiceDesignServiceType];
 

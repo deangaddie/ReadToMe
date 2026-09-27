@@ -211,6 +211,8 @@ else
                     JsonSerializer.Deserialize<VoxCpm2VoiceDesignSettings>(c.SettingsJson)?.BaseUrl ?? "",
                 VoiceDesignServiceType.Qwen3 =>
                     JsonSerializer.Deserialize<Qwen3VoiceDesignSettings>(c.SettingsJson)?.BaseUrl ?? "",
+                VoiceDesignServiceType.Breeze =>
+                    JsonSerializer.Deserialize<BreezeVoiceDesignSettings>(c.SettingsJson)?.BaseUrl ?? "",
                 _ => "",
             };
         }
