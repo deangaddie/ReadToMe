@@ -157,7 +157,7 @@ namespace Read2Me.App.Audio
 
                 case Disposition.RetryAfter retryAfter:
                     logger.LogInformation(
-                        "Audio item {ItemId} model still loading — requeuing in {Backoff:0.#}s (attempt {Attempt})",
+                        "Audio item {ItemId} provider busy — requeuing in {Backoff:0.#}s (attempt {Attempt})",
                         itemId, retryAfter.Delay.TotalSeconds, item.Attempts.Busies + 1);
                     break;
             }

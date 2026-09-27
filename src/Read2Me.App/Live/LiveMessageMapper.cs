@@ -70,6 +70,8 @@ public static class LiveMessageMapper
         Transcribed t => new AudioGenMessage("transcribed", t.Id, t.Attempt, Transcript: t.Transcript),
         Verified v => new AudioGenMessage("verified", v.Id, v.Attempt, Ok: v.Ok, Reason: v.Reason, Wer: v.Wer, Rescued: v.Rescued),
         Failed f => new AudioGenMessage("failed", f.Id, f.Attempt, Reason: f.Reason),
+        // Not tied to an item: the TTS gate sits below the item pipeline. Id stays empty.
+        TtsModelLoading m => new AudioGenMessage("modelLoading", Guid.Empty, 0, Model: m.ModelId),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped AudioGenEvent"),
     };
 

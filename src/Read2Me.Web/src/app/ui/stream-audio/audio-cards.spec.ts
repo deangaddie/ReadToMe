@@ -23,6 +23,22 @@ describe('foldAudioCards', () => {
     ]);
   });
 
+  it('notes a TTS model load on the card that is generating', () => {
+    const [done, generating] = foldAudioCards([
+      started('a'),
+      { kind: 'audioGenerated', id: 'a', attempt: 1 },
+      started('b'),
+      { kind: 'modelLoading', model: 'breeze-q8' },
+    ]);
+    expect(done?.phases[0]?.lines).toEqual([]);
+    expect(generating?.phases[0]?.lines).toEqual(['Loading TTS model breeze-q8…']);
+  });
+
+  it('drops a TTS model load when no card is generating', () => {
+    const cards = foldAudioCards([{ kind: 'modelLoading', model: 'breeze-q8' }]);
+    expect(cards).toEqual([]);
+  });
+
   it('walks the five phases through a happy path', () => {
     const [card] = foldAudioCards([
       started(),

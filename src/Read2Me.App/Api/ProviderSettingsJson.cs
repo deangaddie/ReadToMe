@@ -28,6 +28,7 @@ namespace Read2Me.App.Api
             ParagraphTtsServiceType.Chatterbox => Rewrite(config.SettingsJson, ChatterboxParagraphTtsSettings.Recommended),
             ParagraphTtsServiceType.ChatterboxTurbo => Rewrite(config.SettingsJson, ChatterboxTurboParagraphTtsSettings.Recommended),
             ParagraphTtsServiceType.Qwen3Base => Rewrite(config.SettingsJson, Qwen3ParagraphTtsSettings.Recommended),
+            ParagraphTtsServiceType.Breeze => Rewrite(config.SettingsJson, BreezeParagraphTtsSettings.Recommended),
             _ => config.SettingsJson,
         };
 

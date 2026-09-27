@@ -149,7 +149,8 @@ public sealed record LlmMessage(
 
 /// <summary>
 /// <c>kind</c>: itemStarted | audioGenerated | normalized | postProcessed | transcribed | verified |
-/// failed — one per <see cref="AudioGenEvent"/>. Stream group only.
+/// failed | modelLoading — one per <see cref="AudioGenEvent"/>. Stream group only. <c>modelLoading</c>
+/// is not tied to an item: its <c>id</c> is empty and <c>model</c> names the TTS model loading.
 /// </summary>
 public sealed record AudioGenMessage(
     string Kind,
@@ -163,7 +164,8 @@ public sealed record AudioGenMessage(
     bool? Applied = null,
     string? Transcript = null,
     double? Wer = null,
-    bool? Rescued = null);
+    bool? Rescued = null,
+    string? Model = null);
 
 /// <summary>Which settings area changed, so other clients refresh their list.</summary>
 public sealed record SettingsChangedMessage(string Area);

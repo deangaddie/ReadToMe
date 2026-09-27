@@ -58,6 +58,7 @@ namespace Read2Me.App.Api
             ParagraphTtsServiceType.Chatterbox => new(type.ToString(), ChatterboxFields()),
             ParagraphTtsServiceType.ChatterboxTurbo => new(type.ToString(), ChatterboxTurboFields()),
             ParagraphTtsServiceType.Qwen3Base => new(type.ToString(), Qwen3BaseFields()),
+            ParagraphTtsServiceType.Breeze => new(type.ToString(), BreezeFields()),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "No settings schema for this TTS provider."),
         };
 
@@ -142,6 +143,31 @@ namespace Read2Me.App.Api
                     Help: "Sampling randomness. (0.0–2.0)"),
                 new("repetition_penalty", "Repetition Penalty", "number", Min: 1.0, Max: 2.0, Step: 0.05, Default: r.RepetitionPenalty,
                     Help: "Penalizes repeated tokens. Expression comes from inline paralinguistic tags in the text: [laugh] [chuckle] [sigh] [cough] [clear throat] [gasp] [groan] [sniff] [shush]"),
+            ];
+        }
+
+        /// <summary>Breeze TTS 2 on audio.cpp: camelCase JSON names; a blank seed draws a random one per request.</summary>
+        private static IReadOnlyList<SettingsFieldDto> BreezeFields()
+        {
+            var r = BreezeParagraphTtsSettings.Recommended;
+            return
+            [
+                new("modelId", "Model", "string", Default: r.ModelId,
+                    Help: "The audio.cpp server.json model entry."),
+                new("instructedGuidanceScale", "Instructed Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1,
+                    Default: r.InstructedGuidanceScale,
+                    Help: "Guidance scale when the item has voice instructions — higher follows them harder. (1.0–5.0)"),
+                new("plainGuidanceScale", "Plain Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1,
+                    Default: r.PlainGuidanceScale,
+                    Help: "Guidance scale when the item has no voice instructions. 1 is fastest. (1.0–5.0)"),
+                new("temperature", "Temperature", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Temperature,
+                    Help: "Sampling randomness. (0.0–2.0)"),
+                new("topK", "Top K", "number", Min: 1, Step: 1, Default: r.TopK,
+                    Help: "Top-K sampling cutoff."),
+                new("topP", "Top P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Default: r.TopP,
+                    Help: "Nucleus sampling ceiling."),
+                new("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
+                    Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
             ];
         }
 

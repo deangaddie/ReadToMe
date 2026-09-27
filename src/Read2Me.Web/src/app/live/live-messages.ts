@@ -71,6 +71,7 @@ export const LIVE_KINDS = {
     'transcribed',
     'verified',
     'failed',
+    'modelLoading',
   ],
   bookEdit: ['progress', 'done', 'failed'],
   llmTest: ['done', 'failed', 'cancelled'],
@@ -380,6 +381,8 @@ export interface AudioGenMessage {
   transcript?: string | null;
   wer?: number | null;
   rescued?: boolean | null;
+  /** `modelLoading` only: the TTS model being loaded. That kind has an empty `id`. */
+  model?: string | null;
 }
 
 // ---- throughput (group global, 1 s while a run is active) ---------------------------------------

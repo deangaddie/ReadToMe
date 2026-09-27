@@ -72,6 +72,15 @@ export function foldAudioCards(events: readonly AudioGenEvent[], maxCards = 50):
       cards.set(card.key, card);
       continue;
     }
+    if (e.kind === 'modelLoading') {
+      // Not tied to an item: the TTS gate sits below the pipeline. It belongs to whichever card
+      // is still generating — the audio queue runs one item at a time.
+      const generating = Array.from(cards.values())
+        .reverse()
+        .find((c) => c.phases[0]!.state === 'active');
+      generating?.phases[0]!.lines.push(`Loading TTS model ${e.model}…`);
+      continue;
+    }
     const card = get(e.id, e.attempt);
     if (!card) continue;
     switch (e.kind) {

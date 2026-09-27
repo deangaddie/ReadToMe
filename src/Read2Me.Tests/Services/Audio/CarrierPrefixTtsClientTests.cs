@@ -19,6 +19,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             public int CallCount { get; private set; }
             public string? LastText { get; private set; }
+            public string? LastInstructions { get; private set; }
             public byte[] WavBytes { get; set; } = [0x52, 0x49, 0x46, 0x46];
 
             public Task<Stream> GenerateAsync(string text, string? voiceInstructions, Stream referenceAudioStream,
@@ -27,6 +28,7 @@ namespace Read2Me.Tests.Services.Audio
             {
                 CallCount++;
                 LastText = text;
+                LastInstructions = voiceInstructions;
                 return Task.FromResult<Stream>(new MemoryStream(WavBytes, writable: false));
             }
         }
@@ -147,6 +149,34 @@ namespace Read2Me.Tests.Services.Audio
         ];
 
         private const string Transcript = "The quick brown fox.";
+
+        // ── instruction pass-through (audio.cpp spec D5) ──────────────────────
+
+        /// <summary>
+        /// The carrier and the target go out in one call under the item's instruction, so the target
+        /// is spoken as instructed. The Breeze config also pins that its JSON keys are the ones the
+        /// carrier wrapper reads.
+        /// </summary>
+        [Fact]
+        public async Task Carrier_SendsTheInstructionWithCarrierAndTargetInOneCall()
+        {
+            var (client, inner, _) = Build();
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Breeze",
+                Type = ParagraphTtsServiceType.Breeze,
+                SettingsJson = JsonSerializer.Serialize(BreezeParagraphTtsSettings.Recommended with
+                {
+                    CarrierPrefixEnabled = true,
+                }),
+            };
+
+            await client.GenerateAsync("One.", "whispering, afraid", new MemoryStream(), config, null, Transcript);
+
+            Assert.Equal(1, inner.CallCount);
+            Assert.Equal($"{Transcript} One.", inner.LastText);
+            Assert.Equal("whispering, afraid", inner.LastInstructions);
+        }
 
         // ── passthrough ──────────────────────────────────────────────────────
 

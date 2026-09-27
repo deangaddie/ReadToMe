@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Read2Me.E2eTests.Infrastructure.FakeAi;
 
@@ -39,6 +40,12 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
 
     public List<string> LlmPromptsSeen { get; } = [];
 
+    /// <summary>JSON bodies of every fake-audiocpp <c>POST /v1/audio/speech</c>, oldest first.</summary>
+    public List<JsonObject> AudioCppSpeechBodies { get; } = [];
+
+    /// <summary>The model fake-audiocpp reports <c>loaded</c>; a speech request loads the model it names.</summary>
+    private volatile string? _audioCppLoaded;
+
     /// <summary>
     /// Restores per-test defaults. The handler is shared across the collection, so anything a
     /// test sets (LlmReply) or the pipeline records (_lastTtsText, prompts) would otherwise
@@ -51,6 +58,8 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         LlmModels = FakeLlmModelStore.AllLoaded(DefaultModel);
         _lastTtsText = "";
         lock (LlmPromptsSeen) LlmPromptsSeen.Clear();
+        lock (AudioCppSpeechBodies) AudioCppSpeechBodies.Clear();
+        _audioCppLoaded = null;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -67,6 +76,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             "fake-similarity" => Json("""{"similarity": 1.0}"""),
             "fake-tts" => await HandleTtsAsync(request, path, ct),
             "fake-voicedesign" => await HandleTtsAsync(request, path, ct),
+            "fake-audiocpp" => await HandleAudioCppAsync(request, path, ct),
             _ => throw new InvalidOperationException(
                 $"FakeAiRoutingHandler: unexpected request to {request.RequestUri} — a real network call escaped the fakes."),
         };
@@ -121,6 +131,35 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         {
             Content = new ByteArrayContent(FakeAiResponses.SilentWav()),
         };
+    }
+
+    /// <summary>
+    /// The audio.cpp TTS runtime: <c>GET /v1/models</c> and <c>POST /v1/audio/speech</c> (JSON in,
+    /// WAV out). The spoken input feeds fake-whisper, as the other TTS fakes' text does.
+    /// </summary>
+    private async Task<HttpResponseMessage> HandleAudioCppAsync(
+        HttpRequestMessage request, string path, CancellationToken ct)
+    {
+        if (path == "/v1/models")
+        {
+            var models = new[] { "breeze-q8", "breeze-design" }
+                .Select(id => new { id, loaded = id == _audioCppLoaded });
+            return Json(JsonSerializer.Serialize(new { @object = "list", data = models }));
+        }
+
+        if (path == "/v1/audio/speech")
+        {
+            var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!.AsObject();
+            lock (AudioCppSpeechBodies) AudioCppSpeechBodies.Add(body);
+            _lastTtsText = body["input"]?.GetValue<string>() ?? "";
+            _audioCppLoaded = body["model"]?.GetValue<string>();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(FakeAiResponses.SilentWav()),
+            };
+        }
+
+        throw new InvalidOperationException($"fake-audiocpp: unexpected path {path}");
     }
 
     private static string? ExtractModel(string requestBody)

@@ -100,6 +100,15 @@ describe('mapAudioGenMessage', () => {
         { kind: 'failed', ...base, reason: 'tts 500' },
         { kind: 'failed', ...base, reason: 'tts 500' },
       ],
+      [
+        {
+          kind: 'modelLoading',
+          id: '00000000-0000-0000-0000-000000000000',
+          attempt: 0,
+          model: 'breeze-q8',
+        },
+        { kind: 'modelLoading', model: 'breeze-q8' },
+      ],
     ];
     for (const [wire, expected] of cases) {
       expect(mapAudioGenMessage(wire)).toEqual(expected);

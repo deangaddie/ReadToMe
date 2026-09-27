@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
+using Read2Me.Services;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Api;
@@ -40,6 +43,46 @@ public class AudioApiTests(E2eAppFixture app)
         Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("status").ValueKind);
         Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("outcome").ValueKind);
         Assert.NotEqual(JsonValueKind.Null, status.RootElement.GetProperty("audioVersion").ValueKind);
+    }
+
+    /// <summary>
+    /// The audio.cpp tracer: with the Breeze config active, one audio-queue run goes through the
+    /// shared audio.cpp client (gate check, then speech request) and lands its audio.
+    /// </summary>
+    [Fact]
+    public async Task A_Breeze_config_generates_through_audiocpp()
+    {
+        app.FakeAi.Reset();
+        using var scope = app.Services.CreateScope();
+        var tts = scope.ServiceProvider.GetRequiredService<ParagraphTtsSettingsService>();
+        var previous = await tts.GetActiveConfigIdAsync();
+        var breeze = (await tts.GetAllConfigsAsync()).Single(c => c.Name == WorkspaceSeeder.BreezeConfigName);
+        await tts.SetActiveConfigAsync(breeze.Id);
+        try
+        {
+            var folder = $"api-audio-breeze-{Guid.NewGuid():N}";
+            var builder = await app.SeedProjectAsync(folder, "Breeze Book", "Author");
+            await app.SeedNarratorVoiceAsync(folder);
+            var itemId = builder.ItemId("n1");
+
+            var enqueue = await Http.PostAsJsonAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
+                new { level = "chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
+            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
+
+            await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+
+            Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "audio", $"{itemId}.wav")));
+            List<JsonObject> bodies;
+            lock (app.FakeAi.AudioCppSpeechBodies) bodies = [.. app.FakeAi.AudioCppSpeechBodies];
+            Assert.Equal(2, bodies.Count); // n1 + n2
+            Assert.All(bodies, b => Assert.Equal("breeze-q8", b["model"]!.GetValue<string>()));
+            Assert.Contains(bodies, b => b["input"]!.GetValue<string>() == "It was a dark and stormy night.");
+        }
+        finally
+        {
+            if (previous is { } id) await tts.SetActiveConfigAsync(id);
+        }
     }
 
     [Fact]

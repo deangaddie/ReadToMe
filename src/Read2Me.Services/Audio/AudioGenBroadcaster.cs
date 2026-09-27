@@ -16,5 +16,12 @@ namespace Read2Me.Services.Audio
     public sealed record Verified(Guid Id, int Attempt, bool Ok, double? Wer, string? Reason, bool Rescued = false) : AudioGenEvent;
     public sealed record Failed(Guid Id, int Attempt, string Reason) : AudioGenEvent;
 
+    /// <summary>
+    /// The TTS runtime is about to load <c>ModelId</c> to serve the next request (a cold first
+    /// request takes 9–31 s). Not tied to an item: the gate that sees it sits below the item
+    /// pipeline, so a consumer attaches it to whichever item is generating.
+    /// </summary>
+    public sealed record TtsModelLoading(string ModelId) : AudioGenEvent;
+
 
 }

@@ -189,6 +189,36 @@ namespace Read2Me.Tests.App
             Assert.Equal(42, round.CarrierMaxTargetChars);
         }
 
+        // ---- Breeze ----
+
+        [Fact]
+        public void FromConfig_BuildConfig_RoundTripsBreezeSettings()
+        {
+            var original = BreezeParagraphTtsSettings.Recommended with
+            {
+                BaseUrl = "http://localhost:8004",
+                ModelId = "breeze-custom",
+                InstructedGuidanceScale = 2.5,
+                Seed = 11,
+                MaxChunkChars = 333,
+                CarrierPrefixEnabled = true,
+            };
+            var config = new ParagraphTtsServiceConfig
+            {
+                Name = "Breeze",
+                Type = ParagraphTtsServiceType.Breeze,
+                SettingsJson = JsonSerializer.Serialize(original),
+            };
+
+            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
+            Assert.Equal("http://localhost:8004", form.BaseUrl);
+            Assert.Equal(333, form.MaxChunkChars);
+
+            var rebuilt = form.BuildConfig();
+
+            Assert.Equal(original, JsonSerializer.Deserialize<BreezeParagraphTtsSettings>(rebuilt.SettingsJson));
+        }
+
         // ---- Chatterbox ----
 
         [Fact]

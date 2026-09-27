@@ -21,6 +21,9 @@ namespace Read2Me.E2eTests.Infrastructure;
 /// </summary>
 public static class WorkspaceSeeder
 {
+    /// <summary>The seeded Breeze paragraph-TTS config, pointed at fake-audiocpp. Never the active one.</summary>
+    public const string BreezeConfigName = "fake-breeze";
+
     public static async Task SeedServiceConfigsAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
@@ -48,6 +51,14 @@ public static class WorkspaceSeeder
             Name = "fake",
             Type = ParagraphTtsServiceType.VoxCpm2,
             SettingsJson = JsonSerializer.Serialize(new VoxCpm2ParagraphTtsSettings { BaseUrl = "http://fake-tts" }),
+        });
+
+        // Not active: a test that wants audio.cpp switches to it and back.
+        await sp.GetRequiredService<ParagraphTtsSettingsService>().CreateConfigAsync(new ParagraphTtsServiceConfig
+        {
+            Name = BreezeConfigName,
+            Type = ParagraphTtsServiceType.Breeze,
+            SettingsJson = JsonSerializer.Serialize(new BreezeParagraphTtsSettings { BaseUrl = "http://fake-audiocpp" }),
         });
 
         await sp.GetRequiredService<SemanticSimilaritySettingsService>().CreateConfigAsync(new SemanticSimilarityServiceConfig

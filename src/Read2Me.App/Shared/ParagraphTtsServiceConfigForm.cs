@@ -135,6 +135,18 @@ namespace Read2Me.App.Shared
                     form.CarrierMaxTargetChars = qb.CarrierMaxTargetChars;
                     form.SettingsJson = JsonSerializer.Serialize(qb);
                     break;
+
+                // Legacy UI: connection + chunk/carrier only; Breeze tuning lives in the Angular app.
+                case ParagraphTtsServiceType.Breeze:
+                    var br = string.IsNullOrWhiteSpace(c.SettingsJson)
+                        ? BreezeParagraphTtsSettings.Recommended
+                        : JsonSerializer.Deserialize<BreezeParagraphTtsSettings>(c.SettingsJson) ?? BreezeParagraphTtsSettings.Recommended;
+                    form.BaseUrl = br.BaseUrl;
+                    form.MaxChunkChars = br.MaxChunkChars;
+                    form.CarrierPrefixEnabled = br.CarrierPrefixEnabled;
+                    form.CarrierMaxTargetChars = br.CarrierMaxTargetChars;
+                    form.SettingsJson = JsonSerializer.Serialize(br);
+                    break;
             }
 
             return form;
@@ -151,6 +163,7 @@ namespace Read2Me.App.Shared
                 case ParagraphTtsServiceType.Chatterbox:
                 case ParagraphTtsServiceType.ChatterboxTurbo:
                 case ParagraphTtsServiceType.Qwen3Base:
+                case ParagraphTtsServiceType.Breeze:
                     if (string.IsNullOrWhiteSpace(BaseUrl))
                         return "Base URL is required.";
                     if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out _))
@@ -169,6 +182,7 @@ namespace Read2Me.App.Shared
                 ParagraphTtsServiceType.Chatterbox => BuildChatterboxSettingsJson(),
                 ParagraphTtsServiceType.ChatterboxTurbo => BuildChatterboxTurboSettingsJson(),
                 ParagraphTtsServiceType.Qwen3Base => BuildQwen3BaseSettingsJson(),
+                ParagraphTtsServiceType.Breeze => BuildBreezeSettingsJson(),
                 _ => throw new NotSupportedException($"Unsupported paragraph TTS type '{Type}'."),
             };
 
@@ -254,6 +268,24 @@ namespace Read2Me.App.Shared
                 ? Qwen3ParagraphTtsSettings.Recommended
                 : JsonSerializer.Deserialize<Qwen3ParagraphTtsSettings>(SettingsJson)
                   ?? Qwen3ParagraphTtsSettings.Recommended;
+
+            settings = settings with
+            {
+                BaseUrl = BaseUrl.Trim(),
+                MaxChunkChars = MaxChunkChars,
+                CarrierPrefixEnabled = CarrierPrefixEnabled,
+                CarrierMaxTargetChars = CarrierMaxTargetChars,
+            };
+            return JsonSerializer.Serialize(settings);
+        }
+
+        // BaseUrl + chunk/carrier owned by the form; the tuning keys are kept as loaded (Angular edits them).
+        private string BuildBreezeSettingsJson()
+        {
+            var settings = string.IsNullOrWhiteSpace(SettingsJson)
+                ? BreezeParagraphTtsSettings.Recommended
+                : JsonSerializer.Deserialize<BreezeParagraphTtsSettings>(SettingsJson)
+                  ?? BreezeParagraphTtsSettings.Recommended;
 
             settings = settings with
             {

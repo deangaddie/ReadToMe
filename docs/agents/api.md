@@ -281,7 +281,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characte
 
 # per-voice settings overrides are sparse patches keyed by the provider's settingsJson names;
 # the schema per provider type (ranges, defaults) drives an editor:
-curl -s 'http://localhost:5000/api/settings/paragraph-tts/schema?type=VoxCpm2'   # VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base
+curl -s 'http://localhost:5000/api/settings/paragraph-tts/schema?type=VoxCpm2'   # VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base|Breeze
 curl -s 'http://localhost:5000/api/settings/voice-design/schema?type=Qwen3'      # VoxCpm2|Qwen3
 # → { type, fields: [{ key, label, kind: number|boolean|enum|string|text, min?, max?, step?, options?, default, help?, nullable }] }
 # then: SetVoiceTtsSettingsOverride / SetVoiceSettingsOverride commands with json = '{"cfg_value":3.5}' (null clears)

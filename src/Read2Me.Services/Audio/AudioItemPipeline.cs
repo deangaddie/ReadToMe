@@ -3,6 +3,7 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
@@ -31,7 +32,7 @@ namespace Read2Me.Services.Audio
         /// <c>IAiServiceReporter.ReportFailure</c> gives <c>LlmCompletionRunner</c>: an
         /// <see cref="AiServiceUnavailableException"/> <i>is</i> "reported to the watchdog" —
         /// audio's base URL is client-private, so the exception type is how that bool travels up.
-        /// Everything else is <see cref="WorkOutcome.Failed"/>.
+        /// A <see cref="TtsBusyException"/> is <see cref="WorkOutcome.Busy"/>. Everything else is <see cref="WorkOutcome.Failed"/>.
         /// </summary>
         public async Task<PipelineResult> RunAsync(PipelineRequest req, CancellationToken ct)
         {
@@ -48,6 +49,13 @@ namespace Read2Me.Services.Audio
                 logger.LogWarning(ex, "Item {Id} pipeline aborted — managed AI service unavailable",
                     req.ParagraphItemId);
                 return Aborted(new WorkOutcome.Unavailable(ex.Message));
+            }
+            catch (TtsBusyException ex)
+            {
+                // audio.cpp is generating with another model (voice design runs beside the queue).
+                // Alive, not down: the queue's RetryAfter backoff waits it out.
+                logger.LogInformation("Item {Id} pipeline deferred — {Reason}", req.ParagraphItemId, ex.Message);
+                return Aborted(new WorkOutcome.Busy(ex.Message));
             }
             catch (Exception ex)
             {

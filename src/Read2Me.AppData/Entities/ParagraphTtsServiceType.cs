@@ -7,5 +7,7 @@ namespace Read2Me.AppData.Entities
         Chatterbox = 1,
         ChatterboxTurbo = 2,
         Qwen3Base = 3,
+        /// <summary>Breeze TTS 2 voice cloning on the audio.cpp runtime; follows per-item VoiceInstructions.</summary>
+        Breeze = 4,
     }
 }

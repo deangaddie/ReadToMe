@@ -36,6 +36,7 @@ export const ParagraphTtsServiceType = {
   Chatterbox: 1,
   ChatterboxTurbo: 2,
   Qwen3Base: 3,
+  Breeze: 4,
 } as const;
 export type ParagraphTtsServiceType =
   (typeof ParagraphTtsServiceType)[keyof typeof ParagraphTtsServiceType];

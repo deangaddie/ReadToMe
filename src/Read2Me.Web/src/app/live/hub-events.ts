@@ -69,6 +69,8 @@ export type AudioGenEvent =
       reason?: string | null;
       rescued: boolean;
     }
-  | { kind: 'failed'; id: string; attempt: number; reason: string };
+  | { kind: 'failed'; id: string; attempt: number; reason: string }
+  /** The TTS runtime is loading a model for the next request; not tied to an item. */
+  | { kind: 'modelLoading'; model: string };
 
 export type AudioGenEventKind = AudioGenEvent['kind'];

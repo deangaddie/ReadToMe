@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
@@ -92,6 +93,24 @@ namespace Read2Me.Tests.Services.Audio
             var result = await sut.RunAsync(Request(), CancellationToken.None);
 
             Assert.Equal(new WorkOutcome.Unavailable(ex.Message), result.Outcome);
+        }
+
+        /// <summary>
+        /// audio.cpp stayed busy with another model through the client's 503 retries: the provider is
+        /// alive, so the item waits on the queue's <c>RetryAfter</c> backoff instead of failing.
+        /// </summary>
+        [Fact]
+        public async Task TtsBusy_IsBusy_AndTheQueueRetriesAfterABackoff()
+        {
+            var ex = new TtsBusyException("http://localhost:8004", "breeze-q8");
+            var sut = PipelineWhoseTtsThrows(ex);
+
+            var result = await sut.RunAsync(Request(), CancellationToken.None);
+
+            Assert.Equal(new WorkOutcome.Busy(ex.Message), result.Outcome);
+            Assert.Equal(
+                new Plan.Now(new Disposition.RetryAfter(TimeSpan.FromSeconds(2))),
+                QueueDisposition.Decide(result.Outcome, hasApplicableWork: true, default));
         }
 
         /// <summary>An unmanaged (remote) endpoint's error rethrows unreported, and is ordinary failure.</summary>

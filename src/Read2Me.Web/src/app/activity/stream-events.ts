@@ -91,6 +91,8 @@ export function mapAudioGenMessage(m: AudioGenMessage): AudioGenEvent {
       };
     case 'failed':
       return { kind: 'failed', ...base, reason: m.reason ?? '' };
+    case 'modelLoading':
+      return { kind: 'modelLoading', model: m.model ?? '' };
   }
 }
 

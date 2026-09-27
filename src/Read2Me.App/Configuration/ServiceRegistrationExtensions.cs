@@ -20,6 +20,7 @@ using Read2Me.Services;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
@@ -175,6 +176,12 @@ public static class ServiceRegistrationExtensions
         services.AddKeyedScoped<IParagraphTtsClient, ChatterboxParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.Chatterbox);
         services.AddKeyedScoped<IParagraphTtsClient, ChatterboxTurboParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.ChatterboxTurbo);
         services.AddKeyedScoped<IParagraphTtsClient, Qwen3ParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.Qwen3Base);
+        services.AddKeyedScoped<IParagraphTtsClient, BreezeParagraphTtsClient>(Read2Me.AppData.Entities.ParagraphTtsServiceType.Breeze);
+        // audio.cpp TTS runtime: the gate is a singleton so its per-endpoint locks span every scope.
+        services.AddHttpClient(AudioCppClient.HttpClientName, c => c.Timeout = AudioCppClient.HttpTimeout);
+        services.AddSingleton(AudioCppRetryPolicy.Default);
+        services.AddSingleton<IAudioCppGate, AudioCppGate>();
+        services.AddSingleton<IAudioCppClient, AudioCppClient>();
         services.AddSingleton<ITextProcessingStepCatalog, TextProcessingStepCatalog>();
         services.AddSingleton(new TextProcessingStepDescriptor(
             "to-sentence-case",
