@@ -38,8 +38,10 @@ import { ToastService } from '@app/ui/toast/toast.service';
         [value]="draft()"
         (input)="draft.set($any($event.target).value)"
       ></textarea>
-      @if (stored(); as s) {
+      @if (stored()) {
         <mat-hint>Kept short so every designed voice lands within the Reference Limit.</mat-hint>
+      }
+      @if (stored(); as s) {
         <mat-hint align="end" data-testid="sample-text-count" [class.sample__over]="overLimit()">
           {{ draft().length }} / {{ s.maxLength }}
         </mat-hint>
