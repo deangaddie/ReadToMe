@@ -123,6 +123,8 @@ namespace Read2Me.Services.Audio.AudioCpp
                 };
             if (!string.IsNullOrWhiteSpace(request.ReferenceText))
                 body["reference_text"] = request.ReferenceText;
+            if (!string.IsNullOrWhiteSpace(request.Language))
+                body["language"] = request.Language;
 
             var options = new JsonObject();
             foreach (var (key, value) in request.Options)

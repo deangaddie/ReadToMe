@@ -313,14 +313,15 @@ namespace Read2Me.Tests.App
         {
             var original = Qwen3ParagraphTtsSettings.Recommended with
             {
-                BaseUrl = "http://localhost:8101",
-                ApiKey = "secret",
+                BaseUrl = "http://localhost:8004",
+                ModelId = "qwen3-base-bf16",
                 Language = "en",
                 Temperature = 0.7,
                 TopP = 0.9,
                 TopK = 40,
                 RepetitionPenalty = 1.1,
                 MaxNewTokens = 512,
+                Seed = 9,
                 MaxChunkChars = 333,
             };
             var config = new ParagraphTtsServiceConfig
@@ -331,7 +332,7 @@ namespace Read2Me.Tests.App
             };
 
             var form = ParagraphTtsServiceConfigForm.FromConfig(config);
-            Assert.Equal("http://localhost:8101", form.BaseUrl);
+            Assert.Equal("http://localhost:8004", form.BaseUrl);
             Assert.Equal(333, form.MaxChunkChars);
 
             var rebuilt = form.BuildConfig();

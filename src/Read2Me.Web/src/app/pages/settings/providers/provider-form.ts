@@ -202,7 +202,7 @@ export function buildProviderConfig(
 ): ProviderConfig {
   const values = fieldValues(fields, form.settings);
   const edited = new Set(fields.map((f) => f.key.toLowerCase()));
-  // A stored key no field edits (Qwen3-Base's API key, set over the API) rides along untouched.
+  // A stored key no field edits (Qwen3 voice design's API key, set over the API) rides along untouched.
   const settings: SettingsValues = Object.fromEntries(
     Object.entries(form.settings).filter(([key]) => !edited.has(key)),
   );

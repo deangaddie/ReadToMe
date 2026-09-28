@@ -105,7 +105,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app)
         try
         {
             Assert.Equal(
-                """{"baseUrl":"http://example-tts","apiKey":null,"language":"auto","temperature":null,"top_p":null,"top_k":40,"repetition_penalty":null,"max_new_tokens":null,"maxChunkChars":500,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""",
+                """{"baseUrl":"http://example-tts","modelId":"qwen3-base","language":"auto","temperature":null,"top_p":null,"top_k":40,"repetition_penalty":null,"max_new_tokens":null,"seed":null,"maxChunkChars":500,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""",
                 created.GetProperty("settingsJson").GetString());
         }
         finally

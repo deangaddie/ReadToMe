@@ -112,8 +112,8 @@ public sealed class E2eAppFixture : IAsyncLifetime
     public Task<Guid> SeedEditableVoiceAsync(string folderName, Guid characterId, string voiceName = "Alice Voice") =>
         WorkspaceSeeder.SeedEditableVoiceAsync(Services, WorkspaceDir, folderName, characterId, voiceName);
 
-    public Task SeedNarratorVoiceAsync(string folderName) =>
-        WorkspaceSeeder.SeedNarratorVoiceAsync(Services, WorkspaceDir, folderName);
+    public Task SeedNarratorVoiceAsync(string folderName, string? transcript = null) =>
+        WorkspaceSeeder.SeedNarratorVoiceAsync(Services, WorkspaceDir, folderName, transcript);
 
     /// <summary>
     /// Polls a queue-status endpoint (e.g. <c>/api/attribution/queue</c>) until nothing is queued or

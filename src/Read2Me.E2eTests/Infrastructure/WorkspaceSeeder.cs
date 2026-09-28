@@ -30,6 +30,9 @@ public static class WorkspaceSeeder
     /// <summary>The seeded Chatterbox paragraph-TTS config, pointed at fake-audiocpp. Never the active one.</summary>
     public const string ChatterboxConfigName = "fake-chatterbox";
 
+    /// <summary>The seeded Qwen3-Base paragraph-TTS config, pointed at fake-audiocpp. Never the active one.</summary>
+    public const string Qwen3BaseConfigName = "fake-qwen3-base";
+
     public static async Task SeedServiceConfigsAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
@@ -73,6 +76,14 @@ public static class WorkspaceSeeder
             Name = ChatterboxConfigName,
             Type = ParagraphTtsServiceType.Chatterbox,
             SettingsJson = JsonSerializer.Serialize(new ChatterboxParagraphTtsSettings { BaseUrl = "http://fake-audiocpp" }),
+        });
+
+        // Not active: a test that wants Qwen3-Base on audio.cpp switches to it and back.
+        await sp.GetRequiredService<ParagraphTtsSettingsService>().CreateConfigAsync(new ParagraphTtsServiceConfig
+        {
+            Name = Qwen3BaseConfigName,
+            Type = ParagraphTtsServiceType.Qwen3Base,
+            SettingsJson = JsonSerializer.Serialize(new Qwen3ParagraphTtsSettings { BaseUrl = "http://fake-audiocpp" }),
         });
 
         await sp.GetRequiredService<SemanticSimilaritySettingsService>().CreateConfigAsync(new SemanticSimilarityServiceConfig
@@ -292,9 +303,10 @@ public static class WorkspaceSeeder
     /// <summary>
     /// Gives the built-in Narrator character a cloned voice with on-disk reference audio
     /// and the default VoiceRule, so narration items resolve a voice and can be synthesised.
+    /// A <paramref name="transcript"/> is the reference audio's, which ICL cloners (Qwen3-Base) require.
     /// </summary>
     public static async Task SeedNarratorVoiceAsync(
-        IServiceProvider services, string workspaceDir, string folderName)
+        IServiceProvider services, string workspaceDir, string folderName, string? transcript = null)
     {
         var folderPath = Path.Combine(workspaceDir, folderName);
         var voicesDir = Path.Combine(folderPath, "voices");
@@ -311,6 +323,7 @@ public static class WorkspaceSeeder
             Name = "Narrator Voice",
             Source = VoiceSource.Uploaded,
             AudioFileName = "voices/narrator.wav",
+            Transcript = transcript,
         };
         db.Voices.Add(voice);
         db.VoiceRules.Add(new VoiceRule

@@ -147,6 +147,54 @@ public class AudioApiTests(E2eAppFixture app)
         }
     }
 
+    /// <summary>
+    /// With the Qwen3-Base config active, an audio-queue run speaks on audio.cpp: an ICL clone
+    /// (reference plus the voice's transcript), the language top-level, and only a seed in options
+    /// while the sampling knobs are unset.
+    /// </summary>
+    [Fact]
+    public async Task A_Qwen3Base_config_generates_through_audiocpp()
+    {
+        app.FakeAi.Reset();
+        using var scope = app.Services.CreateScope();
+        var tts = scope.ServiceProvider.GetRequiredService<ParagraphTtsSettingsService>();
+        var previous = await tts.GetActiveConfigIdAsync();
+        var qwen3 = (await tts.GetAllConfigsAsync()).Single(c => c.Name == WorkspaceSeeder.Qwen3BaseConfigName);
+        await tts.SetActiveConfigAsync(qwen3.Id);
+        try
+        {
+            var folder = $"api-audio-qwen3-{Guid.NewGuid():N}";
+            var builder = await app.SeedProjectAsync(folder, "Qwen3 Book", "Author");
+            await app.SeedNarratorVoiceAsync(folder, transcript: "The narrator's reference line.");
+            var itemId = builder.ItemId("n1");
+
+            var enqueue = await Http.PostAsJsonAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
+                new { level = "chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
+            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
+
+            await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+
+            Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "audio", $"{itemId}.wav")));
+            List<JsonObject> bodies;
+            lock (app.FakeAi.AudioCppSpeechBodies) bodies = [.. app.FakeAi.AudioCppSpeechBodies];
+            Assert.Equal(2, bodies.Count); // n1 + n2
+            Assert.Contains(bodies, b => b["input"]!.GetValue<string>() == "It was a dark and stormy night.");
+            Assert.All(bodies, b =>
+            {
+                Assert.Equal("qwen3-base", b["model"]!.GetValue<string>());
+                Assert.Equal("base64", b["voice_ref"]!["type"]!.GetValue<string>());
+                Assert.Equal("The narrator's reference line.", b["reference_text"]!.GetValue<string>());
+                Assert.Equal("auto", b["language"]!.GetValue<string>());
+                Assert.Equal(["seed"], b["options"]!.AsObject().Select(o => o.Key));
+            });
+        }
+        finally
+        {
+            if (previous is { } id) await tts.SetActiveConfigAsync(id);
+        }
+    }
+
     [Fact]
     public async Task Enqueue_unknown_folder_is_404()
     {

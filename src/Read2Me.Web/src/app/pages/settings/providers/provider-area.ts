@@ -123,7 +123,7 @@ export const PARAGRAPH_TTS_AREA: ProviderArea = {
     {
       value: ParagraphTtsServiceType.Qwen3Base,
       label: 'Qwen3Base',
-      urlExample: 'http://localhost:8101',
+      urlExample: 'http://localhost:8004',
     },
     { value: ParagraphTtsServiceType.Breeze, label: 'Breeze', urlExample: 'http://localhost:8004' },
   ],

@@ -181,14 +181,22 @@ namespace Read2Me.App.Api
             ];
         }
 
-        /// <summary>Qwen3-Base TTS: snake_case JSON names, sampling knobs nullable ("server default").</summary>
+        /// <summary>
+        /// Qwen3-Base TTS on audio.cpp: snake_case JSON names, sampling knobs nullable ("server default").
+        /// The keys are the native server's; the client maps them onto audio.cpp's (max_new_tokens →
+        /// max_tokens). A blank seed draws a random one per request.
+        /// </summary>
         private static IReadOnlyList<SettingsFieldDto> Qwen3BaseFields()
         {
             var r = Qwen3ParagraphTtsSettings.Recommended;
             return
             [
+                new("modelId", "Model", "string", Default: r.ModelId,
+                    Help: "The audio.cpp server.json model entry."),
                 new("language", "Language", "enum", Options: Qwen3Languages, Default: r.Language),
                 ..Qwen3SamplingFields("temperature", "top_p", "top_k", "repetition_penalty", "max_new_tokens"),
+                new("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
+                    Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
             ];
         }
 

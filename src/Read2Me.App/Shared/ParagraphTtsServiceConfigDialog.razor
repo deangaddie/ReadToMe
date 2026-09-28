@@ -86,7 +86,7 @@
             @if (_form.Type == ParagraphTtsServiceType.Qwen3Base)
             {
                 <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
-                              Placeholder="http://localhost:8101" Required="true" Immediate="true"
+                              Placeholder="http://localhost:8004" Required="true" Immediate="true"
                               UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
 
                 <MudNumericField @bind-Value="_form.MaxChunkChars" Label="Max Chunk Chars" Variant="Variant.Outlined"

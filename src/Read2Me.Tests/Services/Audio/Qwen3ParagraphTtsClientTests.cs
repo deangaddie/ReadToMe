@@ -1,200 +1,203 @@
-using System.Globalization;
-using System.Net;
-using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.ParagraphTts;
-using Read2Me.Services.Health;
+using Read2Me.Services.Audio.ParagraphTts.Settings;
+using Read2Me.Services.Events;
 using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
 {
+    /// <summary>
+    /// Qwen3-Base paragraph TTS down to the wire: the Qwen3 client over the real audio.cpp client
+    /// and gate, against an in-memory audio.cpp server. An ICL clone — reference audio plus its
+    /// transcript — with the sampling knobs sent only when set.
+    /// </summary>
     public class Qwen3ParagraphTtsClientTests
     {
-        private static readonly ParagraphTtsServiceConfig Config = new()
+        private static readonly byte[] RefAudio = [1, 2, 3, 4, 5];
+
+        private static ParagraphTtsServiceConfig Config(Qwen3ParagraphTtsSettings? settings = null) => new()
         {
-            Name = "test",
+            Name = "qwen3-base",
             Type = ParagraphTtsServiceType.Qwen3Base,
-            SettingsJson = """{"baseUrl":"http://test","language":"en"}""",
+            SettingsJson = JsonSerializer.Serialize(
+                settings ?? Qwen3ParagraphTtsSettings.Recommended with { BaseUrl = "http://acpp:8004" }),
         };
 
-        private static byte[] FakeWav() =>
-            Encoding.ASCII.GetBytes("RIFF____WAVEfmt ");
+        private sealed record Sut(Qwen3ParagraphTtsClient Client, FakeAudioCppHandler Handler);
 
-        [Fact]
-        public async Task GenerateAsync_PostsMultipartToTtsEndpoint_WithTextLanguageAndTranscript()
+        private static Sut Build(FakeAudioCppHandler? handler = null)
         {
-            var handler = new FakeHttpMessageHandler(FakeWav());
-            var factory = new FakeHttpClientFactory(handler);
-            var sut = new Qwen3ParagraphTtsClient(factory, NullLogger<Qwen3ParagraphTtsClient>.Instance, new FakeAiServiceReporter());
-
-            using var refAudio = new MemoryStream(Encoding.UTF8.GetBytes("fake-wav"));
-            await sut.GenerateAsync("hello world", "ignored instructions", refAudio, Config, null, referenceTranscript: "the sample text");
-
-            Assert.Single(handler.Requests);
-            var req = handler.Requests[0];
-            Assert.Equal(HttpMethod.Post, req.Method);
-            Assert.EndsWith("/tts", req.RequestUri!.AbsolutePath);
-
-            Assert.Equal("hello world", handler.Fields["text"]);
-            Assert.Equal("en", handler.Fields["language"]);
-            Assert.Equal("the sample text", handler.Fields["voice_transcript"]);
+            handler ??= new FakeAudioCppHandler { LoadedModel = "qwen3-base" };
+            var factory = new SingleHandlerHttpClientFactory(handler);
+            var gate = new AudioCppGate(factory, new EventBroadcaster<AudioGenEvent>());
+            var audioCpp = new AudioCppClient(
+                factory, gate, new FakeAiServiceReporter(),
+                new AudioCppRetryPolicy([TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]),
+                NullLogger<AudioCppClient>.Instance);
+            return new Sut(new Qwen3ParagraphTtsClient(audioCpp), handler);
         }
 
+        private static Task<Stream> Generate(Sut sut, string? instructions = null,
+            ParagraphTtsServiceConfig? config = null, string? overrideJson = null,
+            string? transcript = "the reference transcript") =>
+            sut.Client.GenerateAsync("Hello there.", instructions, new MemoryStream(RefAudio),
+                config ?? Config(), overrideJson, transcript);
+
+        private static Dictionary<string, string> Options(Sut sut) =>
+            JsonDocument.Parse(sut.Handler.SpeechBodies.Single().ToJsonString()).RootElement
+                .GetProperty("options").EnumerateObject().ToDictionary(o => o.Name, o => o.Value.GetString()!);
+
         [Fact]
-        public async Task GenerateAsync_WithNullReferenceTranscript_ThrowsWithoutCallingService()
+        public async Task Posts_an_icl_clone_with_base64_reference_and_the_voice_transcript()
         {
-            var handler = new FakeHttpMessageHandler(FakeWav());
-            var factory = new FakeHttpClientFactory(handler);
-            var sut = new Qwen3ParagraphTtsClient(factory, NullLogger<Qwen3ParagraphTtsClient>.Instance, new FakeAiServiceReporter());
+            var sut = Build();
 
-            using var refAudio = new MemoryStream(new byte[4]);
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                sut.GenerateAsync("text", null, refAudio, Config, null));
+            var wav = await Generate(sut);
 
-            Assert.Empty(handler.Requests);
+            var body = sut.Handler.SpeechBodies.Single();
+            Assert.Equal("qwen3-base", body["model"]!.GetValue<string>());
+            Assert.Equal("Hello there.", body["input"]!.GetValue<string>());
+            Assert.Equal("base64", body["voice_ref"]!["type"]!.GetValue<string>());
+            Assert.Equal(Convert.ToBase64String(RefAudio), body["voice_ref"]!["data"]!.GetValue<string>());
+            Assert.Equal("the reference transcript", body["reference_text"]!.GetValue<string>());
+            Assert.Equal(FakeAudioCppHandler.Wav, ((MemoryStream)wav).ToArray());
         }
 
-        [Fact]
-        public async Task GenerateAsync_OmitsNullSamplingParams_SendsOnlyNonNullOnes()
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task A_missing_transcript_throws_before_any_request(string? transcript)
         {
-            var handler = new FakeHttpMessageHandler(FakeWav());
-            var factory = new FakeHttpClientFactory(handler);
-            var sut = new Qwen3ParagraphTtsClient(factory, NullLogger<Qwen3ParagraphTtsClient>.Instance, new FakeAiServiceReporter());
+            var sut = Build();
 
-            using var refAudio = new MemoryStream(new byte[4]);
-            await sut.GenerateAsync("text", null, refAudio, Config, null, referenceTranscript: "sample");
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Generate(sut, transcript: transcript));
 
-            Assert.False(handler.Fields.ContainsKey("temperature"));
-            Assert.False(handler.Fields.ContainsKey("top_p"));
-            Assert.False(handler.Fields.ContainsKey("top_k"));
-            Assert.False(handler.Fields.ContainsKey("repetition_penalty"));
-            Assert.False(handler.Fields.ContainsKey("max_new_tokens"));
+            Assert.Empty(sut.Handler.Paths);
         }
 
-        [Fact]
-        public async Task GenerateAsync_WithSamplingParamsSet_SendsThemInvariantCultureFormatted()
+        [Theory]
+        [InlineData("auto", "auto")]
+        [InlineData("en", "english")]
+        [InlineData("zh", "chinese")]
+        [InlineData("ja", "japanese")]
+        [InlineData("", "auto")]
+        public async Task The_language_code_goes_top_level_as_the_name_audiocpp_knows(string code, string expected)
         {
-            var configWithSampling = new ParagraphTtsServiceConfig
+            // audio.cpp reads the Qwen3 language from the top-level field only, by codec language name.
+            var sut = Build();
+
+            await Generate(sut, config: Config(Qwen3ParagraphTtsSettings.Recommended with
             {
-                Name = "test",
-                Type = ParagraphTtsServiceType.Qwen3Base,
-                SettingsJson = """{"baseUrl":"http://test","language":"en","temperature":0.7,"top_p":0.9,"top_k":40,"repetition_penalty":1.1,"max_new_tokens":512}""",
-            };
-            var handler = new FakeHttpMessageHandler(FakeWav());
-            var factory = new FakeHttpClientFactory(handler);
-            var sut = new Qwen3ParagraphTtsClient(factory, NullLogger<Qwen3ParagraphTtsClient>.Instance, new FakeAiServiceReporter());
+                BaseUrl = "http://acpp:8004",
+                Language = code,
+            }));
 
-            using var refAudio = new MemoryStream(new byte[4]);
-            await sut.GenerateAsync("text", null, refAudio, configWithSampling, null, referenceTranscript: "sample");
-
-            Assert.Equal((0.7).ToString(CultureInfo.InvariantCulture), handler.Fields["temperature"]);
-            Assert.Equal((0.9).ToString(CultureInfo.InvariantCulture), handler.Fields["top_p"]);
-            Assert.Equal("40", handler.Fields["top_k"]);
-            Assert.Equal((1.1).ToString(CultureInfo.InvariantCulture), handler.Fields["repetition_penalty"]);
-            Assert.Equal("512", handler.Fields["max_new_tokens"]);
+            Assert.Equal(expected, sut.Handler.SpeechBodies.Single()["language"]!.GetValue<string>());
+            Assert.False(Options(sut).ContainsKey("language"));
         }
 
         [Fact]
-        public async Task GenerateAsync_WithApiKey_SendsBearerAuthorizationHeader()
+        public async Task The_recommended_settings_send_only_a_seed_leaving_sampling_to_audiocpp()
         {
-            var configWithKey = new ParagraphTtsServiceConfig
+            var sut = Build();
+
+            await Generate(sut);
+
+            var options = Options(sut);
+            Assert.Equal(["seed"], options.Keys);
+            Assert.True(int.TryParse(options["seed"], out _));
+        }
+
+        [Fact]
+        public async Task Set_knobs_map_onto_audiocpp_option_names_as_invariant_strings()
+        {
+            var sut = Build(new FakeAudioCppHandler { LoadedModel = "qwen3-base-bf16" });
+            var config = Config(Qwen3ParagraphTtsSettings.Recommended with
             {
-                Name = "test",
-                Type = ParagraphTtsServiceType.Qwen3Base,
-                SettingsJson = """{"baseUrl":"http://test","apiKey":"secret-key"}""",
-            };
-            var handler = new FakeHttpMessageHandler(FakeWav());
-            var factory = new FakeHttpClientFactory(handler);
-            var sut = new Qwen3ParagraphTtsClient(factory, NullLogger<Qwen3ParagraphTtsClient>.Instance, new FakeAiServiceReporter());
+                BaseUrl = "http://acpp:8004",
+                ModelId = "qwen3-base-bf16",
+                Temperature = 0.7,
+                TopP = 0.95,
+                TopK = 40,
+                RepetitionPenalty = 1.1,
+                MaxNewTokens = 512,
+                Seed = 77,
+            });
 
-            using var refAudio = new MemoryStream(new byte[4]);
-            await sut.GenerateAsync("text", null, refAudio, configWithKey, null, referenceTranscript: "sample");
+            await Generate(sut, config: config);
 
-            Assert.Equal("Bearer", handler.Requests[0].Headers.Authorization?.Scheme);
-            Assert.Equal("secret-key", handler.Requests[0].Headers.Authorization?.Parameter);
-        }
-
-        [Fact]
-        public async Task GenerateAsync_ReturnsWavStream_PassThrough()
-        {
-            var wav = FakeWav();
-            var handler = new FakeHttpMessageHandler(wav);
-            var factory = new FakeHttpClientFactory(handler);
-            var sut = new Qwen3ParagraphTtsClient(factory, NullLogger<Qwen3ParagraphTtsClient>.Instance, new FakeAiServiceReporter());
-
-            using var refAudio = new MemoryStream(new byte[4]);
-            var result = await sut.GenerateAsync("text", null, refAudio, Config, null, referenceTranscript: "sample");
-
-            var buf = new byte[wav.Length];
-            await result.ReadExactlyAsync(buf);
-            Assert.Equal(wav, buf);
-        }
-
-        [Fact]
-        public async Task GenerateAsync_OnHttpFailure_ManagedService_ThrowsAiServiceUnavailableException()
-        {
-            var handler = new FakeHttpMessageHandler(FakeWav(), failWith: HttpStatusCode.InternalServerError);
-            var factory = new FakeHttpClientFactory(handler);
-            var reporter = new FakeAiServiceReporter { Managed = true };
-            var sut = new Qwen3ParagraphTtsClient(factory, NullLogger<Qwen3ParagraphTtsClient>.Instance, reporter);
-
-            using var refAudio = new MemoryStream(new byte[4]);
-            await Assert.ThrowsAsync<AiServiceUnavailableException>(() =>
-                sut.GenerateAsync("text", null, refAudio, Config, null, referenceTranscript: "sample"));
-
-            Assert.Single(reporter.Failures);
-        }
-
-        [Fact]
-        public async Task GenerateAsync_OnHttpFailure_UnmanagedService_RethrowsOriginal()
-        {
-            var handler = new FakeHttpMessageHandler(FakeWav(), failWith: HttpStatusCode.InternalServerError);
-            var factory = new FakeHttpClientFactory(handler);
-            var reporter = new FakeAiServiceReporter { Managed = false };
-            var sut = new Qwen3ParagraphTtsClient(factory, NullLogger<Qwen3ParagraphTtsClient>.Instance, reporter);
-
-            using var refAudio = new MemoryStream(new byte[4]);
-            await Assert.ThrowsAsync<HttpRequestException>(() =>
-                sut.GenerateAsync("text", null, refAudio, Config, null, referenceTranscript: "sample"));
-        }
-
-        private class FakeHttpClientFactory(FakeHttpMessageHandler handler) : IHttpClientFactory
-        {
-            public HttpClient CreateClient(string name) => new HttpClient(handler);
-        }
-
-        private class FakeHttpMessageHandler(byte[] wavBody, HttpStatusCode? failWith = null) : HttpMessageHandler
-        {
-            public List<HttpRequestMessage> Requests { get; } = new();
-            public Dictionary<string, string> Fields { get; } = new();
-
-            protected override async Task<HttpResponseMessage> SendAsync(
-                HttpRequestMessage request, CancellationToken cancellationToken)
-            {
-                Requests.Add(request);
-
-                if (request.Content is MultipartFormDataContent multipart)
+            Assert.Equal("qwen3-base-bf16", sut.Handler.SpeechBodies.Single()["model"]!.GetValue<string>());
+            Assert.Equal(
+                new Dictionary<string, string>
                 {
-                    foreach (var part in multipart)
-                    {
-                        var name = part.Headers.ContentDisposition?.Name?.Trim('"');
-                        if (name is null) continue;
-                        if (part is StreamContent || (part.Headers.ContentDisposition?.FileName is not null))
-                            continue;
-                        Fields[name] = await part.ReadAsStringAsync(cancellationToken);
-                    }
-                }
+                    ["temperature"] = "0.7",
+                    ["top_p"] = "0.95",
+                    ["top_k"] = "40",
+                    ["repetition_penalty"] = "1.1",
+                    ["max_tokens"] = "512",
+                    ["seed"] = "77",
+                },
+                Options(sut));
+        }
 
-                if (failWith is { } status)
-                    return new HttpResponseMessage(status);
+        [Fact]
+        public async Task Without_a_pinned_seed_each_request_gets_a_fresh_random_seed()
+        {
+            var sut = Build();
 
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new ByteArrayContent(wavBody),
-                };
-            }
+            for (var i = 0; i < 5; i++)
+                await Generate(sut);
+
+            var seeds = sut.Handler.SpeechBodies.Select(b => b["options"]!["seed"]!.GetValue<string>()).ToList();
+            Assert.True(seeds.Distinct().Count() > 1);
+        }
+
+        [Fact]
+        public async Task A_per_voice_override_replaces_the_config_defaults()
+        {
+            var sut = Build();
+
+            await Generate(sut, overrideJson: """{"temperature":0.55,"language":"fr"}""");
+
+            Assert.Equal("0.55", Options(sut)["temperature"]);
+            Assert.Equal("french", sut.Handler.SpeechBodies.Single()["language"]!.GetValue<string>());
+        }
+
+        [Fact]
+        public async Task Voice_instructions_are_ignored()
+        {
+            var sut = Build();
+
+            await Generate(sut, "angry, shouting");
+
+            Assert.Equal("Hello there.", sut.Handler.SpeechBodies.Single()["input"]!.GetValue<string>());
+            Assert.False(Options(sut).ContainsKey("instruction"));
+        }
+
+        [Fact]
+        public async Task Goes_through_the_tts_gate_before_speaking()
+        {
+            var sut = Build();
+
+            await Generate(sut);
+
+            Assert.Equal(["GET /v1/models", "POST /v1/audio/speech"], sut.Handler.Paths);
+        }
+
+        [Fact]
+        public async Task A_503_that_outlasts_the_retries_throws_tts_busy()
+        {
+            var sut = Build(new FakeAudioCppHandler { LoadedModel = "voxcpm2", BusyResponses = 99 });
+
+            var ex = await Assert.ThrowsAsync<TtsBusyException>(() => Generate(sut));
+
+            Assert.Equal("qwen3-base", ex.ModelId);
         }
     }
 }
