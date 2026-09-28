@@ -202,7 +202,7 @@ export function buildProviderConfig(
 ): ProviderConfig {
   const values = fieldValues(fields, form.settings);
   const edited = new Set(fields.map((f) => f.key.toLowerCase()));
-  // A stored key no field edits (a retired setting, or one set over the API) rides along untouched.
+  // A stored key no field edits rides along to the host, which keeps it if the provider record still has it.
   const settings: SettingsValues = Object.fromEntries(
     Object.entries(form.settings).filter(([key]) => !edited.has(key)),
   );

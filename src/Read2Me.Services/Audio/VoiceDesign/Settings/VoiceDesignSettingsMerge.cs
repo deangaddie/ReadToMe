@@ -20,7 +20,14 @@ namespace Read2Me.Services.Audio.VoiceDesign.Settings
                 && JsonNode.Parse(overrideJson) is JsonObject overrideObj)
             {
                 foreach (var kvp in overrideObj)
+                {
+                    // Keys match case-insensitively, as the read below does: a record without JSON
+                    // names is stored PascalCase ("TopK") while overrides use the schema's camelCase.
+                    foreach (var stale in baseObj.Select(p => p.Key)
+                                 .Where(k => string.Equals(k, kvp.Key, StringComparison.OrdinalIgnoreCase)).ToList())
+                        baseObj.Remove(stale);
                     baseObj[kvp.Key] = kvp.Value?.DeepClone();
+                }
             }
 
             return baseObj.Deserialize<T>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!;

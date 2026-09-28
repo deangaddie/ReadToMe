@@ -190,6 +190,16 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public void Merge_CamelCaseOverride_ReplacesAPascalCaseStoredKey()
+        {
+            // The config forms store this record PascalCase; per-voice overrides use the schema's camelCase keys.
+            var result = Merge("""{"BaseUrl":"http://localhost:8004","TopK":null,"Temperature":0.9}""", """{"topK":20}""");
+
+            Assert.Equal(20, result.TopK);
+            Assert.Equal(0.9, result.Temperature);
+        }
+
+        [Fact]
         public void Merge_EmptyDefaults_UsesOverrideOnly()
         {
             var result = Merge("", """{"baseUrl":"http://override:9000"}""");
