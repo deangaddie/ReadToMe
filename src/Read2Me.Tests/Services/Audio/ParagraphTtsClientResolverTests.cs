@@ -81,5 +81,20 @@ namespace Read2Me.Tests.Services.Audio
                 resolver.Resolve((ParagraphTtsServiceType)999));
             Assert.Contains("999", ex.Message);
         }
+
+        [Fact]
+        public void Resolve_StoredChatterboxTurboConfig_FailsClearlyAsRemoved()
+        {
+            // Value 2 was Chatterbox Turbo (dropped by ADR 0010). A config stored before the
+            // audiocpp-tts 09 migration deletes it must fail its item with a readable reason.
+            using var sp = BuildServices();
+            using var scope = sp.CreateScope();
+
+            var resolver = scope.ServiceProvider.GetRequiredService<IParagraphTtsClientResolver>();
+            var ex = Assert.Throws<NotSupportedException>(() =>
+                resolver.Resolve((ParagraphTtsServiceType)2));
+            Assert.Contains("Chatterbox Turbo", ex.Message);
+            Assert.Contains("removed", ex.Message);
+        }
     }
 }

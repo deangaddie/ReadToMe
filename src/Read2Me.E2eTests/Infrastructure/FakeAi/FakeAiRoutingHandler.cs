@@ -74,7 +74,6 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             "fake-whisper" => Json(FakeAiResponses.WhisperVerboseJson(
                 _lastTtsText.Length > 0 ? _lastTtsText : "transcript")),
             "fake-similarity" => Json("""{"similarity": 1.0}"""),
-            "fake-tts" => HandleTts(),
             "fake-audiocpp" => await HandleAudioCppAsync(request, path, ct),
             _ => throw new InvalidOperationException(
                 $"FakeAiRoutingHandler: unexpected request to {request.RequestUri} — a real network call escaped the fakes."),
@@ -107,15 +106,9 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         throw new InvalidOperationException($"fake-llm: unexpected path {path}");
     }
 
-    /// <summary>The native TTS service not yet on audio.cpp (ChatterboxTurbo): a silent WAV.</summary>
-    private static HttpResponseMessage HandleTts() => new(HttpStatusCode.OK)
-    {
-        Content = new ByteArrayContent(FakeAiResponses.SilentWav()),
-    };
-
     /// <summary>
     /// The audio.cpp TTS runtime: <c>GET /v1/models</c> and <c>POST /v1/audio/speech</c> (JSON in,
-    /// WAV out). The spoken input feeds fake-whisper, as the other TTS fakes' text does.
+    /// WAV out). The spoken input feeds fake-whisper.
     /// </summary>
     private async Task<HttpResponseMessage> HandleAudioCppAsync(
         HttpRequestMessage request, string path, CancellationToken ct)

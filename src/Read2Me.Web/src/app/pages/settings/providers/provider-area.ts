@@ -105,11 +105,6 @@ export const PARAGRAPH_TTS_AREA: ProviderArea = {
       urlExample: 'http://localhost:8004',
     },
     {
-      value: ParagraphTtsServiceType.ChatterboxTurbo,
-      label: 'ChatterboxTurbo',
-      urlExample: 'http://localhost:8001',
-    },
-    {
       value: ParagraphTtsServiceType.Qwen3Base,
       label: 'Qwen3Base',
       urlExample: 'http://localhost:8004',

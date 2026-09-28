@@ -55,7 +55,6 @@ namespace Read2Me.App.Api
                 VoxCpm2ParagraphTtsSettings.Recommended.RetryBadcaseMaxTimes,
                 VoxCpm2ParagraphTtsSettings.Recommended.RetryBadcaseRatioThreshold)),
             ParagraphTtsServiceType.Chatterbox => new(type.ToString(), ChatterboxFields()),
-            ParagraphTtsServiceType.ChatterboxTurbo => new(type.ToString(), ChatterboxTurboFields()),
             ParagraphTtsServiceType.Qwen3Base => new(type.ToString(), Qwen3BaseFields()),
             ParagraphTtsServiceType.Breeze => new(type.ToString(), BreezeFields()),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "No settings schema for this TTS provider."),
@@ -141,18 +140,6 @@ namespace Read2Me.App.Api
                     Help: "Penalizes repeated tokens."),
                 new("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
                     Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
-            ];
-        }
-
-        private static IReadOnlyList<SettingsFieldDto> ChatterboxTurboFields()
-        {
-            var r = ChatterboxTurboParagraphTtsSettings.Recommended;
-            return
-            [
-                new("temperature", "Temperature", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Temperature,
-                    Help: "Sampling randomness. (0.0–2.0)"),
-                new("repetition_penalty", "Repetition Penalty", "number", Min: 1.0, Max: 2.0, Step: 0.05, Default: r.RepetitionPenalty,
-                    Help: "Penalizes repeated tokens. Expression comes from inline paralinguistic tags in the text: [laugh] [chuckle] [sigh] [cough] [clear throat] [gasp] [groan] [sniff] [shush]"),
             ];
         }
 

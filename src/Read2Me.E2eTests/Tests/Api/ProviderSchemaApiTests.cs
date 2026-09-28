@@ -13,7 +13,6 @@ public class ProviderSchemaApiTests(E2eAppFixture app)
     [Theory]
     [InlineData("paragraph-tts", "VoxCpm2", "cfg_value")]
     [InlineData("paragraph-tts", "Chatterbox", "exaggeration")]
-    [InlineData("paragraph-tts", "ChatterboxTurbo", "temperature")]
     [InlineData("paragraph-tts", "Qwen3Base", "language")]
     [InlineData("voice-design", "VoxCpm2", "cfg_value")]
     [InlineData("voice-design", "Qwen3", "language")]
@@ -53,5 +52,12 @@ public class ProviderSchemaApiTests(E2eAppFixture app)
 
         var missing = await Http.GetAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema");
         Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+
+        // Chatterbox Turbo was removed (ADR 0010); its reserved value 2 is no provider type.
+        foreach (var removed in new[] { "ChatterboxTurbo", "2" })
+        {
+            var response = await Http.GetAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema?type={removed}");
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
     }
 }

@@ -121,7 +121,6 @@ public class ProviderSettingsApiTests(E2eAppFixture app)
     [Theory]
     [InlineData("paragraph-tts", 0, """{"baseUrl":"http://x","cfg_value":3.5,"maxChunkChars":350}""")]
     [InlineData("paragraph-tts", 1, """{"baseUrl":"http://x","exaggeration":0.9}""")]
-    [InlineData("paragraph-tts", 2, """{"baseUrl":"http://x","temperature":1.1}""")]
     [InlineData("paragraph-tts", 3, """{"baseUrl":"http://x","top_k":40,"language":"en"}""")]
     [InlineData("voice-design", 0, """{"baseUrl":"http://x","inference_timesteps":20}""")]
     [InlineData("voice-design", 1, """{"baseUrl":"http://x","modelId":"qwen3-design-bf16","topK":40,"seed":9}""")]
@@ -159,6 +158,19 @@ public class ProviderSettingsApiTests(E2eAppFixture app)
             new { name = "bad", type = 0, settingsJson = "{not json" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_paragraph_tts_config_of_the_removed_Chatterbox_Turbo_type_is_400()
+    {
+        // Value 2 is reserved (ADR 0010): no new rows may take it.
+        var response = await Http.PostAsJsonAsync(Url("paragraph-tts"),
+            new { name = "turbo", type = 2, settingsJson = """{"BaseUrl":"http://localhost:8001"}""" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Chatterbox Turbo", await response.Content.ReadAsStringAsync());
+        Assert.DoesNotContain((await GetJsonAsync("paragraph-tts")).EnumerateArray(),
+            c => c.GetProperty("name").GetString() == "turbo");
     }
 
     // ── text-processing steps ────────────────────────────────────────────────

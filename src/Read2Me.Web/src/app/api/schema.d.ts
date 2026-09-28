@@ -2903,7 +2903,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
+        /** The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
         get: {
             parameters: {
                 query?: {

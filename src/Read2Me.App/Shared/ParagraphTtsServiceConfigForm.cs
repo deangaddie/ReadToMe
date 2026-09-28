@@ -114,17 +114,6 @@ namespace Read2Me.App.Shared
                     form.SettingsJson = JsonSerializer.Serialize(cb);
                     break;
 
-                case ParagraphTtsServiceType.ChatterboxTurbo:
-                    var cbt = string.IsNullOrWhiteSpace(c.SettingsJson)
-                        ? ChatterboxTurboParagraphTtsSettings.Recommended
-                        : JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(c.SettingsJson) ?? ChatterboxTurboParagraphTtsSettings.Recommended;
-                    form.BaseUrl = cbt.BaseUrl;
-                    form.MaxChunkChars = cbt.MaxChunkChars;
-                    form.CarrierPrefixEnabled = cbt.CarrierPrefixEnabled;
-                    form.CarrierMaxTargetChars = cbt.CarrierMaxTargetChars;
-                    form.SettingsJson = JsonSerializer.Serialize(cbt);
-                    break;
-
                 case ParagraphTtsServiceType.Qwen3Base:
                     var qb = string.IsNullOrWhiteSpace(c.SettingsJson)
                         ? Qwen3ParagraphTtsSettings.Recommended
@@ -161,7 +150,6 @@ namespace Read2Me.App.Shared
             {
                 case ParagraphTtsServiceType.VoxCpm2:
                 case ParagraphTtsServiceType.Chatterbox:
-                case ParagraphTtsServiceType.ChatterboxTurbo:
                 case ParagraphTtsServiceType.Qwen3Base:
                 case ParagraphTtsServiceType.Breeze:
                     if (string.IsNullOrWhiteSpace(BaseUrl))
@@ -180,7 +168,6 @@ namespace Read2Me.App.Shared
             {
                 ParagraphTtsServiceType.VoxCpm2 => BuildVoxCpm2SettingsJson(),
                 ParagraphTtsServiceType.Chatterbox => BuildChatterboxSettingsJson(),
-                ParagraphTtsServiceType.ChatterboxTurbo => BuildChatterboxTurboSettingsJson(),
                 ParagraphTtsServiceType.Qwen3Base => BuildQwen3BaseSettingsJson(),
                 ParagraphTtsServiceType.Breeze => BuildBreezeSettingsJson(),
                 _ => throw new NotSupportedException($"Unsupported paragraph TTS type '{Type}'."),
@@ -232,24 +219,6 @@ namespace Read2Me.App.Shared
                 ? ChatterboxParagraphTtsSettings.Recommended
                 : JsonSerializer.Deserialize<ChatterboxParagraphTtsSettings>(SettingsJson)
                   ?? ChatterboxParagraphTtsSettings.Recommended;
-
-            settings = settings with
-            {
-                BaseUrl = BaseUrl.Trim(),
-                MaxChunkChars = MaxChunkChars,
-                CarrierPrefixEnabled = CarrierPrefixEnabled,
-                CarrierMaxTargetChars = CarrierMaxTargetChars,
-            };
-            return JsonSerializer.Serialize(settings);
-        }
-
-        // BaseUrl + MaxChunkChars owned by the form, the 2 tunable params by the editor's SettingsJson — merge here.
-        private string BuildChatterboxTurboSettingsJson()
-        {
-            var settings = string.IsNullOrWhiteSpace(SettingsJson)
-                ? ChatterboxTurboParagraphTtsSettings.Recommended
-                : JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(SettingsJson)
-                  ?? ChatterboxTurboParagraphTtsSettings.Recommended;
 
             settings = settings with
             {

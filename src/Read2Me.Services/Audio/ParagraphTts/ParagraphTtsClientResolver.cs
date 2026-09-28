@@ -9,6 +9,10 @@ namespace Read2Me.Services.Audio.ParagraphTts
     {
         public IParagraphTtsClient Resolve(ParagraphTtsServiceType type)
         {
+            if (type == ParagraphTtsServiceTypes.RemovedChatterboxTurbo)
+                throw new NotSupportedException(
+                    "The Chatterbox Turbo TTS provider was removed; choose another paragraph-TTS config in Settings.");
+
             var client = services.GetKeyedService<IParagraphTtsClient>(type);
             if (client is null)
                 throw new NotSupportedException(

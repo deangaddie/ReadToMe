@@ -22,7 +22,6 @@ namespace Read2Me.Services
             {
                 ParagraphTtsServiceType.VoxCpm2 => NullIfBlank(Parse<VoxCpm2ParagraphTtsSettings>(config.SettingsJson)?.BaseUrl),
                 ParagraphTtsServiceType.Chatterbox => NullIfBlank(Parse<ChatterboxParagraphTtsSettings>(config.SettingsJson)?.BaseUrl),
-                ParagraphTtsServiceType.ChatterboxTurbo => NullIfBlank(Parse<ChatterboxTurboParagraphTtsSettings>(config.SettingsJson)?.BaseUrl),
                 ParagraphTtsServiceType.Qwen3Base => NullIfBlank(Parse<Qwen3ParagraphTtsSettings>(config.SettingsJson)?.BaseUrl),
                 ParagraphTtsServiceType.Breeze => NullIfBlank(Parse<BreezeParagraphTtsSettings>(config.SettingsJson)?.BaseUrl),
                 _ => null,

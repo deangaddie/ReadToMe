@@ -26,10 +26,12 @@ namespace Read2Me.App.Api
         {
             ParagraphTtsServiceType.VoxCpm2 => Rewrite(config.SettingsJson, VoxCpm2ParagraphTtsSettings.Recommended),
             ParagraphTtsServiceType.Chatterbox => Rewrite(config.SettingsJson, ChatterboxParagraphTtsSettings.Recommended),
-            ParagraphTtsServiceType.ChatterboxTurbo => Rewrite(config.SettingsJson, ChatterboxTurboParagraphTtsSettings.Recommended),
             ParagraphTtsServiceType.Qwen3Base => Rewrite(config.SettingsJson, Qwen3ParagraphTtsSettings.Recommended),
             ParagraphTtsServiceType.Breeze => Rewrite(config.SettingsJson, BreezeParagraphTtsSettings.Recommended),
-            _ => config.SettingsJson,
+            // No provider has these types: refuse the write (SettingsEndpoints turns it into a 400).
+            ParagraphTtsServiceTypes.RemovedChatterboxTurbo =>
+                throw new NotSupportedException("The Chatterbox Turbo TTS provider was removed; pick another type."),
+            _ => throw new NotSupportedException($"'{config.Type}' is not a paragraph-TTS provider type."),
         };
 
         /// <inheritdoc cref="Canonicalize(ParagraphTtsServiceConfig)"/>

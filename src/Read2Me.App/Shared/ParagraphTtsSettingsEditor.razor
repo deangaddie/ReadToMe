@@ -215,50 +215,6 @@
     </MudStack>
 }
 
-@if (ProviderType == ParagraphTtsServiceType.ChatterboxTurbo)
-{
-    <MudStack Spacing="2">
-        <MudStack Spacing="0" Style="@CbtFieldStyle("temperature")">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                <MudText Typo="Typo.body2">Temperature</MudText>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body2">@_cbtEffective.Temperature.ToString("F2")</MudText>
-                    @if (Mode == TtsSettingsEditorMode.VoiceOverride && CbtIsOverridden("temperature"))
-                    {
-                        <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
-                                       OnClick="@(() => CbtResetField(b => _cbtEffective with { Temperature = b.Temperature }))" />
-                    }
-                </MudStack>
-            </MudStack>
-            <MudSlider T="double" Value="_cbtEffective.Temperature" Min="0.0" Max="2.0" Step="0.05"
-                       ValueChanged="@((double v) => CbtOnFieldChanged(s => s with { Temperature = v }))" />
-            <MudText Typo="Typo.caption" Color="Color.Default">Sampling randomness. (0.0–2.0)</MudText>
-        </MudStack>
-
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <MudNumericField T="double" Value="_cbtEffective.RepetitionPenalty" Label="Repetition Penalty"
-                             Variant="Variant.Outlined" Immediate="true"
-                             Min="1.0" Max="2.0" Step="0.05"
-                             HelperText="Penalizes repeated tokens."
-                             Style="@CbtFieldStyle("repetition_penalty")"
-                             ValueChanged="@((double v) => CbtOnFieldChanged(s => s with { RepetitionPenalty = v }))" />
-            @if (Mode == TtsSettingsEditorMode.VoiceOverride && CbtIsOverridden("repetition_penalty"))
-            {
-                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="Reset to provider default"
-                               OnClick="@(() => CbtResetField(b => _cbtEffective with { RepetitionPenalty = b.RepetitionPenalty }))" />
-            }
-        </MudStack>
-
-        <MudText Typo="Typo.caption" Color="Color.Default">
-            Expression comes from inline paralinguistic tags in the paragraph text, not knobs: [laugh] [chuckle] [sigh] [cough] [clear throat] [gasp] [groan] [sniff] [shush]
-        </MudText>
-
-        <MudButton StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="CbtResetToDefault">
-            Return to default
-        </MudButton>
-    </MudStack>
-}
-
 @if (ProviderType == ParagraphTtsServiceType.Qwen3Base)
 {
     <MudStack Spacing="2">
@@ -327,12 +283,6 @@
     private ChatterboxParagraphTtsSettings _cbEffective = ChatterboxParagraphTtsSettings.Recommended;
     private string _cbBaseJson = "";
 
-    // ChatterboxTurbo: same ProviderDefaults/VoiceOverride split, distinct record type.
-    private ChatterboxTurboParagraphTtsSettings _cbtSettings = ChatterboxTurboParagraphTtsSettings.Recommended;
-    private ChatterboxTurboParagraphTtsSettings _cbtBase = ChatterboxTurboParagraphTtsSettings.Recommended;
-    private ChatterboxTurboParagraphTtsSettings _cbtEffective = ChatterboxTurboParagraphTtsSettings.Recommended;
-    private string _cbtBaseJson = "";
-
     // Qwen3Base: ProviderDefaults mode only (no VoiceOverride diff support).
     private Qwen3ParagraphTtsSettings _qbSettings = Qwen3ParagraphTtsSettings.Recommended;
 
@@ -385,30 +335,6 @@
                     : JsonSerializer.Deserialize<ChatterboxParagraphTtsSettings>(Value, _jsonOpts)
                       ?? ChatterboxParagraphTtsSettings.Recommended;
                 _cbEffective = _cbSettings;
-            }
-            return;
-        }
-
-        if (ProviderType == ParagraphTtsServiceType.ChatterboxTurbo)
-        {
-            if (Mode == TtsSettingsEditorMode.VoiceOverride)
-            {
-                _cbtBaseJson = string.IsNullOrWhiteSpace(ProviderDefaultsJson)
-                    ? JsonSerializer.Serialize(ChatterboxTurboParagraphTtsSettings.Recommended, _jsonOpts)
-                    : ProviderDefaultsJson;
-
-                _cbtBase = JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(_cbtBaseJson, _jsonOpts)
-                        ?? ChatterboxTurboParagraphTtsSettings.Recommended;
-
-                _cbtEffective = ChatterboxTurboParagraphTtsSettingsDiff.Apply(_cbtBaseJson, Value);
-            }
-            else
-            {
-                _cbtSettings = string.IsNullOrWhiteSpace(Value)
-                    ? ChatterboxTurboParagraphTtsSettings.Recommended
-                    : JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(Value, _jsonOpts)
-                      ?? ChatterboxTurboParagraphTtsSettings.Recommended;
-                _cbtEffective = _cbtSettings;
             }
             return;
         }
@@ -539,66 +465,6 @@
         _cbEffective = resetFn(_cbBase);
         await CbEmitOverrideAsync();
     }
-
-    private bool CbtIsOverridden(string jsonKey)
-    {
-        var patch = ChatterboxTurboParagraphTtsSettingsDiff.Diff(_cbtBaseJson, _cbtEffective);
-        var obj = JsonNode.Parse(patch)?.AsObject();
-        return obj?.ContainsKey(jsonKey) == true;
-    }
-
-    private string? CbtFieldStyle(string jsonKey)
-    {
-        if (Mode != TtsSettingsEditorMode.VoiceOverride) return null;
-        return CbtIsOverridden(jsonKey) ? "border-left: 3px solid var(--mud-palette-warning);" : null;
-    }
-
-    private void CbtOnFieldChanged(Func<ChatterboxTurboParagraphTtsSettings, ChatterboxTurboParagraphTtsSettings> update)
-    {
-        if (Mode == TtsSettingsEditorMode.VoiceOverride)
-        {
-            _cbtEffective = update(_cbtEffective);
-            _ = CbtEmitOverrideAsync();
-        }
-        else
-        {
-            _cbtSettings = update(_cbtSettings);
-            _ = CbtEmitAsync();
-        }
-    }
-
-    private async Task CbtEmitAsync()
-    {
-        var json = JsonSerializer.Serialize(_cbtSettings, _jsonOpts);
-        await ValueChanged.InvokeAsync(json);
-    }
-
-    private async Task CbtEmitOverrideAsync()
-    {
-        var patch = ChatterboxTurboParagraphTtsSettingsDiff.Diff(_cbtBaseJson, _cbtEffective);
-        await ValueChanged.InvokeAsync(patch);
-    }
-
-    private async Task CbtResetToDefault()
-    {
-        if (Mode == TtsSettingsEditorMode.VoiceOverride)
-        {
-            _cbtEffective = _cbtBase;
-            await ValueChanged.InvokeAsync("{}");
-        }
-        else
-        {
-            _cbtSettings = ChatterboxTurboParagraphTtsSettings.Recommended;
-            await CbtEmitAsync();
-        }
-    }
-
-    private async Task CbtResetField(Func<ChatterboxTurboParagraphTtsSettings, ChatterboxTurboParagraphTtsSettings> resetFn)
-    {
-        _cbtEffective = resetFn(_cbtBase);
-        await CbtEmitOverrideAsync();
-    }
-
     private void QbOnFieldChanged(Func<Qwen3ParagraphTtsSettings, Qwen3ParagraphTtsSettings> update)
     {
         _qbSettings = update(_qbSettings);

@@ -264,48 +264,6 @@ namespace Read2Me.Tests.App
             Assert.Equal("Base URL is required.", form.Validate());
         }
 
-        // ---- ChatterboxTurbo ----
-
-        [Fact]
-        public void FromConfig_BuildConfig_RoundTripsChatterboxTurboSettings()
-        {
-            var original = ChatterboxTurboParagraphTtsSettings.Recommended with
-            {
-                BaseUrl = "http://localhost:8001",
-                Temperature = 0.9,
-                RepetitionPenalty = 1.5,
-                MaxChunkChars = 333,
-            };
-            var config = new ParagraphTtsServiceConfig
-            {
-                Name = "ChatterboxTurbo",
-                Type = ParagraphTtsServiceType.ChatterboxTurbo,
-                SettingsJson = JsonSerializer.Serialize(original),
-            };
-
-            var form = ParagraphTtsServiceConfigForm.FromConfig(config);
-            Assert.Equal("http://localhost:8001", form.BaseUrl);
-            Assert.Equal(333, form.MaxChunkChars);
-
-            var rebuilt = form.BuildConfig();
-            var s = JsonSerializer.Deserialize<ChatterboxTurboParagraphTtsSettings>(rebuilt.SettingsJson);
-
-            Assert.Equal(original, s);
-        }
-
-        [Fact]
-        public void Validate_ChatterboxTurbo_RequiresBaseUrl()
-        {
-            var form = new ParagraphTtsServiceConfigForm
-            {
-                Name = "ChatterboxTurbo",
-                Type = ParagraphTtsServiceType.ChatterboxTurbo,
-                BaseUrl = "",
-            };
-
-            Assert.Equal("Base URL is required.", form.Validate());
-        }
-
         // ---- Qwen3Base ----
 
         [Fact]

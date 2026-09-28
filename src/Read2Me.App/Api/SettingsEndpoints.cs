@@ -109,6 +109,10 @@ namespace Read2Me.App.Api
                     return Results.Problem($"settingsJson is not this provider type's settings: {ex.Message}",
                         statusCode: StatusCodes.Status400BadRequest);
                 }
+                catch (NotSupportedException ex)
+                {
+                    return Results.Problem(ex.Message, statusCode: StatusCodes.Status400BadRequest);
+                }
             }
 
             return new AreaHandlers(
@@ -184,7 +188,7 @@ namespace Read2Me.App.Api
                     TryParseType<ParagraphTtsServiceType>(type, out var t)
                         ? Results.Ok(ProviderSettingsSchema.ParagraphTts(t))
                         : UnknownProviderType(type, typeof(ParagraphTtsServiceType)))
-                .WithSummary("The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|ChatterboxTurbo|Qwen3Base|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+                .WithSummary("The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
             endpoints.MapGet("/api/settings/voice-design/schema", (string? type) =>
                     TryParseType<VoiceDesignServiceType>(type, out var t)
                         ? Results.Ok(ProviderSettingsSchema.VoiceDesign(t))
