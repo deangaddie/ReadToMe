@@ -30,7 +30,6 @@ namespace Read2Me.Services.Audio.ParagraphTts
             // differ from what its code does (bt-07), so leaving one out is not "the same value".
             var options = new Dictionary<string, string>
             {
-                ["language"] = "en",
                 ["exaggeration"] = Inv(cfg.Exaggeration),
                 ["guidance_scale"] = Inv(cfg.CfgWeight),
                 ["temperature"] = Inv(cfg.Temperature),
@@ -44,7 +43,8 @@ namespace Read2Me.Services.Audio.ParagraphTts
             await referenceAudioStream.CopyToAsync(voiceRef, ct);
 
             return await audioCpp.SpeakAsync(cfg.BaseUrl,
-                new AudioCppSpeechRequest(cfg.ModelId, text, voiceRef.ToArray(), ReferenceText: null, options), ct);
+                new AudioCppSpeechRequest(cfg.ModelId, text, voiceRef.ToArray(), ReferenceText: null, options,
+                    Language: "en"), ct);
         }
 
         private static string Inv(double value) => value.ToString(CultureInfo.InvariantCulture);

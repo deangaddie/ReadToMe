@@ -99,7 +99,7 @@ public class AudioApiTests(E2eAppFixture app)
 
     /// <summary>
     /// With the Chatterbox config active, an audio-queue run speaks on audio.cpp: a plain clone
-    /// (reference, no transcript) with every knob sent explicitly under audio.cpp's names.
+    /// (reference, no transcript) with the language top-level and every knob sent explicitly under audio.cpp's names.
     /// </summary>
     [Fact]
     public async Task A_Chatterbox_config_generates_through_audiocpp()
@@ -136,9 +136,9 @@ public class AudioApiTests(E2eAppFixture app)
                 Assert.False(b.ContainsKey("reference_text"));
                 var options = b["options"]!.AsObject();
                 Assert.Equal(
-                    ["language", "exaggeration", "guidance_scale", "temperature", "min_p", "top_p", "repetition_penalty", "seed"],
+                    ["exaggeration", "guidance_scale", "temperature", "min_p", "top_p", "repetition_penalty", "seed"],
                     options.Select(o => o.Key));
-                Assert.Equal("en", options["language"]!.GetValue<string>());
+                Assert.Equal("en", b["language"]!.GetValue<string>());
             });
         }
         finally

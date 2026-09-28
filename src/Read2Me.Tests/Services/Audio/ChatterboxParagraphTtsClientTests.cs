@@ -92,7 +92,6 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(
                 new Dictionary<string, string>
                 {
-                    ["language"] = "en",
                     ["exaggeration"] = "0.7",
                     ["guidance_scale"] = "0.3",
                     ["temperature"] = "0.65",
@@ -113,7 +112,9 @@ namespace Read2Me.Tests.Services.Audio
             await Generate(sut);
 
             var options = Options(sut);
-            Assert.Equal("en", options.GetProperty("language").GetString());
+            // audio.cpp reads the input language only from the top level; an options.language never reaches the model.
+            Assert.Equal("en", sut.Handler.SpeechBodies.Single()["language"]!.GetValue<string>());
+            Assert.False(options.TryGetProperty("language", out _));
             Assert.Equal("0.5", options.GetProperty("exaggeration").GetString());
             Assert.Equal("0.5", options.GetProperty("guidance_scale").GetString());
             Assert.Equal("0.8", options.GetProperty("temperature").GetString());
