@@ -1,12 +1,12 @@
 # models/
 
-Local model storage for the llama.cpp and Whisper.CPP containers. Files here are bind-mounted into the containers at `/models`.
+Local model storage for the llama.cpp, audio.cpp and Whisper.CPP containers. Files here are bind-mounted into the containers at `/models`.
 
 Model files (`.gguf`, `.bin`, etc.) are excluded from git — this folder exists only to hold them on disk.
 
 ## GGUF location
 
-The GGUF directory mounted into `llama` is configurable so the files can be shared with other projects. Set `GGUF_MODELS_DIR` in `Infra/.env` (see `Infra/.env.example`); it defaults to `./models` when unset. The container path is always `/models`, so `llama/config/models.ini` never changes. Bind mounts resolve at container start — changing this needs no image rebuild, only `docker compose up -d llama`.
+The GGUF directory mounted into `llama` and `audiocpp` is configurable so the files can be shared with other projects. Set `GGUF_MODELS_DIR` in `Infra/.env` (see `Infra/.env.example`); it defaults to `./models` when unset. The container path is always `/models`, so `llama/config/models.ini` and `audiocpp/server.json` never change. Bind mounts resolve at container start — changing this needs no image rebuild, only `docker compose up -d llama audiocpp`. The audio.cpp TTS GGUFs and where to get them are listed in [../README.md](../README.md#audiocpp-tts).
 
 The Whisper model stays in this folder regardless of `GGUF_MODELS_DIR`.
 

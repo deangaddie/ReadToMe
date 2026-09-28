@@ -18,12 +18,7 @@ dotnet run --project src/Read2Me.App
 
 # Infrastructure services (run from Infra/)
 docker compose up -d llama              # LLM service
-docker compose up -d chatterbox        # TTS — expression + voice cloning
-docker compose up -d chatterbox-turbo  # TTS — paralinguistic tags
-docker compose up -d qwen3-tts         # TTS — voice design from description
-docker compose up -d qwen3-tts-base    # TTS — voice cloning from reference audio
-docker compose up -d voxcpm2           # TTS — VoxCPM2 voice cloning
-docker compose up -d audiocpp          # TTS — audio.cpp runtime (Breeze; ADR 0010)
+docker compose up -d audiocpp          # TTS + voice design — every TTS model (audio.cpp, ADR 0010)
 docker compose up -d whisper           # CPU Whisper.CPP transcription
 docker compose up -d minilm-l6         # Semantic similarity
 docker compose up -d mpnet-base-v2     # Semantic similarity
@@ -63,17 +58,12 @@ Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB
 | Container | Port | Role |
 |-----------|------|------|
 | `read2me-llama` | 8080 | LLM — character extraction, script classification. OpenAI-compatible API. |
-| `read2me-chatterbox` | 8000 | TTS — expression instructions + voice cloning (`POST /tts`) |
-| `read2me-chatterbox-turbo` | 8001 | TTS — paralinguistic tags (`[laugh]`, `[sigh]`, etc.) + voice cloning (`POST /tts/turbo`) |
-| `read2me-qwen3-tts` | 8100 | TTS — voice design from text description, no reference audio (`POST /tts`) |
-| `read2me-qwen3-tts-base` | 8101 | TTS — voice cloning from reference audio + transcript (`POST /tts`) |
-| `read2me-voxcpm2` | 8003 | TTS — VoxCPM2 voice cloning (`POST /tts`) |
-| `read2me-audiocpp` | 8004 | TTS — audio.cpp runtime (ADR 0010): Breeze TTS 2 + migrating models (`POST /v1/audio/speech`) |
+| `read2me-audiocpp` | 8004 | TTS + voice design — audio.cpp runtime serving every TTS model (`POST /v1/audio/speech`) |
 | `read2me-whisper` | 9000 | CPU-only Whisper.CPP transcription for accuracy scoring |
 | `read2me-minilm-l6` | 8200 | Semantic similarity — MiniLM-L6 (`POST /similarity`) |
 | `read2me-mpnet-base-v2` | 8201 | Semantic similarity — MPNet-Base-v2 (`POST /similarity`) |
 
-**Chatterbox** requires `reference_audio` (WAV/MP3) on every request — no built-in voices.
+**audio.cpp** (ADR 0010) serves the model ids in `Infra/audiocpp/server.json` — `breeze-q8`, `breeze-design`, `voxcpm2`, `chatterbox`, `qwen3-base`, `qwen3-design`; each provider config's `ModelId` names one. It keeps one model resident and switches on request, like llama autoload: the first request after a switch takes 9–31 s, and a request for a *different* model mid-generation gets a 503, so the app sends one request per endpoint at a time (the TTS gate). `server.json` is read at container start — restart `audiocpp` after editing it. GGUFs live in `GGUF_MODELS_DIR` under `Breeze-TTS-2-GGUF/`, `VoxCPM2-GGUF/`, `Chatterbox-GGUF/` and `Qwen3-TTS-12Hz-1.7B-{Base,VoiceDesign}-GGUF/`. Breeze weights and its audio output are BreezeBlue research/non-commercial: personal use only. Details in `Infra/README.md`.
 
 **llama.cpp** is upstream `v0.5.0` (a TurboQuant fork until 2026-09-26; no `turbo*` KV types now). Switch model without restart via autoload — name the target model in an inference request; `--models-max 1` evicts the loaded model (`POST /v1/models` 404ed on the old fork; the app uses autoload):
 ```bash

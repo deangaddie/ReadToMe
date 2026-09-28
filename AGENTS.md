@@ -29,12 +29,7 @@ Use `docker compose` from the `Infra/` directory.
 
 ```bash
 docker compose up -d llama
-docker compose up -d chatterbox
-docker compose up -d chatterbox-turbo
-docker compose up -d qwen3-tts
-docker compose up -d qwen3-tts-base
-docker compose up -d voxcpm2
-docker compose up -d audiocpp        # audio.cpp TTS runtime (ADR 0010)
+docker compose up -d audiocpp        # every TTS + voice-design model (audio.cpp, ADR 0010)
 docker compose up -d whisper
 docker compose up -d minilm-l6
 docker compose up -d mpnet-base-v2
@@ -46,11 +41,8 @@ docker logs -f <container>     # follow logs
 ## Important constraints
 
 - GPU setup is VRAM-limited (RTX 3070, 8 GB). Only one GPU-resident container should run at a time in normal use.
-- `read2me-whisper` is CPU-only and can run alongside a Chatterbox container.
-- `read2me-minilm-l6` and `read2me-mpnet-base-v2` are CPU-only and can run alongside any GPU container.
-- `read2me-chatterbox` and `read2me-qwen3-tts-base` require `reference_audio` for voice cloning; there are no built-in voices.
-- `read2me-voxcpm2` also requires `reference_audio`.
-- `read2me-qwen3-tts` generates voices from a text description; no reference audio needed.
+- `read2me-whisper`, `read2me-minilm-l6` and `read2me-mpnet-base-v2` are CPU-only and can run alongside any GPU container.
+- `read2me-audiocpp` serves every TTS model (ids in `Infra/audiocpp/server.json`), one resident at a time, switching on request. Cloning models need a voice's reference audio; the voice-design models (`breeze-design`, `qwen3-design`, VoxCPM2 design) work from a text description.
 
 ## Relevant files
 

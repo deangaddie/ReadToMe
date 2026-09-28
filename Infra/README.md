@@ -13,16 +13,15 @@ duplicating the service contracts below.
 Infra/
 ├── docker-compose.yml          # All AI service containers
 ├── Dockerfile.llama            # llama.cpp server (upstream v0.5.0, multi-model preset)
-├── Dockerfile.chatterbox       # Chatterbox TTS image (standard + turbo variants)
-├── Dockerfile.qwen3            # Qwen3 TTS image
+├── Dockerfile.whisper          # Whisper.CPP server (CPU)
+├── Dockerfile.minilm-l6        # Semantic similarity (MiniLM-L6)
+├── Dockerfile.mpnet-base-v2    # Semantic similarity (MPNet-Base-v2)
 ├── llama/
 │   ├── entrypoint.sh           # Starts llama-server with model presets
 │   └── config/
 │       └── models.ini          # Model preset definitions
-├── chatterbox/                 # Chatterbox TTS FastAPI apps
-│   ├── app.py                  # Standard Chatterbox TTS
-│   └── app_turbo.py            # Turbo-only Chatterbox TTS (paralinguistic tags)
-├── qwen3/                      # Qwen3 TTS FastAPI app
+├── audiocpp/
+│   └── server.json             # audio.cpp model entries (every TTS model)
 └── models/                     # GGUF model files (bind-mounted, not committed)
 ```
 
@@ -31,19 +30,15 @@ Infra/
 | Service              | Container                   | Port | Purpose                                                          |
 | -------------------- | --------------------------- | ---- | ---------------------------------------------------------------- |
 | llama.cpp            | `read2me-llama`             | 8080 | LLM — character extraction, script classification                |
-| Chatterbox TTS       | `read2me-chatterbox`        | 8000 | TTS — standard model, expression instructions, voice cloning     |
-| Chatterbox Turbo     | `read2me-chatterbox-turbo`  | 8001 | TTS — turbo model, paralinguistic tags only, voice cloning       |
-| Qwen3 TTS            | `read2me-qwen3-tts`         | 8100 | TTS — voice design from text description, no reference audio     |
-| Qwen3 TTS Base       | `read2me-qwen3-tts-base`    | 8101 | TTS — voice cloning from reference audio + transcript            |
-| VoxCPM2              | `read2me-voxcpm2`           | 8003 | TTS — VoxCPM2 voice cloning                                      |
-| audio.cpp            | `read2me-audiocpp`          | 8004 | TTS — audio.cpp runtime (ADR 0010): Breeze TTS 2, migrating models |
+| audio.cpp            | `read2me-audiocpp`          | 8004 | TTS + voice design — every TTS model, one loaded at a time (ADR 0010) |
 | Whisper.CPP          | `read2me-whisper`           | 9000 | CPU-only transcription for WER and word-level alignment          |
 | MiniLM-L6            | `read2me-minilm-l6`         | 8200 | Semantic similarity — MiniLM-L6-v2                               |
 | MPNet-Base-v2        | `read2me-mpnet-base-v2`     | 8201 | Semantic similarity — all-mpnet-base-v2                          |
 
 ### Health checks
 
-Every service defines its Docker health check in its image. Docker runs the
+Every service defines its Docker health check in its image, except audio.cpp,
+which runs the upstream image unchanged and defines it in `docker-compose.yml`. Docker runs the
 container URL from inside the container; use the host URL for a manual check
 from the machine running Compose. All published ports are bound to
 `127.0.0.1`, and each probe succeeds on an HTTP `200` response.
@@ -51,12 +46,7 @@ from the machine running Compose. All published ports are bound to
 | Service | Docker probe inside container | Manual probe from host |
 | --- | --- | --- |
 | llama.cpp | `GET http://localhost:8080/health` | `http://127.0.0.1:8080/health` |
-| Chatterbox TTS | `GET http://localhost:8000/health` | `http://127.0.0.1:8000/health` |
-| Chatterbox Turbo | `GET http://localhost:8000/health` | `http://127.0.0.1:8001/health` |
-| Qwen3 TTS | `GET http://localhost:8100/health` | `http://127.0.0.1:8100/health` |
-| Qwen3 TTS Base | `GET http://localhost:8101/health` | `http://127.0.0.1:8101/health` |
-| VoxCPM2 | `GET http://localhost:8003/health` | `http://127.0.0.1:8003/health` |
-| audio.cpp | `GET http://localhost:8004/health` | `http://127.0.0.1:8004/health` |
+| audio.cpp | `GET http://localhost:8080/health` | `http://127.0.0.1:8004/health` |
 | Whisper.CPP | `GET http://127.0.0.1:8080/health` | `http://127.0.0.1:9000/health` |
 | MiniLM-L6 | `GET http://localhost:8200/docs` | `http://127.0.0.1:8200/docs` |
 | MPNet-Base-v2 | `GET http://localhost:8201/docs` | `http://127.0.0.1:8201/docs` |
@@ -74,17 +64,12 @@ Configured for RTX 3070 (8 GB VRAM). GPU-resident services cannot generally run 
 | Container                   | When to run                                      |
 | --------------------------- | ------------------------------------------------ |
 | `read2me-llama`             | LLM tasks (script processing)                    |
-| `read2me-chatterbox`        | TTS with expression control / voice cloning      |
-| `read2me-chatterbox-turbo`  | TTS with paralinguistic tags                     |
-| `read2me-qwen3-tts`         | TTS with voice design from text description      |
-| `read2me-qwen3-tts-base`    | TTS with voice cloning from reference audio      |
-| `read2me-voxcpm2`           | TTS with VoxCPM2 voice cloning                   |
-| `read2me-audiocpp`          | TTS on the audio.cpp runtime (Breeze, and later all models) |
+| `read2me-audiocpp`          | Paragraph TTS and voice design (all TTS models)  |
 | `read2me-whisper`           | CPU transcription for WER and word-level alignment |
 | `read2me-minilm-l6`         | Semantic similarity (no GPU — CPU only)          |
 | `read2me-mpnet-base-v2`     | Semantic similarity (no GPU — CPU only)          |
 
-> **Note:** Whisper.CPP and the semantic similarity containers are CPU-only and can run alongside a Chatterbox container.
+> **Note:** Whisper.CPP and the semantic similarity containers are CPU-only and can run alongside `read2me-audiocpp`.
 
 ## Usage
 
@@ -180,145 +165,64 @@ huggingface-cli download <repo> --local-dir ./models
 
 Port `8080`.
 
-## Chatterbox TTS
+## audio.cpp (TTS)
 
-Two containers, same `Dockerfile.chatterbox`, different entry modules selected via `APP_MODULE` build arg.
+`read2me-audiocpp` runs [audio.cpp](https://github.com/0xShug0/audio.cpp), a C++/ggml runtime, and serves every paragraph-TTS and voice-design model the app uses (ADR 0010). Port `8004` on the host, `8080` in the container.
 
-**Voice cloning is required** — no built-in voices. All requests must include `reference_audio` (WAV or MP3).
+The upstream image `ghcr.io/0xshug0/audio.cpp:full-cuda12` runs unchanged — no Dockerfile of our own — pinned by its amd64 digest on the `image:` line in `docker-compose.yml`. `scripts/refresh-pins.ps1` covers only Dockerfile bases, so bump this pin by hand: resolve the tag (`docker buildx imagetools inspect ghcr.io/0xshug0/audio.cpp:full-cuda12`), rewrite the digest, and check each model still generates.
 
-### Standard — port 8000 (`read2me-chatterbox`)
+### Models — `audiocpp/server.json`
 
-Loads `ChatterboxTTS`. **No free-text instruction channel** — expression comes from `exaggeration`/`temperature`, not an `instructions` param (removed).
+| Model id | Family | Task | Used by | GGUF under `GGUF_MODELS_DIR` |
+| --- | --- | --- | --- | --- |
+| `breeze-q8` | `breeze_tts` | `clon` | Breeze paragraph TTS | `Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf` |
+| `breeze-design` | `breeze_tts` | `tts` | Breeze voice design | same file as `breeze-q8` |
+| `voxcpm2` | `voxcpm2` | `tts` | VoxCPM2 paragraph TTS and voice design | `VoxCPM2-GGUF/voxcpm2-q8_0.gguf` |
+| `chatterbox` | `chatterbox` | `clon` | Chatterbox paragraph TTS | `Chatterbox-GGUF/chatterbox-q8_0.gguf` |
+| `qwen3-base` | `qwen3_tts` | `tts` | Qwen3 Base paragraph TTS | `Qwen3-TTS-12Hz-1.7B-Base-GGUF/qwen3-tts-12hz-1.7b-base-q8_0_v2.gguf` |
+| `qwen3-design` | `qwen3_tts` | `vdes` | Qwen3 voice design | `Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf` |
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/health` | Liveness check, reports device |
-| POST | `/tts` | Speech with voice cloning |
+Each provider config's `ModelId` names its entry; the ids above are the defaults. The Q8_0 GGUFs come from the Hugging Face repo `audio-cpp/audio.cpp-gguf`, one folder per model — keep the folder when downloading:
 
-#### POST /tts
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `text` | string | yes | Plain text — no paralinguistic tags |
-| `reference_audio` | file | yes | WAV/MP3 for voice cloning |
-| `exaggeration` | float | no | 0–1, expressiveness (default 0.5) |
-| `cfg_weight` | float | no | 0–1, guidance weight (default 0.5) |
-| `temperature` | float | no | Sampling randomness (default 0.8) |
-| `min_p` | float | no | Nucleus sampling floor (default 0.05) |
-| `top_p` | float | no | Nucleus sampling ceiling (default 1.0) |
-| `repetition_penalty` | float | no | Penalizes repeated tokens (default 1.2) |
-
-### Turbo — port 8001 (`read2me-chatterbox-turbo`)
-
-Loads `ChatterboxTurboTTS` only. Use when text contains paralinguistic tags. Does not support `exaggeration`, `cfg_weight`, or `instructions`. **English-only** — no free-text instruction channel; expression comes from inline tags.
-
-| Method | Path         | Purpose                         |
-| ------ | ------------ | ------------------------------- |
-| GET    | `/health`    | Liveness check, reports device  |
-| POST   | `/tts/turbo` | Speech with paralinguistic tags |
-
-#### POST /tts/turbo
-
-| Field                | Type   | Required | Notes                                         |
-| -------------------- | ------ | -------- | --------------------------------------------- |
-| `text`               | string | yes      | Text with paralinguistic tags                 |
-| `reference_audio`    | file   | yes      | WAV/MP3 for voice cloning (~10 seconds ideal) |
-| `temperature`        | float  | no       | Sampling temperature (default 0.8)            |
-| `repetition_penalty` | float  | no       | Penalizes repeated tokens (default 1.2)       |
-
-Supported paralinguistic tags: `[laugh]` `[chuckle]` `[sigh]` `[cough]` `[clear throat]` `[gasp]` `[groan]` `[sniff]` `[shush]`
-
-Both containers return `audio/wav`.
-
-## Qwen3 TTS
-
-Custom image built from `Dockerfile.qwen3`. Exposes `Qwen3-TTS-12Hz-1.7B-VoiceDesign` through a FastAPI wrapper in `qwen3/app.py`.
-
-Generates voices from text descriptions — no reference audio required.
-
-| Method | Path      | Purpose                                       |
-| ------ | --------- | --------------------------------------------- |
-| GET    | `/health` | Liveness check, reports device and model name |
-| POST   | `/tts`    | Text-to-speech generation using Qwen3 TTS     |
-
-| Field                | Type   | Required | Notes                                                  |
-| -------------------- | ------ | -------- | ------------------------------------------------------ |
-| `text`               | string | yes      | Plain text to synthesize                               |
-| `voice_description`  | string | yes      | Text description of the desired voice                  |
-| `language`           | string | no       | Default `"auto"` (auto/en/zh/ja/ko/de/fr/ru/pt/es/it)  |
-| `temperature`        | float  | no       | HF sampling kwarg, omitted when unset                  |
-| `top_p`              | float  | no       | HF sampling kwarg, omitted when unset                  |
-| `top_k`              | int    | no       | HF sampling kwarg, omitted when unset                  |
-| `repetition_penalty` | float  | no       | HF sampling kwarg, omitted when unset                  |
-| `max_new_tokens`     | int    | no       | HF sampling kwarg, omitted when unset                  |
-
-Returns `audio/wav`.
-
-## Qwen3 TTS Base
-
-Custom image built from `Dockerfile.qwen3` (same image, `app_base` module). Exposes `Qwen3-TTS` (Base model) through `qwen3/app_base.py` for voice cloning from a reference audio clip and its transcript.
-
-| Method | Path      | Purpose                                       |
-| ------ | --------- | --------------------------------------------- |
-| GET    | `/health` | Liveness check, reports device and model name |
-| POST   | `/tts`    | Voice cloning with reference audio            |
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `text` | string | yes | Plain text to synthesize |
-| `reference_audio` | file | yes | WAV/MP3 voice sample for cloning |
-| `voice_transcript` | string | yes | Transcript of the reference audio |
-| `language` | string | no | Default `"auto"` (auto/en/zh/ja/ko/de/fr/ru/pt/es/it) |
-| `temperature` | float | no | HF sampling kwarg, omitted when unset |
-| `top_p` | float | no | HF sampling kwarg, omitted when unset |
-| `top_k` | int | no | HF sampling kwarg, omitted when unset |
-| `repetition_penalty` | float | no | HF sampling kwarg, omitted when unset |
-| `max_new_tokens` | int | no | HF sampling kwarg, omitted when unset |
-
-Returns `audio/wav`.
-
-## VoxCPM2
-
-Native inference server (`voxcpm2/server.py`), no vLLM backend. Wraps `openbmb/VoxCPM2` for voice cloning.
-
-Port `8003`. Two-step protocol — upload the reference clip once, then stream generation referencing its `file_id`.
-
-| Method | Path            | Purpose                                         |
-| ------ | --------------- | ------------------------------------------------ |
-| GET    | `/health`       | Liveness check, reports model-loaded state      |
-| POST   | `/upload-audio` | Upload reference audio, returns a `file_id`     |
-| POST   | `/api/stream`   | Streaming generation using an uploaded `file_id`|
-
-### POST /upload-audio
-
-Multipart. Field `file` (WAV/MP3/FLAC/OGG/M4A). Response:
-
-```json
-{ "file_id": "<uuid>" }
+```bash
+huggingface-cli download audio-cpp/audio.cpp-gguf --include "Breeze-TTS-2-GGUF/*q8_0.gguf" --local-dir <GGUF_MODELS_DIR>
 ```
 
-Uploads are cached server-side and expire after `UPLOAD_TTL_SECONDS` (default 3600s).
+- **Read at startup.** An added or edited entry goes live only after `docker compose restart audiocpp`.
+- **Lazy load, one resident** (`lazy_load: true`, `max_loaded_models: 1`, no idle unload). A request naming another model loads it and evicts the current one; that first request takes 9–31 s. Probe with `GET /v1/models`: each `data[]` item carries a `loaded` boolean (not llama's `status.value`).
+- **A missing GGUF does not fail startup.** `/v1/models` still lists the entry with `loaded: false`, and a request for it returns 500 `model path does not exist`.
+- **Busy.** A request for a *different* model while one is generating gets an immediate 503 `server_busy`; requests for the same model queue. The app's TTS gate sends one request per endpoint at a time and retries a 503 after 2, 4 and 8 s before reporting the queue item Busy.
+- **VoxCPM2 reference capacity.** `voxcpm2.audiovae_encoder_sample_capacity: "480000"` raises VoxCPM2's reference-audio cap from 15 s to 30 s. It pairs with the app's 30 s hard Reference Limit (`ReferenceLimit` in `Read2Me.Services.Audio`); raise one and the other must follow. audio.cpp also caps an inline reference at 5 MiB, which is the limit's byte bound.
 
-### POST /api/stream
+### Request
 
-JSON body. Response is `application/octet-stream`, a sequence of framed binary messages: **1 type byte** + **4-byte little-endian length** (`<I`) + payload. Type `0` = JSON control frame (`meta`/`done`/`error`); type `1` = raw `float32` PCM chunk.
+`POST /v1/audio/speech`, JSON `{ model, input, voice_ref?: { type: "base64", data }, reference_text?, language?, options: { … } }`. Every `options` value is a **string**. The response is a WAV at the model's native rate; the app normalises it to Canonical WAV.
 
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `text` | string | yes | Plain text to synthesize |
-| `control` | string | no | Prepended as `(control)text` — style/emotion hint |
-| `reference_wav_path` | string | no | `file_id` from `/upload-audio` (voice cloning) |
-| `cfg_value` | float | no | Classifier-free guidance weight (default 2.0) |
-| `inference_timesteps` | int | no | Diffusion steps (default 10) |
-| `min_len` | int | no | Minimum output length (default 2) |
-| `max_len` | int | no | Maximum output length (default 4096) |
-| `normalize` | bool | no | Loudness normalization (default false) |
-| `denoise` | bool | no | Denoise reference audio (default false) |
-| `retry_badcase` | bool | no | Retry generation on bad-case detection (default true) |
-| `retry_badcase_max_times` | int | no | Max retries (default 3) |
-| `retry_badcase_ratio_threshold` | float | no | Bad-case detection threshold (default 6.0) |
+- **Breeze** clone sends the voice transcript as `reference_text` and the item's voice instructions as `options.instruction` (omitted when empty), with `guidance_scale` 3 when instructed and 1 when not. Breeze design sends the design prompt as `options.instruction` and no reference.
+- **VoxCPM2** takes the instruction in `input` as `(instruction)text` and no `reference_text`.
+- **Qwen3** takes `language` top-level as a name (`english`, `auto`, …); audio.cpp ignores `options.language`. Base sends the voice transcript as `reference_text`.
+- **Chatterbox** sends `language: "en"` and every knob explicitly, because audio.cpp's documented defaults differ from its code.
+- Every request carries a random `seed` unless the config pins one — audio.cpp's default is a fixed 0, which would make a WER retry repeat the same take.
 
-Stream sequence: one `meta` frame (`{"type": "meta", "sample_rate": ...}`) → N audio frames (raw float32 PCM) → one `done` frame (`{"type": "done", "chunks": N}`), or an `error` frame if generation fails.
+### VRAM
+
+VoxCPM2 and Qwen3 peak near 7.75 GB on paragraph-sized requests — the 8 GB card has no room for llama beside them, and requests should stay paragraph-sized.
+
+### Licences
+
+The audio.cpp runtime is Apache-2.0; VoxCPM2 and Qwen3 are Apache-2.0 and Chatterbox is MIT. **Breeze TTS 2 weights are BreezeBlue research/non-commercial, and the licence covers the audio they produce: personal use only.** Cloning a real person's voice needs their consent.
+
+### Removing the native TTS containers
+
+Before ADR 0010 each model ran in its own Python container (`chatterbox`, `chatterbox-turbo`, `qwen3-tts`, `qwen3-tts-base`, `voxcpm2`). The app migrates stored configs itself (localhost configs on 8000/8003/8100/8101 move to 8004; Chatterbox Turbo configs are deleted). On a machine that ran the old containers, remove the leftovers by hand from `Infra/`:
+
+```bash
+docker rm -f read2me-chatterbox read2me-chatterbox-turbo read2me-qwen3-tts read2me-qwen3-tts-base read2me-voxcpm2
+docker image rm read2me-chatterbox read2me-chatterbox-turbo read2me-qwen3-tts read2me-qwen3-tts-base read2me-voxcpm2
+docker volume rm infra_voxcpm2_uploads
+```
+
+Then delete `cache/chatterbox`, `cache/chatterbox-turbo`, `cache/qwen3`, `cache/qwen3-base` and `cache/voxcpm2`.
 
 ## Whisper.CPP (CPU)
 

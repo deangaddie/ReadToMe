@@ -59,14 +59,16 @@ Server → client, method name = event family, payload carries `kind`:
 | `itemStatus` | `{ folder, paragraphs, items }` per-item status/outcome deltas | project group |
 | `receipt` | `BookMutationReceipt` | project group |
 | `assembly` | phase / progress / completed / failed / cancelled | everyone |
-| `voiceBatch` | started / progress / voiceUpdated / completed / cancelled | project group |
+| `voiceBatch` | started / progress / voiceUpdated (fresh audio carries `referenceSeconds` / `referenceWarning`) / completed / cancelled | project group |
 | `watchdog` | recoveryStarted / containerRestarted / serviceHealthy / serviceDown | everyone |
 | `serviceStatus` | `{ name, status, op?, ok?, error? }` last observed status per managed service | everyone |
 | `preflight` | per-service stages of one preflight run, then `{ kind: done, ok }` | one connection |
 | `bookEdit`, `llmTest` | progress / done / failed for one run | one connection |
-| `llm`, `audioGen` | stream events (control + batched deltas / phase events) | stream group |
+| `llm`, `audioGen` | stream events (control + batched deltas / phase events; `audioGen` `modelLoading` has an empty id — the TTS gate sits below any item) | stream group |
 | `throughput` | `ThroughputSnapshot` once a second while a run is active | everyone |
 | `settingsChanged` | `{ area }` | everyone |
+
+A voice's Reference Limit state (`context/voice-rules.md`) reaches the page from `VoiceDto` or a live `voiceUpdated`; the voice card and the voice editor show `referenceWarning` as a warn chip labelled with `referenceSeconds`, and the voice-design sample-text card counts against the API's `maxLength`.
 
 The C# side lives in `src/Read2Me.App/Live` (`LiveHub`, `LiveRelay`, `LiveMessageMapper`, `LiveMessages`). `live-messages.spec.ts` reads those sources and fails when a family or `kind` string drifts, so add a family on both sides in one change.
 
