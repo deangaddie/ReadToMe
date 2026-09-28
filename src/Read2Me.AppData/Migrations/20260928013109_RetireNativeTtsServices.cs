@@ -20,7 +20,7 @@ namespace Read2Me.AppData.Migrations
         // The retired native services, as the watchdog registry knew them: chatterbox 8000,
         // voxcpm2 8003, qwen3-tts (design) 8100, qwen3-tts-base 8101. Only these hosts are local;
         // any other host is someone's own server and is left alone.
-        private static readonly string[] NativeBaseUrls =
+        private static readonly string[] NativeBaseUrlLiterals =
             (from host in new[] { "localhost", "127.0.0.1" }
              from port in new[] { 8000, 8003, 8100, 8101 }
              select $"'http://{host}:{port}'").ToArray();
@@ -55,12 +55,12 @@ namespace Read2Me.AppData.Migrations
             // the enum name while the member existed; '2' is how the bare value would round-trip.
             // Children are deleted explicitly rather than trusting the FK cascade, which only fires
             // when the connection has foreign_keys on.
-            const string turboIds =
-                "SELECT Id FROM ParagraphTtsServiceConfigs WHERE Type IN ('ChatterboxTurbo', '2')";
+            const string isTurbo = "Type IN ('ChatterboxTurbo', '2')";
+            const string turboIds = $"SELECT Id FROM ParagraphTtsServiceConfigs WHERE {isTurbo}";
             migrationBuilder.Sql($"UPDATE Settings SET ActiveParagraphTtsConfigId = NULL WHERE ActiveParagraphTtsConfigId IN ({turboIds});");
             migrationBuilder.Sql($"DELETE FROM TextSubstitutionSteps WHERE ParagraphTtsServiceConfigId IN ({turboIds});");
             migrationBuilder.Sql($"DELETE FROM ToSentenceCaseConfigs WHERE ParagraphTtsServiceConfigId IN ({turboIds});");
-            migrationBuilder.Sql("DELETE FROM ParagraphTtsServiceConfigs WHERE Type IN ('ChatterboxTurbo', '2');");
+            migrationBuilder.Sql($"DELETE FROM ParagraphTtsServiceConfigs WHERE {isTurbo};");
 
             Repoint(migrationBuilder, "ParagraphTtsServiceConfigs", ParagraphTtsModels);
             Repoint(migrationBuilder, "VoiceDesignServiceConfigs", VoiceDesignModels);
@@ -90,7 +90,7 @@ namespace Read2Me.AppData.Migrations
             string table,
             (string Type, string ModelId, string ModelKey)[] models)
         {
-            var onNativeService = string.Join(" OR ", BaseUrlKeys.Select(NativeBaseUrl));
+            var onNativeService = string.Join(" OR ", BaseUrlKeys.Select(IsOnNativeService));
 
             // Model id first: once the URL moves, the row no longer says it was native. A row that
             // already names a model (either casing) keeps it.
@@ -106,16 +106,16 @@ namespace Read2Me.AppData.Migrations
             {
                 migrationBuilder.Sql(
                     $"UPDATE {table} SET SettingsJson = json_set(SettingsJson, '$.{key}', '{AudioCppBaseUrl}') " +
-                    $"WHERE {NativeBaseUrl(key)};");
+                    $"WHERE {IsOnNativeService(key)};");
             }
         }
 
         /// <summary>
-        /// True when the row's <paramref name="key"/> is a native service URL. Mirrors the watchdog
+        /// SQL predicate: the row's <paramref name="key"/> is a native service URL. Mirrors the watchdog
         /// registry's normalisation (case, trailing slash).
         /// </summary>
-        private static string NativeBaseUrl(string key) =>
-            $"(lower(rtrim({Extract(key)}, '/')) IN ({string.Join(", ", NativeBaseUrls)}))";
+        private static string IsOnNativeService(string key) =>
+            $"(lower(rtrim({Extract(key)}, '/')) IN ({string.Join(", ", NativeBaseUrlLiterals)}))";
 
         /// <summary>
         /// The value at <c>$.key</c>, or NULL when absent. The CASE keeps json_extract away from a
