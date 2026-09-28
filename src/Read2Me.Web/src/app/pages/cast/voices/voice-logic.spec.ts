@@ -25,6 +25,8 @@ function voice(overrides: Partial<VoiceDto> = {}): VoiceDto {
     isEdited: false,
     voiceDesignSettingsOverrideJson: null,
     ttsSettingsOverrideJson: null,
+    referenceSeconds: null,
+    referenceWarning: null,
     ...overrides,
   };
 }
@@ -144,6 +146,26 @@ describe('batch hub events', () => {
     );
     expect(patched.voices[1]).toBe(list.voices[1]);
     expect(patched.defaultVoiceId).toBe('v1');
+  });
+
+  it('voiceUpdated with fresh audio drops the old reference length and warning until a reload', () => {
+    const list: CharacterVoicesDto = {
+      defaultVoiceId: 'v1',
+      voices: [voice({ referenceSeconds: 18.2, referenceWarning: 'over 15 s' })],
+    };
+    const fresh = applyVoiceUpdated(list, {
+      kind: 'voiceUpdated',
+      voiceId: 'v1',
+      audioFileName: 'voices/alice/v1.wav',
+    });
+    expect(fresh.voices[0]).toMatchObject({ referenceSeconds: null, referenceWarning: null });
+
+    const promptOnly = applyVoiceUpdated(list, {
+      kind: 'voiceUpdated',
+      voiceId: 'v1',
+      designPrompt: 'a warm alto',
+    });
+    expect(promptOnly.voices[0]).toMatchObject({ referenceSeconds: 18.2, referenceWarning: 'over 15 s' });
   });
 
   it('voiceUpdated for an unknown voice answers the same list (reload instead)', () => {

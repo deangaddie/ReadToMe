@@ -250,6 +250,36 @@ namespace Read2Me.Tests.Services.Audio
             Assert.EndsWith(".wav", result);
         }
 
+        // ── Reference Limit ───────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task StoreAsync_OverTheHardLimit_StoresNothing_AndKeepsTheStoredOriginal()
+        {
+            // Measured after normalisation, so the canonical-WAV length is what counts.
+            _normalizer.ReturnBytes = TestWav.Tone(31_000);
+            var charId = Guid.NewGuid();
+            var voiceId = Guid.NewGuid();
+            var originalPath = System.IO.Path.Combine(
+                "C:\\fake-workspace", "TestProject", "voices", charId.ToString(), $"{voiceId}.orig.wav");
+            _fs.SeedFile(originalPath, [1, 2, 3]);
+
+            var ex = await Assert.ThrowsAsync<ReferenceTooLongException>(
+                () => _pipeline.StoreAsync(MakeRequest(".mp3", charId: charId, voiceId: voiceId)));
+
+            Assert.Equal(31_000, ex.DurationMs, precision: 0);
+            Assert.Equal([originalPath], _fs.GetAllPaths());
+        }
+
+        [Fact]
+        public async Task StoreAsync_OverTheSoftLimitOnly_StoresIt()
+        {
+            _normalizer.ReturnBytes = TestWav.Tone(20_000);
+
+            var result = await _pipeline.StoreAsync(MakeRequest(".wav"));
+
+            Assert.EndsWith(".wav", result);
+        }
+
         // ── Fake helpers ──────────────────────────────────────────────────────────
 
         private sealed class FakeNormalizerForPipeline : IAudioNormalizer

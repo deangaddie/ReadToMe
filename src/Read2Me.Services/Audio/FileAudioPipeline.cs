@@ -16,13 +16,24 @@ namespace Read2Me.Services.Audio
         /// each call site: fresh audio makes a stored original stale, and a stale original is worse
         /// than none (it would leave the <c>Edited</c> chip lying and Restore pointing at audio the
         /// voice no longer has). A call site added later cannot forget.
+        /// <para>
+        /// The same chokepoint holds the hard <see cref="ReferenceLimit"/>: the normalised audio is
+        /// measured before anything on disk changes, so a refused reference leaves the Voice exactly
+        /// as it was — its audio and its stored original both untouched.
+        /// </para>
         /// </summary>
+        /// <exception cref="ReferenceTooLongException">The normalised audio is over the hard limit.</exception>
         public async Task<string> StoreAsync(AudioStoreRequest request, CancellationToken ct = default)
         {
-            originals.Delete(request.FolderId, request.CharacterId, request.VoiceId);
-
             var settings = await settingsService.GetAsync();
-            var normalizedAudio = await normalizer.NormalizeToWavAsync(request.Source, settings.FfmpegPath, ct);
+            await using var normalizedAudio = await BufferAsync(
+                await normalizer.NormalizeToWavAsync(request.Source, settings.FfmpegPath, ct), ct);
+
+            ReferenceLimit.EnsureWithinHardLimit(
+                CanonicalWav.DurationMs((int)Math.Min(normalizedAudio.Length, int.MaxValue)),
+                normalizedAudio.Length);
+
+            originals.Delete(request.FolderId, request.CharacterId, request.VoiceId);
 
             var projectFolder = fs.GetProjectFolderPath(request.FolderId.Value);
             var charFolder = Path.Combine(projectFolder, "voices", request.CharacterId.ToString());
@@ -53,6 +64,24 @@ namespace Read2Me.Services.Audio
             await fs.WriteFileAsync(Path.Combine(audioFolder, fileName), source);
 
             return $"audio/{fileName}";
+        }
+
+        /// <summary>The normaliser's stream, seekable so its length can be measured before it is written.</summary>
+        private static async Task<Stream> BufferAsync(Stream normalized, CancellationToken ct)
+        {
+            if (normalized.CanSeek)
+            {
+                normalized.Position = 0;
+                return normalized;
+            }
+
+            await using (normalized)
+            {
+                var buffer = new MemoryStream();
+                await normalized.CopyToAsync(buffer, ct);
+                buffer.Position = 0;
+                return buffer;
+            }
         }
 
         private async Task WriteHelperTextFileIfAbsentAsync(string charFolder, AudioStoreRequest request)

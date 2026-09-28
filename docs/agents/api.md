@@ -264,10 +264,12 @@ curl -s -X POST http://localhost:5000/api/voice-batch/cancel
 curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices
 curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}
 # → { id, characterId, name, source: "Uploaded"|"Generated", designPrompt, transcript, audioFileName,
-#     isEdited, voiceDesignSettingsOverrideJson, ttsSettingsOverrideJson }
+#     isEdited, voiceDesignSettingsOverrideJson, ttsSettingsOverrideJson,
+#     referenceSeconds (from the stored WAV header), referenceWarning (set over the 15 s soft Reference Limit) }
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio # 503 "TTS busy, try again" = retry later
 
-# reference audio: upload/replace (multipart 'file', 200 MB max; normalised + committed), then transcribe:
+# reference audio: upload/replace (multipart 'file', 200 MB max; normalised + committed; 422 over the 30 s / 5 MiB
+# hard Reference Limit with nothing stored — never trimmed), then transcribe:
 curl -s -X PUT http://localhost:5000/api/projects/{folder}/voices/{voiceId}/audio -F 'file=@sample.wav'
 curl -s -X POST http://localhost:5000/api/projects/{folder}/voices/{voiceId}/transcribe
 # → { "transcript": "..." } (also stored on the voice)

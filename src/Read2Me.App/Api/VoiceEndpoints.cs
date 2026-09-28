@@ -22,11 +22,14 @@ namespace Read2Me.App.Api
     /// (<see cref="IVoiceOriginalStore.Exists"/>): the audio has been through the voice editor, so
     /// fresh audio would discard that edit. The two override JSONs are sparse patches over the
     /// active provider's settings, keyed as the provider's settings schema lists them.
+    /// <see cref="ReferenceSeconds"/> is the stored audio's length (null without audio), and
+    /// <see cref="ReferenceWarning"/> is set when it is over the Reference Limit's soft limit.
     /// </summary>
     public sealed record VoiceDto(
         Guid Id, Guid CharacterId, string Name, string? Description, string Source,
         string? DesignPrompt, string? Transcript, string? AudioFileName, bool IsEdited,
-        string? VoiceDesignSettingsOverrideJson, string? TtsSettingsOverrideJson);
+        string? VoiceDesignSettingsOverrideJson, string? TtsSettingsOverrideJson,
+        double? ReferenceSeconds, string? ReferenceWarning);
     public sealed record CharacterVoicesDto(Guid? DefaultVoiceId, IReadOnlyList<VoiceDto> Voices);
     public sealed record VoiceBatchStartRequest(bool RegenerateAll = false);
     public sealed record VoiceBatchStatusDto(
@@ -53,10 +56,10 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/projects/{folder}/characters/{characterId:guid}/voices", GetVoicesAsync)
                 .WithSummary("A character's voices and its default voice id.");
             endpoints.MapGet("/api/projects/{folder}/voices/{voiceId:guid}", GetVoiceAsync)
-                .WithSummary("One voice by id, with isEdited (its audio has been through the voice editor) and both settings overrides.");
+                .WithSummary("One voice by id, with isEdited (its audio has been through the voice editor), both settings overrides, and referenceSeconds / referenceWarning (set over the 15 s soft Reference Limit), read from the stored WAV.");
             endpoints.MapPut("/api/projects/{folder}/voices/{voiceId:guid}/audio", UploadAudioAsync)
                 .DisableAntiforgery()
-                .WithSummary("Upload or replace a voice's reference audio: multipart field 'file' (audio, 200 MB max). Normalises, stores and commits in one step; answers the updated voice. Any earlier voice-editor edit is discarded.");
+                .WithSummary("Upload or replace a voice's reference audio: multipart field 'file' (audio, 200 MB max). Normalises, stores and commits in one step; answers the updated voice. Any earlier voice-editor edit is discarded. 422 when the normalised reference is over the Reference Limit's hard limit (30 s / 5 MiB), with nothing stored; over the soft limit (15 s) it is stored and the voice's referenceWarning is set.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/transcribe", TranscribeAsync)
                 .WithSummary("Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service.");
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/design-prompt/render", RenderDesignPromptAsync)
@@ -79,11 +82,23 @@ namespace Read2Me.App.Api
                 .WithSummary("Cancel the running voice batch.");
         }
 
-        internal static VoiceDto ToDto(ProjectFolderId folderId, VoiceEntity v, IVoiceOriginalStore originals) => new(
-            v.Id, v.CharacterId, v.Name, v.Description, v.Source.ToString(),
-            v.DesignPrompt, v.Transcript, v.AudioFileName,
-            originals.Exists(folderId, v.CharacterId, v.Id),
-            v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson);
+        /// <summary>
+        /// The reference's duration is read from the stored WAV's header on every call, not from a
+        /// column, so it applies to voices stored before the Reference Limit existed and stays true
+        /// after the voice editor rewrites the audio.
+        /// </summary>
+        internal static VoiceDto ToDto(
+            ProjectFolderId folderId, VoiceEntity v, IVoiceOriginalStore originals, IFileSystem fs)
+        {
+            var durationMs = WavHeader.TryReadDurationMs(fs, folderId, v.AudioFileName);
+            return new(
+                v.Id, v.CharacterId, v.Name, v.Description, v.Source.ToString(),
+                v.DesignPrompt, v.Transcript, v.AudioFileName,
+                originals.Exists(folderId, v.CharacterId, v.Id),
+                v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson,
+                durationMs is { } ms ? Math.Round(ms / 1000, 1) : null,
+                ReferenceLimit.SoftWarning(durationMs));
+        }
 
         private static async Task<IResult> GetVoicesAsync(
             string folder, Guid characterId, IFileSystem fs, ICharacterReader reader, IVoiceOriginalStore originals)
@@ -95,7 +110,7 @@ namespace Read2Me.App.Api
             var defaultVoiceId = await reader.GetDefaultVoiceIdAsync(folderId, characterId);
             return Results.Ok(new CharacterVoicesDto(
                 defaultVoiceId,
-                voices.Select(v => ToDto(folderId, v, originals)).ToList()));
+                voices.Select(v => ToDto(folderId, v, originals, fs)).ToList()));
         }
 
         private static async Task<IResult> GetVoiceAsync(
@@ -105,7 +120,7 @@ namespace Read2Me.App.Api
                 return Results.NotFound();
 
             var voice = await reader.GetVoiceAsync(folderId, voiceId);
-            return voice is null ? Results.NotFound() : Results.Ok(ToDto(folderId, voice, originals));
+            return voice is null ? Results.NotFound() : Results.Ok(ToDto(folderId, voice, originals, fs));
         }
 
         /// Mirrors CharacterPresenter.UploadVoiceAudioAsync: the orchestrator stores the recording
@@ -156,7 +171,7 @@ namespace Read2Me.App.Api
             }
 
             var updated = await reader.GetVoiceAsync(folderId, voiceId);
-            return updated is null ? Results.NotFound() : Results.Ok(ToDto(folderId, updated, originals));
+            return updated is null ? Results.NotFound() : Results.Ok(ToDto(folderId, updated, originals, fs));
         }
 
         /// Mirrors CharacterPresenter.TranscribeVoiceAsync: transcribe, then commit the transcript.

@@ -92,6 +92,8 @@ function voice(overrides: Partial<VoiceDto> = {}): VoiceDto {
     isEdited: false,
     voiceDesignSettingsOverrideJson: null,
     ttsSettingsOverrideJson: null,
+    referenceSeconds: null,
+    referenceWarning: null,
     ...overrides,
   };
 }

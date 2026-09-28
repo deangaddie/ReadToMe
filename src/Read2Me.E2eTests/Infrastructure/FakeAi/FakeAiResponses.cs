@@ -63,10 +63,10 @@ public static partial class FakeAiResponses
     [GeneratedRegex(@"""index""\s*:\s*(\d+)")]
     private static partial Regex ItemIndex();
 
-    /// <summary>Minimal valid 16-bit PCM mono WAV with 100ms of silence.</summary>
-    public static byte[] SilentWav(int sampleRate = 16000)
+    /// <summary>Minimal valid 16-bit PCM mono WAV of silence, 100 ms unless told otherwise.</summary>
+    public static byte[] SilentWav(int sampleRate = 16000, int durationMs = 100)
     {
-        var samples = sampleRate / 10;
+        var samples = (int)((long)sampleRate * durationMs / 1000);
         var dataLen = samples * 2;
         var ms = new MemoryStream();
         var w = new BinaryWriter(ms);

@@ -115,6 +115,16 @@ interface Render {
             <mat-icon>check</mat-icon> Apply
           </button>
         </span>
+        @if (voice.referenceWarning; as warning) {
+          <r2m-status-chip
+            status="warn"
+            [label]="voice.referenceSeconds + ' s'"
+            icon="timer"
+            compact
+            [tooltip]="warning"
+            data-testid="voice-reference-warning"
+          />
+        }
         @if (voice.isEdited) {
           <r2m-status-chip status="warn" label="Edited" icon="tune" compact data-testid="edited-chip" />
           <button

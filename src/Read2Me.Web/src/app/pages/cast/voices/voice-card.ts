@@ -118,6 +118,16 @@ import { OverrideSave, VoiceOverrides } from './voice-overrides';
               data-testid="voice-edited-chip"
             />
           }
+          @if (voice().referenceWarning; as warning) {
+            <r2m-status-chip
+              status="warn"
+              [label]="voice().referenceSeconds + ' s'"
+              icon="timer"
+              compact
+              [tooltip]="warning"
+              data-testid="voice-reference-warning"
+            />
+          }
           @if (voice().audioFileName) {
             <a
               mat-icon-button
@@ -196,7 +206,7 @@ import { OverrideSave, VoiceOverrides } from './voice-overrides';
                 accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aac,.opus,.webm"
                 [maxBytes]="maxAudioBytes"
                 [label]="voice().audioFileName ? 'Replace audio' : 'Upload audio'"
-                hint="Audio file (WAV, MP3, FLAC, OGG, M4A…), 200 MB max. The recording is normalised on upload."
+                hint="Audio file (WAV, MP3, FLAC, OGG, M4A…), 200 MB max. The reference must be 30 s or shorter; 15 s or shorter clones best. The recording is normalised on upload."
                 (files)="upload($event)"
                 (rejected)="rejected($event)"
               />
@@ -544,9 +554,11 @@ export class VoiceCard {
     if (!(await this.confirmOverwriteEdit(voice))) return;
     this.uploading.set(true);
     try {
-      await this.voices.uploadAudio(this.folder(), voice.id, file);
+      const stored = await this.voices.uploadAudio(this.folder(), voice.id, file);
       this.store.bumpAudio(voice.id);
-      this.toast.success('Voice audio normalised.');
+      // Over the soft Reference Limit it is kept, but the upload says so as well as the badge.
+      if (stored.referenceWarning) this.toast.warn(stored.referenceWarning);
+      else this.toast.success('Voice audio normalised.');
       await this.store.refresh();
     } catch (e) {
       this.toast.problem(toApiError(e).toProblem());

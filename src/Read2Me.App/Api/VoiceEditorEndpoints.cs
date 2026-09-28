@@ -131,7 +131,7 @@ namespace Read2Me.App.Api
                 return NoAudio();
 
             await editor.ApplyAsync(voiceRef, entry.Final, ct);
-            return Results.Ok(VoiceEndpoints.ToDto(folderId, voice, originals));
+            return Results.Ok(VoiceEndpoints.ToDto(folderId, voice, originals, fs));
         }
 
         private static async Task<IResult> RestoreAsync(
@@ -149,7 +149,7 @@ namespace Read2Me.App.Api
                 return NoAudio();
 
             await editor.RestoreOriginalAsync(voiceRef, ct);
-            return Results.Ok(VoiceEndpoints.ToDto(folderId, voice, originals));
+            return Results.Ok(VoiceEndpoints.ToDto(folderId, voice, originals, fs));
         }
 
         private static async Task<IResult> GetOriginalAsync(

@@ -72,6 +72,8 @@ const VOICE: VoiceDto = {
   isEdited: false,
   voiceDesignSettingsOverrideJson: null,
   ttsSettingsOverrideJson: null,
+  referenceSeconds: null,
+  referenceWarning: null,
 };
 
 const PREVIEW: PreviewResponse = {

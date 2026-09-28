@@ -389,6 +389,10 @@ export interface VoiceDto {
   isEdited: boolean;
   voiceDesignSettingsOverrideJson: string | null;
   ttsSettingsOverrideJson: string | null;
+  /** The stored audio's length, read from its WAV header; null without audio. */
+  referenceSeconds: number | null;
+  /** Set when the reference is over the Reference Limit's 15 s soft limit (kept, but warned). */
+  referenceWarning: string | null;
 }
 
 export interface TranscribeVoiceResponse {

@@ -1443,7 +1443,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** One voice by id, with isEdited (its audio has been through the voice editor) and both settings overrides. */
+        /** One voice by id, with isEdited (its audio has been through the voice editor), both settings overrides, and referenceSeconds / referenceWarning (set over the 15 s soft Reference Limit), read from the stored WAV. */
         get: {
             parameters: {
                 query?: never;
@@ -1481,7 +1481,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Upload or replace a voice's reference audio: multipart field 'file' (audio, 200 MB max). Normalises, stores and commits in one step; answers the updated voice. Any earlier voice-editor edit is discarded. */
+        /** Upload or replace a voice's reference audio: multipart field 'file' (audio, 200 MB max). Normalises, stores and commits in one step; answers the updated voice. Any earlier voice-editor edit is discarded. 422 when the normalised reference is over the Reference Limit's hard limit (30 s / 5 MiB), with nothing stored; over the soft limit (15 s) it is stored and the voice's referenceWarning is set. */
         put: {
             parameters: {
                 query?: never;
@@ -1634,7 +1634,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Synthesise reference audio for one generated voice from its design prompt. Synchronous; takes tens of seconds. */
+        /** Synthesise reference audio for one generated voice from its design prompt. Synchronous; takes tens of seconds. 503 "TTS busy, try again" when the TTS runtime is generating with another model. */
         post: {
             parameters: {
                 query?: never;
@@ -2939,7 +2939,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
+        /** The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
         get: {
             parameters: {
                 query?: {

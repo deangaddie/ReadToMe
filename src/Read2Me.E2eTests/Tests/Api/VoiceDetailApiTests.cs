@@ -41,6 +41,83 @@ public class VoiceDetailApiTests(E2eAppFixture app)
         return new MultipartFormDataContent { { content, "file", fileName } };
     }
 
+    // The in-proc host's normaliser passes bytes through, so a 24 kHz mono WAV is already Canonical
+    // WAV and its length is the duration the Reference Limit measures.
+    private static MultipartFormDataContent WavForm(string fileName, int durationMs)
+    {
+        var content = new ByteArrayContent(FakeAiResponses.SilentWav(24000, durationMs));
+        content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+        return new MultipartFormDataContent { { content, "file", fileName } };
+    }
+
+    [Fact]
+    public async Task Upload_over_the_hard_reference_limit_is_422_and_leaves_the_voice_unchanged()
+    {
+        var folder = $"api-voice-toolong-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Voice Too Long", "Author");
+        var aliceId = await CharacterIdAsync(folder, "Alice");
+        var voiceId = await CreateVoiceAsync(folder, aliceId, "Reference Voice", isGenerated: false);
+        var first = await Http.PutAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}/audio", WavForm("short.wav", 5_000));
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var before = JsonDocument.Parse(
+            await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}")).RootElement;
+        var path = Path.Combine(app.WorkspaceDir, folder,
+            before.GetProperty("audioFileName").GetString()!.Replace('/', Path.DirectorySeparatorChar));
+        var bytesBefore = await File.ReadAllBytesAsync(path);
+
+        var response = await Http.PutAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}/audio", WavForm("long.wav", 31_000));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Contains("30 s or shorter", problem.GetProperty("detail").GetString());
+        var after = JsonDocument.Parse(
+            await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}")).RootElement;
+        Assert.Equal(before.GetProperty("audioFileName").GetString(), after.GetProperty("audioFileName").GetString());
+        Assert.Equal(bytesBefore, await File.ReadAllBytesAsync(path));
+    }
+
+    [Fact]
+    public async Task Upload_over_the_soft_reference_limit_is_stored_with_a_warning()
+    {
+        var folder = $"api-voice-soft-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Voice Soft Limit", "Author");
+        var aliceId = await CharacterIdAsync(folder, "Alice");
+        var voiceId = await CreateVoiceAsync(folder, aliceId, "Reference Voice", isGenerated: false);
+
+        var response = await Http.PutAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}/audio", WavForm("long.wav", 20_000));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var uploaded = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.False(string.IsNullOrEmpty(uploaded.GetProperty("audioFileName").GetString()));
+        Assert.Equal(20.0, uploaded.GetProperty("referenceSeconds").GetDouble(), precision: 1);
+        Assert.Contains("15 s", uploaded.GetProperty("referenceWarning").GetString());
+
+        // The list reads it back from the stored WAV's header: no stored column.
+        var listed = JsonDocument.Parse(await Http.GetStringAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"))
+            .RootElement.GetProperty("voices").EnumerateArray().Single(v => v.GetProperty("id").GetGuid() == voiceId);
+        Assert.Contains("15 s", listed.GetProperty("referenceWarning").GetString());
+    }
+
+    [Fact]
+    public async Task Upload_within_the_soft_reference_limit_has_no_warning()
+    {
+        var folder = $"api-voice-within-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Voice Within Limit", "Author");
+        var aliceId = await CharacterIdAsync(folder, "Alice");
+        var voiceId = await CreateVoiceAsync(folder, aliceId, "Reference Voice", isGenerated: false);
+
+        var response = await Http.PutAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}/audio", WavForm("short.wav", 9_000));
+
+        var uploaded = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(9.0, uploaded.GetProperty("referenceSeconds").GetDouble(), precision: 1);
+        Assert.Equal(JsonValueKind.Null, uploaded.GetProperty("referenceWarning").ValueKind);
+    }
+
     [Fact]
     public async Task Get_voice_by_id_answers_the_voice_and_404_for_unknown()
     {

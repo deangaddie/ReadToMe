@@ -41,6 +41,8 @@ function voiceList(voices: Partial<VoiceDto>[]): CharacterVoicesDto {
       isEdited: false,
       voiceDesignSettingsOverrideJson: null,
       ttsSettingsOverrideJson: null,
+      referenceSeconds: null,
+      referenceWarning: null,
       ...v,
     })),
   };

@@ -37,6 +37,55 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBa
         return path;
     }
 
+    private static string CanonicalWavFile(int durationMs)
+    {
+        // 24 kHz mono: the in-proc host's normaliser passes it through as Canonical WAV.
+        var path = Path.Combine(Path.GetTempPath(), $"r2me-voice-{Guid.NewGuid():N}.wav");
+        File.WriteAllBytes(path, FakeAiResponses.SilentWav(24000, durationMs));
+        return path;
+    }
+
+    [Fact]
+    public async Task Reference_upload_over_the_hard_limit_shows_the_error_and_over_the_soft_limit_the_badge()
+    {
+        var book = await App.SeedProjectAsync("web-voices-limit", "Limit Book", "A. Author", characterName: "Alice");
+        var alice = book.CharacterId("Alice");
+        var voiceId = await CreateVoiceAsync("web-voices-limit", alice, "Alice Reference", isGenerated: false);
+
+        await GotoAppAsync($"/app/projects/web-voices-limit/cast/{alice}");
+        var card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
+        await card.Locator("mat-expansion-panel-header").First.ClickAsync();
+        var badge = card.GetByTestId("voice-reference-warning");
+
+        var tooLong = CanonicalWavFile(31_000);
+        var soft = CanonicalWavFile(20_000);
+        try
+        {
+            // Over 30 s: the host refuses it, the card says why, and the voice still has no audio.
+            await card.Locator(".r2m-file-drop__input").SetInputFilesAsync(tooLong);
+            await Expect(Page.Locator(".r2m-toast-panel", new() { HasText = "30 s or shorter" }))
+                .ToBeVisibleAsync(new() { Timeout = 15_000 });
+            await Expect(card.Locator("r2m-file-drop")).ToContainTextAsync("Upload audio");
+            Assert.Equal(JsonValueKind.Null, (await VoiceAsync("web-voices-limit", voiceId.ToString()))
+                .GetProperty("audioFileName").ValueKind);
+            await Expect(badge).ToHaveCountAsync(0);
+
+            // Over 15 s: stored, with the soft-limit badge on the card.
+            await card.Locator(".r2m-file-drop__input").SetInputFilesAsync(soft);
+            await Expect(card.Locator("r2m-file-drop")).ToContainTextAsync("Replace audio", new() { Timeout = 15_000 });
+            await Expect(badge).ToContainTextAsync("20 s");
+        }
+        finally
+        {
+            File.Delete(tooLong);
+            File.Delete(soft);
+        }
+
+        // It is read from the stored WAV, so it is still there after a reload.
+        await Page.ReloadAsync();
+        await Expect(card.GetByTestId("voice-reference-warning")).ToContainTextAsync("20 s", new() { Timeout = 15_000 });
+    }
+
     [Fact]
     public async Task Prompt_voice_life_cycle_ai_prompt_audio_reference_upload_transcribe()
     {
