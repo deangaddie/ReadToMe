@@ -89,7 +89,7 @@ namespace Read2Me.App.Shared
             if (string.IsNullOrWhiteSpace(BaseUrl))
                 return "Base URL is required.";
             if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out _))
-                return "Base URL must be a valid absolute URL (e.g. http://localhost:8003).";
+                return "Base URL must be a valid absolute URL (e.g. http://localhost:8004).";
 
             return null;
         }

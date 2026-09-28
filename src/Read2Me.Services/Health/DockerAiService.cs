@@ -8,7 +8,7 @@ namespace Read2Me.Services.Health;
 /// Static description of a single Docker-hosted AI service the watchdog can manage.
 /// One instance per compose service; created only in <see cref="DockerAiServiceRegistry"/>.
 /// </summary>
-/// <param name="Name">Stable identity, e.g. "llama", "chatterbox", "whisper".</param>
+/// <param name="Name">Stable identity, e.g. "llama", "audiocpp", "whisper".</param>
 /// <param name="ContainerName">Docker container name, e.g. "read2me-llama".</param>
 /// <param name="BaseUrl">Root URL the app reaches the service on, e.g. http://localhost:8080.</param>
 /// <param name="HealthPath">

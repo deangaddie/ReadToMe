@@ -6,11 +6,6 @@ x-hardened: &hardened
   pids_limit: 512
   dns: 127.0.0.1
 
-x-offline: &offline
-  HF_HUB_OFFLINE: "1"
-  HF_HUB_DISABLE_TELEMETRY: "1"
-  DO_NOT_TRACK: "1"
-
 x-gpu: &gpu
   deploy:
     resources:
@@ -50,120 +45,6 @@ services:
       LLAMA_PORT: 8080
       LLAMA_MODELS_FILE: /config/models.ini
       LLAMA_DEFAULT_MODEL: gemma-26b
-
-  chatterbox:
-    <<: [*hardened, *gpu]
-    build:
-      context: .
-      dockerfile: Dockerfile.chatterbox
-    image: read2me-chatterbox
-    container_name: read2me-chatterbox
-    restart: unless-stopped
-    networks: [chatterbox]
-    ports:
-      - "127.0.0.1:8000:8000"
-    environment:
-      <<: *offline
-      HF_HOME: /cache
-      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
-      NUMBA_CACHE_DIR: /tmp/numba
-    volumes:
-      - ./cache/chatterbox:/cache:ro
-
-  chatterbox-turbo:
-    <<: [*hardened, *gpu]
-    build:
-      context: .
-      dockerfile: Dockerfile.chatterbox
-      args:
-        APP_MODULE: app_turbo
-    image: read2me-chatterbox-turbo
-    container_name: read2me-chatterbox-turbo
-    restart: unless-stopped
-    networks: [chatterbox-turbo]
-    ports:
-      - "127.0.0.1:8001:8000"
-    environment:
-      <<: *offline
-      HF_HOME: /cache
-      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
-      NUMBA_CACHE_DIR: /tmp/numba
-    volumes:
-      - ./cache/chatterbox-turbo:/cache:ro
-
-  qwen3-tts:
-    <<: [*hardened, *gpu]
-    build:
-      context: .
-      dockerfile: Dockerfile.qwen3
-    image: read2me-qwen3-tts
-    container_name: read2me-qwen3-tts
-    restart: unless-stopped
-    networks: [qwen3-tts]
-    ports:
-      - "127.0.0.1:8100:8100"
-    environment:
-      <<: *offline
-      HF_HOME: /cache
-      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
-      NUMBA_CACHE_DIR: /tmp/numba
-    volumes:
-      - ./cache/qwen3:/cache:ro
-
-  qwen3-tts-base:
-    <<: [*hardened, *gpu]
-    build:
-      context: .
-      dockerfile: Dockerfile.qwen3
-      args:
-        APP_MODULE: app_base
-        APP_PORT: "8101"
-    image: read2me-qwen3-tts-base
-    container_name: read2me-qwen3-tts-base
-    restart: unless-stopped
-    networks: [qwen3-tts-base]
-    ports:
-      - "127.0.0.1:8101:8101"
-    environment:
-      <<: *offline
-      HF_HOME: /cache
-      APP_PORT: "8101"
-      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
-      NUMBA_CACHE_DIR: /tmp/numba
-    volumes:
-      - ./cache/qwen3-base:/cache:ro
-
-  voxcpm2:
-    <<: [*hardened, *gpu]
-    build:
-      context: .
-      dockerfile: Dockerfile.voxcpm2
-      target: app
-    image: read2me-voxcpm2
-    container_name: read2me-voxcpm2
-    restart: unless-stopped
-    networks: [voxcpm2]
-    ports:
-      - "127.0.0.1:8003:8003"
-    environment:
-      <<: *offline
-      HF_HOME: /cache
-      # librosa JIT caches beside site-packages; redirect it to writable tmpfs.
-      NUMBA_CACHE_DIR: /tmp/numba
-      # Keep incidental compiler caches on tmpfs; runtime compilation stays disabled.
-      TRITON_CACHE_DIR: /tmp/triton
-      TORCHINDUCTOR_CACHE_DIR: /tmp/inductor
-      XDG_CACHE_HOME: /tmp/xdg
-      UPLOAD_DIR: /uploads
-      PYTORCH_CUDA_ALLOC_CONF: max_split_size_mb:512
-      MODEL_ID: /cache/hub/models--openbmb--VoxCPM2/snapshots/bffb3df5a29440629464e5e839f4d214c8714c3d
-      # torch.compile needs a compiler under read_only; measured benefit does not justify it.
-      OPTIMIZE: "false"
-    volumes:
-      - ./cache/voxcpm2:/cache:ro
-      - voxcpm2_uploads:/uploads
 
   # audio.cpp: the single TTS runtime (ADR 0010; Apache-2.0 runtime, Breeze weights research/non-commercial).
   # Models in audiocpp/server.json (lazy-loaded, one resident): breeze-q8, breeze-design, voxcpm2, chatterbox, qwen3-base, qwen3-design.
@@ -248,17 +129,9 @@ services:
     volumes:
       - ./cache/mpnet-base-v2:/cache:ro
 
-volumes:
-  voxcpm2_uploads:
-
 # One single-member bridge per hardened service prevents container-to-container reach.
 networks:
   llama:
-  chatterbox:
-  chatterbox-turbo:
-  qwen3-tts:
-  qwen3-tts-base:
-  voxcpm2:
   audiocpp:
   whisper:
   minilm-l6:

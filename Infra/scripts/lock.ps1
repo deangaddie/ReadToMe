@@ -13,7 +13,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)]
-  [ValidateSet('chatterbox','qwen3','voxcpm2','minilm-l6','mpnet-base-v2')]
+  [ValidateSet('minilm-l6','mpnet-base-v2')]
   [string]$Service
 )
 $ErrorActionPreference = 'Stop'
@@ -23,9 +23,6 @@ $InfraRoot = Split-Path -Parent $PSScriptRoot   # Infra/
 
 # Digest-pinned base per service — MUST match the FROM lines (spec §6.1).
 $Bases = @{
-  'chatterbox'    = 'pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime@sha256:f894dae26e1ee8557c544f9cfdb9dc011b1552bf3c1e656b422f2e221d380e40'
-  'qwen3'         = 'pytorch/pytorch:2.11.0-cuda13.0-cudnn9-runtime@sha256:bfbb4a2b4fdba0fefdb428ea737e626d61bb3daf74a16e1ff935bdb03aa7c3f0'
-  'voxcpm2'       = 'pytorch/pytorch:2.11.0-cuda13.0-cudnn9-runtime@sha256:bfbb4a2b4fdba0fefdb428ea737e626d61bb3daf74a16e1ff935bdb03aa7c3f0'
   'minilm-l6'     = 'python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285'
   'mpnet-base-v2' = 'python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285'
 }
@@ -36,7 +33,7 @@ if (-not (Test-Path (Join-Path $svcDir 'requirements.in'))) {
   throw "No requirements.in in $svcDir"
 }
 
-# voxcpm2 declares a knowingly-inconsistent constraint (datasets 3.6.0) via overrides.txt
+# A service may declare knowingly-inconsistent constraints via overrides.txt
 # (spec §6.2 constraint 3). Pass it only when present.
 $overrides = ''
 if (Test-Path (Join-Path $svcDir 'overrides.txt')) { $overrides = '--overrides overrides.txt' }

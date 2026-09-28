@@ -26,14 +26,14 @@ namespace Read2Me.Tests.Services
             {
                 Type = ParagraphTtsServiceType.VoxCpm2,
                 // VoxCpm2ParagraphTtsSettings maps BaseUrl via [JsonPropertyName("baseUrl")].
-                SettingsJson = """{"baseUrl":"http://localhost:8003"}""",
+                SettingsJson = """{"baseUrl":"http://localhost:8004"}""",
             };
-            Assert.Equal("http://localhost:8003", ServiceConfigBaseUrls.For(config));
+            Assert.Equal("http://localhost:8004", ServiceConfigBaseUrls.For(config));
         }
 
         [Theory]
-        [InlineData("""{"BaseUrl":"http://localhost:8000"}""")]
-        [InlineData("""{"baseUrl":"http://localhost:8000"}""")]
+        [InlineData("""{"BaseUrl":"http://localhost:8004"}""")]
+        [InlineData("""{"baseUrl":"http://localhost:8004"}""")]
         public void ParagraphTts_Chatterbox_ReadsBaseUrlFromSettingsJson(string settingsJson)
         {
             var config = new ParagraphTtsServiceConfig
@@ -41,12 +41,12 @@ namespace Read2Me.Tests.Services
                 Type = ParagraphTtsServiceType.Chatterbox,
                 SettingsJson = settingsJson,
             };
-            Assert.Equal("http://localhost:8000", ServiceConfigBaseUrls.For(config));
+            Assert.Equal("http://localhost:8004", ServiceConfigBaseUrls.For(config));
         }
 
         [Theory]
-        [InlineData("""{"BaseUrl":"http://localhost:8101"}""")]
-        [InlineData("""{"baseUrl":"http://localhost:8101"}""")]
+        [InlineData("""{"BaseUrl":"http://localhost:8004"}""")]
+        [InlineData("""{"baseUrl":"http://localhost:8004"}""")]
         public void ParagraphTts_Qwen3Base_ReadsBaseUrlFromSettingsJson(string settingsJson)
         {
             var config = new ParagraphTtsServiceConfig
@@ -54,7 +54,7 @@ namespace Read2Me.Tests.Services
                 Type = ParagraphTtsServiceType.Qwen3Base,
                 SettingsJson = settingsJson,
             };
-            Assert.Equal("http://localhost:8101", ServiceConfigBaseUrls.For(config));
+            Assert.Equal("http://localhost:8004", ServiceConfigBaseUrls.For(config));
         }
 
         [Fact]
@@ -69,8 +69,8 @@ namespace Read2Me.Tests.Services
         }
 
         [Theory]
-        [InlineData(VoiceDesignServiceType.VoxCpm2, "http://localhost:8003")]
-        [InlineData(VoiceDesignServiceType.Qwen3, "http://localhost:8100")]
+        [InlineData(VoiceDesignServiceType.VoxCpm2, "http://localhost:8004")]
+        [InlineData(VoiceDesignServiceType.Qwen3, "http://localhost:8004")]
         public void VoiceDesign_ReadsBaseUrlPerType(VoiceDesignServiceType type, string url)
         {
             var config = new VoiceDesignServiceConfig
@@ -92,9 +92,9 @@ namespace Read2Me.Tests.Services
             var config = new VoiceDesignServiceConfig
             {
                 Type = type,
-                SettingsJson = """{"baseUrl":"http://localhost:8003"}""",
+                SettingsJson = """{"baseUrl":"http://localhost:8004"}""",
             };
-            Assert.Equal("http://localhost:8003", ServiceConfigBaseUrls.For(config));
+            Assert.Equal("http://localhost:8004", ServiceConfigBaseUrls.For(config));
         }
 
         [Fact]

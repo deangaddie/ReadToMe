@@ -49,18 +49,18 @@ namespace Read2Me.Tests.App.Preflight
         [Fact]
         public async Task BuildPlan_RequiredGpuService_NotListedAsConflict()
         {
-            // chatterbox required + Starting (so it lands in ToStart), llama running elsewhere.
-            var control = ControlFor("chatterbox");
+            // audiocpp required + Starting (so it lands in ToStart), llama running elsewhere.
+            var control = ControlFor("audiocpp");
             control.StatusResult = AiServiceStatus.Stopped;
-            control.StatusByName["chatterbox"] = AiServiceStatus.Starting;
+            control.StatusByName["audiocpp"] = AiServiceStatus.Starting;
             control.StatusByName["llama"] = AiServiceStatus.Ready;
 
-            var plan = await Create(new StubResolver("http://localhost:8000"), control)
+            var plan = await Create(new StubResolver("http://localhost:8004"), control)
                 .BuildPlanAsync(AiTaskKind.AudioGeneration, CancellationToken.None);
 
-            Assert.Equal(["chatterbox"], plan.ToStart.Select(i => i.Service.Name));
+            Assert.Equal(["audiocpp"], plan.ToStart.Select(i => i.Service.Name));
             Assert.Equal(["llama"], plan.Conflicts.Select(s => s.Name));
-            Assert.DoesNotContain(plan.Conflicts, s => s.Name == "chatterbox");
+            Assert.DoesNotContain(plan.Conflicts, s => s.Name == "audiocpp");
         }
 
         [Fact]
@@ -80,30 +80,30 @@ namespace Read2Me.Tests.App.Preflight
         [Fact]
         public async Task BuildPlan_RequiredReady_RivalGpuRunning_StopsIt()
         {
-            // llama required and already Ready, but chatterbox (GPU) is still up holding VRAM.
+            // llama required and already Ready, but audiocpp (GPU) is still up holding VRAM.
             // The rival must be swept even though nothing needs starting.
             var control = ControlFor("llama");
             control.StatusByName["llama"] = AiServiceStatus.Ready;
-            control.StatusByName["chatterbox"] = AiServiceStatus.Ready;
+            control.StatusByName["audiocpp"] = AiServiceStatus.Ready;
 
             var plan = await Create(new StubResolver("http://localhost:8080"), control)
                 .BuildPlanAsync(AiTaskKind.CharacterAttribution, CancellationToken.None);
 
             Assert.False(plan.NothingToDo);
             Assert.Empty(plan.ToStart);
-            Assert.Equal(["chatterbox"], plan.Conflicts.Select(s => s.Name));
+            Assert.Equal(["audiocpp"], plan.Conflicts.Select(s => s.Name));
         }
 
         [Fact]
         public async Task BuildPlan_VoiceDesignAudio_TtsReadyButLlamaUp_StopsLlama()
         {
-            // Repro of the batch "generate audio for all characters" bug: qwen3-tts already answers
-            // /docs (Ready) while a leftover llama holds the GPU. Pre-flight must still stop llama.
-            var control = ControlFor("qwen3-tts");
-            control.StatusByName["qwen3-tts"] = AiServiceStatus.Ready;
+            // Repro of the batch "generate audio for all characters" bug: audiocpp already answers
+            // /health (Ready) while a leftover llama holds the GPU. Pre-flight must still stop llama.
+            var control = ControlFor("audiocpp");
+            control.StatusByName["audiocpp"] = AiServiceStatus.Ready;
             control.StatusByName["llama"] = AiServiceStatus.Ready;
 
-            var plan = await Create(new StubResolver("http://localhost:8100"), control)
+            var plan = await Create(new StubResolver("http://localhost:8004"), control)
                 .BuildPlanAsync(AiTaskKind.VoiceDesignAudio, CancellationToken.None);
 
             Assert.False(plan.NothingToDo);

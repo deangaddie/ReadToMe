@@ -136,11 +136,6 @@ public class DockerAiServiceRegistryTests
         var expected = new[]
         {
             ("llama",            "read2me-llama",          8080),
-            ("chatterbox",       "read2me-chatterbox",     8000),
-            ("chatterbox-turbo", "read2me-chatterbox-turbo", 8001),
-            ("qwen3-tts",        "read2me-qwen3-tts",      8100),
-            ("qwen3-tts-base",   "read2me-qwen3-tts-base", 8101),
-            ("voxcpm2",          "read2me-voxcpm2",        8003),
             ("audiocpp",         "read2me-audiocpp",       8004),
             ("whisper",          "read2me-whisper",        9000),
             ("minilm-l6",        "read2me-minilm-l6",      8200),
@@ -153,6 +148,27 @@ public class DockerAiServiceRegistryTests
             Assert.Equal(container, svc.ContainerName);
             Assert.Equal($"http://localhost:{port}", svc.BaseUrl);
         }
+    }
+
+    [Fact]
+    public void ContainsOnlyComposeServices()
+    {
+        Assert.Equal(
+            ["audiocpp", "llama", "minilm-l6", "mpnet-base-v2", "whisper"],
+            Registry.All.Select(s => s.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:8000")] // chatterbox
+    [InlineData("http://localhost:8001")] // chatterbox-turbo
+    [InlineData("http://localhost:8003")] // voxcpm2
+    [InlineData("http://localhost:8100")] // qwen3-tts
+    [InlineData("http://localhost:8101")] // qwen3-tts-base
+    public void TryGetByBaseUrl_RetiredNativeTtsPort_IsUnmanaged(string baseUrl)
+    {
+        // ADR 0010: every TTS model runs in read2me-audiocpp; the native containers are gone, so
+        // nothing on their old ports is the watchdog's to start or restart.
+        Assert.False(Registry.TryGetByBaseUrl(baseUrl, out _));
     }
 
     [Theory]
@@ -175,7 +191,7 @@ public class DockerAiServiceRegistryTests
     [Fact]
     public void UsesGpu_MatchesComposeNvidiaReservations()
     {
-        var gpu = new[] { "llama", "chatterbox", "chatterbox-turbo", "qwen3-tts", "qwen3-tts-base", "voxcpm2", "audiocpp" };
+        var gpu = new[] { "llama", "audiocpp" };
         var cpu = new[] { "whisper", "minilm-l6", "mpnet-base-v2" };
 
         foreach (var name in gpu)

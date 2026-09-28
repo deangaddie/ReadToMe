@@ -77,16 +77,16 @@ public class PreflightApiTests(E2eAppFixture app)
     [Fact]
     public async Task Gpu_conflict_is_planned_and_stopped_before_the_required_service_starts()
     {
-        // The LLM is a GPU service that is cold, while chatterbox (GPU, unrelated) still holds VRAM.
+        // The LLM is a GPU service that is cold, while audiocpp (GPU, unrelated) still holds VRAM.
         app.FakeControl.Status = AiServiceStatus.Stopped;
         app.FakeControl.GpuUrls.Add(Llm);
         app.FakeControl.StatusByName[Llm] = AiServiceStatus.Stopped;
-        app.FakeControl.StatusByName["chatterbox"] = AiServiceStatus.Ready;
+        app.FakeControl.StatusByName["audiocpp"] = AiServiceStatus.Ready;
         try
         {
             var plan = await PlanAsync("CharacterAttribution");
             var conflict = Assert.Single(plan.GetProperty("conflicts").EnumerateArray());
-            Assert.Equal("chatterbox", conflict.GetProperty("name").GetString());
+            Assert.Equal("audiocpp", conflict.GetProperty("name").GetString());
             Assert.Equal("GPU: one model at a time", conflict.GetProperty("reason").GetString());
 
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
@@ -102,11 +102,11 @@ public class PreflightApiTests(E2eAppFixture app)
                 .Select(m => $"{m.GetProperty("name").GetString()}:{m.GetProperty("stage").GetString()}").ToList();
             Assert.Equal(
             [
-                "chatterbox:waitingToStop", $"{Llm}:waitingToStart",
-                "chatterbox:stopping", "chatterbox:stopped",
+                "audiocpp:waitingToStop", $"{Llm}:waitingToStart",
+                "audiocpp:stopping", "audiocpp:stopped",
                 $"{Llm}:starting", $"{Llm}:ready",
             ], stages);
-            Assert.Equal(["shutdown:chatterbox", $"start:{Llm}"], app.FakeControl.OpLog.ToArray());
+            Assert.Equal(["shutdown:audiocpp", $"start:{Llm}"], app.FakeControl.OpLog.ToArray());
         }
         finally
         {

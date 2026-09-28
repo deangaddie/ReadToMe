@@ -23,8 +23,6 @@ $InfraRoot = Split-Path -Parent $PSScriptRoot   # Infra/
 # ARG default carries the template, not the expanded tag. Without this the llama
 # rewrite silently no-ops.
 $Images = @(
-  @{ Ref = 'pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime';  Files = @('Dockerfile.chatterbox') },
-  @{ Ref = 'pytorch/pytorch:2.11.0-cuda13.0-cudnn9-runtime'; Files = @('Dockerfile.qwen3','Dockerfile.voxcpm2') },
   @{ Ref = 'python:3.13-slim';                               Files = @('Dockerfile.minilm-l6','Dockerfile.mpnet-base-v2') },
   @{ Ref = 'nvidia/cuda:13.3.0-devel-ubuntu24.04';           Files = @('Dockerfile.llama'); InFile = 'nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}' },
   @{ Ref = 'nvidia/cuda:13.3.0-runtime-ubuntu24.04';         Files = @('Dockerfile.llama'); InFile = 'nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}' }
