@@ -38,13 +38,19 @@ import { ToastService } from '@app/ui/toast/toast.service';
         [value]="draft()"
         (input)="draft.set($any($event.target).value)"
       ></textarea>
+      @if (stored(); as s) {
+        <mat-hint>Kept short so every designed voice lands within the Reference Limit.</mat-hint>
+        <mat-hint align="end" data-testid="sample-text-count" [class.sample__over]="overLimit()">
+          {{ draft().length }} / {{ s.maxLength }}
+        </mat-hint>
+      }
     </mat-form-field>
     <div class="sample__actions">
       <button
         mat-flat-button
         type="button"
         data-action="save-sample-text"
-        [disabled]="!dirty() || saving()"
+        [disabled]="!dirty() || overLimit() || saving()"
         (click)="save()"
       >
         Save
@@ -90,6 +96,9 @@ import { ToastService } from '@app/ui/toast/toast.service';
       display: flex;
       gap: var(--r2m-space-2);
     }
+    .sample__over {
+      color: var(--r2m-status-error);
+    }
     .sample__error {
       margin: 0;
       color: var(--r2m-status-error);
@@ -112,6 +121,11 @@ export class VoiceDesignSampleTextCard {
     return stored ? (stored.text ?? stored.default) : '';
   });
   readonly dirty = computed(() => this.stored() !== null && this.draft() !== this.effective());
+  /** Over the host's cap: the host would refuse it, so Save does not offer it. */
+  protected readonly overLimit = computed(() => {
+    const stored = this.stored();
+    return stored !== null && this.draft().length > stored.maxLength;
+  });
   protected readonly isDefault = computed(() => this.draft() === (this.stored()?.default ?? ''));
 
   constructor() {

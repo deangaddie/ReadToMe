@@ -35,6 +35,12 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     /// </summary>
     public TimeSpan LlmDelay { get; set; } = TimeSpan.Zero;
 
+    /// <summary>
+    /// Per-test hook: how long each fake-audiocpp take is, so a test can drive a designed voice past
+    /// the Reference Limit. 100 ms by default.
+    /// </summary>
+    public int AudioCppTakeMs { get; set; } = 100;
+
     /// <summary>Text the last TTS request spoke; echoed back by fake-whisper.</summary>
     private volatile string _lastTtsText = "";
 
@@ -55,6 +61,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     {
         LlmReply = p => FakeAiResponses.AttributionReply(p, "Narrator");
         LlmDelay = TimeSpan.Zero;
+        AudioCppTakeMs = 100;
         LlmModels = FakeLlmModelStore.AllLoaded(DefaultModel);
         _lastTtsText = "";
         lock (LlmPromptsSeen) LlmPromptsSeen.Clear();
@@ -128,7 +135,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             _audioCppLoaded = body["model"]?.GetValue<string>();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new ByteArrayContent(FakeAiResponses.SilentWav()),
+                Content = new ByteArrayContent(FakeAiResponses.SilentWav(durationMs: AudioCppTakeMs)),
             };
         }
 

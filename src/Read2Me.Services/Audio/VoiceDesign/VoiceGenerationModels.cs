@@ -22,11 +22,22 @@ namespace Read2Me.Services.Audio.VoiceDesign
         public string? AudioFileName { get; init; }
         public string? Transcript { get; init; }
 
-        public static VoiceGenerationResult Success(string audioFileName, string transcript) => new()
+        /// <summary>The stored take's length, or null when its header could not be read.</summary>
+        public double? ReferenceSeconds { get; init; }
+
+        /// <summary>
+        /// Set when the take is over the soft <see cref="ReferenceLimit"/>: it was kept, and the
+        /// caller says so. A take over the hard limit is a <see cref="Failure"/> instead.
+        /// </summary>
+        public string? ReferenceWarning { get; init; }
+
+        public static VoiceGenerationResult Success(string audioFileName, string transcript, double? durationMs = null) => new()
         {
             IsSuccess = true,
             AudioFileName = audioFileName,
-            Transcript = transcript
+            Transcript = transcript,
+            ReferenceSeconds = durationMs is { } ms ? Math.Round(ms / 1000, 1) : null,
+            ReferenceWarning = ReferenceLimit.SoftWarning(durationMs),
         };
 
         /// <summary>

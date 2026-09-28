@@ -62,8 +62,8 @@ is 400. `GET /api/settings/{area}/schema?type=` lists a provider type's editable
 base URL (none for transcription, `PassThreshold` for similarity).
 `GET /api/settings/paragraph-tts/{id}/text-steps` → `[{ stepId, label, description, builtIn, options? }]`:
 the ids a TTS config may put in `enabledStepIds` (built-ins, then its own `substitutionSteps`; id 0 =
-built-ins only). `GET/PUT /api/settings/voice-design/sample-text` → `{ text, default }` (`text` null =
-default; PUT `{ text }`, null or the default text clears it).
+built-ins only). `GET/PUT /api/settings/voice-design/sample-text` → `{ text, default, maxLength }` (`text` null =
+default; PUT `{ text }`, null or the default text clears it; `maxLength` 300, longer is 400).
 Test one stored config — a provider that is down answers 422 with its reason:
 `POST /api/settings/voice-design/{id}/test` `{ prompt }` → `{ audioBase64, contentType }` (60 s timeout),
 `POST /api/settings/transcription/{id}/test` multipart `file` (wav/mp3/aac, ≤ 50 MB) → `{ transcript }`,
@@ -267,6 +267,8 @@ curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}
 #     isEdited, voiceDesignSettingsOverrideJson, ttsSettingsOverrideJson,
 #     referenceSeconds (from the stored WAV header), referenceWarning (set over the 15 s soft Reference Limit) }
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio # 503 "TTS busy, try again" = retry later
+# → { audioFileName, transcript, referenceSeconds, referenceWarning } (warned over 15 s); 422 over the 30 s hard
+# Reference Limit, nothing stored — shorten the voice-design sample text
 
 # reference audio: upload/replace (multipart 'file', 200 MB max; normalised + committed; 422 over the 30 s / 5 MiB
 # hard Reference Limit with nothing stored — never trimmed), then transcribe:

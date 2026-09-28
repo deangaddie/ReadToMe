@@ -477,6 +477,10 @@ export interface CharacterVoicesDto {
 export interface GenerateVoiceAudioResponse {
   audioFileName: string;
   transcript: string;
+  /** The stored take's length, as `VoiceDto` reports it. */
+  referenceSeconds: number | null;
+  /** Set over the 15 s soft Reference Limit: the take was kept, but warned. */
+  referenceWarning: string | null;
 }
 
 export type VoiceBatchStartRequest = Schema['VoiceBatchStartRequest'];
@@ -658,6 +662,8 @@ export interface VoiceDesignSampleText {
   /** The stored override; null while the built-in `default` is in use. */
   text: string | null;
   default: string;
+  /** The longest override a save accepts (every designed voice speaks this text). */
+  maxLength: number;
 }
 
 export interface VoiceDesignSampleTextRequest {

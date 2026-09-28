@@ -116,6 +116,7 @@ describe('ProviderSettingsPage', () => {
       (await eventually('GET', '/api/settings/voice-design/sample-text')).flush({
         text: null,
         default: 'The default sentence.',
+        maxLength: 40,
       });
     await flushLoad(area, [saved]);
     await flushSchema(area, type);
@@ -412,7 +413,7 @@ describe('ProviderSettingsPage', () => {
       save.click();
       const put = await eventually('PUT', '/api/settings/voice-design/sample-text');
       expect(put.request.body).toEqual({ text: 'My own sentence.' });
-      put.flush({ text: 'My own sentence.', default: 'The default sentence.' });
+      put.flush({ text: 'My own sentence.', default: 'The default sentence.', maxLength: 40 });
       await stable(fixture);
       expect(save.disabled).toBe(true);
 
@@ -422,6 +423,23 @@ describe('ProviderSettingsPage', () => {
         'The default sentence.',
       );
       expect(save.disabled).toBe(false);
+    });
+
+    it('counts the draft against the host’s cap and will not save past it', async () => {
+      const { fixture, el } = await render('voice-design', 0);
+      const save = el.querySelector<HTMLButtonElement>('[data-action="save-sample-text"]')!;
+      const count = () => el.querySelector('[data-testid="sample-text-count"]')?.textContent?.trim();
+      expect(count()).toBe('21 / 40');
+
+      type(el, '[data-field="sampleText"]', 'x'.repeat(40));
+      await stable(fixture);
+      expect(count()).toBe('40 / 40');
+      expect(save.disabled).toBe(false);
+
+      type(el, '[data-field="sampleText"]', 'x'.repeat(41));
+      await stable(fixture);
+      expect(count()).toBe('41 / 40');
+      expect(save.disabled).toBe(true);
     });
   });
 });

@@ -548,11 +548,15 @@ namespace Read2Me.Services.Llm
     /// <summary>
     /// A neutral voice-test sentence used as the sample text sent to the voice-design AI.
     /// Stored as the voice transcript for generated voices.
+    /// <para>
+    /// Two sentences, 29 words, so a designed take lands within the Reference Limit: measured on
+    /// audio.cpp (2026-09-28) at 9–11 s for a neutral narrator, ~7.5 s for a fast voice and 12–16 s
+    /// for one prompted to speak slowly, across Breeze and VoxCPM2 design.
+    /// </para>
     /// </summary>
     public const string VoiceDesignSampleSentence =
-        "The morning light filtered through tall oak trees as Sarah walked along the winding path. " +
-        "She had lived in this valley all her life, yet each season brought something new to discover. " +
-        "A soft breeze carried the scent of pine and rain, and somewhere in the distance a hawk cried out.";
+        "The morning light filtered through oak trees as Sarah walked along the winding path. " +
+        "A soft breeze carried the scent of pine and rain, and a hawk cried out.";
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {

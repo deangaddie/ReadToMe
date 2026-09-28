@@ -1,4 +1,6 @@
+using System.Globalization;
 using Read2Me.Core.Audio;
+using Read2Me.Core.IO;
 using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Llm;
 
@@ -7,7 +9,8 @@ namespace Read2Me.Services.Audio.VoiceDesign
     public sealed class VoiceAudioGenerator(
         VoiceDesignSettingsService settings,
         IVoiceDesignClientResolver clientResolver,
-        IVoiceAudioWriter voiceAudio) : IVoiceAudioGenerator
+        IVoiceAudioWriter voiceAudio,
+        IFileSystem fs) : IVoiceAudioGenerator
     {
         public async Task<VoiceGenerationResult> GenerateAsync(VoiceGenerationRequest request, CancellationToken ct)
         {
@@ -45,20 +48,39 @@ namespace Read2Me.Services.Audio.VoiceDesign
                 };
 
                 // The take is stored and committed together: the writer owns that ordering, and
-                // owns taking the file away again if the Book refuses to name it (ADR 0007).
+                // owns taking the file away again if the Book refuses to name it (ADR 0007). The
+                // audio pipeline beneath it refuses a take over the hard Reference Limit.
                 var fileName = await voiceAudio.RecordGeneratedAsync(
                     storeReq, sampleText, request.DesignPrompt, ct);
 
-                return VoiceGenerationResult.Success(fileName, sampleText);
+                // Measured as stored — after normalisation, the way the voice list reads it — so the
+                // warning here and the badge there agree.
+                return VoiceGenerationResult.Success(
+                    fileName, sampleText, WavHeader.TryReadDurationMs(fs, request.FolderId, fileName));
             }
             catch (TtsBusyException)
             {
                 return VoiceGenerationResult.Busy();
+            }
+            catch (ReferenceTooLongException ex)
+            {
+                // Nothing was stored. The upload's advice (trim it) does not fit a take whose length
+                // the sample text decides.
+                return VoiceGenerationResult.Failure(TooLongMessage(ex));
             }
             catch (Exception ex)
             {
                 return VoiceGenerationResult.Failure(ex.Message);
             }
         }
+
+        private const string ShortenAdvice = "Shorten the voice-design sample text and generate again.";
+
+        private static string TooLongMessage(ReferenceTooLongException ex) =>
+            ex.DurationMs > ReferenceLimit.HardLimitMs
+                ? $"The generated voice is {(ex.DurationMs / 1000).ToString("0.0", CultureInfo.InvariantCulture)} s; " +
+                  $"a voice's reference must be {ReferenceLimit.Seconds(ReferenceLimit.HardLimitMs)} s or shorter. {ShortenAdvice}"
+                : $"The generated voice is {(ex.ByteLength / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MiB; " +
+                  $"a voice's reference must be 5 MiB or smaller. {ShortenAdvice}";
     }
 }

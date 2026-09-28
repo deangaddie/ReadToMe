@@ -621,8 +621,10 @@ export class VoiceCard {
         if (!saved) return;
         this.promptDraft.set(null);
       }
-      await this.voices.generateAudio(this.folder(), voice.characterId, voice.id);
+      const generated = await this.voices.generateAudio(this.folder(), voice.characterId, voice.id);
       this.store.bumpAudio(voice.id);
+      // Over the soft Reference Limit the take is kept, but generating says so, as an upload does.
+      if (generated.referenceWarning) this.toast.warn(generated.referenceWarning);
       await this.store.refresh();
     } catch (e) {
       this.toast.problem(toApiError(e).toProblem());

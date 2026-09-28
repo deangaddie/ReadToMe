@@ -18,7 +18,8 @@ namespace Read2Me.App.Api
         string StepId, string Label, string Description, bool BuiltIn, IReadOnlyList<SettingsFieldDto>? Options = null);
 
     /// <param name="Text">The stored override; null when the built-in <paramref name="Default"/> is in use.</param>
-    public sealed record VoiceDesignSampleTextResponse(string? Text, string Default);
+    /// <param name="MaxLength">The longest override a PUT accepts: every designed voice speaks this text, so it bounds the take's length (the Reference Limit).</param>
+    public sealed record VoiceDesignSampleTextResponse(string? Text, string Default, int MaxLength);
     public sealed record VoiceDesignSampleTextRequest(string? Text = null);
 
     public sealed record VoiceDesignTestRequest(string? Prompt = null);
@@ -59,7 +60,7 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/settings/voice-design/sample-text", GetSampleTextAsync)
                 .WithSummary("The sentence voice design speaks: the stored override (null when none) and the built-in default.");
             endpoints.MapPut("/api/settings/voice-design/sample-text", SetSampleTextAsync)
-                .WithSummary("Override the voice-design sample sentence. Null, blank or the default text clears the override.");
+                .WithSummary("Override the voice-design sample sentence. Null, blank or the default text clears the override. 400 over maxLength (300) characters.");
 
             endpoints.MapPost("/api/settings/voice-design/{id:int}/test", TestVoiceDesignAsync)
                 .WithSummary("Design a voice from a prompt with one config, speaking the sample text; answers the audio as base64. 60 s timeout. 422 with the reason when the provider fails.");
@@ -85,13 +86,16 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> GetSampleTextAsync(VoiceDesignSettingsService settings) =>
             Results.Ok(new VoiceDesignSampleTextResponse(
-                await settings.GetSampleTextAsync(), PromptTemplates.VoiceDesignSampleSentence));
+                await settings.GetSampleTextAsync(), PromptTemplates.VoiceDesignSampleSentence,
+                VoiceDesignSettingsService.MaxSampleTextLength));
 
         private static async Task<IResult> SetSampleTextAsync(
             VoiceDesignSampleTextRequest request, VoiceDesignSettingsService settings)
         {
             var isOverride = !string.IsNullOrWhiteSpace(request.Text)
                 && request.Text != PromptTemplates.VoiceDesignSampleSentence;
+            if (isOverride && VoiceDesignSettingsService.ValidateSampleText(request.Text) is { } error)
+                return Results.Problem(error, statusCode: StatusCodes.Status400BadRequest);
             await settings.SetSampleTextAsync(isOverride ? request.Text : null);
             return await GetSampleTextAsync(settings);
         }

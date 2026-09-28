@@ -93,7 +93,9 @@ public sealed record VoiceBatchMessage(
     Guid? VoiceId = null,
     string? DesignPrompt = null,
     string? AudioFileName = null,
-    string? Transcript = null);
+    string? Transcript = null,
+    double? ReferenceSeconds = null,
+    string? ReferenceWarning = null);
 
 /// <summary>Voice batch runner state for the connect-time snapshot.</summary>
 public sealed record VoiceBatchState(

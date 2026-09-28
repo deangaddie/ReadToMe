@@ -76,7 +76,8 @@ public sealed class GenerateAudioPhase : ISweepPhase<AudioWorkItem>
         {
             return new PhaseStepOutcome(
                 Ok: true,
-                Update: new VoiceUpdated(item.CharacterId, item.VoiceId, null, result.AudioFileName, result.Transcript),
+                Update: new VoiceUpdated(item.CharacterId, item.VoiceId, null, result.AudioFileName, result.Transcript,
+                    result.ReferenceSeconds, result.ReferenceWarning),
                 FailReason: null);
         }
 

@@ -282,6 +282,9 @@ export interface VoiceBatchMessage {
   designPrompt?: string | null;
   audioFileName?: string | null;
   transcript?: string | null;
+  /** With fresh audio: the take's length and soft-limit warning, as the voice list reports them. */
+  referenceSeconds?: number | null;
+  referenceWarning?: string | null;
 }
 
 export interface VoiceBatchState {

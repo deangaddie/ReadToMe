@@ -59,8 +59,25 @@ namespace Read2Me.Services
             return settings?.VoiceDesignSampleText;
         }
 
+        /// <summary>
+        /// The longest sample text a user may set. Every designed voice speaks it, so it decides the
+        /// take's length: 300 characters keeps a take within the Reference Limit
+        /// (<see cref="Audio.ReferenceLimit"/>). The column allows more; this is the rule.
+        /// </summary>
+        public const int MaxSampleTextLength = 300;
+
+        /// <summary>Why <paramref name="sampleText"/> cannot be stored, or null when it can.</summary>
+        public static string? ValidateSampleText(string? sampleText) =>
+            sampleText is { Length: > MaxSampleTextLength }
+                ? $"The sample text is {sampleText.Length} characters; it must be {MaxSampleTextLength} or fewer."
+                : null;
+
+        /// <exception cref="ArgumentException">The text is over <see cref="MaxSampleTextLength"/>.</exception>
         public async Task SetSampleTextAsync(string? sampleText)
         {
+            if (ValidateSampleText(sampleText) is { } error)
+                throw new ArgumentException(error);
+
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.VoiceDesignSampleText = sampleText);
             await db.SaveChangesAsync();

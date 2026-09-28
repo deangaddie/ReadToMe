@@ -1634,7 +1634,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Synthesise reference audio for one generated voice from its design prompt. Synchronous; takes tens of seconds. 503 "TTS busy, try again" when the TTS runtime is generating with another model. */
+        /** Synthesise reference audio for one generated voice from its design prompt. Synchronous; takes tens of seconds. 503 "TTS busy, try again" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit. */
         post: {
             parameters: {
                 query?: never;
@@ -2300,7 +2300,7 @@ export interface paths {
                 };
             };
         };
-        /** Override the voice-design sample sentence. Null, blank or the default text clears the override. */
+        /** Override the voice-design sample sentence. Null, blank or the default text clears the override. 400 over maxLength (300) characters. */
         put: {
             parameters: {
                 query?: never;

@@ -148,7 +148,7 @@ describe('batch hub events', () => {
     expect(patched.defaultVoiceId).toBe('v1');
   });
 
-  it('voiceUpdated with fresh audio drops the old reference length and warning until a reload', () => {
+  it('voiceUpdated with fresh audio takes the new take’s reference length and warning', () => {
     const list: CharacterVoicesDto = {
       defaultVoiceId: 'v1',
       voices: [voice({ referenceSeconds: 18.2, referenceWarning: 'over 15 s' })],
@@ -157,8 +157,27 @@ describe('batch hub events', () => {
       kind: 'voiceUpdated',
       voiceId: 'v1',
       audioFileName: 'voices/alice/v1.wav',
+      referenceSeconds: 9.4,
+      referenceWarning: null,
     });
-    expect(fresh.voices[0]).toMatchObject({ referenceSeconds: null, referenceWarning: null });
+    expect(fresh.voices[0]).toMatchObject({ referenceSeconds: 9.4, referenceWarning: null });
+
+    const long = applyVoiceUpdated(list, {
+      kind: 'voiceUpdated',
+      voiceId: 'v1',
+      audioFileName: 'voices/alice/v1.wav',
+      referenceSeconds: 16.4,
+      referenceWarning: 'over 15 s again',
+    });
+    expect(long.voices[0]).toMatchObject({ referenceSeconds: 16.4, referenceWarning: 'over 15 s again' });
+
+    // A message without the figures (unreadable header) leaves nothing stale behind.
+    const unmeasured = applyVoiceUpdated(list, {
+      kind: 'voiceUpdated',
+      voiceId: 'v1',
+      audioFileName: 'voices/alice/v1.wav',
+    });
+    expect(unmeasured.voices[0]).toMatchObject({ referenceSeconds: null, referenceWarning: null });
 
     const promptOnly = applyVoiceUpdated(list, {
       kind: 'voiceUpdated',

@@ -123,17 +123,7 @@ public class VoiceApiTests(E2eAppFixture app)
     /// </summary>
     private async Task<JsonObject> DesignOneVoiceAsync(string configName)
     {
-        var folder = $"api-voice-design-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "Designed Voice Book", "Author", characterName: "Alice");
-        app.FakeAi.LlmReply = _ => VoicePlanReply;
-        await Http.PostAsJsonAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/voice-batch/prompts", new { regenerateAll = false });
-        await WaitForBatchAsync();
-
-        var aliceId = await CharacterIdAsync(folder, "Alice");
-        var voiceId = JsonDocument.Parse(await Http.GetStringAsync(
-                $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"))
-            .RootElement.GetProperty("voices")[0].GetProperty("id").GetGuid();
+        var (folder, aliceId, voiceId) = await PlanOneVoiceAsync();
 
         app.FakeAi.Reset();
         using var scope = app.Services.CreateScope();
@@ -157,6 +147,65 @@ public class VoiceApiTests(E2eAppFixture app)
         finally
         {
             if (previous is { } id) await design.SetActiveConfigAsync(id);
+        }
+    }
+
+    /// <summary>A fresh project whose Alice has one planned (prompt-only) designed voice.</summary>
+    private async Task<(string Folder, Guid AliceId, Guid VoiceId)> PlanOneVoiceAsync()
+    {
+        var folder = $"api-voice-design-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Designed Voice Book", "Author", characterName: "Alice");
+        app.FakeAi.LlmReply = _ => VoicePlanReply;
+        await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/voice-batch/prompts", new { regenerateAll = false });
+        await WaitForBatchAsync();
+
+        var aliceId = await CharacterIdAsync(folder, "Alice");
+        var voiceId = JsonDocument.Parse(await Http.GetStringAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"))
+            .RootElement.GetProperty("voices")[0].GetProperty("id").GetGuid();
+        return (folder, aliceId, voiceId);
+    }
+
+    /// <summary>
+    /// The Reference Limit on a designed take, measured after the host normalises it: over 15 s it
+    /// is kept and the answer warns; over 30 s generation fails with advice about the sample text,
+    /// and the voice keeps the audio it had.
+    /// </summary>
+    [Fact]
+    public async Task A_designed_take_over_the_Reference_Limit_is_warned_or_refused()
+    {
+        var (folder, aliceId, voiceId) = await PlanOneVoiceAsync();
+        var generate = $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices/{voiceId}/generate-audio";
+        try
+        {
+            app.FakeAi.AudioCppTakeMs = 16_000;
+            var kept = await Http.PostAsync(generate, null);
+            Assert.Equal(HttpStatusCode.OK, kept.StatusCode);
+            var body = JsonDocument.Parse(await kept.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal(16.0, body.GetProperty("referenceSeconds").GetDouble(), precision: 1);
+            Assert.Contains("15 s soft limit", body.GetProperty("referenceWarning").GetString());
+            var audioFileName = body.GetProperty("audioFileName").GetString()!;
+            var stored = await File.ReadAllBytesAsync(Path.Combine(app.WorkspaceDir, folder,
+                audioFileName.Replace('/', Path.DirectorySeparatorChar)));
+
+            app.FakeAi.AudioCppTakeMs = 31_000;
+            var refused = await Http.PostAsync(generate, null);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+            var problem = JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement;
+            Assert.Contains("Shorten the voice-design sample text", problem.GetProperty("detail").GetString());
+
+            var voice = JsonDocument.Parse(await Http.GetStringAsync(
+                    $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"))
+                .RootElement.GetProperty("voices")[0];
+            Assert.Equal(audioFileName, voice.GetProperty("audioFileName").GetString());
+            Assert.Equal(16.0, voice.GetProperty("referenceSeconds").GetDouble(), precision: 1);
+            Assert.Equal(stored, await File.ReadAllBytesAsync(Path.Combine(app.WorkspaceDir, folder,
+                audioFileName.Replace('/', Path.DirectorySeparatorChar))));
+        }
+        finally
+        {
+            app.FakeAi.AudioCppTakeMs = 100;
         }
     }
 

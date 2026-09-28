@@ -27,6 +27,8 @@
         <MudTextField @bind-Value="_sampleTextDraft"
                       Label="Sample text" Variant="Variant.Outlined"
                       Lines="3" Immediate="true"
+                      MaxLength="VoiceDesignSettingsService.MaxSampleTextLength"
+                      Counter="VoiceDesignSettingsService.MaxSampleTextLength"
                       HelperText="@($"Default: \"{DefaultSampleText}\"")" />
     </MudCardContent>
     <MudCardActions>
@@ -191,7 +193,15 @@ else
     async Task SaveSampleTextAsync()
     {
         var toSave = _sampleTextDraft == DefaultSampleText ? null : _sampleTextDraft;
-        await SettingsService.SetSampleTextAsync(toSave);
+        try
+        {
+            await SettingsService.SetSampleTextAsync(toSave);
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
         _activeSampleText = toSave;
         Snackbar.Add("Sample text saved.", Severity.Success);
     }

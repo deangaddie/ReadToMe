@@ -255,6 +255,18 @@ public class ProviderSettingsApiTests(E2eAppFixture app)
         }
     }
 
+    [Fact]
+    public async Task Sample_text_over_300_characters_is_refused_and_the_stored_text_kept()
+    {
+        var before = (await GetJsonAsync("voice-design/sample-text")).GetProperty("text").GetRawText();
+
+        var put = await Http.PutAsJsonAsync(Url("voice-design/sample-text"), new { text = new string('a', 301) });
+
+        Assert.Equal(HttpStatusCode.BadRequest, put.StatusCode);
+        Assert.Contains("301 characters", (await JsonAsync(put)).GetProperty("detail").GetString());
+        Assert.Equal(before, (await GetJsonAsync("voice-design/sample-text")).GetProperty("text").GetRawText());
+    }
+
     // ── test actions ─────────────────────────────────────────────────────────
 
     [Fact]

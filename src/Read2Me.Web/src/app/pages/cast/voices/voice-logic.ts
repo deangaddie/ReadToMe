@@ -114,8 +114,13 @@ export function applyVoiceUpdated(
     transcript: m.transcript ?? current.transcript,
     // Batch-generated audio is fresh: any earlier edit is gone with it.
     isEdited: m.audioFileName ? false : current.isEdited,
-    // The host measures the stored WAV; the message does not carry it, so the old length is stale.
-    ...(m.audioFileName ? { referenceSeconds: null, referenceWarning: null } : {}),
+    // Fresh audio comes with the host's measure of the stored take; the old length is stale.
+    ...(m.audioFileName
+      ? {
+          referenceSeconds: m.referenceSeconds ?? null,
+          referenceWarning: m.referenceWarning ?? null,
+        }
+      : {}),
   };
   const list = voices.voices.slice();
   list[index] = next;

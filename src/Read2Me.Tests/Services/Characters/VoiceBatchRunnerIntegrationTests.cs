@@ -82,6 +82,7 @@ namespace Read2Me.Tests.Services.Characters
             bool audioGenerationThrows = false,
             string cannedAudioFileName = "voices/voice.wav",
             string cannedTranscript = "sample text",
+            double? cannedDurationMs = null,
             NarratorIdentity? narrator = null)
         {
             var chars = characters ?? Array.Empty<Character>();
@@ -95,7 +96,7 @@ namespace Read2Me.Tests.Services.Characters
             var fakeOrchestrator = new FakeVoiceOrchestrator(
                 cannedPrompt, orchestratorThrows, orchestratorDelayMs,
                 audioGenerationFails, audioGenerationThrows,
-                cannedAudioFileName, cannedTranscript, cannedPlan);
+                cannedAudioFileName, cannedTranscript, cannedPlan, cannedDurationMs);
 
             return BuildRunner(fakeReader, fakeOrchestrator);
         }
@@ -495,6 +496,26 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
+        public async Task GenerateAudio_ATakeOverTheSoftLimit_ReportsItsLengthAndWarning_WithTheUpdate()
+        {
+            var character = MakeCharacter("Alice");
+            var voice = MakeGeneratedVoiceWithPrompt(character.Id);
+            var h = BuildHarness(
+                characters: new[] { character },
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>> { [character.Id] = new List<VoiceEntity> { voice } },
+                cannedDurationMs: 16_400);
+
+            h.Sut.StartGenerateAudio(Folder);
+            await WaitForIdleAsync(h.Sut);
+
+            var update = Assert.Single(h.Events.OfType<VoiceUpdated>(), u => u.VoiceId == voice.Id);
+            Assert.Equal(16.4, update.ReferenceSeconds);
+            Assert.Equal(
+                "The reference is 16.4 s, over the 15 s soft limit. A shorter clip clones more reliably.",
+                update.ReferenceWarning);
+        }
+
+        [Fact]
         public async Task GenerateAudio_UnlinkedSeedNarrator_IsPlanned()
         {
             var narrator = MakeSeedNarrator();
@@ -768,12 +789,13 @@ namespace Read2Me.Tests.Services.Characters
             private readonly string _cannedAudioFileName;
             private readonly string _cannedTranscript;
             private readonly IReadOnlyList<VoicePlanVoice>? _cannedPlan;
+            private readonly double? _cannedDurationMs;
 
             public FakeVoiceOrchestrator(
                 string cannedPrompt, bool throws = false, int delayMs = 0,
                 bool audioFails = false, bool audioThrows = false,
                 string cannedAudioFileName = "voices/voice.wav", string cannedTranscript = "sample text",
-                IReadOnlyList<VoicePlanVoice>? cannedPlan = null)
+                IReadOnlyList<VoicePlanVoice>? cannedPlan = null, double? cannedDurationMs = null)
                 : base(
                     voiceAudio: Substitute.For<IVoiceAudioWriter>(),
                     transcriptionResolver: Substitute.For<ITranscriptionClientResolver>(),
@@ -790,6 +812,7 @@ namespace Read2Me.Tests.Services.Characters
                 _cannedAudioFileName = cannedAudioFileName;
                 _cannedTranscript = cannedTranscript;
                 _cannedPlan = cannedPlan;
+                _cannedDurationMs = cannedDurationMs;
             }
 
             public override Task<string> BuildRenderedPromptAsync(string bookTitle, string author, string characterName) =>
@@ -827,7 +850,7 @@ namespace Read2Me.Tests.Services.Characters
                     throw new InvalidOperationException("Simulated audio generation failure");
                 if (_audioFails)
                     return VoiceGenerationResult.Failure("Simulated audio generation failure");
-                return VoiceGenerationResult.Success(_cannedAudioFileName, _cannedTranscript);
+                return VoiceGenerationResult.Success(_cannedAudioFileName, _cannedTranscript, _cannedDurationMs);
             }
         }
 
