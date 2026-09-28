@@ -54,6 +54,9 @@ namespace Read2Me.App.State
 
         internal ProjectFolderId? _folderId;
 
+        /// <summary>Bumped by every <see cref="LoadAsync"/>; a load applies its reads only while it is still the latest.</summary>
+        private int _loadGeneration;
+
         /// <summary>
         /// Per-voice cache-buster token. Incremented whenever a voice's audio file is
         /// (over)written so the UI can request a fresh URL. The audio file keeps the same
@@ -74,33 +77,47 @@ namespace Read2Me.App.State
 
         public event Action? StateChanged;
 
+        /// <summary>
+        /// Rereads the page. Loads overlap — the tab reloads on every parent render while a gesture's
+        /// own reload may be running — so the reads land only if no newer load started meanwhile;
+        /// otherwise an older snapshot (say, the narrator before an unlink) would overwrite the newer.
+        /// </summary>
         public async Task LoadAsync(ProjectFolderId folderId)
         {
+            var generation = ++_loadGeneration;
             _folderId = folderId;
             IsLoading = true;
             NotifyStateChanged();
-            Narrator = await reader.GetNarratorAsync(folderId);
-            if (string.IsNullOrEmpty(Narrator.DisplayName))
-                Narrator = NarratorIdentity.Unlinked;
-            Characters = await reader.GetCharactersWithAliasesAsync(folderId);
+
+            var narrator = await reader.GetNarratorAsync(folderId);
+            if (string.IsNullOrEmpty(narrator.DisplayName))
+                narrator = NarratorIdentity.Unlinked;
+            var characters = await reader.GetCharactersWithAliasesAsync(folderId);
+            var selected = SelectedCharacter is null ? null : characters.Find(c => c.Id == SelectedCharacter.Id);
+            List<CharacterLine> lines = [];
+            List<VoiceEntity> voices = [];
+            Guid? defaultVoiceId = null;
+            List<VoiceRuleRow> voiceRules = [];
+            if (selected is not null)
+            {
+                lines = await reader.GetCharacterLinesAsync(folderId, selected.Id);
+                voices = await reader.GetCharacterVoicesAsync(folderId, selected.Id);
+                defaultVoiceId = await reader.GetDefaultVoiceIdAsync(folderId, selected.Id);
+                voiceRules = await reader.GetCharacterVoiceRulesAsync(folderId, selected.Id);
+            }
+
+            if (generation != _loadGeneration)
+                return;
+
+            Narrator = narrator;
+            Characters = characters;
             if (SelectedCharacter is not null)
             {
-                var reselected = Characters.Find(c => c.Id == SelectedCharacter.Id);
-                SelectedCharacter = reselected;
-                if (reselected is not null)
-                {
-                    Lines = await reader.GetCharacterLinesAsync(folderId, reselected.Id);
-                    Voices = await reader.GetCharacterVoicesAsync(folderId, reselected.Id);
-                    DefaultVoiceId = await reader.GetDefaultVoiceIdAsync(folderId, reselected.Id);
-                    VoiceRules = await reader.GetCharacterVoiceRulesAsync(folderId, reselected.Id);
-                }
-                else
-                {
-                    Lines = [];
-                    Voices = [];
-                    DefaultVoiceId = null;
-                    VoiceRules = [];
-                }
+                SelectedCharacter = selected;
+                Lines = lines;
+                Voices = voices;
+                DefaultVoiceId = defaultVoiceId;
+                VoiceRules = voiceRules;
             }
             IsLoading = false;
             NotifyStateChanged();

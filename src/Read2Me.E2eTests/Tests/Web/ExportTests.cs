@@ -19,7 +19,8 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBa
     {
         await App.SeedProjectAsync("web-export", "Web Export Book", "A. Author");
         await App.SeedAllItemAudioAsync("web-export");
-        App.Encoder.EncodeDelay = TimeSpan.FromMilliseconds(600);
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        App.Encoder.HoldAtHalf = hold;
         try
         {
             await GotoAppAsync("/app/projects/web-export/export");
@@ -27,11 +28,13 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBa
 
             await Page.Locator("[data-action='assemble']").ClickAsync();
 
-            // Encode is reached with the earlier phases ticked off, and its percentage moves.
+            // Encode is reached with the earlier phases ticked off, and its percentage moves — the
+            // fake encoder parks at 50% until released, so neither is a race against a timer.
             await Expect(Phase("Encode")).ToHaveAttributeAsync("data-state", "active", new() { Timeout = 10_000 });
             await Expect(Phase("Gather")).ToHaveAttributeAsync("data-state", "done");
             await Expect(Page.Locator("[data-role='encode-percent']")).ToContainTextAsync("50%", new() { Timeout = 10_000 });
             await Expect(Page.Locator("[data-action='assemble']")).ToBeDisabledAsync();
+            hold.SetResult();
 
             await Expect(Page.Locator("[data-role='outcome']")).ToContainTextAsync("Finished: Web Export Book.m4b", new() { Timeout = 15_000 });
             await Expect(Phase("Finalize")).ToHaveAttributeAsync("data-state", "done");
@@ -60,7 +63,8 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBa
         }
         finally
         {
-            App.Encoder.EncodeDelay = TimeSpan.Zero;
+            App.Encoder.HoldAtHalf?.TrySetResult();
+            App.Encoder.HoldAtHalf = null;
         }
     }
 
@@ -87,7 +91,7 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBa
     {
         await App.SeedProjectAsync("web-export-cancel", "Web Cancel Export", "A. Author");
         await App.SeedAllItemAudioAsync("web-export-cancel");
-        App.Encoder.EncodeDelay = TimeSpan.FromSeconds(5);
+        App.Encoder.HoldAtHalf = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
             await GotoAppAsync("/app/projects/web-export-cancel/export");
@@ -103,7 +107,8 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBa
         }
         finally
         {
-            App.Encoder.EncodeDelay = TimeSpan.Zero;
+            App.Encoder.HoldAtHalf?.TrySetResult();
+            App.Encoder.HoldAtHalf = null;
         }
     }
 }

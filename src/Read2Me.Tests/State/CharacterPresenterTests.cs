@@ -174,6 +174,30 @@ namespace Read2Me.Tests.State
         }
 
         /// <summary>
+        /// Loads overlap: the tab reloads on every parent render while a gesture's own reload runs.
+        /// A load that read the Book before the newer one must not land its stale snapshot after it.
+        /// </summary>
+        [Fact]
+        public async Task Load_ThatFinishesAfterANewerLoad_DoesNotOverwriteIt()
+        {
+            var watson = new Character { Id = Guid.NewGuid(), Name = "Dr. Watson" };
+            var stale = new TaskCompletionSource<NarratorIdentity>();
+            var reader = Substitute.For<IProjectReader>();
+            reader.GetNarratorAsync(_folder, Arg.Any<CancellationToken>())
+                .Returns(stale.Task, Task.FromResult(NarratorIdentity.Unlinked));
+            reader.GetCharactersWithAliasesAsync(_folder).Returns(new List<Character> { watson });
+            var presenter = CreatePresenter(projectReader: reader);
+
+            var older = presenter.LoadAsync(_folder);
+            await presenter.LoadAsync(_folder);
+            stale.SetResult(new NarratorIdentity(watson.Id, watson.Name, true));
+            await older;
+
+            Assert.False(presenter.Narrator.IsLinked);
+            Assert.False(presenter.IsLoading);
+        }
+
+        /// <summary>
         /// The refusals the command endpoint softens to a success-shaped null are not softened here:
         /// nothing on this page has to answer a contract that predates them, so a gesture that did
         /// nothing says why.

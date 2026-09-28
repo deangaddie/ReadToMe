@@ -1764,13 +1764,16 @@ namespace Read2Me.Tests.State.Projection
 
             loader.Failure = new InvalidOperationException("The read failed while converging.");
             _receipts.Publish(ExternalReceipt(BookFacets.Attribution));
-            await ConvergesAsync(() => loader.Failures == 1, "the failing convergence never ran");
+            // The loader counts the failure before it throws; the projection marks itself stale after,
+            // on the pump — so wait for the stale snapshot, not the count.
+            await ConvergesAsync(
+                () => loader.Failures == 1 && sut.Snapshot!.Health == BookViewHealth.Stale,
+                "the failing convergence never went stale");
 
             // The last coherent snapshot's content is still the one on screen: a failed convergence
             // publishes nothing rather than half of something, and only says it went stale.
             Assert.Same(opened.Branches, sut.Snapshot!.Branches);
             Assert.Equal(opened.Revision, sut.Snapshot!.Revision);
-            Assert.Equal(BookViewHealth.Stale, sut.Snapshot!.Health);
 
             loader.Failure = null;
             var revision = ExternalReceiptPublished(BookFacets.Attribution);

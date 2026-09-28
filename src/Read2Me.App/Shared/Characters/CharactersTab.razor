@@ -97,10 +97,15 @@ else
 
     Character? _selectedCharacter;
 
-    protected override async Task OnParametersSetAsync()
+    // Once per component: OnParametersSetAsync runs on every parent render.
+    protected override void OnInitialized()
     {
         Presenter.StateChanged += Refresh;
         BatchEvents.Event += OnBatchEvent;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
         await Presenter.LoadAsync(new Core.Models.ProjectFolderId(FolderName));
         _selectedCharacter = Presenter.SelectedCharacter;
     }

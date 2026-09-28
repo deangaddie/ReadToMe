@@ -195,7 +195,9 @@ namespace Read2Me.Services.Audio.Assembly
                 var finalPath = Path.Combine(outputDir, outputFileName);
                 tmpPath = finalPath + ".tmp";
 
-                var progress = new Progress<double>(f =>
+                // Inline, not Progress<T>: with no sync context that posts each report to the thread
+                // pool, so two close reports can land out of order and the bar steps backwards.
+                var progress = new SyncProgress(f =>
                 {
                     lock (_lock) { EncodePercent = f; }
                     _broadcaster.Publish(new AssemblyEncodeProgress(f) { Folder = folder.Value });
@@ -254,6 +256,11 @@ namespace Read2Me.Services.Audio.Assembly
         {
             lock (_lock) { CurrentPhase = phase; }
             _broadcaster.Publish(new AssemblyPhaseStarted(phase) { Folder = folder.Value });
+        }
+
+        private sealed class SyncProgress(Action<double> report) : IProgress<double>
+        {
+            public void Report(double value) => report(value);
         }
 
         private void TryDelete(string? path)
