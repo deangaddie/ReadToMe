@@ -29,9 +29,12 @@ namespace Read2Me.Services.Audio
             await using var normalizedAudio = await BufferAsync(
                 await normalizer.NormalizeToWavAsync(request.Source, settings.FfmpegPath, ct), ct);
 
-            ReferenceLimit.EnsureWithinHardLimit(
-                CanonicalWav.DurationMs((int)Math.Min(normalizedAudio.Length, int.MaxValue)),
-                normalizedAudio.Length);
+            // The header, as the voice list reads it, so the two never disagree at a limit; byte
+            // arithmetic only when the header is unreadable.
+            var durationMs = WavHeader.TryReadDurationMs(normalizedAudio)
+                             ?? CanonicalWav.DurationMs((int)Math.Min(normalizedAudio.Length, int.MaxValue));
+            normalizedAudio.Position = 0;
+            ReferenceLimit.EnsureWithinHardLimit(durationMs, normalizedAudio.Length);
 
             originals.Delete(request.FolderId, request.CharacterId, request.VoiceId);
 

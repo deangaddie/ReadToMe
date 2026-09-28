@@ -271,6 +271,24 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public async Task StoreAsync_MeasuresTheWavHeader_NotTheByteCount_SoChunksBeforeDataDoNotCount()
+        {
+            // Exactly 30 s of PCM behind a 48 kB metadata chunk: byte arithmetic would read 31 s,
+            // the header reads 30 s — the same figure the voice list shows.
+            var wav = TestWav.Tone(30_000);
+            var padded = new byte[wav.Length + 8 + 48_000];
+            wav.AsSpan(0, 36).CopyTo(padded);
+            "LIST"u8.CopyTo(padded.AsSpan(36));
+            BitConverter.GetBytes(48_000).CopyTo(padded, 40);
+            wav.AsSpan(36).CopyTo(padded.AsSpan(44 + 48_000));
+            _normalizer.ReturnBytes = padded;
+
+            var result = await _pipeline.StoreAsync(MakeRequest(".wav"));
+
+            Assert.EndsWith(".wav", result);
+        }
+
+        [Fact]
         public async Task StoreAsync_OverTheSoftLimitOnly_StoresIt()
         {
             _normalizer.ReturnBytes = TestWav.Tone(20_000);
