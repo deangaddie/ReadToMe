@@ -191,7 +191,7 @@ huggingface-cli download audio-cpp/audio.cpp-gguf --include "Breeze-TTS-2-GGUF/*
 - **Read at startup.** An added or edited entry goes live only after `docker compose restart audiocpp`.
 - **Lazy load, one resident** (`lazy_load: true`, `max_loaded_models: 1`, no idle unload). A request naming another model loads it and evicts the current one; that first request takes 9–31 s. Probe with `GET /v1/models`: each `data[]` item carries a `loaded` boolean (not llama's `status.value`).
 - **A missing GGUF does not fail startup.** `/v1/models` still lists the entry with `loaded: false`, and a request for it returns 500 `model path does not exist`.
-- **Busy.** A request for a *different* model while one is generating gets an immediate 503 `server_busy`; requests for the same model queue. The app's TTS gate sends one request per endpoint at a time and retries a 503 after 2, 4 and 8 s before reporting the queue item Busy.
+- **Busy.** A request for a *different* model while one is generating gets an immediate 503 `server_busy`; requests for the same model queue. The app's TTS gate sends one request per endpoint at a time; within it, the client retries a 503 after 2, 4 and 8 s before reporting Busy.
 - **VoxCPM2 reference capacity.** `voxcpm2.audiovae_encoder_sample_capacity: "480000"` raises VoxCPM2's reference-audio cap from 15 s to 30 s. It pairs with the app's 30 s hard Reference Limit (`ReferenceLimit` in `Read2Me.Services.Audio`); raise one and the other must follow. audio.cpp also caps an inline reference at 5 MiB, which is the limit's byte bound.
 
 ### Request

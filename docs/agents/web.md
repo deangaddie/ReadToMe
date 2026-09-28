@@ -64,7 +64,7 @@ Server → client, method name = event family, payload carries `kind`:
 | `serviceStatus` | `{ name, status, op?, ok?, error? }` last observed status per managed service | everyone |
 | `preflight` | per-service stages of one preflight run, then `{ kind: done, ok }` | one connection |
 | `bookEdit`, `llmTest` | progress / done / failed for one run | one connection |
-| `llm`, `audioGen` | stream events (control + batched deltas / phase events; `audioGen` `modelLoading` has an empty id — the TTS gate sits below any item) | stream group |
+| `llm`, `audioGen` | stream events (control + batched deltas / phase events; `audioGen` `modelLoading` carries an all-zero (`Guid.Empty`) id — the TTS gate sits below any item) | stream group |
 | `throughput` | `ThroughputSnapshot` once a second while a run is active | everyone |
 | `settingsChanged` | `{ area }` | everyone |
 
