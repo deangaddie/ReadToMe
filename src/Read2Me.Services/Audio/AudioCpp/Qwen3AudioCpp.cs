@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Read2Me.Services.Audio.AudioCpp
 {
     /// <summary>
-    /// Qwen3-TTS's audio.cpp request conventions, shared by the Base clone and (ticket 07) VoiceDesign:
+    /// Qwen3-TTS's audio.cpp request conventions, shared by the Base clone and VoiceDesign:
     /// the stored language code as the language name audio.cpp's talker knows, and the optional
     /// sampling knobs under audio.cpp's option names.
     /// </summary>

@@ -149,7 +149,7 @@ describe('ProviderSettingsPage', () => {
       ['paragraph-tts', 2, ['maxChunkChars', 'carrierPrefixEnabled', 'temperature']],
       ['paragraph-tts', 3, ['maxChunkChars', 'carrierPrefixEnabled', 'top_k']],
       ['voice-design', 0, ['inference_timesteps']],
-      ['voice-design', 1, ['apiKey', 'model', 'topK']],
+      ['voice-design', 1, ['topK']],
       ['transcription', 0, []],
       ['semantic-similarity', 0, ['PassThreshold']],
       ['semantic-similarity', 1, ['PassThreshold']],
@@ -181,8 +181,8 @@ describe('ProviderSettingsPage', () => {
       await flushSchema('voice-design', 1);
       await stable(fixture);
 
-      expect(fieldKeys(el)).toEqual(['apiKey', 'model', 'topK']);
-      expect(el.querySelector<HTMLInputElement>('[data-key="apiKey"] input')?.type).toBe('password');
+      expect(fieldKeys(el)).toEqual(['topK']);
+      expect(el.querySelector<HTMLInputElement>('[data-key="topK"] input')?.value).toBe('');
       expect(fixture.componentInstance.hasUnsavedChanges()).toBe(true);
     });
   });

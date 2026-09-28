@@ -36,7 +36,7 @@ namespace Read2Me.App.Api
         public static void Canonicalize(VoiceDesignServiceConfig config) => config.SettingsJson = config.Type switch
         {
             VoiceDesignServiceType.VoxCpm2 => Rewrite(config.SettingsJson, VoxCpm2VoiceDesignSettings.Recommended, Web),
-            VoiceDesignServiceType.Qwen3 => Rewrite(config.SettingsJson, new Qwen3VoiceDesignSettings()),
+            VoiceDesignServiceType.Qwen3 => Rewrite(config.SettingsJson, Qwen3VoiceDesignSettings.Recommended),
             VoiceDesignServiceType.Breeze => Rewrite(config.SettingsJson, BreezeVoiceDesignSettings.Recommended),
             _ => config.SettingsJson,
         };

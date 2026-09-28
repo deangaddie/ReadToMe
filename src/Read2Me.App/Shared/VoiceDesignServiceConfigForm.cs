@@ -22,9 +22,9 @@ namespace Read2Me.App.Shared
         // VoxCpm2 settings — full JSON for the tunable fields (BaseUrl held separately above)
         public string? SettingsJson { get; set; }
 
-        // Qwen3 settings
-        public string? ApiKey { get; set; }
-        public string? Model { get; set; }
+        // Qwen3 settings. ModelId and Seed ride along as loaded (the Angular app edits them).
+        public string ModelId { get; set; } = Qwen3VoiceDesignSettings.Recommended.ModelId;
+        public int? Seed { get; set; }
         public string Language { get; set; } = "auto";
         public double? Temperature { get; set; }
         public double? TopP { get; set; }
@@ -55,11 +55,11 @@ namespace Read2Me.App.Shared
                     break;
                 case VoiceDesignServiceType.Qwen3:
                     var q3 = string.IsNullOrWhiteSpace(c.SettingsJson)
-                        ? new Qwen3VoiceDesignSettings()
-                        : JsonSerializer.Deserialize<Qwen3VoiceDesignSettings>(c.SettingsJson) ?? new Qwen3VoiceDesignSettings();
+                        ? Qwen3VoiceDesignSettings.Recommended
+                        : JsonSerializer.Deserialize<Qwen3VoiceDesignSettings>(c.SettingsJson) ?? Qwen3VoiceDesignSettings.Recommended;
                     form.BaseUrl = q3.BaseUrl;
-                    form.ApiKey = q3.ApiKey;
-                    form.Model = q3.Model;
+                    form.ModelId = q3.ModelId;
+                    form.Seed = q3.Seed;
                     form.Language = q3.Language;
                     form.Temperature = q3.Temperature;
                     form.TopP = q3.TopP;
@@ -103,14 +103,14 @@ namespace Read2Me.App.Shared
                     JsonSerializer.Serialize(new Qwen3VoiceDesignSettings
                     {
                         BaseUrl = BaseUrl.Trim(),
-                        ApiKey = string.IsNullOrWhiteSpace(ApiKey) ? null : ApiKey.Trim(),
-                        Model = string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
+                        ModelId = ModelId,
                         Language = Language,
                         Temperature = Temperature,
                         TopP = TopP,
                         TopK = TopK,
                         RepetitionPenalty = RepetitionPenalty,
                         MaxNewTokens = MaxNewTokens,
+                        Seed = Seed,
                     }),
                 VoiceDesignServiceType.Breeze => BuildBreezeSettingsJson(),
                 _ => throw new NotSupportedException($"Unsupported voice design type '{Type}'."),

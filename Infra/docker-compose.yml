@@ -166,7 +166,7 @@ services:
       - voxcpm2_uploads:/uploads
 
   # audio.cpp: the single TTS runtime (ADR 0010; Apache-2.0 runtime, Breeze weights research/non-commercial).
-  # Models in audiocpp/server.json (lazy-loaded, one resident): breeze-q8, breeze-design, voxcpm2, chatterbox, qwen3-base.
+  # Models in audiocpp/server.json (lazy-loaded, one resident): breeze-q8, breeze-design, voxcpm2, chatterbox, qwen3-base, qwen3-design.
   audiocpp:
     <<: [*hardened, *gpu]
     image: ghcr.io/0xshug0/audio.cpp:full-cuda12@sha256:5969cc86637cad1e893c6c22120edda9d37fbe1f0f266702dbe7fe7b721ed125

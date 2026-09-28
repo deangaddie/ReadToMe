@@ -33,6 +33,9 @@ public static class WorkspaceSeeder
     /// <summary>The seeded Qwen3-Base paragraph-TTS config, pointed at fake-audiocpp. Never the active one.</summary>
     public const string Qwen3BaseConfigName = "fake-qwen3-base";
 
+    /// <summary>The seeded Qwen3 voice-design config, pointed at fake-audiocpp. Never the active one.</summary>
+    public const string Qwen3DesignConfigName = "fake-qwen3-design";
+
     public static async Task SeedServiceConfigsAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
@@ -106,6 +109,14 @@ public static class WorkspaceSeeder
             Name = BreezeDesignConfigName,
             Type = VoiceDesignServiceType.Breeze,
             SettingsJson = JsonSerializer.Serialize(new BreezeVoiceDesignSettings { BaseUrl = "http://fake-audiocpp" }),
+        });
+
+        // Not active: a test that wants Qwen3 voice design on audio.cpp switches to it and back.
+        await sp.GetRequiredService<VoiceDesignSettingsService>().CreateConfigAsync(new VoiceDesignServiceConfig
+        {
+            Name = Qwen3DesignConfigName,
+            Type = VoiceDesignServiceType.Qwen3,
+            SettingsJson = JsonSerializer.Serialize(new Qwen3VoiceDesignSettings { BaseUrl = "http://fake-audiocpp" }),
         });
     }
 

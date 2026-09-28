@@ -40,6 +40,13 @@
       "mode": "offline"
     },
     {
+      "id": "qwen3-design",
+      "family": "qwen3_tts",
+      "path": "/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf",
+      "task": "vdes",
+      "mode": "offline"
+    },
+    {
       "id": "breeze-design",
       "family": "breeze_tts",
       "path": "/models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf",

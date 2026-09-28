@@ -157,7 +157,7 @@ namespace Read2Me.Tests.Services.Audio
         private static Qwen3VoiceDesignSettings Merge(string defaults, string? overrideJson)
             => VoiceDesignSettingsMerge.Merge<Qwen3VoiceDesignSettings>(defaults, overrideJson);
 
-        private const string Defaults = """{"baseUrl":"http://localhost:8100","apiKey":"key1","model":"qwen3"}""";
+        private const string Defaults = """{"baseUrl":"http://localhost:8100","language":"en","modelId":"qwen3-design"}""";
 
         [Fact]
         public void Merge_NullOverride_ReturnsDefaults()
@@ -165,8 +165,8 @@ namespace Read2Me.Tests.Services.Audio
             var result = Merge(Defaults, null);
 
             Assert.Equal("http://localhost:8100", result.BaseUrl);
-            Assert.Equal("key1", result.ApiKey);
-            Assert.Equal("qwen3", result.Model);
+            Assert.Equal("en", result.Language);
+            Assert.Equal("qwen3-design", result.ModelId);
         }
 
         [Fact]
@@ -182,11 +182,11 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Merge_OverrideKey_ReplacesOnlyThatKey()
         {
-            var result = Merge(Defaults, """{"model":"qwen3-turbo"}""");
+            var result = Merge(Defaults, """{"modelId":"qwen3-design-bf16"}""");
 
             Assert.Equal("http://localhost:8100", result.BaseUrl);
-            Assert.Equal("key1", result.ApiKey);
-            Assert.Equal("qwen3-turbo", result.Model);
+            Assert.Equal("en", result.Language);
+            Assert.Equal("qwen3-design-bf16", result.ModelId);
         }
 
         [Fact]

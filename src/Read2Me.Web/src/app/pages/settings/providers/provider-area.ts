@@ -88,17 +88,6 @@ const CARRIER_MAX_TARGET_CHARS: SettingsField = {
   help: "Text at or below this length gets the voice's reference transcript prepended, then trimmed off the audio.",
 };
 
-const QWEN3_CONNECTION: SettingsField[] = [
-  { key: 'apiKey', label: 'API key (optional)', kind: 'string', default: null, secret: true },
-  {
-    key: 'model',
-    label: 'Model (optional)',
-    kind: 'string',
-    default: null,
-    help: 'Model id sent on the request.',
-  },
-];
-
 const PASS_THRESHOLD_KEY = 'passthreshold';
 
 export const PARAGRAPH_TTS_AREA: ProviderArea = {
@@ -146,12 +135,12 @@ export const VOICE_DESIGN_AREA: ProviderArea = {
   api: VoiceDesignSettingsApi,
   types: [
     { value: VoiceDesignServiceType.VoxCpm2, label: 'VoxCpm2', urlExample: 'http://localhost:8004' },
-    { value: VoiceDesignServiceType.Qwen3, label: 'Qwen3', urlExample: 'http://localhost:8100' },
+    { value: VoiceDesignServiceType.Qwen3, label: 'Qwen3', urlExample: 'http://localhost:8004' },
     { value: VoiceDesignServiceType.Breeze, label: 'Breeze', urlExample: 'http://localhost:8004' },
   ],
   hasTextProcessing: false,
   perConfigKeys: [],
-  configFields: (type) => (type === VoiceDesignServiceType.Qwen3 ? QWEN3_CONNECTION : []),
+  configFields: () => [],
 };
 
 export const TRANSCRIPTION_AREA: ProviderArea = {

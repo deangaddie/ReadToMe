@@ -34,7 +34,7 @@ namespace Read2Me.App.Api
     /// One static descriptor per TTS / voice-design provider (Angular ticket 16): the fields the
     /// Blazor typed editors (<c>ParagraphTtsSettingsEditor</c>, <c>TtsSettingsEditor</c>) render,
     /// with the same ranges and the <c>Recommended</c> record's defaults. Connection settings
-    /// (<c>baseUrl</c>, <c>apiKey</c>) and the app-level chunking / carrier knobs are not here —
+    /// (<c>baseUrl</c>) and the app-level chunking / carrier knobs are not here —
     /// they are per-config, never per-voice, exactly as the <c>*SettingsDiff</c> classes skip them.
     /// </summary>
     public static class ProviderSettingsSchema
@@ -200,14 +200,22 @@ namespace Read2Me.App.Api
             ];
         }
 
-        /// <summary>Qwen3 voice design: the record has no JSON names, so the web-default camelCase keys apply.</summary>
+        /// <summary>
+        /// Qwen3 voice design on audio.cpp: the record has no JSON names, so the web-default camelCase
+        /// keys apply. The client maps the knobs onto audio.cpp's (maxNewTokens → max_tokens). A blank
+        /// seed draws a random one per request.
+        /// </summary>
         private static IReadOnlyList<SettingsFieldDto> Qwen3VoiceDesignFields()
         {
-            var r = new Qwen3VoiceDesignSettings();
+            var r = Qwen3VoiceDesignSettings.Recommended;
             return
             [
+                new("modelId", "Model", "string", Default: r.ModelId,
+                    Help: "The audio.cpp server.json model entry."),
                 new("language", "Language", "enum", Options: Qwen3Languages, Default: r.Language),
                 ..Qwen3SamplingFields("temperature", "topP", "topK", "repetitionPenalty", "maxNewTokens"),
+                new("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
+                    Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so regenerating differs."),
             ];
         }
 

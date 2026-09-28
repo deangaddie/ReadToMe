@@ -124,7 +124,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app)
     [InlineData("paragraph-tts", 2, """{"baseUrl":"http://x","temperature":1.1}""")]
     [InlineData("paragraph-tts", 3, """{"baseUrl":"http://x","top_k":40,"language":"en"}""")]
     [InlineData("voice-design", 0, """{"baseUrl":"http://x","inference_timesteps":20}""")]
-    [InlineData("voice-design", 1, """{"baseUrl":"http://x","apiKey":"k+1","topK":40}""")]
+    [InlineData("voice-design", 1, """{"baseUrl":"http://x","modelId":"qwen3-design-bf16","topK":40,"seed":9}""")]
     [InlineData("transcription", 0, """{"baseUrl":"http://x"}""")]
     [InlineData("semantic-similarity", 0, """{"baseUrl":"http://x","passThreshold":0.7}""")]
     [InlineData("semantic-similarity", 1, """{"baseUrl":"http://x","passThreshold":0.6}""")]

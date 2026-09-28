@@ -1,103 +1,155 @@
-﻿using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.VoiceDesign;
+using Read2Me.Services.Audio.VoiceDesign.Settings;
+using Read2Me.Services.Events;
 using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
 {
+    /// <summary>
+    /// Qwen3 VoiceDesign down to the wire: the Qwen3 design client over the real audio.cpp client and
+    /// gate, against an in-memory audio.cpp server. No reference audio; the sample text is spoken and
+    /// the design prompt is the instruction.
+    /// </summary>
     public class Qwen3VoiceDesignClientTests
     {
-        private readonly FakeHttpClientFactory _httpFactory;
-        private readonly Qwen3VoiceDesignClient _sut;
-
-        public Qwen3VoiceDesignClientTests()
+        private static VoiceDesignServiceConfig Config(Qwen3VoiceDesignSettings? settings = null) => new()
         {
-            _httpFactory = new FakeHttpClientFactory();
-            _sut = new Qwen3VoiceDesignClient(_httpFactory, NullLogger<Qwen3VoiceDesignClient>.Instance, new FakeAiServiceReporter());
+            Name = "qwen3-design",
+            Type = VoiceDesignServiceType.Qwen3,
+            // The config forms write this record with the plain serializer (PascalCase keys).
+            SettingsJson = JsonSerializer.Serialize(
+                settings ?? Qwen3VoiceDesignSettings.Recommended with { BaseUrl = "http://acpp:8004" }),
+        };
+
+        private sealed record Sut(Qwen3VoiceDesignClient Client, FakeAudioCppHandler Handler);
+
+        private static Sut Build(FakeAudioCppHandler? handler = null)
+        {
+            handler ??= new FakeAudioCppHandler { LoadedModel = "qwen3-design" };
+            var factory = new SingleHandlerHttpClientFactory(handler);
+            var gate = new AudioCppGate(factory, new EventBroadcaster<AudioGenEvent>());
+            var audioCpp = new AudioCppClient(
+                factory, gate, new FakeAiServiceReporter(),
+                new AudioCppRetryPolicy([TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]),
+                NullLogger<AudioCppClient>.Instance);
+            return new Sut(new Qwen3VoiceDesignClient(audioCpp), handler);
+        }
+
+        private static Task<Stream> Design(Sut sut, VoiceDesignServiceConfig? config = null, string? overrideJson = null) =>
+            sut.Client.DesignVoiceAsync(config ?? Config(), "A gravelly old sea captain.", "The sample sentence.", overrideJson);
+
+        private static Dictionary<string, string> Options(Sut sut) =>
+            JsonDocument.Parse(sut.Handler.SpeechBodies.Single().ToJsonString()).RootElement.GetProperty("options")
+                .EnumerateObject().ToDictionary(o => o.Name, o => o.Value.GetString()!);
+
+        [Fact]
+        public async Task Speaks_the_sample_text_under_the_prompt_as_instruction_with_no_reference()
+        {
+            var sut = Build();
+
+            var wav = await Design(sut);
+
+            var body = sut.Handler.SpeechBodies.Single();
+            Assert.Equal("qwen3-design", body["model"]!.GetValue<string>());
+            Assert.Equal("The sample sentence.", body["input"]!.GetValue<string>());
+            Assert.Equal("A gravelly old sea captain.", Options(sut)["instruction"]);
+            Assert.False(body.ContainsKey("voice_ref"));
+            Assert.False(body.ContainsKey("reference_text"));
+            Assert.Equal(FakeAudioCppHandler.Wav, ((MemoryStream)wav).ToArray());
         }
 
         [Fact]
-        public async Task Design_PostsMultipartForm_WithTextAndVoiceDescription()
+        public async Task Unset_sampling_knobs_send_only_the_instruction_and_a_random_seed()
         {
-            var audioData = new byte[] { 0x52, 0x49, 0x46, 0x46 }; // RIFF
-            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new ByteArrayContent(audioData)
-            };
+            var sut = Build();
 
-            var config = new VoiceDesignServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
-            var result = await _sut.DesignVoiceAsync(config, "prompt", "text", null);
+            await Design(sut);
 
-            Assert.NotNull(result);
-            var written = new byte[result.Length];
-            await result.ReadExactlyAsync(written);
-            Assert.Equal(audioData, written);
-
-            Assert.NotNull(_httpFactory.LastRequest);
-            Assert.Equal(HttpMethod.Post, _httpFactory.LastRequest.Method);
-            Assert.Equal("http://test/tts", _httpFactory.LastRequest.RequestUri?.ToString());
-            
-            var content = Assert.IsType<MultipartFormDataContent>(_httpFactory.LastRequest.Content);
-            // Can't easily inspect MultipartFormDataContent parts without reading it back
-            var strContent = await content.ReadAsStringAsync();
-            Assert.Contains("text", strContent);
-            Assert.Contains("voice_description", strContent);
+            var options = Options(sut);
+            Assert.Equal(["instruction", "seed"], options.Keys.Order());
+            Assert.True(int.TryParse(options["seed"], out _));
         }
 
         [Fact]
-        public async Task Design_SendsLanguageAndNonNullSamplingParams()
+        public async Task Maps_the_set_knobs_onto_audiocpp_option_names_as_strings()
         {
-            var audioData = new byte[] { 0x52, 0x49, 0x46, 0x46 }; // RIFF
-            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.OK)
+            var sut = Build();
+
+            await Design(sut, Config(Qwen3VoiceDesignSettings.Recommended with
             {
-                Content = new ByteArrayContent(audioData)
-            };
+                BaseUrl = "http://acpp:8004",
+                Temperature = 0.7,
+                TopP = 0.95,
+                TopK = 40,
+                RepetitionPenalty = 1.1,
+                MaxNewTokens = 2048,
+                Seed = 9,
+            }));
 
-            var config = new VoiceDesignServiceConfig
-            {
-                SettingsJson = "{\"BaseUrl\":\"http://test\",\"Language\":\"en\",\"Temperature\":0.7,\"TopK\":40}"
-            };
-            await _sut.DesignVoiceAsync(config, "prompt", "text", null);
-
-            var content = Assert.IsType<MultipartFormDataContent>(_httpFactory.LastRequest!.Content);
-            var strContent = await content.ReadAsStringAsync();
-            Assert.Contains("language", strContent);
-            Assert.Contains("en", strContent);
-            Assert.Contains("temperature", strContent);
-            Assert.Contains("0.7", strContent);
-            Assert.Contains("top_k", strContent);
-            Assert.Contains("40", strContent);
-            Assert.DoesNotContain("top_p", strContent);
-            Assert.DoesNotContain("repetition_penalty", strContent);
-            Assert.DoesNotContain("max_new_tokens", strContent);
-        }
-
-        [Fact]
-        public async Task Design_NonSuccessStatus_Throws()
-        {
-            _httpFactory.Response = new HttpResponseMessage(HttpStatusCode.InternalServerError);
-
-            var config = new VoiceDesignServiceConfig { SettingsJson = "{\"BaseUrl\":\"http://test\"}" };
-            await Assert.ThrowsAsync<HttpRequestException>(() => 
-                _sut.DesignVoiceAsync(config, "prompt", "text", null));
-        }
-
-        private class FakeHttpClientFactory : IHttpClientFactory
-        {
-            public HttpResponseMessage? Response { get; set; }
-            public HttpRequestMessage? LastRequest { get; private set; }
-            public HttpClient CreateClient(string name) => new HttpClient(new FakeHttpMessageHandler(this));
-
-            private class FakeHttpMessageHandler(FakeHttpClientFactory factory) : HttpMessageHandler
-            {
-                protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            Assert.Equal(
+                new Dictionary<string, string>
                 {
-                    factory.LastRequest = request;
-                    return Task.FromResult(factory.Response!);
-                }
-            }
+                    ["instruction"] = "A gravelly old sea captain.",
+                    ["temperature"] = "0.7",
+                    ["top_p"] = "0.95",
+                    ["top_k"] = "40",
+                    ["repetition_penalty"] = "1.1",
+                    ["max_tokens"] = "2048",
+                    ["seed"] = "9",
+                },
+                Options(sut));
+        }
+
+        [Theory]
+        [InlineData("auto", "auto")]
+        [InlineData("en", "english")]
+        [InlineData("ja", "japanese")]
+        public async Task Sends_the_language_top_level_as_the_name_audiocpp_knows(string stored, string sent)
+        {
+            var sut = Build();
+
+            await Design(sut, Config(Qwen3VoiceDesignSettings.Recommended with { BaseUrl = "http://acpp:8004", Language = stored }));
+
+            var body = sut.Handler.SpeechBodies.Single();
+            Assert.Equal(sent, body["language"]!.GetValue<string>());
+            Assert.False(Options(sut).ContainsKey("language"));
+        }
+
+        [Fact]
+        public async Task Names_the_configured_model_entry()
+        {
+            var sut = Build();
+
+            await Design(sut, Config(Qwen3VoiceDesignSettings.Recommended with { BaseUrl = "http://acpp:8004", ModelId = "qwen3-design-bf16" }));
+
+            Assert.Equal("qwen3-design-bf16", sut.Handler.SpeechBodies.Single()["model"]!.GetValue<string>());
+        }
+
+        [Fact]
+        public async Task A_per_voice_override_replaces_the_config_defaults()
+        {
+            var sut = Build();
+
+            await Design(sut, overrideJson: """{"temperature":0.5,"topK":20}""");
+
+            Assert.Equal("0.5", Options(sut)["temperature"]);
+            Assert.Equal("20", Options(sut)["top_k"]);
+        }
+
+        [Fact]
+        public async Task A_503_that_outlasts_the_retries_throws_tts_busy()
+        {
+            var sut = Build(new FakeAudioCppHandler { LoadedModel = "breeze-q8", BusyResponses = 99 });
+
+            var ex = await Assert.ThrowsAsync<TtsBusyException>(() => Design(sut));
+
+            Assert.Equal("qwen3-design", ex.ModelId);
         }
     }
 }

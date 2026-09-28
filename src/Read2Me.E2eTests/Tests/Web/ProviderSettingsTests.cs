@@ -139,8 +139,8 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : We
             {
                 Name = name,
                 Type = VoiceDesignServiceType.Qwen3,
-                BaseUrl = "http://example-qwen:8100",
-                ApiKey = "k+1",
+                BaseUrl = "http://example-qwen:8004",
+                ModelId = "qwen3-design-bf16",
                 Language = "en",
                 TopK = 40,
             }.BuildConfig();
@@ -151,7 +151,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : We
             await Row(name).Locator(".r2m-config-list__main").ClickAsync();
             await Expect(Setting("language")).ToBeVisibleAsync();
             await Expect(Setting("topK").Locator("input")).ToHaveValueAsync("40");
-            await Expect(Setting("apiKey").Locator("input")).ToHaveAttributeAsync("type", "password");
+            await Expect(Setting("modelId").Locator("input")).ToHaveValueAsync("qwen3-design-bf16");
 
             await Field("name").FillAsync(renamed);
             await Save.ClickAsync();

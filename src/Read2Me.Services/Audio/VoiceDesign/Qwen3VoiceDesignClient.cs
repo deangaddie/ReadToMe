@@ -1,83 +1,34 @@
-using System.Globalization;
-using System.Net.Http.Headers;
-using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.VoiceDesign.Settings;
-using Read2Me.Services.Health;
 
 namespace Read2Me.Services.Audio.VoiceDesign
 {
-    /// <summary>Voice-design client for Qwen3-TTS (POST /tts). Returns WAV directly.</summary>
-    public sealed class Qwen3VoiceDesignClient(
-        IHttpClientFactory httpClientFactory,
-        ILogger<Qwen3VoiceDesignClient> logger,
-        IAiServiceReporter reporter) : IVoiceDesignClient
+    /// <summary>
+    /// Voice-design client for Qwen3-TTS VoiceDesign on audio.cpp (task <c>vdes</c>): the sample text
+    /// is spoken, the design prompt is <c>options.instruction</c>, and there is no reference audio.
+    /// Goes through the shared audio.cpp client, so it queues behind the audio queue at the TTS gate
+    /// and throws <see cref="TtsBusyException"/> when another model holds the endpoint.
+    /// </summary>
+    public sealed class Qwen3VoiceDesignClient(IAudioCppClient audioCpp) : IVoiceDesignClient
     {
-        public async Task<Stream> DesignVoiceAsync(
+        public Task<Stream> DesignVoiceAsync(
             VoiceDesignServiceConfig config,
             string prompt,
             string sampleText,
             string? settingsOverrideJson,
             CancellationToken ct = default)
         {
-            var settings = VoiceDesignSettingsMerge.Merge<Qwen3VoiceDesignSettings>(
+            var cfg = VoiceDesignSettingsMerge.Merge<Qwen3VoiceDesignSettings>(
                 config.SettingsJson, settingsOverrideJson);
 
-            logger.LogDebug("Qwen3 voice design -> {Url}", settings.BaseUrl);
+            var options = Qwen3AudioCpp.Options(
+                cfg.Temperature, cfg.TopP, cfg.TopK, cfg.RepetitionPenalty, cfg.MaxNewTokens, cfg.Seed);
+            options["instruction"] = prompt;
 
-            var http = httpClientFactory.CreateClient();
-            if (!string.IsNullOrWhiteSpace(settings.ApiKey))
-                http.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", settings.ApiKey);
-
-            try
-            {
-                var form = new MultipartFormDataContent
-                {
-                    { new StringContent(sampleText), "text" },
-                    { new StringContent(prompt), "voice_description" },
-                    { new StringContent(settings.Language), "language" },
-                };
-
-                if (settings.Temperature is { } temperature)
-                    form.Add(new StringContent(Inv(temperature)), "temperature");
-                if (settings.TopP is { } topP)
-                    form.Add(new StringContent(Inv(topP)), "top_p");
-                if (settings.TopK is { } topK)
-                    form.Add(new StringContent(topK.ToString(CultureInfo.InvariantCulture)), "top_k");
-                if (settings.RepetitionPenalty is { } repetitionPenalty)
-                    form.Add(new StringContent(Inv(repetitionPenalty)), "repetition_penalty");
-                if (settings.MaxNewTokens is { } maxNewTokens)
-                    form.Add(new StringContent(maxNewTokens.ToString(CultureInfo.InvariantCulture)), "max_new_tokens");
-
-                var request = new HttpRequestMessage(
-                    HttpMethod.Post, settings.BaseUrl.TrimEnd('/') + "/tts")
-                {
-                    Content = form,
-                };
-
-                var response = await http.SendAsync(
-                    request, HttpCompletionOption.ResponseHeadersRead, ct);
-                response.EnsureSuccessStatusCode();
-
-                var ms = new MemoryStream();
-                await response.Content.CopyToAsync(ms, ct);
-                ms.Position = 0;
-                reporter.ReportSuccess(settings.BaseUrl);
-                return ms;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                if (reporter.ReportFailure(settings.BaseUrl, ex))
-                    throw new AiServiceUnavailableException(settings.BaseUrl, ex);
-                throw;
-            }
+            return audioCpp.SpeakAsync(cfg.BaseUrl,
+                new AudioCppSpeechRequest(cfg.ModelId, sampleText, VoiceRef: null, ReferenceText: null, options,
+                    Qwen3AudioCpp.Language(cfg.Language)), ct);
         }
-
-        private static string Inv(double value) => value.ToString(CultureInfo.InvariantCulture);
     }
 }

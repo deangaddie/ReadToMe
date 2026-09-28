@@ -12,7 +12,7 @@
             </MudSelect>
 
             <MudTextField @bind-Value="_form.BaseUrl" Label="Base URL" Variant="Variant.Outlined"
-                          Placeholder="@(_form.Type switch { VoiceDesignServiceType.VoxCpm2 => "http://localhost:8003", VoiceDesignServiceType.Breeze => "http://localhost:8004", _ => "http://localhost:8100" })"
+                          Placeholder="http://localhost:8004"
                           Required="true" Immediate="true"
                           UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
 
@@ -25,12 +25,6 @@
 
             @if (_form.Type == VoiceDesignServiceType.Qwen3)
             {
-                <MudTextField @bind-Value="_form.ApiKey" Label="API Key (optional)" Variant="Variant.Outlined"
-                              Immediate="true" InputType="InputType.Password"
-                              UserAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
-                <MudTextField @bind-Value="_form.Model" Label="Model (optional)" Variant="Variant.Outlined"
-                              Immediate="true" Placeholder="Leave blank to use server default" />
-
                 <MudSelect T="string" @bind-Value="_form.Language" Label="Language" Variant="Variant.Outlined">
                     @foreach (var lang in new[] { "auto", "en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it" })
                     {

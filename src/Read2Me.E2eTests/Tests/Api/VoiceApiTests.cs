@@ -91,8 +91,40 @@ public class VoiceApiTests(E2eAppFixture app)
     [Fact]
     public async Task A_Breeze_voice_design_config_designs_through_audiocpp()
     {
-        var folder = $"api-voice-breeze-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "Breeze Voice Book", "Author", characterName: "Alice");
+        var body = await DesignOneVoiceAsync(WorkspaceSeeder.BreezeDesignConfigName);
+
+        Assert.Equal("breeze-design", body["model"]!.GetValue<string>());
+        Assert.Equal("A clear adult voice.", body["options"]!["instruction"]!.GetValue<string>());
+        Assert.False(body.ContainsKey("voice_ref"));
+    }
+
+    /// <summary>
+    /// Qwen3 voice design: with the Qwen3 config active, generating a voice's audio sends its design
+    /// prompt to fake-audiocpp as the instruction on a no-reference <c>qwen3-design</c> request, the
+    /// language top-level, and only the instruction and a seed in options while the knobs are unset.
+    /// </summary>
+    [Fact]
+    public async Task A_Qwen3_voice_design_config_designs_through_audiocpp()
+    {
+        var body = await DesignOneVoiceAsync(WorkspaceSeeder.Qwen3DesignConfigName);
+
+        Assert.Equal("qwen3-design", body["model"]!.GetValue<string>());
+        Assert.Equal("A clear adult voice.", body["options"]!["instruction"]!.GetValue<string>());
+        Assert.Equal(["instruction", "seed"], body["options"]!.AsObject().Select(o => o.Key).Order());
+        Assert.Equal("auto", body["language"]!.GetValue<string>());
+        Assert.False(body.ContainsKey("voice_ref"));
+        Assert.False(body.ContainsKey("reference_text"));
+    }
+
+    /// <summary>
+    /// Plans one voice for a fresh project's Alice, then generates its audio with the named seeded
+    /// voice-design config active (restoring the previous one after). Asserts the take lands and
+    /// returns the one audio.cpp speech body it sent.
+    /// </summary>
+    private async Task<JsonObject> DesignOneVoiceAsync(string configName)
+    {
+        var folder = $"api-voice-design-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Designed Voice Book", "Author", characterName: "Alice");
         app.FakeAi.LlmReply = _ => VoicePlanReply;
         await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/voice-batch/prompts", new { regenerateAll = false });
@@ -107,8 +139,8 @@ public class VoiceApiTests(E2eAppFixture app)
         using var scope = app.Services.CreateScope();
         var design = scope.ServiceProvider.GetRequiredService<VoiceDesignSettingsService>();
         var previous = await design.GetActiveConfigIdAsync();
-        var breeze = (await design.GetAllConfigsAsync()).Single(c => c.Name == WorkspaceSeeder.BreezeDesignConfigName);
-        await design.SetActiveConfigAsync(breeze.Id);
+        var config = (await design.GetAllConfigsAsync()).Single(c => c.Name == configName);
+        await design.SetActiveConfigAsync(config.Id);
         try
         {
             var gen = await Http.PostAsync(
@@ -120,11 +152,7 @@ public class VoiceApiTests(E2eAppFixture app)
             Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder,
                 audioFileName!.Replace('/', Path.DirectorySeparatorChar))));
 
-            JsonObject body;
-            lock (app.FakeAi.AudioCppSpeechBodies) body = Assert.Single(app.FakeAi.AudioCppSpeechBodies);
-            Assert.Equal("breeze-design", body["model"]!.GetValue<string>());
-            Assert.Equal("A clear adult voice.", body["options"]!["instruction"]!.GetValue<string>());
-            Assert.False(body.ContainsKey("voice_ref"));
+            lock (app.FakeAi.AudioCppSpeechBodies) return Assert.Single(app.FakeAi.AudioCppSpeechBodies);
         }
         finally
         {

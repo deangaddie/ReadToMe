@@ -107,7 +107,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         throw new InvalidOperationException($"fake-llm: unexpected path {path}");
     }
 
-    /// <summary>The native TTS services not yet on audio.cpp (ChatterboxTurbo, Qwen3 voice design): a silent WAV.</summary>
+    /// <summary>The native TTS service not yet on audio.cpp (ChatterboxTurbo): a silent WAV.</summary>
     private static HttpResponseMessage HandleTts() => new(HttpStatusCode.OK)
     {
         Content = new ByteArrayContent(FakeAiResponses.SilentWav()),
@@ -122,7 +122,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     {
         if (path == "/v1/models")
         {
-            var models = new[] { "breeze-q8", "breeze-design", "voxcpm2", "chatterbox", "qwen3-base" }
+            var models = new[] { "breeze-q8", "breeze-design", "voxcpm2", "chatterbox", "qwen3-base", "qwen3-design" }
                 .Select(id => new { id, loaded = id == _audioCppLoaded });
             return Json(JsonSerializer.Serialize(new { @object = "list", data = models }));
         }

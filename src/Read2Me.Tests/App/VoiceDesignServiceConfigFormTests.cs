@@ -14,8 +14,8 @@ namespace Read2Me.Tests.App
         /// start voxcpm2) never appeared before voice audio generation.
         /// </summary>
         [Theory]
-        [InlineData(VoiceDesignServiceType.VoxCpm2, "http://localhost:8003")]
-        [InlineData(VoiceDesignServiceType.Qwen3, "http://localhost:8100")]
+        [InlineData(VoiceDesignServiceType.VoxCpm2, "http://localhost:8004")]
+        [InlineData(VoiceDesignServiceType.Qwen3, "http://localhost:8004")]
         [InlineData(VoiceDesignServiceType.Breeze, "http://localhost:8004")]
         public void BuildConfig_SettingsJson_ResolvesBaseUrlForPreflight(VoiceDesignServiceType type, string url)
         {
@@ -51,23 +51,27 @@ namespace Read2Me.Tests.App
         }
 
         [Fact]
-        public void BuildConfig_Qwen3_RoundTripsLanguageAndSamplingParams()
+        public void BuildConfig_Qwen3_RoundTripsModelLanguageSamplingParamsAndSeed()
         {
             var form = new VoiceDesignServiceConfigForm
             {
                 Name = "test",
                 Type = VoiceDesignServiceType.Qwen3,
-                BaseUrl = "http://localhost:8100",
+                BaseUrl = "http://localhost:8004",
                 Language = "ja",
                 Temperature = 0.6,
                 TopP = 0.9,
                 TopK = 40,
                 RepetitionPenalty = 1.1,
                 MaxNewTokens = 512,
+                ModelId = "qwen3-design-bf16",
+                Seed = 9,
             };
 
             var reloaded = VoiceDesignServiceConfigForm.FromConfig(form.BuildConfig());
 
+            Assert.Equal("qwen3-design-bf16", reloaded.ModelId);
+            Assert.Equal(9, reloaded.Seed);
             Assert.Equal("ja", reloaded.Language);
             Assert.Equal(0.6, reloaded.Temperature);
             Assert.Equal(0.9, reloaded.TopP);
