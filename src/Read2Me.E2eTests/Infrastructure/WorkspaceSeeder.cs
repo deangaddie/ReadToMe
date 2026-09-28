@@ -27,6 +27,9 @@ public static class WorkspaceSeeder
     /// <summary>The seeded Breeze voice-design config, pointed at fake-audiocpp. Never the active one.</summary>
     public const string BreezeDesignConfigName = "fake-breeze-design";
 
+    /// <summary>The seeded Chatterbox paragraph-TTS config, pointed at fake-audiocpp. Never the active one.</summary>
+    public const string ChatterboxConfigName = "fake-chatterbox";
+
     public static async Task SeedServiceConfigsAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
@@ -62,6 +65,14 @@ public static class WorkspaceSeeder
             Name = BreezeConfigName,
             Type = ParagraphTtsServiceType.Breeze,
             SettingsJson = JsonSerializer.Serialize(new BreezeParagraphTtsSettings { BaseUrl = "http://fake-audiocpp" }),
+        });
+
+        // Not active: a test that wants Chatterbox on audio.cpp switches to it and back.
+        await sp.GetRequiredService<ParagraphTtsSettingsService>().CreateConfigAsync(new ParagraphTtsServiceConfig
+        {
+            Name = ChatterboxConfigName,
+            Type = ParagraphTtsServiceType.Chatterbox,
+            SettingsJson = JsonSerializer.Serialize(new ChatterboxParagraphTtsSettings { BaseUrl = "http://fake-audiocpp" }),
         });
 
         await sp.GetRequiredService<SemanticSimilaritySettingsService>().CreateConfigAsync(new SemanticSimilarityServiceConfig

@@ -223,13 +223,15 @@ namespace Read2Me.Tests.App
         {
             var original = ChatterboxParagraphTtsSettings.Recommended with
             {
-                BaseUrl = "http://localhost:8000",
+                BaseUrl = "http://localhost:8004",
+                ModelId = "chatterbox-f16",
                 Exaggeration = 0.7,
                 CfgWeight = 0.4,
                 Temperature = 0.9,
                 MinP = 0.1,
                 TopP = 0.95,
                 RepetitionPenalty = 1.5,
+                Seed = 42,
                 MaxChunkChars = 333,
             };
             var config = new ParagraphTtsServiceConfig
@@ -240,7 +242,7 @@ namespace Read2Me.Tests.App
             };
 
             var form = ParagraphTtsServiceConfigForm.FromConfig(config);
-            Assert.Equal("http://localhost:8000", form.BaseUrl);
+            Assert.Equal("http://localhost:8004", form.BaseUrl);
             Assert.Equal(333, form.MaxChunkChars);
 
             var rebuilt = form.BuildConfig();

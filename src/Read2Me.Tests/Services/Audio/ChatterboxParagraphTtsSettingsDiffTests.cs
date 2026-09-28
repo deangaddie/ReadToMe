@@ -24,6 +24,8 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(1.2, r.RepetitionPenalty);
             Assert.Equal(string.Empty, r.BaseUrl);
             Assert.Equal(500, r.MaxChunkChars);
+            Assert.Equal("chatterbox", r.ModelId);
+            Assert.Null(r.Seed);
         }
 
         [Fact]
@@ -115,6 +117,7 @@ namespace Read2Me.Tests.Services.Audio
                 Exaggeration = 0.7,
                 Temperature = 1.0,
                 RepetitionPenalty = 1.5,
+                Seed = 42,
             };
 
             var diff = ChatterboxParagraphTtsSettingsDiff.Diff(RecommendedJson, edited);
@@ -126,6 +129,7 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(edited.MinP, restored.MinP);
             Assert.Equal(edited.TopP, restored.TopP);
             Assert.Equal(edited.RepetitionPenalty, restored.RepetitionPenalty);
+            Assert.Equal(42, restored.Seed);
         }
     }
 }

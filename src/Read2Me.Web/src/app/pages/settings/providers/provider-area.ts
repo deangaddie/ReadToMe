@@ -113,7 +113,7 @@ export const PARAGRAPH_TTS_AREA: ProviderArea = {
     {
       value: ParagraphTtsServiceType.Chatterbox,
       label: 'Chatterbox',
-      urlExample: 'http://localhost:8000',
+      urlExample: 'http://localhost:8004',
     },
     {
       value: ParagraphTtsServiceType.ChatterboxTurbo,

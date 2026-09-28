@@ -97,6 +97,56 @@ public class AudioApiTests(E2eAppFixture app)
         }
     }
 
+    /// <summary>
+    /// With the Chatterbox config active, an audio-queue run speaks on audio.cpp: a plain clone
+    /// (reference, no transcript) with every knob sent explicitly under audio.cpp's names.
+    /// </summary>
+    [Fact]
+    public async Task A_Chatterbox_config_generates_through_audiocpp()
+    {
+        app.FakeAi.Reset();
+        using var scope = app.Services.CreateScope();
+        var tts = scope.ServiceProvider.GetRequiredService<ParagraphTtsSettingsService>();
+        var previous = await tts.GetActiveConfigIdAsync();
+        var chatterbox = (await tts.GetAllConfigsAsync()).Single(c => c.Name == WorkspaceSeeder.ChatterboxConfigName);
+        await tts.SetActiveConfigAsync(chatterbox.Id);
+        try
+        {
+            var folder = $"api-audio-chatterbox-{Guid.NewGuid():N}";
+            var builder = await app.SeedProjectAsync(folder, "Chatterbox Book", "Author");
+            await app.SeedNarratorVoiceAsync(folder);
+            var itemId = builder.ItemId("n1");
+
+            var enqueue = await Http.PostAsJsonAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
+                new { level = "chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
+            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
+
+            await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+
+            Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "audio", $"{itemId}.wav")));
+            List<JsonObject> bodies;
+            lock (app.FakeAi.AudioCppSpeechBodies) bodies = [.. app.FakeAi.AudioCppSpeechBodies];
+            Assert.Equal(2, bodies.Count); // n1 + n2
+            Assert.Contains(bodies, b => b["input"]!.GetValue<string>() == "It was a dark and stormy night.");
+            Assert.All(bodies, b =>
+            {
+                Assert.Equal("chatterbox", b["model"]!.GetValue<string>());
+                Assert.Equal("base64", b["voice_ref"]!["type"]!.GetValue<string>());
+                Assert.False(b.ContainsKey("reference_text"));
+                var options = b["options"]!.AsObject();
+                Assert.Equal(
+                    ["language", "exaggeration", "guidance_scale", "temperature", "min_p", "top_p", "repetition_penalty", "seed"],
+                    options.Select(o => o.Key));
+                Assert.Equal("en", options["language"]!.GetValue<string>());
+            });
+        }
+        finally
+        {
+            if (previous is { } id) await tts.SetActiveConfigAsync(id);
+        }
+    }
+
     [Fact]
     public async Task Enqueue_unknown_folder_is_404()
     {

@@ -116,11 +116,17 @@ namespace Read2Me.App.Api
                 Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
         ];
 
+        /// <summary>
+        /// Chatterbox on audio.cpp. The keys are the native server's; the client maps them onto
+        /// audio.cpp's options (cfg_weight → guidance_scale). A blank seed draws a random one per request.
+        /// </summary>
         private static IReadOnlyList<SettingsFieldDto> ChatterboxFields()
         {
             var r = ChatterboxParagraphTtsSettings.Recommended;
             return
             [
+                new("modelId", "Model", "string", Default: r.ModelId,
+                    Help: "The audio.cpp server.json model entry."),
                 new("exaggeration", "Exaggeration", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Exaggeration,
                     Help: "Emotional intensity. (0.0–2.0)"),
                 new("cfg_weight", "CFG Weight", "number", Min: 0.0, Max: 1.0, Step: 0.05, Default: r.CfgWeight,
@@ -133,6 +139,8 @@ namespace Read2Me.App.Api
                     Help: "Nucleus sampling ceiling."),
                 new("repetition_penalty", "Repetition Penalty", "number", Min: 1.0, Max: 2.0, Step: 0.05, Default: r.RepetitionPenalty,
                     Help: "Penalizes repeated tokens."),
+                new("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
+                    Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
             ];
         }
 
