@@ -99,7 +99,7 @@ namespace Read2Me.App.Api
                 v.DesignPrompt, v.Transcript, v.AudioFileName,
                 originals.Exists(folderId, v.CharacterId, v.Id),
                 v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson,
-                durationMs is { } ms ? Math.Round(ms / 1000, 1) : null,
+                ReferenceLimit.ReportedSeconds(durationMs),
                 ReferenceLimit.SoftWarning(durationMs));
         }
 

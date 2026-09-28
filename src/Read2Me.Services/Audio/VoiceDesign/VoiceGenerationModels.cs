@@ -36,7 +36,7 @@ namespace Read2Me.Services.Audio.VoiceDesign
             IsSuccess = true,
             AudioFileName = audioFileName,
             Transcript = transcript,
-            ReferenceSeconds = durationMs is { } ms ? Math.Round(ms / 1000, 1) : null,
+            ReferenceSeconds = ReferenceLimit.ReportedSeconds(durationMs),
             ReferenceWarning = ReferenceLimit.SoftWarning(durationMs),
         };
 

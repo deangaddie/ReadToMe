@@ -65,6 +65,24 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public void HardLimitMessage_NamesWhichLimit_WithTheCallersSubjectAndAdvice()
+        {
+            Assert.Equal(
+                "The generated voice is 6.0 MiB; a voice's reference must be 5 MiB or smaller — shorten it.",
+                ReferenceLimit.HardLimitMessage(20_000, 6L * 1024 * 1024, "The generated voice", "shorten it."));
+            Assert.Equal(
+                "The generated voice is 31.2 s; a voice's reference must be 30 s or shorter — shorten it.",
+                ReferenceLimit.HardLimitMessage(31_200, Small, "The generated voice", "shorten it."));
+        }
+
+        [Fact]
+        public void ReportedSeconds_IsTenthsOfASecond_OrNullWhenUnknown()
+        {
+            Assert.Equal(16.4, ReferenceLimit.ReportedSeconds(16_437));
+            Assert.Null(ReferenceLimit.ReportedSeconds(null));
+        }
+
+        [Fact]
         public void EnsureWithinHardLimit_OverTheSoftLimitOnly_DoesNotThrow()
         {
             ReferenceLimit.EnsureWithinHardLimit(29_000, Small);

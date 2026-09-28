@@ -193,7 +193,7 @@ public class VoiceApiTests(E2eAppFixture app)
             var refused = await Http.PostAsync(generate, null);
             Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
             var problem = JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement;
-            Assert.Contains("Shorten the voice-design sample text", problem.GetProperty("detail").GetString());
+            Assert.Contains("shorten the voice-design sample text", problem.GetProperty("detail").GetString());
 
             var voice = JsonDocument.Parse(await Http.GetStringAsync(
                     $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"))

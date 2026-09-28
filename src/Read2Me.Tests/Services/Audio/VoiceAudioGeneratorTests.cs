@@ -184,8 +184,8 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(0, voiceAudio.Stored);
             Assert.Empty(_fs.GetAllPaths());
             Assert.Equal(
-                "The generated voice is 34.5 s; a voice's reference must be 30 s or shorter. " +
-                "Shorten the voice-design sample text and generate again.",
+                "The generated voice is 34.5 s; a voice's reference must be 30 s or shorter — " +
+                "shorten the voice-design sample text and generate again.",
                 result.ErrorMessage);
         }
 

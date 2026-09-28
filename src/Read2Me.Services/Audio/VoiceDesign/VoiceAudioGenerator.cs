@@ -1,4 +1,3 @@
-using System.Globalization;
 using Read2Me.Core.Audio;
 using Read2Me.Core.IO;
 using Read2Me.Services.Audio.AudioCpp;
@@ -66,21 +65,14 @@ namespace Read2Me.Services.Audio.VoiceDesign
             {
                 // Nothing was stored. The upload's advice (trim it) does not fit a take whose length
                 // the sample text decides.
-                return VoiceGenerationResult.Failure(TooLongMessage(ex));
+                return VoiceGenerationResult.Failure(ReferenceLimit.HardLimitMessage(
+                    ex.DurationMs, ex.ByteLength, "The generated voice",
+                    "shorten the voice-design sample text and generate again."));
             }
             catch (Exception ex)
             {
                 return VoiceGenerationResult.Failure(ex.Message);
             }
         }
-
-        private const string ShortenAdvice = "Shorten the voice-design sample text and generate again.";
-
-        private static string TooLongMessage(ReferenceTooLongException ex) =>
-            ex.DurationMs > ReferenceLimit.HardLimitMs
-                ? $"The generated voice is {(ex.DurationMs / 1000).ToString("0.0", CultureInfo.InvariantCulture)} s; " +
-                  $"a voice's reference must be {ReferenceLimit.Seconds(ReferenceLimit.HardLimitMs)} s or shorter. {ShortenAdvice}"
-                : $"The generated voice is {(ex.ByteLength / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MiB; " +
-                  $"a voice's reference must be 5 MiB or smaller. {ShortenAdvice}";
     }
 }

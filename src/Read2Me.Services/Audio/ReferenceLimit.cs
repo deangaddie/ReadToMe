@@ -53,19 +53,32 @@ namespace Read2Me.Services.Audio
                 throw new ReferenceTooLongException(durationMs, byteLength);
         }
 
+        /// <summary>A reference's length as the app reports it (tenths of a second), or null when unknown.</summary>
+        public static double? ReportedSeconds(double? durationMs) =>
+            durationMs is { } ms ? Math.Round(ms / 1000, 1) : null;
+
+        /// <summary>
+        /// Why a reference over the hard limit was refused: <paramref name="subject"/> names it ("The
+        /// reference audio", "The generated voice") and <paramref name="advice"/> says what to do,
+        /// which differs between an upload and a generation.
+        /// </summary>
+        public static string HardLimitMessage(double durationMs, long byteLength, string subject, string advice) =>
+            byteLength > HardLimitBytes && durationMs <= HardLimitMs
+                ? $"{subject} is {(byteLength / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MiB; a voice's reference must be {HardLimitBytes / (1024 * 1024)} MiB or smaller — {advice}"
+                : $"{subject} is {(durationMs / 1000).ToString("0.0", CultureInfo.InvariantCulture)} s; a voice's reference must be {Seconds(HardLimitMs)} s or shorter — {advice}";
+
         internal static string Seconds(double ms) =>
             (ms / 1000).ToString(ms % 1000 == 0 ? "0" : "0.0", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
     /// A reference over the hard <see cref="ReferenceLimit"/>. Nothing was stored. The message is the
-    /// upload's; a caller with other advice (voice design) words its own from <see cref="DurationMs"/>.
+    /// upload's; a caller with other advice (voice design) words its own with
+    /// <see cref="ReferenceLimit.HardLimitMessage"/>.
     /// </summary>
     public sealed class ReferenceTooLongException(double durationMs, long byteLength)
-        : InvalidOperationException(
-            byteLength > ReferenceLimit.HardLimitBytes && durationMs <= ReferenceLimit.HardLimitMs
-                ? $"The reference audio is {(byteLength / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MiB; a voice's reference must be 5 MiB or smaller — trim it and upload again."
-                : $"The reference audio is {(durationMs / 1000).ToString("0.0", CultureInfo.InvariantCulture)} s; a voice's reference must be {ReferenceLimit.Seconds(ReferenceLimit.HardLimitMs)} s or shorter — trim it and upload again.")
+        : InvalidOperationException(ReferenceLimit.HardLimitMessage(
+            durationMs, byteLength, "The reference audio", "trim it and upload again."))
     {
         public double DurationMs { get; } = durationMs;
         public long ByteLength { get; } = byteLength;
