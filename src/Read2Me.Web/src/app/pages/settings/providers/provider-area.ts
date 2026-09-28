@@ -192,8 +192,15 @@ export const SIMILARITY_AREA: ProviderArea = {
   },
 };
 
+/** A stored type no provider offers (e.g. the removed Chatterbox Turbo) keeps its number and says so. */
 export function providerType(area: ProviderArea, type: number): ProviderTypeOption {
-  return area.types.find((t) => t.value === type) ?? area.types[0]!;
+  return (
+    area.types.find((t) => t.value === type) ?? {
+      value: type,
+      label: `Unknown type ${type}`,
+      urlExample: area.types[0]!.urlExample,
+    }
+  );
 }
 
 export const PROVIDER_AREAS: Record<ProviderAreaKey, ProviderArea> = {

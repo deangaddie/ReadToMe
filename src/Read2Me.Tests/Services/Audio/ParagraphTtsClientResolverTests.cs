@@ -96,5 +96,12 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Contains("Chatterbox Turbo", ex.Message);
             Assert.Contains("removed", ex.Message);
         }
+
+        [Fact]
+        public void RetiredChatterboxTurboValue_IsNeverReusedByAProvider()
+        {
+            // Stored rows may still carry 2; a new member on it would silently inherit them.
+            Assert.DoesNotContain(Enum.GetValues<ParagraphTtsServiceType>(), t => (int)t == 2);
+        }
     }
 }

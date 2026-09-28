@@ -157,6 +157,12 @@ namespace Read2Me.App.Shared
                     if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out _))
                         return "Base URL must be a valid absolute URL (e.g. http://localhost:8000).";
                     break;
+
+                // A stored row of a type no provider offers: refuse here, before BuildConfig would throw.
+                case RetiredParagraphTtsServiceTypes.ChatterboxTurbo:
+                    return RetiredParagraphTtsServiceTypes.ChatterboxTurboRemoved;
+                default:
+                    return $"'{Type}' is not a paragraph-TTS provider type.";
             }
 
             return null;

@@ -29,8 +29,8 @@ namespace Read2Me.App.Api
             ParagraphTtsServiceType.Qwen3Base => Rewrite(config.SettingsJson, Qwen3ParagraphTtsSettings.Recommended),
             ParagraphTtsServiceType.Breeze => Rewrite(config.SettingsJson, BreezeParagraphTtsSettings.Recommended),
             // No provider has these types: refuse the write (SettingsEndpoints turns it into a 400).
-            ParagraphTtsServiceTypes.RemovedChatterboxTurbo =>
-                throw new NotSupportedException("The Chatterbox Turbo TTS provider was removed; pick another type."),
+            RetiredParagraphTtsServiceTypes.ChatterboxTurbo =>
+                throw new NotSupportedException(RetiredParagraphTtsServiceTypes.ChatterboxTurboRemoved),
             _ => throw new NotSupportedException($"'{config.Type}' is not a paragraph-TTS provider type."),
         };
 

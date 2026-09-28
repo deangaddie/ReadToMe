@@ -264,6 +264,25 @@ namespace Read2Me.Tests.App
             Assert.Equal("Base URL is required.", form.Validate());
         }
 
+        // ---- Removed Chatterbox Turbo (value 2, until the 09 migration deletes the rows) ----
+
+        [Fact]
+        public void Validate_StoredChatterboxTurboConfig_RefusesSaveAsRemoved()
+        {
+            var form = ParagraphTtsServiceConfigForm.FromConfig(new ParagraphTtsServiceConfig
+            {
+                Name = "Turbo",
+                Type = (ParagraphTtsServiceType)2,
+                SettingsJson = """{"BaseUrl":"http://localhost:8001"}""",
+            });
+
+            var error = form.Validate();
+
+            Assert.NotNull(error);
+            Assert.Contains("Chatterbox Turbo", error);
+            Assert.Contains("removed", error);
+        }
+
         // ---- Qwen3Base ----
 
         [Fact]
