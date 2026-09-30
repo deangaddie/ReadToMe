@@ -8,6 +8,7 @@ Converts text/epub book files into audiobooks via AI-powered character attributi
 - **Docker** (with NVIDIA GPU support) — for AI inference services
 - **ffmpeg** — for audio normalisation and m4b assembly (path configured in app settings)
 - **RTX 3070 or similar** — 8 GB VRAM minimum for GPU containers
+- **32 GB RAM**, with the Docker WSL2 VM set to `memory=16GB` in `.wslconfig` — llama keeps the offloaded model layers locked in the VM (see [Infra/README.md](Infra/README.md#host--wsl-memory))
 
 ## Build and run
 

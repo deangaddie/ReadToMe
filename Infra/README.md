@@ -71,6 +71,34 @@ Configured for RTX 3070 (8 GB VRAM). GPU-resident services cannot generally run 
 
 > **Note:** Whisper.CPP and the semantic similarity containers are CPU-only and can run alongside `read2me-audiocpp`.
 
+## Host / WSL memory
+
+The host has **32 GB RAM** (31.7 GiB visible). Docker Desktop runs the containers in a WSL2 VM, and llama
+**mlocks** its weights inside that VM (`load-mode = mlock`, `IPC_LOCK` + unlimited `memlock`), so the VM must
+hold the whole CPU-offloaded part of the model. `qwen-28b` (n-cpu-moe 30) takes ≈ 12.5 GiB of the VM once loaded.
+
+Set the VM size explicitly in `C:\Users\<user>\.wslconfig`:
+
+```ini
+[wsl2]
+memory=16GB
+swap=4GB
+```
+
+16 GB is the smallest size that keeps ≥ 2 GiB of the VM available through a cold load, a thinking-off replay
+of the 41 attribution fixtures and a thinking-on pass (measured minimum 2.17 GiB; 17 GB leaves 3.1 GiB).
+If llama dies mid-run or is OOM-killed, raise it to 17 GB. A VM out of memory kills llama's child process
+**silently**. Evidence: `.scratch/llm-model-upgrade/issues/24-apply-the-preset.md`.
+
+Apply a change with `wsl --shutdown`, then restart Docker Desktop (llama comes back on its own:
+`restart: unless-stopped`). Check it with
+`docker exec read2me-llama sh -c "grep -E 'MemTotal|MemAvailable' /proc/meminfo"`.
+
+**Host-memory trap:** mlock pins pages only inside the guest; Windows can still page out its own apps. While
+attribution runs, the host's available memory sits around 7.5 GB with a quiet desktop. Watch the host's
+`Available MBytes` and pagefile use, not free RAM alone, and close browsers or games during long runs if it
+falls toward 1 GiB.
+
 ## Usage
 
 ```bash
@@ -125,9 +153,9 @@ The pin is frozen until there is a reason to move it: there is no update cadence
 Model presets are defined in `llama/config/models.ini`. Multiple models can be configured; only one is loaded at a time (`--models-max 1`). Switch without restart via **autoload**: name the target model in an inference request and the server evicts the currently loaded model to make room. (The request blocks until the new model finishes loading, then responds.)
 
 ```bash
-# Autoload gemma-26b by naming it in a chat-completion request:
+# Autoload qwen-28b by naming it in a chat-completion request:
 curl http://localhost:8080/v1/chat/completions \
-  -d '{"model":"gemma-26b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
+  -d '{"model":"qwen-28b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
 ```
 
 > **Note:** `POST /v1/models` did **not** switch models on the old fork build (it 404ed) and is untested on upstream. Autoload (above) is the switch the app uses.
@@ -138,28 +166,58 @@ Probe which preset is currently loaded with `GET /v1/models` — each preset ite
 curl http://localhost:8080/v1/models
 ```
 
-All presets are configured for a 34000-token context (`c = 34000`).
+Nothing loads at container start: the first request that names a preset loads it.
 
-| Preset | Model file |
-| --- | --- |
-| `gemma-26b` | `gemma-4-26B-A4B-it-UD-Q4_K_M.gguf` |
-| `gemma-26b_QAT` | `gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf` |
-| `gemma-12b_QAT` | `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf` |
-| `gemma-4b` | `gemma-4-E4B-it-UD-Q4_K_XL.gguf` |
-| `qwen-28b` | `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf` |
-| `qwen-9b` | `Qwen3.5-9B-UD-Q4_K_XL.gguf` |
-| `qwen-4b` | `Qwen3.5-4B-UD-Q4_K_XL.gguf` |
-| `ornith-1.0-9b-q4` | `ornith-1.0-9b-Q4_K_M.gguf` |
-| `ornith-1.0-9b-q5` | `ornith-1.0-9b-Q5_K_M.gguf` |
+### Attribution preset — `qwen-28b`
 
-GGUF files must be placed in `models/` before building. Example:
+`qwen-28b` is the preset the app uses for every LLM task (attribution, discovery, voice plans and prompts, book
+edits). It was chosen by the llm-model-upgrade bench (`.scratch/llm-model-upgrade/`, tickets 19–23) against the
+ticket-05 ground-truth set:
+
+- **Model:** `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf`, 32000-token context, q8_0 K and V cache.
+- **Speed settings:** `n-cpu-moe = 30`, `b = ub = 2048` — about 19 % faster attribution than the old `ub 512`
+  preset (385 s against 480 s for the 41 fixtures), same quality. VRAM stays ≥ 0.6 GiB free.
+- **Sampling fallback:** Qwen3.6 vendor values (temp 0.7, top-p 0.8, top-k 20, min-p 0, repeat 1.0). The app's LLM
+  configs send temperature, top-p and presence per mode (see below).
+- **`reasoning-budget = 4096`:** caps thinking when a request turns it on. It removes thinking runaways (the
+  unbounded preset hit the 8192-token cap about once per 2 runs) at unchanged quality; thinking-off requests are
+  unaffected. The cap also applies to voice plans and thinking-on discovery, which measured 1.1k–3.9k thinking
+  tokens.
+- **Cold load:** 62–75 s, inside the app's 300 s model-switch limit.
+
+The app runs it through two LLM configs on the same preset, so escalating to the thinking step needs no reload:
+
+| Config | Thinking | temp / top-p / presence | Role |
+| --- | --- | --- | --- |
+| Qwen 28b vendor – attribution | off | 0.7 / 0.8 / 1.5 | attribution step 1; the active config (discovery, voice, book edits) |
+| Qwen 28b vendor – thinking | on | 1.0 / 0.95 / 1.5 | attribution chain's final step |
+
+Both set MaxTokens 8192, batch 4, Full prompt style. The chain is attribution → thinking, with self-consistency off.
+
+### All presets
+
+| Preset | Model file | Context |
+| --- | --- | --- |
+| `qwen-28b` | `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf` | 32000 |
+| `qwen-9b` | `Qwen3.5-9B-UD-Q4_K_XL.gguf` | 8096 |
+| `qwen-4b` | `Qwen3.5-4B-UD-Q4_K_XL.gguf` | 8096 |
+| `gemma-12b_QAT` | `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf` | 8096 |
+| `gemma-4b` | `gemma-4-E4B-it-UD-Q4_K_XL.gguf` | 8096 |
+| `lamma-3.1-8b` | `Llama-3.1-8B-Instruct-Q6_K.gguf` | 16000 |
+| `lamma-3.2-3b` | `Llama-3.2-3B-Instruct-Q8_0.gguf` | 16000 |
+
+Only `qwen-28b` is used by the app; the small presets are kept for experiments. The bench's other presets
+(Gemma 4 26B, Qwen3.6-35B MTP, Nemotron, Ornith) were removed on 2026-09-30; they are archived in
+`.scratch/llm-model-upgrade/research/models.ini.bench-2026-09-30`.
+
+GGUF files go in the models directory (`GGUF_MODELS_DIR`, see [models/README.md](models/README.md)); they are bind-mounted, not built in. Example:
 
 ```bash
 pip install huggingface-hub
 huggingface-cli download <repo> --local-dir ./models
 ```
 
-- `IPC_LOCK` capability + unlimited `memlock` to keep model in RAM
+- `IPC_LOCK` capability + unlimited `memlock` to keep model in RAM (size the WSL VM for it: see [Host / WSL memory](#host--wsl-memory))
 - GPU layers offloaded via `ngl = 999` in preset config
 - Logs bind-mounted to `./logs`
 

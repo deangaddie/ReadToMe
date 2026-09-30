@@ -41,6 +41,7 @@ docker logs -f <container>     # follow logs
 ## Important constraints
 
 - GPU setup is VRAM-limited (RTX 3070, 8 GB). Only one GPU-resident container should run at a time in normal use.
+- Host has 32 GB RAM; llama mlocks its weights inside the WSL2 VM, so `.wslconfig` must set `memory=16GB` (see `Infra/README.md`, "Host / WSL memory"). The app's one LLM preset is `qwen-28b` ("Attribution preset" there).
 - `read2me-whisper`, `read2me-minilm-l6` and `read2me-mpnet-base-v2` are CPU-only and can run alongside any GPU container.
 - `read2me-audiocpp` serves every TTS model (ids in `Infra/audiocpp/server.json`), one resident at a time, switching on request. Paragraph TTS clones from a voice's reference audio; voice design (`breeze-design`, `qwen3-design`, `voxcpm2`) works from a text description.
 

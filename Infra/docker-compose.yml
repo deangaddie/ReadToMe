@@ -44,7 +44,6 @@ services:
       LLAMA_HOST: 0.0.0.0
       LLAMA_PORT: 8080
       LLAMA_MODELS_FILE: /config/models.ini
-      LLAMA_DEFAULT_MODEL: gemma-26b
 
   # audio.cpp: the single TTS runtime (ADR 0010; Apache-2.0 runtime, Breeze weights research/non-commercial).
   # Models in audiocpp/server.json (lazy-loaded, one resident): breeze-q8, breeze-design, voxcpm2, chatterbox, qwen3-base, qwen3-design.

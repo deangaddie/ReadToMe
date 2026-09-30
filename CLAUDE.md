@@ -53,7 +53,7 @@ dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # onl
 
 ### AI Infrastructure (`Infra/`)
 
-Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB VRAM) — only one GPU-resident container at a time.
+Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB VRAM) — only one GPU-resident container at a time. Host 32 GB RAM; llama mlocks its weights inside the WSL2 VM, so `.wslconfig` must set `memory=16GB` (sizing and the host-memory trap: `Infra/README.md`, "Host / WSL memory").
 
 | Container | Port | Role |
 |-----------|------|------|
@@ -67,10 +67,10 @@ Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB
 
 **llama.cpp** is upstream `v0.5.0` (a TurboQuant fork until 2026-09-26; no `turbo*` KV types now). Switch model without restart via autoload — name the target model in an inference request; `--models-max 1` evicts the loaded model (`POST /v1/models` 404ed on the old fork; the app uses autoload):
 ```bash
-curl http://localhost:8080/v1/chat/completions -d '{"model":"gemma-26b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
+curl http://localhost:8080/v1/chat/completions -d '{"model":"qwen-28b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
 ```
 Probe the loaded preset with `GET /v1/models` (each item's `status.value` is `unloaded`/`loading`/`loaded`).
-Model presets defined in `Infra/llama/config/models.ini` (e.g. `gemma-26b`, `qwen-28b`, `gemma-12b_QAT`, `gemma-4b`, `qwen-9b`, `qwen-4b`, `ornith-1.0-9b-q4`).
+Model presets defined in `Infra/llama/config/models.ini`. The app uses only `qwen-28b` (thinking budget 4096), through two LLM configs — attribution (thinking off, the active config) and thinking (the chain's final step); why and how: `Infra/README.md`, "Attribution preset".
 
 GGUF model files live in `Infra/models/` by default (bind-mounted, not committed). Override the host directory with `GGUF_MODELS_DIR` in `Infra/.env` to share GGUFs across projects; container path stays `/models`. Whisper's `ggml-base.en.bin` stays in `Infra/models/`.
 
