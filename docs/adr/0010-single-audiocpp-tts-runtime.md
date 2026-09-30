@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-09-27). Decided in the Breeze TTS map (`.scratch/breeze-tts/`, tickets 08 and 09).
+accepted (2026-09-27). Decided in the Breeze TTS map (`.scratch/completed/breeze-tts/`, tickets 08 and 09).
 
 ## Context
 

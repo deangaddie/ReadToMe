@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-09-30). Decided in the LLM Model Upgrade map (`.scratch/llm-model-upgrade/`, tickets 19–24).
+accepted (2026-09-30). Decided in the LLM Model Upgrade map (`.scratch/completed/llm-model-upgrade/`, tickets 19–24).
 
 ## Context
 

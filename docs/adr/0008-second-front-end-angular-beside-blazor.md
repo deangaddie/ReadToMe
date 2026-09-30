@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-09-23; spike branch `spike/angular-frontend`, tickets 01–26 in `.scratch/angular-frontend/`)
+accepted (2026-09-23; spike branch `spike/angular-frontend`, tickets 01–26 in `.scratch/completed/angular-frontend/`)
 
 ## Context
 
@@ -22,7 +22,7 @@ second front end be a thin client over that API, and what would it need from the
 
 **A second front end (Angular) runs beside the Blazor UI on the same host.** Nothing in the
 Blazor UI is removed or changed beyond host wiring; the comparison stays open until the
-spike is judged on parity (`.scratch/angular-frontend/parity.md`).
+spike is judged on parity (`.scratch/completed/angular-frontend/parity.md`).
 
 **Hosting.** The .NET host serves the Blazor UI at `/` and, when `wwwroot/app/index.html`
 exists, the Angular bundle at `/app` with SPA fallback and `--base-href /app/`. The .NET

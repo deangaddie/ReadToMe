@@ -88,7 +88,7 @@ swap=4GB
 16 GB is the smallest size that keeps ≥ 2 GiB of the VM available through a cold load, a thinking-off replay
 of the 41 attribution fixtures and a thinking-on pass (measured minimum 2.17 GiB; 17 GB leaves 3.1 GiB).
 If llama dies mid-run or is OOM-killed, raise it to 17 GB. A VM out of memory kills llama's child process
-**silently**. Evidence: `.scratch/llm-model-upgrade/issues/24-apply-the-preset.md`.
+**silently**. Evidence: `.scratch/completed/llm-model-upgrade/issues/24-apply-the-preset.md`.
 
 Apply a change with `wsl --shutdown`, then restart Docker Desktop (llama comes back on its own:
 `restart: unless-stopped`). Check it with
@@ -146,7 +146,7 @@ DNS policy must be absent while a model is being downloaded.
 
 ## llama.cpp
 
-Custom image built from `Dockerfile.llama` using upstream `ggml-org/llama.cpp` pinned at `v0.5.0` (commit `7fe450e19305b828c199d602c23a8337aaa1f03b`). It replaced the TurboQuant KV-cache fork (`4503343`) after an A/B found the same speed, a VRAM fit, and no breakage (`.scratch/llm-model-upgrade/research/14-bump-ab/STATUS.md`). Serves an OpenAI-compatible API (`/v1/chat/completions`, `/v1/models`).
+Custom image built from `Dockerfile.llama` using upstream `ggml-org/llama.cpp` pinned at `v0.5.0` (commit `7fe450e19305b828c199d602c23a8337aaa1f03b`). It replaced the TurboQuant KV-cache fork (`4503343`) after an A/B found the same speed, a VRAM fit, and no breakage (`.scratch/completed/llm-model-upgrade/research/14-bump-ab/STATUS.md`). Serves an OpenAI-compatible API (`/v1/chat/completions`, `/v1/models`).
 
 The pin is frozen until there is a reason to move it: there is no update cadence or Dependabot entry. Before any bump, review the upstream changes between the two SHAs. Any change to networking, file I/O outside the model path, or build scripts blocks the bump, and a bump needs a replay A/B like ticket 14's.
 
@@ -171,7 +171,7 @@ Nothing loads at container start: the first request that names a preset loads it
 ### Attribution preset — `qwen-28b`
 
 `qwen-28b` is the preset the app uses for every LLM task (attribution, discovery, voice plans and prompts, book
-edits). It was chosen by the llm-model-upgrade bench (`.scratch/llm-model-upgrade/`, tickets 19–23) against the
+edits). It was chosen by the llm-model-upgrade bench (`.scratch/completed/llm-model-upgrade/`, tickets 19–23) against the
 ticket-05 ground-truth set:
 
 - **Model:** `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf`, 32000-token context, q8_0 K and V cache.
@@ -208,7 +208,7 @@ Both set MaxTokens 8192, batch 4, Full prompt style. The chain is attribution �
 
 Only `qwen-28b` is used by the app; the small presets are kept for experiments. The bench's other presets
 (Gemma 4 26B, Qwen3.6-35B MTP, Nemotron, Ornith) were removed on 2026-09-30; they are archived in
-`.scratch/llm-model-upgrade/research/models.ini.bench-2026-09-30`.
+`.scratch/completed/llm-model-upgrade/research/models.ini.bench-2026-09-30`.
 
 GGUF files go in the models directory (`GGUF_MODELS_DIR`, see [models/README.md](models/README.md)); they are bind-mounted, not built in. Example:
 

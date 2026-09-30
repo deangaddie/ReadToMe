@@ -6,7 +6,7 @@ accepted (2026-09-24). Amends the hosting part of [ADR 0008](0008-second-front-e
 
 ## Context
 
-The Angular spike (ADR 0008, `.scratch/angular-frontend/`) reached parity with the Blazor UI
+The Angular spike (ADR 0008, `.scratch/completed/angular-frontend/`) reached parity with the Blazor UI
 across all 26 tickets. The comparison that ADR 0008 left open has been decided: the Angular app
 stays and Blazor goes. Removing Blazor is separate, later work.
 
