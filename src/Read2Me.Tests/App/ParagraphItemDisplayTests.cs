@@ -9,36 +9,6 @@ namespace Read2Me.Tests.App
 {
     public class ParagraphItemDisplayTests
     {
-        private static Paragraph ParagraphWith(ParagraphItemType? type)
-        {
-            var p = new Paragraph { Id = Guid.NewGuid(), Order = "a" };
-            if (type.HasValue)
-            {
-                p.Items = new List<ParagraphItem>
-                {
-                    new() { Id = Guid.NewGuid(), Order = "a", ItemType = type.Value }
-                };
-            }
-            else
-            {
-                p.Items = new List<ParagraphItem>();
-            }
-            return p;
-        }
-
-        [Theory]
-        [InlineData(ParagraphItemType.VolumePause, true)]
-        [InlineData(ParagraphItemType.PartPause, true)]
-        [InlineData(ParagraphItemType.ChapterPause, true)]
-        [InlineData(ParagraphItemType.ParagraphPause, true)]
-        [InlineData(ParagraphItemType.Pause, true)]
-        [InlineData(ParagraphItemType.Speech, false)]
-        public void IsPauseParagraph_ClassifiesPauseTypes(ParagraphItemType type, bool expected)
-        {
-            var p = ParagraphWith(type);
-            Assert.Equal(expected, ParagraphItemDisplay.IsPauseParagraph(p));
-        }
-
         [Fact]
         public void GetSpeechDisplay_NarratorStampedItem_ShowsTheNarrationPresentation()
         {
@@ -89,13 +59,6 @@ namespace Read2Me.Tests.App
 
             Assert.Equal("Unknown", label);
             Assert.Equal(Color.Warning, color);
-        }
-
-        [Fact]
-        public void IsPauseParagraph_EmptyItems_ReturnsTrue()
-        {
-            var p = ParagraphWith(null);
-            Assert.True(ParagraphItemDisplay.IsPauseParagraph(p));
         }
 
         [Theory]

@@ -9,7 +9,7 @@ namespace Read2Me.App.Services.Preflight
     /// double-loads). The first failure aborts the rest; the razor dialog only maps rows to chrome
     /// and the API coordinator only maps <see cref="StageChanged"/> to hub messages.
     /// </summary>
-    public sealed class AiPreflightDialogPresenter(IAiServiceControl control)
+    public sealed class AiPreflightProgress(IAiServiceControl control)
     {
         public enum ServiceStage { Pending, Stopping, Stopped, Starting, Ready, Failed }
 

@@ -1,11 +1,11 @@
-using Read2Me.App.State;
+using Read2Me.App.Live;
 using Read2Me.Core.Models;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 using Xunit;
 
-namespace Read2Me.Tests.State
+namespace Read2Me.Tests.App.Live
 {
     public class AttributionProgressStateTests
     {

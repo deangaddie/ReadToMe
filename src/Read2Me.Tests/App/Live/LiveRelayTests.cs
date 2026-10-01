@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Read2Me.App.Characters;
 using Read2Me.App.Live;
-using Read2Me.App.State;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;

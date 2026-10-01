@@ -2,7 +2,6 @@ using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Read2Me.App.Shared;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data;
@@ -184,7 +183,7 @@ namespace Read2Me.App.Api
             p.Items.Select(i => new ParagraphItemDto(
                 i.Id, ItemTypeWord(i), i.Text, i.CharacterId, i.AudioFileName,
                 i.VoiceInstructions, i.Order, ParagraphItemKinds.IsPause(i.ItemType))).ToList(),
-            ParagraphItemDisplay.IsPauseParagraph(p));
+            PauseParagraph.Is(p));
 
         /// <summary>
         /// The word an API client sees for an item's kind. Storage no longer distinguishes narration

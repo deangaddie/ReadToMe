@@ -1,3 +1,4 @@
+using Read2Me.App.Api;
 using Read2Me.App.Shared.Voices;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
@@ -77,15 +78,13 @@ namespace Read2Me.Tests.App
             model.Rows.Single(r => r.StepId == stepId);
 
         [Fact]
-        public void Starts_with_the_five_steps_unticked_and_seeded_from_the_voice_defaults()
+        public void Starts_with_the_five_steps_unticked()
         {
+            // What each row is seeded with is VoiceStepRow's own coverage (VoiceStepRowTests).
             var model = NewModel();
 
             Assert.Equal(5, model.Rows.Count);
             Assert.All(model.Rows, r => Assert.False(r.Ticked));
-            Assert.Equal(-35, Row(model, AudioPostProcessStepIds.SilenceTrim).ThresholdDb);
-            Assert.Equal(60, Row(model, AudioPostProcessStepIds.DePlosive).CutoffHz);
-            Assert.Equal(ConsonantSoftenPresets.Light, Row(model, AudioPostProcessStepIds.ConsonantSoften).Preset);
         }
 
         [Fact]
@@ -365,20 +364,6 @@ namespace Read2Me.Tests.App
 
             Assert.Same(hiss, model.Selected);
             Assert.False(hiss.Ticked);
-        }
-
-        [Fact]
-        public void A_ticked_row_builds_the_config_its_dials_describe()
-        {
-            var model = NewModel();
-            var trim = Row(model, AudioPostProcessStepIds.SilenceTrim);
-            model.EditDial(() => trim.ThresholdDb = -40);
-
-            var settings = trim.BuildConfig().GetSettings<SilenceTrimSettings>()!;
-
-            Assert.Equal(-40, settings.ThresholdDb);
-            // The Voice-scope guard rides along — it is a property of (step, scope), not of the dial.
-            Assert.Equal(1000, settings.MinOutputMs);
         }
     }
 }

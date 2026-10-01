@@ -1,5 +1,5 @@
-using System.Linq;
 using MudBlazor;
+using Read2Me.App.Api;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
@@ -49,11 +49,6 @@ namespace Read2Me.App.Shared
                 : ("", Color.Warning, "Unknown");
         }
 
-        public static bool IsPauseParagraph(Paragraph p)
-        {
-            if (p.Items.Count == 0) return true;
-            if (p.Items.Count != 1) return false;
-            return ParagraphItemKinds.IsPause(p.Items.First().ItemType);
-        }
+        public static bool IsPauseParagraph(Paragraph p) => PauseParagraph.Is(p);
     }
 }

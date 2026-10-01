@@ -38,15 +38,15 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         @switch (row.Stage)
                         {
-                            case AiPreflightDialogPresenter.ServiceStage.Stopping:
-                            case AiPreflightDialogPresenter.ServiceStage.Starting:
+                            case AiPreflightProgress.ServiceStage.Stopping:
+                            case AiPreflightProgress.ServiceStage.Starting:
                                 <MudProgressCircular Indeterminate="true" Size="Size.Small" />
                                 break;
-                            case AiPreflightDialogPresenter.ServiceStage.Stopped:
-                            case AiPreflightDialogPresenter.ServiceStage.Ready:
+                            case AiPreflightProgress.ServiceStage.Stopped:
+                            case AiPreflightProgress.ServiceStage.Ready:
                                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
                                 break;
-                            case AiPreflightDialogPresenter.ServiceStage.Failed:
+                            case AiPreflightProgress.ServiceStage.Failed:
                                 <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
                                 break;
                             default:
@@ -92,13 +92,13 @@
 
     [Parameter] public AiPreflightPlan Plan { get; set; } = new([], []);
 
-    private AiPreflightDialogPresenter _presenter = default!;
+    private AiPreflightProgress _presenter = default!;
     private readonly CancellationTokenSource _cts = new();
     private bool _started;
 
     protected override void OnInitialized()
     {
-        _presenter = new AiPreflightDialogPresenter(Control);
+        _presenter = new AiPreflightProgress(Control);
         _presenter.Load(Plan);
         _presenter.Changed += OnPresenterChanged;
     }
@@ -122,14 +122,14 @@
 
     private void OnPresenterChanged() => _ = InvokeAsync(StateHasChanged);
 
-    private static string StageText(AiPreflightDialogPresenter.Row row) => row.Stage switch
+    private static string StageText(AiPreflightProgress.Row row) => row.Stage switch
     {
-        AiPreflightDialogPresenter.ServiceStage.Pending => row.IsConflict ? "Waiting to stop…" : "Waiting to start…",
-        AiPreflightDialogPresenter.ServiceStage.Stopping => "Stopping…",
-        AiPreflightDialogPresenter.ServiceStage.Stopped => "Stopped",
-        AiPreflightDialogPresenter.ServiceStage.Starting => "Starting — health check & warm-up may take a few minutes…",
-        AiPreflightDialogPresenter.ServiceStage.Ready => "Ready",
-        AiPreflightDialogPresenter.ServiceStage.Failed => "Failed",
+        AiPreflightProgress.ServiceStage.Pending => row.IsConflict ? "Waiting to stop…" : "Waiting to start…",
+        AiPreflightProgress.ServiceStage.Stopping => "Stopping…",
+        AiPreflightProgress.ServiceStage.Stopped => "Stopped",
+        AiPreflightProgress.ServiceStage.Starting => "Starting — health check & warm-up may take a few minutes…",
+        AiPreflightProgress.ServiceStage.Ready => "Ready",
+        AiPreflightProgress.ServiceStage.Failed => "Failed",
         _ => "",
     };
 

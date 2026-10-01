@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Read2Me.App.Api;
 using Read2Me.Services.Audio;
 
 namespace Read2Me.App.Shared.Voices

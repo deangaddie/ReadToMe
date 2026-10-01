@@ -3,7 +3,7 @@ using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 
-namespace Read2Me.App.State
+namespace Read2Me.App.Live
 {
     /// <summary>
     /// App-scoped signal that the attribution chain has drained a level and escalated its

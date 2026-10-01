@@ -9,7 +9,7 @@ namespace Read2Me.App.Live;
 /// Runs a pre-flight plan in the background — the request that started it has answered 202 with
 /// the run id — and reports every service's stage to the caller's hub connection as
 /// <c>preflight</c> messages, then <c>done</c>. The state machine is the same
-/// <see cref="AiPreflightDialogPresenter"/> the Blazor dialog drives; lifecycle ops go through
+/// <see cref="AiPreflightProgress"/> the Blazor dialog drives; lifecycle ops go through
 /// <see cref="ObservedAiServiceControl"/> so every other client's chips follow too. Runs are
 /// independent: the control facade serialises the docker work.
 /// </summary>
@@ -29,12 +29,12 @@ public sealed class PreflightRunCoordinator(
     private async Task RunAsync(string run, AiPreflightPlan plan, string? connectionId)
     {
         var client = connectionId is null ? null : hub.Clients.Client(connectionId);
-        var presenter = new AiPreflightDialogPresenter(control);
-        presenter.Load(plan);
+        var progress = new AiPreflightProgress(control);
+        progress.Load(plan);
         // The event fires synchronously inside RunAsync, where nothing can be awaited, so each
         // message is captured there and then sent on a chain that keeps the stages in sequence.
         var sends = Task.CompletedTask;
-        presenter.StageChanged += row =>
+        progress.StageChanged += row =>
         {
             var message = LiveMessageMapper.PreflightStage(run, row.Service.Name, StageName(row), row.Error);
             sends = sends.ContinueWith(_ => SendAsync(client, message), TaskScheduler.Default).Unwrap();
@@ -42,12 +42,12 @@ public sealed class PreflightRunCoordinator(
 
         try
         {
-            foreach (var row in presenter.Rows)
+            foreach (var row in progress.Rows)
                 await SendAsync(client, LiveMessageMapper.PreflightStage(run, row.Service.Name, StageName(row)));
 
-            var ok = await presenter.RunAsync(CancellationToken.None);
+            var ok = await progress.RunAsync(CancellationToken.None);
             await sends;
-            await SendAsync(client, LiveMessageMapper.PreflightDone(run, ok, ok ? null : presenter.FailureMessage));
+            await SendAsync(client, LiveMessageMapper.PreflightDone(run, ok, ok ? null : progress.FailureMessage));
         }
         catch (Exception ex)
         {
@@ -58,14 +58,14 @@ public sealed class PreflightRunCoordinator(
     }
 
     /// <summary>The wire stage names the ticket fixes; Pending splits on what the row will do.</summary>
-    public static string StageName(AiPreflightDialogPresenter.Row row) => row.Stage switch
+    public static string StageName(AiPreflightProgress.Row row) => row.Stage switch
     {
-        AiPreflightDialogPresenter.ServiceStage.Pending => row.IsConflict ? "waitingToStop" : "waitingToStart",
-        AiPreflightDialogPresenter.ServiceStage.Stopping => "stopping",
-        AiPreflightDialogPresenter.ServiceStage.Stopped => "stopped",
-        AiPreflightDialogPresenter.ServiceStage.Starting => "starting",
-        AiPreflightDialogPresenter.ServiceStage.Ready => "ready",
-        AiPreflightDialogPresenter.ServiceStage.Failed => "failed",
+        AiPreflightProgress.ServiceStage.Pending => row.IsConflict ? "waitingToStop" : "waitingToStart",
+        AiPreflightProgress.ServiceStage.Stopping => "stopping",
+        AiPreflightProgress.ServiceStage.Stopped => "stopped",
+        AiPreflightProgress.ServiceStage.Starting => "starting",
+        AiPreflightProgress.ServiceStage.Ready => "ready",
+        AiPreflightProgress.ServiceStage.Failed => "failed",
         _ => throw new ArgumentOutOfRangeException(nameof(row), row.Stage, "Unmapped preflight stage"),
     };
 

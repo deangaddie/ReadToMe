@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
 using Read2Me.App.Characters;
-using Read2Me.App.State;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;

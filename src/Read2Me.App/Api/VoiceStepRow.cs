@@ -1,7 +1,7 @@
 using System;
 using Read2Me.Services.Audio;
 
-namespace Read2Me.App.Shared.Voices
+namespace Read2Me.App.Api
 {
     /// <summary>
     /// One row of the voice editor's checklist: the tick, the step's dials as mutable drafts, and the
