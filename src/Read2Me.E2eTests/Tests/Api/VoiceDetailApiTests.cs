@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Read2Me.E2eTests.Infrastructure;
+using Read2Me.Services.Events;
+using Read2Me.Services.Llm;
 using Read2Me.E2eTests.Infrastructure.FakeAi;
 
 namespace Read2Me.E2eTests.Tests.Api;
@@ -242,5 +245,41 @@ public class VoiceDetailApiTests(E2eAppFixture app)
         var unknown = await Http.PostAsync(
             $"{app.BaseUrl}/api/projects/{folder}/characters/{Guid.NewGuid()}/design-prompt/render", null);
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+    }
+
+    /// <summary>
+    /// One voice design prompt is a Throughput Run of one: the LLM stream sees it opened and closed
+    /// around the completion, so the live hub's run total covers it and the next run starts clean.
+    /// </summary>
+    [Fact]
+    public async Task Generating_a_design_prompt_is_bracketed_as_one_throughput_run()
+    {
+        var folder = $"api-voice-prompt-run-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Prompt Run Book", "P. Author");
+        var aliceId = await CharacterIdAsync(folder, "Alice");
+        app.FakeAi.LlmReply = _ => "A bright, quick soprano.";
+
+        var runs = new List<LlmStreamEvent>();
+        var stream = app.Services.GetRequiredService<EventBroadcaster<LlmStreamEvent>>();
+        void Capture(LlmStreamEvent e) { if (e is RunStarted or RunEnded) lock (runs) runs.Add(e); }
+        stream.Event += Capture;
+        try
+        {
+            var generate = await Http.PostAsJsonAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/design-prompt/generate",
+                new { prompt = "Describe Alice's voice." });
+            Assert.Equal(HttpStatusCode.OK, generate.StatusCode);
+        }
+        finally
+        {
+            stream.Event -= Capture;
+            app.FakeAi.Reset();
+        }
+
+        LlmStreamEvent[] captured;
+        lock (runs) captured = [.. runs];
+        Assert.Collection(captured,
+            e => Assert.IsType<RunStarted>(e),
+            e => Assert.IsType<RunEnded>(e));
     }
 }

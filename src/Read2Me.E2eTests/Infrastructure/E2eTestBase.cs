@@ -23,9 +23,10 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
     {
         // The app fixture is collection-shared and tests mutate its fakes (e.g.
         // DockerServiceControlsTests shuts the fake service down, which makes the
-        // AI preflight dialog block every later "Add to ... queue" click). Restore
-        // defaults so test order can't leak state.
-        app.FakeControl.Status = Read2Me.Services.Health.AiServiceStatus.Ready;
+        // AI preflight dialog block every later "Add to ... queue" click, and leaves
+        // its shutdown in the op log a later test asserts on). Restore defaults so
+        // test order can't leak state.
+        app.FakeControl.Reset();
         app.FakeAi.Reset();
 
         var testName = TestContext.Current.Test?.TestDisplayName ?? "unknown-test";

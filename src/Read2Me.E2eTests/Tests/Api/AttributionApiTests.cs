@@ -53,6 +53,46 @@ public class AttributionApiTests(E2eAppFixture app)
             Assert.NotEqual(JsonValueKind.Null, i.GetProperty("characterId").ValueKind));
     }
 
+    /// <summary>
+    /// The seeded llama config is switchable and its model starts <c>unloaded</c> here, so the first
+    /// attribution request has to go through the switch-and-wait gate: autoload trigger, poll
+    /// <c>GET /v1/models</c> until it reads <c>loaded</c>, then the real request. A stamped speaker
+    /// proves the whole path ran, because the real request only goes out once the model has loaded.
+    /// </summary>
+    [Fact]
+    public async Task Attribution_on_an_unloaded_model_waits_for_the_switch_then_resolves()
+    {
+        var folder = $"api-attr-switch-{Guid.NewGuid():N}";
+        var builder = await app.SeedProjectAsync(folder, "Switch Api Book", "Author", characterName: "Alice");
+        app.FakeAi.LlmModels = FakeLlmModelStore.Switching(
+            target: FakeAiRoutingHandler.DefaultModel, loadsAfterPolls: 2);
+        app.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
+        try
+        {
+            var chapterId = builder.ChapterId("ch1");
+            var enqueue = await Http.PostAsJsonAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/attribution/enqueue",
+                new { level = "chapter", nodeId = chapterId, unprocessedOnly = true });
+            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
+
+            await app.WaitForQueueDrainAsync("/api/attribution/queue", timeoutSeconds: 60);
+
+            var children = JsonDocument.Parse(await Http.GetStringAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/nodes/chapter/{chapterId}/children"));
+            var line = children.RootElement.GetProperty("paragraphs").EnumerateArray()
+                .SelectMany(p => p.GetProperty("items").EnumerateArray())
+                .Single(i => i.GetProperty("id").GetGuid() == builder.ItemId("line1"));
+            Assert.Equal(builder.CharacterId("Alice"), line.GetProperty("characterId").GetGuid());
+
+            // The model the request named is the one now resident.
+            Assert.Contains("\"loaded\"", app.FakeAi.LlmModels.RenderJson());
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
     [Fact]
     public async Task Enqueue_unknown_folder_is_404()
     {

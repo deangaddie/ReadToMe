@@ -125,5 +125,32 @@ namespace Read2Me.Tests.App.Preflight
 
             Assert.Equal(["llama"], plan.ToStart.Select(i => i.Service.Name));
         }
+
+        [Fact]
+        public async Task BuildPlan_OnlyUnmanagedEndpoints_NothingToDo_AndProbesNothing()
+        {
+            // An endpoint no managed container answers for (a hosted API, say) is never ours to start
+            // or to sweep around, so the task runs straight away without a single status probe.
+            var control = new FakeAiServiceControl { ResolveResult = null };
+
+            var plan = await Create(new StubResolver("https://api.example.com"), control)
+                .BuildPlanAsync(AiTaskKind.CharacterAttribution, CancellationToken.None);
+
+            Assert.True(plan.NothingToDo);
+            Assert.Equal(0, control.StatusCalls);
+        }
+
+        [Fact]
+        public async Task BuildPlan_NoRequiredUrls_NothingToDo()
+        {
+            var control = new FakeAiServiceControl();
+
+            var plan = await Create(new StubResolver(), control)
+                .BuildPlanAsync(AiTaskKind.Transcription, CancellationToken.None);
+
+            Assert.True(plan.NothingToDo);
+            Assert.Empty(plan.ToStart);
+            Assert.Empty(plan.Conflicts);
+        }
     }
 }

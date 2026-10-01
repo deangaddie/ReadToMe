@@ -2,8 +2,12 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Read2Me.Data;
 using Read2Me.Services;
+using Read2Me.Services.Audio;
+using Read2Me.Services.Events;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Api;
@@ -193,6 +197,53 @@ public class AudioApiTests(E2eAppFixture app)
         {
             if (previous is { } id) await tts.SetActiveConfigAsync(id);
         }
+    }
+
+    /// <summary>
+    /// The verify half of the audio round trip: fake-whisper echoes the synthesised text back (valid
+    /// because the audio queue is serial), so the take is transcribed, passes the WER check without
+    /// a semantic rescue, and leaves no AudioReviews row — a row exists only for a failed stage.
+    /// </summary>
+    [Fact]
+    public async Task A_take_is_transcribed_back_and_verified_without_a_review()
+    {
+        app.FakeAi.Reset();
+        var folder = $"api-audio-verify-{Guid.NewGuid():N}";
+        var builder = await app.SeedProjectAsync(folder, "Audio Verify Book", "Author");
+        await app.SeedNarratorVoiceAsync(folder);
+        var itemId = builder.ItemId("n1");
+
+        var events = new List<AudioGenEvent>();
+        var broadcaster = app.Services.GetRequiredService<EventBroadcaster<AudioGenEvent>>();
+        void Capture(AudioGenEvent e) { lock (events) events.Add(e); }
+        broadcaster.Event += Capture;
+        try
+        {
+            var enqueue = await Http.PostAsJsonAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
+                new { level = "chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
+            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
+            await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+        }
+        finally
+        {
+            broadcaster.Event -= Capture;
+        }
+
+        AudioGenEvent[] captured;
+        lock (events) captured = [.. events];
+        var transcribed = Assert.Single(captured.OfType<Transcribed>(), e => e.Id == itemId);
+        Assert.Equal("It was a dark and stormy night.", transcribed.Transcript);
+        var verified = Assert.Single(captured.OfType<Verified>(), e => e.Id == itemId);
+        Assert.True(verified.Ok);
+        Assert.Equal(0, verified.Wer);
+        Assert.False(verified.Rescued);
+
+        var factory = app.Services.GetRequiredService<IProjectDbContextFactory>();
+        await using var db = await factory.CreateAsync(Path.Combine(app.WorkspaceDir, folder));
+        var item = await db.ParagraphItems.AsNoTracking().SingleAsync(pi => pi.Id == itemId);
+        Assert.Equal($"audio/{itemId}.wav", item.AudioFileName);
+        Assert.False(await db.AudioReviews.AsNoTracking().AnyAsync(r => r.ParagraphItemId == itemId));
     }
 
     [Fact]
