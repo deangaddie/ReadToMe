@@ -68,8 +68,8 @@ namespace Read2Me.Services.Llm
     /// event as "the request succeeded" would be wrong. A same-named event with a changed meaning
     /// is the trap the <c>ElapsedSeconds</c>→<c>GenerationMs</c> rename already avoided once.</item>
     /// <item>Widening <see cref="StreamFailed"/> with these figures cannot cover cancellation: a
-    /// cancel is not a service failure and must surface no error, yet <c>LlmStreamView</c> renders
-    /// a <see cref="StreamFailed"/>'s reason in the error colour.</item>
+    /// cancel is not a service failure and must surface no error, yet a client shows a
+    /// <see cref="StreamFailed"/>'s reason as an error.</item>
     /// </list>
     /// So the failure path publishes <b>both</b> — this for the figures, then
     /// <see cref="StreamFailed"/> for the error — while the cancel path publishes only this one,

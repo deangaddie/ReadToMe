@@ -9,7 +9,7 @@ import { ActivityStore } from './activity-store';
 /**
  * The drawer's Jobs tab (ticket 14): one `r2m-job-card` per job with Cancel / Dismiss, then the
  * LLM throughput block — headline and sparkline while a run is active, the per-config table once it
- * has ended, and Dismiss to retire it (Blazor's StatusDock Dismiss).
+ * has ended, and Dismiss to retire it.
  */
 @Component({
   selector: 'app-jobs-tab',

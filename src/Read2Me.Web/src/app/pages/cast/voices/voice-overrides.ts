@@ -129,7 +129,7 @@ export class VoiceOverrideEditor {
   }
 }
 
-/** Blazor's "Advanced settings": Voice Design and Text-to-Speech override tabs. */
+/** "Advanced settings": Voice Design and Text-to-Speech override tabs. */
 @Component({
   selector: 'app-voice-overrides',
   imports: [MatTabsModule, VoiceOverrideEditor],

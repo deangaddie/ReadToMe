@@ -2,7 +2,7 @@ import { AttributionPromptStyle, LlmApiType, LlmServerConfig } from '@app/api';
 import { isAbsoluteUrl } from '@app/shared/config-form';
 
 /**
- * Edit-state for an `LlmServerConfig`, mirroring Blazor's `LlmServerConfigForm`: numeric fields are
+ * Edit-state for an `LlmServerConfig`: numeric fields are
  * held as text so a blank one means "omit" (the server default applies).
  */
 export interface LlmConfigForm {
@@ -72,11 +72,11 @@ function parse(value: string, pattern: RegExp): number | null | undefined {
   if (!trimmed) return null;
   if (!pattern.test(trimmed)) return undefined;
   const parsed = Number(trimmed);
-  // The host binds whole numbers to int32, as Blazor's int.TryParse did.
+  // The host binds whole numbers to int32, so a larger one cannot be stored.
   return pattern === WHOLE && Math.abs(parsed) > INT32_MAX ? undefined : parsed;
 }
 
-/** The first problem, worded and ordered as Blazor's `LlmServerConfigForm.Validate`; null when valid. */
+/** The first problem, in a fixed check order; null when valid. */
 export function validateLlmForm(form: LlmConfigForm): string | null {
   if (!form.name.trim()) return 'Name is required.';
   if (!form.baseUrl.trim()) return 'Base URL is required.';

@@ -10,8 +10,8 @@ public static class LiveServiceCollectionExtensions
 {
     /// <summary>
     /// SignalR with the same JSON conventions as the agent API (camelCase, enums as names, nulls
-    /// omitted) plus the hub's singletons. Blazor's circuit hub speaks BlazorPack, so these JSON
-    /// options touch only <c>/hubs/live</c>.
+    /// omitted) plus the hub's singletons. <c>/hubs/live</c> is the only hub, so these are the
+    /// options every hub message is written with.
     /// </summary>
     public static IServiceCollection AddLiveHub(this IServiceCollection services)
     {

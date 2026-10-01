@@ -138,7 +138,7 @@ namespace Read2Me.Services.BookEdits
     }
 
     /// <summary>
-    /// In-memory, process-wide (the HTTP API has no circuit). A session lives <see cref="DefaultTtl"/>
+    /// In-memory, process-wide (a session spans several HTTP requests). A session lives <see cref="DefaultTtl"/>
     /// past its last lookup — every call in the flow looks it up, so an open review keeps its
     /// session alive and an abandoned one falls away on the next create or lookup.
     /// </summary>

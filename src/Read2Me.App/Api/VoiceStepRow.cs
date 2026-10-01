@@ -23,7 +23,7 @@ namespace Read2Me.App.Api
 
         public bool Ticked { get; internal set; }
 
-        // ── Dials. Each step reads only its own; the razor shows only the selected row's. ──
+        // ── Dials. Each step reads only its own; the editor shows only the selected row's. ──
 
         public double CutoffHz { get; set; } = DePlosiveSettings.DefaultCutoffHz;
         public double Strength { get; set; } = DenoiseSettings.DefaultStrength;

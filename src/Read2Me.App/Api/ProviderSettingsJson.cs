@@ -8,17 +8,17 @@ using Read2Me.Services.Audio.VoiceDesign.Settings;
 namespace Read2Me.App.Api
 {
     /// <summary>
-    /// Rewrites a provider config's <c>settingsJson</c> into the exact text the Blazor config forms
-    /// store (Angular ticket 22): read leniently into the provider's <c>*Settings</c> record, written
-    /// with the serializer options that provider's form uses. Whatever key case or order a client
-    /// sends, both UIs leave the same string behind — and the services, which read these blobs
-    /// case-sensitively, always find their keys.
+    /// Rewrites a provider config's <c>settingsJson</c> into one canonical stored text (Angular
+    /// ticket 22): read leniently into the provider's <c>*Settings</c> record, written with the
+    /// serializer options that provider's blobs have always been stored with. Whatever key case or
+    /// order a client sends, the same string is left behind — and the services that read these
+    /// blobs case-sensitively always find their keys.
     /// </summary>
     public static class ProviderSettingsJson
     {
         private static readonly JsonSerializerOptions Lenient = new() { PropertyNameCaseInsensitive = true };
 
-        // VoiceDesignServiceConfigForm writes the VoxCPM2 record with the web defaults; every other form uses the plain ones.
+        // The VoxCPM2 voice-design record is stored with the web defaults; every other record uses the plain ones.
         private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
         /// <exception cref="JsonException">The text is not a JSON object of the provider's shape.</exception>
@@ -58,7 +58,7 @@ namespace Read2Me.App.Api
         public static SemanticSimilaritySettings ReadSimilarity(SemanticSimilarityServiceConfig config) =>
             Read(config.SettingsJson, new SemanticSimilaritySettings());
 
-        /// <param name="blank">What a blank blob means — the same starting point the provider's Blazor form takes.</param>
+        /// <param name="blank">What a blank blob means — the provider's settings record with nothing set.</param>
         private static string Rewrite<TSettings>(string json, TSettings blank, JsonSerializerOptions? write = null)
             where TSettings : class =>
             JsonSerializer.Serialize(Read(json, blank), write);

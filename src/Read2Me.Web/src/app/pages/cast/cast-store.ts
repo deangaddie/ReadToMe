@@ -39,7 +39,7 @@ const NO_VOICES: CharacterVoicesDto = { defaultVoiceId: null, voices: [] };
 /**
  * The cast page's state (ticket 15, design §9 "Cast"): the roster summary, the selected character,
  * its lines and its voices (16). Writes post a command and reload from the response (design §8
- * "optimistic nothing"); receipts from elsewhere — another tab, the Blazor UI, an attribution run —
+ * "optimistic nothing"); receipts from elsewhere — another tab, an agent, an attribution run —
  * reload too, debounced per burst. A running voice batch patches the selected character's voices in
  * place from `voiceBatch.voiceUpdated` and reloads on `completed`. Provided by the cast page, so it
  * lives as long as the page does.

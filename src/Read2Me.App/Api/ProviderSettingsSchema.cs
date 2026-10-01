@@ -31,10 +31,9 @@ namespace Read2Me.App.Api
     public sealed record SettingsSchemaDto(string Type, IReadOnlyList<SettingsFieldDto> Fields);
 
     /// <summary>
-    /// One static descriptor per TTS / voice-design provider (Angular ticket 16): the fields the
-    /// Blazor typed editors (<c>ParagraphTtsSettingsEditor</c>, <c>TtsSettingsEditor</c>) render,
-    /// with the same ranges and the <c>Recommended</c> record's defaults. Connection settings
-    /// (<c>baseUrl</c>) and the app-level chunking / carrier knobs are not here —
+    /// One static descriptor per TTS / voice-design provider (Angular ticket 16): the tunable fields
+    /// of the provider's settings record, each with its allowed range and the <c>Recommended</c>
+    /// record's default. Connection settings (<c>baseUrl</c>) and the app-level chunking / carrier knobs are not here —
     /// they are per-config, never per-voice, exactly as the <c>*SettingsDiff</c> classes skip them.
     /// </summary>
     public static class ProviderSettingsSchema

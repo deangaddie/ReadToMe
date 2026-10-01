@@ -621,7 +621,7 @@ export class BookPage {
     });
   }
 
-  /** "Select unprocessed": what Blazor selects, without loading every chapter. */
+  /** "Select unprocessed": the node's unprocessed paragraphs, without loading every chapter. */
   protected async selectUnprocessed(node: TreeNode): Promise<void> {
     await this.withSelectionRead(async (folder) => {
       this.selection.add(await this.book.paragraphIds(folder, node.level, node.id, true));
@@ -654,13 +654,13 @@ export class BookPage {
     await this.generator.enqueueNode(node.level, node.id, this.narratorOnlyMode());
   }
 
-  /** The action bar's Generate audio: queue the selection, then let it go (Blazor clears too). */
+  /** The action bar's Generate audio: queue the selection, then clear it: the queue owns it now. */
   protected async generateSelection(): Promise<void> {
     const queued = await this.generator.enqueueItems(this.audioSelection.ids());
     if (queued) this.audioSelection.clear();
   }
 
-  /** The action bar's Attribute: queue the selection, then let it go (Blazor clears too). */
+  /** The action bar's Attribute: queue the selection, then clear it: the queue owns it now. */
   protected async attributeSelection(): Promise<void> {
     const ids = this.selection.ids();
     if (ids.length === 0) return;

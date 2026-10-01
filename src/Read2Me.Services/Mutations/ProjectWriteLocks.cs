@@ -9,7 +9,7 @@ namespace Read2Me.Services.Mutations;
 /// <para>
 /// Serialization is a latency cost paid by a user gesture that arrives behind a background queue
 /// write, so waiting is bounded rather than assumed. A caller that cannot acquire the lock inside
-/// its budget is told so and reports an expected conflict, instead of holding a Blazor circuit open
+/// its budget is told so and reports an expected conflict, instead of holding a request open
 /// indefinitely.
 /// </para>
 /// </summary>

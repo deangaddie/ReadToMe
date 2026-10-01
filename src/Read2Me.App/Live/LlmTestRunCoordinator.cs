@@ -9,7 +9,7 @@ namespace Read2Me.App.Live;
 
 /// <summary>
 /// Runs the LLM settings page's test send in the background — the request that started it has
-/// answered 202 — exactly as Blazor's page does: a Throughput Run of one, free-text shape, tokens
+/// answered 202 — as a Throughput Run of one: free-text shape, tokens
 /// on the LLM event bus (so <c>stream:llm</c>). Only how it ended goes to the caller's hub
 /// connection. One test at a time, process-wide. Each run opens its own DI scope because the
 /// completion runner is scoped and the request scope is gone.

@@ -219,7 +219,7 @@ namespace Read2Me.App.Characters
             }
 
             // Straight to the write side (ADR 0007): the receipt this commit publishes is how every
-            // open Book View — including ones in other circuits — converges on the stamps, so the
+            // open Book View — in this tab or any other — converges on the stamps, so the
             // queue neither patches a view nor publishes an event of its own.
             var outcome = await mutations.CommitAsync(
                 new AttributeParagraphItemsMutation(item.Folder, item.ParagraphId, attributions), ct);

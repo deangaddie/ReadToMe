@@ -180,15 +180,14 @@ namespace Read2Me.App
             await SendWavAsync(context, path!);
         }
 
-        /// Serves an A/B preview WAV rendered by the circuit that owns <c>token</c>. The file is
+        /// Serves the A/B preview WAV last rendered under <c>token</c>. The file is
         /// overwritten on every render, so it must never be cached.
         private static async Task ServeAudioPreviewAsync(HttpContext context)
         {
             var token = (string?)context.Request.RouteValues["token"];
 
-            // Tokens are circuit-minted: a bare GUID from a paragraph card, or "{pageId}-{stepId}"
-            // from the voice editor's per-step players. Both are alphanumerics and hyphens, and
-            // rejecting anything else keeps a separator or a dot away from the file path.
+            // Tokens are minted server-side (a step preview's GUID), so a real one is only
+            // alphanumerics and hyphens; rejecting anything else keeps a separator or a dot away from the file path.
             if (!IsPreviewToken(token) ||
                 !context.RequestServices.GetRequiredService<AudioPreviewStore>().TryGetPath(token!, out var path))
             {

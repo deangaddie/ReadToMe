@@ -760,7 +760,7 @@ namespace Read2Me.Tests.Services.Llm
         [Fact]
         public void TwoReadersShareOneAggregator_AndSeeTheSameTotals()
         {
-            // Cross-circuit sharing is intentional: one queue on one GPU, so two tabs should agree.
+            // Sharing across clients is intentional: one queue on one GPU, so two tabs should agree.
             Publish(new RunStarted(), Request(1), Completed(90, 1000));
 
             Assert.Equal(_aggregator.Snapshot.RunThroughput, _aggregator.Snapshot.RunThroughput);

@@ -46,7 +46,7 @@ namespace Read2Me.App.Api
 
     public static class VoiceEndpoints
     {
-        /// <summary>Blazor's upload cap (<c>OpenReadStream(maxAllowedSize: 200 MB)</c>).</summary>
+        /// <summary>The largest reference-audio upload accepted: 200 MB.</summary>
         public const long MaxAudioBytes = 200L * 1024 * 1024;
 
         private static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -126,8 +126,8 @@ namespace Read2Me.App.Api
             return voice is null ? Results.NotFound() : Results.Ok(ToDto(folderId, voice, originals, fs));
         }
 
-        /// Mirrors CharacterPresenter.UploadVoiceAudioAsync: the orchestrator stores the recording
-        /// and commits the Book mutation that names it together (ADR 0007).
+        /// The orchestrator stores the recording and commits the Book mutation that names it
+        /// together (ADR 0007).
         private static async Task<IResult> UploadAudioAsync(
             string folder, Guid voiceId, HttpRequest request, IFileSystem fs, ICharacterReader reader,
             IVoiceOriginalStore originals, VoiceOrchestrator orchestrator, MutationOrigin origin, CancellationToken ct)
@@ -139,7 +139,7 @@ namespace Read2Me.App.Api
             if (voice is null)
                 return Results.NotFound();
 
-            // Kestrel's default body cap is 30 MB; the Blazor upload allows 200 MB.
+            // Kestrel's default body cap is 30 MB; a voice upload may be up to 200 MB.
             var sizeFeature = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
             if (sizeFeature is { IsReadOnly: false })
                 sizeFeature.MaxRequestBodySize = MaxAudioBytes;
@@ -177,7 +177,7 @@ namespace Read2Me.App.Api
             return updated is null ? Results.NotFound() : Results.Ok(ToDto(folderId, updated, originals, fs));
         }
 
-        /// Mirrors CharacterPresenter.TranscribeVoiceAsync: transcribe, then commit the transcript.
+        /// Transcribe, then commit the transcript.
         private static async Task<IResult> TranscribeAsync(
             string folder, Guid voiceId, HttpRequest request, IFileSystem fs, ICharacterReader reader,
             VoiceOrchestrator orchestrator, BookMutations mutations, MutationOrigin origin, CancellationToken ct)
@@ -212,7 +212,7 @@ namespace Read2Me.App.Api
                 : Results.Ok(new TranscribeVoiceResponse(transcript));
         }
 
-        /// Mirrors CharacterPresenter.BuildDesignPromptAsync.
+        /// The voice-design prompt template rendered for one character, with the book's title and author.
         private static async Task<IResult> RenderDesignPromptAsync(
             string folder, Guid characterId, IFileSystem fs, ICharacterReader reader,
             IProjectCatalogReader catalog, VoiceOrchestrator orchestrator)
@@ -231,7 +231,7 @@ namespace Read2Me.App.Api
             return Results.Ok(new RenderedDesignPromptResponse(prompt));
         }
 
-        /// Mirrors CharacterPresenter.GenerateDesignPromptWithTextAsync: a single voice design is a
+        /// A single voice design is a
         /// Throughput Run of one, bracketed so the live hub's LLM stream shows it as a run.
         private static async Task<IResult> GenerateDesignPromptAsync(
             string folder, Guid characterId, GenerateDesignPromptRequest? body, IFileSystem fs,

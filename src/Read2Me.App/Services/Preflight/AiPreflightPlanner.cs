@@ -11,8 +11,8 @@ namespace Read2Me.App.Services.Preflight
     /// <summary>
     /// Builds the <see cref="AiPreflightPlan"/> for a task without any UI: required services not
     /// Ready, plus — for any GPU-using task — running GPU services the task does not need (swept
-    /// even when everything required is Ready). Shared by the Blazor gate (<see cref="AiPreflight"/>)
-    /// and the HTTP preflight endpoints so both UIs reconcile the same way.
+    /// even when everything required is Ready). The HTTP preflight endpoints plan with it, and every
+    /// run reconciles toward the plan it returns.
     /// </summary>
     public sealed class AiPreflightPlanner(
         IAiTaskRequirementsResolver resolver,

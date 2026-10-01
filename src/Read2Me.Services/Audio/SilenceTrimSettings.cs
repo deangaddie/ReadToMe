@@ -21,8 +21,8 @@ namespace Read2Me.Services.Audio
     {
         /// <summary>
         /// The voice editor's dial range for <see cref="ThresholdDb"/>. −30 dB is the line where
-        /// speech starts going, so the voice-side dial stops at −35. Shared by the Blazor dials and
-        /// the API's step catalog so the two editors offer (and the API enforces) the same range.
+        /// speech starts going, so the voice-side dial stops at −35. The API's step catalog offers
+        /// this range and enforces it, so a client cannot store a value outside it.
         /// </summary>
         public const double VoiceMinThresholdDb = -60;
         public const double VoiceMaxThresholdDb = -35;

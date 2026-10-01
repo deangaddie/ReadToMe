@@ -6,7 +6,7 @@ import { LiveService } from '@app/live/live.service';
 /**
  * State behind the prompts page (ticket 23), provided by the page. Every write goes to the host
  * and the store reloads the catalog from it; the hub's `settingsChanged { area: 'prompts' }`
- * reloads it too, so a save made in Blazor or over the agent API shows up here. Reloads are
+ * reloads it too, so a save made in another tab or over the agent API shows up here. Reloads are
  * sequenced: a slow answer never overwrites a newer one.
  */
 @Injectable()

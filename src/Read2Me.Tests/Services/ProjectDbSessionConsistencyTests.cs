@@ -155,7 +155,7 @@ namespace Read2Me.Tests.Services
                 voiceIds.Add(voice.Id);
             }
             await db.SaveChangesAsync();
-            _session.Evict(_folder); // start each test from a clean tracker, like a fresh circuit
+            _session.Evict(_folder); // start each test from a clean tracker, like a fresh request
             return (character.Id, voiceIds);
         }
 

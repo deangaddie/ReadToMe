@@ -50,9 +50,9 @@ import { StepPreview } from './step-preview';
 
 /**
  * One card's draft against the store's snapshot. The draft is re-seeded from a reload only while
- * it is untouched (equal to what it was last seeded from), so a change made in Blazor or over the
- * API lands here without wiping typing in progress. After a save the card marks itself untouched,
- * so the reload that follows seeds it with whatever the host normalised.
+ * it is untouched (equal to what it was last seeded from), so a change made in another tab or over
+ * the API lands here without wiping typing in progress. After a save the card marks itself
+ * untouched, so the reload that follows seeds it with whatever the host normalised.
  */
 class CardState<T> {
   readonly draft: WritableSignal<T>;
@@ -150,8 +150,8 @@ const PAUSE_FIELDS: { key: keyof PauseDurations; label: string; step: number }[]
 ];
 
 /**
- * `/settings/audio` (ticket 24): the seven independently saved cards of Blazor's Audio Processing
- * page — ffmpeg, silence trim and consonant soften (each with an A/B preview of the unsaved
+ * `/settings/audio` (ticket 24): the seven independently saved cards of the Audio Processing
+ * settings — ffmpeg, silence trim and consonant soften (each with an A/B preview of the unsaved
  * draft), chunk pause, pause durations, WER threshold, max audio attempts.
  */
 @Component({

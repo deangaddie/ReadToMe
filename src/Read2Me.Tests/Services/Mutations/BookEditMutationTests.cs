@@ -315,7 +315,7 @@ namespace Read2Me.Tests.Services.Mutations
 
         /// <summary>
         /// The program was planned against a Book the producer has been reviewing, possibly while
-        /// another circuit edited it. One vanished target is not a reason to throw away the rows they
+        /// another client edited it. One vanished target is not a reason to throw away the rows they
         /// approved.
         /// </summary>
         [Fact]

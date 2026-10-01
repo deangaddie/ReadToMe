@@ -209,9 +209,9 @@ namespace Read2Me.Tests.Api
             await PostAsync(new UpdateChapterTitleCommand(_folder, b.ChapterId("ch1"), "From the API"));
 
             // The same operation as the Book View's own producer commits it: one mutation, one
-            // circuit-scoped BookMutations, no command in sight.
-            await using var circuit = _root.CreateAsyncScope();
-            await circuit.ServiceProvider.GetRequiredService<BookMutations>().CommitAsync(
+            // scoped BookMutations, no command in sight.
+            await using var scope = _root.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<BookMutations>().CommitAsync(
                 new UpdateChapterTitleMutation(_folder, b.ChapterId("ch1"), "From the Book View"));
 
             Assert.Equal(2, receipts.Count);

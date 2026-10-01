@@ -13,10 +13,9 @@ import { describeRule, isDangling, moveAbility, showRuleControls } from './voice
 /**
  * The Voice rules section of the character detail (research §4 "Voice rules", ticket 17): the
  * rule rows in evaluation order with Move up/down and Delete (hidden on the default rule and on
- * the seed Narrator while the link points elsewhere), Add rule (hidden on the seed Narrator, as in
- * Blazor), and the resolved
- * preview — which voice wins at the start of each chapter. Like Blazor, the section only shows once
- * the character has a rule (the first voice brings the default one). Both lists come from the
+ * the seed Narrator while the link points elsewhere), Add rule (hidden on the seed Narrator),
+ * and the resolved preview — which voice wins at the start of each chapter. The section only
+ * shows once the character has a rule (the first voice brings the default one). Both lists come from the
  * {@link CastStore}, which reloads them after every command and on VoiceRules / Voices / Structure
  * receipts.
  */
@@ -206,7 +205,7 @@ export class VoiceRulesSection {
 
   readonly character = input.required<CharacterSummaryDto>();
 
-  /** Blazor's IsLinkedNarrator: the seed Narrator row while the link points at another character. */
+  /** The seed Narrator row while the link points at another character. */
   private readonly linkedNarrator = computed(
     () => this.character().isNarrator && (this.project.detail()?.narrator.isLinked ?? false),
   );

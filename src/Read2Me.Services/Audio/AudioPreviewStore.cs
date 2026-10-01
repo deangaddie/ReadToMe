@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace Read2Me.Services.Audio
 {
     /// <summary>
-    /// Holds the rendered A/B preview WAV for each browser circuit, keyed by a caller-supplied
+    /// Holds the rendered A/B preview WAVs, process-wide, keyed by a caller-supplied
     /// token. One file per token, overwritten on every render — previews are throwaway, so there
     /// is no persistence and no cleanup job (the OS temp dir is the cleanup job).
     /// </summary>

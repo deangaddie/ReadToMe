@@ -2,8 +2,7 @@ import type { BookEditRow, ProposalStatus } from '@app/api';
 import { ReviewSelection, effectiveValue, isUserEdited, rowState } from './review-model';
 
 /**
- * Ported from `Read2Me.Tests/State/BookEditReviewSelectionTests.cs` — the Blazor dialog and this
- * one have to agree on what "N selected" means and what Apply sends.
+ * What "N selected" means in the review, and what Apply sends for it.
  */
 function proposal(
   status: ProposalStatus,

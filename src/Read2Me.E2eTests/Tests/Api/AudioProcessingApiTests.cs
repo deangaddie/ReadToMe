@@ -67,7 +67,7 @@ public class AudioProcessingApiTests(E2eAppFixture app)
             Assert.Equal(4100, after.GetProperty("volumeMs").GetInt32());
             Assert.Equal(510, after.GetProperty("pauseMs").GetInt32());
 
-            // The service Blazor reads sees the same row.
+            // The settings service every reader goes through sees the same row.
             using var scope = app.Services.CreateScope();
             var settings = await scope.ServiceProvider.GetRequiredService<AudioProcessingSettingsService>().GetAsync();
             Assert.Equal(2600, settings.ChapterPauseMs);

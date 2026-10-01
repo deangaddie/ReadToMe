@@ -13,8 +13,8 @@ import { chainOptions, chainRows } from './chain-steps';
 /**
  * State behind `/settings/llm` (ticket 21), provided by the page. Every write goes to the host and
  * the store reloads from it; the hub's `settingsChanged { area: 'llm' }` reloads it too, so an edit
- * made in Blazor or over the agent API shows up here. Reloads are sequenced: a slow answer never
- * overwrites a newer one.
+ * made in another tab or over the agent API shows up here. Reloads are sequenced: a slow answer
+ * never overwrites a newer one.
  */
 @Injectable()
 export class LlmSettingsStore {

@@ -226,7 +226,7 @@ namespace Read2Me.Tests.Services.UseCases
 
         /// <summary>
         /// The case the whole staging order exists to protect: a commit that succeeds and then
-        /// throws on its way back — a circuit reconciling a Book it has already navigated away from.
+        /// throws on its way back — a view reconciling a Book it has already navigated away from.
         /// The import cannot tell that apart from a commit that never happened, so it must not tidy
         /// away a cover the Book may now name.
         /// </summary>

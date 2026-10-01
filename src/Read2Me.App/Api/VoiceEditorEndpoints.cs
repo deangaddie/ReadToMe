@@ -89,7 +89,7 @@ namespace Read2Me.App.Api
             if (refusal is not null)
                 return Results.Problem(refusal, statusCode: StatusCodes.Status400BadRequest);
 
-            // No tokens: the circuit-bound AudioPreviewStore never evicts, and this store keeps the bytes.
+            // No tokens: AudioPreviewStore never evicts, and this store keeps the bytes.
             var result = await renderer.RenderChainAsync(voiceRef, chain!, tokens: [], ct);
             if (result.Error is not null)
                 return Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
@@ -186,8 +186,8 @@ namespace Read2Me.App.Api
     }
 
     /// <summary>
-    /// The voice-scope step list as the editor shows it: labels and blurbs from <see cref="VoiceStepRow"/>
-    /// (so Blazor and Angular say the same thing), dial ranges from the Blazor dials, defaults from
+    /// The voice-scope step list as the editor shows it: labels and blurbs from <see cref="VoiceStepRow"/>,
+    /// dial ranges from each step's settings, defaults from
     /// <see cref="AudioPostProcessStepDefaults"/>. Chain order is the defaults' order — the client
     /// ticks steps, it never orders them.
     /// </summary>
@@ -204,7 +204,7 @@ namespace Read2Me.App.Api
         /// The configs to render for the requested steps, in catalog order. Each step's settings are its
         /// defaults with the request's dial values laid over — only dial keys are taken, so a client
         /// cannot reach a step's fixed settings, and each value must sit inside the dial's advertised
-        /// range or option list (the Blazor slider made anything else unreachable; the API refuses it).
+        /// range or option list (a slider cannot reach anything else; the API refuses it).
         /// </summary>
         /// <returns>The chain, or a refusal message for the 400.</returns>
         public static (IReadOnlyList<AudioPostProcessStepConfig>? Chain, string? Refusal) BuildChain(

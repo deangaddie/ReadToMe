@@ -17,7 +17,7 @@ import { ToastService } from '@app/ui/toast/toast.service';
 
 /**
  * The sentence every designed voice speaks (ticket 22): Save is dirty-gated, Reset to default only
- * refills the draft — as Blazor's card — and saving the default text stores "no override".
+ * refills the draft — and saving the default text stores "no override".
  */
 @Component({
   selector: 'app-voice-design-sample-text',

@@ -76,7 +76,7 @@ describe('provider form', () => {
       });
     });
 
-    it('starts the sentence-case options at Blazor’s defaults when none are stored', () => {
+    it('starts the sentence-case options at their new-config defaults when none are stored', () => {
       const text = toProviderForm(ttsConfig({ toSentenceCaseConfig: null }), true).text!;
       expect(text.toSentenceCase).toEqual({
         paragraphEnabled: true,
@@ -109,7 +109,7 @@ describe('provider form', () => {
       expect(validate(form())).toBeNull();
     });
 
-    it('asks for a name, then a base URL, then an absolute one — in Blazor’s words', () => {
+    it('asks for a name, then a base URL, then an absolute one', () => {
       expect(validate(form({ name: '  ' }))).toBe('Name is required.');
       expect(validate(form({ baseUrl: '' }))).toBe('Base URL is required.');
       expect(validate(form({ baseUrl: 'localhost:8003' }))).toBe(
@@ -190,7 +190,7 @@ describe('provider form', () => {
       });
     });
 
-    it('drops the sentence-case options when the step is off, as Blazor does', () => {
+    it('drops the sentence-case options when the step is off', () => {
       const text = setStepEnabled(form().text!, 'to-sentence-case', false);
       expect(buildProviderConfig(form({ text }), 4, FIELDS).toSentenceCaseConfig).toBeNull();
     });

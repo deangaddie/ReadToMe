@@ -30,7 +30,7 @@ function rule(overrides: Partial<VoiceRuleDto> = {}): VoiceRuleDto {
   };
 }
 
-describe('describeRule (Blazor CharacterDetailPanel.RuleDescription parity)', () => {
+describe('describeRule', () => {
   it('default rule', () => {
     expect(describeRule(rule({ isDefault: true, voiceName: 'Narrator' }))).toBe(
       'Default → Narrator',

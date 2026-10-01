@@ -98,7 +98,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task A_config_written_with_plain_serializer_options_still_finds_its_base_url()
         {
-            // The Blazor form writes "baseUrl" (web defaults); a plain serialize writes "BaseUrl".
+            // The stored blob says "baseUrl" (web defaults); a plain serialize writes "BaseUrl".
             var sut = Build();
             var config = Config();
             config.SettingsJson = JsonSerializer.Serialize(

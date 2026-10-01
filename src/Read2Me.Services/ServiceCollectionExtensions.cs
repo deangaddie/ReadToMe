@@ -110,7 +110,7 @@ public static class ServiceCollectionExtensions
 
         // ── Book mutations (ADR 0007) ────────────────────────────────────────
         // The write-side spine. Singletons because serialization and revision order are
-        // process-wide facts about a project, not per-circuit ones.
+        // process-wide facts about a project, not per-request ones.
         services.TryAddSingleton<Mutations.ProjectWriteLocks>();
         services.TryAddSingleton<Mutations.BookRevisionSequence>();
         // Process-wide settings-change signal for the live hub relay (the settings services are scoped).

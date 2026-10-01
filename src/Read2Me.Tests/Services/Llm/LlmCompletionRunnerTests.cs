@@ -172,7 +172,7 @@ namespace Read2Me.Tests.Services.Llm
         public async Task SamplesStayOffTheStreamEventBus_WhereEverySubscriberRepaints()
         {
             // One of these rides every token. On the LlmStreamEvent family it would cost a SignalR
-            // repaint per token per circuit and be journalled for replay.
+            // repaint per token per connection and be journalled for replay.
             var llm = new ChunkedLlmClient()
                 .Metrics(new LlmTimings(null, null, null, 10, 100))
                 .Content("{}");

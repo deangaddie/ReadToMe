@@ -11,7 +11,7 @@ import { ChainOption, addStep, moveStep, optionLabel, removeStep } from './chain
 import { LlmSettingsStore } from './llm-settings-store';
 
 /**
- * The attribution escalation chain (ticket 21; Blazor's `AttributionEscalationPanel`): ordered
+ * The attribution escalation chain (ticket 21): ordered
  * rungs with Move up / down and Remove, Add step over config × thinking × style, and the
  * self-consistency switch. Every change is one PUT of the whole chain.
  */

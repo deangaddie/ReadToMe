@@ -60,7 +60,7 @@ namespace Read2Me.Services.Llm
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // The caller cancelled (queue cancel / circuit teardown). Wrapping it as a provider
+                // The caller cancelled (queue cancel / request aborted). Wrapping it as a provider
                 // failure would make it look like the server died: the reporter would count it toward
                 // watchdog recovery and the attribution chain would escalate to the next config.
                 throw;

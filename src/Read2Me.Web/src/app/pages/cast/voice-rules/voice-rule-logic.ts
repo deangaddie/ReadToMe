@@ -2,7 +2,7 @@ import { CreateVoiceRule, Guid, VoiceAnchorLevel, VoiceRuleDto } from '@app/api'
 
 // ---- Rule list ---------------------------------------------------------------------------------------
 
-/** The word Blazor puts before a node's title per level; a line's own text stands alone. */
+/** The word put before a node's title per level; a line's own text stands alone. */
 const LEVEL_WORD: Record<VoiceAnchorLevel, string> = {
   Volume: 'Volume ',
   Part: 'Part ',
@@ -11,7 +11,7 @@ const LEVEL_WORD: Record<VoiceAnchorLevel, string> = {
   ParagraphItem: '',
 };
 
-/** Blazor's node label: the level word, the node's title, or "(missing node)" when the anchor dangles. */
+/** A node's label: level word and title, or "(missing node)" when the anchor dangles. */
 function nodeLabel(
   level: VoiceAnchorLevel | null,
   title: string | null,
@@ -22,7 +22,7 @@ function nodeLabel(
 }
 
 /**
- * The rule row's text, exactly as Blazor's `CharacterDetailPanel.RuleDescription` renders it:
+ * The rule row's text, one of four shapes:
  * "Default → Voice", "From X onward → Voice", "X → Voice" (one node), "X to Y → Voice".
  */
 export function describeRule(rule: VoiceRuleDto): string {
@@ -45,7 +45,7 @@ export function isDangling(rule: VoiceRuleDto): boolean {
 
 /**
  * Move/Delete show on non-default rules only, and never on the seed Narrator row while the narrator
- * link points at another character (Blazor's `IsLinkedNarrator`): that row's rules are inert then.
+ * link points at another character: that row's rules are inert then.
  */
 export function showRuleControls(rule: VoiceRuleDto, seedNarratorLinked: boolean): boolean {
   return !rule.isDefault && !seedNarratorLinked;
@@ -140,7 +140,7 @@ export function canSubmitRule(voiceId: Guid | null, selection: AnchorSelection):
 
 /**
  * The command the dialog submits: "from here on" leaves the to end open, "just this node" closes
- * it on the same anchor (what Blazor's AddVoiceRuleDialog sends). Null while the dialog is invalid.
+ * it on the same anchor. Null while the dialog is invalid.
  */
 export function ruleCommand(
   characterId: Guid,
@@ -162,7 +162,7 @@ export function ruleCommand(
   };
 }
 
-/** A picker label for a paragraph or line: its first 40 characters, as Blazor truncates them. */
+/** A picker label for a paragraph or line: its first 40 characters. */
 export function snippet(text: string | null | undefined, max = 40): string {
   const value = text ?? '';
   return value.length > max ? `${value.slice(0, max)}…` : value;

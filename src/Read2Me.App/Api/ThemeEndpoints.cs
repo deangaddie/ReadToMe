@@ -15,8 +15,8 @@ namespace Read2Me.App.Api
     public sealed record ThemeSelectionUpdateRequest(int? SelectedThemeId = null, bool? FollowSystemPreference = null);
 
     /// <summary>
-    /// Themes over HTTP (spec D9): the same <see cref="AppTheme"/> rows and selection the Blazor UI
-    /// uses, so applying a theme in either UI restyles the other. Built-in rows are read-only.
+    /// Themes over HTTP (spec D9): the <see cref="AppTheme"/> rows and the one stored selection, so
+    /// a theme applied in one tab is the theme every client loads next. Built-in rows are read-only.
     /// Mapped ahead of the <c>/api/settings/{**rest}</c> 404 fallback.
     /// </summary>
     public static class ThemeEndpoints

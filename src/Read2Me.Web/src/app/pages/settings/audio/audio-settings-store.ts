@@ -14,8 +14,8 @@ import { LiveService } from '@app/live/live.service';
 /**
  * State behind `/settings/audio` (ticket 24), provided by the page: the one full snapshot every
  * card seeds from. Every write goes to the host and the store reloads from it; the hub's
- * `settingsChanged { area: 'audio-processing' }` reloads it too, so an edit made in Blazor or
- * over the agent API shows up here. Reloads are sequenced: a slow answer never overwrites a
+ * `settingsChanged { area: 'audio-processing' }` reloads it too, so an edit made in another tab
+ * or over the agent API shows up here. Reloads are sequenced: a slow answer never overwrites a
  * newer one.
  */
 @Injectable()

@@ -185,7 +185,7 @@ export class ReviewSelection {
 
 /**
  * What the Instruct screen says when a plan did not produce a program. `Ok` never reaches here.
- * Mirrors the Blazor dialog's status mapping so both UIs explain a refusal the same way.
+ * One sentence per plan status, so every refusal says why it happened.
  */
 export function planErrorMessage(status: BookEditPlanStatus, reason: string | null): string {
   switch (status) {

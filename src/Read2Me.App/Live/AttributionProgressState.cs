@@ -63,7 +63,7 @@ namespace Read2Me.App.Live
         {
             // Our own RunStarted is published only after _runActive becomes true. A RunStarted
             // received while idle therefore belongs to another surface, whose snapshot must not
-            // be presented as attribution throughput in StatusDock.
+            // be presented as attribution throughput.
             if (e is RunStarted && !_runActive)
                 OwnsThroughputSnapshot = false;
 

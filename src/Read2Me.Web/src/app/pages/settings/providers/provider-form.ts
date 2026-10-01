@@ -37,7 +37,7 @@ export interface ToSentenceCaseForm {
 }
 
 /**
- * A TTS config's text processing, shaped as Blazor's `ParagraphTtsServiceConfigForm`: one ordered
+ * A TTS config's text processing: one ordered
  * list of enabled step ids — built-ins and substitutions alike, the order the steps run in.
  */
 export interface TextProcessingForm {
@@ -60,7 +60,7 @@ export interface ProviderForm {
   text: TextProcessingForm | null;
 }
 
-// New-config defaults of Blazor's `ToSentenceCaseFormItem`.
+// New-config defaults of the To Sentence Case step's options.
 const DEFAULT_TO_SENTENCE_CASE: ToSentenceCaseForm = {
   paragraphEnabled: true,
   wordEnabled: true,
@@ -154,8 +154,8 @@ function fieldProblem(field: SettingsField, value: unknown): string | null {
 }
 
 /**
- * The first problem, or null when the form may be saved. Name and base URL are worded and ordered
- * as Blazor's config forms; `urlExample` is the provider type's placeholder.
+ * The first problem, or null when the form may be saved. Name is checked before base URL;
+ * `urlExample` is the provider type's placeholder.
  */
 export function validateProviderForm(
   form: ProviderForm,

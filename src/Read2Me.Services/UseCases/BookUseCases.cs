@@ -7,10 +7,9 @@ using Read2Me.Services.Mutations;
 namespace Read2Me.Services.UseCases
 {
     /// <summary>
-    /// Where an import's mutation is committed. The API endpoint hands over
-    /// <see cref="BookMutations.CommitAsync"/> directly; a Blazor circuit hands over its own Book
-    /// View projection, so the circuit that asked for the reread is coherent before the gesture
-    /// returns and is never told its own change happened "elsewhere" (ADR 0007).
+    /// Where an import's mutation is committed: <see cref="BookMutations.CommitAsync"/> by default.
+    /// A seam, so a caller can route the commit through something of its own (a test observes it,
+    /// or fails it, here) without the import knowing.
     /// </summary>
     public delegate Task<BookMutationOutcome> CommitBookMutation(BookMutation mutation, CancellationToken ct);
 

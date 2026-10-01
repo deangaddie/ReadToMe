@@ -105,8 +105,8 @@ public class ImportMutationTests : ProjectDbTestBase
     {
         await SeedEmptyProjectAsync();
 
-        await using var circuit = NewCircuit();
-        var outcome = await circuit.Mutations.CommitAsync(
+        await using var caller = NewCaller();
+        var outcome = await caller.Mutations.CommitAsync(
             new ImportBookContentMutation(_folder, new BookContent([]), ReplaceExisting: true));
 
         // No revision, no receipt, and no Book View anywhere rebuilding for a Book that has not moved.
@@ -119,8 +119,8 @@ public class ImportMutationTests : ProjectDbTestBase
         // The schema, and nothing in it.
         await using var _ = await OpenDbAsync();
 
-        await using var circuit = NewCircuit();
-        var outcome = await circuit.Mutations.CommitAsync(
+        await using var caller = NewCaller();
+        var outcome = await caller.Mutations.CommitAsync(
             new ImportBookContentMutation(_folder, OneChapter("Hello there."), ReplaceExisting: false));
 
         var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
@@ -178,18 +178,18 @@ public class ImportMutationTests : ProjectDbTestBase
 
     private async Task<BookMutationReceipt> CommitAsync(BookMutation mutation)
     {
-        await using var circuit = NewCircuit();
-        var outcome = await circuit.Mutations.CommitAsync(mutation);
+        await using var caller = NewCaller();
+        var outcome = await caller.Mutations.CommitAsync(mutation);
         return Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
     }
 
-    private sealed class Circuit(AsyncServiceScope scope) : IAsyncDisposable
+    private sealed class Caller(AsyncServiceScope scope) : IAsyncDisposable
     {
         public BookMutations Mutations { get; } = scope.ServiceProvider.GetRequiredService<BookMutations>();
         public ValueTask DisposeAsync() => scope.DisposeAsync();
     }
 
-    private Circuit NewCircuit() => new(_root.CreateAsyncScope());
+    private Caller NewCaller() => new(_root.CreateAsyncScope());
 
     public override async ValueTask DisposeAsync()
     {

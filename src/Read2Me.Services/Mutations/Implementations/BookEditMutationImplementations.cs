@@ -199,7 +199,7 @@ public sealed class UpdateParagraphItemTextMutationImplementation
 /// <para>
 /// A target the Book no longer contains is skipped rather than refused. The program was planned
 /// against a Book the producer has been reviewing — possibly for minutes, possibly while another
-/// circuit edited it — so the rows that still resolve are the ones they approved, and one vanished
+/// client edited it — so the rows that still resolve are the ones they approved, and one vanished
 /// chapter is not a reason to throw the rest away.
 /// </para>
 /// </summary>

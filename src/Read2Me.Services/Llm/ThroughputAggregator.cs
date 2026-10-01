@@ -113,7 +113,7 @@ namespace Read2Me.Services.Llm
     /// disagree about the same work (ADR 0003).
     /// </para>
     /// <para>
-    /// <b>App-scoped singleton, and cross-circuit sharing is intentional.</b> One queue runs at a
+    /// <b>App-scoped singleton, and sharing across clients is intentional.</b> One queue runs at a
     /// time on one GPU, so two tabs <i>should</i> see the same totals. In-memory only: an
     /// <c>LlmServerConfig</c> is mutable in place, so persisted per-config history would silently
     /// average across a model swap under one id.

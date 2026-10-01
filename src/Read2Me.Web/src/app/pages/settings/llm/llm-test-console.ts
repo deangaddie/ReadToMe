@@ -21,7 +21,7 @@ import { StreamLlm } from '@app/ui/stream-llm/stream-llm';
 import { Throughput } from '@app/ui/throughput/throughput';
 
 /**
- * Test console for the default config (ticket 21; Blazor's test panel): prompt, Send / Stop, the
+ * Test console for the default config (ticket 21): prompt, Send / Stop, the
  * LLM stream inline and the run's throughput. The host runs the send in the background; tokens
  * arrive on `stream:llm` and the ending as one `llmTest` message to this connection. A reconnect
  * may have swallowed that message, so the run state is read back on every resync.

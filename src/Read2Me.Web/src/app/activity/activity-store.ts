@@ -18,7 +18,7 @@ import {
 
 export type ActivityTab = 'jobs' | 'llm' | 'audio' | 'services';
 
-/** Client-side elapsed/ETA tick while a queue is busy (Blazor's StatusDock used 1 s too). */
+/** Client-side elapsed/ETA tick while a queue is busy (1 s: a seconds counter needs no finer). */
 export const ELAPSED_TICK_MS = 1000;
 
 interface LocalJob {
@@ -83,7 +83,7 @@ export class ActivityStore implements OnDestroy {
   readonly showThroughput = computed(
     () => !!this.throughput()?.hasRun && !this._throughputDismissed(),
   );
-  /** Per-config table only after the run ends (Blazor: `HasRun && !IsRunActive`). */
+  /** Per-config table only after a run has happened and is no longer active. */
   readonly showThroughputTable = computed(
     () => this.showThroughput() && !this.throughput()!.isRunActive,
   );
@@ -177,7 +177,7 @@ export class ActivityStore implements OnDestroy {
     this._dismissed.update((set) => new Set(set).add(id));
   }
 
-  /** Blazor's Dismiss: retires the finished run's throughput block here and on the host. */
+  /** Dismiss: retires the finished run's throughput block here and on the host. */
   async dismissThroughput(): Promise<void> {
     this._throughputDismissed.set(true);
     try {

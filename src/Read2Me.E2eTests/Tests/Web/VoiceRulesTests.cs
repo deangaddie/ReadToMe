@@ -8,8 +8,8 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// <summary>
 /// The Voice rules section of the cast page (Angular ticket 17): add a "from here on" rule through
 /// the cascading dialog and watch the preview flip, reorder and delete rules, and see a rule whose
-/// chapter was deleted flagged as dangling. Every step is also asserted against the host reads the
-/// Blazor tab renders from.
+/// chapter was deleted flagged as dangling. Every step is also asserted against the host's own
+/// reads.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
@@ -146,7 +146,7 @@ public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         await Expect(preview).ToHaveCountAsync(3);
         await Expect(preview.Nth(2).Locator("td").Nth(1)).ToHaveTextAsync("Voice B");
 
-        // The chapter goes away elsewhere (the API here; the Blazor tab in practice): the Structure
+        // The chapter goes away elsewhere (the API here; the book page in practice): the Structure
         // receipt reloads the section, the rule reads as missing and the preview loses the row.
         await RunAsync(folder, new { type = "DeleteChapter", chapterId = chapter3 });
 

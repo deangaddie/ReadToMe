@@ -40,8 +40,8 @@ import { OverrideSave, VoiceOverrides } from './voice-overrides';
  * One voice card (research §4 "Voices"): default star, inline rename, description, source chip,
  * Edited chip, Edit audio link, Delete; the Reference ⟷ Prompt toggle; the reference player and
  * upload, or the prompt editor with Regenerate with AI and Generate audio; the Advanced override
- * tabs; and the transcript with Send to AI. Drafts are per field and dirty-gate their Save, as
- * Blazor's VoiceDraftBuffer does; a reload never clobbers a draft.
+ * tabs; and the transcript with Send to AI. Drafts are per field and dirty-gate their Save;
+ * a reload never clobbers a draft.
  */
 @Component({
   selector: 'app-voice-card',
@@ -597,7 +597,7 @@ export class VoiceCard {
         characterId: this.voice().characterId,
         characterName: this.characterName(),
       });
-      // The answer is a draft: Save prompt persists it, as in Blazor.
+      // The answer is a draft: only Save prompt persists it.
       if (result) this.promptDraft.set(result.designPrompt);
     } finally {
       this.regeneratingPrompt.set(false);

@@ -12,7 +12,7 @@ namespace Read2Me.Services.Commands.Handlers;
 /// <para>
 /// It no longer publishes a reconciliation event of its own. Open Book Views converge on the
 /// committed receipt like every other producer's, which is what lets a queue run reach a second
-/// circuit at all.
+/// client at all.
 /// </para>
 /// <para>
 /// One behavioural change comes with that: an answer whose stamps all agree with what the items

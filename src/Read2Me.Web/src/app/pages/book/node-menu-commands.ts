@@ -30,7 +30,7 @@ const NAME_LIMIT = 60;
 /**
  * Turns a chosen menu entry into the command to post, asking whatever the entry needs first
  * (ticket 11, research §3). Null means nothing to send: the dialog was cancelled, or the answer
- * would change nothing (an unchanged title or text is not sent, as in Blazor).
+ * would change nothing (an unchanged title or text is not sent).
  */
 export async function commandFor(
   entry: MenuEntryId,

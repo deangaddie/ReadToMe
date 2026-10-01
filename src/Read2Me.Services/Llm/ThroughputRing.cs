@@ -20,8 +20,8 @@ namespace Read2Me.Services.Llm
     /// </para>
     /// <para>
     /// History lives here rather than in a component so the 10s span is a domain fact. Left in the
-    /// component the span would become an artifact of <i>who is painting</i> — ~20s on StatusDock's
-    /// 1s ticker, ~0.2s in <c>LlmStreamView</c> at 90 tok/s.
+    /// component the span would become an artifact of <i>who is painting</i> — ~20s on a
+    /// 1s ticker, ~0.2s in a per-token stream view at 90 tok/s.
     /// </para>
     /// </remarks>
     internal sealed class ThroughputRing

@@ -40,7 +40,7 @@ describe('silence trim form', () => {
     ).toEqual({ enabled: false, thresholdDb: -35, padMs: 120 });
   });
 
-  it('builds the same JSON Blazor writes: threshold, clamped pad, the stored output floor', () => {
+  it('builds the stored JSON shape: threshold, clamped pad, the stored output floor', () => {
     const stored = {
       stepId: 'silence-trim',
       enabled: true,
@@ -162,7 +162,7 @@ describe('consonant soften form', () => {
     expect(settings['preset']).toBe('custom');
     expect(settings['adynEq']).toEqual({ ...STRONG_ADYNEQ, highpassHz: 90 });
     expect(settings['deesser']).toEqual({ ...DEESSER_PRESETS.strong, highpassHz: 90 });
-    // Key order matches the host's records so the stored JSON reads the same from either UI.
+    // Key order matches the host's records so the stored JSON is byte-identical to the host's.
     expect(Object.keys(settings['adynEq'] as object)).toEqual([
       'thresholdDb',
       'ratio',

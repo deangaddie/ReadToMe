@@ -197,7 +197,7 @@ namespace Read2Me.Services.Characters
         /// <summary>
         /// Paragraphs of <paramref name="folder"/> the queue currently says anything about: queued,
         /// processing, or carrying a terminal outcome. The live hub relay diffs per-item status from
-        /// this set; the Blazor tree keeps pulling <see cref="StatusOf"/> per row.
+        /// this set; single-row reads use <see cref="StatusOf"/>.
         /// </summary>
         public IReadOnlyCollection<Guid> KnownParagraphs(ProjectFolderId folder)
             => _store.TrackedKeys().Concat(_store.OutcomeKeys())

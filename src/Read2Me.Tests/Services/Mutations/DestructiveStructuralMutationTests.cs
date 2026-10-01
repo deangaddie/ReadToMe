@@ -147,11 +147,11 @@ public class DestructiveStructuralMutationTests : ProjectDbTestBase
     public async Task MergeWithNothingToMergeInto_ChangesNothing()
     {
         var b = await SeedTwoVolumesAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
         // The first volume has no previous sibling. A legal gesture that does nothing — not a
         // failure, and emphatically not a commit: the legacy handler answered both the same way.
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new MergeVolumeMutation(_folder, b.VolumeId("v1"), MergeDirection.Previous));
 
         Assert.IsType<BookMutationOutcome.NoChange>(outcome);
@@ -175,9 +175,9 @@ public class DestructiveStructuralMutationTests : ProjectDbTestBase
             "paragraph" => new MergeParagraphMutation(_folder, missing, MergeDirection.Previous),
             _ => new MergeParagraphItemMutation(_folder, missing, MergeDirection.Previous),
         };
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(mutation);
+        var outcome = await caller.Mutations.CommitAsync(mutation);
 
         Assert.Equal(BookMutationRejection.NotFound,
             Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
@@ -266,9 +266,9 @@ public class DestructiveStructuralMutationTests : ProjectDbTestBase
             "paragraph" => new DeleteParagraphMutation(_folder, missing),
             _ => new DeleteParagraphItemMutation(_folder, missing),
         };
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(mutation);
+        var outcome = await caller.Mutations.CommitAsync(mutation);
 
         Assert.Equal(BookMutationRejection.NotFound,
             Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
@@ -301,12 +301,12 @@ public class DestructiveStructuralMutationTests : ProjectDbTestBase
     {
         await SeedTwoVolumesAsync();
         await CommitAsync(new ClearBookContentMutation(_folder));
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
         // The reread that runs this before rebuilding should not consume a revision or make every
         // open Book View rebuild for a Book that has not moved.
         Assert.IsType<BookMutationOutcome.NoChange>(
-            await circuit.Mutations.CommitAsync(new ClearBookContentMutation(_folder)));
+            await caller.Mutations.CommitAsync(new ClearBookContentMutation(_folder)));
     }
 
     // ── harness ──────────────────────────────────────────────────────────────
@@ -337,18 +337,18 @@ public class DestructiveStructuralMutationTests : ProjectDbTestBase
 
     private async Task<BookMutationReceipt> CommitAsync(BookMutation mutation)
     {
-        await using var circuit = NewCircuit();
-        var outcome = await circuit.Mutations.CommitAsync(mutation);
+        await using var caller = NewCaller();
+        var outcome = await caller.Mutations.CommitAsync(mutation);
         return Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
     }
 
-    private sealed class Circuit(AsyncServiceScope scope) : IAsyncDisposable
+    private sealed class Caller(AsyncServiceScope scope) : IAsyncDisposable
     {
         public BookMutations Mutations { get; } = scope.ServiceProvider.GetRequiredService<BookMutations>();
         public ValueTask DisposeAsync() => scope.DisposeAsync();
     }
 
-    private Circuit NewCircuit() => new(_root.CreateAsyncScope());
+    private Caller NewCaller() => new(_root.CreateAsyncScope());
 
     public override async ValueTask DisposeAsync()
     {

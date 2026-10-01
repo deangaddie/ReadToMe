@@ -10,7 +10,7 @@ import {
 const valid: LlmConfigForm = { ...EMPTY_LLM_FORM, name: 'Local', baseUrl: 'http://localhost:8080' };
 
 describe('LLM config form', () => {
-  it('reports the same first validation message as Blazor, in the same order', () => {
+  it('reports the first validation message, checking fields in a fixed order', () => {
     expect(validateLlmForm({ ...valid, name: '  ' })).toBe('Name is required.');
     expect(validateLlmForm({ ...valid, baseUrl: '' })).toBe('Base URL is required.');
     expect(validateLlmForm({ ...valid, baseUrl: 'localhost:8080/v1 x' })).toBe(

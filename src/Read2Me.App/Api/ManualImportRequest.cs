@@ -4,7 +4,7 @@ namespace Read2Me.App.Api
 {
     /// <summary>
     /// <c>POST /api/projects/{folder}/import/manual</c> body: how to re-split the source file by hand
-    /// (the Blazor Manual Reread dialog's form, on the wire). <c>volume</c> is read only when
+    /// (the manual reread dialog's form, on the wire). <c>volume</c> is read only when
     /// <c>hasMultipleVolumes</c>, <c>part</c> only when <c>hasMultipleParts</c>; <c>chapter</c> always.
     /// </summary>
     public sealed record ManualImportRequest(
@@ -15,7 +15,7 @@ namespace Read2Me.App.Api
         SplitRuleRequest? Chapter)
     {
         /// <summary>
-        /// The same rules the Blazor form applies before it submits: a level that is switched on
+        /// Checked before the source file is read: a level that is switched on
         /// needs a rule, and a prefix rule needs a prefix. Anything else is a 400, not a reader error.
         /// </summary>
         public bool TryToOptions(out ManualReadOptions? options, out string? error)

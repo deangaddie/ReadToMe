@@ -25,9 +25,9 @@ namespace Read2Me.App.Api
 
     /// <summary>
     /// <c>/api/preflight/{taskKind}</c> (Angular ticket 25): the readiness gate every AI action
-    /// passes, as plan + run so the Angular sheet shows the same required services, conflicts and
-    /// per-service progress as the Blazor dialog. Task kinds are <see cref="AiTaskKind"/> member
-    /// names, matched without case.
+    /// passes, as plan + run so the Angular sheet can show the required services, the conflicts it
+    /// will stop, and per-service progress while it reconciles them. Task kinds are
+    /// <see cref="AiTaskKind"/> member names, matched without case.
     /// </summary>
     public static class PreflightEndpoints
     {

@@ -6,7 +6,7 @@ using Read2Me.Services.Health;
 namespace Read2Me.Tests.Fakes
 {
     /// <summary>
-    /// Scriptable <see cref="IAiServiceControl"/> for presenter/component tests — no docker, no HTTP.
+    /// Scriptable <see cref="IAiServiceControl"/> for coordinator and endpoint tests — no docker, no HTTP.
     /// Set the canned results, inspect the recorded calls. A <see cref="Gate"/> can hold an op mid-flight
     /// to assert the in-flight (busy) state. Multi-service tests (pre-flight plans) script per service
     /// name via the *ByName dictionaries; misses fall back to the single-value properties.

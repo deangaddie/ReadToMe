@@ -50,7 +50,7 @@ export class AudioProcessingApi {
     );
   }
 
-  /** Persists the path, then probes it — the same order as Blazor's Test button. */
+  /** Persists the path, then probes it, so the probe always checks what the field shows. */
   testFfmpeg(ffmpegPath: string | null): Promise<FfmpegProbeResult> {
     const request: FfmpegTestRequest = { ffmpegPath };
     return this.api.post<FfmpegProbeResult>(`${this.base}/ffmpeg/test`, request);

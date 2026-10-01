@@ -47,8 +47,8 @@ namespace Read2Me.App.Api
     /// The audio post-processing settings row on the wire (Angular ticket 24): scalars, pause
     /// durations, the paragraph step configs, the ffmpeg probe, the recent-sample picker and the
     /// one-step A/B preview. Previews park in the process-wide <see cref="AudioPreviewStore"/> under
-    /// a minted id and play back through the same <c>/audio-preview</c> and <c>/preview-source</c>
-    /// routes Blazor's cards use.
+    /// a minted id and play back through the <c>/audio-preview</c> and <c>/preview-source</c>
+    /// routes.
     /// </summary>
     public static class AudioProcessingEndpoints
     {
@@ -133,8 +133,8 @@ namespace Read2Me.App.Api
         private static async Task<IResult> TestFfmpegAsync(
             FfmpegTestRequest? request, AudioProcessingSettingsService svc, CancellationToken ct)
         {
-            // Probe the path the user typed, persisting it first so the probe matches the field —
-            // the same order as Blazor's Test button.
+            // Probe the path the user typed, persisting it first: the probe reads the stored path,
+            // so testing a typed path saves it.
             if (request?.FfmpegPath is not null)
                 await svc.SetFfmpegPathAsync(request.FfmpegPath);
             return Results.Ok(await svc.TestFfmpegAsync(ct));

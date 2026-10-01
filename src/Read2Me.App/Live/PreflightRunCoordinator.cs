@@ -9,7 +9,7 @@ namespace Read2Me.App.Live;
 /// Runs a pre-flight plan in the background — the request that started it has answered 202 with
 /// the run id — and reports every service's stage to the caller's hub connection as
 /// <c>preflight</c> messages, then <c>done</c>. The state machine is the same
-/// <see cref="AiPreflightProgress"/> the Blazor dialog drives; lifecycle ops go through
+/// <see cref="AiPreflightProgress"/>, driven from here; lifecycle ops go through
 /// <see cref="ObservedAiServiceControl"/> so every other client's chips follow too. Runs are
 /// independent: the control facade serialises the docker work.
 /// </summary>

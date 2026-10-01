@@ -235,12 +235,12 @@ describe('PromptsPage', () => {
 
     live.settingsChanged.next({ area: 'prompts' });
     (await eventually('GET', CATALOG)).flush([
-      entry({ template: 'FROM BLAZOR', isOverridden: true }),
+      entry({ template: 'FROM ANOTHER TAB', isOverridden: true }),
       VOICE,
     ]);
     await stable(fixture);
 
-    expect(textarea(el).value).toBe('FROM BLAZOR');
+    expect(textarea(el).value).toBe('FROM ANOTHER TAB');
     expect(el.querySelector('.r2m-config-editor-frame__dirty')).toBeNull();
     expect(fixture.componentInstance.hasUnsavedChanges()).toBe(false);
   });
@@ -256,7 +256,7 @@ describe('PromptsPage', () => {
 
     live.settingsChanged.next({ area: 'prompts' });
     (await eventually('GET', CATALOG)).flush([
-      entry({ template: 'FROM BLAZOR', isOverridden: true }),
+      entry({ template: 'FROM ANOTHER TAB', isOverridden: true }),
       VOICE,
     ]);
     await stable(fixture);
@@ -266,7 +266,7 @@ describe('PromptsPage', () => {
 
     button(el, 'Cancel').click();
     await stable(fixture);
-    expect(textarea(el).value).toBe('FROM BLAZOR');
+    expect(textarea(el).value).toBe('FROM ANOTHER TAB');
   });
 
   it('asks before switching kinds with unsaved edits', async () => {

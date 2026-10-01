@@ -26,12 +26,12 @@ import {
 export interface AddVoiceRuleDialogData {
   folder: string;
   characterId: Guid;
-  /** The character's voices; the first is preselected as Blazor does. */
+  /** The character's voices; the first is preselected. */
   voices: VoiceDto[];
 }
 
 /**
- * Blazor's AddVoiceRuleDialog: a voice, the mode (From here on / Just this node) and a cascading
+ * Add voice rule: a voice, the mode (From here on / Just this node) and a cascading
  * Volume → Part → Chapter → Paragraph → Line anchor. Each level is clearable and resets the deeper
  * ones; the deepest chosen level is the anchor. Add stays off until a voice and an anchor are
  * chosen. Answers the `CreateVoiceRule` command to run, or null on cancel.

@@ -1,8 +1,8 @@
 import { ManualImportRequest, SplitRuleMode, SplitRuleRequest } from '@app/api';
 
 /**
- * The manual reread dialog's form (research §3 ManualRereadDialog), validated the way the host and
- * the Blazor form validate it: a level that is switched on needs a rule, and a prefix rule needs a
+ * The manual reread dialog's form (research §3 ManualRereadDialog), validated the way the host
+ * validates it: a level that is switched on needs a rule, and a prefix rule needs a
  * prefix. Pure so the dialog stays a thin view over it.
  */
 
@@ -46,7 +46,7 @@ export function activeLevels(form: ManualRereadForm): LevelKey[] {
   return levels;
 }
 
-/** The first problem, worded as the Blazor form words it; null when the form can be sent. */
+/** The first problem, worded as the host words it; null when the form can be sent. */
 export function validateManualReread(form: ManualRereadForm): string | null {
   for (const level of activeLevels(form)) {
     const rule = form[level];

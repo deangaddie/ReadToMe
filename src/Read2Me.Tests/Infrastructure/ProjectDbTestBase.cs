@@ -34,7 +34,7 @@ namespace Read2Me.Tests.Infrastructure
 
         /// <summary>
         /// Who the persisted Book says speaks an item. The question "did that write actually
-        /// commit?" reduces to this often enough — across the projection, presenter and mutation
+        /// commit?" reduces to this often enough — across the projection and mutation
         /// fixtures — that asking it through a fresh context belongs here rather than in each.
         /// </summary>
         protected async Task<Guid?> PersistedSpeakerOfAsync(Guid paragraphItemId)

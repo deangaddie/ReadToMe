@@ -44,7 +44,7 @@ namespace Read2Me.App.Api
         private const long MaxTestAudioBytes = 50L * 1024 * 1024;
         private static readonly HashSet<string> TestAudioExtensions = [".wav", ".mp3", ".aac"];
 
-        /// <summary>Labels and new-config defaults of Blazor's <c>ToSentenceCaseFormItem</c>; keys are <c>toSentenceCaseConfig</c>'s.</summary>
+        /// <summary>Labels and new-config defaults of the To Sentence Case step's options; keys are <c>toSentenceCaseConfig</c>'s.</summary>
         private static readonly IReadOnlyList<SettingsFieldDto> ToSentenceCaseOptions =
         [
             new("paragraphEnabled", "Normalise all-caps paragraphs", "boolean", Default: true),
@@ -147,7 +147,7 @@ namespace Read2Me.App.Api
             if ((await settings.GetAllConfigsAsync()).FirstOrDefault(c => c.Id == id) is not { } config)
                 return Results.NotFound();
 
-            // Kestrel's default body cap is 30 MB; the Blazor test upload allows 50 MB.
+            // Kestrel's default body cap is 30 MB; a test clip may be up to 50 MB.
             var sizeFeature = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
             if (sizeFeature is { IsReadOnly: false })
                 sizeFeature.MaxRequestBodySize = MaxTestAudioBytes;

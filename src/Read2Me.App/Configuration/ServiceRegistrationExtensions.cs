@@ -86,7 +86,7 @@ public static class ServiceRegistrationExtensions
         // meaningful live, and replaying a turn's worth to a late subscriber would chart the past
         // as the present. See LlmTimingsSample.
         services.AddSingleton<EventBroadcaster<LlmTimingsSample>>();
-        // App-scoped: one queue runs at a time on one GPU, so every circuit should read the same
+        // App-scoped: one queue runs at a time on one GPU, so every client should read the same
         // totals. Resolved eagerly at startup, because it only sees the events published after it
         // subscribes — a lazily-created aggregator would miss the run that created it.
         services.AddSingleton<ThroughputAggregator>();
@@ -142,7 +142,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IVoicePreviewRenderer, VoicePreviewRenderer>();
         services.AddScoped<IVoiceOriginalStore, VoiceOriginalStore>();
         services.AddScoped<IVoiceAudioEditor, VoiceAudioEditor>();
-        // Process-wide, not circuit-bound: the HTTP API renders a preview in one request and applies it in another.
+        // Process-wide, not request-scoped: the HTTP API renders a preview in one request and applies it in another.
         services.AddSingleton<IPreviewStore>(_ => new PreviewStore(TimeProvider.System));
         services.AddScoped<IRecentAudioSampleFinder, RecentAudioSampleFinder>();
         services.AddSingleton<Read2Me.Services.Events.EventBroadcaster<Read2Me.Services.Audio.Assembly.AssemblyEvent>>();
@@ -213,7 +213,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Read2Me.Services.BookEdits.ScopeResolver>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditPlanner>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditProposalService>();
-        // Process-wide, not circuit-bound: the HTTP API plans in one request and proposes/applies in others.
+        // Process-wide, not request-scoped: the HTTP API plans in one request and proposes/applies in others.
         services.AddSingleton<Read2Me.Services.BookEdits.IBookEditSessionStore>(_ => new Read2Me.Services.BookEdits.BookEditSessionStore(TimeProvider.System));
         services.AddSingleton<Read2Me.App.Live.BookEditRunCoordinator>();
         services.AddSingleton<Read2Me.App.Live.LlmTestRunCoordinator>();
@@ -235,8 +235,8 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<AiServiceHealthMonitor>();
         services.AddSingleton<IAiServiceReporter, AiServiceReporter>();
         services.AddSingleton<IAiServiceControl, AiServiceControl>();
-        // Status observations for /hubs/live: every UI-facing probe and op (API, pre-flight, Blazor
-        // controls) goes through the observed facade so every client's chips follow (Angular ticket 25).
+        // Status observations for /hubs/live: every UI-facing probe and op (API, pre-flight) goes
+        // through the observed facade so every client's chips follow (Angular ticket 25).
         services.AddSingleton<EventBroadcaster<ServiceStatusChanged>>();
         services.AddSingleton(sp => new ObservedAiServiceControl(
             sp.GetRequiredService<IAiServiceControl>(), sp.GetRequiredService<EventBroadcaster<ServiceStatusChanged>>()));

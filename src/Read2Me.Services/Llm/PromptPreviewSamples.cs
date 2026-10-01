@@ -3,8 +3,8 @@ using Read2Me.Services.Characters;
 namespace Read2Me.Services.Llm
 {
     /// <summary>
-    /// The Hobbit sample values a prompt template is previewed with. Shared by the Blazor page,
-    /// the Angular page (over <c>POST /api/settings/prompts/{kind}/preview</c>) and the catalog, so
+    /// The Hobbit sample values a prompt template is previewed with. Shared by the preview endpoint
+    /// (<c>POST /api/settings/prompts/{kind}/preview</c>) and the catalog, so
     /// every preview shows the same book.
     /// </summary>
     /// <remarks>

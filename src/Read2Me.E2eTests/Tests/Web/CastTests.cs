@@ -7,7 +7,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// <summary>
 /// The cast page (Angular ticket 15) on the fake-AI host: discovery end to end — review, edit a
 /// row, apply, the roster updates, a re-run marks the row "Already exists" — and the detail's
-/// rename landing in the host so Blazor beside it sees the same name.
+/// rename landing in the host so every other reader sees the same name.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class CastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)

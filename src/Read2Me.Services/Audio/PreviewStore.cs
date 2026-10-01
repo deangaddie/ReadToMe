@@ -23,8 +23,8 @@ namespace Read2Me.Services.Audio
     }
 
     /// <summary>
-    /// In-memory, process-wide (not circuit-bound: the HTTP API has no circuit). Entries expire after
-    /// <see cref="DefaultTtl"/>; expired ones are dropped on the next save or lookup, so an idle
+    /// In-memory, process-wide (not request-scoped: a preview outlives the request that made it).
+    /// Entries expire after <see cref="DefaultTtl"/>; expired ones are dropped on the next save or lookup, so an idle
     /// store holds at most the last half hour of previews — voice WAVs are seconds long, so that is
     /// a few megabytes, not a cache to manage.
     /// </summary>

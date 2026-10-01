@@ -7,7 +7,7 @@ namespace Read2Me.E2eTests.Tests;
 
 /// <summary>
 /// The endpoint the consonant-soften A/B preview's "Filtered" player points at. It serves whatever
-/// the circuit last rendered under its token, and nothing before that.
+/// was last rendered under its token, and nothing before that.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class AudioPreviewEndpointTests(E2eAppFixture app)

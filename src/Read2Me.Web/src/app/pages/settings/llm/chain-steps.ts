@@ -1,7 +1,7 @@
 import { AttributionChainStep, AttributionPromptStyle, LlmServerConfig } from '@app/api';
 
 /**
- * Pure edits over the stored attribution chain (Blazor's `AttributionEscalationPresenter`). Steps
+ * Pure edits over the stored attribution chain. Steps
  * are addressed by index, not config id: one config may hold several rungs differing only in
  * thinking and prompt style. Both flags are fixed at add time.
  */

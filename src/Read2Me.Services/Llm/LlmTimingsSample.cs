@@ -7,10 +7,10 @@ namespace Read2Me.Services.Llm
     /// <remarks>
     /// <b>This rides its own <c>EventBroadcaster</c>, deliberately not the <see cref="LlmStreamEvent"/>
     /// family.</b> With <c>timings_per_token: true</c> one of these arrives per token, and every
-    /// <see cref="LlmStreamEvent"/> subscriber is built for the opposite: <c>LlmStreamView</c>
-    /// repaints on <i>every</i> event it receives, unfiltered, and <c>EventJournal</c> buffers
+    /// <see cref="LlmStreamEvent"/> subscriber is built for the opposite: the live relay
+    /// forwards <i>every</i> event to each <c>stream:llm</c> subscriber, unfiltered, and <c>EventJournal</c> buffers
     /// every event of the turn to replay to late subscribers. Joining that family would have cost
-    /// a second SignalR repaint per token on every open circuit and buffered a reading per token
+    /// a second SignalR message per token on every open connection and buffered a reading per token
     /// for replay — the exact per-token amplification the pull seam exists to make structurally
     /// impossible (ADR 0003, decision 06). A separate family costs one delegate invoke per token
     /// and is what <c>EventBroadcaster</c>'s "one transport, many event families" is for.

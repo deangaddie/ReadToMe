@@ -65,7 +65,7 @@ public class ProjectApiTests(E2eAppFixture app)
 
     /// <summary>
     /// The manual reread (Angular ticket 11): a text book whose chapters are bare Roman numerals
-    /// splits the way the Blazor dialog's "Roman numerals" choice splits it, and replaces whatever the
+    /// splits on its "Roman numerals" chapter rule, and replaces whatever the
     /// automatic import made of the same file.
     /// </summary>
     [Fact]

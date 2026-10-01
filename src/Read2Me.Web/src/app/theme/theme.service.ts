@@ -12,7 +12,7 @@ export type SchemePreference = 'light' | 'dark' | 'system';
  * Runtime theming (spec D9, design §3): loads the shared theme store from the host, resolves the
  * effective AppTheme (following the OS preference live when asked), and applies it as CSS custom
  * properties in a `<style id="r2m-theme">` element plus `data-theme` on `<html>` (which styles.scss
- * maps to `color-scheme`). Both UIs read the same rows, so applying here restyles Blazor too.
+ * maps to `color-scheme`). The host stores the selection, so every client loads the same theme.
  */
 @Injectable({ providedIn: 'root' })
 export class ThemeService {

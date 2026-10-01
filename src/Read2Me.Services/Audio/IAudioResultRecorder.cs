@@ -26,7 +26,7 @@ namespace Read2Me.Services.Audio
     /// <para>
     /// Every file operation happens <em>before</em> the mutation, so the take is complete at the path
     /// the Book is about to name by the time the commit publishes its receipt. That ordering is what
-    /// lets another circuit converge on that receipt and play the item at once: a Book View never
+    /// lets another client converge on that receipt and play the item at once: a Book View never
     /// names audio that is still on its way.
     /// </para>
     /// <para>

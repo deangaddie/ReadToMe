@@ -8,8 +8,8 @@ import { ProviderConfig } from './provider-form';
 /**
  * State behind one provider settings page (ticket 22), provided by the page, which names its area
  * with `init`. Every write goes to the host and the store reloads from it; the hub's
- * `settingsChanged` for the area reloads it too, so an edit made in Blazor or over the agent API
- * shows up here. Reloads are sequenced: a slow answer never overwrites a newer one.
+ * `settingsChanged` for the area reloads it too, so an edit made in another tab or over the
+ * agent API shows up here. Reloads are sequenced: a slow answer never overwrites a newer one.
  */
 @Injectable()
 export class ProviderSettingsStore {

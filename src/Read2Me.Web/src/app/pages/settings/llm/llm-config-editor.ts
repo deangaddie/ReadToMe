@@ -55,7 +55,7 @@ const NUMERIC_FIELDS = [
 ] as const;
 
 /**
- * The in-place typed editor for one LLM config (ticket 21): Blazor's `LlmServerConfigDialog` fields
+ * The in-place typed editor for one LLM config (ticket 21): the config's fields
  * and validation messages inside the settings editor frame, plus the managed-container status for
  * the config's base URL.
  */

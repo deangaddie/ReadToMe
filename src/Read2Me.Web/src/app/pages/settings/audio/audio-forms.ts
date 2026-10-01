@@ -12,8 +12,8 @@ import {
 
 /**
  * Edit-state and rules for the audio-processing cards (ticket 24), kept pure so the preset
- * re-seed rules and the per-card validation can be tested without a component. Mirrors
- * Blazor's `SilenceTrimForm` / `ConsonantSoftenForm`: presets are stored by reference, so raw
+ * re-seed rules and the per-card validation can be tested without a component. Presets
+ * are stored by reference, so raw
  * params are only written when the preset is custom, and picking any preset (custom included)
  * re-seeds the drafts from the last non-custom preset, discarding unsaved tweaks.
  */
@@ -224,7 +224,7 @@ export function setSoftenEngine(
   return { ...form, engine };
 }
 
-/** Key order follows the host's records, so both UIs write byte-identical settings JSON. */
+/** Key order follows the host's records, so a save writes byte-identical settings JSON. */
 function adynEqParams(d: AdynEqDraft, highpassHz: number | undefined): AdynEqParams {
   return {
     thresholdDb: d.thresholdDb,

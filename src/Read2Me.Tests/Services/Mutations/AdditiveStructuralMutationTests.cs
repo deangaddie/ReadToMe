@@ -137,9 +137,9 @@ public class AdditiveStructuralMutationTests : ProjectDbTestBase
             "paragraph" => new SplitAtParagraphMutation(_folder, missing, null),
             _ => new SplitAtItemMutation(_folder, missing),
         };
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(mutation);
+        var outcome = await caller.Mutations.CommitAsync(mutation);
 
         var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
         Assert.Equal(BookMutationRejection.NotFound, rejected.Reason);
@@ -193,10 +193,10 @@ public class AdditiveStructuralMutationTests : ProjectDbTestBase
         var b = new BookHierarchyBuilder(OpenDbAsync);
         await b.AddVolume("v1", v => v.AddChapter(null, c => c.AddParagraph("pg", g => g.AddNarration("i1", "One"))))
             .BuildAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
         Assert.IsType<BookMutationOutcome.NoChange>(
-            await circuit.Mutations.CommitAsync(new AddChapterTitlesMutation(_folder)));
+            await caller.Mutations.CommitAsync(new AddChapterTitlesMutation(_folder)));
     }
 
     [Fact]
@@ -207,14 +207,14 @@ public class AdditiveStructuralMutationTests : ProjectDbTestBase
                 .AddParagraph("pg1", g => g.AddNarration("i1", "One"))
                 .AddParagraph("pg2", g => g.AddNarration("i2", "Two"))))
             .BuildAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var first = await circuit.Mutations.CommitAsync(new AddPausesMutation(_folder));
+        var first = await caller.Mutations.CommitAsync(new AddPausesMutation(_folder));
         Assert.IsType<BookMutationOutcome.Committed>(first);
 
         // The gesture the legacy handler could not report honestly: nothing left to insert, so no
         // revision, no receipt, and no success for a Book View to announce.
-        var second = await circuit.Mutations.CommitAsync(new AddPausesMutation(_folder));
+        var second = await caller.Mutations.CommitAsync(new AddPausesMutation(_folder));
         Assert.IsType<BookMutationOutcome.NoChange>(second);
     }
 
@@ -257,9 +257,9 @@ public class AdditiveStructuralMutationTests : ProjectDbTestBase
     public async Task InsertPauseParagraph_AgainstAnAnchorTheBookDoesNotContain_IsRejectedAsNotFound()
     {
         await SeedTwoVolumesTwoPartsAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new InsertPauseParagraphMutation(_folder, Guid.NewGuid(), InsertPosition.After, PauseKind.Pause));
 
         Assert.Equal(BookMutationRejection.NotFound,
@@ -283,18 +283,18 @@ public class AdditiveStructuralMutationTests : ProjectDbTestBase
 
     private async Task<BookMutationReceipt> CommitAsync(BookMutation mutation)
     {
-        await using var circuit = NewCircuit();
-        var outcome = await circuit.Mutations.CommitAsync(mutation);
+        await using var caller = NewCaller();
+        var outcome = await caller.Mutations.CommitAsync(mutation);
         return Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
     }
 
-    private sealed class Circuit(AsyncServiceScope scope) : IAsyncDisposable
+    private sealed class Caller(AsyncServiceScope scope) : IAsyncDisposable
     {
         public BookMutations Mutations { get; } = scope.ServiceProvider.GetRequiredService<BookMutations>();
         public ValueTask DisposeAsync() => scope.DisposeAsync();
     }
 
-    private Circuit NewCircuit() => new(_root.CreateAsyncScope());
+    private Caller NewCaller() => new(_root.CreateAsyncScope());
 
     public override async ValueTask DisposeAsync()
     {

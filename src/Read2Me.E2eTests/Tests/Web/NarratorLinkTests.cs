@@ -4,7 +4,7 @@ using Read2Me.E2eTests.Infrastructure;
 namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
-/// The cast page's narrator link (Angular ticket 15) beside the Blazor test of the same name: the
+/// The cast page's narrator link (Angular ticket 15): the
 /// banner's picker links a character, the seed row and the audio-mode voice preview read the link
 /// back, and Unlink (confirmed) restores the unlinked strings.
 /// </summary>

@@ -12,7 +12,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { firstValueFrom } from 'rxjs';
 
 export interface AddVoiceDialogData {
-  /** The name the voice takes when the field is left blank (Blazor: the character's name). */
+  /** The name the voice takes when the field is left blank: the character's name. */
   characterName: string;
 }
 
@@ -21,7 +21,7 @@ export interface AddVoiceDialogResult {
   isGenerated: boolean;
 }
 
-/** Blazor's AddVoiceDialog: a name (default = the character) and the source, Reference Audio or Prompt. */
+/** Add voice: a name (default = the character) and the source, Reference Audio or Prompt. */
 @Component({
   selector: 'app-add-voice-dialog',
   imports: [MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatRadioModule],

@@ -29,7 +29,7 @@ const STATUS_VIEW: Record<AiServiceStatus, { kind: StatusKind; label: string }> 
  * Presentational Start / Restart / Shutdown / Refresh controls for a managed container (design §7).
  * The services page, the drawer's Services tab and the config editors wire the outputs to the
  * app-wide AI services store; `statusOnly` keeps just the chip and Refresh. Button availability
- * mirrors the Blazor presenter: Stopped / Not found can be started, a live or Down container can be
+ * follows the state: Stopped / Not found can be started, a live or Down container can be
  * restarted or shut down.
  */
 @Component({

@@ -275,8 +275,8 @@ export class PromptEditor {
 
   constructor() {
     // A new kind replaces the draft; a reload of the same kind replaces it only while the draft
-    // is still the text this editor last showed — a save made in Blazor or over the API must not
-    // wipe typing in progress, but must reach an untouched editor.
+    // is still the text this editor last showed — a save made in another tab or over the API
+    // must not wipe typing in progress, but must reach an untouched editor.
     let shown: { kind: string; template: string } | null = null;
     effect(() => {
       const entry = this.entry();

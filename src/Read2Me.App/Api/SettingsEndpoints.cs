@@ -64,7 +64,7 @@ namespace Read2Me.App.Api
             endpoints.MapAudioProcessingEndpoints();
             MapSchemaEndpoints(endpoints);
 
-            // Anything else under /api/settings is not an area — 404 instead of the Blazor fallback.
+            // Anything else under /api/settings is not an area — 404, not the web app's fallback page.
             endpoints.MapFallback("/api/settings/{**rest}", () => Results.NotFound());
         }
 

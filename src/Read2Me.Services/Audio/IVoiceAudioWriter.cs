@@ -52,7 +52,7 @@ namespace Read2Me.Services.Audio
     /// Keeps a Voice's audio on the safe side of the Book mutation that names it (ADR 0007).
     /// <para>
     /// The file is written <em>before</em> the mutation, so it is complete at the path the Book is
-    /// about to name and another circuit can converge on the receipt and play it at once. A mutation
+    /// about to name and another client can converge on the receipt and play it at once. A mutation
     /// that does not commit leaves nothing behind: the staged take is removed again, best-effort,
     /// unless it landed on the path the Voice already named — the Book still points there, and an
     /// empty path is the worse of the two states.

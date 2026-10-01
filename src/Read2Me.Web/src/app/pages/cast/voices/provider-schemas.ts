@@ -18,7 +18,7 @@ export const PROVIDER_AREA_LABEL: Record<ProviderArea, string> = {
  * (`GET /active` then `GET /schema?type=`), dropped when the hub says that settings area changed.
  * The schema's defaults are the **active config's** values (its `settingsJson` merged over the
  * provider's recommended defaults), so "provider default" on a card means what that config would
- * use — as Blazor seeds its override editors. Null when no config is active — the editor then
+ * use — the override editors seed from it. Null when no config is active — the editor then
  * says so instead of rendering fields.
  */
 @Injectable({ providedIn: 'root' })

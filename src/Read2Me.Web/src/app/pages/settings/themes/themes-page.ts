@@ -17,8 +17,8 @@ import { ThemeEditorData, ThemeEditorDialog, ThemeEditorResult } from './theme-e
 
 /**
  * `/settings/themes` (ticket 04): card grid of every theme with Apply / Edit / Delete, New, and the
- * follow-system toggle. Writes go through ThemeService so the app restyles immediately and the
- * Blazor UI picks the same selection up on its next load.
+ * follow-system toggle. Writes go through ThemeService so the app restyles immediately and every
+ * other tab picks the same selection up on its next load.
  */
 @Component({
   selector: 'app-themes-page',

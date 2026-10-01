@@ -51,9 +51,9 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Insert_Commits_AndReceiptDescribesWhatItActuallyChanged()
     {
         var b = await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "A restored line."));
 
         var receipt = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
@@ -87,10 +87,10 @@ public class BookMutationsTests : ProjectDbTestBase
                 .AddRawItem("anchor", ParagraphItemType.Speech, "“Hello there,” she said.", character.Id)
                 .AddRawItem("tail", ParagraphItemType.Speech, "“Only me,” came the reply.", character.Id))))
             .BuildAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
         var receipt = await CommitInsertAsync(
-            circuit, _folder, b.ItemId("anchor"), "  “And who might you be?” he answered.  ");
+            caller, _folder, b.ItemId("anchor"), "  “And who might you be?” he answered.  ");
 
         await using var verify = await OpenDbAsync();
         var items = await verify.ParagraphItems
@@ -118,9 +118,9 @@ public class BookMutationsTests : ProjectDbTestBase
             .AddParagraph("para1", p => p.AddNarration("first", "The door swung open."))
             .AddParagraph("para2", p => p.AddNarration("second", "Second paragraph."))))
             .BuildAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new InsertParagraphItemMutation(_folder, b.ItemId("second"), InsertPosition.Before, "A restored line."));
 
         var created = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt.Effects.CreatedId!.Value;
@@ -137,14 +137,14 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Insert_Commits_AndTheSameSessionReadsTheNewItemBack()
     {
         // The tracking session caches one long-lived context per project; without eviction inside
-        // the commit, the very circuit that wrote reads the Book from before its own write.
+        // the commit, the very caller that wrote reads the Book from before its own write.
         var b = await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        await circuit.Mutations.CommitAsync(
+        await caller.Mutations.CommitAsync(
             new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "Fresh."));
 
-        var db = await circuit.Session.OpenAsync(_folder);
+        var db = await caller.Session.OpenAsync(_folder);
         Assert.Equal(2, await db.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
     }
 
@@ -152,7 +152,7 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Insert_Commits_PublishesTheReceiptOnlyAfterTheChangeIsReadable()
     {
         var b = await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
         var published = new List<BookMutationReceipt>();
         var visibleWhenPublished = new List<int>();
         void OnReceipt(BookMutationReceipt r)
@@ -165,7 +165,7 @@ public class BookMutationsTests : ProjectDbTestBase
 
         try
         {
-            await circuit.Mutations.CommitAsync(
+            await caller.Mutations.CommitAsync(
                 new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "Published."));
         }
         finally { _receipts.Event -= OnReceipt; }
@@ -179,7 +179,7 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Insert_Commits_EvenWhenAReceiptSubscriberThrows()
     {
         var b = await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
         static void Explode(BookMutationReceipt _) =>
             throw new InvalidOperationException("A reader that cannot cope with its own mail.");
         _receipts.Event += Explode;
@@ -187,7 +187,7 @@ public class BookMutationsTests : ProjectDbTestBase
         BookMutationOutcome outcome;
         try
         {
-            outcome = await circuit.Mutations.CommitAsync(
+            outcome = await caller.Mutations.CommitAsync(
                 new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "Committed."));
         }
         finally { _receipts.Event -= Explode; }
@@ -204,11 +204,11 @@ public class BookMutationsTests : ProjectDbTestBase
     {
         var b = await SeedOneItemAsync();
         var other = await SeedOneItemAsync("other-book");
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var first = await CommitInsertAsync(circuit, _folder, b.ItemId("item"), "One.");
-        var second = await CommitInsertAsync(circuit, _folder, b.ItemId("item"), "Two.");
-        var elsewhere = await CommitInsertAsync(circuit, "other-book", other.ItemId("item"), "Elsewhere.");
+        var first = await CommitInsertAsync(caller, _folder, b.ItemId("item"), "One.");
+        var second = await CommitInsertAsync(caller, _folder, b.ItemId("item"), "Two.");
+        var elsewhere = await CommitInsertAsync(caller, "other-book", other.ItemId("item"), "Elsewhere.");
 
         Assert.Equal(1L, first.Revision);
         Assert.Equal(2L, second.Revision);
@@ -227,7 +227,7 @@ public class BookMutationsTests : ProjectDbTestBase
             .AddParagraph("para", p => p.AddPause("pause", ParagraphItemType.ParagraphPause))
             .AddParagraph("speech", p => p.AddNarration("item", "Real content."))))
             .BuildAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
         var published = new List<BookMutationReceipt>();
         void OnReceipt(BookMutationReceipt r) => published.Add(r);
         _receipts.Event += OnReceipt;
@@ -235,7 +235,7 @@ public class BookMutationsTests : ProjectDbTestBase
         BookMutationOutcome outcome;
         try
         {
-            outcome = await circuit.Mutations.CommitAsync(
+            outcome = await caller.Mutations.CommitAsync(
                 new InsertParagraphItemMutation(_folder, b.ItemId("pause"), InsertPosition.After, "Text."));
         }
         finally { _receipts.Event -= OnReceipt; }
@@ -246,7 +246,7 @@ public class BookMutationsTests : ProjectDbTestBase
         Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
 
         // No revision was consumed: the project's first *committed* mutation is still revision 1.
-        var committed = await CommitInsertAsync(circuit, _folder, b.ItemId("item"), "First real write.");
+        var committed = await CommitInsertAsync(caller, _folder, b.ItemId("item"), "First real write.");
         Assert.Equal(1L, committed.Revision);
     }
 
@@ -258,9 +258,9 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Insert_WithWhitespaceOnlyText_IsRejectedAsValidation(string text)
     {
         var b = await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, text));
 
         var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
@@ -273,9 +273,9 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Insert_AgainstAnUnknownAnchor_IsRejectedAsNotFound()
     {
         await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new InsertParagraphItemMutation(_folder, Guid.NewGuid(), InsertPosition.After, "Nowhere."));
 
         Assert.Equal(BookMutationRejection.NotFound,
@@ -286,11 +286,11 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Commit_WhenCancelledBeforeTheCommitPoint_IsRejectedAsCancelled_AndRollsBack()
     {
         var b = await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "Cancelled."), cts.Token);
 
         Assert.Equal(BookMutationRejection.Cancelled,
@@ -305,9 +305,9 @@ public class BookMutationsTests : ProjectDbTestBase
         // The transaction belongs to BookMutations, so a half-applied implementation cannot leave a
         // half-committed Book behind — the failure mode the per-handler SaveChangesAsync calls had.
         var b = await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new HalfStagedMutation(_folder, b.ParagraphId("para")));
 
         Assert.Equal(BookMutationRejection.Conflict,
@@ -320,19 +320,19 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Commit_WhenAnImplementationHasADefect_Throws()
     {
         await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => circuit.Mutations.CommitAsync(new ExplodingMutation(_folder)));
+            () => caller.Mutations.CommitAsync(new ExplodingMutation(_folder)));
     }
 
     [Fact]
     public async Task Commit_OfAnUnregisteredMutation_Throws()
     {
-        await using var circuit = NewCircuit();
+        await using var caller = NewCaller();
 
         await Assert.ThrowsAsync<NotSupportedException>(
-            () => circuit.Mutations.CommitAsync(new UnregisteredMutation(_folder)));
+            () => caller.Mutations.CommitAsync(new UnregisteredMutation(_folder)));
     }
 
     // ── serialization ────────────────────────────────────────────────────────
@@ -341,8 +341,8 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Writes_ForOneProject_SerializeInCommitOrder()
     {
         var b = await SeedOneItemAsync();
-        await using var one = NewCircuit();
-        await using var two = NewCircuit();
+        await using var one = NewCaller();
+        await using var two = NewCaller();
 
         var first = CommitInsertAsync(one, _folder, b.ItemId("item"), "First.");
         var second = CommitInsertAsync(two, _folder, b.ItemId("item"), "Second.");
@@ -357,8 +357,8 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Writes_ForDifferentProjects_DoNotWaitOnEachOther()
     {
         var other = await SeedOneItemAsync("other-book");
-        await using var blocking = NewCircuit();
-        await using var free = NewCircuit();
+        await using var blocking = NewCaller();
+        await using var free = NewCaller();
         var gate = new TaskCompletionSource();
         var entered = new TaskCompletionSource();
 
@@ -377,8 +377,8 @@ public class BookMutationsTests : ProjectDbTestBase
     public async Task Commit_WhenTheLockWaitBudgetRunsOut_IsRejectedAsConflict()
     {
         var b = await SeedOneItemAsync();
-        await using var blocking = NewCircuit();
-        await using var waiting = NewCircuit();
+        await using var blocking = NewCaller();
+        await using var waiting = NewCaller();
         var gate = new TaskCompletionSource();
         var entered = new TaskCompletionSource();
         _options.LockWaitBudget = TimeSpan.FromMilliseconds(50);
@@ -401,15 +401,15 @@ public class BookMutationsTests : ProjectDbTestBase
         // A receipt subscriber stands in for the reconciliation the projection will do next: if the
         // lock were still held while receipts are published, this would time out rather than commit.
         var b = await SeedOneItemAsync();
-        await using var circuit = NewCircuit();
-        await using var subscriberCircuit = NewCircuit();
+        await using var caller = NewCaller();
+        await using var subscriberCaller = NewCaller();
         _options.LockWaitBudget = TimeSpan.FromSeconds(2);
         BookMutationOutcome? fromSubscriber = null;
         var reentered = 0;
         void OnReceipt(BookMutationReceipt r)
         {
             if (Interlocked.Exchange(ref reentered, 1) == 1) return;
-            fromSubscriber = Task.Run(() => subscriberCircuit.Mutations.CommitAsync(
+            fromSubscriber = Task.Run(() => subscriberCaller.Mutations.CommitAsync(
                 new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "Reentrant.")))
                 .GetAwaiter().GetResult();
         }
@@ -417,7 +417,7 @@ public class BookMutationsTests : ProjectDbTestBase
 
         try
         {
-            await circuit.Mutations.CommitAsync(
+            await caller.Mutations.CommitAsync(
                 new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "First."));
         }
         finally { _receipts.Event -= OnReceipt; }
@@ -431,8 +431,8 @@ public class BookMutationsTests : ProjectDbTestBase
         // A gesture the user abandoned and a project another writer is hogging are different
         // answers, and the caller reports them differently.
         var b = await SeedOneItemAsync();
-        await using var blocking = NewCircuit();
-        await using var waiting = NewCircuit();
+        await using var blocking = NewCaller();
+        await using var waiting = NewCaller();
         var gate = new TaskCompletionSource();
         var entered = new TaskCompletionSource();
         using var cts = new CancellationTokenSource();
@@ -463,8 +463,8 @@ public class BookMutationsTests : ProjectDbTestBase
         var budget = TimeSpan.FromSeconds(2);
         const int samples = 20;
         var b = await SeedOneItemAsync();
-        await using var queue = NewCircuit();
-        await using var gesture = NewCircuit();
+        await using var queue = NewCaller();
+        await using var gesture = NewCaller();
         using var queueRunning = new CancellationTokenSource();
 
         var queueWriter = Task.Run(async () =>
@@ -499,15 +499,15 @@ public class BookMutationsTests : ProjectDbTestBase
 
     // ── harness ──────────────────────────────────────────────────────────────
 
-    /// <summary>One Blazor circuit's worth of scoped services — its own session, its own mutations.</summary>
-    private sealed class Circuit(AsyncServiceScope scope) : IAsyncDisposable
+    /// <summary>One caller's DI scope, as a request gets — its own session, its own mutations.</summary>
+    private sealed class Caller(AsyncServiceScope scope) : IAsyncDisposable
     {
         public BookMutations Mutations { get; } = scope.ServiceProvider.GetRequiredService<BookMutations>();
         public ProjectDbSession Session { get; } = scope.ServiceProvider.GetRequiredService<ProjectDbSession>();
         public ValueTask DisposeAsync() => scope.DisposeAsync();
     }
 
-    private Circuit NewCircuit() => new(_root.CreateAsyncScope());
+    private Caller NewCaller() => new(_root.CreateAsyncScope());
 
     public override async ValueTask DisposeAsync()
     {
@@ -516,9 +516,9 @@ public class BookMutationsTests : ProjectDbTestBase
     }
 
     private static async Task<BookMutationReceipt> CommitInsertAsync(
-        Circuit circuit, ProjectFolderId folder, Guid anchorId, string text)
+        Caller caller, ProjectFolderId folder, Guid anchorId, string text)
     {
-        var outcome = await circuit.Mutations.CommitAsync(
+        var outcome = await caller.Mutations.CommitAsync(
             new InsertParagraphItemMutation(folder, anchorId, InsertPosition.After, text));
         return Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
     }

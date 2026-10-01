@@ -36,11 +36,11 @@ export interface GeneratePromptDialogResult {
 
 export type GeneratePromptPhase = 'rendering' | 'edit' | 'generating';
 
-/** The activity centre's id for the single voice-prompt run (one at a time, like Blazor's state). */
+/** The activity centre's id for the single voice-prompt run (one at a time). */
 export const VOICE_PROMPT_JOB_ID = 'voicePrompt';
 
 /**
- * Blazor's "Regenerate with AI" (research §4): the host renders the voice-design prompt template
+ * "Regenerate with AI" (research §4): the host renders the voice-design prompt template
  * for the character, the user reviews or edits it, Send to AI asks the LLM and the answer comes
  * back as the card's prompt draft. The LLM stream is inline while generating, and the run is
  * registered with the activity centre so the pill shows it. Cancel while generating closes the

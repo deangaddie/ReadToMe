@@ -3,11 +3,9 @@ using Read2Me.Services.Health;
 namespace Read2Me.App.Services.Preflight
 {
     /// <summary>
-    /// UI-agnostic state machine behind <c>AiPreflightDialog</c> and the <c>/api/preflight</c>
-    /// run. Runs the plan sequentially — conflicts stopped first to free VRAM, then required
+    /// UI-agnostic state machine behind the <c>/api/preflight</c> run. Runs the plan sequentially — conflicts stopped first to free VRAM, then required
     /// services started (docker start → health poll → warm-up, one at a time so the 8 GB GPU never
-    /// double-loads). The first failure aborts the rest; the razor dialog only maps rows to chrome
-    /// and the API coordinator only maps <see cref="StageChanged"/> to hub messages.
+    /// double-loads). The first failure aborts the rest; the API coordinator only maps <see cref="StageChanged"/> to hub messages.
     /// </summary>
     public sealed class AiPreflightProgress(IAiServiceControl control)
     {

@@ -7,7 +7,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// Themes over HTTP: list, custom CRUD, built-in protection, and the shared selection
-/// (selected theme + follow-system flag) the Blazor UI reads too.
+/// (selected theme + follow-system flag) every client reads.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ThemesApiTests(E2eAppFixture app)

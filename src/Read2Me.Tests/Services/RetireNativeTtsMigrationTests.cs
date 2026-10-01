@@ -97,8 +97,8 @@ namespace Read2Me.Tests.Services
         [Fact]
         public async Task Qwen3VoiceDesign_IsRepointed_WithPascalCaseModelId()
         {
-            // Qwen3VoiceDesignSettings has no JSON names: its forms store PascalCase and the Blazor
-            // form reads the blob case-sensitively.
+            // Qwen3VoiceDesignSettings has no JSON names: its blobs are stored PascalCase, so the
+            // repoint must keep "ModelId" in that case.
             await SeedAsync(
                 """INSERT INTO VoiceDesignServiceConfigs (Id, Name, Type, SettingsJson) VALUES (1, 'q', 'Qwen3', '{"BaseUrl":"http://localhost:8100","Language":"English"}')""");
 

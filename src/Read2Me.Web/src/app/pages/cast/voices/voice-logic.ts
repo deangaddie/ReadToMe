@@ -26,7 +26,7 @@ export function sourceSwitchWarning(voice: VoiceDto, target: VoiceSource): strin
   return null;
 }
 
-/** Fresh audio discards a voice-editor edit — allowed, but never silently (Blazor parity). */
+/** Fresh audio discards a voice-editor edit — allowed, but never silently. */
 export const EDITED_OVERWRITE_MESSAGE =
   "This voice's audio has been edited. Regenerating replaces it.";
 
@@ -34,7 +34,7 @@ export function overwriteEditWarning(voice: VoiceDto): string | null {
   return voice.isEdited ? EDITED_OVERWRITE_MESSAGE : null;
 }
 
-/** Generate audio needs a non-blank design prompt (the draft counts, as in Blazor). */
+/** Generate audio needs a non-blank design prompt (an unsaved draft counts). */
 export function canGenerateAudio(promptDraft: string | null | undefined): boolean {
   return (promptDraft ?? '').trim().length > 0;
 }

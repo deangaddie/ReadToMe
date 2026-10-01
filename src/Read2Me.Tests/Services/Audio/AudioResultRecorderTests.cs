@@ -113,7 +113,7 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         /// <summary>
-        /// The receipt reaches other circuits during the commit, so the take has to be at the path
+        /// The receipt reaches other clients during the commit, so the take has to be at the path
         /// the Book is about to name before the commit runs — not after it.
         /// </summary>
         [Fact]

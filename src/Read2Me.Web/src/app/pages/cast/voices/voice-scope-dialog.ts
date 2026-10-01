@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { PromptBatchScope } from './voice-logic';
 
 /**
- * Blazor's GenerateVoicesScopeDialog: shown before the prompt batch when any character already
+ * The generate-voices scope choice: shown before the prompt batch when any character already
  * has voices. "Clear and regenerate all" is destructive (every voice, its audio and rules go first).
  */
 @Component({

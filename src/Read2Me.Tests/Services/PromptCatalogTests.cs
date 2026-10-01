@@ -5,8 +5,8 @@ using Xunit;
 namespace Read2Me.Tests.Services
 {
     /// <summary>
-    /// The prompt catalog is what both UIs and the agent API describe a prompt kind with; every kind
-    /// must be self-consistent: its default template uses only the tokens it lists, and its sample
+    /// The prompt catalog is what the settings page and the agent API describe a prompt kind
+    /// with; every kind must be self-consistent: its default template uses only the tokens it lists, and its sample
     /// values render every listed token.
     /// </summary>
     public class PromptCatalogTests

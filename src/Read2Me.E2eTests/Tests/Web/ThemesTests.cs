@@ -7,7 +7,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// <summary>
 /// The themes page (Angular ticket 04): applying a built-in theme restyles the document at once
 /// (the <c>data-theme</c> scheme on the root), the choice survives a reload because the host stores
-/// it, and it is the same selection Blazor reads.
+/// it, and it is the one selection every client reads.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ThemesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)

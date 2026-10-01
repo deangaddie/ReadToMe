@@ -2,8 +2,8 @@ import { BulkAssignPreviewDto } from '@app/api';
 import { ConfirmOptions } from '@app/ui/confirm-dialog/confirm-dialog';
 
 /**
- * The bulk speaker assign's wording (ticket 12; the same sentences Blazor's
- * `BookHierarchyPresenter.BulkConfirmMessage` uses, so both UIs promise the same thing). A null
+ * The bulk speaker assign's wording (ticket 12): the confirmation says exactly what the command
+ * will change. A null
  * name means a clear throughout. The figures come from the preview read, never from the loaded
  * rows: a selection can cover chapters that were never opened.
  */

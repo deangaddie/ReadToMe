@@ -5,8 +5,8 @@ using Xunit;
 namespace Read2Me.Tests.Api
 {
     /// <summary>
-    /// The manual-import body's translation into <see cref="ManualReadOptions"/>: the same gates the
-    /// Blazor form applies, plus the wire's own mode names.
+    /// The manual-import body's translation into <see cref="ManualReadOptions"/>: the gates checked
+    /// before the source file is read, plus the wire's own mode names.
     /// </summary>
     public class ManualImportRequestTests
     {

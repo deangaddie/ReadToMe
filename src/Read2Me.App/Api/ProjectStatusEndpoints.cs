@@ -102,7 +102,7 @@ namespace Read2Me.App.Api
 
         /// <summary>
         /// <see cref="NodeStatusService"/> holds persisted counts only as fresh as its last seed, and
-        /// only the Blazor book view seeds it otherwise. Reseeding from the database here makes every
+        /// nothing else reseeds it from storage. Reseeding from the database here makes every
         /// read current and, through <c>Changed</c>, pushes the corrected roll-ups to hub members.
         /// </summary>
         private static async Task<IReadOnlyList<ParagraphStatusSeedRow>> SeedAsync(

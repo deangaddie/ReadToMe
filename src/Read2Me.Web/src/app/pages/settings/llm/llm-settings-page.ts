@@ -150,7 +150,7 @@ export class LlmSettingsPage implements HasUnsavedChanges {
   constructor() {
     void this.store.load();
     // Keeps the editor on a config that still exists and, while it holds no edits, on its latest
-    // saved state — a reload may carry a change made in Blazor or over the API.
+    // saved state — a reload may carry a change made in another tab or over the API.
     effect(() => {
       const configs = this.store.configs();
       if (!configs) return;

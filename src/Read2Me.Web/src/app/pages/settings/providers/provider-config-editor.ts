@@ -51,7 +51,7 @@ export interface ProviderEditTarget {
 /**
  * The in-place typed editor for one provider config of any area (ticket 22): name, type and base
  * URL, then the area's own per-config fields and the provider type's tuning fields from the host's
- * schema in one `r2m-settings-form`, then — for TTS — text processing. Blazor's config dialogs,
+ * schema in one `r2m-settings-form`, then — for TTS — text processing,
  * inside the settings editor frame, plus the managed-container status for the draft base URL.
  */
 @Component({
@@ -251,7 +251,7 @@ export class ProviderConfigEditor {
 
   /**
    * Another provider type is another settings record: its tuning starts from that type's defaults.
-   * What the area holds per config (chunking, carrier prefix) stays, as it does in Blazor's dialog.
+   * What the area holds per config (chunking, carrier prefix) stays.
    */
   protected setType(type: number): void {
     const kept = this.area().perConfigKeys;
