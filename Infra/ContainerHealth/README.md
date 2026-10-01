@@ -1,7 +1,7 @@
 # Container Health dashboard
 
 This local operator console observes and exercises Read2Me's nine AI services without
-starting the Blazor app. It is local-only: Vite binds `127.0.0.1:5173`, exposes only the
+starting the Read2Me host. It is local-only: Vite binds `127.0.0.1:5173`, exposes only the
 nine fixed proxy routes, and keeps inputs, diagnostics, and results in page memory. A
 reload discards them; there is no persistence, authentication, LAN hosting, or Docker
 control surface.

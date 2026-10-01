@@ -1,18 +1,18 @@
 # Web front end (Angular) — how it is built and how to extend it
 
-The Angular app in `src/Read2Me.Web` is the default UI; `/` redirects to it ([ADR 0008](../adr/0008-second-front-end-angular-beside-blazor.md), [ADR 0009](../adr/0009-angular-is-the-default-ui.md)). It is a thin view over the agent API ([api.md](api.md)) and the live hub; it holds no book logic of its own. The legacy Blazor UI stays beside it until it is removed. Vocabulary: [context/web.md](../../context/web.md).
+The Angular app in `src/Read2Me.Web` is the only UI; `/` redirects to it ([ADR 0008](../adr/0008-second-front-end-angular-beside-blazor.md), [ADR 0012](../adr/0012-blazor-ui-removed.md)). It is a thin view over the agent API ([api.md](api.md)) and the live hub; it holds no book logic of its own. Vocabulary: [context/web.md](../../context/web.md).
 
 ## Run, build, test
 
 | Want | Do |
 |---|---|
-| Both UIs on one host | `pwsh scripts/build-web.ps1` then `dotnet run --project src/Read2Me.App` → web app at `/app` (`/` redirects there), Blazor home at `/blazor` |
+| App on the host | `pwsh scripts/build-web.ps1` then `dotnet run --project src/Read2Me.App` → web app at `/app` (`/` redirects there) |
 | Web dev loop with live reload | host running on `:5000`, then `npm start` in `src/Read2Me.Web` → `http://localhost:4200/app/` (proxy for `/api`, `/hubs`, `/workspace`, `/openapi`) |
 | PR gate for the web project | `npm run check` (lint + typecheck + `api:check` + Vitest + build) or `pwsh scripts/build-web.ps1 -Check` |
 | Browser tests for the web app | build the bundle, then `dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"`; without a bundle every web test skips with the command to run |
 | API types after a host change | run the host, then `npm run api:types`; `api:check` fails the gate when `schema.d.ts` is stale |
 
-The .NET solution never builds the web project. `dotnet build` and the Blazor E2E tests work with no Node installed; `/app` then serves a "run npm run build" page.
+The .NET solution never builds the web project. `dotnet build` and the unit tests work with no Node installed; `/app` then serves a "run npm run build" page and every browser test skips.
 
 ## Layout (`src/Read2Me.Web/src/app`)
 
@@ -76,4 +76,4 @@ The C# side lives in `src/Read2Me.App/Live` (`LiveHub`, `LiveRelay`, `LiveMessag
 
 `E2eTestBase` (in `src/Read2Me.E2eTests/Infrastructure`) copies the built bundle into the in-proc host's web root and navigates to `/app/...`, waiting for the hub socket. It runs on the collection-shared `E2eAppFixture`: `FakeAi` (LLM/TTS/whisper replies), `FakeControl` (container statuses, op log), `Encoder` (fake ffmpeg), the seeders (`SeedProjectAsync`, `SeedThreeDialogParagraphProjectAsync`, …) and `WaitForQueueDrainAsync`. State the fixture shares across tests (a shut-down fake service, a theme selection) must be restored in a `finally`.
 
-One file per area under `Tests/Web`, named for what it proves; `LiveUpdateTests` covers two browser contexts on one host and a forced hub disconnect. The parity checklist that says which Blazor function each web route provides is `.scratch/completed/angular-frontend/parity.md`.
+One file per area under `Tests/Web`, named for what it proves; `LiveUpdateTests` covers two browser contexts on one host and a forced hub disconnect.

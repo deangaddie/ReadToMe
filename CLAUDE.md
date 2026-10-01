@@ -14,7 +14,7 @@ dotnet build src/Read2Me.App
 
 # Run (Kestrel)
 dotnet run --project src/Read2Me.App
-# https://localhost:5001 / http://localhost:5000 — `/` redirects to the Angular app at /app (default UI, ADR 0009); legacy Blazor home at /blazor
+# https://localhost:5001 / http://localhost:5000 — `/` redirects to the Angular app at /app (the only UI, ADR 0012)
 
 # Infrastructure services (run from Infra/)
 docker compose up -d llama              # LLM service
@@ -35,21 +35,21 @@ npm run build                           # emits to src/Read2Me.App/wwwroot/app/ 
 npm run check                           # lint + typecheck + api:check + test + build
 npm run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
 
-# Browser tests (both UIs): src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
-dotnet test src/Read2Me.E2eTests         # Angular tests (Tests/Web) skip unless a bundle exists in wwwroot/app
-dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the Angular suite
+# E2E tests: src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
+dotnet test src/Read2Me.E2eTests         # browser tests (Tests/Web) skip unless a bundle exists in wwwroot/app
+dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the browser suite
 # Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 ```
 
 ## Architecture
 
-**ReadToMe** orchestrates AI-powered audiobook production from text scripts. The default UI is the Angular app (`src/Read2Me.Web`), served by the host at `/app` as a thin client over the agent API and the live hub — see `docs/agents/web.md` and ADRs 0008/0009. The legacy Blazor Server UI (home at `/blazor`) remains until it is removed; add new UI work to the Angular app only.
+**ReadToMe** orchestrates AI-powered audiobook production from text scripts. The UI is the Angular app (`src/Read2Me.Web`), served by the host at `/app` as a thin client over the agent API and the live hub — see `docs/agents/web.md` and ADRs 0008/0012.
 
 ### .NET App (`src/Read2Me.App`)
 
-- **Framework**: ASP.NET Core 10, Blazor Server, `Startup.cs` pattern
+- **Framework**: ASP.NET Core 10 API host, `Startup.cs` pattern
 - **Entry**: `Program.cs` → `Startup.cs` → `ConfigureServices` / `Configure`
-- **UI**: Razor pages + Blazor components via SignalR
+- **Surface**: agent API endpoints (`Api/`), the `/hubs/live` SignalR hub (`Live/`), `/workspace`, and the Angular bundle at `/app`
 
 ### AI Infrastructure (`Infra/`)
 

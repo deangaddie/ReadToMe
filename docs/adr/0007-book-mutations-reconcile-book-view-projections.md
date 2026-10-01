@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted
+accepted. Amended by [ADR 0012](0012-blazor-ui-removed.md): the Book View projection and its adapter are gone with the Blazor UI; mutations, receipts and `LiveRelay` remain.
 
 ## Context
 

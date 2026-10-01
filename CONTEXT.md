@@ -4,7 +4,7 @@ Domain vocabulary for ReadToMe. Use these terms exactly in code, tests, and disc
 
 | Area | File | Covers |
 | ---- | ---- | ------ |
-| Book structure, view, selection, status | [context/book-structure.md](context/book-structure.md) | Volume…ParagraphItem hierarchy, speech vs pause + `NarrationRule`, Book Hierarchy, Alias, Book View Mode, Book mutation + receipt, Book View projection/snapshot, Character paragraph, Folder/Audio Item Selection, Roll-up, Generatable item, Node Status Badge/roll-up |
+| Book structure, view, selection, status | [context/book-structure.md](context/book-structure.md) | Volume…ParagraphItem hierarchy, speech vs pause + `NarrationRule`, Book Hierarchy, Alias, Book mutation + receipt, Character paragraph, paragraph/audio item selection, Roll-up, Generatable item, Node Status Badge/roll-up |
 | Voice rules | [context/voice-rules.md](context/voice-rules.md) | Voice, Voice Rule, default rule, Position, Anchor, evaluation, effective Character, `VoiceResolver`, `NodeOrderTables`, `AnchorSpanResolver`, dangling anchor, rule editor, resolved preview, Reference Limit |
 | Character attribution | [context/attribution.md](context/attribution.md) | Character attribution, unattributed, processed/unprocessed, Character Queue + what it asks about, item attribution/frozen boundaries/chunk, escalation chain, narrator link + linked character + `narrator` wire alias |
 | LLM infrastructure | [context/llm.md](context/llm.md) | Constrained completion, Completion Runner, completion scanner stop, Run outcome, Thinking budget, Health streak |
@@ -13,4 +13,4 @@ Domain vocabulary for ReadToMe. Use these terms exactly in code, tests, and disc
 | Semantic verification | [context/semantic-verification.md](context/semantic-verification.md) | Semantic Similarity Check, Semantic Rescue, `ISemanticVerifier` |
 | Audiobook assembly & live-event infra | [context/assembly.md](context/assembly.md) | Audiobook Assembly, manifest, pauses, concat/chapters/cover, `EventBroadcaster<T>`, `VoiceBatchRunner`, Sweep Phase |
 | Container health dashboard | [context/container-health-dashboard.md](context/container-health-dashboard.md) | Service Adapter, shared operator-console boundary |
-| Web front end (Angular) | [context/web.md](context/web.md) | Web app vs Blazor UI, Live relay + event family, Activity centre, Reader mode, Pipeline step, Preflight sheet, Managed service status, `r2m-*` component library, Web E2E |
+| Web front end (Angular) | [context/web.md](context/web.md) | Web app, Live relay + event family, Activity centre, Reader mode, Pipeline step, Preflight sheet, Managed service status, `r2m-*` component library, Web E2E |

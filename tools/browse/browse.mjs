@@ -157,16 +157,6 @@ export function waitForTreeTitles(page, expected, timeoutMs = 8000) {
   );
 }
 
-// ---- Blazor (/) -------------------------------------------------------------------------------
-
-/** Opens a Blazor page and waits for the circuit (the page's own websocket) before returning. */
-export async function openBlazor(page, path) {
-  const ws = page.waitForEvent('websocket', { timeout: 15_000 });
-  await page.goto(`${HOST}${path}`);
-  await ws;
-  await page.waitForLoadState('networkidle');
-}
-
 /** Visible text of the page, whitespace-collapsed (textContent would include stylesheets). */
 export const visibleText = async (page) =>
   (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ');

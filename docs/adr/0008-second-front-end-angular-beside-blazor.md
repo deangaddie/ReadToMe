@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-09-23; spike branch `spike/angular-frontend`, tickets 01–26 in `.scratch/completed/angular-frontend/`)
+accepted (2026-09-23; spike branch `spike/angular-frontend`, tickets 01–26 in `.scratch/completed/angular-frontend/`). Superseded in part by [ADR 0012](0012-blazor-ui-removed.md): the Blazor UI is removed.
 
 ## Context
 

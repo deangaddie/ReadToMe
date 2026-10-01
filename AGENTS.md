@@ -1,18 +1,18 @@
 # AGENTS for ReadToMe
 
-This repository is a Blazor Server app (with a second, Angular front end served at `/app` — see `docs/agents/web.md`) plus AI inference infrastructure for audiobook production, with GPU-backed generation services and CPU-only transcription/semantic services.
+This repository is an ASP.NET Core API host with an Angular front end served at `/app` (see `docs/agents/web.md`), plus AI inference infrastructure for audiobook production, with GPU-backed generation services and CPU-only transcription/semantic services.
 
 ## Use when
 
 - working on code in `src/Read2Me.App`
-- updating or extending the Blazor Server app
+- updating or extending the API host or the Angular app
 - changing AI service orchestration or Docker-based inference dependencies
 - fixing build/run issues for the .NET app or the `Infra/` services
 
 ## Key facts
 
-- App: `src/Read2Me.App` is an ASP.NET Core 10 Blazor Server app using the `Program.cs` + `Startup.cs` pattern.
-- UI: Razor pages and Blazor components under `Pages/` and `Shared/`.
+- App: `src/Read2Me.App` is an ASP.NET Core 10 host using the `Program.cs` + `Startup.cs` pattern: agent API under `Api/`, the live hub under `Live/`.
+- UI: the Angular app in `src/Read2Me.Web`, built into `src/Read2Me.App/wwwroot/app` and served at `/app`.
 - Solution: `src/Read2Me.slnx`.
 - Infra: `Infra/` contains GPU-backed LLM/TTS containers plus CPU-only Whisper and semantic similarity containers.
 - Models: `Infra/models/` holds GGUF model files by default; these are not committed and must be provided separately. `GGUF_MODELS_DIR` in `Infra/.env` can point the llama mount at a shared directory outside the repo.
@@ -48,7 +48,7 @@ docker logs -f <container>     # follow logs
 ## Relevant files
 
 - `CLAUDE.md` — repository overview, build/run commands, and architecture summary
-- `docs/agents/web.md` — the Angular web front end (`src/Read2Me.Web`, served at `/app` beside the Blazor UI): layout, lint rules, adding a page, the live hub contract, browser tests; vocabulary in `context/web.md`
+- `docs/agents/web.md` — the Angular web front end (`src/Read2Me.Web`, served at `/app`): layout, lint rules, adding a page, the live hub contract, browser tests; vocabulary in `context/web.md`
 - `CONTEXT.md` — domain glossary index; read before any architecture work, then load only the `context/*.md` section file(s) for the area you're touching
 - `Infra/README.md` — Docker service details, ports, supported endpoints, and usage notes
 - `Infra/docker-compose.yml` — container orchestration for all services

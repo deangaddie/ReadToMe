@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-09-24). Amends the hosting part of [ADR 0008](0008-second-front-end-angular-beside-blazor.md).
+accepted (2026-09-24). Amends the hosting part of [ADR 0008](0008-second-front-end-angular-beside-blazor.md). Superseded in part by [ADR 0012](0012-blazor-ui-removed.md): the Blazor UI is removed.
 
 ## Context
 
