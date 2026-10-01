@@ -10,7 +10,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// stamped with a speaker and audio so the test can see the insertion leave that work alone.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class InsertItemTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class InsertItemTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
     public async Task Insert_item_after_adds_an_unattributed_row_and_leaves_the_anchor_alone()

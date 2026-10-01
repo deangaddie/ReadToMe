@@ -12,7 +12,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// run, and cancel from the pill. The fake LLM is slowed so the queue is observable while busy.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private LiveConnectionRegistry Registry => App.Services.GetRequiredService<LiveConnectionRegistry>();
 

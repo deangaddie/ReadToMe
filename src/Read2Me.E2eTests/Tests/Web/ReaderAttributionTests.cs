@@ -10,7 +10,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// assign, bulk-assign and clear speakers by hand.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
     public async Task Select_unprocessed_attribute_and_watch_the_rows_resolve()

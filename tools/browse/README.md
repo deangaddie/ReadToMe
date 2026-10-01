@@ -3,7 +3,7 @@
 For ad-hoc verification and bug hunting against a real host: write a short `.mjs` script with
 the helpers in `browse.mjs`, run it, read the log. Automated E2E tests do **not** live here —
 they are in `src/Read2Me.E2eTests` (xUnit + Microsoft.Playwright, in-proc host, fake AI), with
-Angular pages under `Tests/Web/` on `WebE2eTestBase`.
+Angular pages under `Tests/Web/` on `E2eTestBase`.
 
 ```bash
 cd tools/browse && npm ci            # playwright-core only; Chromium is the one the E2E tests installed

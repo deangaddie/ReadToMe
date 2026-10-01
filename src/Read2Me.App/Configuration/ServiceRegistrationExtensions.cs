@@ -8,12 +8,9 @@ using Read2Me.App.Audio;
 using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
 using Read2Me.App.Services.Preflight;
-using Read2Me.App.State;
-using Read2Me.App.State.Projection;
 using Read2Me.Services.Queueing;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
-using Read2Me.App.Shared.BookMenus;
 using Read2Me.AppData;
 using Read2Me.Data;
 using Read2Me.Services;
@@ -66,11 +63,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ProjectUseCases>();
         services.AddScoped<BookUseCases>();
         services.AddScoped<EnqueueUseCases>();
-        services.AddScoped<IBookProjectLoader, BookProjectLoader>();
-        services.AddScoped<ISelectionCoordinator, BookSelectionCoordinator>();
-        services.AddScoped<BookHierarchyPresenter>();
-        // One per circuit: a Book View projection is one reader's view of one Book (ADR 0007).
-        services.AddScoped<BookViewProjection>();
 
         services.AddSingleton<EpubFileReader>();
         services.AddSingleton<TextFileReader>();
@@ -213,8 +205,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IChainStep>(sp => sp.GetRequiredService<CharacterAttributionService>());
         services.AddScoped<AttributionEscalationChain>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
-        services.AddScoped<CharacterPresenter>();
-        services.AddScoped<Read2Me.App.State.VoicePromptGenerationState>();
         services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();
         services.AddSingleton<VoiceBatchRunner>();
 
@@ -252,13 +242,12 @@ public static class ServiceRegistrationExtensions
             sp.GetRequiredService<IAiServiceControl>(), sp.GetRequiredService<EventBroadcaster<ServiceStatusChanged>>()));
         services.AddSingleton<Read2Me.App.Live.AiServiceOpCoordinator>();
         services.AddSingleton<Read2Me.App.Live.PreflightRunCoordinator>();
-        // Scoped: the resolver reads per-circuit settings services and the gate shows a dialog.
+        // Scoped: the resolver reads the scoped settings services.
         services.AddScoped<IAiTaskRequirementsResolver, AiTaskRequirementsResolver>();
         services.AddScoped<IAiPreflightPlanner>(sp => new AiPreflightPlanner(
             sp.GetRequiredService<IAiTaskRequirementsResolver>(),
             sp.GetRequiredService<ObservedAiServiceControl>(),
             sp.GetRequiredService<DockerAiServiceRegistry>()));
-        services.AddScoped<IAiPreflight, AiPreflight>();
         return services;
     }
 
@@ -279,10 +268,6 @@ public static class ServiceRegistrationExtensions
     public static IServiceCollection AddAppState(this IServiceCollection services)
     {
         services.AddSingleton<ThemeService>();
-        services.AddScoped<BookTreeState>();
-        services.AddScoped<BookSelectionState>();
-        services.AddScoped<AudioItemSelectionState>();
-        services.AddScoped<MenuActions>();
         return services;
     }
 

@@ -44,9 +44,6 @@ namespace Read2Me.App.Api
                 .WithSummary("Change the selected theme and/or the follow-system flag; both fields optional.");
         }
 
-        // TODO(06): relay ThemeService.OnThemeChanged as `settingsChanged { area: 'themes' }` on the live hub.
-
-
         private static async Task<IResult> ListAsync(ThemeService svc) =>
             Results.Ok(await svc.GetAllThemesAsync());
 

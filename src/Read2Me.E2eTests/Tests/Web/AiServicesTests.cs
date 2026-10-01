@@ -11,7 +11,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// action on a cold LLM raises the sheet, starts the service with stages, then runs.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class AiServicesTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class AiServicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private ILocator Card(string name) => Page.Locator($".services-page__card[data-service='{name}']");
 

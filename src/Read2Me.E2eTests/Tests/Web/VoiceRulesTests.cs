@@ -12,7 +12,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// Blazor tab renders from.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 

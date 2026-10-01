@@ -11,7 +11,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// tree's node menu lands in the host and comes back through the reader's own receipt.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
     public async Task Mode_toggle_round_trips_the_url_and_the_row_shape()

@@ -10,7 +10,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// the host's item type, and whether audio mode lets the item be picked for generation.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class NarratorPickerTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class NarratorPickerTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const string Folder = "web-narrator-picker";
 

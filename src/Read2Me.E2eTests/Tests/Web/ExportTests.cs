@@ -9,7 +9,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// downloads, missing audio offers a partial build, and Cancel mid-encode shows Cancelled.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private ILocator Phase(string phase) => Page.Locator($"app-export-page [data-phase='{phase}']");
     private ILocator Outputs => Page.Locator("app-export-page [data-output]");

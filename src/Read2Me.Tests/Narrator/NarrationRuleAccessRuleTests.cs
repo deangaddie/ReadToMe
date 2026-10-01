@@ -71,8 +71,7 @@ namespace Read2Me.Tests.Narrator
         /// <summary>Production only — tests and fixtures arrange the sentinel as a value.</summary>
         private static IEnumerable<string> ProductionSourceFiles() =>
             Directory.EnumerateFiles(SourceRoot(), "*.*", SearchOption.AllDirectories)
-                .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                         || f.EndsWith(".razor", StringComparison.OrdinalIgnoreCase))
+                .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}"))

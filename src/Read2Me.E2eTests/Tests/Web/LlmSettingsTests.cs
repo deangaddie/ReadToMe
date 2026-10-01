@@ -13,7 +13,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// chain reordered and read back over the API.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 

@@ -6,8 +6,8 @@ namespace Read2Me.App.Api
 {
     /// <summary>
     /// Single wiring point for the agent-facing HTTP API. Everything lives under /api;
-    /// the trailing fallback keeps unknown /api paths out of the Blazor _Host page so
-    /// they 404 like an API should instead of returning the app shell.
+    /// the trailing fallback keeps unknown /api paths a plain 404, as an API should,
+    /// whatever catch-all the host maps beside it.
     /// </summary>
     public static class AgentApiEndpoints
     {

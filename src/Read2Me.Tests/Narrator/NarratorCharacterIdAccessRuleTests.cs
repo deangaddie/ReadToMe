@@ -69,8 +69,7 @@ namespace Read2Me.Tests.Narrator
 
         private static IEnumerable<string> SourceFiles() =>
             Directory.EnumerateFiles(SourceRoot(), "*.*", SearchOption.AllDirectories)
-                .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                         || f.EndsWith(".razor", StringComparison.OrdinalIgnoreCase))
+                .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
                 // Migrations and the model snapshot are generated schema, not consumers.

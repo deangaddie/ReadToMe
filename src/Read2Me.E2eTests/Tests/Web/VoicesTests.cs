@@ -12,7 +12,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// settings override round trip, and the prompt batch landing on the cards from hub events.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 

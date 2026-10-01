@@ -12,10 +12,10 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// <summary>
 /// The audio-processing settings page (Angular ticket 24) against the real host: change the
 /// silence-trim threshold, audition it on a recent sample through the A/B preview, save it, and
-/// read the new value back on Blazor's page.
+/// read the new value back on a fresh load.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 
@@ -29,7 +29,7 @@ public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture p
             .Single(s => s.GetProperty("stepId").GetString() == AudioPostProcessStepIds.SilenceTrim);
 
     [Fact]
-    public async Task Trim_threshold_preview_on_a_recent_sample_save_and_Blazor_shows_it()
+    public async Task Trim_threshold_preview_on_a_recent_sample_save_and_reload_shows_it()
     {
         var folder = $"web-audio-{Guid.NewGuid():N}";
         var builder = await App.SeedProjectAsync(folder, "Audio Settings Book", "Author");
@@ -77,9 +77,9 @@ public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture p
             await Expect(Save).ToBeDisabledAsync();
             Assert.Equal(-42, (await TrimStepAsync()).GetProperty("settings").GetProperty("thresholdDb").GetDouble());
 
-            // Blazor's page shows the new value.
-            await GotoAsync("/audio-processing-settings");
-            await Expect(Page.GetByLabel("Silence threshold (dB)")).ToHaveValueAsync("-42");
+            // A fresh load of the page shows the saved value.
+            await GotoAppAsync("/app/settings/audio");
+            await Expect(Threshold).ToHaveValueAsync("-42");
         }
         finally
         {

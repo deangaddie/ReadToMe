@@ -44,7 +44,7 @@ The .NET solution never builds the web project. `dotnet build` and the Blazor E2
 3. Build the view from `@app/ui` components. A missing building block goes into `ui/` with a story on the styleguide, not into the page.
 4. Gate any AI action with `await preflight.ensureReady('<task>')`; the task kinds are `attribution`, `audio`, `voicePrompt`, `discovery`, `voiceDesign`, `transcription`, `bookEdit`.
 5. Mutations: send the command, do nothing with the response, and let the receipt (`LiveService.on('receipt')`) drive the reload. Show `ProblemDetails.detail` from the typed error on failure.
-6. Tests: a Vitest spec beside the page for state and rendering; a browser test under `src/Read2Me.E2eTests/Tests/Web/<Area>Tests.cs` on `WebE2eTestBase` for the round trip through the host. Locate by `r2m-*` element or host class, BEM classes, `data-action` / `data-entry` / `data-testid` attributes, or ARIA roles and labels. Material element tags (`mat-select`, `mat-option`, `mat-dialog-container`) and the overlay panel (`.mat-mdc-menu-panel`) are acceptable handles; a component's internal `.mat-mdc-*` structure is not.
+6. Tests: a Vitest spec beside the page for state and rendering; a browser test under `src/Read2Me.E2eTests/Tests/Web/<Area>Tests.cs` on `E2eTestBase` for the round trip through the host. Locate by `r2m-*` element or host class, BEM classes, `data-action` / `data-entry` / `data-testid` attributes, or ARIA roles and labels. Material element tags (`mat-select`, `mat-option`, `mat-dialog-container`) and the overlay panel (`.mat-mdc-menu-panel`) are acceptable handles; a component's internal `.mat-mdc-*` structure is not.
 
 ## The hub contract (`/hubs/live`)
 
@@ -74,6 +74,6 @@ The C# side lives in `src/Read2Me.App/Live` (`LiveHub`, `LiveRelay`, `LiveMessag
 
 ## Browser tests
 
-`WebE2eTestBase` (in `src/Read2Me.E2eTests/Infrastructure`) copies the built bundle into the in-proc host's web root and navigates to `/app/...`, waiting for the hub socket. It shares `E2eAppFixture` with the Blazor tests: `FakeAi` (LLM/TTS/whisper replies), `FakeControl` (container statuses, op log), `Encoder` (fake ffmpeg), the seeders (`SeedProjectAsync`, `SeedThreeDialogParagraphProjectAsync`, …) and `WaitForQueueDrainAsync`. State the fixture shares across tests (a shut-down fake service, a theme selection) must be restored in a `finally`.
+`E2eTestBase` (in `src/Read2Me.E2eTests/Infrastructure`) copies the built bundle into the in-proc host's web root and navigates to `/app/...`, waiting for the hub socket. It runs on the collection-shared `E2eAppFixture`: `FakeAi` (LLM/TTS/whisper replies), `FakeControl` (container statuses, op log), `Encoder` (fake ffmpeg), the seeders (`SeedProjectAsync`, `SeedThreeDialogParagraphProjectAsync`, …) and `WaitForQueueDrainAsync`. State the fixture shares across tests (a shut-down fake service, a theme selection) must be restored in a `finally`.
 
 One file per area under `Tests/Web`, named for what it proves; `LiveUpdateTests` covers two browser contexts on one host and a forced hub disconnect. The parity checklist that says which Blazor function each web route provides is `.scratch/completed/angular-frontend/parity.md`.

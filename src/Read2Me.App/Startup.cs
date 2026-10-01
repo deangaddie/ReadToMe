@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using MudBlazor.Services;
 using Read2Me.App.Api;
 using Read2Me.App.Configuration;
 using Read2Me.App.Live;
@@ -45,9 +44,7 @@ namespace Read2Me.App
             services.AddLiveHub();
 
             services.AddHttpClient();
-            services.AddRazorPages();
-            services.AddServerSideBlazor();
-            services.AddMudServices();
+            services.AddProblemDetails();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IOptions<WorkspaceOptions> workspaceOptions)
@@ -58,7 +55,7 @@ namespace Read2Me.App
             }
             else
             {
-                app.UseExceptionHandler("/Error");
+                app.UseExceptionHandler();
                 app.UseHsts();
             }
 
@@ -108,21 +105,19 @@ namespace Read2Me.App
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapBlazorHub();
                 endpoints.MapGet("/audio-preview/{token}", ServeAudioPreviewAsync);
                 endpoints.MapGet("/preview-source/{folder}/{id}", ServePreviewSourceAsync);
                 endpoints.MapAgentApi();
                 endpoints.MapLiveHub();
-                // The Angular app is the default UI (ADR 0009); the Blazor home lives at /blazor.
+                // The Angular app is the only UI; the root sends a browser to it.
                 endpoints.MapGet("/", ctx =>
                 {
                     ctx.Response.Redirect("/app/");
                     return Task.CompletedTask;
                 });
-                // The Angular app owns /app; its SPA fallback must run before Blazor's _Host catch-all.
+                // The Angular app owns /app; any other unmatched URL is a plain 404.
                 endpoints.MapFallback("/app", ctx => ServeAngularAppAsync(ctx, env));
                 endpoints.MapFallback("/app/{**path}", ctx => ServeAngularAppAsync(ctx, env));
-                endpoints.MapFallbackToPage("/_Host");
             });
         }
 
@@ -147,7 +142,7 @@ namespace Read2Me.App
 
         /// SPA fallback for the Angular app: every unmatched /app/... URL gets the bundle's index.html
         /// so client-side routes deep-link. When the bundle has not been built the same URLs get a
-        /// static "how to build it" page instead — never Blazor's _Host.
+        /// static "how to build it" page instead.
         ///
         /// The bundle is looked up on the physical web root (one stat per request) rather than the
         /// WebRootFileProvider: in Development that provider is a composite over the static-web-assets

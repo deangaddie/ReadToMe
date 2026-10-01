@@ -7,11 +7,11 @@ namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
 /// The prompts settings page (Angular ticket 23) against the real host: edit the character prompt,
-/// preview it with the sample book, save it, see the override and its compatibility warning in
-/// Blazor's page too, then reset to the built-in default.
+/// preview it with the sample book, save it, see the override and its compatibility warning survive
+/// a reload, then reset to the built-in default.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 
@@ -25,7 +25,7 @@ public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : WebE
             .RootElement.EnumerateArray().Single(k => k.GetProperty("kind").GetString() == kind);
 
     [Fact]
-    public async Task Character_prompt_edit_preview_save_shows_in_Blazor_and_reset_restores_default()
+    public async Task Character_prompt_edit_preview_save_survives_reload_and_reset_restores_default()
     {
         const string edited = "Who speaks in {{book_title}}?\n{{context_json}}\n{{response_format}}";
         try
@@ -61,14 +61,11 @@ public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : WebE
             Assert.True(stored.GetProperty("isOverridden").GetBoolean());
             Assert.Equal(edited, stored.GetProperty("template").GetString());
 
-            // Blazor's page shows the same override and the same warning.
-            await GotoAsync("/llm-prompts");
-            await Expect(Page.Locator("textarea").First).ToHaveValueAsync(edited);
-            await Expect(Page.Locator(".mud-chip", new() { HasText = "Stored override missing" })).ToBeVisibleAsync();
-
-            // Reset to default from the Angular page.
+            // A fresh load shows the same override and the same warning; reset it to the default.
             await GotoAppAsync("/app/settings/prompts");
             await Expect(Template).ToHaveValueAsync(edited);
+            await Expect(Page.Locator("[data-role='prompt-warning']"))
+                .ToContainTextAsync("Stored override missing {{narrator_identity}}");
             await Page.Locator("[data-action='reset-prompt']").ClickAsync();
             await Page.Locator("r2m-confirm-dialog button", new() { HasText = "Reset" }).ClickAsync();
             await Expect(Template).ToHaveValueAsync(PromptTemplates.DefaultCharacterPrompt);

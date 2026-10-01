@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Events;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -13,43 +14,21 @@ namespace Read2Me.Tests.Services
             new(Factory, NullLogger<ThemeService>.Instance);
 
         // ---------------------------------------------------------------
-        // Seeding / GetCurrentThemeAsync
+        // Seeding / GetAllThemesAsync
         // ---------------------------------------------------------------
 
         [Fact]
-        public async Task GetCurrentThemeAsync_EmptyDb_SeedsBuiltInsAndReturnsFirst()
+        public async Task GetAllThemesAsync_EmptyDb_SeedsBuiltInsAndASettingsRow()
         {
             var svc = CreateService();
 
-            var (theme, isDark, follow) = await svc.GetCurrentThemeAsync();
-
-            Assert.NotNull(theme);
-            Assert.False(isDark);   // first seeded theme is "Light"
-            Assert.False(follow);
+            await svc.GetAllThemesAsync();
 
             await using var db = await Factory.CreateDbContextAsync();
             Assert.True(await db.Themes.CountAsync(t => t.IsBuiltIn) >= 2);
             Assert.Equal(1, await db.Settings.CountAsync());
-        }
-
-        [Fact]
-        public async Task GetCurrentThemeAsync_SelectedTheme_ReturnsIt()
-        {
-            var svc = CreateService();
-            await svc.GetCurrentThemeAsync(); // seed
-
-            await using (var db = await Factory.CreateDbContextAsync())
-            {
-                var dark = await db.Themes.SingleAsync(t => t.Name == "Dark");
-                var settings = await db.Settings.SingleAsync();
-                settings.SelectedThemeId = dark.Id;
-                await db.SaveChangesAsync();
-            }
-
-            // Fresh service — the old one still holds the cached "Light" theme.
-            var (_, isDark, _) = await CreateService().GetCurrentThemeAsync();
-
-            Assert.True(isDark);
+            Assert.Null(await svc.GetSelectedThemeIdAsync());
+            Assert.False(await svc.GetFollowSystemPreferenceAsync());
         }
 
         [Fact]
@@ -81,33 +60,29 @@ namespace Read2Me.Tests.Services
         // ---------------------------------------------------------------
 
         [Fact]
-        public async Task SetSelectedThemeAsync_PersistsAndInvalidatesCache()
+        public async Task SetSelectedThemeAsync_Persists()
         {
             var svc = CreateService();
-            var (_, initialDark, _) = await svc.GetCurrentThemeAsync();
-            Assert.False(initialDark);
-
             var themes = await svc.GetAllThemesAsync();
             var dark = themes.Single(t => t.Name == "Dark");
 
             await svc.SetSelectedThemeAsync(dark.Id);
 
-            Assert.Equal(dark.Id, await svc.GetSelectedThemeIdAsync());
-            var (_, isDark, _) = await svc.GetCurrentThemeAsync();
-            Assert.True(isDark);
+            Assert.Equal(dark.Id, await CreateService().GetSelectedThemeIdAsync());
         }
 
         [Fact]
-        public async Task SetSelectedThemeAsync_RaisesOnThemeChanged()
+        public async Task SetSelectedThemeAsync_PublishesAThemesSettingsChange()
         {
-            var svc = CreateService();
+            var changes = new EventBroadcaster<SettingsChanged>();
+            var svc = new ThemeService(Factory, NullLogger<ThemeService>.Instance, changes);
             var themes = await svc.GetAllThemesAsync();
-            var raised = false;
-            svc.OnThemeChanged += () => raised = true;
+            var published = new List<SettingsChanged>();
+            changes.Event += published.Add;
 
             await svc.SetSelectedThemeAsync(themes.First().Id);
 
-            Assert.True(raised);
+            Assert.Equal([new SettingsChanged(SettingsArea.Themes)], published);
         }
 
         // ---------------------------------------------------------------
@@ -126,18 +101,16 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task UpdateThemeAsync_ActiveTheme_NextGetReflectsChange()
+        public async Task UpdateThemeAsync_CustomTheme_PersistsTheChange()
         {
             var svc = CreateService();
             var custom = await svc.CreateThemeAsync(new AppTheme { Name = "Mine", IsDark = false });
-            await svc.SetSelectedThemeAsync(custom.Id);
-            await svc.GetCurrentThemeAsync(); // prime cache
 
             custom.IsDark = true;
             await svc.UpdateThemeAsync(custom);
 
-            var (_, isDark, _) = await svc.GetCurrentThemeAsync();
-            Assert.True(isDark);
+            var themes = await svc.GetAllThemesAsync();
+            Assert.True(themes.Single(t => t.Id == custom.Id).IsDark);
         }
 
         [Fact]
@@ -210,13 +183,11 @@ namespace Read2Me.Tests.Services
         public async Task SetFollowSystemPreferenceAsync_RoundTrips()
         {
             var svc = CreateService();
-            await svc.GetCurrentThemeAsync(); // seed
+            await svc.GetAllThemesAsync(); // seed
 
             await svc.SetFollowSystemPreferenceAsync(true);
 
             Assert.True(await svc.GetFollowSystemPreferenceAsync());
-            var (_, _, follow) = await svc.GetCurrentThemeAsync();
-            Assert.True(follow);
         }
     }
 }

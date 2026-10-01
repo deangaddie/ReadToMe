@@ -5,9 +5,9 @@ namespace Read2Me.E2eTests.Tests;
 
 /// <summary>
 /// Plain-HTTP checks that the host serves the Angular bundle under /app (SPA fallback for deep
-/// links, cache headers) and a friendly not-built page when the bundle is absent — without ever
-/// falling through to Blazor's _Host. The fixture's web root is a throwaway directory, so each
-/// test stages exactly the files it needs.
+/// links, cache headers) and a friendly not-built page when the bundle is absent, and that nothing
+/// outside /app falls back to it. The fixture's web root is a throwaway directory, so each test
+/// stages exactly the files it needs.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class WebHostingTests(E2eAppFixture app)
@@ -28,7 +28,6 @@ public class WebHostingTests(E2eAppFixture app)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("npm run build", html);
-        Assert.DoesNotContain("_framework/blazor.server.js", html);
         Assert.DoesNotContain("<app-root>", html);
     }
 
@@ -76,20 +75,46 @@ public class WebHostingTests(E2eAppFixture app)
     }
 
     [Fact]
-    public async Task Blazor_home_and_api_are_untouched_by_the_app_fallback()
+    public async Task Api_is_untouched_by_the_app_fallback()
     {
         StageBundle();
         try
         {
-            var root = await Http.GetAsync(app.BaseUrl + "/blazor");
-            var rootHtml = await root.Content.ReadAsStringAsync();
             var api = await Http.GetAsync(app.BaseUrl + "/api/projects");
 
-            Assert.Equal(HttpStatusCode.OK, root.StatusCode);
-            Assert.Contains("_framework/blazor.server.js", rootHtml);
-            Assert.DoesNotContain(IndexMarker, rootHtml);
             Assert.Equal(HttpStatusCode.OK, api.StatusCode);
             Assert.Equal("application/json", api.Content.Headers.ContentType?.MediaType);
+        }
+        finally
+        {
+            RemoveBundle();
+        }
+    }
+
+    /// <summary>
+    /// The retired Blazor UI's routes and assets are gone for good: no page, no redirect, and no
+    /// fall-through to the Angular index. Only <c>/</c> still sends a browser to <c>/app/</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("/blazor")]
+    [InlineData("/project/foundation")]
+    [InlineData("/llm-settings")]
+    [InlineData("/llm-prompts")]
+    [InlineData("/audio-processing-settings")]
+    [InlineData("/_blazor")]
+    [InlineData("/_framework/blazor.server.js")]
+    [InlineData("/_content/MudBlazor/MudBlazor.min.css")]
+    [InlineData("/css/app.css")]
+    public async Task Retired_blazor_routes_are_not_found(string path)
+    {
+        StageBundle();
+        try
+        {
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            var response = await http.GetAsync(app.BaseUrl + path);
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.DoesNotContain(IndexMarker, await response.Content.ReadAsStringAsync());
         }
         finally
         {

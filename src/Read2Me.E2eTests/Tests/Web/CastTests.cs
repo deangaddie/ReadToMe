@@ -10,7 +10,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// rename landing in the host so Blazor beside it sees the same name.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class CastTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class CastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 

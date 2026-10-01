@@ -9,7 +9,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// the dialog with a text upload and lands on the shelf, and delete removes it from the host.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class ProjectsShelfTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class ProjectsShelfTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
     public async Task Shelf_shows_the_seeded_card_and_a_created_project_until_it_is_deleted()

@@ -10,7 +10,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// it, and it is the same selection Blazor reads.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class ThemesTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class ThemesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
     public async Task Apply_restyles_immediately_persists_and_is_shared_with_the_host()

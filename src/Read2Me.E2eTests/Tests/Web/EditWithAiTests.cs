@@ -7,10 +7,10 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// <summary>
 /// Edit with AI in the web reader (Angular ticket 19) end to end on the fake-AI host: instruct →
 /// plan → propose → review, with a hand edit and a per-row retry, then one apply that the reader
-/// picks up from its own receipt and Blazor agrees with.
+/// picks up from its own receipt and a fresh load confirms.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     /// <summary>An LLM plan that hands every chapter title to the model to rewrite.</summary>
     private const string LlmPlan =
@@ -96,13 +96,13 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTe
         await Expect(Page.Locator(".tree__title"))
             .ToHaveTextAsync(["Chapter The First", "Chapter The Second", "Chapter 3"]);
 
-        // 7. The host agrees, and so does Blazor.
+        // 7. The host agrees: a fresh load of the reader shows the persisted titles.
         var children = await Page.APIRequest.GetAsync(
             $"{App.BaseUrl}/api/projects/{folder}/book");
         Assert.Contains("\"totalChapters\":3", await children.TextAsync());
-        await GotoAsync($"/project/{folder}");
-        await Expect(Page.GetByText("Chapter The First").First).ToBeVisibleAsync(new() { Timeout = 30_000 });
-        await Expect(Page.GetByText("Chapter The Second").First).ToBeVisibleAsync();
+        await GotoAppAsync($"/app/projects/{folder}/book");
+        await Expect(Page.Locator(".tree__title"))
+            .ToHaveTextAsync(["Chapter The First", "Chapter The Second", "Chapter 3"], new() { Timeout = 30_000 });
     }
 
     [Fact]

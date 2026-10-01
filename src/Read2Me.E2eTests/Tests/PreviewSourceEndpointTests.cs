@@ -90,8 +90,8 @@ public class PreviewSourceEndpointTests(E2eAppFixture app)
     public async Task Folder_that_is_not_a_bare_path_segment_is_404()
     {
         // The folder name reaches the app from a URL, so it must never be combined into a path.
-        // An *un*-encoded "../.." never gets here — the client normalises it away and it lands on the
-        // Blazor fallback page — so the encoded form is the one that actually reaches the route.
+        // An *un*-encoded "../.." never gets here — the client normalises it away before the request
+        // is sent — so the encoded form is the one that actually reaches the route.
         var itemId = Guid.NewGuid();
         await SaveAsync(itemId, [1, 2, 3, 4]);
 

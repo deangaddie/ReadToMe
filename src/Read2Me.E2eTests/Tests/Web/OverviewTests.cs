@@ -10,7 +10,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// fake LLM, and the step turns done from hub roll-ups without a reload.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class OverviewTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class OverviewTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
     public async Task Attribute_from_the_stepper_advances_the_step_live()

@@ -3,17 +3,25 @@ using Microsoft.Playwright;
 namespace Read2Me.E2eTests.Infrastructure;
 
 /// <summary>
-/// Fresh browser context + page per test (isolated Blazor circuit).
-/// Interact only after <see cref="GotoAsync"/> returns — it waits for the
-/// SignalR circuit, because clicks on prerendered static HTML are dropped.
-///
-/// On failure, saves a Playwright trace (.zip), a final screenshot, and the
-/// session video under artifacts/&lt;test-name&gt;/ (gitignored — see repo
-/// .gitignore's generic "artifacts/" rule). Passing tests keep nothing.
-/// Open a trace with: npx playwright show-trace &lt;path&gt;
+/// Base for tests that drive the Angular web app (<c>/app/...</c>) on the in-proc host: a fresh
+/// browser context and page per test, over the collection's shared fixture, fakes and seeders.
+/// <para>
+/// The host's web root is a throwaway directory, so the bundle <c>npm run build</c> emitted into
+/// <c>src/Read2Me.App/wwwroot/app</c> is copied in before every test (other tests in the collection
+/// stage and remove stub bundles there). Without a built bundle the test is skipped with the
+/// command that produces one, never failed: the .NET build does not touch the web project.
+/// </para>
+/// <para>
+/// On failure, saves a Playwright trace (.zip), a final screenshot, and the session video under
+/// artifacts/&lt;test-name&gt;/ (gitignored — see repo .gitignore's generic "artifacts/" rule).
+/// Passing tests keep nothing. Open a trace with: npx playwright show-trace &lt;path&gt;
+/// </para>
 /// </summary>
 public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAsyncLifetime
 {
+    /// <summary>Where <c>npm run build</c> puts the bundle, found from the test binary upwards.</summary>
+    public static string? BuiltBundleDir { get; } = FindBuiltBundle();
+
     protected E2eAppFixture App => app;
     protected IPage Page { get; private set; } = null!;
     private IBrowserContext _context = null!;
@@ -21,11 +29,10 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
 
     public async ValueTask InitializeAsync()
     {
-        // The app fixture is collection-shared and tests mutate its fakes (e.g.
-        // DockerServiceControlsTests shuts the fake service down, which makes the
-        // AI preflight dialog block every later "Add to ... queue" click, and leaves
-        // its shutdown in the op log a later test asserts on). Restore defaults so
-        // test order can't leak state.
+        // The app fixture is collection-shared and tests mutate its fakes (e.g. shutting the fake
+        // service down makes the AI pre-flight sheet block every later queue click, and leaves the
+        // shutdown in the op log a later test asserts on). Restore defaults so test order can't
+        // leak state.
         app.FakeControl.Reset();
         app.FakeAi.Reset();
 
@@ -47,8 +54,6 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
             Snapshots = true,
             Sources = true,
         });
-        // External font in _Host.cshtml — keep tests offline-deterministic.
-        await _context.RouteAsync("https://fonts.googleapis.com/**", r => r.AbortAsync());
         Page = await _context.NewPageAsync();
     }
 
@@ -76,16 +81,46 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
         }
     }
 
-    /// <summary>Navigates and waits for the Blazor Server circuit to be live.</summary>
-    protected async Task GotoAsync(string path)
+    /// <summary>
+    /// Stages the built bundle and navigates to an <c>/app/...</c> path, returning once the Angular
+    /// shell has rendered and the live hub is connected — the point after which receipts drive the
+    /// screen. Skips the test when no bundle has been built.
+    /// </summary>
+    protected async Task GotoAppAsync(string path)
     {
-        var wsTask = Page.WaitForWebSocketAsync(new PageWaitForWebSocketOptions { Timeout = 15_000 });
+        if (BuiltBundleDir is null)
+            Assert.Skip("No Angular bundle at src/Read2Me.App/wwwroot/app — run `npm run build` in src/Read2Me.Web first.");
+
+        StageBundle(BuiltBundleDir, Path.Combine(App.WebRootDir, "app"));
+
+        var hub = Page.WaitForWebSocketAsync(new PageWaitForWebSocketOptions { Timeout = 15_000 });
         await Page.GotoAsync(path);
-        var ws = await wsTask;
-        Assert.Contains("_blazor", ws.Url);
-        // First interactive render follows the socket handshake; NetworkIdle covers it.
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        Assert.Contains("/hubs/live", (await hub).Url);
+        await Expect(Page.Locator("app-root *").First).ToBeVisibleAsync();
     }
 
     protected static ILocatorAssertions Expect(ILocator locator) => Assertions.Expect(locator);
+
+    private static void StageBundle(string source, string target)
+    {
+        if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var destination = Path.Combine(target, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(file, destination);
+        }
+    }
+
+    private static string? FindBuiltBundle()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (!File.Exists(Path.Combine(dir.FullName, "Read2Me.slnx"))) continue;
+            var bundle = Path.Combine(dir.FullName, "Read2Me.App", "wwwroot", "app");
+            return File.Exists(Path.Combine(bundle, "index.html")) ? bundle : null;
+        }
+        return null;
+    }
 }

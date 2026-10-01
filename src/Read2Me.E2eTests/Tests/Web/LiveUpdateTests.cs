@@ -10,7 +10,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// the hub reconnects on its own and keeps receiving receipts.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
     public async Task A_split_in_one_browser_reaches_the_other_within_two_seconds()

@@ -5,12 +5,12 @@ namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
 /// The Angular voice audio editor (ticket 18) end to end: tick two steps, preview, hear both stages,
-/// apply, see Edited on the cast card and in Blazor's editor, restore. Asserts on the <b>files</b> as
-/// the Blazor test does — <c>{voiceId}.orig.wav</c> exists ⟺ the voice has been edited. The filters
+/// apply, see Edited on the cast card and after a reload, restore. Asserts on the <b>files</b> —
+/// <c>{voiceId}.orig.wav</c> exists ⟺ the voice has been edited. The filters
 /// are ffmpeg-gated and may skip on this host, so the live bytes are not asserted to differ.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 
@@ -70,7 +70,7 @@ public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eT
         await preview.ClickAsync();
         await Expect(apply).ToBeEnabledAsync(new() { Timeout = 30_000 });
 
-        // 5. Apply captures the original; the card and Blazor's editor both say Edited.
+        // 5. Apply captures the original; the editor and the card both say Edited.
         await apply.ClickAsync();
         await Expect(editor.Locator("[data-testid='edited-chip']")).ToBeVisibleAsync(new() { Timeout = 30_000 });
         Assert.True(File.Exists(originalPath));
@@ -79,11 +79,9 @@ public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eT
         await editor.Locator("[data-action='back']").ClickAsync();
         await Expect(card.Locator("[data-testid='voice-edited-chip']")).ToBeVisibleAsync(new() { Timeout = 15_000 });
 
-        await GotoAsync($"/project/{folder}/voice/{voiceId}/audio");
-        await Expect(Page.Locator("[data-testid='edited-chip']")).ToBeVisibleAsync(new() { Timeout = 30_000 });
-
-        // 6. Restore puts the original back and deletes it.
+        // 6. The editor still says Edited on a fresh load; restore puts the original back and deletes it.
         await GotoAppAsync($"/app/projects/{folder}/voices/{voiceId}/editor");
+        await Expect(editor.Locator("[data-testid='edited-chip']")).ToBeVisibleAsync(new() { Timeout = 30_000 });
         await editor.Locator("[data-action='restore']").ClickAsync();
         await Page.Locator("r2m-confirm-dialog .r2m-confirm-dialog__confirm").ClickAsync();
         await Expect(editor.Locator("[data-testid='edited-chip']")).ToBeHiddenAsync(new() { Timeout = 30_000 });

@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MudBlazor;
 using Read2Me.AppData;
 using Read2Me.AppData.Entities;
 
@@ -12,20 +11,11 @@ namespace Read2Me.Services
     {
         private readonly IDbContextFactory<Read2MeDbContext> _dbFactory;
         private readonly ILogger<ThemeService> _logger;
-        private readonly SemaphoreSlim _cacheLock = new(1, 1);
-        private MudTheme? _cachedMudTheme;
-        private AppTheme? _cachedAppTheme;
-        private bool _cachedFollowSystem;
-
-        public event Action? OnThemeChanged;
 
         private readonly EventBroadcaster<SettingsChanged>? _changes;
 
-        private void NotifyChanged()
-        {
-            OnThemeChanged?.Invoke();
+        private void NotifyChanged() =>
             _changes?.Publish(new SettingsChanged(SettingsArea.Themes));
-        }
 
         /// <summary>Without the process-wide change signal (tests, and NSubstitute class proxies, use this arity).</summary>
         public ThemeService(IDbContextFactory<Read2MeDbContext> dbFactory, ILogger<ThemeService> logger)
@@ -37,40 +27,6 @@ namespace Read2Me.Services
             _changes = changes;
             _dbFactory = dbFactory;
             _logger = logger;
-        }
-
-        public async Task<(MudTheme Theme, bool IsDark, bool FollowSystem)> GetCurrentThemeAsync()
-        {
-            await _cacheLock.WaitAsync();
-            try
-            {
-                if (_cachedMudTheme != null && _cachedAppTheme != null)
-                {
-                    _logger.LogDebug("Returning cached theme '{Name}'", _cachedAppTheme.Name);
-                    return (_cachedMudTheme, _cachedAppTheme.IsDark, _cachedFollowSystem);
-                }
-
-                await using var db = await _dbFactory.CreateDbContextAsync();
-                await EnsureSeededAsync(db);
-
-                var settings = await db.Settings.SingleOrDefaultAsync();
-                AppTheme? theme = null;
-
-                if (settings?.SelectedThemeId != null)
-                    theme = await db.Themes.FindAsync(settings.SelectedThemeId);
-
-                theme ??= await db.Themes.OrderBy(t => t.Id).FirstAsync();
-
-                _logger.LogDebug("Loaded theme '{Name}' (dark={IsDark}, follow={Follow})", theme.Name, theme.IsDark, settings?.FollowSystemPreference ?? false);
-                _cachedAppTheme = theme;
-                _cachedMudTheme = BuildMudTheme(theme);
-                _cachedFollowSystem = settings?.FollowSystemPreference ?? false;
-                return (_cachedMudTheme, theme.IsDark, _cachedFollowSystem);
-            }
-            finally
-            {
-                _cacheLock.Release();
-            }
         }
 
         public async Task<List<AppTheme>> GetAllThemesAsync()
@@ -105,7 +61,6 @@ namespace Read2Me.Services
             }
             await db.SaveChangesAsync();
 
-            InvalidateCache();
             NotifyChanged();
         }
 
@@ -140,20 +95,6 @@ namespace Read2Me.Services
             db.Themes.Update(theme);
             await db.SaveChangesAsync();
 
-            await _cacheLock.WaitAsync();
-            try
-            {
-                if (_cachedAppTheme?.Id == theme.Id)
-                {
-                    _logger.LogDebug("Active theme updated — invalidating cache");
-                    InvalidateCacheUnsafe();
-                }
-            }
-            finally
-            {
-                _cacheLock.Release();
-            }
-
             NotifyChanged();
         }
 
@@ -178,7 +119,6 @@ namespace Read2Me.Services
             }
 
             await db.SaveChangesAsync();
-            InvalidateCache();
             NotifyChanged();
         }
 
@@ -197,7 +137,6 @@ namespace Read2Me.Services
             }
             await db.SaveChangesAsync();
 
-            InvalidateCache();
             NotifyChanged();
         }
 
@@ -206,20 +145,6 @@ namespace Read2Me.Services
             await using var db = await _dbFactory.CreateDbContextAsync();
             var settings = await db.Settings.SingleOrDefaultAsync();
             return settings?.FollowSystemPreference ?? false;
-        }
-
-        private void InvalidateCache()
-        {
-            _cacheLock.Wait();
-            try { InvalidateCacheUnsafe(); }
-            finally { _cacheLock.Release(); }
-        }
-
-        private void InvalidateCacheUnsafe()
-        {
-            _logger.LogDebug("Theme cache invalidated");
-            _cachedMudTheme = null;
-            _cachedAppTheme = null;
         }
 
         private static async Task EnsureSeededAsync(Read2MeDbContext db)
@@ -262,34 +187,5 @@ namespace Read2Me.Services
             new() { Name = "Coffee", IsBuiltIn = true, IsDark = false, Primary = "#6F4E37", Secondary = "#A67B5B", Background = "#F5F5DC", Surface = "#FFFFFF", AppbarBackground = "#6F4E37" },
             new() { Name = "Cyberpunk", IsBuiltIn = true, IsDark = true, Primary = "#F0ED0D", Secondary = "#00F0FF", Background = "#010101", Surface = "#1A1A1A", AppbarBackground = "#010101", DrawerBackground = "#010101", TextPrimary = "#F0ED0D" },
         ];
-
-        private static MudTheme BuildMudTheme(AppTheme theme)
-        {
-            var mudTheme = new MudTheme();
-
-            if (theme.IsDark)
-            {
-                ApplyPalette(mudTheme.PaletteDark, theme);
-            }
-            else
-            {
-                ApplyPalette(mudTheme.PaletteLight, theme);
-            }
-
-            return mudTheme;
-        }
-
-        private static void ApplyPalette(Palette palette, AppTheme theme)
-        {
-            palette.Primary = theme.Primary;
-            palette.Secondary = theme.Secondary;
-
-            if (!string.IsNullOrEmpty(theme.Background)) palette.Background = theme.Background;
-            if (!string.IsNullOrEmpty(theme.Surface)) palette.Surface = theme.Surface;
-            if (!string.IsNullOrEmpty(theme.AppbarBackground)) palette.AppbarBackground = theme.AppbarBackground;
-            if (!string.IsNullOrEmpty(theme.DrawerBackground)) palette.DrawerBackground = theme.DrawerBackground;
-            if (!string.IsNullOrEmpty(theme.TextPrimary)) palette.TextPrimary = theme.TextPrimary;
-            if (!string.IsNullOrEmpty(theme.TextSecondary)) palette.TextSecondary = theme.TextSecondary;
-        }
     }
 }

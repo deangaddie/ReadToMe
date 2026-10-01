@@ -9,7 +9,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// gesture that touches all of it — the tree, the chapter headers and the rows.
 /// </summary>
 [Collection(E2eCollection.Name)]
-public class ReaderEditingTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
+public class ReaderEditingTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
     public async Task Split_chapter_from_the_paragraph_menu_reloads_tree_and_rows_without_a_toast()

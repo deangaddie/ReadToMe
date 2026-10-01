@@ -1,9 +1,6 @@
 using System.Reflection;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Live;
-using Read2Me.App.State;
-using Read2Me.App.State.Projection;
 using Read2Me.Core.Configuration;
 using Read2Me.Data;
 using Read2Me.Services;
@@ -17,8 +14,8 @@ namespace Read2Me.Tests.Architecture;
 /// <summary>
 /// The rules that keep ADR 0007's one consistency model from quietly growing a second one. Every
 /// producer-family slice retired its own legacy path; this file is what stops the next change from
-/// putting one back — a mutation implementation nobody registered, a Book View adapter that writes
-/// behind its own projection, or a persisted-state reconciliation event reappearing beside the
+/// putting one back — a mutation implementation nobody registered, a second subscriber reconciling
+/// Book state from receipts, or a persisted-state reconciliation event reappearing beside the
 /// receipt that replaced it.
 /// <para>
 /// The matching forward rule — every <see cref="BookMutation"/> has an implementation — lives in
@@ -62,51 +59,11 @@ public class OneConsistencyModelTests : ProjectDbTestBase
     }
 
     /// <summary>
-    /// The Book View's MudBlazor adapter renders snapshots, submits intents and mutations, and maps
-    /// typed outcomes. Handing it <see cref="BookMutations"/> would let it commit behind its own
-    /// projection — which is exactly the second consistency model this architecture removed.
-    /// </summary>
-    [Fact]
-    public void TheBookViewAdapter_DoesNotTakeBookMutations()
-    {
-        Assert.DoesNotContain(
-            typeof(BookHierarchyPresenter).GetConstructors().SelectMany(c => c.GetParameters()),
-            p => p.ParameterType == typeof(BookMutations));
-    }
-
-    /// <summary>
-    /// Nor may a rendered component reach the write side directly, for the same reason: a gesture
-    /// that skips the projection publishes no snapshot, so the page it came from would be the one
-    /// place in the app still patching itself.
-    /// </summary>
-    [Fact]
-    public void NoRenderedComponent_TakesBookMutations()
-    {
-        var components = typeof(BookHierarchyPresenter).Assembly.GetTypes()
-            .Where(t => t is { IsAbstract: false } && typeof(IComponent).IsAssignableFrom(t))
-            .ToList();
-
-        Assert.NotEmpty(components);
-
-        foreach (var component in components)
-        {
-            Assert.DoesNotContain(
-                component.GetConstructors().SelectMany(c => c.GetParameters()),
-                p => p.ParameterType == typeof(BookMutations));
-
-            Assert.DoesNotContain(
-                component.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance),
-                p => p.PropertyType == typeof(BookMutations) &&
-                     p.GetCustomAttribute<InjectAttribute>() is not null);
-        }
-    }
-
-    /// <summary>
     /// The one channel persisted Book state reconciles through: <see cref="BookMutations"/>
-    /// publishes a <see cref="BookMutationReceipt"/>, and <see cref="BookViewProjection"/> is the
-    /// only thing that listens. A second reconciliation subscriber — however it is named — would be
-    /// a second answer to "what does the Book look like now", which is the model this architecture
-    /// removed.
+    /// publishes a <see cref="BookMutationReceipt"/>, and <see cref="LiveRelay"/> forwards it
+    /// verbatim to hub clients. A host-side subscriber that derived Book state from receipts —
+    /// however it is named — would be a second answer to "what does the Book look like now", which
+    /// is the model this architecture removed.
     /// <para>
     /// Queue status, the Audio Gen Stream and attribution progress are untouched by this rule: they
     /// describe live work rather than reconciling persisted Book state, and nothing here constrains
@@ -114,7 +71,7 @@ public class OneConsistencyModelTests : ProjectDbTestBase
     /// </para>
     /// </summary>
     [Fact]
-    public void OnlyTheProjection_ConsumesBookMutationReceipts()
+    public void OnlyTheRelay_ConsumesBookMutationReceipts()
     {
         var consumers = ProductionAssemblies
             .SelectMany(a => a.GetTypes())
@@ -126,10 +83,9 @@ public class OneConsistencyModelTests : ProjectDbTestBase
             .Order()
             .ToList();
 
-        // BookMutations is the publisher; BookViewProjection is the subscriber. LiveRelay is neither:
-        // it forwards each receipt verbatim to hub clients and derives no Book state from it — the
-        // Angular client runs its own projection from the same receipts (ADR 0007, spec D6).
-        Assert.Equal([nameof(BookMutations), nameof(BookViewProjection), nameof(LiveRelay)], consumers);
+        // BookMutations is the publisher. LiveRelay derives no Book state from a receipt: the
+        // Angular client reloads what each receipt names (ADR 0007, spec D6).
+        Assert.Equal([nameof(BookMutations), nameof(LiveRelay)], consumers);
     }
 
     /// <summary>
@@ -148,28 +104,9 @@ public class OneConsistencyModelTests : ProjectDbTestBase
             Assert.DoesNotContain(assembly.GetTypes(), t => t.Name == typeName);
     }
 
-    /// <summary>
-    /// The other half of ADR 0007's rule for the adapter: it "owns no refresh, patch, reseed, or
-    /// selection rule". Those rules are not a shape reflection can see, but the seams they would
-    /// have to be written against are — the loader that rebuilds a Book View, the tree state it
-    /// rebuilds into, and the coordinator that decides what a selection may still contain. The
-    /// adapter reaches none of them; the projection owns all three.
-    /// </summary>
-    [Theory]
-    [InlineData("IBookProjectLoader")]
-    [InlineData("BookTreeState")]
-    [InlineData("BookSelectionCoordinator")]
-    [InlineData("ISelectionCoordinator")]
-    public void TheBookViewAdapter_DoesNotTakeAReconciliationSeam(string seamName)
-    {
-        Assert.DoesNotContain(
-            typeof(BookHierarchyPresenter).GetConstructors().SelectMany(c => c.GetParameters()),
-            p => p.ParameterType.Name == seamName);
-    }
-
     private static Assembly[] ProductionAssemblies =>
     [
-        typeof(BookHierarchyPresenter).Assembly,
+        typeof(LiveRelay).Assembly,
         typeof(BookMutations).Assembly,
         typeof(ProjectDbContext).Assembly,
     ];
