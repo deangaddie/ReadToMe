@@ -2,8 +2,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Read2Me.App.Shared;
-using Read2Me.AppData.Entities;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Api;
@@ -59,7 +57,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app)
     // ── canonical settingsJson ───────────────────────────────────────────────
 
     [Fact]
-    public async Task A_write_stores_settingsJson_exactly_as_the_Blazor_form_serialises_it()
+    public async Task A_write_stores_settingsJson_in_canonical_case_order_and_keys()
     {
         // Wrong case, wrong order, a stray key: what any client may send.
         var created = await CreateAsync("semantic-similarity", new
@@ -115,35 +113,33 @@ public class ProviderSettingsApiTests(E2eAppFixture app)
     }
 
     /// <summary>
-    /// Acceptance 1 for every provider type: what the API stores is exactly what Blazor's config
-    /// form writes when it opens that config and saves it again.
+    /// Acceptance 1 for every provider type: what the API stores is the provider's canonical
+    /// <c>settingsJson</c> — its property names and order, every field of its settings record, and
+    /// the defaults for whatever was not sent.
     /// </summary>
     [Theory]
-    [InlineData("paragraph-tts", 0, """{"baseUrl":"http://x","cfg_value":3.5,"maxChunkChars":350}""")]
-    [InlineData("paragraph-tts", 1, """{"baseUrl":"http://x","exaggeration":0.9}""")]
-    [InlineData("paragraph-tts", 3, """{"baseUrl":"http://x","top_k":40,"language":"en"}""")]
-    [InlineData("voice-design", 0, """{"baseUrl":"http://x","inference_timesteps":20}""")]
-    [InlineData("voice-design", 1, """{"baseUrl":"http://x","modelId":"qwen3-design-bf16","topK":40,"seed":9}""")]
-    [InlineData("transcription", 0, """{"baseUrl":"http://x"}""")]
-    [InlineData("semantic-similarity", 0, """{"baseUrl":"http://x","passThreshold":0.7}""")]
-    [InlineData("semantic-similarity", 1, """{"baseUrl":"http://x","passThreshold":0.6}""")]
-    public async Task Stored_settingsJson_is_what_the_Blazor_form_writes_back(string area, int type, string sent)
+    [InlineData("paragraph-tts", 0, """{"baseUrl":"http://x","cfg_value":3.5,"maxChunkChars":350}""",
+        """{"baseUrl":"http://x","modelId":"voxcpm2","cfg_value":3.5,"inference_timesteps":10,"min_len":2,"max_len":4096,"retry_badcase":true,"retry_badcase_max_times":3,"retry_badcase_ratio_threshold":6,"seed":null,"maxChunkChars":350,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""")]
+    [InlineData("paragraph-tts", 1, """{"baseUrl":"http://x","exaggeration":0.9}""",
+        """{"baseUrl":"http://x","modelId":"chatterbox","exaggeration":0.9,"cfg_weight":0.5,"temperature":0.8,"min_p":0.05,"top_p":1,"repetition_penalty":1.2,"seed":null,"maxChunkChars":500,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""")]
+    [InlineData("paragraph-tts", 3, """{"baseUrl":"http://x","top_k":40,"language":"en"}""",
+        """{"baseUrl":"http://x","modelId":"qwen3-base","language":"en","temperature":null,"top_p":null,"top_k":40,"repetition_penalty":null,"max_new_tokens":null,"seed":null,"maxChunkChars":500,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""")]
+    [InlineData("voice-design", 0, """{"baseUrl":"http://x","inference_timesteps":20}""",
+        """{"baseUrl":"http://x","modelId":"voxcpm2","cfg_value":2,"inference_timesteps":20,"min_len":2,"max_len":4096,"retry_badcase":true,"retry_badcase_max_times":3,"retry_badcase_ratio_threshold":6,"seed":null}""")]
+    [InlineData("voice-design", 1, """{"baseUrl":"http://x","modelId":"qwen3-design-bf16","topK":40,"seed":9}""",
+        """{"BaseUrl":"http://x","ModelId":"qwen3-design-bf16","Language":"auto","Temperature":null,"TopP":null,"TopK":40,"RepetitionPenalty":null,"MaxNewTokens":null,"Seed":9}""")]
+    [InlineData("transcription", 0, """{"baseUrl":"http://x"}""",
+        """{"BaseUrl":"http://x"}""")]
+    [InlineData("semantic-similarity", 0, """{"baseUrl":"http://x","passThreshold":0.7}""",
+        """{"BaseUrl":"http://x","PassThreshold":0.7}""")]
+    [InlineData("semantic-similarity", 1, """{"baseUrl":"http://x","passThreshold":0.6}""",
+        """{"BaseUrl":"http://x","PassThreshold":0.6}""")]
+    public async Task Stored_settingsJson_is_the_providers_canonical_wire_form(string area, int type, string sent, string expected)
     {
         var created = await CreateAsync(area, new { name = $"rt-{Guid.NewGuid():N}", type, settingsJson = sent });
         try
         {
-            var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-            var blazor = area switch
-            {
-                "paragraph-tts" => ParagraphTtsServiceConfigForm.FromConfig(created.Deserialize<ParagraphTtsServiceConfig>(web)!).BuildConfig().SettingsJson,
-                "voice-design" => VoiceDesignServiceConfigForm.FromConfig(created.Deserialize<VoiceDesignServiceConfig>(web)!).BuildConfig().SettingsJson,
-                "transcription" => TranscriptionServiceConfigForm.FromConfig(created.Deserialize<TranscriptionServiceConfig>(web)!).BuildConfig().SettingsJson,
-                _ => SemanticSimilarityServiceConfigForm.FromConfig(created.Deserialize<SemanticSimilarityServiceConfig>(web)!).BuildConfig().SettingsJson,
-            };
-
-            var stored = created.GetProperty("settingsJson").GetString()!;
-            Assert.Equal(blazor, stored);
-            Assert.Contains("http://x", stored);
+            Assert.Equal(expected, created.GetProperty("settingsJson").GetString());
         }
         finally
         {
@@ -245,7 +241,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app)
             Assert.Equal(HttpStatusCode.OK, put.StatusCode);
             Assert.Equal("A custom sentence.", (await GetJsonAsync("voice-design/sample-text")).GetProperty("text").GetString());
 
-            // Saving the default text is "no override", as Blazor's page stores it.
+            // Saving the default text is "no override": nothing is stored.
             await Http.PutAsJsonAsync(Url("voice-design/sample-text"), new { text = @default });
             Assert.Equal(JsonValueKind.Null, (await GetJsonAsync("voice-design/sample-text")).GetProperty("text").ValueKind);
         }

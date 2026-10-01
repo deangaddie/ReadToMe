@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
-using Read2Me.App.Shared;
 using Read2Me.AppData.Entities;
 using Read2Me.E2eTests.Infrastructure;
 using Read2Me.Services;
@@ -11,10 +10,10 @@ using Read2Me.Services;
 namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
-/// The four provider settings pages (Angular ticket 22) against the real host. "Round-trips with
-/// Blazor" is checked with Blazor's own config forms: what the Angular page stores is exactly what
-/// the Blazor dialog would write back, and a config the Blazor form built survives an Angular save
-/// with its <c>settingsJson</c> unchanged.
+/// The four provider settings pages (Angular ticket 22) against the real host. The wire contract is
+/// checked against literal canonical <c>settingsJson</c>: what the Angular page stores is exactly
+/// that form, and a stored canonical config survives an Angular save with its <c>settingsJson</c>
+/// unchanged.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : WebE2eTestBase(app, pw)
@@ -63,7 +62,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : We
     // ── TTS ──────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Tts_config_with_text_processing_saves_reloads_and_matches_what_Blazor_writes()
+    public async Task Tts_config_with_text_processing_saves_canonical_settingsJson_and_reloads()
     {
         var name = NewName("web-tts");
         try
@@ -93,10 +92,9 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : We
             await Expect(Dirty).ToHaveCountAsync(0);
 
             var stored = await StoredAsync<ParagraphTtsServiceConfig>("paragraph-tts", name);
-            Assert.Equal(ParagraphTtsServiceConfigForm.FromConfig(stored).BuildConfig().SettingsJson, stored.SettingsJson);
-            Assert.Contains("\"maxChunkChars\":350", stored.SettingsJson);
-            Assert.Contains("\"carrierMaxTargetChars\":25", stored.SettingsJson);
-            Assert.Contains("\"cfg_value\":3.5", stored.SettingsJson);
+            Assert.Equal(
+                """{"baseUrl":"http://example-tts:8003","modelId":"voxcpm2","cfg_value":3.5,"inference_timesteps":10,"min_len":2,"max_len":4096,"retry_badcase":true,"retry_badcase_max_times":3,"retry_badcase_ratio_threshold":6,"seed":null,"maxChunkChars":350,"carrierPrefixEnabled":true,"carrierMaxTargetChars":25}""",
+                stored.SettingsJson);
             var step = Assert.Single(stored.SubstitutionSteps);
             Assert.Equal(("Dr.", "Doctor"), (step.FromText, step.ToText));
             Assert.Equal(["to-sentence-case", step.Id], stored.EnabledStepIds);
@@ -129,21 +127,18 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : We
     }
 
     [Fact]
-    public async Task A_config_the_Blazor_form_built_keeps_its_settingsJson_through_an_Angular_save()
+    public async Task A_stored_canonical_config_keeps_its_settingsJson_through_an_Angular_save()
     {
-        var name = NewName("blazor-vd");
+        var name = NewName("stored-vd");
         var renamed = NewName("renamed-vd");
         try
         {
-            var built = new VoiceDesignServiceConfigForm
+            var built = new VoiceDesignServiceConfig
             {
                 Name = name,
                 Type = VoiceDesignServiceType.Qwen3,
-                BaseUrl = "http://example-qwen:8004",
-                ModelId = "qwen3-design-bf16",
-                Language = "en",
-                TopK = 40,
-            }.BuildConfig();
+                SettingsJson = """{"BaseUrl":"http://example-qwen:8004","ModelId":"qwen3-design-bf16","Language":"en","Temperature":null,"TopP":null,"TopK":40,"RepetitionPenalty":null,"MaxNewTokens":null,"Seed":null}""",
+            };
             using (var scope = App.Services.CreateScope())
                 await scope.ServiceProvider.GetRequiredService<VoiceDesignSettingsService>().CreateConfigAsync(built);
 
@@ -234,7 +229,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : We
     // ── similarity ───────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Similarity_config_round_trips_with_Blazor_and_its_test_reports_pass_and_failure()
+    public async Task Similarity_config_saves_canonical_settingsJson_and_its_test_reports_pass_and_failure()
     {
         var name = NewName("web-sim");
         try
@@ -250,7 +245,6 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : We
             await Expect(Row(name)).ToContainTextAsync("threshold 0.70");
 
             var stored = await StoredAsync<SemanticSimilarityServiceConfig>("semantic-similarity", name);
-            Assert.Equal(SemanticSimilarityServiceConfigForm.FromConfig(stored).BuildConfig().SettingsJson, stored.SettingsJson);
             Assert.Equal("""{"BaseUrl":"http://no-such-similarity","PassThreshold":0.7}""", stored.SettingsJson);
 
             // The new config's server does not exist: the failure is reported, not thrown.
