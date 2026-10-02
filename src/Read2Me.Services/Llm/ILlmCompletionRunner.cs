@@ -53,16 +53,35 @@ namespace Read2Me.Services.Llm
     /// Per-run parameters that are not the server's persisted settings; null leaves the config's
     /// own values in force.
     /// </param>
+    /// <param name="SystemPrompt">
+    /// Optional <c>system</c> message sent before <paramref name="Prompt"/> (the user message).
+    /// Null sends the user message alone, as before.
+    /// </param>
+    /// <param name="Grammar">
+    /// Optional GBNF grammar (llama.cpp top-level <c>grammar</c>). Mutually exclusive with
+    /// <paramref name="JsonSchema"/>: setting both throws <see cref="ArgumentException"/>.
+    /// </param>
+    /// <param name="DisplayPrompt">
+    /// What <see cref="RequestStarted"/> publishes in place of <paramref name="Prompt"/>
+    /// when set — for prompts too large to push to the hub and the event journal on every call.
+    /// The server always receives <paramref name="Prompt"/>.
+    /// </param>
     public sealed record LlmRunRequest(
         LlmServerConfig Config, string Prompt, string Label,
         string? JsonSchema = null, CompletionShape Shape = CompletionShape.Object,
-        bool DisableThinking = false, LlmRunOverrides? Overrides = null);
+        bool DisableThinking = false, LlmRunOverrides? Overrides = null,
+        string? SystemPrompt = null, string? Grammar = null, string? DisplayPrompt = null);
 
     /// <param name="Outcome">How the run ended.</param>
     /// <param name="Value">Parsed value on <see cref="LlmRunOutcome.Completed"/>; default otherwise.</param>
     /// <param name="Raw">Full accumulated content, whatever the outcome.</param>
     /// <param name="Error">Failure reason for non-Completed outcomes.</param>
-    public sealed record LlmRunResult<T>(LlmRunOutcome Outcome, T? Value, string Raw, string? Error);
+    /// <param name="Timings">
+    /// The request's last server reading (<c>prompt_n</c>, <c>cache_n</c>, …), whatever the
+    /// outcome; null when the server sent none — absence, never a zeroed reading (ADR 0003).
+    /// </param>
+    public sealed record LlmRunResult<T>(
+        LlmRunOutcome Outcome, T? Value, string Raw, string? Error, LlmTimings? Timings = null);
 
     /// <summary>
     /// The one place a streamed LLM completion is run: owns the live-stream event lifecycle,

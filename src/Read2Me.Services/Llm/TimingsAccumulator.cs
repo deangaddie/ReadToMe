@@ -51,6 +51,12 @@ namespace Read2Me.Services.Llm
                 _window.Add(new Reading(arrival, n, ms));
         }
 
+        /// <summary>
+        /// The last reading received, whole — or null before any. Cumulative like every reading,
+        /// so it is the request's totals so far (<c>prompt_n</c>, <c>cache_n</c>, …), never a sum.
+        /// </summary>
+        public LlmTimings? Latest => _latest;
+
         /// <summary>Tokens generated, per the latest reading's <c>predicted_n</c>.</summary>
         public int? TokensOut => _latest?.PredictedN;
 

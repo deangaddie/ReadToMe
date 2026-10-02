@@ -194,6 +194,15 @@ The app runs it through two LLM configs on the same preset, so escalating to the
 
 Both set MaxTokens 8192, batch 4, Full prompt style. The chain is attribution → thinking, with self-consistency off.
 
+### Chapter-pass preset — `gemma-12b`
+
+`gemma-12b` is for the opt-in Chapter attribution prompt style (`.scratch/attribution-grammar/`, in progress). It is
+a verbatim copy of the attribution-options spike's `gemma-12b-bench`: `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf`, 16384
+context (the whole chapter so far fits; the app front-trims longer chapters), `b 2048 / ub 1024`, all layers on the
+GPU. Its sampling (temp 1.0, top-p 0.95, top-k 64, repeat-penalty 1.0, which overrides `[*]`'s 1.1) is only the
+fallback: the Chapter style forces temperature 0, thinking off and a small `max_tokens` on every request, and
+constrains the answer with a GBNF `grammar`.
+
 ### All presets
 
 | Preset | Model file | Context |
@@ -201,12 +210,14 @@ Both set MaxTokens 8192, batch 4, Full prompt style. The chain is attribution �
 | `qwen-28b` | `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf` | 32000 |
 | `qwen-9b` | `Qwen3.5-9B-UD-Q4_K_XL.gguf` | 8096 |
 | `qwen-4b` | `Qwen3.5-4B-UD-Q4_K_XL.gguf` | 8096 |
+| `gemma-12b` | `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf` | 16384 |
 | `gemma-12b_QAT` | `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf` | 8096 |
 | `gemma-4b` | `gemma-4-E4B-it-UD-Q4_K_XL.gguf` | 8096 |
 | `lamma-3.1-8b` | `Llama-3.1-8B-Instruct-Q6_K.gguf` | 16000 |
 | `lamma-3.2-3b` | `Llama-3.2-3B-Instruct-Q8_0.gguf` | 16000 |
 
-Only `qwen-28b` is used by the app; the small presets are kept for experiments. The bench's other presets
+The app uses `qwen-28b`, and `gemma-12b` when an LLM config with the Chapter prompt style names it; the other small
+presets are kept for experiments. The bench's other presets
 (Gemma 4 26B, Qwen3.6-35B MTP, Nemotron, Ornith) were removed on 2026-09-30; they are archived in
 `.scratch/completed/llm-model-upgrade/research/models.ini.bench-2026-09-30`.
 

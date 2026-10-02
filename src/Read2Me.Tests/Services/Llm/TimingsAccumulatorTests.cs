@@ -21,6 +21,26 @@ namespace Read2Me.Tests.Services.Llm
             return acc;
         }
 
+        // ---- Latest: the last whole reading, for callers that log prompt_n / cache_n ----
+
+        [Fact]
+        public void Latest_IsNullBeforeAnyReading()
+        {
+            Assert.Null(new TimingsAccumulator().Latest);
+            Assert.Null(Fed((100, null)).Latest);
+        }
+
+        [Fact]
+        public void Latest_IsTheLastReading_NotASum()
+        {
+            var first = new LlmTimings(CacheN: 300, PromptN: 40, PromptMs: 12, PredictedN: 1, PredictedMs: 5);
+            var last = new LlmTimings(CacheN: 300, PromptN: 40, PromptMs: 12, PredictedN: 6, PredictedMs: 30);
+
+            var acc = Fed((100, first), (200, null), (300, last));
+
+            Assert.Same(last, acc.Latest);
+        }
+
         // ---- Cumulative, not additive ----
 
         [Fact]
