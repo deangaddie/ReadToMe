@@ -862,5 +862,228 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("Liz", Speaker(result));          // sample 1 carried verbatim
             Assert.DoesNotContain(llm.Configs, c => c.Name == "B");
         }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Chapter rung → Full rung (spec §4.7): the production router over the
+        // real chapter pass and the real existing step, under the real walk.
+        // ─────────────────────────────────────────────────────────────────────
+
+        private const string Gemma = "gemma";
+        private const string Qwen = "qwen";
+
+        /// <summary>
+        /// One book of chapters for both steps: the chapter pass reads a chapter's snapshot, the Full
+        /// rung reads a batch context for the ids it is asked about (each paragraph's own items).
+        /// </summary>
+        private sealed class BookReader : ProjectReaderFakeBase
+        {
+            private readonly Dictionary<Guid, List<ChapterParagraph>> _chapters = [];
+
+            public List<Character> Characters { get; } =
+            [
+                new() { Id = Guid.NewGuid(), Name = "Alice", Aliases = [] },
+                new() { Id = Guid.NewGuid(), Name = "Bob", Aliases = [] },
+            ];
+
+            /// <summary>Adds a chapter whose paragraphs are dialog items with these texts, one list per paragraph.</summary>
+            public List<QueuedParagraph> AddChapter(params string[][] paragraphs)
+            {
+                var chapterId = Guid.NewGuid();
+                var snapshot = paragraphs
+                    .Select(texts => new ChapterParagraph(Guid.NewGuid(), [.. texts.Select(t =>
+                        new ContextItem(Guid.NewGuid(), t, AttributionWire.Dialog, AttributionWire.Unknown))]))
+                    .ToList();
+                _chapters[chapterId] = snapshot;
+                return [.. snapshot.Select(p => new QueuedParagraph(
+                    Folder, p.ParagraphId, p.Items[0].Text, chapterId, Guid.NewGuid(), Guid.NewGuid()))];
+            }
+
+            public override Task<IReadOnlyList<ChapterParagraph>> GetChapterParagraphsForAttributionAsync(
+                ProjectFolderId f, Guid chapterId) =>
+                Task.FromResult<IReadOnlyList<ChapterParagraph>>(_chapters[chapterId]);
+
+            public override Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
+                ProjectFolderId f, Guid chapterId, IReadOnlyList<Guid> ids, int b, int a)
+            {
+                var entries = ids.Select((id, i) =>
+                {
+                    var p = _chapters[chapterId].Single(p => p.ParagraphId == id);
+                    return new BatchContextEntry(string.Join(" ", p.Items.Select(x => x.Text)), p.Items, i);
+                }).ToList();
+                return Task.FromResult<ParagraphBatchContext?>(new ParagraphBatchContext(entries, [.. ids], []));
+            }
+
+            public override Task<Project?> GetProjectAsync(ProjectFolderId f) => Task.FromResult<Project?>(DefaultProject());
+            public override Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId f) =>
+                Task.FromResult(Characters.ToList());
+        }
+
+        /// <summary>Rules-discover finds nothing in these said-tag-free chapters; a create would be a test bug.</summary>
+        private sealed class NoCreateResolver() : CharacterResolver(null!, null!)
+        {
+            public override Task<Guid> ResolveOrCreateAsync(ProjectFolderId folder, string name, CancellationToken ct) =>
+                throw new InvalidOperationException($"Unexpected create of '{name}'");
+        }
+
+        /// <summary>
+        /// Registers the chain as rungs of (config, thinking, style), each config batch size 1, and
+        /// builds the walk over the production router, as DI wires it.
+        /// </summary>
+        private async Task<AttributionEscalationChain> ChapterChainAsync(
+            SequenceCompletionRunner llm, BookReader reader,
+            EventBroadcaster<LlmStreamEvent>? broadcaster, params (string Name, bool Thinking, AttributionPromptStyle Style)[] rungs)
+        {
+            var settings = NewSettings();
+            var entries = new List<AttributionChainEntry>();
+            foreach (var (name, thinking, style) in rungs)
+            {
+                var config = await AddConfigAsync(settings, name, batchSize: 1);
+                entries.Add(new AttributionChainEntry(config.Id, thinking, style));
+            }
+            await settings.SetActiveConfigAsync(entries[0].ConfigId);
+            await settings.SetAttributionChainEntriesAsync(entries);
+
+            var router = new StyleRoutedChainStep(
+                NewService(llm, reader),
+                new Read2Me.Services.Characters.ChapterPass.ChapterAttributionStep(
+                    llm, reader, new NoCreateResolver(),
+                    NullLogger<Read2Me.Services.Characters.ChapterPass.ChapterAttributionStep>.Instance));
+            return new AttributionEscalationChain(
+                router, settings, broadcaster ?? new EventBroadcaster<LlmStreamEvent>(),
+                NullLogger<AttributionEscalationChain>.Instance);
+        }
+
+        private Task<AttributionEscalationChain> GemmaThenQwenAsync(
+            SequenceCompletionRunner llm, BookReader reader, EventBroadcaster<LlmStreamEvent>? broadcaster = null) =>
+            ChapterChainAsync(llm, reader, broadcaster,
+                (Gemma, false, AttributionPromptStyle.Chapter), (Qwen, true, AttributionPromptStyle.Full));
+
+        /// <summary>
+        /// Drains the walk, noting for each yielded paragraph how many escalation (<see cref="Qwen"/>)
+        /// requests had been sent when it came out.
+        /// </summary>
+        private static async Task<List<(QueuedParagraph Item, AttributionOutcome Outcome, int QwenCallsBefore)>>
+            DrainChapterChainAsync(AttributionEscalationChain walk, SequenceCompletionRunner llm,
+                IReadOnlyList<QueuedParagraph> queued)
+        {
+            var results = new List<(QueuedParagraph, AttributionOutcome, int)>();
+            await foreach (var (item, outcome) in walk.AttributeQueueAsync(queued, callbacks: null, CancellationToken.None))
+                results.Add((item, outcome, llm.Configs.Count(c => c.Name == Qwen)));
+            return results;
+        }
+
+        /// <summary>
+        /// Two chapters of two one-line paragraphs; the chapter pass names the first of each and
+        /// answers Unknown for the second, which the Full rung then names.
+        /// </summary>
+        private static (BookReader Reader, List<QueuedParagraph> Queued, SequenceCompletionRunner Llm) TwoChapters()
+        {
+            var reader = new BookReader();
+            var queued = reader.AddChapter(["“Alpha”"], ["“Bravo”"]);
+            queued.AddRange(reader.AddChapter(["“Charlie”"], ["“Delta”"]));
+            var llm = new SequenceCompletionRunner()
+                .ForConfig(Gemma, "Alice | calm", "Unknown |", "Bob | dry", "Unknown | sly")
+                .ForConfig(Qwen, Resolved("Bob"));
+            return (reader, queued, llm);
+        }
+
+        [Fact]
+        public async Task ChapterRung_EveryChapterPassRequest_PrecedesAnyEscalation_AcrossTwoChapters()
+        {
+            var (reader, queued, llm) = TwoChapters();
+
+            await DrainChapterChainAsync(await GemmaThenQwenAsync(llm, reader), llm, queued);
+
+            Assert.Equal([Gemma, Gemma, Gemma, Gemma, Qwen, Qwen], llm.Configs.Select(c => c.Name));
+        }
+
+        [Fact]
+        public async Task ChapterRung_OnlyParagraphsWithAnUnknownItem_ReachTheFullRung()
+        {
+            var (reader, queued, llm) = TwoChapters();
+
+            var results = await DrainChapterChainAsync(await GemmaThenQwenAsync(llm, reader), llm, queued);
+
+            var escalated = llm.Calls.Where(c => c.Config.Name == Qwen).Select(c => c.Prompt).ToList();
+            Assert.Equal(2, escalated.Count);
+            Assert.Contains("Bravo", escalated[0]);
+            Assert.Contains("Delta", escalated[1]);
+            Assert.All(escalated, p => Assert.DoesNotContain("Alpha", p));
+            Assert.All(escalated, p => Assert.DoesNotContain("Charlie", p));
+            Assert.All(results, r => Assert.Equal(AttributionStatus.Resolved, r.Outcome.Status));
+            Assert.Equal(["Alice", "Bob", "Bob", "Bob"],
+                queued.Select(q => Speaker(results.Single(r => r.Item == q).Outcome)));
+        }
+
+        [Fact]
+        public async Task ChapterRung_ConfidentParagraphs_AreYieldedDuringTheChapterPass()
+        {
+            var (reader, queued, llm) = TwoChapters();
+
+            var results = await DrainChapterChainAsync(await GemmaThenQwenAsync(llm, reader), llm, queued);
+
+            // Book order for the confident ones, before any escalation request; the suspects after.
+            Assert.Equal([queued[0], queued[2], queued[1], queued[3]], results.Select(r => r.Item));
+            Assert.Equal([0, 0, 1, 2], results.Select(r => r.QwenCallsBefore));
+        }
+
+        [Fact]
+        public async Task SingleChapterRung_YieldsUnknown_WithNoEscalation()
+        {
+            var reader = new BookReader();
+            var queued = reader.AddChapter(["“Alpha”"], ["“Bravo”"]);
+            var llm = new SequenceCompletionRunner().ForConfig(Gemma, "Alice | calm", "Unknown |");
+            var walk = await ChapterChainAsync(llm, reader, null, (Gemma, false, AttributionPromptStyle.Chapter));
+
+            var results = await DrainChapterChainAsync(walk, llm, queued);
+
+            Assert.Equal([Gemma, Gemma], llm.Configs.Select(c => c.Name));
+            Assert.Equal(AttributionStatus.Resolved, results[0].Outcome.Status);
+            var unknown = results[1].Outcome;
+            Assert.Equal(AttributionStatus.Unknown, unknown.Status);
+            Assert.Null(unknown.FailureReason);   // nothing escalated, so no escalation reason
+            Assert.True(AttributionWire.IsUnknownSpeaker(Speaker(unknown)!));
+        }
+
+        [Fact]
+        public async Task ChapterRung_Escalation_IsAnnouncedWithTheFullRungName_AndUnknownsCarryTheChapterRungName()
+        {
+            var reader = new BookReader();
+            var queued = reader.AddChapter(["“Alpha”"]);
+            var llm = new SequenceCompletionRunner().ForConfig(Gemma, "Unknown |").ForConfig(Qwen, Unknown);
+            var broadcaster = new EventBroadcaster<LlmStreamEvent>();
+            var events = new List<LlmStreamEvent>();
+            broadcaster.Event += e => events.Add(e);
+
+            var outcome = Assert.Single(
+                await DrainChapterChainAsync(await GemmaThenQwenAsync(llm, reader, broadcaster), llm, queued)).Outcome;
+
+            Assert.Equal(new EscalationStarted(1, "qwen (thinking)", 1), Assert.Single(events.OfType<EscalationStarted>()));
+            Assert.Equal("Speaker unknown after escalating through 2 models (gemma (chapter) → qwen (thinking))",
+                outcome.FailureReason);
+        }
+
+        /// <summary>
+        /// Spec risk R6, documented as today's behaviour: the walk keeps a paragraph's answer whole,
+        /// and ranks a partly named answer the same as an all-Unknown one (both trigger Unknown), with
+        /// ties to the later rung. So the Full rung's all-Unknown answer replaces the chapter pass's
+        /// named item. A per-item merge would make this test fail — on purpose.
+        /// </summary>
+        [Fact]
+        public async Task ChapterRung_NamedItem_IsDropped_WhenTheFullRungTiesAtUnknown_LaterRungWins()
+        {
+            var reader = new BookReader();
+            var queued = reader.AddChapter(["“One”", "“Two”"]);
+            var llm = new SequenceCompletionRunner()
+                .ForConfig(Gemma, "Alice | calm", "Unknown |")
+                .ForConfig(Qwen, $$"""{ "reasoning": "r", "items": [ {{Item("unknown")}}, {{Item("unknown").Replace("\"index\": 0", "\"index\": 1")}} ] }""");
+
+            var outcome = Assert.Single(
+                await DrainChapterChainAsync(await GemmaThenQwenAsync(llm, reader), llm, queued)).Outcome;
+
+            Assert.Equal(AttributionStatus.Unknown, outcome.Status);
+            Assert.Equal([0, 1], outcome.Answer!.Items.Select(i => i.Index));
+            Assert.All(outcome.Answer.Items, i => Assert.True(AttributionWire.IsUnknownSpeaker(i.Speaker)));
+        }
     }
 }
