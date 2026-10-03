@@ -357,5 +357,74 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             Assert.Equal(EscalationTrigger.Unknown, missing.Trigger);
             Assert.Null(missing.Outcome.Answer);
         }
+
+        [Fact]
+        public async Task A_rule_tagged_item_gets_a_voice_only_call_and_keeps_the_tagged_name()
+        {
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Pug."));
+            // The voice-only grammar cannot produce another name; the parse must not trust one anyway.
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Kulgan | urgent");
+
+            var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0])), [Queued(p0)]);
+
+            var request = Assert.Single(runner.Requests);
+            Assert.Equal(RosterGrammar.ForName("Pug"), request.Grammar);
+            Assert.EndsWith("Who speaks ⟦0.0⟧, and how is it delivered? Answer as Name | delivery.", request.Prompt);
+            Assert.Equal(AttributionStatus.Resolved, outcomes[0].Step.Outcome.Status);
+            Assert.Equal([new AttributedItem(0, "Pug", "urgent")], outcomes[0].Step.Outcome.Answer!.Items);
+        }
+
+        [Fact]
+        public async Task An_untagged_item_still_gets_the_roster_grammar()
+        {
+            // Item 0 has a named tag; item 2 follows another character's beat, so the rules leave it.
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Pug. Kulgan frowned."), Dialog("“Now.”"));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | urgent", "Kulgan | curt");
+
+            var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0])), [Queued(p0)]);
+
+            Assert.Equal(["⟦0.0⟧", "⟦0.2⟧"], runner.Requests.Select(Asked));
+            Assert.Equal(RosterGrammar.ForName("Pug"), runner.Requests[0].Grammar);
+            Assert.Equal(RosterGrammar.ForRoster(["Kulgan", "Pug"]), runner.Requests[1].Grammar);
+            Assert.Equal(
+                [new AttributedItem(0, "Pug", "urgent"), new AttributedItem(2, "Kulgan", "curt")],
+                outcomes[0].Step.Outcome.Answer!.Items);
+        }
+
+        [Fact]
+        public async Task Rule_tags_are_labels_from_the_very_first_call_but_never_over_a_stamp()
+        {
+            var p0 = Para(Dialog("“A”"));
+            var queuedTagged = Para(Dialog("“We must go,”"), Narr("said Pug."));
+            var unstampedTagged = Para(Dialog("“Sit down,”"), Narr("said Kulgan."));
+            var stamped = Para(Dialog("“Hm,”", "Kulgan"), Narr("said Pug."));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Kulgan | calm", "Pug | urgent");
+
+            await RunAsync(
+                NewStep(runner, new FakeReader([p0, queuedTagged, unstampedTagged, stamped])),
+                [Queued(p0), Queued(queuedTagged)]);
+
+            var first = runner.Requests[0].Prompt;
+            Assert.Equal("⟦0.0⟧", Asked(runner.Requests[0]));
+            Assert.Contains("[1] {Pug} ⟦1.0⟧“We must go,” said Pug.\n", first);
+            Assert.Contains("[2] {Kulgan} ⟦2.0⟧“Sit down,” said Kulgan.\n", first);
+            Assert.Contains("[3] {Kulgan} ⟦3.0⟧“Hm,” said Pug.\n", first);
+        }
+
+        [Fact]
+        public async Task Voice_only_calls_and_rule_tags_are_counted_and_logged_with_the_rule_id()
+        {
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Pug. Kulgan frowned."), Dialog("“Now.”"));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | urgent", "Kulgan | curt");
+            var logger = new CollectingLogger<ChapterAttributionStep>();
+
+            await RunAsync(NewStep(runner, new FakeReader([p0]), logger), [Queued(p0)]);
+
+            var debug = logger.At(LogLevel.Debug).ToList();
+            Assert.Contains(debug, m => m.Contains("[0.0] voice T1-post-vs:", StringComparison.Ordinal));
+            Assert.Contains(debug, m => m.Contains("[0.2] full:", StringComparison.Ordinal));
+            var summary = Assert.Single(logger.At(LogLevel.Information), m => m.StartsWith("Chapter pass '", StringComparison.Ordinal));
+            Assert.Contains("2 items, 2 calls (1 voice-only, 1 rule-tagged)", summary);
+        }
     }
 }

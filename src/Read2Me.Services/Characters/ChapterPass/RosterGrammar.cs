@@ -53,7 +53,6 @@ namespace Read2Me.Services.Characters.ChapterPass
         {
             var bar = raw.IndexOf(" |", StringComparison.Ordinal);
             var answered = (bar < 0 ? raw : raw[..bar]).Trim();
-            var cue = bar < 0 ? null : raw[(bar + 2)..].Trim();
 
             if (answered == UnknownAnswer)
             {
@@ -65,13 +64,25 @@ namespace Read2Me.Services.Characters.ChapterPass
             if (answered.Length > 0 && names.Contains(answered, StringComparer.Ordinal))
             {
                 name = answered;
-                delivery = string.IsNullOrEmpty(cue) ? null : cue;
+                delivery = ParseDelivery(raw);
                 return true;
             }
 
             name = null;
             delivery = null;
             return false;
+        }
+
+        /// <summary>
+        /// The delivery half of <c>Name | delivery</c>: what follows the first <c>" |"</c>, trimmed;
+        /// null when empty or when there is no bar. A voice-only answer is read with this alone, since
+        /// its name is the rule's, not the model's.
+        /// </summary>
+        public static string? ParseDelivery(string raw)
+        {
+            var bar = raw.IndexOf(" |", StringComparison.Ordinal);
+            var cue = bar < 0 ? null : raw[(bar + 2)..].Trim();
+            return string.IsNullOrEmpty(cue) ? null : cue;
         }
 
         /// <summary>A GBNF string literal: backslash, quote and control characters escaped; UTF-8 as is.</summary>

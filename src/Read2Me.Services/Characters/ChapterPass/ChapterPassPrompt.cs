@@ -69,6 +69,13 @@ namespace Read2Me.Services.Characters.ChapterPass
         /// <summary>Feeds an answer forward: item <paramref name="ii"/> of paragraph <paramref name="k"/> now shows <c>{name}</c>.</summary>
         public void SetLabel(int k, int ii, string name) => _labels[k][ii] = name;
 
+        /// <summary>
+        /// A rule tag shown before the first call (lab <c>known</c> seeding): item
+        /// <paramref name="ii"/> of paragraph <paramref name="k"/> shows <c>{name}</c> unless a stamp
+        /// already labels it. The queued paragraphs start unlabelled, so their tags always show.
+        /// </summary>
+        public void SeedLabel(int k, int ii, string name) => _labels[k][ii] ??= name;
+
         /// <summary>The user message asking about item <paramref name="ii"/> of paragraph <paramref name="k"/>.</summary>
         public string UserMessage(int k, int ii) => Passage(k) + Question(k, ii);
 

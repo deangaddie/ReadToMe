@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Read2Me.AppData.Entities;
 using Read2Me.Data;
+using Read2Me.Services.Characters.Rules;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters.ChapterPass
@@ -13,6 +14,11 @@ namespace Read2Me.Services.Characters.ChapterPass
     /// is grammar-restricted to a roster name or <c>Unknown</c> plus a delivery cue. Streams one
     /// <see cref="StepOutcome"/> per queued paragraph; the walk and the processor apply it exactly as
     /// they apply the existing step's.
+    /// <para>
+    /// Before the ask loop, <see cref="SpeechTagRules"/> tags the items whose speaker an explicit
+    /// speech tag names; those get a voice-only call (the grammar fixes the name) and show their
+    /// name as a label from the first call on.
+    /// </para>
     /// <para>
     /// The rung's <see cref="ChainStepOptions.SelfConsistency"/>,
     /// <see cref="ChainStepOptions.TemperatureOverride"/>, <see cref="ChainStepOptions.Thinking"/>
@@ -65,9 +71,16 @@ namespace Read2Me.Services.Characters.ChapterPass
             var prompt = new ChapterPassPrompt(
                 project?.BookTitle ?? string.Empty, project?.Author ?? string.Empty, characters, snapshot,
                 group.Select(i => i.ParagraphId).ToHashSet());
-            var grammar = RosterGrammar.ForRoster(prompt.Names);
-            var names = prompt.Names.ToHashSet(StringComparer.Ordinal);
+            var full = new Ask("full", RosterGrammar.ForRoster(prompt.Names), RosterParser(prompt.Names), VoiceOnly: false);
             var stats = new ChapterStats();
+
+            // Rules pre-tag (spec §4.2 step 4): every tag is a label from the first call on, so tags
+            // feed forward like answers; a tagged item in a queued paragraph gets a voice-only call.
+            var tags = SpeechTagRules.TagChapter(snapshot, RulesRoster(characters));
+            for (var k = 0; k < snapshot.Count; k++)
+                for (var ii = 0; ii < snapshot[k].Items.Count; ii++)
+                    if (tags.TryGetValue(snapshot[k].Items[ii].ItemId, out var tag))
+                        prompt.SeedLabel(k, ii, tag.Speaker);
 
             // A queued paragraph the chapter no longer has (deleted, or no speech item left) has
             // nothing to ask: Unknown with an Unknown trigger, like the existing step's unaskable bin.
@@ -94,16 +107,23 @@ namespace Read2Me.Services.Characters.ChapterPass
                         continue;
 
                     stats.Items++;
+                    var ask = full;
+                    if (tags.TryGetValue(paragraphItems[ii].ItemId, out var tag))
+                    {
+                        stats.RuleTagged++;
+                        ask = VoiceOnly(tag);
+                    }
+
                     while (prompt.NeedsTrim(k, ii) && prompt.Trim(k))
                         Trimmed(stats, first.ChapterId, prompt, k, ii, "over budget");
 
-                    var run = await AskAsync(prompt, k, ii, item, opts, grammar, names, stats, ct);
+                    var run = await AskAsync(prompt, k, ii, item, opts, ask, stats, ct);
                     if (run.Outcome == LlmRunOutcome.Failed && IsContextOverflow(run.Error) && prompt.Trim(k))
                     {
                         // The character budget is an estimate of tokens; llama's 400 is the truth.
                         // One more trim and one retry; a second overflow falls through to the fan-out.
                         Trimmed(stats, first.ChapterId, prompt, k, ii, "context overflow");
-                        run = await AskAsync(prompt, k, ii, item, opts, grammar, names, stats, ct);
+                        run = await AskAsync(prompt, k, ii, item, opts, ask, stats, ct);
                     }
 
                     switch (run.Outcome)
@@ -146,17 +166,39 @@ namespace Read2Me.Services.Characters.ChapterPass
         /// <summary>One request for item <paramref name="ii"/> of paragraph <paramref name="k"/>, counted and logged.</summary>
         private async Task<LlmRunResult<ChapterAnswer>> AskAsync(
             ChapterPassPrompt prompt, int k, int ii, QueuedParagraph item, ChainStepOptions opts,
-            string grammar, IReadOnlyCollection<string> names, ChapterStats stats, CancellationToken ct)
+            Ask ask, ChapterStats stats, CancellationToken ct)
         {
             var request = new LlmRunRequest(
                 opts.Config, prompt.UserMessage(k, ii), $"[{k}.{ii}] {item.Preview}",
                 Shape: CompletionShape.None, DisableThinking: true, Overrides: Greedy,
-                SystemPrompt: prompt.SystemText, Grammar: grammar, DisplayPrompt: prompt.DisplayTail(k, ii));
-            var run = await runner.RunAsync<ChapterAnswer>(request, Parser(names), ct);
+                SystemPrompt: prompt.SystemText, Grammar: ask.Grammar, DisplayPrompt: prompt.DisplayTail(k, ii));
+            var run = await runner.RunAsync<ChapterAnswer>(request, ask.Parser, ct);
             stats.Called(run.Timings?.PromptN);
-            LogTimings(item.ChapterId, k, ii, run.Timings);
+            if (ask.VoiceOnly)
+                stats.VoiceOnly++;
+            LogTimings(item.ChapterId, k, ii, ask.Kind, run.Timings);
             return run;
         }
+
+        /// <summary>
+        /// One kind of request: the roster call (<c>full</c>), or the voice-only call for a rule tag
+        /// (<c>voice &lt;rule&gt;</c>) whose grammar fixes the name.
+        /// </summary>
+        private sealed record Ask(string Kind, string Grammar, TryParse<ChapterAnswer> Parser, bool VoiceOnly);
+
+        private static Ask VoiceOnly(RuleTag tag) =>
+            new($"voice {tag.Rule}", RosterGrammar.ForName(tag.Speaker), VoiceParser(tag.Speaker), VoiceOnly: true);
+
+        /// <summary>
+        /// The roster the rules match mentions against: the prompt's (no seed Narrator row, no name
+        /// that collides with <c>Unknown</c>), with aliases, so every tag is an answerable name.
+        /// </summary>
+        private static List<RosterEntry> RulesRoster(IReadOnlyList<Data.Entities.Character> characters) =>
+        [
+            .. characters
+                .Where(c => c.Id != ProjectDbContext.NarratorId && !RosterGrammar.IsReserved(c.Name))
+                .Select(c => new RosterEntry(c.Name, [.. c.Aliases.Select(a => a.Name)])),
+        ];
 
         /// <summary>llama's 400 for a prompt longer than the context: "…exceeds the available context size…".</summary>
         private static bool IsContextOverflow(string? error) =>
@@ -235,8 +277,22 @@ namespace Read2Me.Services.Characters.ChapterPass
         /// <summary>The answer as the grammar shapes it: a roster name or the unknown sentinel, and a cue.</summary>
         private sealed record ChapterAnswer(string Name, string? Delivery);
 
-        private static TryParse<ChapterAnswer> Parser(IReadOnlyCollection<string> names) =>
+        /// <summary>
+        /// The voice-only answer: the name is the rule's whatever the model wrote (the grammar
+        /// allows only that name anyway); only the delivery is read.
+        /// </summary>
+        private static TryParse<ChapterAnswer> VoiceParser(string name) =>
             (string raw, out ChapterAnswer? value, out string? error) =>
+            {
+                value = new ChapterAnswer(name, RosterGrammar.ParseDelivery(raw));
+                error = null;
+                return true;
+            };
+
+        private static TryParse<ChapterAnswer> RosterParser(IReadOnlyList<string> roster)
+        {
+            var names = roster.ToHashSet(StringComparer.Ordinal);
+            return (string raw, out ChapterAnswer? value, out string? error) =>
             {
                 if (RosterGrammar.TryParse(raw, names, out var name, out var delivery))
                 {
@@ -248,6 +304,7 @@ namespace Read2Me.Services.Characters.ChapterPass
                 error = "Could not parse chapter-pass answer.";
                 return false;
             };
+        }
 
         /// <summary>
         /// The paragraph's answers judged as the existing step judges them, so the walk treats a
@@ -299,9 +356,9 @@ namespace Read2Me.Services.Characters.ChapterPass
         }
 
         /// <summary>The cache check (spec §4.6): how much of each prompt llama had to prefill.</summary>
-        private void LogTimings(Guid chapterId, int k, int ii, LlmTimings? timings) =>
+        private void LogTimings(Guid chapterId, int k, int ii, string kind, LlmTimings? timings) =>
             logger.LogDebug(
-                "Chapter pass {ChapterId} [{K}.{Ii}] full: prompt_n {PromptN}, cache_n {CacheN}, predicted_n {PredictedN}",
-                chapterId, k, ii, timings?.PromptN, timings?.CacheN, timings?.PredictedN);
+                "Chapter pass {ChapterId} [{K}.{Ii}] {Kind}: prompt_n {PromptN}, cache_n {CacheN}, predicted_n {PredictedN}",
+                chapterId, k, ii, kind, timings?.PromptN, timings?.CacheN, timings?.PredictedN);
     }
 }
