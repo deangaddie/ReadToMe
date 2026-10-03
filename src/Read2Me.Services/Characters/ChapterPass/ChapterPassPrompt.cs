@@ -14,6 +14,8 @@ namespace Read2Me.Services.Characters.ChapterPass
     /// snapshot only; the one thing that changes between calls is a <c>{Name} </c> label inserted by
     /// <see cref="SetLabel"/> on an item just answered. So every call's prefix up to the current
     /// paragraph is the previous call's, and llama reuses it from its prompt cache.</item>
+    /// <item>A chapter too long for <see cref="ChapterPassBudget"/> starts at <see cref="TrimStart"/>
+    /// instead of the chapter start; between trims the prefix property holds from there.</item>
     /// </list>
     /// <para>
     /// A paragraph's number <c>k</c> is its index in the snapshot, fixed when the snapshot was taken;
@@ -68,8 +70,34 @@ namespace Read2Me.Services.Characters.ChapterPass
         public void SetLabel(int k, int ii, string name) => _labels[k][ii] = name;
 
         /// <summary>The user message asking about item <paramref name="ii"/> of paragraph <paramref name="k"/>.</summary>
-        public string UserMessage(int k, int ii) =>
-            "Passage:\n" + string.Join("\n", Lines(0, LastLine(k))) + "\n\n" + Question(k, ii);
+        public string UserMessage(int k, int ii) => Passage(k) + Question(k, ii);
+
+        /// <summary>
+        /// The first paragraph the passage shows (spec §4.5). It starts at 0 and only moves forward,
+        /// by <see cref="Trim"/>; the lines keep their snapshot <c>k</c>.
+        /// </summary>
+        public int TrimStart { get; private set; }
+
+        /// <summary>Whether asking about item <paramref name="ii"/> of paragraph <paramref name="k"/> would be over budget.</summary>
+        public bool NeedsTrim(int k, int ii) =>
+            ChapterPassBudget.NeedsTrim(SystemText.Length, Passage(k).Length, Question(k, ii).Length);
+
+        /// <summary>
+        /// Drops the oldest half of the lines before paragraph <paramref name="k"/> from the passage.
+        /// False when there is nothing before it left to drop.
+        /// </summary>
+        public bool Trim(int k)
+        {
+            var next = ChapterPassBudget.NextTrimStart(TrimStart, k);
+            if (next == TrimStart)
+                return false;
+            TrimStart = next;
+            return true;
+        }
+
+        /// <summary><c>Passage:</c>, the lines from <see cref="TrimStart"/> to four past <paramref name="k"/>, and the blank line before the question.</summary>
+        private string Passage(int k) =>
+            "Passage:\n" + string.Join("\n", Lines(TrimStart, LastLine(k))) + "\n\n";
 
         /// <summary>
         /// What the live stream shows instead of the whole chapter: the passage's last
@@ -78,7 +106,7 @@ namespace Read2Me.Services.Characters.ChapterPass
         public string DisplayTail(int k, int ii)
         {
             var last = LastLine(k);
-            var first = Math.Max(0, last - TailLines + 1);
+            var first = Math.Max(TrimStart, last - TailLines + 1);
             return "Passage (tail):\n" + string.Join("\n", Lines(first, last)) + "\n\n" + Question(k, ii);
         }
 

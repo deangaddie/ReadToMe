@@ -67,6 +67,7 @@ namespace Read2Me.Services.Characters.ChapterPass
                 group.Select(i => i.ParagraphId).ToHashSet());
             var grammar = RosterGrammar.ForRoster(prompt.Names);
             var names = prompt.Names.ToHashSet(StringComparer.Ordinal);
+            var stats = new ChapterStats();
 
             // A queued paragraph the chapter no longer has (deleted, or no speech item left) has
             // nothing to ask: Unknown with an Unknown trigger, like the existing step's unaskable bin.
@@ -92,19 +93,27 @@ namespace Read2Me.Services.Characters.ChapterPass
                     if (!paragraphItems[ii].IsDialog)
                         continue;
 
-                    var request = new LlmRunRequest(
-                        opts.Config, prompt.UserMessage(k, ii), $"[{k}.{ii}] {item.Preview}",
-                        Shape: CompletionShape.None, DisableThinking: true, Overrides: Greedy,
-                        SystemPrompt: prompt.SystemText, Grammar: grammar, DisplayPrompt: prompt.DisplayTail(k, ii));
-                    var run = await runner.RunAsync<ChapterAnswer>(request, Parser(names), ct);
-                    LogTimings(first.ChapterId, k, ii, run.Timings);
+                    stats.Items++;
+                    while (prompt.NeedsTrim(k, ii) && prompt.Trim(k))
+                        Trimmed(stats, first.ChapterId, prompt, k, ii, "over budget");
+
+                    var run = await AskAsync(prompt, k, ii, item, opts, grammar, names, stats, ct);
+                    if (run.Outcome == LlmRunOutcome.Failed && IsContextOverflow(run.Error) && prompt.Trim(k))
+                    {
+                        // The character budget is an estimate of tokens; llama's 400 is the truth.
+                        // One more trim and one retry; a second overflow falls through to the fan-out.
+                        Trimmed(stats, first.ChapterId, prompt, k, ii, "context overflow");
+                        run = await AskAsync(prompt, k, ii, item, opts, grammar, names, stats, ct);
+                    }
 
                     switch (run.Outcome)
                     {
                         case LlmRunOutcome.Completed:
                             var answer = run.Value!;
                             answered.Add(new AttributedItem(ii, answer.Name, answer.Delivery));
-                            if (!AttributionWire.IsUnknownSpeaker(answer.Name))
+                            if (AttributionWire.IsUnknownSpeaker(answer.Name))
+                                stats.Unknown++;
+                            else
                                 prompt.SetLabel(k, ii, answer.Name);
                             break;
 
@@ -121,6 +130,7 @@ namespace Read2Me.Services.Characters.ChapterPass
                             // Infra or still-loading: the rest of the chapter is one unit of failure,
                             // as a chunk is on the existing step. Stop asking and fan the outcome out.
                             var routed = InfraOutcome(run.Outcome, run.Error, opts.Config.Name, queued.Count - q);
+                            LogSummary(first.ChapterId, stats);
                             for (var rest = q; rest < queued.Count; rest++)
                                 yield return (queued[rest], routed);
                             yield break;
@@ -128,6 +138,97 @@ namespace Read2Me.Services.Characters.ChapterPass
                 }
 
                 yield return (item, failed ?? Classify(item.ParagraphId, paragraphItems, answered, characters, narrator, opts));
+            }
+
+            LogSummary(first.ChapterId, stats);
+        }
+
+        /// <summary>One request for item <paramref name="ii"/> of paragraph <paramref name="k"/>, counted and logged.</summary>
+        private async Task<LlmRunResult<ChapterAnswer>> AskAsync(
+            ChapterPassPrompt prompt, int k, int ii, QueuedParagraph item, ChainStepOptions opts,
+            string grammar, IReadOnlyCollection<string> names, ChapterStats stats, CancellationToken ct)
+        {
+            var request = new LlmRunRequest(
+                opts.Config, prompt.UserMessage(k, ii), $"[{k}.{ii}] {item.Preview}",
+                Shape: CompletionShape.None, DisableThinking: true, Overrides: Greedy,
+                SystemPrompt: prompt.SystemText, Grammar: grammar, DisplayPrompt: prompt.DisplayTail(k, ii));
+            var run = await runner.RunAsync<ChapterAnswer>(request, Parser(names), ct);
+            stats.Called(run.Timings?.PromptN);
+            LogTimings(item.ChapterId, k, ii, run.Timings);
+            return run;
+        }
+
+        /// <summary>llama's 400 for a prompt longer than the context: "…exceeds the available context size…".</summary>
+        private static bool IsContextOverflow(string? error) =>
+            error is not null
+            && error.Contains("exceed", StringComparison.OrdinalIgnoreCase)
+            && error.Contains("context", StringComparison.OrdinalIgnoreCase);
+
+        private void Trimmed(ChapterStats stats, Guid chapterId, ChapterPassPrompt prompt, int k, int ii, string reason)
+        {
+            stats.Trimmed();
+            logger.LogInformation(
+                "Chapter pass {ChapterId}: passage trimmed to start at [{TrimStart}] before [{K}.{Ii}] ({Reason})",
+                chapterId, prompt.TrimStart, k, ii, reason);
+        }
+
+        /// <summary>The per-chapter line of spec §4.6: what the pass did and whether the prompt cache held.</summary>
+        private void LogSummary(Guid chapterId, ChapterStats stats) =>
+            logger.LogInformation(
+                "Chapter pass '{Chapter}': {Items} items, {Calls} calls ({VoiceOnly} voice-only, {RuleTagged} rule-tagged), "
+                + "{Unknown} unknown, {Created} characters created, prompt_n total {PromptTotal} / median {PromptMedian} "
+                + "(excl. first call and post-trim calls), {Trims} trims",
+                chapterId, stats.Items, stats.Calls, stats.VoiceOnly, stats.RuleTagged, stats.Unknown, stats.Created,
+                stats.PromptTotal, stats.PromptMedian, stats.Trims);
+
+        /// <summary>
+        /// Counters for one chapter's summary. The prompt_n median leaves out the chapter's first call
+        /// and the first call after each trim: those prefill from cold by design, and the median is
+        /// the check that every other call reused the prefix.
+        /// </summary>
+        private sealed class ChapterStats
+        {
+            private readonly List<int> _warm = [];
+            private bool _cold = true;
+
+            public int Items { get; set; }
+            public int Calls { get; private set; }
+            public int VoiceOnly { get; set; }
+            public int RuleTagged { get; set; }
+            public int Unknown { get; set; }
+            public int Created { get; set; }
+            public int Trims { get; private set; }
+            public long PromptTotal { get; private set; }
+
+            /// <summary>The middle warm prompt_n (the mean of the two middles when even); null with none.</summary>
+            public int? PromptMedian
+            {
+                get
+                {
+                    if (_warm.Count == 0)
+                        return null;
+                    var sorted = _warm.Order().ToList();
+                    var mid = sorted.Count / 2;
+                    return sorted.Count % 2 == 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+                }
+            }
+
+            public void Called(int? promptN)
+            {
+                Calls++;
+                if (promptN is { } n)
+                {
+                    PromptTotal += n;
+                    if (!_cold)
+                        _warm.Add(n);
+                }
+                _cold = false;
+            }
+
+            public void Trimmed()
+            {
+                Trims++;
+                _cold = true;
             }
         }
 

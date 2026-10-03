@@ -192,6 +192,72 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         }
 
         [Fact]
+        public void A_trim_drops_the_oldest_half_of_the_lines_before_the_current_and_keeps_k()
+        {
+            var paras = Enumerable.Range(0, 12).Select(i => Para(Dialog($"“L{i}”"))).ToList();
+            var prompt = Build(paras, paras);
+
+            Assert.Equal(0, prompt.TrimStart);
+            Assert.True(prompt.Trim(6));
+
+            Assert.Equal(3, prompt.TrimStart);
+            Assert.Equal(
+                "Passage:\n[3] ⟦3.0⟧“L3”\n[4] ⟦4.0⟧“L4”\n[5] ⟦5.0⟧“L5”\n[6] ⟦6.0⟧“L6”\n" +
+                "[7] ⟦7.0⟧“L7”\n[8] ⟦8.0⟧“L8”\n[9] ⟦9.0⟧“L9”\n[10] ⟦10.0⟧“L10”\n\n" +
+                "Who speaks ⟦6.0⟧, and how is it delivered? Answer as Name | delivery.",
+                prompt.UserMessage(6, 0));
+        }
+
+        [Fact]
+        public void Nothing_is_trimmed_at_or_past_the_current_paragraph()
+        {
+            var paras = Enumerable.Range(0, 3).Select(i => Para(Dialog($"“L{i}”"))).ToList();
+            var prompt = Build(paras, paras);
+
+            Assert.True(prompt.Trim(1));
+            Assert.Equal(1, prompt.TrimStart);
+            Assert.False(prompt.Trim(1));
+            Assert.Equal(1, prompt.TrimStart);
+            Assert.StartsWith("Passage:\n[1] ⟦1.0⟧“L1”\n", prompt.UserMessage(1, 0));
+        }
+
+        [Fact]
+        public void Needs_trim_measures_the_system_text_the_passage_and_the_question()
+        {
+            var paras = Enumerable.Range(0, 80).Select(_ => Para(Dialog($"“{new string('x', 600)}”"))).ToList();
+            var prompt = Build(paras, paras);
+
+            Assert.False(prompt.NeedsTrim(10, 0));
+            Assert.True(prompt.NeedsTrim(70, 0));
+            Assert.Equal(
+                prompt.SystemText.Length + prompt.UserMessage(60, 0).Length > ChapterPassBudget.MaxPromptChars,
+                prompt.NeedsTrim(60, 0));
+        }
+
+        /// <summary>The prefix property holds again from <c>trimStart</c> once a trim has happened.</summary>
+        [Fact]
+        public void After_a_trim_consecutive_asks_are_append_only_again()
+        {
+            var paras = Enumerable.Range(0, 20).Select(i => Para(Narr($"N{i}."), Dialog($"“L{i}”"))).ToList();
+            var prompt = Build(paras, paras);
+
+            Assert.True(prompt.Trim(10));
+            for (var k = 10; k < 15; k++)
+            {
+                var before = prompt.UserMessage(k, 1);
+                prompt.SetLabel(k, 1, "Pug");
+                var after = prompt.UserMessage(k + 1, 1);
+
+                var lineStart = before.IndexOf($"\n[{k}] ", StringComparison.Ordinal);
+                var upToCurrent = before[..(before.IndexOf('\n', lineStart + 1) + 1)];
+                var expected = upToCurrent.Replace($"⟦{k}.1⟧", "{Pug} " + $"⟦{k}.1⟧", StringComparison.Ordinal);
+
+                Assert.StartsWith("Passage:\n[5] N5. ⟦5.1⟧“L5”\n", after, StringComparison.Ordinal);
+                Assert.StartsWith(expected, after, StringComparison.Ordinal);
+            }
+        }
+
+        [Fact]
         public void Display_tail_is_the_last_five_passage_lines_and_the_question()
         {
             var paras = Enumerable.Range(0, 10).Select(i => Para(Dialog($"“L{i}”"))).ToList();

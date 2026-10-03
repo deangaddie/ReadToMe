@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
@@ -64,8 +65,9 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             }
         }
 
-        private static ChapterAttributionStep NewStep(ILlmCompletionRunner runner, IProjectReader reader) =>
-            new(runner, reader, NullLogger<ChapterAttributionStep>.Instance);
+        private static ChapterAttributionStep NewStep(
+            ILlmCompletionRunner runner, IProjectReader reader, ILogger<ChapterAttributionStep>? logger = null) =>
+            new(runner, reader, logger ?? NullLogger<ChapterAttributionStep>.Instance);
 
         private static async Task<List<(QueuedParagraph Item, StepOutcome Step)>> RunAsync(
             ChapterAttributionStep step, IReadOnlyList<QueuedParagraph> items,
@@ -217,6 +219,127 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
 
             Assert.Equal([[p0.ParagraphId], [p1.ParagraphId]], started.Select(c => c.Select(i => i.ParagraphId).ToList()));
             Assert.Equal(1, reader.SnapshotReads);
+        }
+
+        /// <summary>The passage's first line number: where the front-trim currently starts.</summary>
+        private static int FirstLine(LlmRunRequest r) =>
+            int.Parse(r.Prompt["Passage:\n[".Length..r.Prompt.IndexOf(']', StringComparison.Ordinal)],
+                System.Globalization.CultureInfo.InvariantCulture);
+
+        private const string ContextOverflow =
+            "LLM provider returned error (BadRequest): {\"error\":{\"code\":400,"
+            + "\"message\":\"the request exceeds the available context size, try increasing it\"}}";
+
+        [Fact]
+        public async Task A_long_chapter_is_front_trimmed_so_every_request_fits_and_every_item_is_asked()
+        {
+            var paras = Enumerable.Range(0, 120)
+                .Select(i => Para(Narr($"N{i}."), Dialog($"“{new string('x', 600)}”")))
+                .ToList();
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+
+            var outcomes = await RunAsync(NewStep(runner, new FakeReader(paras)), [.. paras.Select(Queued)]);
+
+            Assert.Equal(paras.Select((_, k) => $"⟦{k}.1⟧"), runner.Requests.Select(Asked));
+            Assert.All(runner.Requests, r =>
+                Assert.True(r.SystemPrompt!.Length + r.Prompt.Length <= ChapterPassBudget.MaxPromptChars));
+            Assert.All(outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Step.Outcome.Status));
+
+            var trims = runner.Requests.Select(FirstLine).Distinct().Count() - 1;
+            Assert.InRange(trims, 1, 10);
+            Assert.True(runner.Requests.Select(FirstLine).Zip(runner.Requests.Skip(1).Select(FirstLine))
+                .All(p => p.First <= p.Second), "the trim start only moves forward");
+        }
+
+        [Fact]
+        public async Task A_context_overflow_trims_once_more_and_retries_the_item()
+        {
+            var p0 = Para(Dialog("“A”"));
+            var p1 = Para(Dialog("“B”"));
+            var p2 = Para(Dialog("“C”"));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm", "Kulgan |");
+            runner.FailFor(ConfigName, LlmRunOutcome.Failed, ContextOverflow);
+            runner.ForConfig(ConfigName, "Pug | dry");
+
+            var outcomes = await RunAsync(
+                NewStep(runner, new FakeReader([p0, p1, p2])), [Queued(p0), Queued(p1), Queued(p2)]);
+
+            Assert.Equal(["⟦0.0⟧", "⟦1.0⟧", "⟦2.0⟧", "⟦2.0⟧"], runner.Requests.Select(Asked));
+            Assert.Equal([0, 0, 0, 1], runner.Requests.Select(FirstLine));
+            Assert.All(outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Step.Outcome.Status));
+            Assert.Equal([new AttributedItem(0, "Pug", "dry")], outcomes[2].Step.Outcome.Answer!.Items);
+        }
+
+        [Fact]
+        public async Task A_second_context_overflow_fans_out_to_the_rest_of_the_chapter()
+        {
+            var p0 = Para(Dialog("“A”"));
+            var p1 = Para(Dialog("“B”"));
+            var p2 = Para(Dialog("“C”"));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            runner.FailFor(ConfigName, LlmRunOutcome.Failed, ContextOverflow);
+            runner.FailFor(ConfigName, LlmRunOutcome.Failed, ContextOverflow);
+
+            var outcomes = await RunAsync(
+                NewStep(runner, new FakeReader([p0, p1, p2])), [Queued(p0), Queued(p1), Queued(p2)]);
+
+            Assert.Equal(["⟦0.0⟧", "⟦1.0⟧", "⟦1.0⟧"], runner.Requests.Select(Asked));
+            Assert.Equal(AttributionStatus.Resolved, outcomes[0].Step.Outcome.Status);
+            Assert.All(outcomes.Skip(1), o => Assert.Equal(AttributionStatus.Failed, o.Step.Outcome.Status));
+        }
+
+        [Fact]
+        public async Task A_failure_that_is_not_a_context_overflow_is_not_retried()
+        {
+            var p0 = Para(Dialog("“A”"));
+            var p1 = Para(Dialog("“B”"));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            runner.FailFor(ConfigName, LlmRunOutcome.Failed, "LLM provider returned error (InternalServerError): boom");
+
+            var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0, p1])), [Queued(p0), Queued(p1)]);
+
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.Equal(AttributionStatus.Failed, outcomes[1].Step.Outcome.Status);
+        }
+
+        [Fact]
+        public async Task One_summary_line_per_chapter_with_counts_and_the_prompt_n_median()
+        {
+            var p0 = Para(Dialog("“A”"), Narr("x"), Dialog("“B”"));
+            var p1 = Para(Dialog("“C”"));
+            var p2 = Para(Dialog("“D”"));
+            var runner = new SequenceCompletionRunner()
+                .ForConfig(ConfigName, "Pug | calm", "Unknown |", "Kulgan |");
+            runner.FailFor(ConfigName, LlmRunOutcome.Failed, ContextOverflow);
+            runner.ForConfig(ConfigName, "Pug |");
+            int[] promptN = [1000, 100, 300, 900, 900, 200];
+            runner.Timings = (_, n) => new LlmTimings(CacheN: 50, PromptN: promptN[n], null, PredictedN: 4, null);
+            var logger = new CollectingLogger<ChapterAttributionStep>();
+
+            await RunAsync(NewStep(runner, new FakeReader([p0, p1, p2]), logger),
+                [Queued(p0), Queued(p1), Queued(p2)]);
+
+            // Calls: [0.0]=1000 (first), [0.2]=100, [1.0]=300, [2.0] overflow=900, [2.0] retry=900
+            // (first after a trim). The median counts 100, 300 and the overflowed 900 → 300.
+            var summary = Assert.Single(logger.At(LogLevel.Information), m => m.StartsWith("Chapter pass '", StringComparison.Ordinal));
+            Assert.Equal(
+                $"Chapter pass '{Chapter}': 4 items, 5 calls (0 voice-only, 0 rule-tagged), 1 unknown, "
+                + "0 characters created, prompt_n total 3200 / median 300 (excl. first call and post-trim calls), 1 trims",
+                summary);
+        }
+
+        [Fact]
+        public async Task The_summary_is_logged_for_a_chapter_stopped_by_an_infra_failure()
+        {
+            var p0 = Para(Dialog("“A”"));
+            var p1 = Para(Dialog("“B”"));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            runner.FailFor(ConfigName, LlmRunOutcome.ServiceUnavailable, "down");
+            var logger = new CollectingLogger<ChapterAttributionStep>();
+
+            await RunAsync(NewStep(runner, new FakeReader([p0, p1]), logger), [Queued(p0), Queued(p1)]);
+
+            Assert.Single(logger.At(LogLevel.Information), m => m.StartsWith("Chapter pass '", StringComparison.Ordinal));
         }
 
         [Fact]
