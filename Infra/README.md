@@ -171,7 +171,8 @@ Nothing loads at container start: the first request that names a preset loads it
 ### Attribution preset — `qwen-28b`
 
 `qwen-28b` is the preset the app uses for every LLM task (attribution, discovery, voice plans and prompts, book
-edits). It was chosen by the llm-model-upgrade bench (`.scratch/completed/llm-model-upgrade/`, tickets 19–23) against the
+edits), except a Chapter-style attribution rung, which runs on `gemma-12b` (below; ADR 0013). It was chosen by the
+llm-model-upgrade bench (`.scratch/completed/llm-model-upgrade/`, tickets 19–23) against the
 ticket-05 ground-truth set:
 
 - **Model:** `Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf`, 32000-token context, q8_0 K and V cache.
@@ -196,12 +197,22 @@ Both set MaxTokens 8192, batch 4, Full prompt style. The chain is attribution �
 
 ### Chapter-pass preset — `gemma-12b`
 
-`gemma-12b` is for the opt-in Chapter attribution prompt style (`.scratch/attribution-grammar/`, in progress). It is
+`gemma-12b` is for the opt-in Chapter attribution prompt style ([ADR 0013](../docs/adr/0013-chapter-pass-attribution-opt-in.md)). It is
 a verbatim copy of the attribution-options spike's `gemma-12b-bench`: `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf`, 16384
 context (the whole chapter so far fits; the app front-trims longer chapters), `b 2048 / ub 1024`, all layers on the
 GPU. Its sampling (temp 1.0, top-p 0.95, top-k 64, repeat-penalty 1.0, which overrides `[*]`'s 1.1) is only the
 fallback: the Chapter style forces temperature 0, thinking off and a small `max_tokens` on every request, and
 constrains the answer with a GBNF `grammar`.
+
+- **Why 16k context:** a chapter pass sends the whole chapter so far plus 4 paragraphs of look-ahead on every
+  request, so the context must hold a typical chapter. Longer chapters are front-trimmed in halves by the app's
+  40 000-character prompt budget, which is sized for this 16k preset (about 10–12.5k tokens, with room for the
+  48-token answer).
+- **Model swap per phase:** the recommended chain is `[gemma-12b · Chapter, qwen-28b · Full · thinking]`. The
+  escalation walk runs the Chapter rung over the whole drained queue before it escalates anything, so a queue drain
+  costs one switch to `gemma-12b` and, if any line came back `Unknown`, one switch back to `qwen-28b` (each a cold
+  load through autoload; `qwen-28b` takes 62–75 s), not one per chapter. Another LLM task during a chapter pass (voice plans, discovery, a test
+  send on `qwen-28b`) switches the model away and loses the prompt cache; that costs speed, not correctness.
 
 ### All presets
 

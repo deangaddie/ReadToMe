@@ -111,4 +111,13 @@ describe('LLM config form', () => {
     expect(form.maxTokens).toBe('');
     expect(buildLlmConfig(form, config.id)).toEqual(config);
   });
+
+  it('round-trips the Chapter prompt style', () => {
+    const form = { ...valid, promptStyle: AttributionPromptStyle.Chapter };
+
+    const config = buildLlmConfig(form, 4);
+
+    expect(config.promptStyle).toBe(AttributionPromptStyle.Chapter);
+    expect(toLlmForm(config).promptStyle).toBe(AttributionPromptStyle.Chapter);
+  });
 });

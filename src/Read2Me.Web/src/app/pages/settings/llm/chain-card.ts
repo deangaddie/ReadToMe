@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { AttributionChainStep, toApiError } from '@app/api';
+import { AttributionChainStep, AttributionPromptStyle, toApiError } from '@app/api';
 import { StatusChip } from '@app/ui/status-chip/status-chip';
 import { ToastService } from '@app/ui/toast/toast.service';
 import { ChainOption, addStep, moveStep, optionLabel, removeStep } from './chain-steps';
@@ -31,10 +31,13 @@ import { LlmSettingsStore } from './llm-settings-store';
     <p class="chain__intro">
       Character attribution runs each step in order. The first answers the easy lines; suspect
       answers (unknown, unlisted name, parse failure) escalate to the next. A config can be added
-      once per combination of two flags, fixed when the step is added. <b>Thinking</b> runs the step
-      with model thinking on: slower, higher recall. <b>Simple</b> asks with the strict prompt,
-      which names a speaker only when the text does and otherwise answers "unknown" — far less
-      confabulation, more escalation. To change a step's mode, remove it and add the other variant.
+      once per variant (prompt style and thinking), fixed when the step is added.
+      <b>Thinking</b> runs the step with model thinking on: slower, higher recall.
+      <b>Simple</b> asks with the strict prompt, which names a speaker only when the text does and
+      otherwise answers "unknown" — far less confabulation, more escalation. <b>Chapter</b> walks
+      each chapter one line at a time with roster-only answers (fast models only; thinking is always
+      off) and sends unknowns on to the next step. To change a step's mode, remove it and add the
+      other variant.
     </p>
 
     @if (!store.chainLoaded()) {
@@ -80,8 +83,11 @@ import { LlmSettingsStore } from './llm-settings-store';
               <span class="chain__model">{{ row.config.model }}</span>
             }
             <span class="chain__flags">
-              @if (row.simple) {
+              @if (row.style === styles.Simple) {
                 <r2m-status-chip status="info" label="Simple" compact />
+              }
+              @if (row.style === styles.Chapter) {
+                <r2m-status-chip status="info" label="Chapter" compact />
               }
               @if (row.thinking) {
                 <r2m-status-chip status="info" label="Thinking" compact />
@@ -202,6 +208,7 @@ export class LlmChainCard {
 
   protected readonly busy = signal(false);
   protected readonly label = optionLabel;
+  protected readonly styles = AttributionPromptStyle;
 
   protected move(index: number, delta: -1 | 1): Promise<void> {
     return this.save(moveStep(this.store.steps(), index, delta));

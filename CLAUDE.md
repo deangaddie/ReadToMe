@@ -70,7 +70,7 @@ Containerized GPU services orchestrated via `docker-compose.yml`. RTX 3070 (8 GB
 curl http://localhost:8080/v1/chat/completions -d '{"model":"qwen-28b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
 ```
 Probe the loaded preset with `GET /v1/models` (each item's `status.value` is `unloaded`/`loading`/`loaded`).
-Model presets defined in `Infra/llama/config/models.ini`. The app uses only `qwen-28b` (thinking budget 4096), through two LLM configs — attribution (thinking off, the active config) and thinking (the chain's final step); why and how: `Infra/README.md`, "Attribution preset".
+Model presets defined in `Infra/llama/config/models.ini`. The app uses `qwen-28b` (thinking budget 4096) through two LLM configs — attribution (thinking off, the active config) and thinking (the chain's final step); why and how: `Infra/README.md`, "Attribution preset". It also uses `gemma-12b` when an LLM config with the opt-in Chapter attribution prompt style names it (ADR 0013; `Infra/README.md`, "Chapter-pass preset").
 
 GGUF model files live in `Infra/models/` by default (bind-mounted, not committed). Override the host directory with `GGUF_MODELS_DIR` in `Infra/.env` to share GGUFs across projects; container path stays `/models`. Whisper's `ggml-base.en.bin` stays in `Infra/models/`.
 

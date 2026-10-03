@@ -11,7 +11,8 @@ export interface ChainRow {
   index: number;
   config: LlmServerConfig;
   thinking: boolean;
-  simple: boolean;
+  /** The style the rung runs as: its own, else its config's. */
+  style: AttributionPromptStyle;
 }
 
 /** One addable rung: a config in one thinking × style variant. */
@@ -61,15 +62,26 @@ export function chainRows(
   return steps.flatMap((step, index) => {
     const config = byId.get(step.configId);
     if (!config) return [];
-    const simple = effectiveStyle(step, config) === AttributionPromptStyle.Simple;
-    return [{ index, config, thinking: step.thinking, simple }];
+    return [{ index, config, thinking: step.thinking, style: effectiveStyle(step, config) }];
   });
 }
 
 /**
- * Every config in four variants (full/simple × fast/thinking) minus the ones already in the chain.
- * Compared on the effective style, so a legacy step with no stored style occupies the variant it
- * actually runs as.
+ * The style × thinking variants a rung can be added as. Chapter is fast only: the chapter pass
+ * always sends thinking off, so a thinking Chapter rung would run exactly like the fast one.
+ */
+const VARIANTS: readonly { promptStyle: AttributionPromptStyle; thinking: boolean }[] = [
+  { promptStyle: AttributionPromptStyle.Full, thinking: false },
+  { promptStyle: AttributionPromptStyle.Simple, thinking: false },
+  { promptStyle: AttributionPromptStyle.Chapter, thinking: false },
+  { promptStyle: AttributionPromptStyle.Full, thinking: true },
+  { promptStyle: AttributionPromptStyle.Simple, thinking: true },
+];
+
+/**
+ * Every config in five variants (full/simple × fast/thinking, plus chapter fast) minus the ones
+ * already in the chain. Compared on the effective style, so a legacy step with no stored style
+ * occupies the variant it actually runs as.
  */
 export function chainOptions(
   steps: readonly AttributionChainStep[],
@@ -78,22 +90,10 @@ export function chainOptions(
   const key = (id: number, thinking: boolean, style: AttributionPromptStyle) =>
     `${id}:${thinking}:${style}`;
   const present = new Set(
-    chainRows(steps, configs).map((r) =>
-      key(
-        r.config.id,
-        r.thinking,
-        r.simple ? AttributionPromptStyle.Simple : AttributionPromptStyle.Full,
-      ),
-    ),
+    chainRows(steps, configs).map((r) => key(r.config.id, r.thinking, r.style)),
   );
   return configs
-    .flatMap((config) =>
-      [false, true].flatMap((thinking) =>
-        [AttributionPromptStyle.Full, AttributionPromptStyle.Simple].map(
-          (promptStyle): ChainOption => ({ config, thinking, promptStyle }),
-        ),
-      ),
-    )
+    .flatMap((config) => VARIANTS.map((v): ChainOption => ({ config, ...v })))
     .filter((o) => !present.has(key(o.config.id, o.thinking, o.promptStyle)));
 }
 
@@ -101,6 +101,7 @@ export function chainOptions(
 export function optionLabel(option: ChainOption): string {
   const suffixes = [
     ...(option.promptStyle === AttributionPromptStyle.Simple ? ['simple'] : []),
+    ...(option.promptStyle === AttributionPromptStyle.Chapter ? ['chapter'] : []),
     ...(option.thinking ? ['thinking'] : []),
   ];
   return suffixes.length ? `${option.config.name} (${suffixes.join(', ')})` : option.config.name;

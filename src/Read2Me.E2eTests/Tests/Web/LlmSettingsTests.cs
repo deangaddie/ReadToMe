@@ -163,6 +163,43 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         }
     }
 
+    [Fact]
+    public async Task The_recommended_chain_of_a_chapter_rung_then_a_thinking_rung_can_be_built()
+    {
+        try
+        {
+            await GotoAppAsync("/app/settings/llm");
+            var chain = Page.Locator("app-llm-chain-card");
+            await Expect(chain.Locator(".chain__alert--info")).ToContainTextAsync("fake");
+
+            await chain.Locator("[data-action='add-step']").ClickAsync();
+            // Chapter is offered as a fast variant only: thinking is always off on a chapter pass.
+            await Expect(Page.GetByRole(AriaRole.Menuitem, new() { Name = "fake (chapter)", Exact = true })).ToBeVisibleAsync();
+            await Expect(Page.GetByRole(AriaRole.Menuitem, new() { Name = "fake (chapter, thinking)" })).ToHaveCountAsync(0);
+            await Page.GetByRole(AriaRole.Menuitem, new() { Name = "fake (chapter)", Exact = true }).ClickAsync();
+            await Expect(chain.Locator(".chain__step")).ToHaveCountAsync(1);
+            await chain.Locator("[data-action='add-step']").ClickAsync();
+            await Page.GetByRole(AriaRole.Menuitem, new() { Name = "fake (thinking)", Exact = true }).ClickAsync();
+            await Expect(chain.Locator(".chain__step")).ToHaveCountAsync(2);
+
+            await Expect(chain.Locator(".chain__step").First.Locator(".r2m-status-chip__label")).ToHaveTextAsync(["Chapter"]);
+            await Expect(chain.Locator(".chain__step").Nth(1).Locator(".r2m-status-chip__label")).ToHaveTextAsync(["Thinking"]);
+
+            var steps = (await GetJsonAsync("/api/settings/llm/attribution-chain"))
+                .GetProperty("steps").EnumerateArray().ToList();
+            Assert.Equal(2, steps.Count);
+            Assert.Equal(2, steps[0].GetProperty("promptStyle").GetInt32());
+            Assert.False(steps[0].GetProperty("thinking").GetBoolean());
+            Assert.Equal(0, steps[1].GetProperty("promptStyle").GetInt32());
+            Assert.True(steps[1].GetProperty("thinking").GetBoolean());
+        }
+        finally
+        {
+            await Http.PutAsJsonAsync($"{App.BaseUrl}/api/settings/llm/attribution-chain",
+                new { steps = Array.Empty<object>(), selfConsistency = false });
+        }
+    }
+
     /// <summary>Leaves the shared host as the next test expects it: "fake" default, no stray config.</summary>
     private async Task RestoreAsync(string name)
     {

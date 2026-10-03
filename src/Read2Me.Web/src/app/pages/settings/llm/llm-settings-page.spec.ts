@@ -196,6 +196,20 @@ describe('LlmSettingsPage', () => {
     ]);
   });
 
+  it('a Chapter rung shows the Chapter chip', async () => {
+    const steps = [
+      { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Chapter },
+      { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
+    ];
+    const { el } = await render(chain({ steps }));
+
+    expect(
+      Array.from(el.querySelectorAll('.chain__step')).map((s) =>
+        Array.from(s.querySelectorAll('.r2m-status-chip__label')).map((c) => c.textContent?.trim()),
+      ),
+    ).toEqual([['Chapter'], ['Thinking']]);
+  });
+
   it('names the fallback when the chain is empty', async () => {
     const { el } = await render(
       chain({ resolved: [{ config: SMALL, thinking: false, promptStyle: SMALL.promptStyle }] }),
