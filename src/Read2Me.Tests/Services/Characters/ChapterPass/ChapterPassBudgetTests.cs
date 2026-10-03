@@ -4,7 +4,7 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters.ChapterPass
 {
     /// <summary>
-    /// The chapter pass's context budget (spec §4.5): a character ceiling on the whole prompt, and a
+    /// The chapter pass's context budget: a character ceiling on the whole prompt, and a
     /// front-trim that drops the oldest half of the lines before the current paragraph.
     /// </summary>
     public class ChapterPassBudgetTests

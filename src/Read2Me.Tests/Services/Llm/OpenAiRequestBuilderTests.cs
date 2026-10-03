@@ -222,13 +222,5 @@ namespace Read2Me.Tests.Services.Llm
             Assert.Equal(grammar, doc.RootElement.GetProperty("grammar").GetString());
             Assert.False(doc.RootElement.TryGetProperty("response_format", out _));
         }
-
-        [Fact]
-        public void BuildChatBody_GrammarAndJsonSchemaTogether_Throws()
-        {
-            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
-            Assert.Throws<ArgumentException>(() => OpenAiRequestBuilder.BuildChatBody(
-                cfg, "hi", stream: true, jsonSchema: """{ "type": "object" }""", grammar: "root ::= \"a\""));
-        }
     }
 }

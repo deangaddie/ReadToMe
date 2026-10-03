@@ -52,8 +52,9 @@ namespace Read2Me.Services.Llm
         /// </summary>
         private async Task<LlmRunResult<string>> StreamAsync(LlmRunRequest request, CancellationToken ct)
         {
-            // A caller bug, so it throws through rather than becoming a Failed outcome (which would
-            // count against the server's health streak).
+            // llama.cpp compiles response_format to a grammar of its own, so two constraints on one
+            // request are ambiguous. A caller bug, so it throws through rather than becoming a
+            // failure outcome (which would count against the server's health streak).
             if (!string.IsNullOrWhiteSpace(request.Grammar) && !string.IsNullOrWhiteSpace(request.JsonSchema))
                 throw new ArgumentException(
                     "An LLM run cannot set both a GBNF grammar and a JSON schema.", nameof(request));
@@ -143,6 +144,17 @@ namespace Read2Me.Services.Llm
                     "LLM run '{Label}' deferred — model still loading: {Message}", request.Label, ex.Message);
                 PublishAborted(timings);
                 return new LlmRunResult<string>(LlmRunOutcome.ModelLoading, null, sb.ToString(), ex.Message, timings.Latest);
+            }
+            catch (LlmProviderException ex) when (ex.IsClientError)
+            {
+                // The service answered and blamed the request (llama's 400 for a prompt over the
+                // context size). It is healthy, so this is not reported: it must not feed the
+                // watchdog's failure streak. Failed, not ServiceUnavailable, lets the caller change
+                // the request and retry instead of waiting out a recovery that cannot help.
+                logger.LogWarning("LLM run '{Label}' rejected by the provider: {Message}", request.Label, ex.Message);
+                PublishAborted(timings);
+                broadcaster.Publish(new StreamFailed(ex.Message));
+                return new LlmRunResult<string>(LlmRunOutcome.Failed, null, sb.ToString(), ex.Message, timings.Latest);
             }
             catch (Exception ex)
             {

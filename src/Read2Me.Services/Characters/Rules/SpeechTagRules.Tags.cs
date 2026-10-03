@@ -4,9 +4,8 @@ using static Read2Me.Services.Characters.Rules.SpeechLexicon;
 namespace Read2Me.Services.Characters.Rules
 {
     /// <summary>
-    /// Paragraph parsing, noun-phrase analysis and tag detection (lab <c>rules.mjs</c>: everything
-    /// between the name index and <c>tagChapter</c>). Shared by <see cref="TagChapter"/> and, from
-    /// ticket 05, name discovery, which reads the <c>unknown:</c> mentions of <see cref="PostTag"/>
+    /// Paragraph parsing, noun-phrase analysis and tag detection (the prototype's everything between
+    /// the name index and <c>tagChapter</c>). Shared by <see cref="TagChapter"/> and name discovery, which reads the <c>unknown:</c> mentions of <see cref="PostTag"/>
     /// and <see cref="PreTag"/>.
     /// </summary>
     internal static partial class SpeechTagRules

@@ -6,7 +6,7 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters.Rules
 {
     /// <summary>
-    /// The zero-LLM speaker tagger (port of the spike's <c>rules.mjs</c> v2 <c>tagChapter</c>): one
+    /// The zero-LLM speaker tagger (port of the measured prototype's <c>tagChapter</c>): one
     /// synthetic paragraph per tier and per guard. A test names the tag it expects, or that the item
     /// is left to the model.
     /// </summary>
@@ -277,7 +277,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
             Assert.Null(TagOf(tags, second));
         }
 
-        // ---- DiscoverNames: capitalised tag names the roster does not know (ticket 05)
+        // ---- DiscoverNames: capitalised tag names the roster does not know
 
         private static readonly IReadOnlyList<RosterEntry> DiscoverRoster =
         [

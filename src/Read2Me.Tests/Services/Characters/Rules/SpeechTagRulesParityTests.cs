@@ -7,10 +7,10 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters.Rules
 {
     /// <summary>
-    /// The C# port against the spike's JavaScript, item for item, on the frozen in-sample and
-    /// held-out chapters. Book text is never committed: the fixture is written outside the repo by
-    /// the spike's <c>lab/dump-rules.mjs</c>, and this test is skipped unless
-    /// <c>R2M_RULES_PARITY</c> names that file. Covers tagging (ticket 04) and name discovery (ticket 05).
+    /// The C# port against the JavaScript prototype it was ported from, item for item, on a fixed set
+    /// of measured chapters. Book text is never committed: the fixture is dumped from the prototype
+    /// to a file outside the repo, and this test is skipped unless <c>R2M_RULES_PARITY</c> names that
+    /// file. Covers tagging and name discovery.
     /// </summary>
     public class SpeechTagRulesParityTests
     {
@@ -23,7 +23,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
             IReadOnlyList<FixtureRoster> Roster, IReadOnlyDictionary<Guid, FixtureTag> Expected,
             IReadOnlyList<FixtureDiscover>? Discover);
 
-        /// <summary>One discovery run: the roster it saw (a drop set's, grown chapter by chapter) and what the lab found.</summary>
+        /// <summary>One discovery run: the roster it saw (a drop set's, grown chapter by chapter) and what the prototype found.</summary>
         private sealed record FixtureDiscover(
             string Dropset, IReadOnlyList<FixtureRoster> Roster, IReadOnlyList<FixtureName> Expected);
 
@@ -38,7 +38,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         private sealed record FixtureTag(string Speaker, string Rule);
 
         [Fact]
-        public void Tags_every_chapter_exactly_as_the_lab_does()
+        public void Tags_every_chapter_exactly_as_the_prototype_does()
         {
             var fixture = Load();
 
@@ -55,19 +55,19 @@ namespace Read2Me.Tests.Services.Characters.Rules
                     if (!actual.TryGetValue(id, out var got))
                         mismatches.Add($"{where} {id}: missing {tag.Speaker}/{tag.Rule}");
                     else if (got != new RuleTag(tag.Speaker, tag.Rule))
-                        mismatches.Add($"{where} {id}: {got.Speaker}/{got.Rule}, lab {tag.Speaker}/{tag.Rule}");
+                        mismatches.Add($"{where} {id}: {got.Speaker}/{got.Rule}, prototype {tag.Speaker}/{tag.Rule}");
                 }
                 foreach (var (id, got) in actual.Where(a => !chapter.Expected.ContainsKey(a.Key)))
                     mismatches.Add($"{where} {id}: extra {got.Speaker}/{got.Rule}");
             }
 
             TestContext.Current.TestOutputHelper?.WriteLine(
-                $"{fixture.Chapters.Count} chapters, {total} lab tags, {mismatches.Count} mismatches");
+                $"{fixture.Chapters.Count} chapters, {total} prototype tags, {mismatches.Count} mismatches");
             Assert.True(mismatches.Count == 0, string.Join("\n", mismatches));
         }
 
         [Fact]
-        public void Discovers_the_same_names_as_the_lab_in_every_chapter_and_drop_set()
+        public void Discovers_the_same_names_as_the_prototype_in_every_chapter_and_drop_set()
         {
             var fixture = Load();
             Assert.Contains(fixture.Chapters, c => c.Discover is { Count: > 0 });
@@ -86,7 +86,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
                     found.AddRange(actual.Select(d => $"{where}: {d.Name} ({d.Count}×)"));
                     if (!actual.SequenceEqual(run.Expected))
                         mismatches.Add(
-                            $"{where}: [{string.Join(", ", actual)}], lab [{string.Join(", ", run.Expected)}]");
+                            $"{where}: [{string.Join(", ", actual)}], prototype [{string.Join(", ", run.Expected)}]");
                 }
             }
 
@@ -99,7 +99,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         {
             var path = Environment.GetEnvironmentVariable(FixtureVariable);
             if (string.IsNullOrEmpty(path))
-                Assert.Skip($"{FixtureVariable} is not set (fixture from the spike's lab/dump-rules.mjs)");
+                Assert.Skip($"{FixtureVariable} is not set (a fixture dumped from the JavaScript prototype)");
 
             var fixture = JsonSerializer.Deserialize<Fixture>(
                 File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;

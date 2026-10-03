@@ -15,11 +15,6 @@ namespace Read2Me.Services.Llm
             bool disableThinking = false, LlmRunOverrides? overrides = null,
             string? systemPrompt = null, string? grammar = null)
         {
-            // Two constraint mechanisms on one request: llama.cpp compiles response_format to a
-            // grammar of its own, so sending both is ambiguous at best. A caller bug, not a runtime state.
-            if (!string.IsNullOrWhiteSpace(grammar) && !string.IsNullOrWhiteSpace(jsonSchema))
-                throw new ArgumentException("A request cannot set both a GBNF grammar and a JSON schema.", nameof(grammar));
-
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
             {

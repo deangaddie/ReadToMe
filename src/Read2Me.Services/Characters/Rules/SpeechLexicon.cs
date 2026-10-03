@@ -4,8 +4,8 @@ using System.Text.RegularExpressions;
 namespace Read2Me.Services.Characters.Rules
 {
     /// <summary>
-    /// The word lists and text helpers of the speech-tag rules, copied verbatim from the spike's
-    /// <c>rules.mjs</c> (v2). JavaScript semantics are kept where they could differ: letter tests
+    /// The word lists and text helpers of the speech-tag rules, copied verbatim from the JavaScript
+    /// prototype they were measured with. JavaScript semantics are kept where they could differ: letter tests
     /// are ASCII (<c>/[A-Z]/</c>), whitespace is ECMAScript <c>\s</c>, and <c>$</c> is end of string.
     /// </summary>
     internal static partial class SpeechLexicon
@@ -15,7 +15,7 @@ namespace Read2Me.Services.Characters.Rules
             "mr", "mrs", "ms", "miss", "sir", "lady", "lord", "master", "prince", "princess", "duke", "duchess",
             "king", "queen", "father", "mother", "brother", "sister", "dr", "doctor", "captain", "colonel", "uncle", "aunt", "madame",
             "madam", "monsieur", "count", "countess", "baron", "baroness", "earl", "squire", "professor", "mistress", "dame", "general",
-            "lieutenant", "sergeant", "major", "inspector", "reverend", "lieutenant", "commander", "admiral", "baronet", "emperor", "empress",
+            "lieutenant", "sergeant", "major", "inspector", "reverend", "commander", "admiral", "baronet", "emperor", "empress",
         ], StringComparer.Ordinal);
 
         public static readonly FrozenSet<string> SpeechVerbs = FrozenSet.ToFrozenSet(
@@ -28,7 +28,7 @@ namespace Read2Me.Services.Characters.Rules
             explained explains suggested suggests offered protested objected declared declares announced announces inquired enquired
             inquires enquires queried pleaded begged urged warned mumbled stammered stuttered breathed finished concluded corrected teased
             joked quipped wailed sobbed spoke noted mused ventured prompted persisted pressed sneered scoffed grumbled complained
-            shrieked howled barked thundered purred drawled intoned chimed piped sang called croaked gushed managed blurted
+            shrieked howled barked thundered purred drawled intoned chimed piped sang croaked gushed managed blurted
             """.Split((char[])[' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries),
             StringComparer.Ordinal);
 
@@ -82,7 +82,7 @@ namespace Read2Me.Services.Characters.Rules
 
         public static string Lc(string s) => s.ToLowerInvariant();
 
-        /// <summary>Lower case, periods removed, a trailing possessive <c>'s</c> dropped (lab <c>strip</c>).</summary>
+        /// <summary>Lower case, periods removed, a trailing possessive <c>'s</c> dropped (the prototype's <c>strip</c>).</summary>
         public static string Strip(string s) => DropPossessive(Lc(s).Replace(".", "", StringComparison.Ordinal));
 
         /// <summary>A trailing <c>’s</c> or <c>'s</c> removed.</summary>
@@ -140,7 +140,7 @@ namespace Read2Me.Services.Characters.Rules
         /// <summary><c>split(/\s+/)</c> with empty parts dropped.</summary>
         public static string[] Words(string s) => JsSpaces().Split(s).Where(w => w.Length > 0).ToArray();
 
-        /// <summary>The lab tokenizer: abbreviated honorifics, words (with apostrophes and hyphens), and clause punctuation.</summary>
+        /// <summary>The prototype's tokenizer: abbreviated honorifics, words (with apostrophes and hyphens), and clause punctuation.</summary>
         public static List<string> Tokenize(string s) => [.. Token().Matches(s).Select(m => m.Value)];
 
         /// <summary>Sentences, split after <c>.!?</c> and rejoined after an abbreviated honorific; only those with a letter.</summary>

@@ -8,7 +8,7 @@ using Read2Me.Services.Llm;
 namespace Read2Me.Services.Characters.ChapterPass
 {
     /// <summary>
-    /// The chapter pass (<see cref="AttributionPromptStyle.Chapter"/>, spec §4.2): per chapter, read
+    /// The chapter pass (<see cref="AttributionPromptStyle.Chapter"/>): per chapter, read
     /// the roster and the chapter once, then ask about one dialog item at a time, in chapter order,
     /// with the whole chapter so far as context and every earlier answer shown as a label. The answer
     /// is grammar-restricted to a roster name or <c>Unknown</c> plus a delivery cue. Streams one
@@ -16,7 +16,8 @@ namespace Read2Me.Services.Characters.ChapterPass
     /// they apply the existing step's.
     /// <para>
     /// First, rules-discover creates a Character for each name a speech tag uses that the roster
-    /// lacks, so the roster read for the chapter (and its grammar) can offer it.
+    /// lacks, so the roster read for the chapter (and its grammar) can offer it. This is the only
+    /// way the pass adds to the cast: the model's answer is held to the roster.
     /// </para>
     /// <para>
     /// Before the ask loop, <see cref="SpeechTagRules"/> tags the items whose speaker an explicit
@@ -36,7 +37,7 @@ namespace Read2Me.Services.Characters.ChapterPass
         ILogger<ChapterAttributionStep> logger)
         : IChainStep
     {
-        /// <summary>Room for a name and a 60-char cue; the grammar ends the answer well before it.</summary>
+        /// <summary>Room for a name and a 40-char cue; the grammar ends the answer well before it.</summary>
         public const int MaxTokens = 48;
 
         private static readonly LlmRunOverrides Greedy = new(MaxTokens: MaxTokens, Temperature: 0);
@@ -66,8 +67,8 @@ namespace Read2Me.Services.Characters.ChapterPass
             var narrator = await reader.GetNarratorAsync(first.Folder, ct);
             var snapshot = await reader.GetChapterParagraphsForAttributionAsync(first.Folder, first.ChapterId);
             var stats = new ChapterStats();
-            // Rules-discover (spec §4.2 step 1) may add Characters; it changes no items, so the
-            // snapshot stands and only the roster is read again.
+            // Rules-discover may add Characters; it changes no items, so the snapshot stands and only
+            // the roster is read again.
             stats.Created = await DiscoverAsync(first, snapshot, ct);
             var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
 
@@ -82,8 +83,8 @@ namespace Read2Me.Services.Characters.ChapterPass
                 group.Select(i => i.ParagraphId).ToHashSet());
             var full = new Ask("full", RosterGrammar.ForRoster(prompt.Names), RosterParser(prompt.Names), VoiceOnly: false);
 
-            // Rules pre-tag (spec §4.2 step 4): every tag is a label from the first call on, so tags
-            // feed forward like answers; a tagged item in a queued paragraph gets a voice-only call.
+            // Rules pre-tag: every tag is a label from the first call on, so tags feed forward like
+            // answers; a tagged item in a queued paragraph gets a voice-only call.
             var tags = SpeechTagRules.TagChapter(snapshot, RulesRoster(characters));
             for (var k = 0; k < snapshot.Count; k++)
                 for (var ii = 0; ii < snapshot[k].Items.Count; ii++)
@@ -173,8 +174,8 @@ namespace Read2Me.Services.Characters.ChapterPass
 
         /// <summary>
         /// Creates a Character for each name the chapter's speech tags use that the roster does not
-        /// know, silently (spec Q3): the cast list shows it through the create's receipt, and the user
-        /// merges a phantom there. The resolver re-checks names and aliases, so nothing is duplicated.
+        /// know, without asking: the cast list shows it through the create's receipt, and the user
+        /// merges a phantom there, which costs less than a prompt per name mid-run. The resolver re-checks names and aliases, so nothing is duplicated.
         /// </summary>
         /// <returns>How many Characters were created.</returns>
         private async Task<int> DiscoverAsync(
@@ -223,13 +224,12 @@ namespace Read2Me.Services.Characters.ChapterPass
             new($"voice {tag.Rule}", RosterGrammar.ForName(tag.Speaker), VoiceParser(tag.Speaker), VoiceOnly: true);
 
         /// <summary>
-        /// The roster the rules match mentions against: the prompt's (no seed Narrator row, no name
-        /// that collides with <c>Unknown</c>), with aliases, so every tag is an answerable name.
+        /// The roster the rules match mentions against: the prompt's, with aliases, so every tag is an
+        /// answerable name.
         /// </summary>
         private static List<RosterEntry> RulesRoster(IReadOnlyList<Data.Entities.Character> characters) =>
         [
-            .. characters
-                .Where(c => c.Id != ProjectDbContext.NarratorId && !RosterGrammar.IsReserved(c.Name))
+            .. RosterGrammar.Answerable(characters)
                 .Select(c => new RosterEntry(c.Name, [.. c.Aliases.Select(a => a.Name)])),
         ];
 
@@ -247,7 +247,7 @@ namespace Read2Me.Services.Characters.ChapterPass
                 chapterId, prompt.TrimStart, k, ii, reason);
         }
 
-        /// <summary>The per-chapter line of spec §4.6: what the pass did and whether the prompt cache held.</summary>
+        /// <summary>One line per chapter: what the pass did and whether the prompt cache held.</summary>
         private void LogSummary(Guid chapterId, ChapterStats stats) =>
             logger.LogInformation(
                 "Chapter pass '{Chapter}': {Items} items, {Calls} calls ({VoiceOnly} voice-only, {RuleTagged} rule-tagged), "
@@ -388,7 +388,7 @@ namespace Read2Me.Services.Characters.ChapterPass
                 EscalationTrigger.None);
         }
 
-        /// <summary>The cache check (spec §4.6): how much of each prompt llama had to prefill.</summary>
+        /// <summary>The cache check: how much of each prompt llama had to prefill (cache_n is what it reused).</summary>
         private void LogTimings(Guid chapterId, int k, int ii, string kind, LlmTimings? timings) =>
             logger.LogDebug(
                 "Chapter pass {ChapterId} [{K}.{Ii}] {Kind}: prompt_n {PromptN}, cache_n {CacheN}, predicted_n {PredictedN}",

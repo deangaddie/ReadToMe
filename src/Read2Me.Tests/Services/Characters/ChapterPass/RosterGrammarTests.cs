@@ -6,13 +6,13 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
 {
     /// <summary>
     /// The chapter pass's answer contract: a GBNF that only admits a roster name or <c>Unknown</c>
-    /// plus an optional delivery cue, and the parse that maps the answer back (spec §4.4).
-    /// Expected grammars are the lab's (<c>mc.mjs</c> <c>voiceGrammar</c>), written out by hand.
+    /// plus an optional delivery cue, and the parse that maps the answer back.
+    /// Expected grammars are the measured prototype's, written out by hand.
     /// </summary>
     public class RosterGrammarTests
     {
         [Fact]
-        public void Two_name_roster_grammar_matches_the_lab()
+        public void Two_name_roster_grammar_matches_the_prototype()
         {
             var grammar = RosterGrammar.ForRoster(["Pug", "Tomas"]);
 

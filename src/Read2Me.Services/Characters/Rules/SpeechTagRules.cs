@@ -7,7 +7,8 @@ namespace Read2Me.Services.Characters.Rules
 
     /// <summary>
     /// Which tiers <see cref="SpeechTagRules.TagChapter"/> runs. All on by default; each is a
-    /// one-line switch if a tier misbehaves on unseen books (spec R5).
+    /// one-line switch if a tier misbehaves on unseen books: the rules were measured on a handful of
+    /// novels only.
     /// <list type="bullet">
     /// <item>T1: a named speech tag before or after the quote.</item>
     /// <item>T2: the paragraph's single speaker propagated to its untagged quotes.</item>
@@ -22,10 +23,11 @@ namespace Read2Me.Services.Characters.Rules
     }
 
     /// <summary>
-    /// The zero-LLM speaker tagger: a port of the attribution-options spike's <c>rules.mjs</c> v2
-    /// <c>tagChapter</c>, kept faithful to it (a parity test compares the two item for item). It
-    /// answers only the dialog items it is sure of; everything else is left to the model. The
-    /// optional first-person rule is not ported (off for lab parity, spec Q6).
+    /// The zero-LLM speaker tagger: a port of a measured JavaScript prototype's <c>tagChapter</c>,
+    /// kept faithful to it (a local parity test compares the two item for item), which is why the
+    /// prototype's names are kept. It answers only the dialog items it is sure of; everything else is
+    /// left to the model. The prototype's optional first-person rule is not ported: it was off in
+    /// the measured runs.
     /// <para>
     /// Works on each paragraph's joined text (items joined by one space), so it does not depend on
     /// how the importer split items: quote spans are found with “ ” (or straight quotes), narration is

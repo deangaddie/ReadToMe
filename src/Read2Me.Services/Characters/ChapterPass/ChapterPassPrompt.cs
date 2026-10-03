@@ -1,11 +1,10 @@
 using System.Text;
-using Read2Me.Data;
 using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.Characters.ChapterPass
 {
     /// <summary>
-    /// The chapter pass's prompt for one chapter (spec §4.3), and where its cache contract lives.
+    /// The chapter pass's prompt for one chapter, and where its cache contract lives.
     /// <list type="bullet">
     /// <item><see cref="SystemText"/> is built once: instructions, book, roster, rules, answer line.
     /// It never changes within the chapter.</item>
@@ -28,7 +27,7 @@ namespace Read2Me.Services.Characters.ChapterPass
     /// </summary>
     internal sealed class ChapterPassPrompt
     {
-        /// <summary>Look-ahead paragraphs after the current one (lab <c>--after 4</c>).</summary>
+        /// <summary>Look-ahead paragraphs after the current one: a speech tag often follows the quote it names.</summary>
         public const int After = 4;
 
         /// <summary>Passage lines <see cref="DisplayTail"/> shows.</summary>
@@ -39,7 +38,7 @@ namespace Read2Me.Services.Characters.ChapterPass
 
         /// <param name="bookTitle">The book's title, as the prompt names it.</param>
         /// <param name="author">The book's author.</param>
-        /// <param name="characters">The roster as read; the seed Narrator row is left out here.</param>
+        /// <param name="characters">The roster as read; only <see cref="RosterGrammar.Answerable"/> ones are offered.</param>
         /// <param name="snapshot">The chapter, read once (<c>GetChapterParagraphsForAttributionAsync</c>).</param>
         /// <param name="queued">The paragraphs this pass asks about; their dialog starts unlabelled.</param>
         public ChapterPassPrompt(
@@ -47,9 +46,7 @@ namespace Read2Me.Services.Characters.ChapterPass
             IReadOnlyList<ChapterParagraph> snapshot, IReadOnlySet<Guid> queued)
         {
             _snapshot = snapshot;
-            var roster = characters
-                .Where(c => c.Id != ProjectDbContext.NarratorId && !RosterGrammar.IsReserved(c.Name))
-                .ToList();
+            var roster = RosterGrammar.Answerable(characters).ToList();
             Names = RosterGrammar.AnswerNames(roster.Select(c => c.Name));
             SystemText = BuildSystemText(bookTitle, author, roster);
 
@@ -70,7 +67,7 @@ namespace Read2Me.Services.Characters.ChapterPass
         public void SetLabel(int k, int ii, string name) => _labels[k][ii] = name;
 
         /// <summary>
-        /// A rule tag shown before the first call (lab <c>known</c> seeding): item
+        /// A rule tag shown before the first call, so the model sees it as an earlier answer: item
         /// <paramref name="ii"/> of paragraph <paramref name="k"/> shows <c>{name}</c> unless a stamp
         /// already labels it. The queued paragraphs start unlabelled, so their tags always show.
         /// </summary>
@@ -80,7 +77,7 @@ namespace Read2Me.Services.Characters.ChapterPass
         public string UserMessage(int k, int ii) => Passage(k) + Question(k, ii);
 
         /// <summary>
-        /// The first paragraph the passage shows (spec §4.5). It starts at 0 and only moves forward,
+        /// The first paragraph the passage shows (see <see cref="ChapterPassBudget"/>). It starts at 0 and only moves forward,
         /// by <see cref="Trim"/>; the lines keep their snapshot <c>k</c>.
         /// </summary>
         public int TrimStart { get; private set; }
@@ -152,8 +149,9 @@ namespace Read2Me.Services.Characters.ChapterPass
             !Llm.AttributionWire.IsUnknownSpeaker(speaker) && !Llm.AttributionWire.IsNarrator(speaker);
 
         /// <summary>
-        /// Lab <c>PROMPTS.v1</c> as <c>mc.mjs buildPrompt</c> renders it with <c>--answer name --voice</c>,
-        /// verbatim, including the two rules that still say <c>"?"</c> for unknown.
+        /// The instructions, verbatim from the prototype this pass was measured with, including the two
+        /// rules that still say <c>"?"</c> for unknown: changing the wording changes the measured
+        /// answers, so it waits for a measured run of its own.
         /// </summary>
         private static string BuildSystemText(string bookTitle, string author, IReadOnlyList<Character> roster)
         {

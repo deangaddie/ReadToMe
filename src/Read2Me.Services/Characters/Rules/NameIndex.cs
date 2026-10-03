@@ -14,7 +14,7 @@ namespace Read2Me.Services.Characters.Rules
         public static readonly NameMatch Unknown = new(NameMatchStatus.Unknown);
         public static readonly NameMatch Ambiguous = new(NameMatchStatus.Ambiguous);
 
-        /// <summary>The lab's status word (<c>roster</c>, <c>ambiguous</c>, <c>unknown</c>), as unresolved reasons carry it.</summary>
+        /// <summary>The prototype's status word (<c>roster</c>, <c>ambiguous</c>, <c>unknown</c>), as unresolved reasons carry it.</summary>
         public string StatusWord => Status switch
         {
             NameMatchStatus.Roster => "roster",
@@ -24,7 +24,7 @@ namespace Read2Me.Services.Characters.Rules
     }
 
     /// <summary>
-    /// Roster name matching (lab <c>buildNameIndex</c>). A capitalised name or alias becomes a form:
+    /// Roster name matching (the prototype's <c>buildNameIndex</c>). A capitalised name or alias becomes a form:
     /// its honorific words and its other words. A mention matches a form when all its non-honorific
     /// words are the form's, and its honorifics (if both have any) are too; exactly one matching
     /// character is a hit, several are ambiguous. An all-lowercase alias ("the magician") is a noun

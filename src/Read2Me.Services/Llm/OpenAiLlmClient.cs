@@ -74,7 +74,7 @@ namespace Read2Me.Services.Llm
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync(ct);
-                throw new LlmProviderException($"LLM provider returned error ({response.StatusCode}): {error}", null!);
+                throw new LlmProviderException($"LLM provider returned error ({response.StatusCode}): {error}", response.StatusCode);
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct);

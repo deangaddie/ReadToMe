@@ -24,6 +24,7 @@ using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Books;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Characters.ChapterPass;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
 using Read2Me.Services.IO;
@@ -202,12 +203,12 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<QueueWorker<QueuedParagraph>>();
         services.AddScoped<AttributionRequestBuilder>();
         services.AddScoped<CharacterAttributionService>();
-        services.AddScoped<Read2Me.Services.Characters.ChapterPass.ChapterAttributionStep>();
+        services.AddScoped<ChapterAttributionStep>();
         // The walk sees one step: the router sends a Chapter-style rung to the chapter pass and
         // every other style, untouched, to the existing step.
         services.AddScoped<IChainStep>(sp => new StyleRoutedChainStep(
             sp.GetRequiredService<CharacterAttributionService>(),
-            sp.GetRequiredService<Read2Me.Services.Characters.ChapterPass.ChapterAttributionStep>()));
+            sp.GetRequiredService<ChapterAttributionStep>()));
         services.AddScoped<AttributionEscalationChain>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();

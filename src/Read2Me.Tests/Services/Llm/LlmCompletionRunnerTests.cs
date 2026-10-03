@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Exceptions;
@@ -422,6 +423,50 @@ namespace Read2Me.Tests.Services.Llm
             Assert.Equal(LlmRunOutcome.Failed, result.Outcome);
             Assert.Equal("boom", result.Error);
             Assert.IsType<StreamFailed>(_events[^1]);
+        }
+
+        [Theory]
+        [InlineData(HttpStatusCode.BadRequest)]
+        [InlineData(HttpStatusCode.UnprocessableEntity)]
+        public async Task ClientError_ManagedService_MapsToFailed_AndIsNotReportedToHealth(HttpStatusCode status)
+        {
+            // A 4xx is the request's fault (llama's 400 for a prompt over the context size): the
+            // service answered, so a restart cannot help. It must not count toward the watchdog
+            // streak, and it must surface as Failed so the caller can fix the request and retry.
+            var llm = new ChunkedLlmClient().Throws(new LlmProviderException(
+                "LLM provider returned error (BadRequest): the request exceeds the available context size", status));
+            _reporter.Managed = true;
+            var runner = Runner(llm);
+
+            var result = await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L"),
+                CancellationToken.None);
+
+            Assert.Equal(LlmRunOutcome.Failed, result.Outcome);
+            Assert.Contains("exceeds the available context size", result.Error);
+            Assert.Empty(_reporter.Failures);
+            Assert.Empty(_reporter.Successes);
+            Assert.IsType<StreamFailed>(_events[^1]);
+        }
+
+        [Theory]
+        [InlineData(HttpStatusCode.InternalServerError)]
+        [InlineData(HttpStatusCode.ServiceUnavailable)]
+        [InlineData(HttpStatusCode.RequestTimeout)]
+        [InlineData(HttpStatusCode.TooManyRequests)]
+        public async Task ServerError_ManagedService_StillMapsToServiceUnavailable(HttpStatusCode status)
+        {
+            // 5xx, and the two 4xx that say "busy or slow, try again", are still the service's.
+            var llm = new ChunkedLlmClient().Throws(new LlmProviderException("LLM provider returned error", status));
+            _reporter.Managed = true;
+            var runner = Runner(llm);
+
+            var result = await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L"),
+                CancellationToken.None);
+
+            Assert.Equal(LlmRunOutcome.ServiceUnavailable, result.Outcome);
+            Assert.Single(_reporter.Failures);
         }
 
         // ---- Model still loading (switch-and-wait) ----

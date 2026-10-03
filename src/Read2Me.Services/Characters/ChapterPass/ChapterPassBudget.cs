@@ -1,7 +1,7 @@
 namespace Read2Me.Services.Characters.ChapterPass
 {
     /// <summary>
-    /// The chapter pass's context budget (spec §4.5). The prompt is the whole chapter so far, so a
+    /// The chapter pass's context budget. The prompt is the whole chapter so far, so a
     /// long chapter outgrows the 16k <c>gemma-12b</c> context. When it would, the oldest half of the
     /// lines before the current paragraph is dropped in one step; the trim start then stays put
     /// until the next overflow, so llama's prompt cache reuses the prefix again after one re-prefill.

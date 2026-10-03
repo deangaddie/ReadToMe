@@ -864,7 +864,7 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // Chapter rung → Full rung (spec §4.7): the production router over the
+        // Chapter rung → Full rung: the production router over the
         // real chapter pass and the real existing step, under the real walk.
         // ─────────────────────────────────────────────────────────────────────
 
@@ -1064,7 +1064,7 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         /// <summary>
-        /// Spec risk R6, documented as today's behaviour: the walk keeps a paragraph's answer whole,
+        /// A known limit, documented as today's behaviour: the walk keeps a paragraph's answer whole,
         /// and ranks a partly named answer the same as an all-Unknown one (both trigger Unknown), with
         /// ties to the later rung. So the Full rung's all-Unknown answer replaces the chapter pass's
         /// named item. A per-item merge would make this test fail — on purpose.

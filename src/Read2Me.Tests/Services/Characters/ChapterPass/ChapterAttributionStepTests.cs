@@ -1,12 +1,14 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
+using Read2Me.Core.Exceptions;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Characters.ChapterPass;
+using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -14,7 +16,7 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters.ChapterPass
 {
     /// <summary>
-    /// The chapter pass as an <see cref="IChainStep"/> (spec §4.2): one grammar-restricted call per
+    /// The chapter pass as an <see cref="IChainStep"/>: one grammar-restricted call per
     /// dialog item, sequentially through the chapter, answers fed forward as labels, one
     /// <see cref="StepOutcome"/> per queued paragraph, and an infra failure fanned out to the rest
     /// of the chapter.
@@ -298,6 +300,55 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             Assert.Equal([0, 0, 0, 1], runner.Requests.Select(FirstLine));
             Assert.All(outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Step.Outcome.Status));
             Assert.Equal([new AttributedItem(0, "Pug", "dry")], outcomes[2].Step.Outcome.Answer!.Items);
+        }
+
+        [Fact]
+        public async Task A_context_overflow_from_a_managed_llama_is_retried_through_the_real_runner()
+        {
+            // The real runner over a managed (watchdog-registered) base URL, as in production: llama's
+            // 400 must reach the step as Failed, not ServiceUnavailable, or the retry never fires and
+            // the overflow counts toward the container's failure streak.
+            var p0 = Para(Dialog("“A”"));
+            var p1 = Para(Dialog("“B”"));
+            var client = new PerCallLlmClient(
+                "Pug | calm",
+                new LlmProviderException(ContextOverflow, System.Net.HttpStatusCode.BadRequest),
+                "Kulgan | dry");
+            var reporter = new FakeAiServiceReporter { Managed = true };
+            var runner = new LlmCompletionRunner(client, reporter, new EventBroadcaster<LlmStreamEvent>(),
+                new EventBroadcaster<LlmTimingsSample>(), NullLogger<LlmCompletionRunner>.Instance);
+            var reader = new FakeReader([p0, p1]);
+
+            var outcomes = await RunAsync(
+                NewStep(runner, reader, resolver: new FakeResolver(reader)), [Queued(p0), Queued(p1)]);
+
+            Assert.Equal(3, client.Calls);
+            Assert.All(outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Step.Outcome.Status));
+            Assert.Equal([new AttributedItem(0, "Kulgan", "dry")], outcomes[1].Step.Outcome.Answer!.Items);
+            Assert.Empty(reporter.Failures);
+        }
+
+        /// <summary>One scripted reply per call: a string is streamed as the content, an exception thrown.</summary>
+        private sealed class PerCallLlmClient(params object[] replies) : ILlmClient
+        {
+            public int Calls { get; private set; }
+
+            public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
+                LlmServerConfig config, string prompt, string? jsonSchema = null,
+                bool disableThinking = false, LlmRunOverrides? overrides = null,
+                string? systemPrompt = null, string? grammar = null,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+            {
+                var reply = replies[Calls++];
+                await Task.CompletedTask;
+                if (reply is Exception ex)
+                    throw ex;
+                yield return new LlmChatChunk(null, (string)reply, false);
+                yield return new LlmChatChunk(null, null, Done: true);
+            }
+
+            public Task<IReadOnlyList<string>> GetModelsAsync(LlmServerConfig config, CancellationToken ct = default) =>
+                Task.FromResult<IReadOnlyList<string>>([]);
         }
 
         [Fact]

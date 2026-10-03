@@ -9,13 +9,13 @@ namespace Read2Me.Services.Characters.Rules
     /// </summary>
     internal sealed record DiscoveredName(string Name, int Count, string Example);
 
-    /// <summary>Rules-discover (lab <c>rules.mjs</c> <c>discoverNames</c>), ticket 05.</summary>
+    /// <summary>Rules-discover (the prototype's <c>discoverNames</c>): names to add to the roster before a chapter is asked.</summary>
     internal static partial class SpeechTagRules
     {
         private const int ExampleLength = 80;
         private const string UnknownPrefix = "unknown:";
 
-        /// <summary>Words a tag phrase may start with that are not part of a name (lab <c>OPENERS</c>).</summary>
+        /// <summary>Words a tag phrase may start with that are not part of a name (the prototype's <c>OPENERS</c>).</summary>
         private static readonly FrozenSet<string> Openers = FrozenSet.ToFrozenSet(
             [.. LeadWord, .. LeadClause, "yes", "no", "oh", "ah", "well", "very", "even", "instead", "perhaps", "only", "all", "i"],
             StringComparer.Ordinal);
@@ -68,7 +68,7 @@ namespace Read2Me.Services.Characters.Rules
             return string.Join(" ", toks);
         }
 
-        /// <summary>The narration after the quote, or before it when there is none (lab <c>(q.post || q.pre)</c>).</summary>
+        /// <summary>The narration after the quote, or before it when there is none.</summary>
         private static string Example(Quote q)
         {
             var text = JsTrim(q.Post.Length > 0 ? q.Post : q.Pre);

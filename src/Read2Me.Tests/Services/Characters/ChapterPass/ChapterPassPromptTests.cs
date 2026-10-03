@@ -8,7 +8,7 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters.ChapterPass
 {
     /// <summary>
-    /// The chapter-pass prompt and its cache contract (spec §4.3): a system text fixed for the
+    /// The chapter-pass prompt and its cache contract: a system text fixed for the
     /// chapter, and a user message whose lines before the current paragraph only ever grow by an
     /// inserted <c>{Name} </c> label, so llama's prompt cache reuses the prefix.
     /// </summary>

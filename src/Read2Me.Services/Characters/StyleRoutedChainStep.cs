@@ -6,7 +6,7 @@ namespace Read2Me.Services.Characters
     /// The one <see cref="IChainStep"/> the walk sees: routes a rung by its effective prompt style.
     /// <see cref="AttributionPromptStyle.Chapter"/> goes to the chapter pass; every other style goes
     /// to the existing step with the walk's options untouched, which is what keeps the
-    /// <c>Full</c>/<c>Simple</c> path byte-for-byte as it was (spec §4.1).
+    /// <c>Full</c>/<c>Simple</c> path byte-for-byte as it was before the chapter pass existed.
     /// </summary>
     /// <param name="existing">The existing step (<see cref="CharacterAttributionService"/>).</param>
     /// <param name="chapter">The chapter pass (<see cref="ChapterPass.ChapterAttributionStep"/>).</param>

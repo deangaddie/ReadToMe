@@ -86,7 +86,32 @@ namespace Read2Me.Tests.Services.Llm
             await pump;
         }
 
+        [Fact]
+        public async Task ErrorResponse_ThrowsProviderException_CarryingTheStatus()
+        {
+            // The runner reads the status to tell a bad request (not a health failure) from a sick service.
+            var factory = new SingleClientFactory(new HttpClient(new StatusHandler(HttpStatusCode.BadRequest,
+                "{\"error\":{\"message\":\"the request exceeds the available context size\"}}")));
+            var options = Options.Create(new AiWatchdogOptions { StreamInactivitySeconds = 60 });
+            var client = new OpenAiLlmClient(factory, NullLogger<OpenAiLlmClient>.Instance, options, new NoOpModelLoadGate());
+
+            var ex = await Assert.ThrowsAsync<Read2Me.Core.Exceptions.LlmProviderException>(async () =>
+            {
+                await foreach (var _ in client.StreamChatAsync(Config, "prompt", ct: CancellationToken.None)) { }
+            });
+
+            Assert.Equal(HttpStatusCode.BadRequest, ex.StatusCode);
+            Assert.True(ex.IsClientError);
+            Assert.Contains("exceeds the available context size", ex.Message);
+        }
+
         // ---- Fakes ----------------------------------------------------------
+
+        private sealed class StatusHandler(HttpStatusCode status, string body) : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+                => Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+        }
 
         private sealed class SingleClientFactory(HttpClient client) : IHttpClientFactory
         {

@@ -7,7 +7,7 @@ using Xunit;
 namespace Read2Me.Tests.Services.Characters
 {
     /// <summary>
-    /// The style router is the "existing path unchanged" guarantee (spec §4.1): <c>Full</c> and
+    /// The style router is the "existing path unchanged" guarantee: <c>Full</c> and
     /// <c>Simple</c> reach the existing step with the very options the walk built, and only
     /// <c>Chapter</c> reaches the chapter pass.
     /// </summary>
