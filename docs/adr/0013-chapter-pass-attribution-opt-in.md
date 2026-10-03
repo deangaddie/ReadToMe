@@ -26,20 +26,27 @@ the roster:
 | --- | --- | --- | --- | --- |
 | Current: `qwen-28b`, Full | 535 | 44 | 64 | 1516 s |
 | Chapter style: `gemma-12b` | 566 | 63 | 14 | 340 s |
+| Chapter style, unknowns escalated to `qwen-28b` · Full · thinking | 570 | 34 | 39 | 2045 s |
 
 Wrong answers fell by 78 % and the run was 4.5× faster. Rules-discover created 4 real characters in the one
-chapter whose roster lacked them, and no phantoms. The escalation of unknowns to `qwen-28b` has not been measured yet.
+chapter whose roster lacked them, and no phantoms. Escalating the unknowns is a bad trade: it turned 29 unknowns into
+4 more correct and 25 more wrong. Nearly all of those are in the chapter whose speakers rules-discover can't find,
+where `qwen-28b` names a listed character instead. It also took 6× the time, because of the model swaps and thinking.
+
+With the hand-made complete rosters (one run each), the Chapter style scored 262 / 44 / 4 in 156 s in-sample
+(310 items; current path 256 / 23 / 31 in 704 s) and 320 / 5 / 8 in 182 s held-out (333 items; current path
+302 / 8 / 23 in 710 s).
 
 ## Decision
 
 - **An opt-in prompt style.** `AttributionPromptStyle.Chapter = 2`, selected like `Simple`: on an LLM config or on
   one chain rung. `StyleRoutedChainStep` sends a Chapter rung to `ChapterAttributionStep` and every other rung to
-  `CharacterAttributionService`. `Full` and `Simple` are unchanged, and **the default stays `Full`** until the
-  measurement in ticket 09 is finished and Dean decides.
+  `CharacterAttributionService`. `Full` and `Simple` are unchanged, and **the default stays `Full`** until Dean
+  decides to switch.
 - **A second llama preset, `gemma-12b`**, with 16384 context. A Chapter config names it. Every other task (discovery,
   voice plans and prompts, book edits, `Full`/`Simple` rungs) stays on `qwen-28b`. This is where ADR 0011's "one
-  preset for every LLM task" no longer holds. The recommended chain is `[gemma-12b · Chapter, qwen-28b · Full ·
-  thinking]`.
+  preset for every LLM task" no longer holds. The recommended chain is one rung, `[gemma-12b · Chapter]`: its
+  unknowns go to manual review. A second `qwen-28b` rung adds more wrong names than right ones (see Context).
 - **Grammar-restricted roster names.** The answer is constrained by a GBNF grammar to `Name | delivery`. Name is a
   roster name or `Unknown`, and delivery is an optional cue of up to 40 characters. Thinking is off, temperature is 0,
   and `max_tokens` is 48, whatever the config says. **The model can never create a Character on this path**; there
@@ -53,8 +60,8 @@ chapter whose roster lacked them, and no phantoms. The escalation of unknowns to
   the only change to an earlier line is an inserted `{Name}` label for an item just answered. Nothing else uses the
   LLM slot inside a chapter. Long chapters are front-trimmed in halves, and the trim point then stays fixed, so llama
   reuses the prefix and prefills only a few hundred tokens per call.
-- **Unknowns escalate as before.** An `Unknown` answer makes the paragraph suspect. The existing walk re-asks it on
-  the next rung after the whole step-0 pass, or sends it to manual review in a one-rung chain.
+- **Unknowns follow the chain as before.** An `Unknown` answer makes the paragraph suspect. The existing walk re-asks
+  it on the next rung after the whole step-0 pass, or sends it to manual review in a one-rung chain (recommended).
 
 Recorded here because the same branch changed it app-wide: **an LLM 4xx response (except 408 and 429) is a request
 failure, not a service-health failure.** It returns `Failed`, is not reported to the AI-service health monitor, and
