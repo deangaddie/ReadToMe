@@ -226,6 +226,33 @@ namespace Read2Me.Tests.Services
             Assert.Equal(["P3"], ctx.Following.Select(p => p.Text).ToArray());
         }
 
+        // ── GetChapterParagraphsForAttributionAsync ───────────────────────────
+
+        [Fact]
+        public async Task GetChapterParagraphsForAttribution_ReturnsSpeechParagraphsInOrderWithWireItems()
+        {
+            var alice = new Character { Id = Guid.NewGuid(), Name = "Alice" };
+            var b = new BookHierarchyBuilder(OpenDbAsync).WithCharacter("alice", alice);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("p0", p => p
+                    .AddNarration("n0", "Night fell.")
+                    .AddRawItem("d0", ParagraphItemType.Speech, "“Who?”"))
+                .AddParagraph("pause", p => p.AddPause("x", ParagraphItemType.ParagraphPause))
+                .AddParagraph("p1", p => p.AddCharacterLine("d1", "“Me.”", speaker: "alice"))))
+                .BuildAsync();
+
+            var chapter = await _reader.GetChapterParagraphsForAttributionAsync(_folder, b.ChapterId("ch"));
+
+            Assert.Equal([b.ParagraphId("p0"), b.ParagraphId("p1")], chapter.Select(p => p.ParagraphId));
+            Assert.Equal(
+                [
+                    new ContextItem(b.ItemId("n0"), "Night fell.", "narration", "narrator"),
+                    new ContextItem(b.ItemId("d0"), "“Who?”", "dialog", "unknown"),
+                ],
+                chapter[0].Items);
+            Assert.Equal([new ContextItem(b.ItemId("d1"), "“Me.”", "dialog", "Alice")], chapter[1].Items);
+        }
+
         // ── GetParagraphBatchContextAsync ─────────────────────────────────────
 
         [Fact]

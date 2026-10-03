@@ -46,6 +46,9 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
 
     public List<string> LlmPromptsSeen { get; } = [];
 
+    /// <summary>JSON bodies of every fake-llm <c>POST /v1/chat/completions</c>, oldest first.</summary>
+    public List<JsonObject> LlmBodiesSeen { get; } = [];
+
     /// <summary>JSON bodies of every fake-audiocpp <c>POST /v1/audio/speech</c>, oldest first.</summary>
     public List<JsonObject> AudioCppSpeechBodies { get; } = [];
 
@@ -65,6 +68,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         LlmModels = FakeLlmModelStore.AllLoaded(DefaultModel);
         _lastTtsText = "";
         lock (LlmPromptsSeen) LlmPromptsSeen.Clear();
+        lock (LlmBodiesSeen) LlmBodiesSeen.Clear();
         lock (AudioCppSpeechBodies) AudioCppSpeechBodies.Clear();
         _audioCppLoaded = null;
     }
@@ -100,6 +104,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             // behaviour); the switch-and-wait gate's max_tokens=1 trigger and the real request both land here.
             LlmModels.NoteRequest(ExtractModel(body));
             var prompt = ExtractPrompt(body);
+            lock (LlmBodiesSeen) LlmBodiesSeen.Add(JsonNode.Parse(body)!.AsObject());
             lock (LlmPromptsSeen) LlmPromptsSeen.Add(prompt);
             if (LlmDelay > TimeSpan.Zero) await Task.Delay(LlmDelay, ct);
             var sse = FakeAiResponses.OpenAiSse(LlmReply(prompt));
@@ -169,9 +174,18 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         if (doc.RootElement.TryGetProperty("messages", out var messages) &&
             messages.ValueKind == JsonValueKind.Array)
         {
+            // The user message is the prompt; a system message (the chapter pass) sits before it.
+            string? first = null;
             foreach (var m in messages.EnumerateArray())
-                if (m.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+            {
+                if (!m.TryGetProperty("content", out var c) || c.ValueKind != JsonValueKind.String)
+                    continue;
+                if (m.TryGetProperty("role", out var role) && role.GetString() == "user")
                     return c.GetString() ?? "";
+                first ??= c.GetString() ?? "";
+            }
+            if (first != null)
+                return first;
         }
         if (doc.RootElement.TryGetProperty("prompt", out var p) && p.ValueKind == JsonValueKind.String)
             return p.GetString() ?? "";

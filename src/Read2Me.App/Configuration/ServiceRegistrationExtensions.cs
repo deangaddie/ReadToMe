@@ -202,7 +202,12 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<QueueWorker<QueuedParagraph>>();
         services.AddScoped<AttributionRequestBuilder>();
         services.AddScoped<CharacterAttributionService>();
-        services.AddScoped<IChainStep>(sp => sp.GetRequiredService<CharacterAttributionService>());
+        services.AddScoped<Read2Me.Services.Characters.ChapterPass.ChapterAttributionStep>();
+        // The walk sees one step: the router sends a Chapter-style rung to the chapter pass and
+        // every other style, untouched, to the existing step.
+        services.AddScoped<IChainStep>(sp => new StyleRoutedChainStep(
+            sp.GetRequiredService<CharacterAttributionService>(),
+            sp.GetRequiredService<Read2Me.Services.Characters.ChapterPass.ChapterAttributionStep>()));
         services.AddScoped<AttributionEscalationChain>();
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();

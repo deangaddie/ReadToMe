@@ -507,6 +507,24 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal("B (thinking)", Assert.Single(events.OfType<EscalationStarted>()).ConfigName);
         }
 
+        [Fact]
+        public async Task ChapterRung_RendersWithSuffix_InEscalationReason()
+        {
+            _settings.GetAttributionChainAsync().Returns(new List<ResolvedChainStep>
+            {
+                new(new LlmServerConfig { Name = "gemma", AttributionBatchSize = 8 }, false, AttributionPromptStyle.Chapter),
+                new(new LlmServerConfig { Name = "qwen", AttributionBatchSize = 8 }, true, AttributionPromptStyle.Full),
+            });
+            var step = new ScriptedStep()
+                .ForConfig("gemma", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown))
+                .ForConfig("qwen", Suspect(EscalationTrigger.Unknown, AttributionStatus.Unknown));
+
+            var outcome = Assert.Single(await DrainAsync(Chain(step), [Item()])).Outcome;
+
+            Assert.Equal("Speaker unknown after escalating through 2 models (gemma (chapter) → qwen (thinking))",
+                outcome.FailureReason);
+        }
+
         // ── ItemDeferred fire ─────────────────────────────────────────────────
 
         [Fact]

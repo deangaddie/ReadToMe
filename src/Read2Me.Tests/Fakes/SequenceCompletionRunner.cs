@@ -25,6 +25,9 @@ namespace Read2Me.Tests.Fakes
         /// <summary>(config, prompt) recorded per call, in call order.</summary>
         public List<(LlmServerConfig Config, string Prompt)> Calls { get; } = [];
 
+        /// <summary>The full request of each call, in call order (parallel to <see cref="Calls"/>).</summary>
+        public List<LlmRunRequest> Requests { get; } = [];
+
         /// <summary>Script one or more raw completions for calls made with the config of this name.</summary>
         public SequenceCompletionRunner ForConfig(string configName, params string[] responses)
         {
@@ -89,6 +92,7 @@ namespace Read2Me.Tests.Fakes
             Configs.Add(request.Config);
             Overrides.Add(request.Overrides);
             Calls.Add((request.Config, request.Prompt));
+            Requests.Add(request);
             return Next(request.Config.Name);
         }
     }

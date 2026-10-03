@@ -276,6 +276,15 @@ namespace Read2Me.Services
             return new ParagraphBatchContext(entries, included, deferred);
         }
 
+        public async Task<IReadOnlyList<ChapterParagraph>> GetChapterParagraphsForAttributionAsync(
+            ProjectFolderId folderId, Guid chapterId)
+        {
+            var paragraphs = await LoadChapterContextRowsAsync(folderId, chapterId);
+            return [.. paragraphs
+                .Where(p => p.HasContentItem)
+                .Select(p => new ChapterParagraph(p.Id, ToItems(p)))];
+        }
+
         private static ContextParagraph ToContextParagraph(ChapterContextRow row) =>
             new(row.Text, ToItems(row));
 

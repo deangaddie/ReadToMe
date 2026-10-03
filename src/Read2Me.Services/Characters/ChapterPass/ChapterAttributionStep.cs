@@ -1,0 +1,206 @@
+using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Logging;
+using Read2Me.AppData.Entities;
+using Read2Me.Data;
+using Read2Me.Services.Llm;
+
+namespace Read2Me.Services.Characters.ChapterPass
+{
+    /// <summary>
+    /// The chapter pass (<see cref="AttributionPromptStyle.Chapter"/>, spec §4.2): per chapter, read
+    /// the roster and the chapter once, then ask about one dialog item at a time, in chapter order,
+    /// with the whole chapter so far as context and every earlier answer shown as a label. The answer
+    /// is grammar-restricted to a roster name or <c>Unknown</c> plus a delivery cue. Streams one
+    /// <see cref="StepOutcome"/> per queued paragraph; the walk and the processor apply it exactly as
+    /// they apply the existing step's.
+    /// <para>
+    /// The rung's <see cref="ChainStepOptions.SelfConsistency"/>,
+    /// <see cref="ChainStepOptions.TemperatureOverride"/>, <see cref="ChainStepOptions.Thinking"/>
+    /// and final-rung re-ask are ignored: every request is greedy, short and thinking-off.
+    /// </para>
+    /// </summary>
+    internal sealed class ChapterAttributionStep(
+        ILlmCompletionRunner runner,
+        IProjectReader reader,
+        ILogger<ChapterAttributionStep> logger)
+        : IChainStep
+    {
+        /// <summary>Room for a name and a 60-char cue; the grammar ends the answer well before it.</summary>
+        public const int MaxTokens = 48;
+
+        private static readonly LlmRunOverrides Greedy = new(MaxTokens: MaxTokens, Temperature: 0);
+
+        /// <inheritdoc/>
+        async IAsyncEnumerable<(QueuedParagraph Item, StepOutcome Step)> IChainStep.RunAsync(
+            IReadOnlyList<QueuedParagraph> items,
+            ChainStepOptions opts,
+            AttributionQueueCallbacks? callbacks,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            foreach (var group in items.GroupBy(i => (i.Folder, i.ChapterId)))
+                await foreach (var outcome in RunChapterAsync([.. group], opts, callbacks, ct))
+                    yield return outcome;
+        }
+
+        /// <summary>
+        /// One chapter: roster, snapshot, then the sequential ask loop over the queued paragraphs in
+        /// chapter order. Nothing else is asked in between, so llama's one slot keeps the prefix.
+        /// </summary>
+        private async IAsyncEnumerable<(QueuedParagraph Item, StepOutcome Step)> RunChapterAsync(
+            IReadOnlyList<QueuedParagraph> group, ChainStepOptions opts,
+            AttributionQueueCallbacks? callbacks, [EnumeratorCancellation] CancellationToken ct)
+        {
+            var first = group[0];
+            var project = await reader.GetProjectAsync(first.Folder);
+            var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
+            var narrator = await reader.GetNarratorAsync(first.Folder, ct);
+            var snapshot = await reader.GetChapterParagraphsForAttributionAsync(first.Folder, first.ChapterId);
+
+            foreach (var reserved in characters.Where(c => RosterGrammar.IsReserved(c.Name)))
+                logger.LogWarning(
+                    "Character '{Name}' collides with the Unknown answer and is left out of the chapter pass roster",
+                    reserved.Name);
+
+            var index = snapshot.Select((p, k) => (p.ParagraphId, k)).ToDictionary(x => x.ParagraphId, x => x.k);
+            var prompt = new ChapterPassPrompt(
+                project?.BookTitle ?? string.Empty, project?.Author ?? string.Empty, characters, snapshot,
+                group.Select(i => i.ParagraphId).ToHashSet());
+            var grammar = RosterGrammar.ForRoster(prompt.Names);
+            var names = prompt.Names.ToHashSet(StringComparer.Ordinal);
+
+            // A queued paragraph the chapter no longer has (deleted, or no speech item left) has
+            // nothing to ask: Unknown with an Unknown trigger, like the existing step's unaskable bin.
+            foreach (var item in group.Where(i => !index.ContainsKey(i.ParagraphId)))
+            {
+                logger.LogInformation("Paragraph {ParagraphId} has no text — marking unknown", item.ParagraphId);
+                yield return (item, new StepOutcome(
+                    new AttributionOutcome(AttributionStatus.Unknown, null, null), EscalationTrigger.Unknown));
+            }
+
+            var queued = group.Where(i => index.ContainsKey(i.ParagraphId)).OrderBy(i => index[i.ParagraphId]).ToList();
+            for (var q = 0; q < queued.Count; q++)
+            {
+                var item = queued[q];
+                var k = index[item.ParagraphId];
+                var paragraphItems = snapshot[k].Items;
+                callbacks?.ChunkStarted?.Invoke([item]);
+
+                var answered = new List<AttributedItem>();
+                StepOutcome? failed = null;
+                for (var ii = 0; ii < paragraphItems.Count && failed is null; ii++)
+                {
+                    if (!paragraphItems[ii].IsDialog)
+                        continue;
+
+                    var request = new LlmRunRequest(
+                        opts.Config, prompt.UserMessage(k, ii), $"[{k}.{ii}] {item.Preview}",
+                        Shape: CompletionShape.None, DisableThinking: true, Overrides: Greedy,
+                        SystemPrompt: prompt.SystemText, Grammar: grammar, DisplayPrompt: prompt.DisplayTail(k, ii));
+                    var run = await runner.RunAsync<ChapterAnswer>(request, Parser(names), ct);
+                    LogTimings(first.ChapterId, k, ii, run.Timings);
+
+                    switch (run.Outcome)
+                    {
+                        case LlmRunOutcome.Completed:
+                            var answer = run.Value!;
+                            answered.Add(new AttributedItem(ii, answer.Name, answer.Delivery));
+                            if (!AttributionWire.IsUnknownSpeaker(answer.Name))
+                                prompt.SetLabel(k, ii, answer.Name);
+                            break;
+
+                        case LlmRunOutcome.ParseFailed:
+                            logger.LogWarning(
+                                "Failed to parse the chapter-pass answer for [{K}.{Ii}] on config {ConfigName}: {Raw}",
+                                k, ii, opts.Config.Name, run.Raw);
+                            failed = new StepOutcome(
+                                new AttributionOutcome(AttributionStatus.Failed, null, run.Error),
+                                EscalationTrigger.ParseFailure);
+                            break;
+
+                        default:
+                            // Infra or still-loading: the rest of the chapter is one unit of failure,
+                            // as a chunk is on the existing step. Stop asking and fan the outcome out.
+                            var routed = InfraOutcome(run.Outcome, run.Error, opts.Config.Name, queued.Count - q);
+                            for (var rest = q; rest < queued.Count; rest++)
+                                yield return (queued[rest], routed);
+                            yield break;
+                    }
+                }
+
+                yield return (item, failed ?? Classify(item.ParagraphId, paragraphItems, answered, characters, narrator, opts));
+            }
+        }
+
+        /// <summary>The answer as the grammar shapes it: a roster name or the unknown sentinel, and a cue.</summary>
+        private sealed record ChapterAnswer(string Name, string? Delivery);
+
+        private static TryParse<ChapterAnswer> Parser(IReadOnlyCollection<string> names) =>
+            (string raw, out ChapterAnswer? value, out string? error) =>
+            {
+                if (RosterGrammar.TryParse(raw, names, out var name, out var delivery))
+                {
+                    value = new ChapterAnswer(name!, delivery);
+                    error = null;
+                    return true;
+                }
+                value = null;
+                error = "Could not parse chapter-pass answer.";
+                return false;
+            };
+
+        /// <summary>
+        /// The paragraph's answers judged as the existing step judges them, so the walk treats a
+        /// chapter-pass outcome exactly like any other.
+        /// </summary>
+        private StepOutcome Classify(
+            Guid paragraphId, IReadOnlyList<ContextItem> items, IReadOnlyList<AttributedItem> answer,
+            IReadOnlyList<Data.Entities.Character> characters, NarratorIdentity narrator, ChainStepOptions opts)
+        {
+            var trigger = ItemAttributionEscalation.DeriveTrigger(answer, items, characters, narrator);
+            var status = ItemAttributionEscalation.HasUnknownSpeaker(answer, items, narrator)
+                ? AttributionStatus.Unknown
+                : AttributionStatus.Resolved;
+
+            logger.LogInformation(
+                "Chapter pass attributed paragraph {ParagraphId}: {Count} dialog item(s), status {Status}, "
+                + "trigger {Trigger}, config {ConfigName}. Speakers: {Speakers}",
+                paragraphId, answer.Count, status, trigger, opts.Config.Name,
+                string.Join(", ", answer.Select(a => $"{a.Index}={a.Speaker}")));
+
+            return new StepOutcome(
+                new AttributionOutcome(status, AttributionAnswer.For(answer, items), null), trigger);
+        }
+
+        /// <summary>
+        /// A run that produced no answer, as the existing step routes it: still loading → a None
+        /// trigger the walk short-circuits on; failed or unavailable → infra, also None.
+        /// </summary>
+        private StepOutcome InfraOutcome(LlmRunOutcome outcome, string? error, string configName, int count)
+        {
+            if (outcome == LlmRunOutcome.ModelLoading)
+            {
+                logger.LogInformation(
+                    "{Count} paragraph(s): model still loading — deferring to queue backoff", count);
+                return new StepOutcome(
+                    new AttributionOutcome(AttributionStatus.ModelLoading, null, error), EscalationTrigger.None);
+            }
+
+            logger.LogError(
+                "Error attributing {Count} paragraph(s) by chapter pass on config {ConfigName}: {Reason}",
+                count, configName, error);
+            return new StepOutcome(
+                new AttributionOutcome(
+                    outcome == LlmRunOutcome.ServiceUnavailable
+                        ? AttributionStatus.ServiceUnavailable
+                        : AttributionStatus.Failed,
+                    null, error),
+                EscalationTrigger.None);
+        }
+
+        /// <summary>The cache check (spec §4.6): how much of each prompt llama had to prefill.</summary>
+        private void LogTimings(Guid chapterId, int k, int ii, LlmTimings? timings) =>
+            logger.LogDebug(
+                "Chapter pass {ChapterId} [{K}.{Ii}] full: prompt_n {PromptN}, cache_n {CacheN}, predicted_n {PredictedN}",
+                chapterId, k, ii, timings?.PromptN, timings?.CacheN, timings?.PredictedN);
+    }
+}
