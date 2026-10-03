@@ -175,7 +175,10 @@ namespace Read2Me.Services.Characters.ChapterPass
                 - Use attribution tags ("said X", "X replied") before or after the quote, actions by a named character in the same paragraph, who is addressed by name (usually NOT the speaker), and the alternation of a two-person conversation.
                 - A listed character is a candidate only once the visible text has placed them in this scene. A speaker the text has only described ("a man", "the young officer") and not yet identified is "?", even if the book names them later.
                 - Never pick a name by elimination or plausibility. A wrong name is worse than "?".
-                - Answer as "Name | delivery": the name exactly as listed (or "Unknown"), then a few words for the voice actor on how the line sounds: emotion, tone, volume, pace (e.g. "angry, shouting", "soft, hesitant", "amused"), taken from the text and the situation. Not speech verbs ("said", "replied", "asked") and not gestures or actions. Leave the delivery empty if the line is plain, neutral speech.
+                - Answer as "Name | delivery": the name exactly as listed (or "Unknown"), then a short cue for the voice actor on how the line sounds: emotion, tone, volume or pace, in one or two adjectives plus at most one volume or pace word (e.g. "angry, shouting", "soft, hesitant", "dry, amused").
+                  - If the narration says how the line is spoken ("softly", "whispered", "shouted"), the cue must agree with it.
+                  - Describe only the voice. Never sounds or actions other than speech ("chuckling", "laughing", "sighing", "smiling"), gestures, or what the line is about. Never speech verbs ("said", "replied", "asked").
+                  - Answer "plain" for a neutral or expository line.
                 """.ReplaceLineEndings("\n");
         }
     }

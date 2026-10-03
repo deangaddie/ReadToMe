@@ -19,7 +19,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             Assert.Equal(
                 "root ::= name \" |\" voice\n" +
                 "name ::= \"Pug\" | \"Tomas\" | \"Unknown\"\n" +
-                "voice ::= ( \" \" [^\\n|]{1,60} )?",
+                "voice ::= ( \" \" [^\\n|]{1,40} )?",
                 grammar);
         }
 
@@ -44,7 +44,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             Assert.Equal(
                 "root ::= \"Pug\" \" |\" voice\n" +
-                "voice ::= ( \" \" [^\\n|]{1,60} )?",
+                "voice ::= ( \" \" [^\\n|]{1,40} )?",
                 RosterGrammar.ForName("Pug"));
         }
 
@@ -55,11 +55,25 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         [InlineData("Pug | soft, hesitant ", "Pug", "soft, hesitant")]
         [InlineData("Pug", "Pug", null)]
         [InlineData("Unknown | shouting", AttributionWire.Unknown, null)]
+        [InlineData("Pug | plain", "Pug", null)]
+        [InlineData("Pug | Plain ", "Pug", null)]
+        [InlineData("Pug | PLAIN", "Pug", null)]
+        [InlineData("Pug | plainly annoyed", "Pug", "plainly annoyed")]
         public void Parses_a_name_and_delivery(string raw, string name, string? delivery)
         {
             Assert.True(RosterGrammar.TryParse(raw, ["Pug", "Tomas"], out var n, out var d));
             Assert.Equal(name, n);
             Assert.Equal(delivery, d);
+        }
+
+        [Theory]
+        [InlineData("Pug | plain", null)]
+        [InlineData("Pug | Plain ", null)]
+        [InlineData("Pug | plainly annoyed", "plainly annoyed")]
+        [InlineData("Pug | dry, amused", "dry, amused")]
+        public void A_voice_only_answer_of_plain_has_no_delivery(string raw, string? delivery)
+        {
+            Assert.Equal(delivery, RosterGrammar.ParseDelivery(raw));
         }
 
         [Theory]

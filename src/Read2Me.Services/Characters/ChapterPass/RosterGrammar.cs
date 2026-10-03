@@ -14,8 +14,8 @@ namespace Read2Me.Services.Characters.ChapterPass
         /// <summary>The answer for "not identified"; maps to <see cref="AttributionWire.Unknown"/>.</summary>
         public const string UnknownAnswer = "Unknown";
 
-        /// <summary>The delivery cue: a space and up to 60 characters with no newline or bar (lab parity).</summary>
-        private const string VoiceRule = "voice ::= ( \" \" [^\\n|]{1,60} )?";
+        /// <summary>The delivery cue: a space and up to 40 characters with no newline or bar (voice-quality fix c: long cues drift into content).</summary>
+        private const string VoiceRule = "voice ::= ( \" \" [^\\n|]{1,40} )?";
 
         /// <summary>
         /// The names the model may answer with, in roster order: duplicates collapsed, and a roster
@@ -46,7 +46,7 @@ namespace Read2Me.Services.Characters.ChapterPass
         /// Parses <c>Name | delivery</c>: split at the first <c>" |"</c>; the name must be one of
         /// <paramref name="names"/> exactly (→ itself) or <c>Unknown</c> (→
         /// <see cref="AttributionWire.Unknown"/>, delivery dropped — the escalation rung writes its
-        /// own). The delivery is trimmed, and empty becomes null. Anything else is false.
+        /// own). The delivery is read by <see cref="ParseDelivery"/>. Anything else is false.
         /// </summary>
         public static bool TryParse(
             string raw, IReadOnlyCollection<string> names, out string? name, out string? delivery)
@@ -75,15 +75,21 @@ namespace Read2Me.Services.Characters.ChapterPass
 
         /// <summary>
         /// The delivery half of <c>Name | delivery</c>: what follows the first <c>" |"</c>, trimmed;
-        /// null when empty or when there is no bar. A voice-only answer is read with this alone, since
-        /// its name is the rule's, not the model's.
+        /// null when empty, when there is no bar, or when it is <see cref="PlainAnswer"/> (any case):
+        /// a neutral line gets no instruction. A voice-only answer is read with this alone, since its
+        /// name is the rule's, not the model's.
         /// </summary>
         public static string? ParseDelivery(string raw)
         {
             var bar = raw.IndexOf(" |", StringComparison.Ordinal);
             var cue = bar < 0 ? null : raw[(bar + 2)..].Trim();
-            return string.IsNullOrEmpty(cue) ? null : cue;
+            return string.IsNullOrEmpty(cue) || cue.Equals(PlainAnswer, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : cue;
         }
+
+        /// <summary>The cue the prompt asks for on a neutral or expository line; maps to no delivery.</summary>
+        public const string PlainAnswer = "plain";
 
         /// <summary>A GBNF string literal: backslash, quote and control characters escaped; UTF-8 as is.</summary>
         private static string Literal(string value)
