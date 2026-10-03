@@ -15,6 +15,10 @@ namespace Read2Me.Services.Characters.ChapterPass
     /// <see cref="StepOutcome"/> per queued paragraph; the walk and the processor apply it exactly as
     /// they apply the existing step's.
     /// <para>
+    /// First, rules-discover creates a Character for each name a speech tag uses that the roster
+    /// lacks, so the roster read for the chapter (and its grammar) can offer it.
+    /// </para>
+    /// <para>
     /// Before the ask loop, <see cref="SpeechTagRules"/> tags the items whose speaker an explicit
     /// speech tag names; those get a voice-only call (the grammar fixes the name) and show their
     /// name as a label from the first call on.
@@ -28,6 +32,7 @@ namespace Read2Me.Services.Characters.ChapterPass
     internal sealed class ChapterAttributionStep(
         ILlmCompletionRunner runner,
         IProjectReader reader,
+        CharacterResolver resolver,
         ILogger<ChapterAttributionStep> logger)
         : IChainStep
     {
@@ -58,9 +63,13 @@ namespace Read2Me.Services.Characters.ChapterPass
         {
             var first = group[0];
             var project = await reader.GetProjectAsync(first.Folder);
-            var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
             var narrator = await reader.GetNarratorAsync(first.Folder, ct);
             var snapshot = await reader.GetChapterParagraphsForAttributionAsync(first.Folder, first.ChapterId);
+            var stats = new ChapterStats();
+            // Rules-discover (spec §4.2 step 1) may add Characters; it changes no items, so the
+            // snapshot stands and only the roster is read again.
+            stats.Created = await DiscoverAsync(first, snapshot, ct);
+            var characters = await reader.GetCharactersWithAliasesAsync(first.Folder);
 
             foreach (var reserved in characters.Where(c => RosterGrammar.IsReserved(c.Name)))
                 logger.LogWarning(
@@ -72,7 +81,6 @@ namespace Read2Me.Services.Characters.ChapterPass
                 project?.BookTitle ?? string.Empty, project?.Author ?? string.Empty, characters, snapshot,
                 group.Select(i => i.ParagraphId).ToHashSet());
             var full = new Ask("full", RosterGrammar.ForRoster(prompt.Names), RosterParser(prompt.Names), VoiceOnly: false);
-            var stats = new ChapterStats();
 
             // Rules pre-tag (spec §4.2 step 4): every tag is a label from the first call on, so tags
             // feed forward like answers; a tagged item in a queued paragraph gets a voice-only call.
@@ -161,6 +169,31 @@ namespace Read2Me.Services.Characters.ChapterPass
             }
 
             LogSummary(first.ChapterId, stats);
+        }
+
+        /// <summary>
+        /// Creates a Character for each name the chapter's speech tags use that the roster does not
+        /// know, silently (spec Q3): the cast list shows it through the create's receipt, and the user
+        /// merges a phantom there. The resolver re-checks names and aliases, so nothing is duplicated.
+        /// </summary>
+        /// <returns>How many Characters were created.</returns>
+        private async Task<int> DiscoverAsync(
+            QueuedParagraph first, IReadOnlyList<ChapterParagraph> snapshot, CancellationToken ct)
+        {
+            var roster = await reader.GetCharactersWithAliasesAsync(first.Folder);
+            var discovered = SpeechTagRules.DiscoverNames(snapshot, RulesRoster(roster));
+            var known = roster.Select(c => c.Id).ToHashSet();
+            var created = 0;
+            foreach (var name in discovered)
+            {
+                if (!known.Add(await resolver.ResolveOrCreateAsync(first.Folder, name.Name, ct)))
+                    continue;
+                created++;
+                logger.LogInformation(
+                    "Rules-discover created '{Name}' in '{Chapter}' ({Count}×, e.g. \"{Example}\")",
+                    name.Name, first.ChapterId, name.Count, name.Example);
+            }
+            return created;
         }
 
         /// <summary>One request for item <paramref name="ii"/> of paragraph <paramref name="k"/>, counted and logged.</summary>

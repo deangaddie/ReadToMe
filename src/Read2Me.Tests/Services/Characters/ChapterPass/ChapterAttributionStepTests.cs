@@ -43,16 +43,19 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             public int SnapshotReads { get; private set; }
 
+            /// <summary>The roster; <see cref="FakeResolver"/> adds to it as the real create would.</summary>
+            public List<Character> Characters { get; } =
+            [
+                new() { Id = ProjectDbContext.NarratorId, Name = ProjectDbContext.NarratorName, IsNarrator = true },
+                new() { Id = Guid.NewGuid(), Name = "Kulgan" },
+                new() { Id = Guid.NewGuid(), Name = "Pug" },
+            ];
+
             public override Task<Project?> GetProjectAsync(ProjectFolderId folderId) =>
                 Task.FromResult<Project?>(new Project { BookTitle = "Magician", Author = "Feist" });
 
             public override Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) =>
-                Task.FromResult(new List<Character>
-                {
-                    new() { Id = ProjectDbContext.NarratorId, Name = ProjectDbContext.NarratorName, IsNarrator = true },
-                    new() { Id = Guid.NewGuid(), Name = "Kulgan" },
-                    new() { Id = Guid.NewGuid(), Name = "Pug" },
-                });
+                Task.FromResult(Characters.ToList());
 
             public override Task<NarratorIdentity> GetNarratorAsync(ProjectFolderId folderId, CancellationToken ct = default) =>
                 Task.FromResult(NarratorIdentity.Unlinked);
@@ -61,13 +64,40 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
                 ProjectFolderId folderId, Guid chapterId)
             {
                 SnapshotReads++;
-                return Task.FromResult(snapshot);
+                return Task.FromResult(OtherChapters.GetValueOrDefault(chapterId) ?? snapshot);
+            }
+
+            /// <summary>Snapshots for chapters other than <see cref="Chapter"/>.</summary>
+            public Dictionary<Guid, IReadOnlyList<ChapterParagraph>> OtherChapters { get; } = [];
+        }
+
+        /// <summary>
+        /// Resolves a name the way <see cref="CharacterResolver"/> does (name or alias, case-insensitive,
+        /// else create), against the fake reader's roster, and records each call with how many LLM
+        /// requests had been sent by then.
+        /// </summary>
+        private sealed class FakeResolver(FakeReader reader, SequenceCompletionRunner? runner = null)
+            : CharacterResolver(null!, null!)
+        {
+            public List<(string Name, int RequestsBefore)> Calls { get; } = [];
+
+            public override Task<Guid> ResolveOrCreateAsync(ProjectFolderId folder, string name, CancellationToken ct)
+            {
+                Calls.Add((name, runner?.Requests.Count ?? 0));
+                if (reader.Characters.FirstOrDefault(c => Matches(c, name)) is { } existing)
+                    return Task.FromResult(existing.Id);
+                var created = new Character { Id = Guid.NewGuid(), Name = name };
+                reader.Characters.Add(created);
+                return Task.FromResult(created.Id);
             }
         }
 
         private static ChapterAttributionStep NewStep(
-            ILlmCompletionRunner runner, IProjectReader reader, ILogger<ChapterAttributionStep>? logger = null) =>
-            new(runner, reader, logger ?? NullLogger<ChapterAttributionStep>.Instance);
+            ILlmCompletionRunner runner, IProjectReader reader, ILogger<ChapterAttributionStep>? logger = null,
+            CharacterResolver? resolver = null) =>
+            new(runner, reader,
+                resolver ?? new FakeResolver((FakeReader)reader, runner as SequenceCompletionRunner),
+                logger ?? NullLogger<ChapterAttributionStep>.Instance);
 
         private static async Task<List<(QueuedParagraph Item, StepOutcome Step)>> RunAsync(
             ChapterAttributionStep step, IReadOnlyList<QueuedParagraph> items,
@@ -425,6 +455,60 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             Assert.Contains(debug, m => m.Contains("[0.2] full:", StringComparison.Ordinal));
             var summary = Assert.Single(logger.At(LogLevel.Information), m => m.StartsWith("Chapter pass '", StringComparison.Ordinal));
             Assert.Contains("2 items, 2 calls (1 voice-only, 1 rule-tagged)", summary);
+        }
+
+        [Fact]
+        public async Task An_unlisted_tag_name_is_created_before_the_first_call_and_offered_from_it()
+        {
+            var p0 = Para(Dialog("“A”"));
+            var p1 = Para(Dialog("“We must go,”"), Narr("said Laurie."));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm", "Laurie | urgent");
+            var reader = new FakeReader([p0, p1]);
+            var resolver = new FakeResolver(reader, runner);
+
+            var outcomes = await RunAsync(NewStep(runner, reader, resolver: resolver), [Queued(p0), Queued(p1)]);
+
+            Assert.Equal([("Laurie", 0)], resolver.Calls);
+            var first = runner.Requests[0];
+            Assert.Contains("- Laurie", first.SystemPrompt);
+            Assert.Equal(RosterGrammar.ForRoster(["Kulgan", "Pug", "Laurie"]), first.Grammar);
+            // with Laurie on the roster, the said-tag is now a rule tag
+            Assert.Equal(RosterGrammar.ForName("Laurie"), runner.Requests[1].Grammar);
+            Assert.Equal([new AttributedItem(0, "Laurie", "urgent")], outcomes[1].Step.Outcome.Answer!.Items);
+        }
+
+        [Fact]
+        public async Task A_name_created_in_one_chapter_is_not_created_again_in_the_next()
+        {
+            var otherChapter = Guid.NewGuid();
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Laurie."));
+            var p1 = Para(Dialog("“Wait,”"), Narr("said Laurie."));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Laurie | urgent", "Laurie | soft");
+            var reader = new FakeReader([p0]);
+            reader.OtherChapters[otherChapter] = [p1];
+            var resolver = new FakeResolver(reader, runner);
+
+            await RunAsync(
+                NewStep(runner, reader, resolver: resolver),
+                [Queued(p0), Queued(p1) with { ChapterId = otherChapter }]);
+
+            Assert.Equal(["Laurie"], resolver.Calls.Select(c => c.Name));
+            Assert.Equal(2, runner.Requests.Count);
+        }
+
+        [Fact]
+        public async Task A_created_character_is_logged_with_its_example_and_counted_in_the_summary()
+        {
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Laurie."));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Laurie | urgent");
+            var logger = new CollectingLogger<ChapterAttributionStep>();
+
+            await RunAsync(NewStep(runner, new FakeReader([p0]), logger), [Queued(p0)]);
+
+            var info = logger.At(LogLevel.Information).ToList();
+            Assert.Contains($"Rules-discover created 'Laurie' in '{Chapter}' (1×, e.g. \"said Laurie.\")", info);
+            var summary = Assert.Single(info, m => m.StartsWith("Chapter pass '", StringComparison.Ordinal));
+            Assert.Contains("1 characters created", summary);
         }
     }
 }

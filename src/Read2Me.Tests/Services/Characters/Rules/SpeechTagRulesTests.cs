@@ -276,5 +276,72 @@ namespace Read2Me.Tests.Services.Characters.Rules
             Assert.Equal(new RuleTag("Pug", "T1-post-vs"), TagOf(tags, first));
             Assert.Null(TagOf(tags, second));
         }
+
+        // ---- DiscoverNames: capitalised tag names the roster does not know (ticket 05)
+
+        private static readonly IReadOnlyList<RosterEntry> DiscoverRoster =
+        [
+            new("Pug", []),
+            new("Kulgan", ["the magician"]),
+            new("Duke Borric", []),
+        ];
+
+        private static IReadOnlyList<DiscoveredName> Discover(params ChapterParagraph[] chapter) =>
+            SpeechTagRules.DiscoverNames(chapter, DiscoverRoster);
+
+        [Fact]
+        public void Discover_finds_a_said_tag_name_missing_from_the_roster()
+        {
+            var found = Discover(P(D("“We must go,”"), N("said Laurie.")));
+
+            Assert.Equal([new DiscoveredName("Laurie", 1, "said Laurie.")], found);
+        }
+
+        [Fact]
+        public void Discover_drops_a_leading_ly_adverb()
+        {
+            var found = Discover(P(D("“We must go,”"), N("said Suddenly Laurie.")));
+
+            Assert.Equal("Laurie", Assert.Single(found).Name);
+        }
+
+        [Fact]
+        public void Discover_drops_a_leading_opener()
+        {
+            var found = Discover(P(D("“We must go,”"), N("said Well Laurie.")));
+
+            Assert.Equal("Laurie", Assert.Single(found).Name);
+        }
+
+        [Fact]
+        public void Discover_ignores_an_honorific_alone()
+        {
+            Assert.Empty(Discover(P(D("“We must go,”"), N("said Lord."))));
+        }
+
+        [Fact]
+        public void Discover_ignores_a_mention_sharing_a_word_with_a_roster_name()
+        {
+            Assert.Empty(Discover(P(D("“We must go,”"), N("said Lord Borric."))));
+        }
+
+        [Fact]
+        public void Discover_ignores_a_pronoun()
+        {
+            Assert.Empty(Discover(P(D("“We must go,”"), N("said he."))));
+        }
+
+        [Fact]
+        public void Discover_counts_every_tag_and_keeps_the_first_example_in_first_seen_order()
+        {
+            var found = Discover(
+                P(D("“A,”"), N("said Nogamu.")),
+                P(N("Laurie said,"), D("“B.”")),
+                P(D("“C,”"), N("said Nogamu quietly.")));
+
+            Assert.Equal(
+                [new DiscoveredName("Nogamu", 2, "said Nogamu."), new DiscoveredName("Laurie", 1, "Laurie said,")],
+                found);
+        }
     }
 }
