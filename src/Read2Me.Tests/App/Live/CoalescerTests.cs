@@ -37,7 +37,8 @@ public class CoalescerTests
     [Fact]
     public void Debouncer_fires_once_per_window_however_many_pulses_arrive()
     {
-        var debouncer = new Debouncer(TimeSpan.FromMilliseconds(250));
+        // The default window, as the relay builds it: this pins the 250 ms it ships with.
+        var debouncer = new Debouncer();
         for (var i = 0; i < 100; i++)
             debouncer.Mark(T0.AddMilliseconds(i * 2));
 
