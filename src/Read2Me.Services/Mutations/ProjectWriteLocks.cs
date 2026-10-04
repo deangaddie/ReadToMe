@@ -12,6 +12,14 @@ namespace Read2Me.Services.Mutations;
 /// its budget is told so and reports an expected conflict, instead of holding a request open
 /// indefinitely.
 /// </para>
+/// <para>
+/// The table lives as long as the process: no gate is ever removed, not even a deleted project's.
+/// That is a choice, not an oversight. Removing an entry while a writer still holds it — a write
+/// in flight during the delete, or the folder name reused at once by a re-import — would let the
+/// next acquire create a second gate for the same folder, and two writers would run at once.
+/// Making eviction safe needs reference counting; one small semaphore per project written to, in
+/// a process restarted often, is not worth that.
+/// </para>
 /// </summary>
 public sealed class ProjectWriteLocks
 {

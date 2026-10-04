@@ -12,6 +12,10 @@ namespace Read2Me.Services.Mutations;
 /// Only <see cref="BookMutations"/> calls <see cref="Next"/>, and only under that project's write
 /// lock after its commit succeeded, so revision order is commit order.
 /// </para>
+/// <para>
+/// The table is never evicted, deliberately — not even for a deleted project. A counter that
+/// forgot a project would hand out a revision lower than one already stamped on a snapshot.
+/// </para>
 /// </summary>
 public sealed class BookRevisionSequence
 {
