@@ -35,26 +35,45 @@ namespace Read2Me.Services.Characters
         /// for the id that won, because a mutation that changed nothing has no created identity to
         /// report (ADR 0007).
         /// </para>
+        /// <para>
+        /// With no outcome to hand back, a refused create is thrown as what it is: a cancellation as
+        /// <see cref="OperationCanceledException"/>, anything else with the refusal's own message.
+        /// </para>
         /// </summary>
         public virtual async Task<Guid> ResolveOrCreateAsync(
-            ProjectFolderId folder, string name, CancellationToken ct) =>
-            (await ResolveOrCreateWithOutcomeAsync(folder, name, ct)).Id;
+            ProjectFolderId folder, string name, CancellationToken ct)
+        {
+            var (outcome, id) = await ResolveOrCreateWithOutcomeAsync(folder, name, ct);
+            return id ?? throw UncommittedArtifact.AsException(outcome, $"character '{name}'", ct);
+        }
 
         /// <summary>
         /// The same answer for a caller that also has to report whether anything was written — the
         /// generic command endpoint, which answers with the id either way but must not describe a
         /// created Character as a Book that did not change.
         /// </summary>
-        public async Task<(BookMutationOutcome Outcome, Guid Id)> ResolveOrCreateWithOutcomeAsync(
+        /// <returns>
+        /// The id, except on <see cref="BookMutationOutcome.Rejected"/>: a refused create (lock
+        /// contention, cancellation) wrote nothing and found nobody, so it carries no id.
+        /// </returns>
+        public async Task<(BookMutationOutcome Outcome, Guid? Id)> ResolveOrCreateWithOutcomeAsync(
             ProjectFolderId folder, string name, CancellationToken ct)
         {
             if (await FindAsync(folder, name) is { } existing)
                 return (new BookMutationOutcome.NoChange(), existing);
 
             var outcome = await mutations.CommitAsync(new CreateCharacterMutation(folder, name), ct);
-            if (outcome is BookMutationOutcome.Committed { Receipt.Effects.CreatedId: { } created })
-                return (outcome, created);
+            switch (outcome)
+            {
+                case BookMutationOutcome.Committed { Receipt.Effects.CreatedId: { } created }:
+                    return (outcome, created);
+                case BookMutationOutcome.Rejected:
+                    return (outcome, null);
+            }
 
+            // NoChange (another writer created the name between the read above and this commit), or a
+            // commit that did not report its id: either way the row must be there now. Not finding
+            // it is a defect, not an outcome.
             return (outcome, await FindAsync(folder, name)
                 ?? throw new InvalidOperationException(
                     $"CreateCharacterMutation neither created nor found a character named '{name}'."));
@@ -74,10 +93,10 @@ namespace Read2Me.Services.Characters
             ProjectFolderId folder, string name, IReadOnlyList<string> aliases, CancellationToken ct)
         {
             var (outcome, id) = await ResolveOrCreateWithOutcomeAsync(folder, name, ct);
-            if (outcome is BookMutationOutcome.Rejected) return outcome;
+            if (id is not { } resolved) return outcome;
 
             foreach (var alias in aliases)
-                if (await mutations.CommitAsync(new AddCharacterAliasMutation(folder, id, alias), ct)
+                if (await mutations.CommitAsync(new AddCharacterAliasMutation(folder, resolved, alias), ct)
                     is BookMutationOutcome.Rejected refused)
                     return refused;
 

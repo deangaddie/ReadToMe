@@ -237,6 +237,35 @@ namespace Read2Me.Tests.App.Characters
             Assert.Empty(_queue.Applied);
         }
 
+        /// <summary>
+        /// A new speaker whose create was cancelled: the resolver throws the cancellation as itself,
+        /// so the paragraph is dropped as cancelled, not failed with a "neither created nor found".
+        /// </summary>
+        [Fact]
+        public async Task CancelledSpeakerCreate_DoesNotMarkFailed()
+        {
+            _attribution.Outcome = Resolved("Gandalf");
+            _resolver.Refusal = new OperationCanceledException("Cancelled before commit.");
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            Assert.Empty(_queue.Applied);
+            Assert.Empty(_commits.Applied);
+        }
+
+        /// <summary>A contended create fails the paragraph with the contention's own reason.</summary>
+        [Fact]
+        public async Task ContendedSpeakerCreate_FailsWithTheContention()
+        {
+            _attribution.Outcome = Resolved("Gandalf");
+            _resolver.Refusal = new InvalidOperationException("Another write is still in progress.");
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            Assert.Contains("still in progress", DispositionFor<Disposition.Failed>(_item).Reason);
+            Assert.Empty(_commits.Applied);
+        }
+
         // ── The narrator token on a dialog item ───────────────────────────────
 
         /// <summary>
@@ -590,11 +619,13 @@ namespace Read2Me.Tests.App.Characters
         {
             public Guid ResolvedId { get; set; }
             public List<string> Names { get; } = [];
+            /// <summary>What a refused create throws, when set.</summary>
+            public Exception? Refusal { get; set; }
 
             public override Task<Guid> ResolveOrCreateAsync(ProjectFolderId folder, string name, CancellationToken ct)
             {
                 Names.Add(name);
-                return Task.FromResult(ResolvedId);
+                return Refusal is null ? Task.FromResult(ResolvedId) : Task.FromException<Guid>(Refusal);
             }
         }
 
