@@ -256,6 +256,7 @@ namespace Read2Me.Services.Characters
         {
             var suffixes = new List<string>(2);
             if (entry.Style == AttributionPromptStyle.Simple) suffixes.Add("simple");
+            if (entry.Style == AttributionPromptStyle.Chapter) suffixes.Add("chapter");
             if (entry.Thinking) suffixes.Add("thinking");
             return suffixes.Count == 0
                 ? entry.Config.Name

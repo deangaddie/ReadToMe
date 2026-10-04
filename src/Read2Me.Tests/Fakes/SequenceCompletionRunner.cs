@@ -25,6 +25,14 @@ namespace Read2Me.Tests.Fakes
         /// <summary>(config, prompt) recorded per call, in call order.</summary>
         public List<(LlmServerConfig Config, string Prompt)> Calls { get; } = [];
 
+        /// <summary>The full request of each call, in call order (parallel to <see cref="Calls"/>).</summary>
+        public List<LlmRunRequest> Requests { get; } = [];
+
+        /// <summary>
+        /// The llama timings each call reports, by request and 0-based call number; none when unset.
+        /// </summary>
+        public Func<LlmRunRequest, int, LlmTimings?>? Timings { get; set; }
+
         /// <summary>Script one or more raw completions for calls made with the config of this name.</summary>
         public SequenceCompletionRunner ForConfig(string configName, params string[] responses)
         {
@@ -68,11 +76,12 @@ namespace Read2Me.Tests.Fakes
         {
             var step = Record(request);
             if (step.Throws != null) throw step.Throws;
+            var timings = Timings?.Invoke(request, Requests.Count - 1);
             if (step.Outcome != LlmRunOutcome.Completed)
-                return Task.FromResult(new LlmRunResult<T>(step.Outcome, default, string.Empty, step.Error));
+                return Task.FromResult(new LlmRunResult<T>(step.Outcome, default, string.Empty, step.Error, timings));
             if (!parser(step.Raw!, out var value, out var error))
-                return Task.FromResult(new LlmRunResult<T>(LlmRunOutcome.ParseFailed, value, step.Raw!, error));
-            return Task.FromResult(new LlmRunResult<T>(LlmRunOutcome.Completed, value, step.Raw!, null));
+                return Task.FromResult(new LlmRunResult<T>(LlmRunOutcome.ParseFailed, value, step.Raw!, error, timings));
+            return Task.FromResult(new LlmRunResult<T>(LlmRunOutcome.Completed, value, step.Raw!, null, timings));
         }
 
         public Task<LlmRunResult<string>> RunAsync(LlmRunRequest request, CancellationToken ct)
@@ -89,6 +98,7 @@ namespace Read2Me.Tests.Fakes
             Configs.Add(request.Config);
             Overrides.Add(request.Overrides);
             Calls.Add((request.Config, request.Prompt));
+            Requests.Add(request);
             return Next(request.Config.Name);
         }
     }

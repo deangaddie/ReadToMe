@@ -30,17 +30,17 @@ namespace Read2Me.Services.Llm
         {
             var run = await StreamAsync(request, ct);
             if (run.Outcome != LlmRunOutcome.Completed)
-                return new LlmRunResult<T>(run.Outcome, default, run.Raw, run.Error);
+                return new LlmRunResult<T>(run.Outcome, default, run.Raw, run.Error, run.Timings);
 
             if (!parser(run.Raw, out var value, out var error))
             {
                 var reason = $"{error} Response: {run.Raw[..Math.Min(200, run.Raw.Length)]}";
                 logger.LogWarning("LLM run '{Label}' parse failed: {Reason}", request.Label, reason);
                 broadcaster.Publish(new StreamFailed(reason));
-                return new LlmRunResult<T>(LlmRunOutcome.ParseFailed, value, run.Raw, reason);
+                return new LlmRunResult<T>(LlmRunOutcome.ParseFailed, value, run.Raw, reason, run.Timings);
             }
 
-            return new LlmRunResult<T>(LlmRunOutcome.Completed, value, run.Raw, null);
+            return new LlmRunResult<T>(LlmRunOutcome.Completed, value, run.Raw, null, run.Timings);
         }
 
         public Task<LlmRunResult<string>> RunAsync(LlmRunRequest request, CancellationToken ct)
@@ -52,6 +52,13 @@ namespace Read2Me.Services.Llm
         /// </summary>
         private async Task<LlmRunResult<string>> StreamAsync(LlmRunRequest request, CancellationToken ct)
         {
+            // llama.cpp compiles response_format to a grammar of its own, so two constraints on one
+            // request are ambiguous. A caller bug, so it throws through rather than becoming a
+            // failure outcome (which would count against the server's health streak).
+            if (!string.IsNullOrWhiteSpace(request.Grammar) && !string.IsNullOrWhiteSpace(request.JsonSchema))
+                throw new ArgumentException(
+                    "An LLM run cannot set both a GBNF grammar and a JSON schema.", nameof(request));
+
             var sb = new StringBuilder();
 
             // Nothing timed here is displayed — the stamps only let the accumulator slice its
@@ -66,7 +73,7 @@ namespace Read2Me.Services.Llm
             try
             {
                 logger.LogDebug("LLM run '{Label}' against {BaseUrl}", request.Label, request.Config.BaseUrl);
-                broadcaster.Publish(new RequestStarted(request.Label, request.Prompt,
+                broadcaster.Publish(new RequestStarted(request.Label, request.DisplayPrompt ?? request.Prompt,
                     request.Config.Id, request.Config.Name));
 
                 LlmUsage? usage = null;
@@ -79,7 +86,7 @@ namespace Read2Me.Services.Llm
 
                 await foreach (var chunk in llm.StreamChatAsync(
                     request.Config, request.Prompt, request.JsonSchema, request.DisableThinking,
-                    request.Overrides, ct))
+                    request.Overrides, request.SystemPrompt, request.Grammar, ct))
                 {
                     // One stamp, both consumers: the accumulator's window and the aggregator's ring
                     // must agree about when this chunk landed.
@@ -109,7 +116,7 @@ namespace Read2Me.Services.Llm
 
                 reporter.ReportSuccess(request.Config.BaseUrl);
                 var raw = sb.ToString();
-                return new LlmRunResult<string>(LlmRunOutcome.Completed, raw, raw, null);
+                return new LlmRunResult<string>(LlmRunOutcome.Completed, raw, raw, null, timings.Latest);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -136,7 +143,18 @@ namespace Read2Me.Services.Llm
                 logger.LogInformation(
                     "LLM run '{Label}' deferred — model still loading: {Message}", request.Label, ex.Message);
                 PublishAborted(timings);
-                return new LlmRunResult<string>(LlmRunOutcome.ModelLoading, null, sb.ToString(), ex.Message);
+                return new LlmRunResult<string>(LlmRunOutcome.ModelLoading, null, sb.ToString(), ex.Message, timings.Latest);
+            }
+            catch (LlmProviderException ex) when (ex.IsClientError)
+            {
+                // The service answered and blamed the request (llama's 400 for a prompt over the
+                // context size). It is healthy, so this is not reported: it must not feed the
+                // watchdog's failure streak. Failed, not ServiceUnavailable, lets the caller change
+                // the request and retry instead of waiting out a recovery that cannot help.
+                logger.LogWarning("LLM run '{Label}' rejected by the provider: {Message}", request.Label, ex.Message);
+                PublishAborted(timings);
+                broadcaster.Publish(new StreamFailed(ex.Message));
+                return new LlmRunResult<string>(LlmRunOutcome.Failed, null, sb.ToString(), ex.Message, timings.Latest);
             }
             catch (Exception ex)
             {
@@ -149,7 +167,7 @@ namespace Read2Me.Services.Llm
                 var reported = reporter.ReportFailure(request.Config.BaseUrl, ex);
                 return new LlmRunResult<string>(
                     reported ? LlmRunOutcome.ServiceUnavailable : LlmRunOutcome.Failed,
-                    null, sb.ToString(), ex.Message);
+                    null, sb.ToString(), ex.Message, timings.Latest);
             }
         }
 

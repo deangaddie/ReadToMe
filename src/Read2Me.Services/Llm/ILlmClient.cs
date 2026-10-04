@@ -15,10 +15,15 @@ namespace Read2Me.Services.Llm
         /// enable_thinking=false); no-op on models without a thinking mode.
         /// When <paramref name="overrides"/> is set, its non-null properties replace the config's
         /// own values for this request only; the config itself is untouched.
+        /// When <paramref name="systemPrompt"/> is set, it is sent as a <c>system</c> message
+        /// before the user message. When <paramref name="grammar"/> is set, it is sent as
+        /// llama.cpp's top-level GBNF <c>grammar</c>; it cannot be combined with
+        /// <paramref name="jsonSchema"/>. Both null leave the request body exactly as before.
         /// </summary>
         IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
             LlmServerConfig config, string prompt, string? jsonSchema = null,
             bool disableThinking = false, LlmRunOverrides? overrides = null,
+            string? systemPrompt = null, string? grammar = null,
             CancellationToken ct = default);
 
         /// <summary>

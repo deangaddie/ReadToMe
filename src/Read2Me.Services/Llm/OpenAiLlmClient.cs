@@ -36,6 +36,7 @@ namespace Read2Me.Services.Llm
         public async IAsyncEnumerable<LlmChatChunk> StreamChatAsync(
             LlmServerConfig config, string prompt, string? jsonSchema = null,
             bool disableThinking = false, LlmRunOverrides? overrides = null,
+            string? systemPrompt = null, string? grammar = null,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             // On a switchable llama endpoint, ensure the target model is loaded before the real request
@@ -47,7 +48,7 @@ namespace Read2Me.Services.Llm
             var http = CreateClient(config);
 
             var body = OpenAiRequestBuilder.BuildChatBody(
-                config, prompt, stream: true, jsonSchema, disableThinking, overrides);
+                config, prompt, stream: true, jsonSchema, disableThinking, overrides, systemPrompt, grammar);
             using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiStreamParser.Combine(config.BaseUrl, "v1/chat/completions"))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
@@ -73,7 +74,7 @@ namespace Read2Me.Services.Llm
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync(ct);
-                throw new LlmProviderException($"LLM provider returned error ({response.StatusCode}): {error}", null!);
+                throw new LlmProviderException($"LLM provider returned error ({response.StatusCode}): {error}", response.StatusCode);
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct);

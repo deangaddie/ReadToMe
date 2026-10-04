@@ -64,6 +64,8 @@ namespace Read2Me.Tests.Fakes
             Task.FromResult<ParagraphContext?>(null);
         public virtual Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after) =>
             Task.FromResult<ParagraphBatchContext?>(null);
+        public virtual Task<IReadOnlyList<ChapterParagraph>> GetChapterParagraphsForAttributionAsync(ProjectFolderId folderId, Guid chapterId) =>
+            Task.FromResult<IReadOnlyList<ChapterParagraph>>([]);
         public virtual Task<IReadOnlyList<AssemblyManifestEntry>> GetAssemblyManifestAsync(ProjectFolderId folder, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<AssemblyManifestEntry>>([]);
         public virtual Task<IReadOnlyList<AudioSampleInfo>> GetAudioSampleInfosAsync(ProjectFolderId folderId, IReadOnlyCollection<Guid> itemIds) =>

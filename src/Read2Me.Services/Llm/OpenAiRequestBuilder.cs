@@ -12,7 +12,8 @@ namespace Read2Me.Services.Llm
     {
         public static string BuildChatBody(
             LlmServerConfig config, string prompt, bool stream, string? jsonSchema = null,
-            bool disableThinking = false, LlmRunOverrides? overrides = null)
+            bool disableThinking = false, LlmRunOverrides? overrides = null,
+            string? systemPrompt = null, string? grammar = null)
         {
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
@@ -39,6 +40,15 @@ namespace Read2Me.Services.Llm
                 }
 
                 writer.WriteStartArray("messages");
+                // System first, then user. A stable system message is what lets llama's prompt
+                // cache reuse the prefix across calls (chapter pass); no system message when unset.
+                if (systemPrompt is not null)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("role", "system");
+                    writer.WriteString("content", systemPrompt);
+                    writer.WriteEndObject();
+                }
                 writer.WriteStartObject();
                 writer.WriteString("role", "user");
                 writer.WriteString("content", prompt);
@@ -77,6 +87,11 @@ namespace Read2Me.Services.Llm
                     writer.WriteEndObject();
                     writer.WriteEndObject();
                 }
+
+                // llama.cpp extension: a raw GBNF grammar at top level. Emitted only when set, like
+                // chat_template_kwargs, so strict OpenAI-compatible servers never see it.
+                if (!string.IsNullOrWhiteSpace(grammar))
+                    writer.WriteString("grammar", grammar);
 
                 writer.WriteEndObject();
             }

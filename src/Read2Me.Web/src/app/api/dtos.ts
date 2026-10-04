@@ -27,7 +27,7 @@ export type NodeLevel = 'volume' | 'part' | 'chapter';
 export const LlmApiType = { OpenAiCompatible: 0 } as const;
 export type LlmApiType = (typeof LlmApiType)[keyof typeof LlmApiType];
 
-export const AttributionPromptStyle = { Full: 0, Simple: 1 } as const;
+export const AttributionPromptStyle = { Full: 0, Simple: 1, Chapter: 2 } as const;
 export type AttributionPromptStyle =
   (typeof AttributionPromptStyle)[keyof typeof AttributionPromptStyle];
 

@@ -46,6 +46,12 @@ namespace Read2Me.Services
     /// </summary>
     public sealed record ContextParagraph(string Text, IReadOnlyList<ContextItem> Items);
 
+    /// <summary>
+    /// One paragraph of a chapter-pass snapshot: its id and its speech items in <c>Order</c>
+    /// sequence, in the wire shape (index = the item's position, which is what an answer names).
+    /// </summary>
+    public sealed record ChapterParagraph(Guid ParagraphId, IReadOnlyList<ContextItem> Items);
+
     /// <summary>Text of a target paragraph plus its nearest neighbours within the same chapter.</summary>
     public sealed record ParagraphContext(
         ContextParagraph Query,
@@ -170,6 +176,14 @@ namespace Read2Me.Services
         /// </summary>
         Task<ParagraphBatchContext?> GetParagraphBatchContextAsync(
             ProjectFolderId folderId, Guid chapterId, IReadOnlyList<Guid> paragraphIds, int before, int after);
+
+        /// <summary>
+        /// The whole chapter as the chapter pass reads it: every paragraph with at least one speech
+        /// item, in <c>Order</c>, each with its speech items as <see cref="ContextItem"/>s (speaker =
+        /// the stamped name, <c>narrator</c> or <c>unknown</c>). Empty for an unknown chapter.
+        /// </summary>
+        Task<IReadOnlyList<ChapterParagraph>> GetChapterParagraphsForAttributionAsync(
+            ProjectFolderId folderId, Guid chapterId);
     }
 
     /// <summary>

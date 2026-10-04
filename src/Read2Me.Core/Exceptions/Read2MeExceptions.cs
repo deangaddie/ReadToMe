@@ -1,4 +1,6 @@
-﻿namespace Read2Me.Core.Exceptions;
+﻿using System.Net;
+
+namespace Read2Me.Core.Exceptions;
 
 public class Read2MeException : Exception
 {
@@ -34,6 +36,25 @@ public class DatabaseInconsistentException : Read2MeException
 public class LlmProviderException : Read2MeException
 {
     public LlmProviderException(string message, Exception innerException) : base(message, innerException) { }
+
+    /// <summary>The provider answered with a non-success status.</summary>
+    public LlmProviderException(string message, HttpStatusCode statusCode) : base(message)
+    {
+        StatusCode = statusCode;
+    }
+
+    /// <summary>The status the provider answered with; null when no response arrived.</summary>
+    public HttpStatusCode? StatusCode { get; }
+
+    /// <summary>
+    /// A 4xx that blames the request (for llama, a prompt over the context size): the service is
+    /// up and answering, so a restart cannot fix it and a retry of the same request fails the same
+    /// way. 408 and 429 are left out: they say "slow or busy, try again".
+    /// </summary>
+    public bool IsClientError =>
+        StatusCode is { } s
+        && (int)s is >= 400 and < 500
+        && s is not HttpStatusCode.RequestTimeout and not HttpStatusCode.TooManyRequests;
 }
 
 /// <summary>

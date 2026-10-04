@@ -204,7 +204,9 @@ const NUMERIC_FIELDS = [
           <mat-hint>
             Simple: only assigns a speaker when the text explicitly says who speaks ("said X");
             otherwise returns unknown so escalation passes the paragraph to a larger model. Full:
-            uses inference heuristics.
+            uses inference heuristics. Chapter: whole chapter, roster-only answers, rules pre-tag
+            and rules-discover. Fast on gemma-12b; the model never creates characters —
+            rules-discover does. Thinking is always off.
           </mat-hint>
         </mat-form-field>
 
@@ -298,6 +300,7 @@ export class LlmConfigEditor {
   protected readonly promptStyles = [
     { value: AttributionPromptStyle.Full, label: 'Full' },
     { value: AttributionPromptStyle.Simple, label: 'Simple' },
+    { value: AttributionPromptStyle.Chapter, label: 'Chapter' },
   ];
   protected readonly numericFields = NUMERIC_FIELDS;
 

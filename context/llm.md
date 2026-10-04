@@ -2,7 +2,7 @@
 
 Use these terms exactly in code, tests, and discussion.
 
-- **Constrained completion** — an LLM request whose output is constrained to a JSON schema (llama.cpp compiles the schema to a grammar, so the model cannot emit anything but the schema).
+- **Constrained completion** — an LLM request whose output llama.cpp's sampler constrains, so the model cannot emit anything else. Two shapes, never both on one request (`ArgumentException`): a **JSON schema** (`response_format`, compiled to a grammar by llama.cpp; the `Full`/`Simple` attribution, discovery, book-edit and voice-plan paths) or a raw **GBNF grammar** (`LlmRunRequest.Grammar`, sent as top-level `grammar`; the chapter pass's roster grammar, `context/attribution.md`). A grammar answer is plain text, not JSON: the grammar itself ends it, not the completion scanner.
 - **Completion Runner** — the single module (`ILlmCompletionRunner`) that runs a constrained completion end to end: streams via `ILlmClient`, publishes the Audio Gen Stream-style broadcast events, stops at the completion scanner, records stream metrics, reports health streaks, and maps failure to an outcome. Every LLM-calling feature (attribution, discovery, book edits, voice prompts) goes through it — never through `ILlmClient` directly.
   _Avoid_: "LLM helper", "LLM wrapper", calling `StreamChatAsync` from feature code
 - **Completion scanner stop** — breaking the stream the moment the answer JSON object/array closes (`JsonCompletionScanner`); disposing the stream cancels the request if the model keeps generating.

@@ -3,6 +3,8 @@
 ## Status
 
 accepted (2026-09-30). Decided in the LLM Model Upgrade map (`.scratch/completed/llm-model-upgrade/`, tickets 19–24).
+Amended by [ADR 0013](0013-chapter-pass-attribution-opt-in.md): an opt-in Chapter-style attribution rung runs on a
+second preset, `gemma-12b`; every other LLM task stays on `qwen-28b`.
 
 ## Context
 

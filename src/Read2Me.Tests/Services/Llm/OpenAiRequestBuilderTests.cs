@@ -177,5 +177,50 @@ namespace Read2Me.Tests.Services.Llm
             Assert.Contains("\"role\":\"user\"", json);
             Assert.Contains("\"content\":\"hello world\"", json);
         }
+
+        // ---- System message + GBNF grammar (chapter pass, attribution-grammar 01) ----
+
+        [Fact]
+        public void BuildChatBody_WithNeitherSystemNorGrammar_IsByteIdenticalToTodaysBody()
+        {
+            // Golden: every existing caller passes neither, and must send exactly what it sent before.
+            var cfg = new LlmServerConfig { BaseUrl = "http://x", Model = "m", Temperature = 0.5, MaxTokens = 100 };
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true, disableThinking: true);
+            Assert.Equal(
+                "{\"model\":\"m\",\"stream\":true,\"timings_per_token\":true," +
+                "\"stream_options\":{\"include_usage\":true}," +
+                "\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]," +
+                "\"temperature\":0.5,\"max_tokens\":100," +
+                "\"chat_template_kwargs\":{\"enable_thinking\":false}}",
+                json);
+        }
+
+        [Fact]
+        public void BuildChatBody_WithSystemPrompt_SendsSystemMessageBeforeUserMessage()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            var json = OpenAiRequestBuilder.BuildChatBody(
+                cfg, "the passage", stream: true, systemPrompt: "the rules");
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var messages = doc.RootElement.GetProperty("messages");
+            Assert.Equal(2, messages.GetArrayLength());
+            Assert.Equal("system", messages[0].GetProperty("role").GetString());
+            Assert.Equal("the rules", messages[0].GetProperty("content").GetString());
+            Assert.Equal("user", messages[1].GetProperty("role").GetString());
+            Assert.Equal("the passage", messages[1].GetProperty("content").GetString());
+        }
+
+        [Fact]
+        public void BuildChatBody_WithGrammar_EmitsTopLevelGrammarAndNoResponseFormat()
+        {
+            var cfg = new LlmServerConfig { BaseUrl = "http://x" };
+            const string grammar = "root ::= \"Pug\" | \"Unknown\"";
+            var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true, grammar: grammar);
+
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.Equal(grammar, doc.RootElement.GetProperty("grammar").GetString());
+            Assert.False(doc.RootElement.TryGetProperty("response_format", out _));
+        }
     }
 }

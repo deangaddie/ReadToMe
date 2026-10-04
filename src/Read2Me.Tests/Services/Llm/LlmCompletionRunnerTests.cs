@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Exceptions;
@@ -424,6 +425,50 @@ namespace Read2Me.Tests.Services.Llm
             Assert.IsType<StreamFailed>(_events[^1]);
         }
 
+        [Theory]
+        [InlineData(HttpStatusCode.BadRequest)]
+        [InlineData(HttpStatusCode.UnprocessableEntity)]
+        public async Task ClientError_ManagedService_MapsToFailed_AndIsNotReportedToHealth(HttpStatusCode status)
+        {
+            // A 4xx is the request's fault (llama's 400 for a prompt over the context size): the
+            // service answered, so a restart cannot help. It must not count toward the watchdog
+            // streak, and it must surface as Failed so the caller can fix the request and retry.
+            var llm = new ChunkedLlmClient().Throws(new LlmProviderException(
+                "LLM provider returned error (BadRequest): the request exceeds the available context size", status));
+            _reporter.Managed = true;
+            var runner = Runner(llm);
+
+            var result = await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L"),
+                CancellationToken.None);
+
+            Assert.Equal(LlmRunOutcome.Failed, result.Outcome);
+            Assert.Contains("exceeds the available context size", result.Error);
+            Assert.Empty(_reporter.Failures);
+            Assert.Empty(_reporter.Successes);
+            Assert.IsType<StreamFailed>(_events[^1]);
+        }
+
+        [Theory]
+        [InlineData(HttpStatusCode.InternalServerError)]
+        [InlineData(HttpStatusCode.ServiceUnavailable)]
+        [InlineData(HttpStatusCode.RequestTimeout)]
+        [InlineData(HttpStatusCode.TooManyRequests)]
+        public async Task ServerError_ManagedService_StillMapsToServiceUnavailable(HttpStatusCode status)
+        {
+            // 5xx, and the two 4xx that say "busy or slow, try again", are still the service's.
+            var llm = new ChunkedLlmClient().Throws(new LlmProviderException("LLM provider returned error", status));
+            _reporter.Managed = true;
+            var runner = Runner(llm);
+
+            var result = await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L"),
+                CancellationToken.None);
+
+            Assert.Equal(LlmRunOutcome.ServiceUnavailable, result.Outcome);
+            Assert.Single(_reporter.Failures);
+        }
+
         // ---- Model still loading (switch-and-wait) ----
 
         [Fact]
@@ -580,6 +625,120 @@ namespace Read2Me.Tests.Services.Llm
 
             Assert.Equal(LlmRunOutcome.Failed, result.Outcome);
             Assert.False(parserCalled);
+        }
+
+        // ---- System prompt, grammar, display prompt, timings on the result (attribution-grammar 01) ----
+
+        private static readonly LlmTimings ChapterReading =
+            new(CacheN: 3200, PromptN: 358, PromptMs: 90, PredictedN: 6, PredictedMs: 40);
+
+        [Fact]
+        public async Task SystemPromptAndGrammar_PassThroughToClient()
+        {
+            var llm = new ChunkedLlmClient().Content("Pug | calm");
+            var runner = Runner(llm);
+
+            await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None,
+                    SystemPrompt: "sys", Grammar: "root ::= \"Pug\""),
+                CancellationToken.None);
+            await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None),
+                CancellationToken.None);
+
+            Assert.Equal("sys", llm.Calls[0].SystemPrompt);
+            Assert.Equal("root ::= \"Pug\"", llm.Calls[0].Grammar);
+            Assert.Null(llm.Calls[1].SystemPrompt);
+            Assert.Null(llm.Calls[1].Grammar);
+        }
+
+        [Fact]
+        public async Task GrammarAndJsonSchemaTogether_Throws()
+        {
+            var runner = Runner(new ChunkedLlmClient().Content("x"));
+
+            await Assert.ThrowsAsync<ArgumentException>(() => runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", JsonSchema: """{ "type": "object" }""",
+                    Grammar: "root ::= \"a\""),
+                CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task RequestStarted_PublishesDisplayPrompt_WhenSet()
+        {
+            var llm = new ChunkedLlmClient().Content("ok");
+            var runner = Runner(llm);
+
+            await runner.RunAsync(
+                new LlmRunRequest(Config(), "the whole chapter", "L", Shape: CompletionShape.None,
+                    DisplayPrompt: "the tail"),
+                CancellationToken.None);
+
+            Assert.Equal("the tail", Assert.IsType<RequestStarted>(_events[0]).Prompt);
+            // The model still gets the full prompt.
+            Assert.Equal("the whole chapter", llm.Calls[0].Prompt);
+        }
+
+        [Fact]
+        public async Task Completed_CarriesTheLastTimingsReading()
+        {
+            var llm = new ChunkedLlmClient().Content("Pug").Metrics(ChapterReading);
+            var runner = Runner(llm);
+
+            var result = await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None),
+                CancellationToken.None);
+
+            Assert.Equal(LlmRunOutcome.Completed, result.Outcome);
+            Assert.Equal(ChapterReading, result.Timings);
+        }
+
+        [Fact]
+        public async Task ParseFailed_CarriesTheLastTimingsReading()
+        {
+            var llm = new ChunkedLlmClient().Content("{}").Metrics(ChapterReading);
+            var runner = Runner(llm);
+
+            static bool Reject(string raw, out int value, out string? error)
+            {
+                value = 0;
+                error = "bad.";
+                return false;
+            }
+
+            var result = await runner.RunAsync<int>(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None), Reject,
+                CancellationToken.None);
+
+            Assert.Equal(LlmRunOutcome.ParseFailed, result.Outcome);
+            Assert.Equal(ChapterReading, result.Timings);
+        }
+
+        [Fact]
+        public async Task FailedRunWithAReading_CarriesIt()
+        {
+            var llm = new ChunkedLlmClient().Metrics(ChapterReading).Throws(new HttpRequestException("down"));
+            var runner = Runner(llm);
+
+            var result = await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None),
+                CancellationToken.None);
+
+            Assert.Equal(LlmRunOutcome.Failed, result.Outcome);
+            Assert.Equal(ChapterReading, result.Timings);
+        }
+
+        [Fact]
+        public async Task RunWithNoReading_HasNullTimings()
+        {
+            // Absence stays null, never a zeroed reading (ADR 0003).
+            var runner = Runner(new ChunkedLlmClient().Content("ok"));
+
+            var result = await runner.RunAsync(
+                new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None),
+                CancellationToken.None);
+
+            Assert.Null(result.Timings);
         }
     }
 }
