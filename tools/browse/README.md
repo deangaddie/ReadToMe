@@ -28,7 +28,8 @@ try {
   await openNodeMenu(page, page.locator('r2m-paragraph').nth(1).locator('.r2m-paragraph__menu'));
   await chooseEntry(page, 'split');
   await answerPrompt(page, 'Two');
-  console.log(await waitForTreeTitles(page, ['Chapter 1', 'Two']));
+  // The import is one chapter, titled after the uploaded file (book.txt); the split adds "Two".
+  console.log(await waitForTreeTitles(page, ['book', 'Two']));
   console.log((await api(`/api/projects/${project.folder}/book`)).totalChapters, page.toasts, page.errors);
 } finally {
   await project.remove();
@@ -38,6 +39,7 @@ try {
 
 ```bash
 node my-check.mjs > my-check.log 2>&1; cat my-check.log
+R2M_WEB=http://localhost:5000 node my-check.mjs   # no dev server: drive the host's own /app bundle
 ```
 
 Rules that keep runs honest:

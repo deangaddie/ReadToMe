@@ -34,6 +34,18 @@ namespace Read2Me.Services.Audio
     /// than overwritten, so a mutation that does not commit — the item was deleted while the take was
     /// generating, another writer held the project too long — puts back exactly what was there.
     /// </para>
+    /// <para>
+    /// The ordering opens a window the other way, and it is accepted rather than missed. When the
+    /// take replaces an earlier one, the path the Book names (<c>audio/{itemId}.wav</c>) holds the
+    /// unrecorded take from the move into place until the commit returns — a wait that includes
+    /// queuing for the write lock — and briefly nothing at all between the two moves. A reader that
+    /// fetches it then (an agent reading <c>/workspace</c>, or a page already showing the item that
+    /// fetches its audio again) can get audio that an uncommitted outcome — a cancellation, the item
+    /// deleted, the project held past the lock budget — rolls back, or keeps if the restore itself
+    /// fails. The Book names a take by its item id, so closing this would take content-addressed or
+    /// revision-suffixed filenames, with the Book naming the new file only on commit. That costs more
+    /// than a narrow window over a real take of the same item is worth.
+    /// </para>
     /// </summary>
     public sealed class AudioResultRecorder(
         IFileSystem fs,

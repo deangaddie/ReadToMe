@@ -28,8 +28,11 @@ public class NarratorLinkTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         await Expect(NarratorRow).ToHaveCountAsync(1);
         await Expect(NarratorRow).Not.ToContainTextAsync("→");
 
-        // Link from the banner's picker.
-        await Banner.Locator("mat-select").ClickAsync(new() { Force = true });
+        // Link from the banner's picker, once the roster has loaded and enabled it: a forced click
+        // on the still-disabled select opens nothing.
+        var picker = Banner.Locator("mat-select");
+        await Expect(picker).ToBeEnabledAsync();
+        await picker.ClickAsync(new() { Force = true });
         await Page.Locator("mat-option", new() { HasText = "Dr. Watson" }).ClickAsync();
         await Expect(Banner).ToContainTextAsync("Narrated by Dr. Watson");
         await Expect(NarratorRow).ToContainTextAsync("Narrator → Dr. Watson");

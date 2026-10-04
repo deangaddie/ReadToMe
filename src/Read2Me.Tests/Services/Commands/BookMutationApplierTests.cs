@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services.Books;
 using Read2Me.Services.Commands;
@@ -25,7 +26,7 @@ namespace Read2Me.Tests.Services.Commands
                 ToDelete: [],
                 ToUpdate: []);
 
-            await BookMutationApplier.ApplyMutationAsync(db, mutation);
+            await StageAndSaveAsync(db, mutation);
 
             await using var verify = await OpenDbAsync();
             Assert.True(await verify.Volumes.AnyAsync(v => v.Id == volume.Id));
@@ -48,7 +49,7 @@ namespace Read2Me.Tests.Services.Commands
                 ToDelete: [volume],
                 ToUpdate: []);
 
-            await BookMutationApplier.ApplyMutationAsync(db, mutation);
+            await StageAndSaveAsync(db, mutation);
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Volumes.AnyAsync(v => v.Id == volume.Id));
@@ -71,7 +72,7 @@ namespace Read2Me.Tests.Services.Commands
                 ToDelete: [],
                 ToUpdate: [tracked]);
 
-            await BookMutationApplier.ApplyMutationAsync(db, mutation);
+            await StageAndSaveAsync(db, mutation);
 
             await using var verify = await OpenDbAsync();
             var reloaded = await verify.Volumes.SingleAsync(v => v.Id == volume.Id);
@@ -99,7 +100,7 @@ namespace Read2Me.Tests.Services.Commands
             db.Entry(detached!).State = EntityState.Detached;
             detached!.VolumeId = second.Id;
 
-            await BookMutationApplier.ApplyMutationAsync(
+            await StageAndSaveAsync(
                 db, new HierarchyMutation(ToAdd: [], ToDelete: [], ToUpdate: [detached]));
 
             await using var verify = await OpenDbAsync();
@@ -115,8 +116,8 @@ namespace Read2Me.Tests.Services.Commands
                 ToDelete: [],
                 ToUpdate: []);
 
-            await Assert.ThrowsAsync<NotSupportedException>(
-                () => BookMutationApplier.ApplyMutationAsync(db, mutation));
+            Assert.Throws<NotSupportedException>(
+                () => BookMutationApplier.StageMutation(db, mutation));
         }
 
         [Fact]
@@ -128,8 +129,18 @@ namespace Read2Me.Tests.Services.Commands
                 ToDelete: [new Rogue()],
                 ToUpdate: []);
 
-            await Assert.ThrowsAsync<NotSupportedException>(
-                () => BookMutationApplier.ApplyMutationAsync(db, mutation));
+            Assert.Throws<NotSupportedException>(
+                () => BookMutationApplier.StageMutation(db, mutation));
+        }
+
+        /// <summary>
+        /// The applier only stages; in the app <c>BookMutations</c> owns the save. These tests save
+        /// directly because they exercise the staging switch over entity types, not the commit.
+        /// </summary>
+        private static async Task StageAndSaveAsync(ProjectDbContext db, HierarchyMutation mutation)
+        {
+            BookMutationApplier.StageMutation(db, mutation);
+            await db.SaveChangesAsync();
         }
 
         /// <summary>An IBookEntity the applier doesn't handle — proves the default arm throws.</summary>

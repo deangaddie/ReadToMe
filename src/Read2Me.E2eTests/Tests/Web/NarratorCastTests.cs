@@ -32,8 +32,11 @@ public class NarratorCastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
 
         await GotoAppAsync($"/app/projects/{Folder}/cast");
 
-        // The picker offers the characters, never the Narrator itself.
-        await Banner.Locator("mat-select").ClickAsync(new() { Force = true });
+        // The picker offers the characters, never the Narrator itself. It stays disabled until the
+        // roster loads, and a forced click on it then opens nothing: wait for it to enable first.
+        var picker = Banner.Locator("mat-select");
+        await Expect(picker).ToBeEnabledAsync();
+        await picker.ClickAsync(new() { Force = true });
         var options = Page.Locator("mat-option");
         await Expect(options).ToHaveTextAsync(["Dr. Watson", "Lestrade"]);
         await options.Filter(new() { HasText = "Dr. Watson" }).ClickAsync();
