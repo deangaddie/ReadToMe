@@ -8,7 +8,7 @@ import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast/toast.service';
 import { Subject } from 'rxjs';
 import { ProjectStore } from '../project/project-store';
-import { BookStore, RECEIPT_BATCH_MS } from './book-store';
+import { BookStore, RECEIPT_BATCH_MS, WINDOW_CAP } from './book-store';
 import { TreeNode } from './book-tree';
 
 const BASE = '/api/projects/dune';
@@ -239,9 +239,43 @@ describe('BookStore', () => {
     await past;
 
     expect(store.window()).toEqual(['c1', 'c2', 'c3']);
+    expect(store.atEnd()).toBe(true);
     const previous = store.loadPrevious();
     await previous;
     expect(store.window()).toEqual(['c1', 'c2', 'c3']);
+  });
+
+  it('atEnd is false while a later part is unread', async () => {
+    await open();
+    await openFirst();
+    const next = store.loadNext();
+    await settle();
+    http.expectOne(`${BASE}/nodes/chapter/c2/children`).flush(paragraphs('c'));
+    await next;
+    // c2 ends p1, but p2 has not been read: there may be more.
+    expect(store.atEnd()).toBe(false);
+  });
+
+  it('a full window drops its far end, unless the reader says it is still on screen', async () => {
+    const ids = Array.from({ length: WINDOW_CAP + 2 }, (_, i) => `c${i + 1}`);
+    await open();
+    await expand('p1', ids);
+    await openFirstFromLoaded();
+    for (const id of ids.slice(1, WINDOW_CAP + 1)) {
+      const next = store.loadNext(false);
+      await settle();
+      http.expectOne(`${BASE}/nodes/chapter/${id}/children`).flush(paragraphs(`${id}-p`));
+      await next;
+    }
+    expect(store.window()).toEqual(ids.slice(0, WINDOW_CAP + 1));
+
+    const next = store.loadNext();
+    await settle();
+    const last = ids.at(-1)!;
+    http.expectOne(`${BASE}/nodes/chapter/${last}/children`).flush(paragraphs(`${last}-p`));
+    await next;
+    // One chapter in, one out: the window shrinks back toward the cap as the reader moves on.
+    expect(store.window()).toEqual(ids.slice(1));
   });
 
   it('audio mode loads the voice map for loaded chapters', async () => {
@@ -481,6 +515,34 @@ describe('BookStore', () => {
       http.expectOne(`${BASE}/nodes/chapter/c1b/children`).flush(paragraphs('b2'));
       await settle();
       expect(store.window()).toEqual(['c1', 'c1b', 'c2']);
+    });
+
+    it('after a structural reload, a chapter in a later part stays open while earlier parts are unread', async () => {
+      await open();
+      await expand('p2', ['c3']);
+      const opening = store.openChapter('c3');
+      http.expectOne(`${BASE}/nodes/chapter/c3/children`).flush(paragraphs('d'));
+      await opening;
+
+      live.receipts.next(receipt(6, 'Structure', { nodeIds: ['c3'] }));
+      await settle(RECEIPT_BATCH_MS + 20);
+      http.expectOne(`${BASE}/book`).flush(OVERVIEW);
+      http.expectOne(`${BASE}/nodes/chapter/c3/children`).flush(paragraphs('d'));
+      await settle();
+      http.expectOne(`${BASE}/nodes/volume/v1/children`).flush({
+        parts: [
+          { id: 'p1', title: 'One' },
+          { id: 'p2', title: 'Two' },
+        ],
+      });
+      http.expectOne(`${BASE}/nodes/part/p2/children`).flush({ chapters: [{ id: 'c3', title: 'C3' }] });
+      await settle();
+      // p1 was never read, so c3 is not in the chapter sequence yet: read on rather than drop it.
+      http.expectOne(`${BASE}/nodes/part/p1/children`).flush({ chapters: [{ id: 'c1', title: 'C1' }] });
+      await settle();
+
+      expect(store.window()).toEqual(['c3']);
+      expect(store.currentChapterId()).toBe('c3');
     });
   });
 

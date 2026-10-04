@@ -29,7 +29,7 @@ import { LoadedChapterView, ReaderMode, SpeakerContext } from './reader-rows';
 /** Receipts arrive in bursts (attribution commits per paragraph); apply one merged plan per burst. */
 export const RECEIPT_BATCH_MS = 150;
 
-/** Chapters kept in the reader window; the far end is dropped past this. */
+/** Chapters kept in the reader window; past this the far end is dropped, unless it is on screen. */
 export const WINDOW_CAP = 5;
 
 type Direction = 'next' | 'previous';
@@ -110,6 +110,16 @@ export class BookStore {
     names: Object.fromEntries((this._overview()?.characters ?? []).map((c) => [c.id, c.name])),
     narrator: this.project.detail()?.narrator ?? null,
   }));
+
+  /** The window ends with the book's last chapter: there is no next one to load. */
+  readonly atEnd = computed(() => {
+    const last = this._window().at(-1);
+    return (
+      last !== undefined &&
+      firstUnloaded(this._overview()?.volumes ?? [], this._children()) === null &&
+      this.sequence().at(-1)?.id === last
+    );
+  });
 
   /** Voice per item across the loaded window. */
   readonly itemVoices = computed<ChapterVoicesDto>(() =>
@@ -236,14 +246,17 @@ export class BookStore {
     this._scrollRequest.update((r) => ({ chapterId, seq: (r?.seq ?? 0) + 1 }));
   }
 
-  /** Appends the chapter after the window, if there is one. */
-  loadNext(): Promise<void> {
-    return this.extend('next');
+  /**
+   * Appends the chapter after the window, if there is one. `dropFar` false keeps the first chapter
+   * even past {@link WINDOW_CAP}: the reader passes it while that chapter is still on screen.
+   */
+  loadNext(dropFar = true): Promise<void> {
+    return this.extend('next', dropFar);
   }
 
-  /** Prepends the chapter before the window, if there is one. */
-  loadPrevious(): Promise<void> {
-    return this.extend('previous');
+  /** Prepends the chapter before the window, if there is one; `dropFar` as for {@link loadNext}. */
+  loadPrevious(dropFar = true): Promise<void> {
+    return this.extend('previous', dropFar);
   }
 
   /** The stale banner's Refresh: read everything on screen again. */
@@ -261,7 +274,7 @@ export class BookStore {
     }
   }
 
-  private async extend(direction: Direction): Promise<void> {
+  private async extend(direction: Direction, dropFar: boolean): Promise<void> {
     const window = this._window();
     const edge = direction === 'next' ? window.at(-1) : window[0];
     if (!edge) return;
@@ -280,7 +293,7 @@ export class BookStore {
       await this.loadChapter(target);
       this._window.update((w) => {
         const next = direction === 'next' ? [...w, target] : [target, ...w];
-        if (next.length <= WINDOW_CAP) return next;
+        if (next.length <= WINDOW_CAP || !dropFar) return next;
         return direction === 'next' ? next.slice(1) : next.slice(0, WINDOW_CAP);
       });
     } catch (error) {
@@ -377,13 +390,23 @@ export class BookStore {
   /**
    * After the structure changed: drop window chapters that no longer exist and fill any chapter that
    * appeared between the first and last kept ones, so the window stays a contiguous run of the book.
+   * The sequence stops at the first part not read yet, so structure is read until it holds the
+   * whole window or there is none left: only then is a missing chapter really gone.
    */
   private async reconcileWindow(): Promise<void> {
+    const wanted = this._window();
+    await this.findChapter((seq) => {
+      const ids = new Set(seq.map((c) => c.id));
+      return wanted.every((id) => ids.has(id)) ? null : undefined;
+    });
     const sequence = this.sequence().map((c) => c.id);
     const kept = this._window().filter((id) => sequence.includes(id));
     if (kept.length === 0) {
       this._window.set([]);
-      if (this._overview()?.hasContent) await this.openFirstChapter();
+      if (!this._overview()?.hasContent) return;
+      const first = await this.findChapter((seq) => seq[0]?.id);
+      // The reader may have opened a chapter of its own meanwhile (a deep link on page load).
+      if (first && this._window().length === 0) await this.openChapter(first);
       return;
     }
     const from = sequence.indexOf(kept[0]!);

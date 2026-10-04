@@ -33,7 +33,7 @@ import { ProjectStore } from '../project/project-store';
 import { AudioGenerator } from './audio-generator';
 import { AudioSelectionStore } from './audio-selection-store';
 import { BookEditor } from './book-editor';
-import { BookStore, WINDOW_CAP } from './book-store';
+import { BookStore } from './book-store';
 import { TreeNode } from './book-tree';
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { ManualRereadDialog } from './manual-reread-dialog';
@@ -450,6 +450,9 @@ export class BookPage {
   readonly chapter = input<string>();
 
   private readonly viewport = viewChild(CdkVirtualScrollViewport);
+  private readonly scroll = viewChild(MeasuredScrollDirective);
+  /** The chapter last opened from the tree, until the viewport has scrolled it to the top. */
+  private scrollTarget: string | null = null;
 
   protected readonly modes = READER_MODES;
   protected readonly modeLabels = MODE_LABELS;
@@ -753,10 +756,12 @@ export class BookPage {
 
   private async start(folder: string): Promise<void> {
     await this.store.open(folder);
-    if (this.store.window().length > 0 || this.noContent()) return;
+    if (this.noContent()) return;
+    // `?chapter=` wins over whatever the window holds: a reload may have opened the first chapter
+    // while the overview was still loading.
     const chapter = this.chapter();
-    if (chapter) await this.store.openChapter(chapter);
-    else await this.store.openFirstChapter();
+    if (chapter && !this.store.window().includes(chapter)) await this.store.openChapter(chapter);
+    else if (this.store.window().length === 0) await this.store.openFirstChapter();
   }
 
   private scrollToChapter(chapterId: string): void {
@@ -767,9 +772,11 @@ export class BookPage {
         );
         const viewport = this.viewport();
         if (index < 0 || !viewport) return;
+        this.scrollTarget = chapterId;
         viewport.scrollToIndex(index);
-        // The chapter before is needed to scroll up from the top of this one.
-        void this.store.loadPrevious();
+        // The chapter before is needed to scroll up from the top of this one; the edge check
+        // loads it once that can keep this chapter in place.
+        this.checkEdges();
       },
       { injector: this.injector },
     );
@@ -779,15 +786,58 @@ export class BookPage {
    * Loads the neighbouring chapter when the viewport nears an end. Polled rather than tied to
    * scroll events: a chapter shorter than the viewport never scrolls, and wheel input at the very
    * top fires no scroll event at all.
+   *
+   * Two rules keep the chapter the reader is on in place when chapters are short (a part whose
+   * only chapter is its heading). Content shorter than the viewport cannot scroll, so a chapter
+   * prepended to it pushes the reader's chapter down: load next until there is something to
+   * scroll, and previous only then (or when there is no next). And a full window drops its far
+   * end only when that chapter is off screen by a margin; dropping one still in view would empty
+   * the screen and start the loads over. A chapter opened from the tree that could not scroll to
+   * the top yet ({@link scrollTarget}) is scrolled there once the chapters after it have loaded.
    */
   private checkEdges(): void {
     const viewport = this.viewport();
     if (!viewport || this.rows().length === 0) return;
     const top = viewport.measureScrollOffset('top');
     const bottom = viewport.measureScrollOffset('bottom');
-    // A full window that still fits on screen would cycle chapters in and out; leave it be.
-    if (top + bottom < 2 * EDGE_PX && this.store.window().length >= WINDOW_CAP) return;
-    if (bottom < EDGE_PX) void this.store.loadNext();
-    if (top < EDGE_PX) void this.store.loadPrevious();
+    const size = viewport.getViewportSize();
+    const window = this.store.window();
+    const scrollable = top + bottom >= 1;
+
+    const reaching = this.reachScrollTarget(viewport, top, bottom);
+    if (bottom < EDGE_PX) {
+      // Dropping the first chapter is safe when the second starts well above the viewport.
+      const second = window[1];
+      void this.store.loadNext(second !== undefined && this.chapterOffset(second) <= top - EDGE_PX);
+    }
+    if (!reaching && top < EDGE_PX && (scrollable || this.store.atEnd())) {
+      const last = window.at(-1);
+      void this.store.loadPrevious(
+        last !== undefined && this.chapterOffset(last) >= top + size + EDGE_PX,
+      );
+    }
+  }
+
+  /**
+   * Scrolls on to {@link scrollTarget} when the content below it has grown; true while the target
+   * is still out of reach. It is given up once reached, gone, or the book has nothing more to load.
+   */
+  private reachScrollTarget(viewport: CdkVirtualScrollViewport, top: number, bottom: number): boolean {
+    const chapterId = this.scrollTarget;
+    if (!chapterId) return false;
+    const target = this.chapterOffset(chapterId);
+    if (!Number.isFinite(target) || top >= target - 1 || this.store.atEnd()) {
+      this.scrollTarget = null;
+      return false;
+    }
+    if (bottom >= 1) viewport.scrollToOffset(target);
+    return true;
+  }
+
+  /** Where a loaded chapter's header row starts; a chapter with no rows sits off screen. */
+  private chapterOffset(chapterId: string): number {
+    const index = this.rows().findIndex((r) => r.kind === 'chapter' && r.chapterId === chapterId);
+    const scroll = this.scroll();
+    return index < 0 || !scroll ? Number.POSITIVE_INFINITY : scroll.strategy.offsetOf(index);
   }
 }

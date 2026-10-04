@@ -79,6 +79,11 @@ export class MeasuredScrollStrategy implements VirtualScrollStrategy {
     // Offsets come from the height index, never from the rendered content.
   }
 
+  /** Where row `index` starts, in pixels from the top of the content (estimated until measured). */
+  offsetOf(index: number): number {
+    return this.index.offsetOf(index);
+  }
+
   scrollToIndex(index: number, behavior: ScrollBehavior): void {
     this.pendingAnchor = null;
     this.viewport?.scrollToOffset(this.index.offsetOf(index), behavior);
