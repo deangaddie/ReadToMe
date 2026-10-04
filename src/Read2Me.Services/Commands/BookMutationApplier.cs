@@ -25,9 +25,9 @@ internal static class BookMutationApplier
     }
 
     /// <summary>
-    /// Puts a planned mutation on the change tracker without saving it. Callers that own a
-    /// transaction and a single commit point — <c>BookMutations</c> — stage and save themselves;
-    /// legacy command handlers use <see cref="ApplyMutationAsync"/>, which saves immediately.
+    /// Puts a planned mutation on the change tracker without saving it. Saving is not this class's
+    /// business: the mutation implementations stage here, and <c>BookMutations</c> owns the
+    /// transaction and the one commit point (ADR 0007).
     /// </summary>
     internal static void StageMutation(ProjectDbContext db, HierarchyMutation mutation)
     {
@@ -59,11 +59,5 @@ internal static class BookMutationApplier
         {
             db.Entry(entity).State = EntityState.Modified;
         }
-    }
-
-    internal static async Task ApplyMutationAsync(ProjectDbContext db, HierarchyMutation mutation)
-    {
-        StageMutation(db, mutation);
-        await db.SaveChangesAsync();
     }
 }
