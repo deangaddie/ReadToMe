@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { AttributionApi, BookApi, Guid, toApiError } from '@app/api';
 import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
+import { PromptService } from '@app/ui/text-prompt-dialog/text-prompt-dialog';
 import { ToastService } from '@app/ui/toast/toast.service';
 import { ProjectStore } from '../project/project-store';
 import { BookEditor } from './book-editor';
@@ -28,6 +29,7 @@ export class SpeakerAssigner {
   private readonly api = inject(BookApi);
   private readonly attribution = inject(AttributionApi);
   private readonly confirm = inject(ConfirmService);
+  private readonly prompt = inject(PromptService);
   private readonly toast = inject(ToastService);
 
   /** `characterId` null clears the speaker (the line needs attributing again). */
@@ -58,10 +60,20 @@ export class SpeakerAssigner {
 
   /**
    * "New character…" from the menu: creates (idempotent by name — an existing character or alias
-   * answers with its own id) and assigns in one go. Nothing happens on a blank name.
+   * answers with its own id) and assigns in one go. A blank name (the menu's search was empty)
+   * asks for one first; a cancelled prompt writes nothing.
    */
   async createAndAssign(target: AssignTarget, name: string): Promise<void> {
-    const id = await this.createCharacter(name);
+    const named =
+      name.trim() ||
+      (await this.prompt.text({
+        title: 'New character',
+        label: 'Name',
+        required: true,
+        confirmLabel: 'Create',
+      }));
+    if (!named) return;
+    const id = await this.createCharacter(named);
     if (id) await this.assign(target, id);
   }
 

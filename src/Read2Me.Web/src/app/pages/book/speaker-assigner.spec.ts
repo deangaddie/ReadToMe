@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ApiError, AttributionApi, BookApi } from '@app/api';
 import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
+import { PromptService } from '@app/ui/text-prompt-dialog/text-prompt-dialog';
 import { ToastService } from '@app/ui/toast/toast.service';
 import { ProjectStore } from '../project/project-store';
 import { BookEditor } from './book-editor';
@@ -16,6 +17,7 @@ describe('SpeakerAssigner', () => {
   let bulkAssignPreview: ReturnType<typeof vi.fn>;
   let characters: ReturnType<typeof vi.fn>;
   let confirm: ReturnType<typeof vi.fn>;
+  let promptText: ReturnType<typeof vi.fn>;
   let toasts: { kind: string; message: unknown }[];
   const paragraphs = signal<Record<string, { outcome?: { kind: 'Failed' } } | null>>({});
 
@@ -28,6 +30,7 @@ describe('SpeakerAssigner', () => {
       .mockResolvedValue({ paragraphsWithCharacterItems: 2, characterItems: 3 });
     characters = vi.fn().mockResolvedValue([]);
     confirm = vi.fn().mockResolvedValue(true);
+    promptText = vi.fn().mockResolvedValue(null);
     toasts = [];
     paragraphs.set({});
     TestBed.configureTestingModule({
@@ -45,6 +48,7 @@ describe('SpeakerAssigner', () => {
         { provide: BookApi, useValue: { bulkAssignPreview, characters } },
         { provide: AttributionApi, useValue: { clearOutcome } },
         { provide: ConfirmService, useValue: { confirm } },
+        { provide: PromptService, useValue: { text: promptText } },
         {
           provide: ToastService,
           useValue: {
@@ -82,6 +86,21 @@ describe('SpeakerAssigner', () => {
     await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, '  Gaal ');
     expect(execute).toHaveBeenCalledWith({ type: 'CreateCharacter', name: 'Gaal' });
     expect(run).toHaveBeenCalledWith({ type: 'SetItemCharacter', itemId: 'i1', characterId: 'c-new' });
+  });
+
+  it('new character with a blank search asks for the name, then creates and assigns', async () => {
+    promptText.mockResolvedValueOnce('Gaal');
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, '  ');
+    expect(promptText).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith({ type: 'CreateCharacter', name: 'Gaal' });
+    expect(run).toHaveBeenCalledWith({ type: 'SetItemCharacter', itemId: 'i1', characterId: 'c-new' });
+  });
+
+  it('new character: a cancelled name prompt writes nothing', async () => {
+    await assigner.createAndAssign({ kind: 'paragraph', paragraphId: 'p1' }, '');
+    expect(promptText).toHaveBeenCalledTimes(1);
+    expect(execute).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
   });
 
   it('new character with no id answered resolves it from the roster by name or alias', async () => {
