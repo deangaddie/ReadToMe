@@ -261,16 +261,18 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Fact]
-        public async Task Propose_ChangeCaseSentence_FailsRowsUntilSupported()
+        public async Task Propose_ChangeCaseSentence_ReCasesInCode()
         {
             var runner = new FakeLlmCompletionRunner();
             var program = Program(new EditTransform(TransformKind.ChangeCase, CaseMode: CaseMode.Sentence));
 
             var proposals = await NewService(runner, NewSettings())
-                .ProposeAsync(Folder, program, [Target(1, "SHOUT")], null, false, CancellationToken.None);
+                .ProposeAsync(Folder, program, [Target(1, "PART IV"), Target(2, "Part IV")],
+                    null, false, CancellationToken.None);
 
-            Assert.Equal(ProposalStatus.Failed, proposals[0].Status);
-            Assert.Contains("not supported yet", proposals[0].FailureReason);
+            Assert.Equal("Part IV", proposals[0].NewValue);
+            Assert.Equal(ProposalStatus.Proposed, proposals[0].Status);
+            Assert.Equal(ProposalStatus.NoChange, proposals[1].Status);
             Assert.Empty(runner.Requests);
         }
 

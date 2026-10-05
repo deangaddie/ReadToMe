@@ -21,20 +21,22 @@ namespace Read2Me.Services.BookEdits
                 .Replace("{old}", oldValue);
 
         /// <summary>Re-cases the whole value when <paramref name="pattern"/> is null, otherwise only
-        /// the spans it matches. Upper and lower are literal. Throws NotSupportedException for
-        /// sentence and title case (not built yet) and RegexMatchTimeoutException on catastrophic
-        /// patterns; callers mark the item Failed.</summary>
+        /// the spans it matches. Upper and lower are literal; sentence and title read sentence
+        /// starts and neighbouring words from the whole value and keep roman numerals and acronyms
+        /// (see CaseChanger). Throws RegexMatchTimeoutException on catastrophic patterns; callers
+        /// mark the item Failed.</summary>
         public static string ChangeCase(string value, string? pattern, CaseMode mode)
         {
-            Func<string, string> recase = mode switch
+            var recased = mode switch
             {
-                CaseMode.Upper => s => s.ToUpperInvariant(),
-                CaseMode.Lower => s => s.ToLowerInvariant(),
-                _ => throw new NotSupportedException($"{mode} case is not supported yet."),
+                CaseMode.Upper => value.ToUpperInvariant(),
+                CaseMode.Lower => value.ToLowerInvariant(),
+                CaseMode.Sentence or CaseMode.Title => CaseChanger.Recase(value, mode),
+                _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
             };
             return pattern == null
-                ? recase(value)
-                : Regex.Replace(value, pattern, m => recase(m.Value), RegexOptions.None, RegexTimeout);
+                ? recased
+                : Regex.Replace(value, pattern, m => recased.Substring(m.Index, m.Length), RegexOptions.None, RegexTimeout);
         }
     }
 }

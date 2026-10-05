@@ -78,10 +78,6 @@ namespace Read2Me.Services.BookEdits
                 {
                     failure = "Pattern timed out on this text.";
                 }
-                catch (NotSupportedException ex)
-                {
-                    failure = ex.Message;
-                }
                 proposals.Add(Build(target, newValue, failure));
             }
             progress?.Report((targets.Count, targets.Count));
