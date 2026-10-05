@@ -85,6 +85,8 @@ namespace Read2Me.App.Api
             var warnings = new List<string>();
             if (session.IsLlmTransform && targets.Count > LlmTargetWarnThreshold)
                 warnings.Add($"This is a large AI job ({targets.Count} items). It may take a long time.");
+            if (EditProgramDescriber.TitlesAlsoMatch(await resolver.CountTitlesAlsoMatchingAsync(folderId, program, ct)) is { } titles)
+                warnings.Add(titles);
 
             return Results.Ok(new PlanBookEditResponse(
                 "Ok", null, session.Summary, session.Id, program.Transform.Kind.ToString(),

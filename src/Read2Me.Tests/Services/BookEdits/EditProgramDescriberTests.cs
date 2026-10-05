@@ -23,5 +23,21 @@ namespace Read2Me.Tests.Services.BookEdits
 
             Assert.Equal(expected, EditProgramDescriber.Describe(program));
         }
+
+        [Theory]
+        [InlineData(0, 5, 0, "5 titles also match — run again targeting part titles")]
+        [InlineData(0, 1, 0, "1 title also matches — run again targeting part titles")]
+        [InlineData(0, 2, 3, "5 titles also match — run again targeting part and chapter titles")]
+        [InlineData(1, 1, 1, "3 titles also match — run again targeting volume, part and chapter titles")]
+        public void TitlesAlsoMatch_CountsAndNamesTheMatchingLevels(int volume, int part, int chapter, string expected)
+        {
+            Assert.Equal(expected, EditProgramDescriber.TitlesAlsoMatch(new TitleMatchCounts(volume, part, chapter)));
+        }
+
+        [Fact]
+        public void TitlesAlsoMatch_NoMatchingTitles_IsNoWarning()
+        {
+            Assert.Null(EditProgramDescriber.TitlesAlsoMatch(new TitleMatchCounts(0, 0, 0)));
+        }
     }
 }

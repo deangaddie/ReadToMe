@@ -198,5 +198,100 @@ namespace Read2Me.Tests.Services.BookEdits
             var targets = await _sut.ResolveAsync(_folder, Program(EditTargetSelector.ChapterTitle));
             Assert.Empty(targets);
         }
+
+        private static EditProgram Pattern(EditTargetSelector target, TransformKind kind, string? pattern) =>
+            new(true, null, target, NodeFilter.All, ParagraphFilter.All,
+                kind == TransformKind.ChangeCase
+                    ? new EditTransform(kind, pattern, CaseMode: CaseMode.Upper)
+                    : new EditTransform(kind, pattern, Replacement: "x"));
+
+        [Theory]
+        [InlineData(TransformKind.RegexReplace)]
+        [InlineData(TransformKind.ChangeCase)]
+        public async Task Resolve_PatternTransform_DropsItemsThePatternDoesNotMatch(TransformKind kind)
+        {
+            var b = await SeedBookAsync();
+            var targets = await _sut.ResolveAsync(_folder, Pattern(EditTargetSelector.ParagraphText, kind, "paragraph|chapter"));
+
+            Assert.Equal([b.ItemId("i2"), b.ItemId("i3")], targets.Select(t => t.Id));
+            Assert.Equal([1, 2], targets.Select(t => t.OrdinalInScope));
+        }
+
+        [Fact]
+        public async Task Resolve_PatternTransform_DropsTitlesThePatternDoesNotMatch()
+        {
+            var b = await SeedBookAsync();
+            var targets = await _sut.ResolveAsync(_folder, Pattern(EditTargetSelector.ChapterTitle, TransformKind.ChangeCase, "2"));
+
+            Assert.Equal([b.ChapterId("ch2")], targets.Select(t => t.Id));
+        }
+
+        [Fact]
+        public async Task Resolve_ChangeCaseWithoutPattern_KeepsEveryTarget()
+        {
+            await SeedBookAsync();
+            var targets = await _sut.ResolveAsync(_folder, Pattern(EditTargetSelector.ParagraphText, TransformKind.ChangeCase, null));
+
+            Assert.Equal(3, targets.Count);
+        }
+
+        [Fact]
+        public async Task Resolve_LlmTransform_IsNotPrunedByItsPattern()
+        {
+            await SeedBookAsync();
+            var program = new EditProgram(true, null, EditTargetSelector.ParagraphText, NodeFilter.All, ParagraphFilter.All,
+                new EditTransform(TransformKind.Llm, Pattern: "nothing matches this", Instruction: "do it"));
+
+            Assert.Equal(3, (await _sut.ResolveAsync(_folder, program)).Count);
+        }
+
+        [Fact]
+        public async Task Resolve_PatternThatTimesOut_KeepsTheTarget()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch1", c => c
+                    .AddParagraph("p1", p => p.AddNarration("i1", new string('a', 40) + "!"))))
+                .BuildAsync();
+
+            var targets = await _sut.ResolveAsync(_folder,
+                Pattern(EditTargetSelector.ParagraphText, TransformKind.RegexReplace, "^(a|aa)+$"));
+
+            Assert.Equal([b.ItemId("i1")], targets.Select(t => t.Id));
+        }
+
+        private async Task SeedAllCapsTitlesAsync()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("BOOK ONE", v => v
+                    .AddPart("PART I", p => p
+                        .AddChapter("THE MULE", c => c.AddParagraph("p1", pp => pp.AddNarration("i1", "Text.")))
+                        .AddChapter("Ordinary", c => c.AddParagraph("p2", pp => pp.AddNarration("i2", "Text."))))
+                    .AddPart("Part Two", p => p
+                        .AddChapter("ANOTHER", c => c.AddParagraph("p3", pp => pp.AddNarration("i3", "Text.")))))
+                .BuildAsync();
+        }
+
+        [Fact]
+        public async Task CountTitlesAlsoMatching_ParagraphChangeCase_CountsEachTitleLevelThePatternMatches()
+        {
+            await SeedAllCapsTitlesAsync();
+            var counts = await _sut.CountTitlesAlsoMatchingAsync(_folder,
+                Pattern(EditTargetSelector.ParagraphText, TransformKind.ChangeCase, @"\b\p{Lu}{2,}\b"));
+
+            Assert.Equal(new TitleMatchCounts(Volume: 1, Part: 1, Chapter: 2), counts);
+        }
+
+        [Theory]
+        [InlineData(EditTargetSelector.PartTitle, TransformKind.ChangeCase, @"\b\p{Lu}{2,}\b")]
+        [InlineData(EditTargetSelector.ParagraphText, TransformKind.ChangeCase, null)]
+        [InlineData(EditTargetSelector.ParagraphText, TransformKind.RegexReplace, @"\b\p{Lu}{2,}\b")]
+        public async Task CountTitlesAlsoMatching_OtherPrograms_CountNothing(
+            EditTargetSelector target, TransformKind kind, string? pattern)
+        {
+            await SeedAllCapsTitlesAsync();
+            var counts = await _sut.CountTitlesAlsoMatchingAsync(_folder, Pattern(target, kind, pattern));
+
+            Assert.Equal(0, counts.Total);
+        }
     }
 }

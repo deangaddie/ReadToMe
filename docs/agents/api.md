@@ -397,6 +397,8 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/plan \
 # status Ok carries the program; NoLlmConfigured | Unsupported | ServiceUnavailable | Failed |
 # NoTargets explain themselves in reason instead. transform Llm means one LLM request per 8 items
 # (requestCount says how many) and per-row retries; RegexReplace / SetTemplate / ChangeCase run in code.
+# RegexReplace, and ChangeCase with a pattern, count only the items their pattern matches (none → NoTargets);
+# a paragraph-text ChangeCase warns "N titles also match — run again targeting <levels> titles" when titles match too.
 
 # start the run (202) and follow it on the hub as bookEdit { kind: progress | done | failed } —
 # pass the connectionId you want it pushed to, or leave it out and poll the session instead:

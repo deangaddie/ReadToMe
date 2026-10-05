@@ -27,6 +27,28 @@ namespace Read2Me.Services.BookEdits
             return $"Edit {target}{scope} — {transform}";
         }
 
+        /// <summary>
+        /// The plan warning for a paragraph-text change_case whose pattern also matches titles, which
+        /// one program cannot reach: "5 titles also match — run again targeting part titles". Null
+        /// when no title matches.
+        /// </summary>
+        public static string? TitlesAlsoMatch(TitleMatchCounts counts)
+        {
+            if (counts.Total == 0)
+                return null;
+            string[] levels =
+            [
+                .. counts.Volume > 0 ? ["volume"] : Array.Empty<string>(),
+                .. counts.Part > 0 ? ["part"] : Array.Empty<string>(),
+                .. counts.Chapter > 0 ? ["chapter"] : Array.Empty<string>(),
+            ];
+            var named = levels.Length == 1
+                ? levels[0]
+                : $"{string.Join(", ", levels[..^1])} and {levels[^1]}";
+            var match = counts.Total == 1 ? "title also matches" : "titles also match";
+            return $"{counts.Total} {match} — run again targeting {named} titles";
+        }
+
         private static string ChangeCasePhrase(EditTransform transform)
         {
             var mode = $"{transform.CaseMode.ToString()!.ToLowerInvariant()} case";

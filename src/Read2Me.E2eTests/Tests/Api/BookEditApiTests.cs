@@ -274,6 +274,7 @@ public class BookEditApiTests(E2eAppFixture app)
             Assert.Equal(3, plan.GetProperty("targetCount").GetInt32());
             Assert.Equal(0, plan.GetProperty("requestCount").GetInt32());
             Assert.EndsWith("— change to upper case", plan.GetProperty("summary").GetString());
+            Assert.Equal(0, plan.GetProperty("warnings").GetArrayLength());
             var program = plan.GetProperty("program").GetString()!;
 
             int promptsBefore;
@@ -298,7 +299,7 @@ public class BookEditApiTests(E2eAppFixture app)
     }
 
     [Fact]
-    public async Task Change_case_with_a_pattern_re_cases_only_the_matched_spans()
+    public async Task Change_case_with_a_pattern_counts_and_re_cases_only_the_matching_items()
     {
         var folder = $"api-edit-case-span-{Guid.NewGuid():N}";
         await app.SeedMultiChapterProjectAsync(folder, "Span Book", "Author", chapters: 2);
@@ -308,17 +309,17 @@ public class BookEditApiTests(E2eAppFixture app)
             var plan = await PlanAsync(folder, "make 'opens' uppercase");
             Assert.Equal("ChangeCase", plan.GetProperty("transform").GetString());
             Assert.EndsWith("— change text matching \"\\bopens\\b\" to upper case", plan.GetProperty("summary").GetString());
+            // The dialogue lines hold no match, so they are not in the plan at all.
+            Assert.Equal(2, plan.GetProperty("targetCount").GetInt32());
+            // No title holds "opens": no "titles also match" warning.
+            Assert.Equal(0, plan.GetProperty("warnings").GetArrayLength());
             var program = plan.GetProperty("program").GetString()!;
 
             await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"), new { thinking = false });
             var rows = (await WaitForRunAsync(folder, program, "Completed")).GetProperty("rows").EnumerateArray().ToList();
 
-            var changed = rows.Where(r => r.GetProperty("status").GetString() == "Proposed")
-                .Select(r => r.GetProperty("newValue").GetString()).ToList();
-            Assert.Equal(["Chapter 1 OPENS.", "Chapter 2 OPENS."], changed);
-            // The dialogue lines hold no match, so they come back unchanged.
-            Assert.All(rows.Where(r => r.GetProperty("status").GetString() != "Proposed"),
-                r => Assert.Equal("NoChange", r.GetProperty("status").GetString()));
+            Assert.Equal(["Chapter 1 OPENS.", "Chapter 2 OPENS."], rows.Select(r => r.GetProperty("newValue").GetString()));
+            Assert.All(rows, r => Assert.Equal("Proposed", r.GetProperty("status").GetString()));
         }
         finally
         {
@@ -347,6 +348,10 @@ public class BookEditApiTests(E2eAppFixture app)
             var plan = await PlanAsync(folder, "make the all-caps words sentence case");
             Assert.Equal("ChangeCase", plan.GetProperty("transform").GetString());
             Assert.EndsWith("— names, numerals and acronyms are kept", plan.GetProperty("summary").GetString());
+            // Only the four items holding all-caps words count; the two plain prose lines are dropped.
+            Assert.Equal(4, plan.GetProperty("targetCount").GetInt32());
+            Assert.Equal(["1 title also matches — run again targeting part titles"],
+                plan.GetProperty("warnings").EnumerateArray().Select(w => w.GetString()));
             var program = plan.GetProperty("program").GetString()!;
 
             await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"), new { thinking = false });
@@ -360,8 +365,62 @@ public class BookEditApiTests(E2eAppFixture app)
                 "The mayors",
                 "The Four Kingdoms— The name given to the Province of Anacreon.",
             ], changed);
-            // Numerals and acronyms, and the prose with no all-caps words, come back unchanged.
-            Assert.Equal(3, rows.Count(r => r.GetProperty("status").GetString() == "NoChange"));
+            // The numerals and acronyms line matches the pattern but comes back unchanged.
+            Assert.Equal(["NoChange"], rows.Where(r => r.GetProperty("status").GetString() != "Proposed")
+                .Select(r => r.GetProperty("status").GetString()));
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
+    [Fact]
+    public async Task Change_case_pattern_matching_no_item_is_no_targets()
+    {
+        var folder = $"api-edit-case-none-{Guid.NewGuid():N}";
+        await app.SeedNarrationBookAsync(folder, "PART IV", ["Plain prose only.", "Nothing shouts here."]);
+        app.FakeAi.LlmReply = _ => ChangeCasePlan("paragraph_text", AllCapsPattern, "sentence");
+        try
+        {
+            var plan = await PlanAsync(folder, "make the all-caps words sentence case");
+            Assert.Equal("NoTargets", plan.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, plan.GetProperty("program").ValueKind);
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
+    private static string RegexReplacePlan(string pattern) =>
+        $$"""
+        { "reasoning": "find and replace", "supported": true, "unsupported_reason": null,
+          "target": "paragraph_text",
+          "node_filter": { "ordinal_from": null, "ordinal_to": null, "title_regex": null },
+          "paragraph_filter": { "where": [] },
+          "transform": { "kind": "regex_replace", "pattern": {{JsonSerializer.Serialize(pattern)}},
+            "replacement": "begins", "template": null, "instruction": null, "case_mode": null } }
+        """;
+
+    [Fact]
+    public async Task Regex_replace_counts_only_the_items_its_pattern_matches()
+    {
+        var folder = $"api-edit-regex-{Guid.NewGuid():N}";
+        await app.SeedMultiChapterProjectAsync(folder, "Regex Book", "Author", chapters: 3);
+        try
+        {
+            app.FakeAi.LlmReply = _ => RegexReplacePlan("opens");
+            var plan = await PlanAsync(folder, "replace opens with begins");
+            Assert.Equal("Ok", plan.GetProperty("status").GetString());
+            // The three narration items match; the three dialogue lines do not count.
+            Assert.Equal(3, plan.GetProperty("targetCount").GetInt32());
+            Assert.Equal(0, plan.GetProperty("warnings").GetArrayLength());
+
+            app.FakeAi.LlmReply = _ => RegexReplacePlan("nowhere in the book");
+            var none = await PlanAsync(folder, "replace nowhere with begins");
+            Assert.Equal("NoTargets", none.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, none.GetProperty("program").ValueKind);
         }
         finally
         {

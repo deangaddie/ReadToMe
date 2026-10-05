@@ -16,12 +16,20 @@ namespace Read2Me.Services.BookEdits
         Guid? ChapterId,
         Guid? ParagraphId);
 
+    /// <summary>How many volume, part and chapter titles a pattern matches, book-wide.</summary>
+    public sealed record TitleMatchCounts(int Volume, int Part, int Chapter)
+    {
+        public int Total => Volume + Part + Chapter;
+    }
+
     /// <summary>
     /// Resolves an edit program's scope selector to concrete entities by walking the
     /// book hierarchy in reading order. Pure traversal — no LLM. Ordinal filters are
     /// 1-based and counted book-wide at the target level (chapter level for paragraph
     /// text). Entities with null titles are skipped for regex_replace and treated as
-    /// empty strings otherwise.
+    /// empty strings otherwise. A regex_replace, or a change_case with a pattern, keeps
+    /// only the targets its pattern matches, so the count is the real job; a value the
+    /// pattern times out on is kept, so its row fails visibly rather than vanishing.
     /// </summary>
     public class ScopeResolver(IBookContentReader reader)
     {
@@ -31,6 +39,7 @@ namespace Read2Me.Services.BookEdits
             ProjectFolderId folderId, EditProgram program, CancellationToken ct = default)
         {
             var titleRegex = CreateRegex(program.NodeFilter.TitleRegex);
+            var transformRegex = PrunesByPattern(program.Transform) ? CreateRegex(program.Transform.Pattern) : null;
             var predicates = program.ParagraphFilter.Where
                 .Select(p => (Predicate: p, Regex: CreateRegex(p.Regex)))
                 .ToList();
@@ -48,7 +57,7 @@ namespace Read2Me.Services.BookEdits
                 if (program.Target == EditTargetSelector.VolumeTitle)
                 {
                     if (NodeMatches(program.NodeFilter, titleRegex, volumeN, volume.Title))
-                        AddTitleTarget(targets, program, BookEditTargetKind.VolumeTitle, volume.Id, volume.Title, volumeLabel);
+                        AddTitleTarget(targets, program, transformRegex, BookEditTargetKind.VolumeTitle, volume.Id, volume.Title, volumeLabel);
                     continue;
                 }
 
@@ -62,7 +71,7 @@ namespace Read2Me.Services.BookEdits
                     if (program.Target == EditTargetSelector.PartTitle)
                     {
                         if (NodeMatches(program.NodeFilter, titleRegex, partN, part.Title))
-                            AddTitleTarget(targets, program, BookEditTargetKind.PartTitle, part.Id, part.Title,
+                            AddTitleTarget(targets, program, transformRegex, BookEditTargetKind.PartTitle, part.Id, part.Title,
                                 $"{volumeLabel} › {partLabel ?? $"Part {partN}"}");
                         continue;
                     }
@@ -82,7 +91,7 @@ namespace Read2Me.Services.BookEdits
                         if (program.Target == EditTargetSelector.ChapterTitle)
                         {
                             if (NodeMatches(program.NodeFilter, titleRegex, chapterN, chapter.Title))
-                                AddTitleTarget(targets, program, BookEditTargetKind.ChapterTitle, chapter.Id, chapter.Title, chapterPath);
+                                AddTitleTarget(targets, program, transformRegex, BookEditTargetKind.ChapterTitle, chapter.Id, chapter.Title, chapterPath);
                             continue;
                         }
 
@@ -91,7 +100,7 @@ namespace Read2Me.Services.BookEdits
                             continue;
 
                         var paragraphs = (await reader.GetChildrenAsync(folderId, BookNodeLevel.Chapter, chapter.Id)).Paragraphs ?? [];
-                        AddParagraphTargets(targets, predicates, chapter.Id, chapterPath, paragraphs);
+                        AddParagraphTargets(targets, predicates, transformRegex, chapter.Id, chapterPath, paragraphs);
                     }
                 }
             }
@@ -99,16 +108,54 @@ namespace Read2Me.Services.BookEdits
             return targets;
         }
 
+        /// <summary>
+        /// For a paragraph-text change_case with a pattern, counts the volume, part and chapter titles
+        /// the pattern also matches — what the run leaves behind, since one program targets one kind
+        /// of value. Book-wide on purpose: the advice is a separate run over those titles, which the
+        /// program's chapter and paragraph filters do not describe. All zero for any other program;
+        /// a title the pattern times out on is not counted.
+        /// </summary>
+        public virtual async Task<TitleMatchCounts> CountTitlesAlsoMatchingAsync(
+            ProjectFolderId folderId, EditProgram program, CancellationToken ct = default)
+        {
+            if (program is not { Target: EditTargetSelector.ParagraphText, Transform.Kind: TransformKind.ChangeCase }
+                || CreateRegex(program.Transform.Pattern) is not { } regex)
+                return new TitleMatchCounts(0, 0, 0);
+            bool Matches(string? title) => title != null && SafeIsMatch(regex, title);
+            int volumes = 0, parts = 0, chapters = 0;
+
+            foreach (var volume in await reader.GetVolumesAsync(folderId))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (Matches(volume.Title)) volumes++;
+                foreach (var part in (await reader.GetChildrenAsync(folderId, BookNodeLevel.Volume, volume.Id)).Parts ?? [])
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (Matches(part.Title)) parts++;
+                    chapters += ((await reader.GetChildrenAsync(folderId, BookNodeLevel.Part, part.Id)).Chapters ?? [])
+                        .Count(c => Matches(c.Title));
+                }
+            }
+
+            return new TitleMatchCounts(volumes, parts, chapters);
+        }
+
+        private static bool PrunesByPattern(EditTransform transform) =>
+            transform.Kind is TransformKind.RegexReplace or TransformKind.ChangeCase;
+
         private static void AddTitleTarget(
-            List<EditTarget> targets, EditProgram program, BookEditTargetKind kind, Guid id, string? title, string path)
+            List<EditTarget> targets, EditProgram program, Regex? transformRegex,
+            BookEditTargetKind kind, Guid id, string? title, string path)
         {
             if (title == null && program.Transform.Kind == TransformKind.RegexReplace)
+                return;
+            if (!MatchesOrTimesOut(transformRegex, title ?? string.Empty))
                 return;
             targets.Add(new EditTarget(kind, id, title ?? string.Empty, path, targets.Count + 1, null, null));
         }
 
         private void AddParagraphTargets(
-            List<EditTarget> targets, List<(EditPredicate Predicate, Regex? Regex)> predicates,
+            List<EditTarget> targets, List<(EditPredicate Predicate, Regex? Regex)> predicates, Regex? transformRegex,
             Guid chapterId, string chapterPath, List<Paragraph> paragraphs)
         {
             var contentParagraphs = paragraphs
@@ -125,6 +172,8 @@ namespace Read2Me.Services.BookEdits
                     var text = items[j].Text!;
                     var itemOrdinal = j + 1;
                     if (!predicates.All(p => PredicateMatches(p.Predicate, p.Regex, number, fromEnd, itemOrdinal, text)))
+                        continue;
+                    if (!MatchesOrTimesOut(transformRegex, text))
                         continue;
                     targets.Add(new EditTarget(
                         BookEditTargetKind.ParagraphItemText, items[j].Id, text,
@@ -177,6 +226,15 @@ namespace Read2Me.Services.BookEdits
         {
             try { return regex.IsMatch(input); }
             catch (RegexMatchTimeoutException) { return false; }
+        }
+
+        /// <summary>Null regex = no pruning. A timeout keeps the target: the transform then fails
+        /// that row with its timeout reason instead of the item silently leaving the plan.</summary>
+        private static bool MatchesOrTimesOut(Regex? regex, string input)
+        {
+            if (regex == null) return true;
+            try { return regex.IsMatch(input); }
+            catch (RegexMatchTimeoutException) { return true; }
         }
 
         private static Regex? CreateRegex(string? pattern) =>
