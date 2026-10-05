@@ -163,6 +163,17 @@ namespace Read2Me.Services
             return await db.Chapters.CountAsync();
         }
 
+        public async Task<IReadOnlyList<string>> GetBookTextAsync(ProjectFolderId folderId, CancellationToken ct = default)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var texts = new List<string?>();
+            texts.AddRange(await db.Volumes.AsNoTracking().Select(v => v.Title).ToListAsync(ct));
+            texts.AddRange(await db.Parts.AsNoTracking().Select(p => p.Title).ToListAsync(ct));
+            texts.AddRange(await db.Chapters.AsNoTracking().Select(c => c.Title).ToListAsync(ct));
+            texts.AddRange(await db.ParagraphItems.AsNoTracking().Select(i => i.Text).ToListAsync(ct));
+            return texts.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToList();
+        }
+
         public async Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(
             ProjectFolderId folderId, IEnumerable<Guid> paragraphIds)
         {

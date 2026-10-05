@@ -2,7 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace Read2Me.Services.BookEdits
 {
-    /// <summary>Sentence or title case for one value, with the fixed rules that keep roman
+    /// <summary>Sentence or title case for one value. Keeps the book's names from the
+    /// <see cref="ProtectionSet"/> (longest phrase first, then words) and the fixed rules: roman
     /// numerals (and the pronoun I), short isolated acronyms and dotted acronyms. Re-cases the
     /// whole value so sentence starts and neighbouring words are read in full context; the
     /// result has the same length as the input, so callers can take matched spans from it.</summary>
@@ -21,13 +22,9 @@ namespace Read2Me.Services.BookEdits
         private static readonly HashSet<string> SmallWords =
             ["a", "an", "the", "and", "but", "or", "nor", "for", "of", "to", "in", "on", "at", "by", "as"];
 
-        public static string Recase(string value, CaseMode mode)
+        public static string Recase(string value, CaseMode mode, ProtectionSet protection)
         {
-            var acronyms = DottedAcronym.Matches(value);
-            var words = Word.Matches(value)
-                .Where(w => !acronyms.Any(a => w.Index < a.Index + a.Length && a.Index < w.Index + w.Length))
-                .ToList();
-
+            var words = Tokenise(value);
             var output = value.ToCharArray();
             for (var i = 0; i < words.Count; i++)
             {
@@ -37,30 +34,61 @@ namespace Read2Me.Services.BookEdits
                     && (i == words.Count - 1 || !IsAllCaps(words[i + 1].Value));
                 if (!initial && isolated && IsShortAcronym(word.Value))
                     continue;
-                RecaseWord(word.Value, initial, mode == CaseMode.Title).CopyTo(0, output, word.Index, word.Length);
+
+                var phrase = protection.MatchPhrase(value, words, i);
+                if (phrase != null)
+                {
+                    for (var k = 0; k < phrase.Length; k++)
+                    {
+                        var stem = k == 0 && initial ? Capitalise(phrase[k]) : phrase[k];
+                        var phraseWord = words[i + k];
+                        (stem + phraseWord.Value[stem.Length..].ToLowerInvariant())
+                            .CopyTo(0, output, phraseWord.Index, phraseWord.Length);
+                    }
+                    i += phrase.Length - 1;
+                    continue;
+                }
+                RecaseWord(word.Value, initial, mode == CaseMode.Title, protection)
+                    .CopyTo(0, output, word.Index, word.Length);
             }
             return new string(output);
         }
 
+        /// <summary>The words of a value, dotted acronyms left out (they are never re-cased).</summary>
+        internal static IReadOnlyList<Match> Tokenise(string value)
+        {
+            var acronyms = DottedAcronym.Matches(value);
+            return Word.Matches(value)
+                .Where(w => !acronyms.Any(a => w.Index < a.Index + a.Length && a.Index < w.Index + w.Length))
+                .ToList();
+        }
+
         /// <summary>Hyphen parts are cased one by one: each is a new word in title case only.
-        /// Letters after an apostrophe stay lower.</summary>
-        private static string RecaseWord(string word, bool initial, bool title)
+        /// Letters after an apostrophe stay lower. A protected word takes its restore form, which
+        /// beats the small-word rule.</summary>
+        private static string RecaseWord(string word, bool initial, bool title, ProtectionSet protection)
         {
             var parts = word.Split('-');
             for (var p = 0; p < parts.Length; p++)
             {
                 var part = parts[p];
-                var apostrophe = part.IndexOfAny(['\'', '’']);
-                var stem = apostrophe < 0 ? part : part[..apostrophe];
-                var tail = apostrophe < 0 ? "" : part[apostrophe..].ToLowerInvariant();
+                var stem = Stem(part);
+                var tail = part[stem.Length..].ToLowerInvariant();
+                var first = p == 0 && initial;
 
-                var capitalise = (p == 0 && initial)
-                    || (title && !SmallWords.Contains(part.ToLowerInvariant()));
-                if (!RomanNumeral.IsMatch(stem))
+                if (RomanNumeral.IsMatch(stem))
                 {
-                    stem = capitalise
-                        ? char.ToUpperInvariant(stem[0]) + stem[1..].ToLowerInvariant()
-                        : stem.ToLowerInvariant();
+                    // keep the numeral (or pronoun I) upper
+                }
+                else if (protection.Words.TryGetValue(stem.ToLowerInvariant(), out var restore)
+                    && restore.Length == stem.Length)
+                {
+                    stem = first ? Capitalise(restore) : restore;
+                }
+                else
+                {
+                    var capitalise = first || (title && !SmallWords.Contains(part.ToLowerInvariant()));
+                    stem = capitalise ? Capitalise(stem.ToLowerInvariant()) : stem.ToLowerInvariant();
                 }
                 parts[p] = stem + tail;
             }
@@ -70,7 +98,7 @@ namespace Read2Me.Services.BookEdits
         /// <summary>The value's start (after leading whitespace / opening quotes), directly after an
         /// opening quote, or after . ! ? : with optional closing quotes and whitespace. The em dash
         /// is not a boundary.</summary>
-        private static bool IsSentenceStart(string value, int start)
+        internal static bool IsSentenceStart(string value, int start)
         {
             if (start == 0 || IsOpeningQuote(value[start - 1]))
                 return true;
@@ -87,10 +115,19 @@ namespace Read2Me.Services.BookEdits
             return i >= 0 && value[i] is '.' or '!' or '?' or ':';
         }
 
-        private static bool IsOpeningQuote(char c) => c is '“' or '"' or '‘';
+        /// <summary>The letters before an apostrophe (Seldon's → Seldon), or the whole word.</summary>
+        internal static string Stem(string word)
+        {
+            var apostrophe = word.IndexOfAny(['\'', '’']);
+            return apostrophe < 0 ? word : word[..apostrophe];
+        }
 
-        private static bool IsAllCaps(string word)
+        internal static bool IsAllCaps(string word)
             => word.Any(char.IsLetter) && !word.Any(char.IsLower);
+
+        private static string Capitalise(string word) => char.ToUpperInvariant(word[0]) + word[1..];
+
+        private static bool IsOpeningQuote(char c) => c is '“' or '"' or '‘';
 
         private static bool IsShortAcronym(string word)
             => word.Length is 2 or 3 && word.All(char.IsUpper);

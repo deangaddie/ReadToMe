@@ -155,6 +155,12 @@ namespace Read2Me.Services
         Task<int> GetTotalPartCountAsync(ProjectFolderId folderId);
         Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId);
 
+        /// <summary>
+        /// Every volume, part and chapter title and every paragraph item's text, blanks left out, in
+        /// no particular order — the corpus a case change learns the book's names from.
+        /// </summary>
+        Task<IReadOnlyList<string>> GetBookTextAsync(ProjectFolderId folderId, CancellationToken ct = default);
+
         // Returns paragraphs from the given id set ordered by book position (Volume→Part→Chapter→Paragraph order).
         // Preview is the first character item's text, truncated.
         Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds);

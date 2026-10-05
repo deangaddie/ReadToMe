@@ -32,7 +32,7 @@ namespace Read2Me.Tests.Services.BookEdits
         public void ChangeCase_UpperLower_ReCasesWholeValueOrMatchedSpans(
             string value, string? pattern, CaseMode mode, string expected)
         {
-            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, pattern, mode));
+            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, pattern, mode, ProtectionSet.Empty));
         }
 
         [Theory]
@@ -67,7 +67,7 @@ namespace Read2Me.Tests.Services.BookEdits
         [InlineData("PS3551 F59", "PS3551 F59")]
         public void ChangeCase_Sentence_WholeValue(string value, string expected)
         {
-            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, null, CaseMode.Sentence));
+            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, null, CaseMode.Sentence, ProtectionSet.Empty));
         }
 
         [Theory]
@@ -89,7 +89,7 @@ namespace Read2Me.Tests.Services.BookEdits
         [InlineData("chapter one", "Chapter One")]
         public void ChangeCase_Title_WholeValue(string value, string expected)
         {
-            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, null, CaseMode.Title));
+            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, null, CaseMode.Title, ProtectionSet.Empty));
         }
 
         private const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['’]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['’]\p{Lu}+)?)*\b";
@@ -109,14 +109,14 @@ namespace Read2Me.Tests.Services.BookEdits
         public void ChangeCase_SentenceAndTitle_WithPattern_ReCasesOnlyMatchedSpans(
             string value, CaseMode mode, string expected)
         {
-            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, AllCapsPattern, mode));
+            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, AllCapsPattern, mode, ProtectionSet.Empty));
         }
 
         [Fact]
         public void ChangeCase_SentenceWithPattern_ReadsSentenceStartFromWholeValue()
         {
             Assert.Equal("He left. Then CAME the",
-                DeterministicTransformer.ChangeCase("He left. THEN CAME the", "THEN", CaseMode.Sentence));
+                DeterministicTransformer.ChangeCase("He left. THEN CAME the", "THEN", CaseMode.Sentence, ProtectionSet.Empty));
         }
 
         [Theory]

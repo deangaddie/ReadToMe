@@ -379,4 +379,32 @@ public static class WorkspaceSeeder
 
         return builder;
     }
+
+    /// <summary>
+    /// Creates a project with one volume, one part titled <paramref name="partTitle"/> and one
+    /// chapter whose paragraphs are each one narration item, in order. Item names are "n1", "n2"….
+    /// </summary>
+    public static async Task<BookHierarchyBuilder> SeedNarrationBookAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string partTitle, IReadOnlyList<string> narration)
+    {
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        var folderPath = Path.Combine(workspaceDir, folderName);
+
+        var builder = new BookHierarchyBuilder(() => factory.CreateAsync(folderPath));
+        builder
+            .WithProject(title: "Narration Book", author: "Author")
+            .AddVolume("Volume 1", v => v.AddPart(partTitle, p => p.AddChapter("ch1", c =>
+            {
+                for (var i = 0; i < narration.Count; i++)
+                {
+                    var n = i + 1;
+                    var text = narration[i];
+                    c.AddParagraph($"p{n}", para => para.AddNarration($"n{n}", text));
+                }
+            })));
+        await builder.BuildAsync();
+
+        return builder;
+    }
 }

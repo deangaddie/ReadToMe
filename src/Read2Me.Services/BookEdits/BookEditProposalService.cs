@@ -29,6 +29,7 @@ namespace Read2Me.Services.BookEdits
         ILlmCompletionRunner runner,
         LlmSettingsService settings,
         IProjectCatalogReader catalog,
+        IBookContentReader content,
         ILogger<BookEditProposalService> logger)
     {
         /// <summary>Targets per LLM request. The plan's request count is derived from it.</summary>
@@ -51,11 +52,19 @@ namespace Read2Me.Services.BookEdits
         {
             return program.Transform.Kind == TransformKind.Llm
                 ? await ProposeWithLlmAsync(folderId, program, targets, progress, disableThinking, ct)
-                : ProposeDeterministic(program, targets, progress);
+                : ProposeDeterministic(program, targets, await BuildProtectionAsync(folderId, program, ct), progress);
         }
 
+        /// <summary>The book's names, learned once per run — only sentence and title case keep them.</summary>
+        private async Task<ProtectionSet> BuildProtectionAsync(
+            ProjectFolderId folderId, EditProgram program, CancellationToken ct)
+            => program.Transform is { Kind: TransformKind.ChangeCase, CaseMode: CaseMode.Sentence or CaseMode.Title }
+                ? ProtectionSet.Build(await content.GetBookTextAsync(folderId, ct))
+                : ProtectionSet.Empty;
+
         private static IReadOnlyList<ProposedEdit> ProposeDeterministic(
-            EditProgram program, IReadOnlyList<EditTarget> targets, IProgress<(int, int)>? progress)
+            EditProgram program, IReadOnlyList<EditTarget> targets, ProtectionSet protection,
+            IProgress<(int, int)>? progress)
         {
             var proposals = new List<ProposedEdit>(targets.Count);
             foreach (var target in targets)
@@ -69,7 +78,8 @@ namespace Read2Me.Services.BookEdits
                         TransformKind.RegexReplace => DeterministicTransformer.RegexReplace(
                             target.CurrentValue, program.Transform.Pattern!, program.Transform.Replacement),
                         TransformKind.ChangeCase => DeterministicTransformer.ChangeCase(
-                            target.CurrentValue, program.Transform.Pattern, program.Transform.CaseMode!.Value),
+                            target.CurrentValue, program.Transform.Pattern, program.Transform.CaseMode!.Value,
+                            protection),
                         _ => DeterministicTransformer.RenderTemplate(
                             program.Transform.Template!, target.OrdinalInScope, target.CurrentValue),
                     };

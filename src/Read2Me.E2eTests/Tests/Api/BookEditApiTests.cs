@@ -326,6 +326,49 @@ public class BookEditApiTests(E2eAppFixture app)
         }
     }
 
+    private const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['’]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['’]\p{Lu}+)?)*\b";
+
+    [Fact]
+    public async Task Change_case_sentence_keeps_the_book_names_numerals_and_acronyms()
+    {
+        var folder = $"api-edit-case-names-{Guid.NewGuid():N}";
+        await app.SeedNarrationBookAsync(folder, "PART IV",
+        [
+            "HARI SELDON— . . . born in the Galactic Era.",
+            "THE MAYORS",
+            "THE FOUR KINGDOMS— The name given to the Province of Anacreon.",
+            "The last strong Emperor was Cleon II, and UV light was rare.",
+            "Gaal Dornick met Hari Seldon on Trantor, near the Four Kingdoms.",
+            "The mayors argued; the four winds blew over the kingdoms.",
+        ]);
+        app.FakeAi.LlmReply = _ => ChangeCasePlan("paragraph_text", AllCapsPattern, "sentence");
+        try
+        {
+            var plan = await PlanAsync(folder, "make the all-caps words sentence case");
+            Assert.Equal("ChangeCase", plan.GetProperty("transform").GetString());
+            Assert.EndsWith("— names, numerals and acronyms are kept", plan.GetProperty("summary").GetString());
+            var program = plan.GetProperty("program").GetString()!;
+
+            await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"), new { thinking = false });
+            var rows = (await WaitForRunAsync(folder, program, "Completed")).GetProperty("rows").EnumerateArray().ToList();
+
+            var changed = rows.Where(r => r.GetProperty("status").GetString() == "Proposed")
+                .Select(r => r.GetProperty("newValue").GetString()).ToList();
+            Assert.Equal(
+            [
+                "Hari Seldon— . . . born in the Galactic Era.",
+                "The mayors",
+                "The Four Kingdoms— The name given to the Province of Anacreon.",
+            ], changed);
+            // Numerals and acronyms, and the prose with no all-caps words, come back unchanged.
+            Assert.Equal(3, rows.Count(r => r.GetProperty("status").GetString() == "NoChange"));
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
     [Fact]
     public async Task Plan_reports_unsupported_and_no_target_outcomes_without_a_session()
     {

@@ -37,6 +37,8 @@ namespace Read2Me.Tests.Fakes
         public virtual Task<List<CharacterSummary>> GetCharacterSummariesAsync(ProjectFolderId folderId) => Task.FromResult(new List<CharacterSummary>());
         public virtual Task<int> GetTotalPartCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
         public virtual Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId) => Task.FromResult(0);
+        public virtual Task<IReadOnlyList<string>> GetBookTextAsync(ProjectFolderId folderId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
         public virtual Task<List<CharacterParagraphRef>> GetCharacterParagraphsAsync(ProjectFolderId folderId, BookNodeLevel level, Guid nodeId, bool unprocessedOnly = false) =>
             Task.FromResult(new List<CharacterParagraphRef>());
         public virtual Task<List<CharacterParagraphRef>> GetCharacterParagraphRefsAsync(ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds) =>

@@ -30,9 +30,12 @@ namespace Read2Me.Services.BookEdits
         private static string ChangeCasePhrase(EditTransform transform)
         {
             var mode = $"{transform.CaseMode.ToString()!.ToLowerInvariant()} case";
-            return transform.Pattern == null
+            var change = transform.Pattern == null
                 ? $"change to {mode}"
                 : $"change text matching \"{transform.Pattern}\" to {mode}";
+            return transform.CaseMode is CaseMode.Sentence or CaseMode.Title
+                ? $"{change} — names, numerals and acronyms are kept"
+                : change;
         }
 
         private static string ScopePhrase(EditProgram program)

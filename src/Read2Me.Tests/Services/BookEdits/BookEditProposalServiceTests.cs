@@ -19,7 +19,7 @@ namespace Read2Me.Tests.Services.BookEdits
             new(Factory, NullLogger<LlmSettingsService>.Instance);
 
         private BookEditProposalService NewService(FakeLlmCompletionRunner runner, LlmSettingsService settings) =>
-            new(runner, settings, new EmptyReader(),
+            new(runner, settings, new EmptyReader(), new EmptyReader(),
                 NullLogger<BookEditProposalService>.Instance);
 
         private sealed class EmptyReader : ProjectReaderFakeBase;
@@ -276,6 +276,35 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Empty(runner.Requests);
         }
 
+        [Theory]
+        [InlineData(CaseMode.Sentence, "Hari Seldon spoke on Trantor")]
+        [InlineData(CaseMode.Title, "Hari Seldon Spoke on Trantor")]
+        [InlineData(CaseMode.Upper, "HARI SELDON SPOKE ON TRANTOR")]
+        public async Task Propose_ChangeCase_KeepsTheNamesTheBookUses(CaseMode mode, string expected)
+        {
+            var reader = new BookTextReader(["He met Hari Seldon there.", "They left for Trantor.", "he spoke", "on"]);
+            var program = Program(new EditTransform(TransformKind.ChangeCase, CaseMode: mode));
+
+            var proposals = await new BookEditProposalService(new FakeLlmCompletionRunner(), NewSettings(),
+                    reader, reader, NullLogger<BookEditProposalService>.Instance)
+                .ProposeAsync(Folder, program, [Target(1, "HARI SELDON SPOKE ON TRANTOR")],
+                    null, false, CancellationToken.None);
+
+            Assert.Equal(expected, proposals[0].NewValue);
+            Assert.Equal(mode == CaseMode.Upper ? 0 : 1, reader.BookTextReads);
+        }
+
+        private sealed class BookTextReader(IReadOnlyList<string> texts) : ProjectReaderFakeBase
+        {
+            public int BookTextReads { get; private set; }
+
+            public override Task<IReadOnlyList<string>> GetBookTextAsync(ProjectFolderId folderId, CancellationToken ct = default)
+            {
+                BookTextReads++;
+                return Task.FromResult(texts);
+            }
+        }
+
         [Fact]
         public async Task ProposeOne_ChangeCase_FailsWithoutCallingLlm()
         {
@@ -386,7 +415,7 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         private BookEditProposalService NewService2(ILlmCompletionRunner runner, LlmSettingsService settings) =>
-            new(runner, settings, new EmptyReader(),
+            new(runner, settings, new EmptyReader(), new EmptyReader(),
                 NullLogger<BookEditProposalService>.Instance);
 
         /// <summary>First run completes with the given raw; second cancels the source and throws.</summary>

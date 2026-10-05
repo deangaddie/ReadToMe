@@ -22,16 +22,17 @@ namespace Read2Me.Services.BookEdits
 
         /// <summary>Re-cases the whole value when <paramref name="pattern"/> is null, otherwise only
         /// the spans it matches. Upper and lower are literal; sentence and title read sentence
-        /// starts and neighbouring words from the whole value and keep roman numerals and acronyms
-        /// (see CaseChanger). Throws RegexMatchTimeoutException on catastrophic patterns; callers
+        /// starts and neighbouring words from the whole value and keep the book's names from
+        /// <paramref name="protection"/> (ProtectionSet.Empty for none) plus roman numerals and acronyms (see
+        /// CaseChanger). Throws RegexMatchTimeoutException on catastrophic patterns; callers
         /// mark the item Failed.</summary>
-        public static string ChangeCase(string value, string? pattern, CaseMode mode)
+        public static string ChangeCase(string value, string? pattern, CaseMode mode, ProtectionSet protection)
         {
             var recased = mode switch
             {
                 CaseMode.Upper => value.ToUpperInvariant(),
                 CaseMode.Lower => value.ToLowerInvariant(),
-                CaseMode.Sentence or CaseMode.Title => CaseChanger.Recase(value, mode),
+                CaseMode.Sentence or CaseMode.Title => CaseChanger.Recase(value, mode, protection),
                 _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
             };
             return pattern == null

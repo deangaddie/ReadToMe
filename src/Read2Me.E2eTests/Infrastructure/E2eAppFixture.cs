@@ -101,6 +101,10 @@ public sealed class E2eAppFixture : IAsyncLifetime
         WorkspaceSeeder.SeedMultiChapterProjectAsync(
             Services, WorkspaceDir, folderName, title, author, chapters, characterName);
 
+    public Task<TestUtils.BookHierarchyBuilder> SeedNarrationBookAsync(
+        string folderName, string partTitle, IReadOnlyList<string> narration) =>
+        WorkspaceSeeder.SeedNarrationBookAsync(Services, WorkspaceDir, folderName, partTitle, narration);
+
     public Task SeedItemAudioAsync(string folderName, Guid itemId, Guid characterId) =>
         WorkspaceSeeder.SeedItemAudioAsync(Services, WorkspaceDir, folderName, itemId, characterId);
 
