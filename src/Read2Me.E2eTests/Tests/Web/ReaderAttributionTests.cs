@@ -58,11 +58,14 @@ public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E
         await Page.Locator(".r2m-speaker-menu__action", new() { HasText = "Clear speaker" }).ClickAsync();
         await Expect(items.Nth(1).Locator(".r2m-speaker-chip--unknown")).ToHaveCountAsync(1);
 
-        // New character from the search box, assigned in the same gesture.
+        // New character by keyboard alone: the search box has focus on open, and Enter on a name
+        // nobody matches creates it, assigned in the same gesture.
         await items.Nth(2).Locator("r2m-speaker-chip button").ClickAsync();
-        await Page.Locator(".r2m-speaker-menu__input").FillAsync("Bob");
-        await Page.Locator(".r2m-speaker-menu__action", new() { HasText = "New character" }).ClickAsync();
+        await Expect(Page.Locator(".r2m-speaker-menu__input")).ToBeFocusedAsync();
+        await Page.Keyboard.TypeAsync("Bob");
+        await Page.Keyboard.PressAsync("Enter");
         await Expect(items.Nth(2).Locator(".r2m-speaker-chip--named")).ToHaveTextAsync("Bob");
+        await Expect(Page.Locator(".r2m-speaker-menu")).ToHaveCountAsync(0);
 
         // Bulk: the two rows around Bob's ticked, Alice picked once, the confirm quotes the preview.
         var boxes = Page.Locator("r2m-paragraph input[type=checkbox]");

@@ -4,16 +4,20 @@ import {
   Component,
   Directive,
   ElementRef,
+  Injector,
   OnDestroy,
+  afterNextRender,
   booleanAttribute,
   computed,
   inject,
   input,
   output,
   signal,
+  viewChild,
   viewChildren,
 } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
+import { MAT_MENU_PANEL } from '@angular/material/menu';
 import { speakerHue } from '@app/shared/speaker-color';
 
 export interface SpeakerRosterEntry {
@@ -63,9 +67,9 @@ export class SpeakerMenuRow implements Highlightable {
         autocomplete="off"
         aria-label="Search characters"
         [value]="query()"
-        (input)="query.set(search.value)"
+        (input)="onSearch(search.value)"
         (click)="$event.stopPropagation()"
-        (keydown)="$event.stopPropagation(); onKeydown($event)"
+        (keydown)="$event.key !== 'Escape' && $event.stopPropagation(); onKeydown($event)"
       />
     </label>
     <div class="r2m-speaker-menu__list" role="listbox" aria-label="Characters">
@@ -237,9 +241,22 @@ export class SpeakerMenu implements OnDestroy {
       );
   });
 
+  private readonly injector = inject(Injector);
+  private readonly search = viewChild.required<ElementRef<HTMLInputElement>>('search');
   private readonly rows = viewChildren(SpeakerMenuRow);
   private keyManager?: ActiveDescendantKeyManager<SpeakerMenuRow>;
   private keyManagerRows?: readonly SpeakerMenuRow[];
+
+  /** The mat-menu hosting this panel, if any: a keyboard pick closes it as a click would. */
+  private readonly hostMenu = inject(MAT_MENU_PANEL, { optional: true });
+
+  constructor() {
+    // Opened from a mat-menu with a mouse or trackpad: type to search straight away. Touch skips
+    // it (the on-screen keyboard would cover the list); standalone use never steals focus.
+    if (this.hostMenu && window.matchMedia?.('(pointer: fine)').matches) {
+      afterNextRender(() => this.search().nativeElement.focus());
+    }
+  }
 
   /**
    * Key manager over the currently rendered rows, rebuilt when filtering changes the row set.
@@ -249,10 +266,11 @@ export class SpeakerMenu implements OnDestroy {
   private manager(): ActiveDescendantKeyManager<SpeakerMenuRow> {
     const rows = this.rows();
     if (this.keyManager && this.keyManagerRows === rows) return this.keyManager;
+    // Rows are reused across filters (tracked by id): unstyle the old highlight before replacing.
+    this.keyManager?.setActiveItem(-1);
     this.keyManager?.destroy();
     this.keyManagerRows = rows;
     this.keyManager = new ActiveDescendantKeyManager(rows).withWrap().withVerticalOrientation();
-    if (rows.length) this.keyManager.setFirstItemActive();
     return this.keyManager;
   }
 
@@ -264,6 +282,20 @@ export class SpeakerMenu implements OnDestroy {
     return speakerHue(id);
   }
 
+  /** New search text; once the filtered rows render, the first match is highlighted. */
+  protected onSearch(value: string): void {
+    this.query.set(value);
+    // An empty search highlights nobody, so a stray Enter cannot assign the narrator.
+    afterNextRender(
+      () => {
+        const manager = this.manager();
+        if (this.query().trim()) manager.setFirstItemActive();
+        else manager.setActiveItem(-1);
+      },
+      { injector: this.injector },
+    );
+  }
+
   protected choose(entry: SpeakerRosterEntry): void {
     this.pick.emit(entry.id);
   }
@@ -271,10 +303,25 @@ export class SpeakerMenu implements OnDestroy {
   protected onKeydown(event: KeyboardEvent): void {
     const manager = this.manager();
     if (event.key === 'Enter') {
-      const active = manager.activeItem;
-      if (active) {
+      // Enter can beat the re-render after a keystroke: trust the highlight only while the
+      // rendered rows are the current matches, else take the first match (none on an empty search).
+      const matches = this.filtered();
+      const rows = this.rows();
+      const rendered =
+        rows.length === matches.length && rows.every((row, i) => row.entry().id === matches[i]!.id);
+      const target = rendered
+        ? manager.activeItem?.entry()
+        : this.query().trim()
+          ? matches[0]
+          : undefined;
+      if (target) {
         event.preventDefault();
-        this.choose(active.entry());
+        this.choose(target);
+        this.hostMenu?.close.emit('keydown');
+      } else if (!matches.length && this.query().trim() && this.allowCreate()) {
+        event.preventDefault();
+        this.create.emit(this.query().trim());
+        this.hostMenu?.close.emit('keydown');
       }
       return;
     }

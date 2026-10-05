@@ -162,12 +162,15 @@ const MODE_LABELS: Record<ReaderMode, string> = {
             <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
           </button>
           <mat-menu #bulk="matMenu" class="book__bulk-menu">
-            <r2m-speaker-menu
-              [roster]="roster()"
-              (pick)="bulkAssign($event)"
-              (clear)="bulkAssign(null)"
-              (create)="bulkCreate($event)"
-            />
+            <!-- Lazy: a fresh speaker menu (empty search, focused) on every open. -->
+            <ng-template matMenuContent>
+              <r2m-speaker-menu
+                [roster]="roster()"
+                (pick)="bulkAssign($event)"
+                (clear)="bulkAssign(null)"
+                (create)="bulkCreate($event)"
+              />
+            </ng-template>
           </mat-menu>
           <button mat-button type="button" data-action="clear-selection" (click)="selection.clear()">
             Clear

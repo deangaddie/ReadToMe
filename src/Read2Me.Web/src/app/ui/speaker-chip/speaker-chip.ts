@@ -41,13 +41,16 @@ export type SpeakerChipState = 'named' | 'unknown' | 'mixed' | 'narration' | 'na
         <ng-container *ngTemplateOutlet="content" />
       </button>
       <mat-menu #menu="matMenu" class="r2m-speaker-chip__menu">
-        <r2m-speaker-menu
-          [roster]="roster()!"
-          [selectedId]="characterId()"
-          (pick)="pick.emit($event)"
-          (clear)="clear.emit()"
-          (create)="create.emit($event)"
-        />
+        <!-- Lazy: a fresh speaker menu (empty search, focused) on every open. -->
+        <ng-template matMenuContent>
+          <r2m-speaker-menu
+            [roster]="roster()!"
+            [selectedId]="characterId()"
+            (pick)="pick.emit($event)"
+            (clear)="clear.emit()"
+            (create)="create.emit($event)"
+          />
+        </ng-template>
       </mat-menu>
     } @else if (interactive()) {
       <button type="button" class="r2m-speaker-chip__body" (click)="open.emit()">
