@@ -111,7 +111,8 @@ const PREVIEW_CHARS = 160;
         @case ('instruct') {
           <p class="edit__hint">
             Describe the change in plain language — e.g. “the first letter of the first paragraph of
-            every chapter is missing, restore it” or “rename every chapter to ‘Chapter {{ '{' }}n{{ '}' }}’”.
+            every chapter is missing, restore it”, “rename every chapter to ‘Chapter {{ '{' }}n{{ '}' }}’”
+            or “make the all-caps headings sentence case”.
             Only titles and paragraph text can be edited.
           </p>
           <textarea

@@ -2,7 +2,9 @@ namespace Read2Me.Services.BookEdits
 {
     public enum EditTargetSelector { VolumeTitle, PartTitle, ChapterTitle, ParagraphText }
 
-    public enum TransformKind { RegexReplace, SetTemplate, Llm }
+    public enum TransformKind { RegexReplace, SetTemplate, Llm, ChangeCase }
+
+    public enum CaseMode { Upper, Lower, Sentence, Title }
 
     public enum PredicateField { ParagraphOrdinal, ParagraphOrdinalFromEnd, ItemOrdinal, Text }
 
@@ -40,7 +42,8 @@ namespace Read2Me.Services.BookEdits
         string? Pattern = null,
         string? Replacement = null,
         string? Template = null,
-        string? Instruction = null);
+        string? Instruction = null,
+        CaseMode? CaseMode = null);
 
     /// <summary>Structured edit plan produced by the phase-A LLM call from the user's
     /// free-text instruction. Keep in sync with EditProgramSchema below.</summary>
@@ -61,7 +64,7 @@ namespace Read2Me.Services.BookEdits
             "\"target\": \"chapter_title\", " +
             "\"node_filter\": { \"ordinal_from\": null, \"ordinal_to\": null, \"title_regex\": null }, " +
             "\"paragraph_filter\": { \"where\": [] }, " +
-            "\"transform\": { \"kind\": \"set_template\", \"pattern\": null, \"replacement\": null, \"template\": \"Chapter {n}: {old}\", \"instruction\": null } }";
+            "\"transform\": { \"kind\": \"set_template\", \"pattern\": null, \"replacement\": null, \"template\": \"Chapter {n}: {old}\", \"instruction\": null, \"case_mode\": null } }";
 
         /// <summary>
         /// Sent as response_format json_schema so the server constrains generation to this shape.
@@ -108,13 +111,14 @@ namespace Read2Me.Services.BookEdits
                 "transform": {
                   "type": "object",
                   "properties": {
-                    "kind": { "type": "string", "enum": ["regex_replace", "set_template", "llm"] },
+                    "kind": { "type": "string", "enum": ["regex_replace", "set_template", "change_case", "llm"] },
                     "pattern": { "type": ["string", "null"] },
                     "replacement": { "type": ["string", "null"] },
                     "template": { "type": ["string", "null"] },
-                    "instruction": { "type": ["string", "null"] }
+                    "instruction": { "type": ["string", "null"] },
+                    "case_mode": { "type": ["string", "null"], "enum": ["upper", "lower", "sentence", "title", null] }
                   },
-                  "required": ["kind", "pattern", "replacement", "template", "instruction"]
+                  "required": ["kind", "pattern", "replacement", "template", "instruction", "case_mode"]
                 }
               },
               "required": ["reasoning", "supported", "unsupported_reason", "target", "node_filter", "paragraph_filter", "transform"]

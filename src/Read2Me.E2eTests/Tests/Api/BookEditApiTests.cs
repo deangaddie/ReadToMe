@@ -250,6 +250,82 @@ public class BookEditApiTests(E2eAppFixture app)
         }
     }
 
+    private static string ChangeCasePlan(string target, string? pattern, string caseMode) =>
+        $$"""
+        { "reasoning": "change letter case", "supported": true, "unsupported_reason": null,
+          "target": "{{target}}",
+          "node_filter": { "ordinal_from": null, "ordinal_to": null, "title_regex": null },
+          "paragraph_filter": { "where": [] },
+          "transform": { "kind": "change_case", "pattern": {{(pattern == null ? "null" : JsonSerializer.Serialize(pattern))}},
+            "replacement": null, "template": null, "instruction": null, "case_mode": "{{caseMode}}" } }
+        """;
+
+    [Fact]
+    public async Task Change_case_upper_re_cases_whole_titles_at_once_and_refuses_retries()
+    {
+        var folder = $"api-edit-case-{Guid.NewGuid():N}";
+        await app.SeedMultiChapterProjectAsync(folder, "Case Book", "Author", chapters: 3);
+        app.FakeAi.LlmReply = _ => ChangeCasePlan("chapter_title", null, "upper");
+        try
+        {
+            var plan = await PlanAsync(folder, "make the chapter titles uppercase");
+            Assert.Equal("Ok", plan.GetProperty("status").GetString());
+            Assert.Equal("ChangeCase", plan.GetProperty("transform").GetString());
+            Assert.Equal(3, plan.GetProperty("targetCount").GetInt32());
+            Assert.Equal(0, plan.GetProperty("requestCount").GetInt32());
+            Assert.EndsWith("— change to upper case", plan.GetProperty("summary").GetString());
+            var program = plan.GetProperty("program").GetString()!;
+
+            int promptsBefore;
+            lock (app.FakeAi.LlmPromptsSeen) promptsBefore = app.FakeAi.LlmPromptsSeen.Count;
+            var propose = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"), new { thinking = false });
+            Assert.Equal(HttpStatusCode.Accepted, propose.StatusCode);
+            var rows = (await WaitForRunAsync(folder, program, "Completed")).GetProperty("rows").EnumerateArray().ToList();
+            Assert.Equal(["CHAPTER 1", "CHAPTER 2", "CHAPTER 3"], rows.Select(r => r.GetProperty("newValue").GetString()));
+            Assert.All(rows, r => Assert.Equal("Proposed", r.GetProperty("status").GetString()));
+            lock (app.FakeAi.LlmPromptsSeen) Assert.Equal(promptsBefore, app.FakeAi.LlmPromptsSeen.Count);
+
+            var retry = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose-one"),
+                new { targetId = rows[0].GetProperty("id").GetGuid(), thinking = false });
+            Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+            var row = JsonDocument.Parse(await retry.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal("Failed", row.GetProperty("status").GetString());
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
+    [Fact]
+    public async Task Change_case_with_a_pattern_re_cases_only_the_matched_spans()
+    {
+        var folder = $"api-edit-case-span-{Guid.NewGuid():N}";
+        await app.SeedMultiChapterProjectAsync(folder, "Span Book", "Author", chapters: 2);
+        app.FakeAi.LlmReply = _ => ChangeCasePlan("paragraph_text", @"\bopens\b", "upper");
+        try
+        {
+            var plan = await PlanAsync(folder, "make 'opens' uppercase");
+            Assert.Equal("ChangeCase", plan.GetProperty("transform").GetString());
+            Assert.EndsWith("— change text matching \"\\bopens\\b\" to upper case", plan.GetProperty("summary").GetString());
+            var program = plan.GetProperty("program").GetString()!;
+
+            await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"), new { thinking = false });
+            var rows = (await WaitForRunAsync(folder, program, "Completed")).GetProperty("rows").EnumerateArray().ToList();
+
+            var changed = rows.Where(r => r.GetProperty("status").GetString() == "Proposed")
+                .Select(r => r.GetProperty("newValue").GetString()).ToList();
+            Assert.Equal(["Chapter 1 OPENS.", "Chapter 2 OPENS."], changed);
+            // The dialogue lines hold no match, so they come back unchanged.
+            Assert.All(rows.Where(r => r.GetProperty("status").GetString() != "Proposed"),
+                r => Assert.Equal("NoChange", r.GetProperty("status").GetString()));
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
     [Fact]
     public async Task Plan_reports_unsupported_and_no_target_outcomes_without_a_session()
     {

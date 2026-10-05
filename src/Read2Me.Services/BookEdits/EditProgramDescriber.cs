@@ -20,10 +20,19 @@ namespace Read2Me.Services.BookEdits
                     $"replace pattern \"{program.Transform.Pattern}\" with \"{program.Transform.Replacement}\"",
                 TransformKind.SetTemplate =>
                     $"set to template \"{program.Transform.Template}\"",
+                TransformKind.ChangeCase => ChangeCasePhrase(program.Transform),
                 _ => $"AI edit: \"{program.Transform.Instruction}\"",
             };
 
             return $"Edit {target}{scope} — {transform}";
+        }
+
+        private static string ChangeCasePhrase(EditTransform transform)
+        {
+            var mode = $"{transform.CaseMode.ToString()!.ToLowerInvariant()} case";
+            return transform.Pattern == null
+                ? $"change to {mode}"
+                : $"change text matching \"{transform.Pattern}\" to {mode}";
         }
 
         private static string ScopePhrase(EditProgram program)

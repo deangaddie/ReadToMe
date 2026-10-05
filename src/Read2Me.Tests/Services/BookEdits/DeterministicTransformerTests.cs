@@ -22,6 +22,28 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Theory]
+        [InlineData("Part one", null, CaseMode.Upper, "PART ONE")]
+        [InlineData("PART One", null, CaseMode.Lower, "part one")]
+        [InlineData("Hari Seldon said", "Seldon", CaseMode.Upper, "Hari SELDON said")]
+        [InlineData("THE MULE and THE GENERAL", @"\bTHE\b", CaseMode.Lower, "the MULE and the GENERAL")]
+        [InlineData("ALREADY UPPER", null, CaseMode.Upper, "ALREADY UPPER")]
+        [InlineData("no match here", "xyz", CaseMode.Upper, "no match here")]
+        [InlineData("élan vital", null, CaseMode.Upper, "ÉLAN VITAL")]
+        public void ChangeCase_UpperLower_ReCasesWholeValueOrMatchedSpans(
+            string value, string? pattern, CaseMode mode, string expected)
+        {
+            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, pattern, mode));
+        }
+
+        [Theory]
+        [InlineData(CaseMode.Sentence)]
+        [InlineData(CaseMode.Title)]
+        public void ChangeCase_SentenceAndTitle_NotSupportedYet(CaseMode mode)
+        {
+            Assert.Throws<NotSupportedException>(() => DeterministicTransformer.ChangeCase("SHOUT", null, mode));
+        }
+
+        [Theory]
         [InlineData("Chapter {n}: {old}", 3, "The Storm", "Chapter 3: The Storm")]
         [InlineData("{old}!", 1, "Hello", "Hello!")]
         [InlineData("Part {n}", 12, "ignored", "Part 12")]

@@ -1038,7 +1038,7 @@ export type BookEditPlanStatus =
   'Ok' | 'NoLlmConfigured' | 'Unsupported' | 'ServiceUnavailable' | 'Failed' | 'NoTargets';
 
 /** `TransformKind`: only `Llm` plans send a request per item, so only they offer per-row retries. */
-export type BookEditTransformKind = 'RegexReplace' | 'SetTemplate' | 'Llm';
+export type BookEditTransformKind = 'RegexReplace' | 'SetTemplate' | 'ChangeCase' | 'Llm';
 
 export type ProposalStatus = 'Proposed' | 'NoChange' | 'Failed';
 

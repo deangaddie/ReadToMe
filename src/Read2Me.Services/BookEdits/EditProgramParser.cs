@@ -107,6 +107,22 @@ namespace Read2Me.Services.BookEdits
                     return false;
             }
 
+            CaseMode? caseMode = null;
+            if (kind == TransformKind.ChangeCase)
+            {
+                if (string.IsNullOrEmpty(dto.Transform.CaseMode))
+                {
+                    error = "Transform 'change_case' is missing its case_mode.";
+                    return false;
+                }
+                if (!TryMapCaseMode(dto.Transform.CaseMode, out var mode))
+                {
+                    error = $"Unknown case_mode '{dto.Transform.CaseMode}'.";
+                    return false;
+                }
+                caseMode = mode;
+            }
+
             if (!ValidateRegex(dto.Transform.Pattern, "transform pattern", ref error) ||
                 !ValidateRegex(dto.NodeFilter?.TitleRegex, "title filter", ref error))
                 return false;
@@ -120,7 +136,7 @@ namespace Read2Me.Services.BookEdits
                 Target: target,
                 NodeFilter: new NodeFilter(dto.NodeFilter?.OrdinalFrom, dto.NodeFilter?.OrdinalTo, dto.NodeFilter?.TitleRegex),
                 ParagraphFilter: new ParagraphFilter(where),
-                Transform: new EditTransform(kind, dto.Transform.Pattern, dto.Transform.Replacement, dto.Transform.Template, dto.Transform.Instruction),
+                Transform: new EditTransform(kind, dto.Transform.Pattern, dto.Transform.Replacement, dto.Transform.Template, dto.Transform.Instruction, caseMode),
                 Reasoning: dto.Reasoning);
             return true;
         }
@@ -160,9 +176,23 @@ namespace Read2Me.Services.BookEdits
                 "regex_replace" => TransformKind.RegexReplace,
                 "set_template" => TransformKind.SetTemplate,
                 "llm" => TransformKind.Llm,
+                "change_case" => TransformKind.ChangeCase,
                 _ => (TransformKind)(-1),
             };
             return (int)kind >= 0;
+        }
+
+        private static bool TryMapCaseMode(string value, out CaseMode mode)
+        {
+            mode = value switch
+            {
+                "upper" => CaseMode.Upper,
+                "lower" => CaseMode.Lower,
+                "sentence" => CaseMode.Sentence,
+                "title" => CaseMode.Title,
+                _ => (CaseMode)(-1),
+            };
+            return (int)mode >= 0;
         }
 
         private static bool TryMapPredicates(
@@ -326,6 +356,9 @@ namespace Read2Me.Services.BookEdits
 
             [JsonPropertyName("instruction")]
             public string? Instruction { get; set; }
+
+            [JsonPropertyName("case_mode")]
+            public string? CaseMode { get; set; }
         }
     }
 }

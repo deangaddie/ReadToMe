@@ -68,6 +68,8 @@ namespace Read2Me.Services.BookEdits
                     {
                         TransformKind.RegexReplace => DeterministicTransformer.RegexReplace(
                             target.CurrentValue, program.Transform.Pattern!, program.Transform.Replacement),
+                        TransformKind.ChangeCase => DeterministicTransformer.ChangeCase(
+                            target.CurrentValue, program.Transform.Pattern, program.Transform.CaseMode!.Value),
                         _ => DeterministicTransformer.RenderTemplate(
                             program.Transform.Template!, target.OrdinalInScope, target.CurrentValue),
                     };
@@ -75,6 +77,10 @@ namespace Read2Me.Services.BookEdits
                 catch (RegexMatchTimeoutException)
                 {
                     failure = "Pattern timed out on this text.";
+                }
+                catch (NotSupportedException ex)
+                {
+                    failure = ex.Message;
                 }
                 proposals.Add(Build(target, newValue, failure));
             }

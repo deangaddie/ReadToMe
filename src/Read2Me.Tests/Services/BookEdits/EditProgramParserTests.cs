@@ -131,6 +131,61 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Contains(expectedInError, error);
         }
 
+        [Theory]
+        [InlineData("upper", CaseMode.Upper)]
+        [InlineData("lower", CaseMode.Lower)]
+        [InlineData("sentence", CaseMode.Sentence)]
+        [InlineData("title", CaseMode.Title)]
+        public void TryParse_ChangeCase_MapsCaseMode(string wire, CaseMode expected)
+        {
+            var raw = ValidProgram
+                .Replace("\"kind\": \"set_template\"", "\"kind\": \"change_case\"")
+                .Replace("\"template\": \"Chapter {n}: {old}\"", "\"template\": null")
+                .Replace("\"instruction\": null", $"\"instruction\": null, \"case_mode\": \"{wire}\"");
+            Assert.True(EditProgramParser.TryParse(raw, out var program, out var error), error);
+            Assert.Equal(TransformKind.ChangeCase, program!.Transform.Kind);
+            Assert.Equal(expected, program.Transform.CaseMode);
+            Assert.Null(program.Transform.Pattern);
+        }
+
+        [Theory]
+        [InlineData(", \"case_mode\": null")]
+        [InlineData("")]
+        public void TryParse_ChangeCaseWithoutCaseMode_Fails(string caseMode)
+        {
+            var raw = ValidProgram
+                .Replace("\"kind\": \"set_template\"", "\"kind\": \"change_case\"")
+                .Replace("\"instruction\": null", $"\"instruction\": null{caseMode}");
+            Assert.False(EditProgramParser.TryParse(raw, out _, out var error));
+            Assert.Contains("case_mode", error);
+        }
+
+        [Fact]
+        public void TryParse_UnknownCaseMode_Fails()
+        {
+            var raw = ValidProgram
+                .Replace("\"kind\": \"set_template\"", "\"kind\": \"change_case\"")
+                .Replace("\"instruction\": null", "\"instruction\": null, \"case_mode\": \"shouty\"");
+            Assert.False(EditProgramParser.TryParse(raw, out _, out var error));
+            Assert.Contains("shouty", error);
+        }
+
+        [Fact]
+        public void TryParse_OtherKindIgnoresCaseMode()
+        {
+            var raw = ValidProgram.Replace("\"instruction\": null", "\"instruction\": null, \"case_mode\": null");
+            Assert.True(EditProgramParser.TryParse(raw, out var program, out _));
+            Assert.Null(program!.Transform.CaseMode);
+        }
+
+        [Fact]
+        public void JsonExample_ParsesAsTheSchemaShape()
+        {
+            Assert.True(EditProgramParser.TryParse(EditProgramSchema.JsonExample, out var program, out var error), error);
+            Assert.Equal(TransformKind.SetTemplate, program!.Transform.Kind);
+            Assert.Contains("\"case_mode\": null", EditProgramSchema.JsonExample);
+        }
+
         [Fact]
         public void TryParse_MissingParagraphFilter_DefaultsToAll()
         {

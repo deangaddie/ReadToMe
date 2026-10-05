@@ -247,6 +247,49 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Fact]
+        public async Task Propose_ChangeCaseUpper_ReCasesAndMarksUnchanged()
+        {
+            var program = Program(new EditTransform(TransformKind.ChangeCase, CaseMode: CaseMode.Upper));
+            var targets = new[] { Target(1, "Part one"), Target(2, "PART TWO") };
+
+            var proposals = await NewService(new FakeLlmCompletionRunner(), NewSettings())
+                .ProposeAsync(Folder, program, targets, null, false, CancellationToken.None);
+
+            Assert.Equal("PART ONE", proposals[0].NewValue);
+            Assert.Equal(ProposalStatus.Proposed, proposals[0].Status);
+            Assert.Equal(ProposalStatus.NoChange, proposals[1].Status);
+        }
+
+        [Fact]
+        public async Task Propose_ChangeCaseSentence_FailsRowsUntilSupported()
+        {
+            var runner = new FakeLlmCompletionRunner();
+            var program = Program(new EditTransform(TransformKind.ChangeCase, CaseMode: CaseMode.Sentence));
+
+            var proposals = await NewService(runner, NewSettings())
+                .ProposeAsync(Folder, program, [Target(1, "SHOUT")], null, false, CancellationToken.None);
+
+            Assert.Equal(ProposalStatus.Failed, proposals[0].Status);
+            Assert.Contains("not supported yet", proposals[0].FailureReason);
+            Assert.Empty(runner.Requests);
+        }
+
+        [Fact]
+        public async Task ProposeOne_ChangeCase_FailsWithoutCallingLlm()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner();
+            var program = Program(new EditTransform(TransformKind.ChangeCase, CaseMode: CaseMode.Upper));
+
+            var proposal = await NewService(runner, settings)
+                .ProposeOneAsync(Folder, program, Target(1, "Intro"), null, false, CancellationToken.None);
+
+            Assert.Equal(ProposalStatus.Failed, proposal.Status);
+            Assert.Empty(runner.Requests);
+        }
+
+        [Fact]
         public async Task ProposeOne_DeterministicProgram_FailsWithoutCallingLlm()
         {
             var settings = NewSettings();
