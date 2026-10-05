@@ -9,7 +9,7 @@ namespace Read2Me.Tests.Services.BookEdits
     /// </summary>
     public class ChangeCaseProtectionTests
     {
-        private const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['’]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['’]\p{Lu}+)?)*\b";
+        private const string AllCapsPattern = EditProgramSchema.AllCapsPattern;
 
         /// <summary>A Foundation-like book: the survey's all-caps values (which carry no case
         /// evidence) plus prose that uses the names mid-sentence and the ordinary words in lowercase.

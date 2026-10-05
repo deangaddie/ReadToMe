@@ -25,6 +25,29 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Theory]
+        [InlineData(CaseMode.Sentence,
+            "Edit paragraph text (all paragraphs) — change all-caps words to sentence case — names, numerals and acronyms are kept")]
+        [InlineData(CaseMode.Lower, "Edit paragraph text (all paragraphs) — change all-caps words to lower case")]
+        public void Describe_ChangeCase_ReadyMadeAllCapsPattern_IsNamedInPlainWords(CaseMode mode, string expected)
+        {
+            var program = Program(EditTargetSelector.ParagraphText,
+                new EditTransform(TransformKind.ChangeCase, Pattern: EditProgramSchema.AllCapsPattern, CaseMode: mode));
+
+            Assert.Equal(expected, EditProgramDescriber.Describe(program));
+        }
+
+        [Fact]
+        public void Describe_ChangeCase_ReadyMadePatternWithStraightApostrophes_IsStillNamedInPlainWords()
+        {
+            // With thinking on, qwen-28b often copies the pattern with ’ turned into '.
+            var copied = EditProgramSchema.AllCapsPattern.Replace('’', '\'');
+            var program = Program(EditTargetSelector.ParagraphText,
+                new EditTransform(TransformKind.ChangeCase, Pattern: copied, CaseMode: CaseMode.Upper));
+
+            Assert.EndsWith("— change all-caps words to upper case", EditProgramDescriber.Describe(program));
+        }
+
+        [Theory]
         [InlineData(0, 5, 0, "5 titles also match — run again targeting part titles")]
         [InlineData(0, 1, 0, "1 title also matches — run again targeting part titles")]
         [InlineData(0, 2, 3, "5 titles also match — run again targeting part and chapter titles")]

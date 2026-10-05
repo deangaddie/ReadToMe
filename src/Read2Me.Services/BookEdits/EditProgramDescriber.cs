@@ -52,9 +52,12 @@ namespace Read2Me.Services.BookEdits
         private static string ChangeCasePhrase(EditTransform transform)
         {
             var mode = $"{transform.CaseMode.ToString()!.ToLowerInvariant()} case";
-            var change = transform.Pattern == null
-                ? $"change to {mode}"
-                : $"change text matching \"{transform.Pattern}\" to {mode}";
+            var change = transform.Pattern switch
+            {
+                null => $"change to {mode}",
+                var p when EditProgramSchema.IsAllCapsPattern(p) => $"change all-caps words to {mode}",
+                var p => $"change text matching \"{p}\" to {mode}",
+            };
             return transform.CaseMode is CaseMode.Sentence or CaseMode.Title
                 ? $"{change} — names, numerals and acronyms are kept"
                 : change;

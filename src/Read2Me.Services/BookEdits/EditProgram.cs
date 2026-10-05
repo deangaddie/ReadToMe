@@ -58,6 +58,16 @@ namespace Read2Me.Services.BookEdits
 
     public static class EditProgramSchema
     {
+        /// <summary>The ready-made change_case pattern for all-caps words and runs ("HARI SELDON",
+        /// "SELDON'S", "TRANTOR-BORN"). The planner prompt hands it to the model verbatim and the
+        /// describer names it in plain words.</summary>
+        public const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['’]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['’]\p{Lu}+)?)*\b";
+
+        /// <summary>True for <see cref="AllCapsPattern"/> as the planner returns it. With thinking
+        /// on, qwen-28b often copies it with ’ turned into ', which is counted as the same pattern.</summary>
+        public static bool IsAllCapsPattern(string? pattern) =>
+            pattern?.Replace('’', '\'') == AllCapsPattern.Replace('’', '\'');
+
         /// <summary>Injected into the prompt via {{response_format}}.</summary>
         public const string JsonExample =
             "{ \"reasoning\": \"user wants every chapter renamed with a number prefix\", \"supported\": true, \"unsupported_reason\": null, " +

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.SignalR.Client;
 using Read2Me.E2eTests.Infrastructure;
+using Read2Me.Services.BookEdits;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
@@ -327,7 +328,7 @@ public class BookEditApiTests(E2eAppFixture app)
         }
     }
 
-    private const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['’]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['’]\p{Lu}+)?)*\b";
+    private const string AllCapsPattern = EditProgramSchema.AllCapsPattern;
 
     [Fact]
     public async Task Change_case_sentence_keeps_the_book_names_numerals_and_acronyms()
@@ -347,7 +348,8 @@ public class BookEditApiTests(E2eAppFixture app)
         {
             var plan = await PlanAsync(folder, "make the all-caps words sentence case");
             Assert.Equal("ChangeCase", plan.GetProperty("transform").GetString());
-            Assert.EndsWith("— names, numerals and acronyms are kept", plan.GetProperty("summary").GetString());
+            Assert.EndsWith("— change all-caps words to sentence case — names, numerals and acronyms are kept",
+                plan.GetProperty("summary").GetString());
             // Only the four items holding all-caps words count; the two plain prose lines are dropped.
             Assert.Equal(4, plan.GetProperty("targetCount").GetInt32());
             Assert.Equal(["1 title also matches — run again targeting part titles"],

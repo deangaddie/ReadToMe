@@ -21,6 +21,7 @@ namespace Read2Me.Services.Llm
     public const string Instruction = "instruction";
     public const string BookOutline = "book_outline";
     public const string EditItemsJson = "edit_items_json";
+    public const string AllCapsPattern = "all_caps_pattern";
 
     public const int DefaultContextParagraphsBefore = 6;
     public const int DefaultContextParagraphsAfter = 4;
@@ -459,7 +460,9 @@ namespace Read2Me.Services.Llm
 
             1. "target" — what kind of value is edited:
                - "volume_title", "part_title", "chapter_title": rename those nodes.
-               - "paragraph_text": edit the text of paragraphs.
+               - "paragraph_text": edit the text of paragraphs, including headings and
+                 headers written inside the text — "headings" means paragraph text unless
+                 the instruction says titles.
 
             2. Scope filters — which nodes are edited:
                - "node_filter" narrows the nodes at the target level (for "paragraph_text"
@@ -488,11 +491,29 @@ namespace Read2Me.Services.Llm
 
             3. "transform" — how each matched value changes. Pick exactly one kind:
                - "regex_replace": a mechanical find/replace. Set "pattern" (.NET regex) and
-                 "replacement" ($1-style group references allowed).
+                 "replacement" ($1-style group references allowed). Patterns are
+                 case-sensitive: they match only the exact casing written (add (?i) to ignore
+                 case). Escape regex characters in literal text: "Mr." → "Mr\.", "(" → "\(",
+                 "?" → "\?".
                - "set_template": the whole value is replaced by "template". Tokens: {n} is
                  the 1-based position of the item within the matched scope, {old} is the
                  current value. Example: "Chapter {n}: {old}". Use this for renames with
                  numbering, prefixes ("X{old}") or suffixes ("{old}X").
+               - "change_case": change letter case. Set "case_mode" to "upper", "lower",
+                 "sentence" or "title". "pattern" is a .NET regex selecting the spans to
+                 re-case, or null to re-case the whole value. For all-caps words or runs
+                 (ALL CAPS, capitals, shouting, caps headings), never write your own pattern —
+                 use this pattern exactly: {{all_caps_pattern}}
+                 In sentence and title modes, names, places, roman numerals and acronyms are
+                 kept automatically — do not try to exclude them in the pattern.
+                 Pick "case_mode" from the wording: "sentence case", "normal case", "not all
+                 caps", "fix the shouting/caps" → "sentence"; "title case", "capitalise each
+                 word" → "title"; "uppercase", "all caps" → "upper"; "lowercase" → "lower".
+                 When the wording names no case, use "sentence".
+                 When the instruction does not name volume, part or chapter titles, target
+                 "paragraph_text" and note in "reasoning" that titles need a separate run.
+                 Check the outline: if the chapter titles there are not in the case the
+                 instruction describes, the text it means is paragraph text.
                - "llm": the change needs understanding of the text (e.g. "restore the missing
                  first letter", "fix the grammar"). Set "instruction" to a precise, standalone
                  command that will be applied to each matched text on its own.
@@ -505,6 +526,10 @@ namespace Read2Me.Services.Llm
             - First write one short sentence in "reasoning" explaining how you read the instruction.
             - Use the most deterministic transform that satisfies the instruction: prefer
               set_template or regex_replace over llm when the change is mechanical.
+            - Changing letter case by a rule (sentence, title, upper or lower case, fixing
+              all caps) is always change_case, never llm or regex_replace. Replacing named
+              literal text with other literal text ("replace X with Y") is regex_replace,
+              even when X and Y differ only in case.
             - Return ONLY valid JSON. No markdown fences, no text outside the JSON.
             - JSON format: {{response_format}}
             """;

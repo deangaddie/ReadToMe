@@ -71,6 +71,20 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.False(request.DisableThinking);
         }
 
+        [Fact]
+        public async Task Plan_Prompt_OffersTheReadyMadeAllCapsPatternVerbatim()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes(ValidPlanJson);
+
+            await NewPlanner(runner, settings).PlanAsync(Folder, "fix the shouty capitals", false, CancellationToken.None);
+
+            var prompt = Assert.Single(runner.Requests).Prompt;
+            Assert.Contains($"use this pattern exactly: {EditProgramSchema.AllCapsPattern}", prompt);
+            Assert.Contains("\"change_case\"", prompt);
+        }
+
         [Theory]
         [InlineData(true)]
         [InlineData(false)]

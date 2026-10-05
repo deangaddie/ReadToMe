@@ -92,7 +92,7 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, null, CaseMode.Title, ProtectionSet.Empty));
         }
 
-        private const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['’]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['’]\p{Lu}+)?)*\b";
+        private const string AllCapsPattern = EditProgramSchema.AllCapsPattern;
 
         [Theory]
         [InlineData("…the last strong Emperor, Cleon II. The first", CaseMode.Sentence, "…the last strong Emperor, Cleon II. The first")]

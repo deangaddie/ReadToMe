@@ -34,14 +34,7 @@ namespace Read2Me.Services.BookEdits
             var project = await reader.GetProjectAsync(folderId);
             var outline = await outlineBuilder.BuildAsync(folderId, ct);
 
-            var prompt = PromptTemplates.Render(PromptTemplates.DefaultEditPlanPrompt, new Dictionary<string, string>
-            {
-                [PromptTemplates.BookTitle]      = project?.BookTitle ?? string.Empty,
-                [PromptTemplates.BookAuthor]     = project?.Author ?? string.Empty,
-                [PromptTemplates.Instruction]    = instruction,
-                [PromptTemplates.BookOutline]    = outline,
-                [PromptTemplates.ResponseFormat] = EditProgramSchema.JsonExample,
-            });
+            var prompt = RenderPrompt(project?.BookTitle, project?.Author, instruction, outline);
 
             logger.LogDebug("Sending edit-plan prompt for instruction: {Instruction}", instruction);
 
@@ -72,5 +65,17 @@ namespace Read2Me.Services.BookEdits
                 program.Target, program.Transform.Kind);
             return new EditPlanOutcome(EditPlanStatus.Ok, program, null);
         }
+
+        /// <summary>The plan prompt as the planner sends it; the live planner eval renders it too.</summary>
+        public static string RenderPrompt(string? bookTitle, string? author, string instruction, string outline) =>
+            PromptTemplates.Render(PromptTemplates.DefaultEditPlanPrompt, new Dictionary<string, string>
+            {
+                [PromptTemplates.BookTitle]      = bookTitle ?? string.Empty,
+                [PromptTemplates.BookAuthor]     = author ?? string.Empty,
+                [PromptTemplates.Instruction]    = instruction,
+                [PromptTemplates.BookOutline]    = outline,
+                [PromptTemplates.AllCapsPattern] = EditProgramSchema.AllCapsPattern,
+                [PromptTemplates.ResponseFormat] = EditProgramSchema.JsonExample,
+            });
     }
 }
