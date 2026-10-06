@@ -1,0 +1,41 @@
+@scope (app-root) to (r2m-outlet > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  .shell__appbar {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-4);
+    height: 48px;
+    padding: 0 var(--r2m-space-4);
+    background: var(--r2m-appbar-bg);
+  }
+  .shell__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .shell__crumbs {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    color: var(--r2m-text-muted);
+
+    & a {
+      color: inherit;
+    }
+    & [aria-current] {
+      color: var(--r2m-text);
+    }
+  }
+  .shell__main {
+    flex: 1 1 auto;
+    padding: var(--r2m-space-4) var(--r2m-space-6);
+  }
+}

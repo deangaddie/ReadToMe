@@ -339,6 +339,7 @@ Infra/ContainerHealth/dist/
 
 # Angular front end (src/Read2Me.Web) build + cache output
 src/Read2Me.App/wwwroot/app/
+src/Read2Me.App/wwwroot/app2/
 .angular/
 src/Read2Me.Web/dist/
 

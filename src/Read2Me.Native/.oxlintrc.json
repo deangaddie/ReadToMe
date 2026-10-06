@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "jsPlugins": ["eslint-plugin-lit"],
+  "categories": { "correctness": "error" },
+  "ignorePatterns": ["src/app/api/schema.d.ts"],
+  "rules": {
+    "typescript/no-redundant-type-constituents": "off",
+    "lit/attribute-names": "error",
+    "lit/attribute-value-entities": "error",
+    "lit/binding-positions": "error",
+    "lit/no-duplicate-template-bindings": "error",
+    "lit/no-invalid-escape-sequences": "error",
+    "lit/no-invalid-html": "error",
+    "lit/no-legacy-template-syntax": "error",
+    "lit/no-useless-template-literals": "error",
+    "lit/no-value-attribute": "error",
+    "lit/prefer-nothing": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "fetch", "message": "HTTP goes through ApiClient (src/app/api)." }
+        ]
+      }
+    },
+    {
+      "files": ["src/app/api/**/*.ts"],
+      "rules": { "no-restricted-globals": "off" }
+    }
+  ]
+}

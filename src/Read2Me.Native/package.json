@@ -1,0 +1,32 @@
+{
+  "name": "read2me-native",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun dev.ts",
+    "build": "bun build.ts",
+    "lint": "bun --bun oxlint --type-aware",
+    "format": "bun --bun oxfmt",
+    "typecheck": "bun --bun x tsc --noEmit",
+    "test": "bun test",
+    "api:types": "bun --bun x openapi-typescript http://localhost:5000/openapi/v1.json -o src/app/api/schema.d.ts",
+    "api:check": "bun scripts/check-api-types.ts",
+    "check": "bun run lint && bun run typecheck && bun run api:check && bun run test && bun run build"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.11",
+    "@preact/signals-core": "^1.14.0",
+    "lit-html": "^3.3.0"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.14.5",
+    "@types/bun": "1.4.2",
+    "eslint-plugin-lit": "2.3.1",
+    "openapi-typescript": "7.13.0",
+    "oxfmt": "0.72.0",
+    "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "6.0.3"
+  },
+  "packageManager": "bun@1.4.2"
+}
