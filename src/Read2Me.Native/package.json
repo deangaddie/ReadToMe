@@ -11,7 +11,9 @@
     "test": "bun test",
     "api:types": "bun --bun x openapi-typescript http://localhost:5000/openapi/v1.json -o src/app/api/schema.d.ts",
     "api:check": "bun scripts/check-api-types.ts",
-    "check": "bun run lint && bun run typecheck && bun run api:check && bun run test && bun run build"
+    "icons": "bun scripts/icons.ts",
+    "icons:check": "bun scripts/icons.ts --check",
+    "check": "bun run lint && bun run typecheck && bun run api:check && bun run icons:check && bun run test && bun run build"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.11",

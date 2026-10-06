@@ -1,4 +1,5 @@
 import { html, nothing } from 'lit-html';
+import type { IconName } from './icons';
 
 /**
  * Presentational partials: stateless markup is a function returning a template, not an element.
@@ -7,7 +8,7 @@ import { html, nothing } from 'lit-html';
 
 export type StatusKind = 'ok' | 'warn' | 'error' | 'info' | 'busy' | 'neutral';
 
-const DEFAULT_ICONS: Record<StatusKind, string> = {
+const DEFAULT_ICONS: Record<StatusKind, IconName> = {
   ok: 'check_circle',
   warn: 'warning',
   error: 'error',
@@ -16,15 +17,15 @@ const DEFAULT_ICONS: Record<StatusKind, string> = {
   neutral: 'radio_button_unchecked',
 };
 
-/** Material Symbols ligature icon (the font MatIconRegistry pointed at). */
-export const icon = (name: string, cls = '') =>
+/** Material Symbols ligature icon, drawn from the subset font that holds only `IconName`. */
+export const icon = (name: IconName, cls = '') =>
   html`<span class="material-symbols-rounded r2m-icon ${cls}" aria-hidden="true">${name}</span>`;
 
 /** Status conveyed by colour *and* icon *and* text, never colour alone (design §7). */
 export function statusChip(options: {
   status: StatusKind;
   label: string;
-  icon?: string;
+  icon?: IconName;
   tooltip?: string;
   compact?: boolean;
 }) {
@@ -37,7 +38,7 @@ export function statusChip(options: {
 }
 
 export function emptyState(
-  options: { icon: string; headline: string; hint?: string; compact?: boolean },
+  options: { icon: IconName; headline: string; hint?: string; compact?: boolean },
   action: unknown = nothing,
 ) {
   return html`<div class="r2m-empty-state ${options.compact ? 'r2m-empty-state--compact' : ''}">
@@ -49,7 +50,7 @@ export function emptyState(
 
 export type CountBadgeKind = 'attribution' | 'audio' | 'review';
 
-const BADGE_ICONS: Record<CountBadgeKind, string> = {
+const BADGE_ICONS: Record<CountBadgeKind, IconName> = {
   attribution: 'person_search',
   audio: 'graphic_eq',
   review: 'rate_review',

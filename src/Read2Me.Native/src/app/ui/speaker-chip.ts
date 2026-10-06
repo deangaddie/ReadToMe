@@ -2,6 +2,7 @@ import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import { speakerHue } from '@app/shared/speaker-color';
+import type { IconName } from './icons';
 import { icon } from './partials';
 import type { SpeakerMenu, SpeakerRosterEntry } from './speaker-menu';
 import './speaker-menu';
@@ -137,7 +138,7 @@ export class SpeakerChip extends R2mElement {
 
   #content() {
     const state = this.#state();
-    const glyph =
+    const glyph: IconName | null =
       state === 'unknown'
         ? 'question_mark'
         : state === 'mixed'
@@ -152,7 +153,7 @@ export class SpeakerChip extends R2mElement {
           ? html`<span
               class="material-symbols-rounded r2m-speaker-chip__link"
               aria-label="Linked narrator"
-              >link</span
+              >${'link' satisfies IconName}</span
             >`
           : nothing
       }`;

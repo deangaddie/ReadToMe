@@ -16,6 +16,14 @@
   font-display: swap;
   src: url('../assets/fonts/InterVariable-Italic.woff2') format('woff2');
 }
+/* A subset holding only the IconName union (src/app/ui/icons.ts); rebuilt by `bun run icons`. */
+@font-face {
+  font-family: 'Material Symbols Rounded';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url('../assets/fonts/MaterialSymbolsRounded.woff2') format('woff2');
+}
 
 :root {
   color-scheme: light dark;

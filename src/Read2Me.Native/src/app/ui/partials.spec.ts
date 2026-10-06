@@ -35,12 +35,12 @@ describe('statusChip', () => {
       statusChip({
         status: 'ok',
         label: 'Done',
-        icon: 'verified',
+        icon: 'info',
         tooltip: 'All set',
         compact: true,
       }),
     ).querySelector('.r2m-status-chip');
-    expect(chip?.querySelector('.r2m-icon')?.textContent).toBe('verified');
+    expect(chip?.querySelector('.r2m-icon')?.textContent).toBe('info');
     expect(chip?.getAttribute('data-tooltip')).toBe('All set');
     expect(chip?.classList.contains('r2m-status-chip--compact')).toBe(true);
   });
@@ -50,18 +50,18 @@ describe('emptyState', () => {
   it('renders the icon, headline, hint and action', () => {
     const el = mount(
       emptyState(
-        { icon: 'inbox', headline: 'No projects', hint: 'Import a book to start.' },
+        { icon: 'search', headline: 'No projects', hint: 'Import a book to start.' },
         html`<button>Import</button>`,
       ),
     );
-    expect(el.querySelector('.r2m-empty-state__icon')?.textContent).toBe('inbox');
+    expect(el.querySelector('.r2m-empty-state__icon')?.textContent).toBe('search');
     expect(el.querySelector('.r2m-empty-state__headline')?.textContent).toBe('No projects');
     expect(el.querySelector('.r2m-empty-state__hint')?.textContent).toBe('Import a book to start.');
     expect(el.querySelector('button')?.textContent).toBe('Import');
   });
 
   it('leaves the hint out when there is none', () => {
-    const el = mount(emptyState({ icon: 'inbox', headline: 'Nothing', compact: true }));
+    const el = mount(emptyState({ icon: 'search', headline: 'Nothing', compact: true }));
     expect(el.querySelector('.r2m-empty-state__hint')).toBeNull();
     expect(el.querySelector('.r2m-empty-state--compact')).not.toBeNull();
   });
