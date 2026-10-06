@@ -43,10 +43,11 @@ decided as one:
   carried into the real app. The spike's pages are throwaway.
 - **Parity is what the E2E suite covers.** Anything else may be pruned screen by screen.
 - **The host contract is unchanged.** `/app`, `/api`, `/hubs/live` and `/workspace` stay as they are. Until the
-  cutover, ADR 0012 holds: Angular serves `/app`.
-- **One reversal point.** The migration starts with the Book page, the hardest screen. After it, real cost and parity
-  are compared with the prototypes. A screen far over its estimate, or one that loses E2E behaviour, sends the effort
-  back to Angular. The thresholds are set in the migration spec.
+  cutover, ADR 0012 holds: Angular serves `/app`. While the migration runs, the native app is served beside it at
+  `/app2`, which goes away at cutover.
+- **One reversal point.** The migration starts with the Book page, the hardest screen. After it, real cost, parity
+  and feel are compared with the prototypes, and the user decides whether to go on or go back to Angular. There are
+  no preset thresholds; the migration spec lists what the checkpoint measures.
 
 ## Considered options
 
@@ -67,7 +68,7 @@ decided as one:
   point exists for that reason.
 - The cost is mostly mechanical:
   - about 6.7k template lines;
-  - 44 TestBed specs to rewrite (the 43 pure specs port as is);
+  - 61 TestBed specs to rewrite (the 43 pure specs port as is);
   - `inject()` → `use()` in 93 files;
   - 46 E2E locators that hit Material DOM.
 - Two pieces are unproven and are named as risks in the migration spec: heavy reader rows inside the virtual list,
