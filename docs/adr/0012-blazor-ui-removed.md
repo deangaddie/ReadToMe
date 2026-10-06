@@ -5,6 +5,7 @@
 accepted (2026-10-01). Decided in the Blazor removal spec (`.scratch/completed/blazor-removal/`, tickets 01–06).
 Amends [ADR 0007](0007-book-mutations-reconcile-book-view-projections.md); supersedes the "Blazor stays" parts of
 [ADR 0008](0008-second-front-end-angular-beside-blazor.md) and [ADR 0009](0009-angular-is-the-default-ui.md).
+Amended by [ADR 0014](0014-native-web-front-end-replaces-angular.md): Angular stays the only UI until the native front end takes over `/app`.
 
 ## Context
 
