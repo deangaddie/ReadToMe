@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Read2Me — native front end not built</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { margin: 0; padding: 3rem 1.5rem; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: #1f2933; background: #f5f7fa; }
+    main { max-width: 40rem; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
+    p { margin: .5rem 0; }
+    pre { background: #1f2933; color: #e4e7eb; padding: 1rem; border-radius: .5rem; overflow-x: auto; }
+    code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+    a { color: #0b5cad; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>The native front end has not been built</h1>
+    <p>This host serves the native app from <code>wwwroot/app2/</code>, and that folder has no <code>index.html</code>.</p>
+    <p>Build it once from the repo root, then reload this page:</p>
+<pre><code>pwsh scripts/build-native.ps1</code></pre>
+    <p>For development with live reload, run <code>bun run dev</code> in <code>src/Read2Me.Native</code> instead and open <a href="http://localhost:4300/app2/">http://localhost:4300/app2/</a>. It proxies API calls to this host.</p>
+    <p>The Angular app is still served at <a href="/app/">/app/</a>.</p>
+  </main>
+</body>
+</html>

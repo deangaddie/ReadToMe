@@ -4,15 +4,16 @@ using Read2Me.E2eTests.Infrastructure;
 namespace Read2Me.E2eTests.Tests;
 
 /// <summary>
-/// Plain-HTTP checks that the host serves the Angular bundle under /app (SPA fallback for deep
-/// links, cache headers) and a friendly not-built page when the bundle is absent, and that nothing
-/// outside /app falls back to it. The fixture's web root is a throwaway directory, so each test
-/// stages exactly the files it needs.
+/// Plain-HTTP checks that the host serves the Angular bundle under /app and the native bundle under
+/// /app2 (SPA fallback for deep links, cache headers), a friendly not-built page for each when its
+/// bundle is absent, and that nothing outside those prefixes falls back to them. The fixture's web
+/// root is a throwaway directory, so each test stages exactly the files it needs.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class WebHostingTests(E2eAppFixture app)
 {
     private const string IndexMarker = "<!-- angular-stub-index -->";
+    private const string NativeIndexMarker = "<!-- native-stub-index -->";
     private static readonly HttpClient Http = new();
 
     [Theory]
@@ -74,6 +75,52 @@ public class WebHostingTests(E2eAppFixture app)
         }
     }
 
+    [Theory]
+    [InlineData("/app2")]
+    [InlineData("/app2/")]
+    [InlineData("/app2/projects/foundation")]
+    public async Task Without_native_bundle_app2_routes_return_native_not_built_page(string path)
+    {
+        RemoveNativeBundle();
+
+        var response = await Http.GetAsync(app.BaseUrl + path);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("The native front end has not been built", html);
+        Assert.Contains("pwsh scripts/build-native.ps1", html);
+        Assert.Contains("bun run dev", html);
+        Assert.DoesNotContain("npm run build", html);
+        Assert.DoesNotContain(NativeIndexMarker, html);
+    }
+
+    /// <summary>
+    /// Bun hashes are lowercase (index-kdddnwpm.js), unlike Angular's uppercase ones, and the
+    /// immutable rule has to catch both under /app2/ as it does under /app/.
+    /// </summary>
+    [Fact]
+    public async Task Native_bundle_deep_links_serve_index_and_lowercase_hashed_assets_are_immutable()
+    {
+        StageNativeBundle();
+        try
+        {
+            var deepLink = await Http.GetAsync(app.BaseUrl + "/app2/projects/foundation");
+            var js = await Http.GetAsync(app.BaseUrl + "/app2/index-kdddnwpm.js");
+            var index = await Http.GetAsync(app.BaseUrl + "/app2/index.html");
+
+            Assert.Equal(HttpStatusCode.OK, deepLink.StatusCode);
+            Assert.Contains(NativeIndexMarker, await deepLink.Content.ReadAsStringAsync());
+            Assert.Equal("no-cache", deepLink.Headers.CacheControl?.ToString());
+            Assert.Equal(HttpStatusCode.OK, js.StatusCode);
+            Assert.Equal("public, max-age=31536000, immutable", js.Headers.CacheControl?.ToString());
+            Assert.Equal("no-cache", index.Headers.CacheControl?.ToString());
+        }
+        finally
+        {
+            RemoveNativeBundle();
+        }
+    }
+
     [Fact]
     public async Task Api_is_untouched_by_the_app_fallback()
     {
@@ -122,18 +169,24 @@ public class WebHostingTests(E2eAppFixture app)
         }
     }
 
-    private void StageBundle()
+    // Angular: uppercase hash, <app-root>. Native (Bun): lowercase hash, <r2m-app>.
+    private void StageBundle() => StageBundle("app", IndexMarker, "<app-root></app-root>", "main-UP4C2GUA.js");
+    private void RemoveBundle() => RemoveBundle("app");
+    private void StageNativeBundle() => StageBundle("app2", NativeIndexMarker, "<r2m-app></r2m-app>", "index-kdddnwpm.js");
+    private void RemoveNativeBundle() => RemoveBundle("app2");
+
+    private void StageBundle(string folder, string marker, string rootElement, string hashedAsset)
     {
-        var dir = Path.Combine(app.WebRootDir, "app");
+        var dir = Path.Combine(app.WebRootDir, folder);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "index.html"),
-            $"<!doctype html><html><head><base href=\"/app/\"></head><body>{IndexMarker}<app-root></app-root></body></html>");
-        File.WriteAllText(Path.Combine(dir, "main-UP4C2GUA.js"), "console.log('stub');");
+            $"<!doctype html><html><head><base href=\"/{folder}/\"></head><body>{marker}{rootElement}</body></html>");
+        File.WriteAllText(Path.Combine(dir, hashedAsset), "console.log('stub');");
     }
 
-    private void RemoveBundle()
+    private void RemoveBundle(string folder)
     {
-        var dir = Path.Combine(app.WebRootDir, "app");
+        var dir = Path.Combine(app.WebRootDir, folder);
         if (Directory.Exists(dir))
             Directory.Delete(dir, recursive: true);
     }

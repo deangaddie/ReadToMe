@@ -69,7 +69,7 @@ namespace Read2Me.App
 
             app.UseStaticFiles(new StaticFileOptions
             {
-                OnPrepareResponse = ApplyAngularBundleCaching
+                OnPrepareResponse = ApplySpaBundleCaching
             });
 
             var workspacePath = workspaceOptions.Value.FolderPath;
@@ -109,30 +109,45 @@ namespace Read2Me.App
                 endpoints.MapGet("/preview-source/{folder}/{id}", ServePreviewSourceAsync);
                 endpoints.MapAgentApi();
                 endpoints.MapLiveHub();
-                // The Angular app is the only UI; the root sends a browser to it.
+                // The Angular app is the UI until cutover (ADR 0014); the root sends a browser to it.
                 endpoints.MapGet("/", ctx =>
                 {
                     ctx.Response.Redirect("/app/");
                     return Task.CompletedTask;
                 });
-                // The Angular app owns /app; any other unmatched URL is a plain 404.
-                endpoints.MapFallback("/app", ctx => ServeAngularAppAsync(ctx, env));
-                endpoints.MapFallback("/app/{**path}", ctx => ServeAngularAppAsync(ctx, env));
+                // Each front end owns its prefix; any other unmatched URL is a plain 404.
+                foreach (var spa in SpaApps)
+                {
+                    endpoints.MapFallback(spa.Prefix, ctx => ServeSpaAsync(ctx, env, spa));
+                    endpoints.MapFallback(spa.Prefix + "/{**path}", ctx => ServeSpaAsync(ctx, env, spa));
+                }
             });
         }
 
-        private const string AngularBundleIndex = "app/index.html";
-        private const string AngularMissingPage = "app-missing.html";
+        /// <summary>
+        /// One single-page front end the host serves: its URL prefix, the built bundle's index under
+        /// the web root, and the checked-in page shown there while the bundle has not been built.
+        /// </summary>
+        private sealed record SpaApp(string Prefix, string BundleIndex, string MissingPage);
 
-        // Angular emits content-hashed file names (main-UP4C2GUA.js, styles-CQKAZ5MM.css,
-        // InterVariable-AM3KRH5U.woff2). Anything under /app/ carrying a hash is immutable;
-        // everything else there (index.html, favicon, licences) must be revalidated.
-        private static readonly Regex HashedAssetName = new(@"-[A-Z0-9]{8}\.[a-z0-9]+$", RegexOptions.Compiled);
+        // The Angular app at /app and the native app at /app2 run side by side during the migration
+        // (ADR 0014). Cutover drops the /app2 row.
+        private static readonly SpaApp[] SpaApps =
+        [
+            new("/app", "app/index.html", "app-missing.html"),
+            new("/app2", "app2/index.html", "app2-missing.html"),
+        ];
 
-        private static void ApplyAngularBundleCaching(StaticFileResponseContext ctx)
+        // Both bundlers emit content-hashed file names: Angular uppercase (main-UP4C2GUA.js,
+        // InterVariable-AM3KRH5U.woff2), Bun lowercase (index-kdddnwpm.js). Anything under an app
+        // prefix carrying a hash is immutable; everything else there (index.html, favicon, licences)
+        // must be revalidated.
+        private static readonly Regex HashedAssetName = new(@"-[A-Za-z0-9]{8}\.[a-z0-9]+$", RegexOptions.Compiled);
+
+        private static void ApplySpaBundleCaching(StaticFileResponseContext ctx)
         {
             var path = ctx.Context.Request.Path.Value;
-            if (path is null || !path.StartsWith("/app/", StringComparison.OrdinalIgnoreCase))
+            if (path is null || !SpaApps.Any(spa => path.StartsWith(spa.Prefix + "/", StringComparison.OrdinalIgnoreCase)))
                 return;
 
             ctx.Context.Response.Headers.CacheControl = HashedAssetName.IsMatch(path)
@@ -140,24 +155,24 @@ namespace Read2Me.App
                 : "no-cache";
         }
 
-        /// SPA fallback for the Angular app: every unmatched /app/... URL gets the bundle's index.html
-        /// so client-side routes deep-link. When the bundle has not been built the same URLs get a
+        /// SPA fallback: every unmatched URL under the app's prefix gets the bundle's index.html so
+        /// client-side routes deep-link. When the bundle has not been built the same URLs get a
         /// static "how to build it" page instead.
         ///
         /// The bundle is looked up on the physical web root (one stat per request) rather than the
         /// WebRootFileProvider: in Development that provider is a composite over the static-web-assets
-        /// manifest, which would surface a developer's local ng build inside a test host that meant
+        /// manifest, which would surface a developer's local build inside a test host that meant
         /// to run without one. The not-built page is a checked-in asset, so it goes through the provider.
-        private static Task ServeAngularAppAsync(HttpContext context, IWebHostEnvironment env)
+        private static Task ServeSpaAsync(HttpContext context, IWebHostEnvironment env, SpaApp spa)
         {
             context.Response.StatusCode = StatusCodes.Status200OK;
             context.Response.ContentType = "text/html; charset=utf-8";
             context.Response.Headers.CacheControl = "no-cache";
 
-            var index = Path.Combine(env.WebRootPath, AngularBundleIndex);
+            var index = Path.Combine(env.WebRootPath, spa.BundleIndex);
             return File.Exists(index)
                 ? context.Response.SendFileAsync(index, context.RequestAborted)
-                : context.Response.SendFileAsync(env.WebRootFileProvider.GetFileInfo(AngularMissingPage), context.RequestAborted);
+                : context.Response.SendFileAsync(env.WebRootFileProvider.GetFileInfo(spa.MissingPage), context.RequestAborted);
         }
 
         /// Serves an item's Preview Source — the unprocessed side of the A/B preview. It lives in a
