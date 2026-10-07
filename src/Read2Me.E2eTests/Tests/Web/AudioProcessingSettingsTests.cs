@@ -44,7 +44,7 @@ public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture p
         var original = (await TrimStepAsync()).GetRawText();
         try
         {
-            await GotoAppAsync("/app/settings/audio");
+            await GotoAppAsync("settings/audio");
             await Expect(Page.Locator("[data-card]")).ToHaveCountAsync(7);
             await Expect(Threshold).ToHaveValueAsync("-50");
             await Expect(Save).ToBeDisabledAsync();
@@ -78,7 +78,7 @@ public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture p
             Assert.Equal(-42, (await TrimStepAsync()).GetProperty("settings").GetProperty("thresholdDb").GetDouble());
 
             // A fresh load of the page shows the saved value.
-            await GotoAppAsync("/app/settings/audio");
+            await GotoAppAsync("settings/audio");
             await Expect(Threshold).ToHaveValueAsync("-42");
         }
         finally

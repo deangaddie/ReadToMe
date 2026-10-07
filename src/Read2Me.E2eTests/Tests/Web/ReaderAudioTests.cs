@@ -20,7 +20,7 @@ public class ReaderAudioTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         await App.SeedNarratorVoiceAsync("web-audio");
         var chapterId = book.ChapterId("ch1");
 
-        await GotoAppAsync("/app/projects/web-audio/book?mode=audio");
+        await GotoAppAsync("projects/web-audio/book?mode=audio");
 
         // Three paragraphs miss audio; the unattributed line's checkbox is off, the narration ones live.
         var chapterBadge = Page.Locator($"[data-node-id='{chapterId}'] r2m-count-badge[kind='audio'] .r2m-count-badge__count");
@@ -64,7 +64,7 @@ public class ReaderAudioTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         Assert.Equal(202, enqueue.Status);
         await App.WaitForQueueDrainAsync("/api/audio/queue");
 
-        await GotoAppAsync("/app/projects/web-audio-retry/book?mode=audio");
+        await GotoAppAsync("projects/web-audio-retry/book?mode=audio");
 
         var row = ItemRow(Page, itemId);
         var chip = row.Locator("r2m-status-chip", new() { HasText = "Failed" });
@@ -106,7 +106,7 @@ public class ReaderAudioTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
             });
         Assert.Equal(200, flag.Status);
 
-        await GotoAppAsync("/app/projects/web-audio-review/book?mode=audio");
+        await GotoAppAsync("projects/web-audio-review/book?mode=audio");
 
         var row = ItemRow(Page, itemId);
         await Expect(row.Locator("r2m-status-chip", new() { HasText = "Verify failed" })).ToBeVisibleAsync();
@@ -115,7 +115,7 @@ public class ReaderAudioTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         await Expect(row.Locator("[data-testid='review-dismissed']")).ToBeVisibleAsync();
         await Expect(row.Locator("r2m-status-chip")).ToHaveCountAsync(0);
 
-        await GotoAppAsync("/app/projects/web-audio-review/book?mode=audio");
+        await GotoAppAsync("projects/web-audio-review/book?mode=audio");
         await Expect(ItemRow(Page, itemId).Locator("[data-testid='review-dismissed']")).ToBeVisibleAsync();
         await Expect(ItemRow(Page, itemId).Locator("r2m-status-chip")).ToHaveCountAsync(0);
     }

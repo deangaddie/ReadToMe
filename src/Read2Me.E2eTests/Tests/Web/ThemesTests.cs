@@ -17,7 +17,7 @@ public class ThemesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
     {
         try
         {
-            await GotoAppAsync("/app/settings/themes");
+            await GotoAppAsync("settings/themes");
             var html = Page.Locator("html");
             await Expect(html).ToHaveAttributeAsync("data-theme", "light");
 

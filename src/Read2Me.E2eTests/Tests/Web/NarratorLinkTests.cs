@@ -23,7 +23,7 @@ public class NarratorLinkTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         await App.SeedEditableVoiceAsync(Folder, builder.CharacterId("Dr. Watson"), "Watson Voice");
         await App.SeedNarratorVoiceAsync(Folder);
 
-        await GotoAppAsync($"/app/projects/{Folder}/cast");
+        await GotoAppAsync($"projects/{Folder}/cast");
         await Expect(Banner).ToContainTextAsync("First-person book? Say who tells it");
         await Expect(NarratorRow).ToHaveCountAsync(1);
         await Expect(NarratorRow).Not.ToContainTextAsync("→");
@@ -38,13 +38,13 @@ public class NarratorLinkTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         await Expect(NarratorRow).ToContainTextAsync("Narrator → Dr. Watson");
 
         // The reader's audio mode reads the same link back on the narration line.
-        await Page.GotoAsync($"/app/projects/{Folder}/book?mode=audio");
+        await Page.GotoAsync(AppPath($"projects/{Folder}/book?mode=audio"));
         var preview = Page.Locator("[data-testid='voice-line']").First;
         await Expect(preview).ToContainTextAsync("Narrator → Dr. Watson");
         await Expect(preview).ToContainTextAsync("Watson Voice");
 
         // Unlink, warning confirmed; the Narrator's own voice is still there.
-        await Page.GotoAsync($"/app/projects/{Folder}/cast");
+        await Page.GotoAsync(AppPath($"projects/{Folder}/cast"));
         await Banner.Locator(".narrator-banner__unlink").ClickAsync();
         var confirm = Page.Locator(".r2m-confirm-dialog");
         await Expect(confirm).ToContainTextAsync("Unlink Dr. Watson as this book's narrator?");

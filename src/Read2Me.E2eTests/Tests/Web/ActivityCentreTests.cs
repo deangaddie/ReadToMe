@@ -23,7 +23,7 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
         App.FakeAi.LlmDelay = TimeSpan.FromSeconds(2);
 
-        await GotoAppAsync("/app/projects/web-activity/book?mode=speakers");
+        await GotoAppAsync("projects/web-activity/book?mode=speakers");
         await Expect(Page.Locator("app-activity-bar")).ToContainTextAsync("No background work");
 
         await Page.Locator("[data-node-id] .tree__select").First.CheckAsync();
@@ -67,7 +67,7 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
         App.FakeAi.LlmDelay = TimeSpan.FromSeconds(3);
 
-        await GotoAppAsync("/app/projects/web-activity-cancel/book?mode=speakers");
+        await GotoAppAsync("projects/web-activity-cancel/book?mode=speakers");
         await Page.Locator("[data-node-id] .tree__select").First.CheckAsync();
         await Page.Locator("[data-action='attribute-selection']").ClickAsync();
 

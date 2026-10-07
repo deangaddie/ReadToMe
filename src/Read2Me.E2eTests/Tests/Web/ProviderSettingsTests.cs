@@ -67,7 +67,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
         var name = NewName("web-tts");
         try
         {
-            await GotoAppAsync("/app/settings/tts");
+            await GotoAppAsync("settings/tts");
             await Expect(Row("fake")).ToContainTextAsync("Active");
 
             await NewConfigAsync(name, "nowhere");
@@ -101,7 +101,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
             Assert.Equal(8, stored.ToSentenceCaseConfig!.WordMinLength);
 
             // A fresh page shows what was saved.
-            await GotoAppAsync("/app/settings/tts");
+            await GotoAppAsync("settings/tts");
             await Row(name).Locator(".r2m-config-list__main").ClickAsync();
             await Expect(substitution.Locator("[data-field='toText']")).ToHaveValueAsync("Doctor");
             await Expect(Page.Locator("[data-step='to-sentence-case'] input")).ToBeCheckedAsync();
@@ -142,7 +142,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
             using (var scope = App.Services.CreateScope())
                 await scope.ServiceProvider.GetRequiredService<VoiceDesignSettingsService>().CreateConfigAsync(built);
 
-            await GotoAppAsync("/app/settings/voice-design");
+            await GotoAppAsync("settings/voice-design");
             await Row(name).Locator(".r2m-config-list__main").ClickAsync();
             await Expect(Setting("language")).ToBeVisibleAsync();
             await Expect(Setting("topK").Locator("input")).ToHaveValueAsync("40");
@@ -166,7 +166,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
     [Fact]
     public async Task A_Breeze_voice_design_config_shows_its_audiocpp_settings()
     {
-        await GotoAppAsync("/app/settings/voice-design");
+        await GotoAppAsync("settings/voice-design");
         await Row(WorkspaceSeeder.BreezeDesignConfigName).Locator(".r2m-config-list__main").ClickAsync();
 
         await Expect(Setting("modelId").Locator("input")).ToHaveValueAsync("breeze-design");
@@ -179,7 +179,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
     {
         try
         {
-            await GotoAppAsync("/app/settings/voice-design");
+            await GotoAppAsync("settings/voice-design");
             var sample = Page.Locator("app-voice-design-sample-text");
             var saveSample = sample.Locator("[data-action='save-sample-text']");
             await Expect(saveSample).ToBeDisabledAsync();
@@ -212,7 +212,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
     [Fact]
     public async Task Transcription_test_shows_the_transcript_of_a_dropped_file()
     {
-        await GotoAppAsync("/app/settings/transcription");
+        await GotoAppAsync("settings/transcription");
         var test = Page.Locator("app-transcription-test");
         await Expect(test).ToContainTextAsync("Test \"fake\"");
 
@@ -234,7 +234,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
         var name = NewName("web-sim");
         try
         {
-            await GotoAppAsync("/app/settings/similarity");
+            await GotoAppAsync("settings/similarity");
             await NewConfigAsync(name, "http://no-such-similarity");
 
             await Setting("PassThreshold").Locator("input[type=number]").FillAsync("1");

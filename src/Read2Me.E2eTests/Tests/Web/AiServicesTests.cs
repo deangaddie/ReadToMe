@@ -21,7 +21,7 @@ public class AiServicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         App.FakeControl.StatusByName["llama"] = AiServiceStatus.Ready;
         try
         {
-            await GotoAppAsync("/app/settings/services");
+            await GotoAppAsync("settings/services");
 
             await Expect(Card("llama").Locator("r2m-docker-controls r2m-status-chip")).ToContainTextAsync("Ready");
             await Expect(Card("whisper")).ToContainTextAsync("read2me-whisper");
@@ -51,7 +51,7 @@ public class AiServicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         App.FakeControl.StatusByName["http://fake-llm"] = AiServiceStatus.Stopped;
         try
         {
-            await GotoAppAsync("/app/projects/web-preflight/book?mode=speakers");
+            await GotoAppAsync("projects/web-preflight/book?mode=speakers");
             await Page.Locator("[data-node-id] .tree__select").First.CheckAsync();
             await Expect(Page.Locator("[data-testid='selection-count']")).ToHaveTextAsync("3 paragraphs");
 

@@ -35,7 +35,7 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
 
     private async Task OpenDialogAsync(string folder, string instruction)
     {
-        await GotoAppAsync($"/app/projects/{folder}/book");
+        await GotoAppAsync($"projects/{folder}/book");
         await Page.Locator("[data-testid='book-actions']").ClickAsync();
         await Page.Locator(".mat-mdc-menu-panel [data-action='edit-with-ai']").ClickAsync();
 
@@ -100,7 +100,7 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         var children = await Page.APIRequest.GetAsync(
             $"{App.BaseUrl}/api/projects/{folder}/book");
         Assert.Contains("\"totalChapters\":3", await children.TextAsync());
-        await GotoAppAsync($"/app/projects/{folder}/book");
+        await GotoAppAsync($"projects/{folder}/book");
         await Expect(Page.Locator(".tree__title"))
             .ToHaveTextAsync(["Chapter The First", "Chapter The Second", "Chapter 3"], new() { Timeout = 30_000 });
     }

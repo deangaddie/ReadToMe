@@ -19,7 +19,7 @@ public class OverviewTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
         try
         {
-            await GotoAppAsync("/app/projects/web-overview");
+            await GotoAppAsync("projects/web-overview");
 
             var steps = Page.Locator("r2m-pipeline .r2m-pipeline__step");
             await Expect(steps).ToHaveCountAsync(6);

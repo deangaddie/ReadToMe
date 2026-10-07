@@ -17,13 +17,13 @@ public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
     {
         await App.SeedProjectAsync("web-live", "Web Live Book", "A. Author");
 
-        await GotoAppAsync("/app/projects/web-live/book");
+        await GotoAppAsync("projects/web-live/book");
         await Expect(Page.Locator(".tree__title")).ToHaveTextAsync(["ch1"]);
 
         // A second, independent browser context on the same host.
         await using var other = await Page.Context.Browser!.NewContextAsync(new() { BaseURL = App.BaseUrl });
         var otherPage = await other.NewPageAsync();
-        await otherPage.GotoAsync("/app/projects/web-live/book?mode=speakers");
+        await otherPage.GotoAsync(AppPath("projects/web-live/book?mode=speakers"));
         var paragraphs = otherPage.Locator("r2m-paragraph");
         await Expect(paragraphs).ToHaveCountAsync(3);
 
@@ -63,7 +63,7 @@ public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
             })();
             """);
 
-        await GotoAppAsync("/app/projects/web-reconnect/book");
+        await GotoAppAsync("projects/web-reconnect/book");
         var dot = Page.Locator(".shell__conn");
         await Expect(dot).ToHaveClassAsync(new Regex("shell__conn--connected"));
         Assert.Equal(1, await Page.EvaluateAsync<int>("() => window.__r2mSockets.length"));

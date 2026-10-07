@@ -16,7 +16,7 @@ public class ReaderEditingTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTe
     {
         await App.SeedProjectAsync("web-split", "Web Split Book", "A. Author");
 
-        await GotoAppAsync("/app/projects/web-split/book?mode=speakers");
+        await GotoAppAsync("projects/web-split/book?mode=speakers");
 
         var paragraphs = Page.Locator("r2m-paragraph");
         await Expect(paragraphs).ToHaveCountAsync(3);

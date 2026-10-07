@@ -39,7 +39,7 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         var name = $"web-llm-{Guid.NewGuid():N}"[..16];
         try
         {
-            await GotoAppAsync("/app/settings/llm");
+            await GotoAppAsync("settings/llm");
             await Expect(Row("fake")).ToContainTextAsync("Default");
 
             await Page.Locator("r2m-config-list button", new() { HasText = "New" }).ClickAsync();
@@ -99,7 +99,7 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         App.FakeAi.LlmReply = _ => "The quick brown fox.";
         try
         {
-            await GotoAppAsync("/app/settings/llm");
+            await GotoAppAsync("settings/llm");
             var console = Page.Locator("app-llm-test-console");
             await Expect(console).ToContainTextAsync("Test \"fake\"");
 
@@ -128,7 +128,7 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
     {
         try
         {
-            await GotoAppAsync("/app/settings/llm");
+            await GotoAppAsync("settings/llm");
             var chain = Page.Locator("app-llm-chain-card");
             await Expect(chain.Locator(".chain__alert--info")).ToContainTextAsync("fake");
 
@@ -168,7 +168,7 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
     {
         try
         {
-            await GotoAppAsync("/app/settings/llm");
+            await GotoAppAsync("settings/llm");
             var chain = Page.Locator("app-llm-chain-card");
             await Expect(chain.Locator(".chain__alert--info")).ToContainTextAsync("fake");
 

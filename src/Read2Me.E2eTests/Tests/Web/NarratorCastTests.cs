@@ -30,7 +30,7 @@ public class NarratorCastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
             new() { DataObject = new { type = "CreateCharacter", name = "Lestrade" } });
         Assert.True(lestrade.Ok);
 
-        await GotoAppAsync($"/app/projects/{Folder}/cast");
+        await GotoAppAsync($"projects/{Folder}/cast");
 
         // The picker offers the characters, never the Narrator itself. It stays disabled until the
         // roster loads, and a forced click on it then opens nothing: wait for it to enable first.

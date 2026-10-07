@@ -13,7 +13,7 @@ it to PATH). The installed major.minor must match the "packageManager" pin in sr
 
 .EXAMPLE
 pwsh scripts/build-native.ps1
-dotnet test src/Read2Me.E2eTests            # native web tests now run
+dotnet test src/Read2Me.E2eTests            # native web tests (Tests/Native) now run; set R2M_E2E_BROWSER=firefox for Firefox
 
 .EXAMPLE
 pwsh scripts/build-native.ps1 -Check        # CI: everything the native project gates on

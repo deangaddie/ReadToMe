@@ -52,7 +52,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         var alice = book.CharacterId("Alice");
         var voiceId = await CreateVoiceAsync("web-voices-limit", alice, "Alice Reference", isGenerated: false);
 
-        await GotoAppAsync($"/app/projects/web-voices-limit/cast/{alice}");
+        await GotoAppAsync($"projects/web-voices-limit/cast/{alice}");
         var card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
         await card.Locator("mat-expansion-panel-header").First.ClickAsync();
         var badge = card.GetByTestId("voice-reference-warning");
@@ -93,7 +93,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         var alice = book.CharacterId("Alice");
         App.FakeAi.LlmReply = _ => "A warm, unhurried alto with a faint Scottish lilt.";
 
-        await GotoAppAsync($"/app/projects/web-voices-life/cast/{alice}");
+        await GotoAppAsync($"projects/web-voices-life/cast/{alice}");
         var section = Page.Locator("app-voices-section");
         await Expect(section).ToBeVisibleAsync();
 
@@ -186,7 +186,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         var alice = book.CharacterId("Alice");
         var voiceId = await CreateVoiceAsync("web-voices-override", alice, "Alice Voice", isGenerated: true);
 
-        await GotoAppAsync($"/app/projects/web-voices-override/cast/{alice}");
+        await GotoAppAsync($"projects/web-voices-override/cast/{alice}");
         var card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
         await card.Locator("mat-expansion-panel-header").First.ClickAsync();
         await card.Locator("[data-section='advanced'] mat-expansion-panel-header").ClickAsync();
@@ -206,7 +206,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
             (await VoiceAsync("web-voices-override", voiceId.ToString())).GetProperty("ttsSettingsOverrideJson").GetString());
 
         // Reload: the stored override shows the dot; reset restores the provider default.
-        await GotoAppAsync($"/app/projects/web-voices-override/cast/{alice}");
+        await GotoAppAsync($"projects/web-voices-override/cast/{alice}");
         card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
         await card.Locator("mat-expansion-panel-header").First.ClickAsync();
         await card.Locator("[data-section='advanced'] mat-expansion-panel-header").ClickAsync();
@@ -239,7 +239,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         App.FakeAi.LlmReply = _ => VoicePlanReply;
         App.FakeAi.LlmDelay = TimeSpan.FromMilliseconds(1200);
 
-        await GotoAppAsync($"/app/projects/web-voices-batch/cast/{alice}");
+        await GotoAppAsync($"projects/web-voices-batch/cast/{alice}");
         await Expect(Page.Locator("app-voices-section")).ToContainTextAsync("No voices yet");
         var rows = Page.Locator(".cast__row");
         await Expect(rows).ToHaveCountAsync(4);

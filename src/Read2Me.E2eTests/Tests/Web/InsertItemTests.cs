@@ -23,7 +23,7 @@ public class InsertItemTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
 
         // Audio mode shows both the item's selection checkbox and its player, so "unattributed" and
         // "the anchor kept its audio" are both readable off the rows.
-        await GotoAppAsync($"/app/projects/{folder}/book?mode=audio");
+        await GotoAppAsync($"projects/{folder}/book?mode=audio");
 
         var rows = Page.Locator($"r2m-paragraph[data-paragraph-id='{book.ParagraphId("p2")}'] r2m-item");
         await Expect(rows).ToHaveCountAsync(3);

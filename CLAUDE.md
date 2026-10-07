@@ -36,8 +36,9 @@ npm run check                           # lint + typecheck + api:check + test + 
 npm run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
 
 # E2E tests: src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
-dotnet test src/Read2Me.E2eTests         # browser tests (Tests/Web) skip unless a bundle exists in wwwroot/app
-dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the browser suite
+dotnet test src/Read2Me.E2eTests         # browser tests skip unless their bundle exists: Tests/Web needs wwwroot/app, Tests/Native needs wwwroot/app2
+R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # same suite in Firefox (default chromium); Angular classes skip, native classes run
+dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the Angular browser suite
 # Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 ```
 

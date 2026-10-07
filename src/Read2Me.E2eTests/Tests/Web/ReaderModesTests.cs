@@ -18,7 +18,7 @@ public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
     {
         await App.SeedProjectAsync("web-modes", "Web Modes Book", "A. Author");
 
-        await GotoAppAsync("/app/projects/web-modes/book");
+        await GotoAppAsync("projects/web-modes/book");
 
         // Read mode: plain paragraphs, no speaker chips, no selection boxes.
         var toggle = Page.Locator("mat-button-toggle-group[aria-label='Reader mode']");
@@ -39,7 +39,7 @@ public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         // Back to Read drops the query; a reload keeps whatever the URL says.
         await toggle.GetByText("Read").ClickAsync();
         await Assertions.Expect(Page).Not.ToHaveURLAsync(new Regex("mode="));
-        await Page.GotoAsync("/app/projects/web-modes/book?mode=audio");
+        await Page.GotoAsync(AppPath("projects/web-modes/book?mode=audio"));
         await Expect(Page.Locator("r2m-item .r2m-item__voice").First).ToBeVisibleAsync();
     }
 
@@ -48,7 +48,7 @@ public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
     {
         var builder = await App.SeedProjectAsync("web-title", "Web Title Book", "A. Author");
 
-        await GotoAppAsync("/app/projects/web-title/book");
+        await GotoAppAsync("projects/web-title/book");
         await Expect(Page.Locator(".tree__title")).ToHaveTextAsync(["ch1"]);
 
         var node = Page.Locator(".tree__node").First;

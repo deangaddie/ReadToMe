@@ -16,7 +16,7 @@ public class ProjectsShelfTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTe
     {
         await App.SeedProjectAsync("web-shelf", "Web Shelf Book", "Shelby Author");
 
-        await GotoAppAsync("/app/projects");
+        await GotoAppAsync("projects");
 
         var seeded = Page.Locator("r2m-project-card[data-folder='web-shelf']");
         await Expect(seeded).ToBeVisibleAsync();
@@ -39,8 +39,8 @@ public class ProjectsShelfTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTe
         await dialog.Locator(".new-project__create").ClickAsync();
 
         // Creating opens the new project's overview; back on the shelf the card is there.
-        await Assertions.Expect(Page).ToHaveURLAsync(new Regex("/app/projects/[^/]+$"), new() { Timeout = 15_000 });
-        await Page.GotoAsync("/app/projects");
+        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("projects/[^/]+$")), new() { Timeout = 15_000 });
+        await Page.GotoAsync(AppPath("projects"));
         var created = Page.Locator("r2m-project-card", new() { HasText = "Shelf Upload" });
         await Expect(created).ToBeVisibleAsync();
         var folder = await created.GetAttributeAsync("data-folder");

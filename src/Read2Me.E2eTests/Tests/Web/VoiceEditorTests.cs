@@ -28,11 +28,11 @@ public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         var beforeBytes = await File.ReadAllBytesAsync(livePath);
 
         // 1. The cast card's Edit audio link lands on the editor.
-        await GotoAppAsync($"/app/projects/{folder}/cast/{alice}");
+        await GotoAppAsync($"projects/{folder}/cast/{alice}");
         var card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
         await card.Locator("mat-expansion-panel-header").First.ClickAsync();
         await card.Locator("[data-action='edit-audio']").ClickAsync();
-        await Assertions.Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex($"/app/projects/{folder}/voices/{voiceId}/editor$"));
+        await Assertions.Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex(AppPath($"projects/{folder}/voices/{voiceId}/editor$")));
 
         var editor = Page.Locator("app-voice-editor-page");
         var apply = editor.Locator("[data-action='apply']");
@@ -80,7 +80,7 @@ public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         await Expect(card.Locator("[data-testid='voice-edited-chip']")).ToBeVisibleAsync(new() { Timeout = 15_000 });
 
         // 6. The editor still says Edited on a fresh load; restore puts the original back and deletes it.
-        await GotoAppAsync($"/app/projects/{folder}/voices/{voiceId}/editor");
+        await GotoAppAsync($"projects/{folder}/voices/{voiceId}/editor");
         await Expect(editor.Locator("[data-testid='edited-chip']")).ToBeVisibleAsync(new() { Timeout = 30_000 });
         await editor.Locator("[data-action='restore']").ClickAsync();
         await Page.Locator("r2m-confirm-dialog .r2m-confirm-dialog__confirm").ClickAsync();

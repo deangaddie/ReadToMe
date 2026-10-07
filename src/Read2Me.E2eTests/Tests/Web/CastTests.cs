@@ -21,7 +21,7 @@ public class CastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(ap
         App.FakeAi.LlmReply = _ =>
             """{ "reasoning": "outline", "characters": [ { "name": "Alice", "aliases": ["Al"] }, { "name": "Bob", "aliases": ["Robert"] } ] }""";
 
-        await GotoAppAsync("/app/projects/web-cast-discover/cast");
+        await GotoAppAsync("projects/web-cast-discover/cast");
         await Expect(Page.Locator(".cast__row")).ToHaveCountAsync(2);
 
         await Page.Locator("[data-action='discover']").ClickAsync();
@@ -67,7 +67,7 @@ public class CastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(ap
         await App.SeedProjectAsync("web-cast-fail", "Web Cast Fail", "A. Author");
         App.FakeAi.LlmReply = _ => "not json at all";
 
-        await GotoAppAsync("/app/projects/web-cast-fail/cast?discover=1");
+        await GotoAppAsync("projects/web-cast-fail/cast?discover=1");
         var dialog = Page.Locator("app-discovery-dialog");
         await Expect(dialog.Locator("mat-dialog-content")).ToHaveAttributeAsync("data-phase", "failed", new() { Timeout = 15_000 });
         await Expect(dialog.Locator(".discover__error")).ToContainTextAsync("Character discovery failed");
@@ -82,7 +82,7 @@ public class CastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(ap
         var book = await App.SeedThreeDialogParagraphProjectAsync("web-cast-edit", "Web Cast Edit", "A. Author", characterName: "Alice");
         var alice = book.CharacterId("Alice");
 
-        await GotoAppAsync($"/app/projects/web-cast-edit/cast/{alice}");
+        await GotoAppAsync($"projects/web-cast-edit/cast/{alice}");
         var detail = Page.Locator("app-character-detail");
         await Expect(detail).ToBeVisibleAsync();
 

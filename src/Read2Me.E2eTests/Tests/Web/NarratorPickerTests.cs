@@ -22,7 +22,7 @@ public class NarratorPickerTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         var narrationId = book.ItemId("n1");
         var lineId = book.ItemId("line1");
 
-        await GotoAppAsync($"/app/projects/{Folder}/book?mode=speakers");
+        await GotoAppAsync($"projects/{Folder}/book?mode=speakers");
         var narration = Page.Locator("r2m-item .r2m-speaker-chip--narration");
         await Expect(narration).ToHaveCountAsync(1);
 
@@ -37,13 +37,13 @@ public class NarratorPickerTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
 
         // Both now have somebody to read them, so audio mode lets both be picked; the two lines
         // still unattributed stay off.
-        await Page.GotoAsync($"/app/projects/{Folder}/book?mode=audio");
+        await Page.GotoAsync(AppPath($"projects/{Folder}/book?mode=audio"));
         await Expect(Item(lineId).Locator("input[type=checkbox]")).ToBeEnabledAsync();
         await Expect(Item(narrationId).Locator("input[type=checkbox]")).ToBeEnabledAsync();
         await Expect(Page.Locator("r2m-item input[type=checkbox]:disabled")).ToHaveCountAsync(2);
 
         // The first item goes back to the narrator.
-        await Page.GotoAsync($"/app/projects/{Folder}/book?mode=speakers");
+        await Page.GotoAsync(AppPath($"projects/{Folder}/book?mode=speakers"));
         await PickAsync(narrationId, NarratorEntry);
         await Expect(narration).ToHaveCountAsync(2);
 

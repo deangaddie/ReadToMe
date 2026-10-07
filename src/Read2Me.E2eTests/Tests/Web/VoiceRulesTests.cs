@@ -48,7 +48,7 @@ public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         await RunAsync(folder, new { type = "CreateVoice", characterId = alice, name = "Voice A", isGenerated = true });
         await RunAsync(folder, new { type = "CreateVoice", characterId = alice, name = "Voice B", isGenerated = true });
 
-        await GotoAppAsync($"/app/projects/{folder}/cast/{alice}");
+        await GotoAppAsync($"projects/{folder}/cast/{alice}");
         var section = Page.Locator("app-voice-rules-section");
         await Expect(section).ToBeVisibleAsync();
 
@@ -136,7 +136,7 @@ public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
             fromLevel = "Chapter", fromNodeId = chapter3, toLevel = "Chapter", toNodeId = chapter3,
         });
 
-        await GotoAppAsync($"/app/projects/{folder}/cast/{alice}");
+        await GotoAppAsync($"projects/{folder}/cast/{alice}");
         var section = Page.Locator("app-voice-rules-section");
         var rows = section.Locator("li.voice-rules__row");
         await Expect(rows).ToHaveCountAsync(2);

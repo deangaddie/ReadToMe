@@ -23,7 +23,7 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         App.Encoder.HoldAtHalf = hold;
         try
         {
-            await GotoAppAsync("/app/projects/web-export/export");
+            await GotoAppAsync("projects/web-export/export");
             await Expect(Page.Locator("app-export-page")).ToContainTextAsync("No audiobooks yet");
 
             await Page.Locator("[data-action='assemble']").ClickAsync();
@@ -47,15 +47,15 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
             Assert.Equal("Web Export Book.m4b", download.SuggestedFilename);
 
             // A reload reads how the run ended off the hub snapshot.
-            await GotoAppAsync("/app/projects/web-export/export");
+            await GotoAppAsync("projects/web-export/export");
             await Expect(Page.Locator("[data-role='outcome']")).ToContainTextAsync("Finished: Web Export Book.m4b");
 
             // The overview's Export step now reports the build.
-            await GotoAppAsync("/app/projects/web-export");
+            await GotoAppAsync("projects/web-export");
             await Expect(Page.Locator("[data-step='export']")).ToContainTextAsync("Last build:");
 
             // Deleting asks first, then the list empties.
-            await GotoAppAsync("/app/projects/web-export/export");
+            await GotoAppAsync("projects/web-export/export");
             await Page.Locator("[data-action='delete-output']").ClickAsync();
             await Page.Locator("r2m-confirm-dialog .r2m-confirm-dialog__confirm").ClickAsync();
             await Expect(Outputs).ToHaveCountAsync(0);
@@ -73,7 +73,7 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
     {
         await App.SeedProjectAsync("web-export-partial", "Web Partial Book", "A. Author");
 
-        await GotoAppAsync("/app/projects/web-export-partial/export");
+        await GotoAppAsync("projects/web-export-partial/export");
         await Page.Locator("[data-action='assemble']").ClickAsync();
 
         var dialog = Page.Locator("r2m-confirm-dialog");
@@ -94,7 +94,7 @@ public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         App.Encoder.HoldAtHalf = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
-            await GotoAppAsync("/app/projects/web-export-cancel/export");
+            await GotoAppAsync("projects/web-export-cancel/export");
             await Page.Locator("[data-action='assemble']").ClickAsync();
             await Expect(Phase("Encode")).ToHaveAttributeAsync("data-state", "active", new() { Timeout = 10_000 });
 

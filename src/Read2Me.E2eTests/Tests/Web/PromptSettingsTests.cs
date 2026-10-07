@@ -30,7 +30,7 @@ public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         const string edited = "Who speaks in {{book_title}}?\n{{context_json}}\n{{response_format}}";
         try
         {
-            await GotoAppAsync("/app/settings/prompts");
+            await GotoAppAsync("settings/prompts");
             await Expect(Page.Locator(".r2m-config-editor-frame__title")).ToHaveTextAsync("Book Character Prompt");
             await Expect(Template).ToHaveValueAsync(PromptTemplates.DefaultCharacterPrompt);
             await Expect(Save).ToBeDisabledAsync();
@@ -62,7 +62,7 @@ public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
             Assert.Equal(edited, stored.GetProperty("template").GetString());
 
             // A fresh load shows the same override and the same warning; reset it to the default.
-            await GotoAppAsync("/app/settings/prompts");
+            await GotoAppAsync("settings/prompts");
             await Expect(Template).ToHaveValueAsync(edited);
             await Expect(Page.Locator("[data-role='prompt-warning']"))
                 .ToContainTextAsync("Stored override missing {{narrator_identity}}");

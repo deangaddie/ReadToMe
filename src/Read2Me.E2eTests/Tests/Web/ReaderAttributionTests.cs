@@ -18,7 +18,7 @@ public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E
         await App.SeedThreeDialogParagraphProjectAsync("web-attr", "Web Attr Book", "A. Author", characterName: "Alice");
         App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
 
-        await GotoAppAsync("/app/projects/web-attr/book?mode=speakers");
+        await GotoAppAsync("projects/web-attr/book?mode=speakers");
 
         var unknown = Page.Locator("r2m-item .r2m-speaker-chip--unknown");
         await Expect(unknown).ToHaveCountAsync(3);
@@ -43,7 +43,7 @@ public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E
     {
         await App.SeedThreeDialogParagraphProjectAsync("web-assign", "Web Assign Book", "A. Author", characterName: "Alice");
 
-        await GotoAppAsync("/app/projects/web-assign/book?mode=speakers");
+        await GotoAppAsync("projects/web-assign/book?mode=speakers");
 
         var items = Page.Locator("r2m-item");
         await Expect(items).ToHaveCountAsync(4);
