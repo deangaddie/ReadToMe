@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { type FakeNavigation, installNavigation, settle } from '../../testing/fake-navigation';
 import { Router, fill, titleOf, type RouteDef } from './router';
+import { signal } from './signals';
 
 const ROUTES: RouteDef[] = [
   { path: '', redirectTo: 'projects' },
@@ -72,6 +73,26 @@ describe('Router', () => {
   it('sets the document title from the chain titles', () => {
     start('projects/dune/book');
     expect(document.title).toBe('Read2Me · dune · Book');
+  });
+
+  it('keeps the document title current when a title function reads a signal', () => {
+    const name = signal('dune');
+    installNavigation('projects/dune/book');
+    const router = new Router();
+    router.start(
+      [
+        {
+          path: 'projects/:folder',
+          title: (p) => name() || (p['folder'] ?? ''),
+          tag: 'x-project',
+          children: [{ path: 'book', title: 'Book', tag: 'x-book' }],
+        },
+      ],
+      async () => true,
+    );
+    expect(document.title).toBe('Read2Me · dune · Book');
+    name.set('Dune Messiah');
+    expect(document.title).toBe('Read2Me · Dune Messiah · Book');
   });
 
   it('navigate() takes an app-relative path and resolves it against the base', async () => {

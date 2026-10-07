@@ -31,6 +31,12 @@ define('x-outlet-book', BookPage);
 let lazyLoads = 0;
 const ROUTES: RouteDef[] = [
   { path: 'projects', tag: 'x-outlet-list' },
+  // A grouping level with a title but no element, like an Angular component-less route.
+  {
+    path: 'settings',
+    title: 'Settings',
+    children: [{ path: 'llm', tag: 'x-outlet-book' }],
+  },
   {
     path: 'projects/:folder',
     tag: 'x-outlet-project',
@@ -109,6 +115,11 @@ describe('r2m-outlet', () => {
     const inner = outlet.querySelector('r2m-outlet');
     expect(inner?.firstElementChild?.localName).toBe('x-outlet-cast');
     expect(inner?.firstElementChild?.textContent).toBe('cast');
+  });
+
+  it('skips a grouping route without an element and renders the next tagged level', async () => {
+    const { outlet } = await start('settings/llm');
+    expect(outlet.firstElementChild?.localName).toBe('x-outlet-book');
   });
 
   it('renders nothing when no route matches', async () => {

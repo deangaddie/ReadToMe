@@ -5,8 +5,9 @@ import { untracked } from './signals';
 
 /**
  * Renders one level of the matched route chain: the root outlet renders level 0, an outlet inside
- * that element level 1, and so on. Loads the level's chunk first; keeps the element while the tag
- * stays the same, so a param change is a signal change, not a re-mount.
+ * that element level 1, and so on. Routes without a `tag` (a grouping level that only carries a
+ * title, like an Angular component-less route) take no level. Loads the level's chunk first; keeps
+ * the element while the tag stays the same, so a param change is a signal change, not a re-mount.
  */
 export class R2mOutlet extends R2mElement {
   #router = use(Router);
@@ -17,7 +18,7 @@ export class R2mOutlet extends R2mElement {
     for (let el = this.parentElement; el; el = el.parentElement)
       if (el instanceof R2mOutlet) depth++;
     this.effect(() => {
-      const route = this.#router.match()?.chain[depth];
+      const route = this.#router.match()?.chain.filter((r) => r.tag)[depth];
       untracked(() => void this.#show(route?.tag, route?.load));
     });
   }

@@ -100,8 +100,8 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
 
     /// <summary>
     /// Stages the built bundle for <see cref="WebApp"/> and navigates to an app-relative path
-    /// (<c>"projects/x/book"</c>), returning once the shell has rendered — for Angular, also once
-    /// the live hub is connected, the point after which receipts drive the screen. Skips the test
+    /// (<c>"projects/x/book"</c>), returning once the live hub socket has opened and the shell has
+    /// rendered, the point after which receipts drive the screen. Skips the test
     /// when that app has no built bundle (the Angular-under-Firefox skip happens in <see cref="InitializeAsync"/>).
     /// </summary>
     protected async Task GotoAppAsync(string path)
@@ -112,12 +112,10 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
 
         StageBundle(bundle, Path.Combine(App.WebRootDir, WebApp.BundleFolder()));
 
-        // The native shell does not open the live hub until the project shell lands (native-web 20).
-        var hub = WebApp == WebApp.Angular
-            ? Page.WaitForWebSocketAsync(new PageWaitForWebSocketOptions { Timeout = 15_000 })
-            : null;
+        // Both apps open the live hub on boot; receipts drive the screen from then on.
+        var hub = Page.WaitForWebSocketAsync(new PageWaitForWebSocketOptions { Timeout = 15_000 });
         await Page.GotoAsync(AppPath(path));
-        if (hub is not null) Assert.Contains("/hubs/live", (await hub).Url);
+        Assert.Contains("/hubs/live", (await hub).Url);
         await Expect(Page.Locator("app-root *").First).ToBeVisibleAsync();
     }
 

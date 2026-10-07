@@ -6,3 +6,5 @@ export * from './api-client';
 export * from './api-error';
 export * from './dtos';
 export * from './book-commands';
+export * from './themes-api';
+export * from './projects-api';

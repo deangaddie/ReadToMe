@@ -56,16 +56,31 @@
   /* M3 azure system colours. */
   --r2m-accent: light-dark(#005cbb, #abc7ff);
   --r2m-on-accent: light-dark(#ffffff, #002f65);
+  --r2m-accent-container: light-dark(#d7e3f8, #00458f);
+  --r2m-on-accent-container: light-dark(#001b3f, #d7e3f8);
+  --r2m-secondary: light-dark(#565e71, #bec6dc);
+  --r2m-on-secondary: light-dark(#ffffff, #283141);
+  --r2m-secondary-container: light-dark(#dae2f9, #3e4759);
+  --r2m-on-secondary-container: light-dark(#131c2b, #dae2f9);
   --r2m-surface: light-dark(#f9f9ff, #111318);
   --r2m-surface-low: light-dark(#f3f3fa, #191c20);
   --r2m-surface-container: light-dark(#ededf4, #1d2024);
   --r2m-surface-high: light-dark(#e7e8ee, #282a2f);
+  --r2m-surface-highest: light-dark(#e1e2e8, #33353a);
   --r2m-outline: light-dark(#c4c6d0, #44474e);
   --r2m-text: light-dark(#1a1b1f, #e2e2e9);
   --r2m-text-muted: light-dark(#44474e, #c4c6d0);
   --r2m-nav-active-bg: light-dark(#d7e3f8, #3d4758);
   --r2m-nav-active-fg: light-dark(#101c2b, #d7e3f8);
   --r2m-appbar-bg: var(--r2m-surface-container);
+  --r2m-appbar-fg: var(--r2m-text);
+  --r2m-nav-bg: var(--r2m-surface-low);
+  --r2m-nav-fg: var(--r2m-text-muted);
+
+  /* Shell layout (design §5). */
+  --r2m-appbar-height: 48px;
+  --r2m-rail-collapsed: 72px;
+  --r2m-rail-expanded: 240px;
 
   --r2m-status-ok: light-dark(#1b7f3b, #6fd58a);
   --r2m-status-ok-soft: light-dark(#dcf5e3, #163d22);
@@ -83,6 +98,13 @@
 
 html {
   height: 100%;
+}
+/* The theme in force pins the scheme, so every light-dark() token resolves to its side. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 body {
   margin: 0;
@@ -170,6 +192,33 @@ a {
 .r2m-button--danger {
   background: var(--r2m-status-error);
   color: var(--r2m-surface);
+}
+/* Icon button: a 40px round hit area around one icon; colour inherits from its bar. */
+.r2m-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -2px;
+  }
+  &:disabled {
+    opacity: 0.38;
+    cursor: default;
+  }
 }
 
 /* ---- fields --------------------------------------------------------------------------------- */
@@ -314,6 +363,36 @@ dialog.r2m-dialog {
   background: var(--r2m-surface-container);
   color: var(--r2m-text);
   box-shadow: var(--r2m-shadow-2);
+}
+/* A plain menu entry (mat-menu-item): full-width button with an optional leading icon. */
+.r2m-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-3);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--r2m-space-4);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--r2m-surface-high);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -2px;
+  }
+  &[aria-checked='true'] {
+    font-weight: 600;
+  }
+  & .r2m-icon {
+    color: var(--r2m-text-muted);
+  }
 }
 
 /* ---- tooltip -------------------------------------------------------------------------------- */

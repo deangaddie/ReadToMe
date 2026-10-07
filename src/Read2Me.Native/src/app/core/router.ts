@@ -1,4 +1,4 @@
-import { computed, signal } from './signals';
+import { computed, effect, signal } from './signals';
 
 /**
  * The Navigation-API router (replaces @angular/router). Routes nest like Angular's; each level
@@ -62,6 +62,12 @@ export class Router {
       if (this.#leafIsDirty()) e.preventDefault();
     });
     this.#apply(new URL(location.href));
+    // An effect, so a title function that reads a signal (the project's loaded title) stays current.
+    effect(() => {
+      const match = this.match();
+      const titles = match ? match.chain.map((r) => titleOf(r, match.params)).filter(Boolean) : [];
+      document.title = ['Read2Me', ...titles].join(' · ');
+    });
   }
 
   navigate(
@@ -120,8 +126,6 @@ export class Router {
       return;
     }
     this.#url.set(url);
-    const titles = match ? match.chain.map((r) => titleOf(r, match.params)).filter(Boolean) : [];
-    document.title = ['Read2Me', ...titles].join(' · ');
   }
 
   /** `url`'s path below the base as `/…` without a trailing slash, or null when outside it. */
