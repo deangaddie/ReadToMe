@@ -2,10 +2,13 @@
   "name": "read2me-browse",
   "version": "0.0.0",
   "private": true,
-  "description": "Drive a running ReadToMe web app (/app) from a Node script.",
+  "description": "Drive a running ReadToMe web app (/app or /app2) from a Bun or Node script.",
   "type": "module",
   "engines": {
     "node": ">=24.18 <25"
+  },
+  "scripts": {
+    "test": "node --test browse.test.mjs"
   },
   "dependencies": {
     "playwright-core": "1.61.0"

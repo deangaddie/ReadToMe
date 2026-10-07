@@ -26,7 +26,7 @@ docker compose stop <service>
 docker compose up -d --build            # After Dockerfile/entrypoint changes
 docker logs -f read2me-llama
 
-# Web front end (Angular, src/Read2Me.Web — see its README.md and docs/agents/web.md)
+# Web front end (Angular, src/Read2Me.Web — see its README.md and docs/agents/web.md). FROZEN: bug fixes only (ADR 0014)
 pwsh scripts/build-web.ps1              # npm ci + npm run build from anywhere; -Check runs npm run check instead
 cd src/Read2Me.Web
 npm ci                                  # Node 24 / npm 11 pinned in engines
@@ -35,11 +35,23 @@ npm run build                           # emits to src/Read2Me.App/wwwroot/app/ 
 npm run check                           # lint + typecheck + api:check + test + build
 npm run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
 
+# Native front end (Bun, src/Read2Me.Native — see its README.md and docs/agents/web.md "Native app"). New UI work goes here
+pwsh scripts/build-native.ps1           # bun install --frozen-lockfile + bun run build from anywhere; -Check runs bun run check; -SkipInstall for local loops
+cd src/Read2Me.Native
+bun install --frozen-lockfile           # Bun 1.4.2 pinned by packageManager; no Node needed
+bun run dev                             # HMR dev server on http://localhost:4300/app2/, proxies /api,/hubs,/workspace,/openapi,/audio-preview,/preview-source to :5000
+bun run build                           # emits to src/Read2Me.App/wwwroot/app2/ (git-ignored); host serves it at /app2
+bun run check                           # lint + typecheck + api:check + icons:check + bun test + build
+bun test src/app/core/router.spec.ts    # one spec file
+bun run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
+bun run icons                           # rebuild the subset icon font from the IconName union (network); icons:check gates offline
+
 # E2E tests: src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
 dotnet test src/Read2Me.E2eTests         # browser tests skip unless their bundle exists: Tests/Web needs wwwroot/app, Tests/Native needs wwwroot/app2
 R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # same suite in Firefox (default chromium); Angular classes skip, native classes run
 dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the Angular browser suite
-# Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
+dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Native"   # only the native browser suite
+# Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill); R2M_APP=/app2 targets the native app
 
 # PR gate: every CI stage in order, stopping at the first failure (native check, web build, dotnet build, unit, E2E Chromium, E2E Firefox)
 pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use
@@ -47,13 +59,13 @@ pwsh scripts/check.ps1                  # -SkipInstall once node_modules are cur
 
 ## Architecture
 
-**ReadToMe** orchestrates AI-powered audiobook production from text scripts. The UI is the Angular app (`src/Read2Me.Web`), served by the host at `/app` as a thin client over the agent API and the live hub — see `docs/agents/web.md` and ADRs 0008/0012.
+**ReadToMe** orchestrates AI-powered audiobook production from text scripts. The UI is the Angular app (`src/Read2Me.Web`), served by the host at `/app` as a thin client over the agent API and the live hub — see `docs/agents/web.md` and ADRs 0008/0012. It is being replaced screen by screen by the native app (`src/Read2Me.Native`, custom elements on Bun, ADR 0014) served at `/app2`: Angular is frozen (bug fixes only) and new UI work lands in the native app. Plan and PR sequence: `.scratch/native-web/spec.md` (local, untracked).
 
 ### .NET App (`src/Read2Me.App`)
 
 - **Framework**: ASP.NET Core 10 API host, `Startup.cs` pattern
 - **Entry**: `Program.cs` → `Startup.cs` → `ConfigureServices` / `Configure`
-- **Surface**: agent API endpoints (`Api/`), the `/hubs/live` SignalR hub (`Live/`), `/workspace`, and the Angular bundle at `/app`
+- **Surface**: agent API endpoints (`Api/`), the `/hubs/live` SignalR hub (`Live/`), `/workspace`, the Angular bundle at `/app` and the native bundle at `/app2`
 
 ### AI Infrastructure (`Infra/`)
 

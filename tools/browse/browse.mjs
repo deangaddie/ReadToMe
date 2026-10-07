@@ -1,4 +1,4 @@
-// Helpers for driving a running ReadToMe host from a throwaway Node script. See README.md.
+// Helpers for driving a running ReadToMe host from a throwaway script (Bun or Node). See README.md.
 //
 // playwright-core is pinned to the Microsoft.Playwright version the E2E project uses, so the
 // Chromium the .NET tests already installed under %LOCALAPPDATA%\ms-playwright is the one this
@@ -6,8 +6,20 @@
 import { chromium } from 'playwright-core';
 
 export const HOST = process.env.R2M_HOST ?? 'http://localhost:5000';
-/** The Angular dev server (`npm start` in src/Read2Me.Web) proxies /api and /hubs to HOST. */
-export const WEB = process.env.R2M_WEB ?? 'http://localhost:4200';
+
+/**
+ * Which app a script drives and where it is served. `R2M_APP` is the app's prefix: `/app` (Angular,
+ * the default) or `/app2` (native, while the migration runs). `R2M_WEB` is the origin serving it;
+ * unset, it is that app's dev server (`npm start` → :4200 for `/app`, `bun run dev` → :4300 for
+ * `/app2`), both proxying /api and /hubs to HOST. `R2M_WEB=http://localhost:5000` drives the host's
+ * own bundle instead.
+ */
+export function resolveApp(env = process.env) {
+  const app = `/${(env.R2M_APP ?? '/app').replace(/^\/+|\/+$/g, '')}`;
+  const web = env.R2M_WEB ?? (app === '/app2' ? 'http://localhost:4300' : 'http://localhost:4200');
+  return { app, web };
+}
+export const { app: APP, web: WEB } = resolveApp();
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const stamp = () => new Date().toISOString().slice(11, 19);
@@ -40,7 +52,8 @@ export async function launch({ headless = true, watchdogMs = 240_000 } = {}) {
   page.on('pageerror', (e) => page.errors.push(`pageerror: ${e.message}`));
   const toastWatch = setInterval(async () => {
     try {
-      for (const t of await page.$$eval('.r2m-toast-panel', (els) => els.map((e) => e.textContent.trim())))
+      // Angular toasts are `.r2m-toast-panel`; the native app's are `.r2m-toast`.
+      for (const t of await page.$$eval('.r2m-toast-panel, .r2m-toast', (els) => els.map((e) => e.textContent.trim())))
         if (!page.toasts.includes(t)) page.toasts.push(t);
     } catch {
       /* page navigating */
@@ -109,11 +122,11 @@ export async function throwawayProject(text, { title = `browse-${Date.now().toSt
   };
 }
 
-// ---- Angular web app (/app) -------------------------------------------------------------------
+// ---- The web app (APP: /app or /app2) --------------------------------------------------------
 
-/** Opens a web-app route and waits for the reader rows (book pages) or the shell to render. */
+/** Opens an app route (`/projects/x/book`) under APP and waits for the shell to render. */
 export async function openWeb(page, path) {
-  await page.goto(`${WEB}/app${path}`);
+  await page.goto(`${WEB}${APP}${path}`);
   await page.waitForSelector('app-root *', { timeout: 60_000 });
 }
 
