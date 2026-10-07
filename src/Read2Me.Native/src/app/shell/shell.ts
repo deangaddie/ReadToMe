@@ -1,4 +1,5 @@
 import { html, nothing } from 'lit-html';
+import { ActivityStore } from '@app/activity/activity-store';
 import { R2mElement, define } from '@app/core/element';
 import { Router, fill, titleOf } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -12,6 +13,8 @@ import { icon } from '@app/ui/partials';
 import { RailState } from './rail-state';
 import { GLOBAL_NAV_ITEMS, type NavItem, contextNavItems, isActive } from './shell-nav';
 import '@app/core/outlet';
+import '@app/activity/activity-bar';
+import '@app/activity/activity-drawer';
 import shellCss from './shell.css' with { type: 'text' };
 
 adoptStyles(shellCss);
@@ -33,14 +36,19 @@ interface Crumb {
 /**
  * Application shell (design §5): app bar with breadcrumbs from the matched route chain, the live
  * connection dot and the theme quick menu; the nav rail with the context group for "here" and the
- * global group; the main outlet. Below 900 px the rail becomes a modal drawer. The activity bar
- * and drawer arrive with the activity centre (native-web 21).
+ * global group; the main outlet; the activity bar below and the activity drawer beside the content
+ * (both read {@link ActivityStore}). Below 900 px the rail becomes a modal drawer and the activity
+ * bar collapses to one summary pill.
  */
 export class AppShell extends R2mElement {
   private readonly router = use(Router);
   private readonly rail = use(RailState);
   private readonly theme = use(ThemeService);
   private readonly live = use(LiveService);
+  private readonly activity = use(ActivityStore);
+
+  /** The activity drawer (design §5); pills and the ▲ open it through the store. */
+  readonly drawerOpen = this.activity.drawerOpen;
 
   private readonly context = computed(() => shellContext(this.router.match()));
   private readonly contextItems = computed(() => contextNavItems(this.context()));
@@ -185,7 +193,19 @@ export class AppShell extends R2mElement {
           </nav>
         </aside>
         <main class="shell__main"><r2m-outlet></r2m-outlet></main>
+        ${
+          this.drawerOpen()
+            ? html`<aside class="shell__drawer" aria-label="Activity">
+                <!-- Mounted only while open so a stream tab's hub group is left when the drawer closes. -->
+                <r2m-activity-drawer></r2m-activity-drawer>
+              </aside>`
+            : nothing
+        }
       </div>
+
+      <footer class="shell__activity" aria-label="Background activity">
+        <r2m-activity-bar .narrow=${narrow}></r2m-activity-bar>
+      </footer>
     `;
   }
 

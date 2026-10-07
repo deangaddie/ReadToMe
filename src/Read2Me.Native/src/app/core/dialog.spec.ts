@@ -35,6 +35,18 @@ describe('openDialog', () => {
     expect(document.querySelector('dialog')).toBeNull();
   });
 
+  it('docks a sheet to the bottom and keeps it open until the content closes it', async () => {
+    const content = document.createElement('div');
+    void openDialog(content, { variant: 'sheet', closedBy: 'none' });
+    await Promise.resolve();
+    const dialog = document.querySelector('dialog')!;
+    expect(dialog.className).toBe('r2m-dialog r2m-dialog--sheet');
+    expect(dialog.getAttribute('closedby')).toBe('none');
+    const cancel = new Event('cancel', { cancelable: true });
+    dialog.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+  });
+
   it('waits for the content to render before showing it', async () => {
     let finishRender = () => {};
     const content = Object.assign(document.createElement('div'), {

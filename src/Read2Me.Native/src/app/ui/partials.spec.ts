@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { html, render } from 'lit-html';
-import { countBadge, emptyState, icon, statusChip } from './partials';
+import { countBadge, emptyState, icon, spinner, statusChip } from './partials';
 
 function mount(template: unknown): HTMLElement {
   const host = document.createElement('div');
@@ -64,6 +64,15 @@ describe('emptyState', () => {
     const el = mount(emptyState({ icon: 'search', headline: 'Nothing', compact: true }));
     expect(el.querySelector('.r2m-empty-state__hint')).toBeNull();
     expect(el.querySelector('.r2m-empty-state--compact')).not.toBeNull();
+  });
+});
+
+describe('spinner', () => {
+  it('is an indeterminate progressbar sized by its argument', () => {
+    const el = mount(spinner(14, 'x-ring')).querySelector('.r2m-spinner');
+    expect(el?.getAttribute('role')).toBe('progressbar');
+    expect(el?.classList.contains('x-ring')).toBe(true);
+    expect(el?.getAttribute('style')).toContain('--_size: 14px');
   });
 });
 

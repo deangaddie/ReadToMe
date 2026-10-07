@@ -1,4 +1,4 @@
-@scope (app-root) to (r2m-outlet > *) {
+@scope (app-root) to (r2m-outlet > *, r2m-activity-bar, r2m-activity-drawer) {
   :scope {
     display: flex;
     flex-direction: column;
@@ -177,11 +177,41 @@
     overflow: auto;
   }
 
-  /* ---- narrow: the rail is a modal drawer over the content ---------------------------------- */
+  /* ---- activity drawer (design §5): docked at the end of the body ---------------------------- */
+  .shell__drawer {
+    flex: 0 0 auto;
+    width: min(var(--r2m-activity-drawer-width), 100vw);
+    min-height: 0;
+    background: var(--r2m-surface-low);
+    border-left: 1px solid var(--r2m-outline);
+    overflow: hidden;
+  }
+
+  /* ---- activity bar ------------------------------------------------------------------------- */
+  .shell__activity {
+    flex: 0 0 var(--r2m-activity-bar-height);
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    padding: 0 var(--r2m-space-1) 0 var(--r2m-space-4);
+    background: var(--r2m-activity-bg);
+    border-top: 1px solid var(--r2m-outline);
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-text-muted);
+    z-index: 3;
+  }
+
+  /* ---- narrow: the rail and the drawer float over the content ------------------------------- */
   @media (max-width: 899.98px) {
     .shell__rail {
       position: absolute;
       inset: 0 auto 0 0;
+      z-index: 2;
+      box-shadow: var(--r2m-shadow-3);
+    }
+    .shell__drawer {
+      position: absolute;
+      inset: 0 0 0 auto;
       z-index: 2;
       box-shadow: var(--r2m-shadow-3);
     }

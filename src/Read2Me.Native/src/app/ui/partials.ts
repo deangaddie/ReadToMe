@@ -56,6 +56,16 @@ const BADGE_ICONS: Record<CountBadgeKind, IconName> = {
   review: 'rate_review',
 };
 
+/** Indeterminate progress spinner (mat-progress-spinner): `size` in px, colour from `currentColor`. */
+export function spinner(size = 20, cls = '') {
+  return html`<span
+    class="r2m-spinner ${cls}"
+    role="progressbar"
+    aria-label="Working"
+    style="--_size: ${size}px"
+  ></span>`;
+}
+
 /** Count badge (design §7): number + icon coloured by kind; nothing at zero unless `showZero`. */
 export function countBadge(kind: CountBadgeKind, count: number, tooltip: string, showZero = false) {
   if (count === 0 && !showZero) return nothing;

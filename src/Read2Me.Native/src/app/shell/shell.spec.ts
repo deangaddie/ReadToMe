@@ -202,6 +202,22 @@ describe('app-root', () => {
     expect(conn?.getAttribute('aria-label')).toBe('Lost');
   });
 
+  it('starts with the activity drawer closed and mounts it only while open', async () => {
+    const { shell } = await mount('projects');
+    expect(shell.drawerOpen()).toBe(false);
+    expect(shell.querySelector('r2m-activity-bar')).not.toBeNull();
+    expect(shell.querySelector('r2m-activity-drawer')).toBeNull();
+
+    shell.querySelector<HTMLElement>('[aria-label="Toggle activity drawer"]')?.click();
+    await settle();
+    expect(shell.drawerOpen()).toBe(true);
+    expect(shell.querySelector('.shell__drawer r2m-activity-drawer')).not.toBeNull();
+
+    shell.querySelector<HTMLElement>('[aria-label="Close activity drawer"]')?.click();
+    await settle();
+    expect(shell.querySelector('r2m-activity-drawer')).toBeNull();
+  });
+
   it('offers the three scheme choices in the theme menu', async () => {
     const { shell } = await mount('projects');
     expect(shell.querySelector('.shell__theme')?.getAttribute('popovertarget')).toBe(
