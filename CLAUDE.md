@@ -40,6 +40,9 @@ dotnet test src/Read2Me.E2eTests         # browser tests skip unless their bundl
 R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # same suite in Firefox (default chromium); Angular classes skip, native classes run
 dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the Angular browser suite
 # Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
+
+# PR gate: every CI stage in order, stopping at the first failure (native check, web build, dotnet build, unit, E2E Chromium, E2E Firefox)
+pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use
 ```
 
 ## Architecture

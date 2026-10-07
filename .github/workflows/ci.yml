@@ -1,5 +1,8 @@
 name: CI
 
+# Mirrors scripts/check.ps1 (the local PR gate) as separate named steps, so a failure says which stage broke.
+# Keep the two in step: a stage added here is a stage added there.
+
 on:
   push:
     branches: [main]
@@ -13,6 +16,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Reads the "packageManager" pin (bun@x.y.z) in the native project's package.json, the same field
+      # scripts/build-native.ps1 checks the local Bun against.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: src/Read2Me.Native/package.json
+
+      # Lint, typecheck, api:check, icons:check, bun tests and the production build into
+      # src/Read2Me.App/wwwroot/app2 — the bundle the native E2E tests (Tests/Native) stage into the in-proc host.
+      # Same script as the local gate: it also checks the installed Bun against the pin and that the bundle landed.
+      - name: Native check and build
+        run: pwsh scripts/build-native.ps1 -Check
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/Read2Me.Web/package-lock.json
+
+      # Lint, typecheck, unit tests and the production build into src/Read2Me.App/wwwroot/app —
+      # the bundle the Angular E2E tests (Tests/Web) stage into the in-proc host; without it they skip.
+      # These Node/Angular steps stay until the native cutover (.scratch/native-web/spec.md §8.5).
+      - name: Web check and build
+        working-directory: src/Read2Me.Web
+        run: |
+          npm ci
+          npm run check
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -24,25 +56,18 @@ jobs:
       - name: Unit tests
         run: dotnet test src/Read2Me.Tests --configuration Release --no-build
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: src/Read2Me.Web/package-lock.json
-
-      # Lint, typecheck, unit tests and the production build into src/Read2Me.App/wwwroot/app —
-      # the bundle the Angular E2E tests (Tests/Web) stage into the in-proc host; without it they skip.
-      - name: Web check and build
-        working-directory: src/Read2Me.Web
-        run: |
-          npm ci
-          npm run check
-
       - name: Install Playwright browsers
-        run: pwsh src/Read2Me.E2eTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+        run: pwsh src/Read2Me.E2eTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium firefox
 
-      - name: E2E tests
+      # The suite runs once per browser: Angular classes (Tests/Web) skip under Firefox, native classes run in both.
+      - name: E2E tests (Chromium)
+        env:
+          R2M_E2E_BROWSER: chromium
+        run: dotnet test src/Read2Me.E2eTests --configuration Release --no-build
+
+      - name: E2E tests (Firefox)
+        env:
+          R2M_E2E_BROWSER: firefox
         run: dotnet test src/Read2Me.E2eTests --configuration Release --no-build
 
       - name: Upload E2E failure artifacts
