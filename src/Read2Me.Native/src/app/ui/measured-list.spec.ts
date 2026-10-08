@@ -88,8 +88,8 @@ describe('r2m-measured-list', () => {
     const keys = rendered(list);
     expect(keys).toContain('r500');
     expect(keys).not.toContain('r0');
-    expect(list.querySelector<HTMLElement>('.r2m-vlist__content')?.style.transform).toBe(
-      `translateY(${list.offsetOf(Number(keys[0]!.slice(1)))}px)`,
+    expect(list.querySelector<HTMLElement>('.r2m-vlist__content')?.style.top).toBe(
+      `${list.offsetOf(Number(keys[0]!.slice(1)))}px`,
     );
   });
 

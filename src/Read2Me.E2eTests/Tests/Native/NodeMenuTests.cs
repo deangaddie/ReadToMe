@@ -115,6 +115,33 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         Assert.Equal(second, await Page.EvaluateAsync<string?>(FocusedNode));
     }
 
+    [Fact]
+    public async Task A_paragraph_menu_deep_in_a_long_book_opens_on_its_trigger()
+    {
+        var book = await App.SeedLongBookAsync("native-menu-deep", "Native Menu Deep", "A. Author");
+        var target = book.ChapterId("Chapter 6");
+
+        // Deep in the book the measured list's rendered window starts thousands of pixels down.
+        await GotoAppAsync($"projects/native-menu-deep/book?chapter={target}");
+        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", target.ToString());
+        var key = await Page.EvaluateAsync<string>("""
+            () => {
+              const list = document.querySelector('r2m-measured-list');
+              const top = list.getBoundingClientRect().top;
+              return [...list.querySelectorAll('[data-row-key^="paragraph:"]')]
+                .find((row) => row.getBoundingClientRect().top > top + 80).dataset.rowKey;
+            }
+            """);
+
+        var row = Page.Locator($"[data-row-key='{key}'] .r2m-paragraph__menu");
+        await row.HoverAsync();
+        var trigger = row.Locator("button");
+        await trigger.ClickAsync();
+        var menu = Page.Locator("#r2m-node-menu-panel");
+        await Expect(menu).ToBeVisibleAsync();
+        AssertAnchored((await trigger.BoundingBoxAsync())!, (await menu.BoundingBoxAsync())!);
+    }
+
     /// <summary>The panel sits just below the trigger (block-end) and overlaps it horizontally.</summary>
     private static void AssertAnchored(LocatorBoundingBoxResult anchor, LocatorBoundingBoxResult panel)
     {

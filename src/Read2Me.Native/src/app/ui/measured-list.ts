@@ -27,10 +27,11 @@ adoptStyles(`
     .r2m-vlist__spacer {
       width: 1px;
     }
+    /* Placed by top, not a transform: Firefox anchors popovers to a row's untransformed box,
+       so a menu opened deep in the list would land the window's offset above its trigger. */
     .r2m-vlist__content {
       position: absolute;
       inset: 0 0 auto 0;
-      will-change: transform;
     }
     /* A row's own box must hold its children's margins, or measured heights miss them. */
     .r2m-vlist__row {
@@ -277,7 +278,7 @@ export class MeasuredList<T = unknown> extends R2mElement {
       const end = Math.min(length, this.index.indexAt(offset + this.clientHeight + BUFFER_PX) + 1);
       range = { start, end };
     }
-    if (content) content.style.transform = `translateY(${this.index.offsetOf(range.start)}px)`;
+    if (content) content.style.top = `${this.index.offsetOf(range.start)}px`;
     const current = this.#range();
     if (current.start !== range.start || current.end !== range.end) this.#range.set(range);
     const top = length > 0 ? this.topRow(this.scrollOffsetIntended()) : -1;
