@@ -178,6 +178,8 @@ export interface RowContext {
   roster: readonly SpeakerRosterEntry[];
   /** The editor is locked (stale view or a write in flight): every row menu is off (design §8). */
   locked: boolean;
+  /** An audio preflight or enqueue is in flight (ticket 13): the row's Retry waits for it. */
+  generating: boolean;
 }
 
 /** Queued or processing: the server rejects edits, so the row shows a lock (design §8). */

@@ -284,6 +284,25 @@
     align-items: center;
     gap: var(--r2m-space-1);
   }
+  /* Retry / Dismiss beside a chip (ticket 13). */
+  .r2m-item__action {
+    padding: 0 var(--r2m-space-1);
+    border: none;
+    border-radius: var(--r2m-radius-sm);
+    background: transparent;
+    color: var(--r2m-accent);
+    font: inherit;
+    font-size: var(--r2m-text-xs);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .r2m-item__action:disabled {
+    color: var(--r2m-text-muted);
+    cursor: default;
+  }
+  .r2m-item__action:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+  }
   .r2m-item__review-dismissed {
     font-size: 16px;
     opacity: 0.4;

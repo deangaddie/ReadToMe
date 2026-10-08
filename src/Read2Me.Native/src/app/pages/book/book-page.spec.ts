@@ -4,13 +4,15 @@ import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
 import type { QueueMessage } from '@app/live/live-messages';
 import { Preflight } from '@app/shared/preflight';
+import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
+import { AudioGenerator } from './audio-generator';
 import { BookStore } from './book-store';
 import type { BookPage } from './book-page';
-import { SelectionStore } from './selection-store';
+import { AudioSelectionStore, SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 import '../project/project-shell';
 import './book-page';
@@ -399,7 +401,10 @@ describe('r2m-book-page', () => {
 
       expect(rowBoxes(page)).toEqual([]);
       expect(bar(page)).toBeNull();
-      expect(page.querySelectorAll('.tree__select').length).toBe(0);
+      // The tree's checkboxes now select items, and read as unchecked over that selection.
+      const treeBox = page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!;
+      expect(treeBox.getAttribute('aria-label')).toBe('Select items of The Encyclopedists');
+      expect(treeBox.checked).toBe(false);
       expect(selection.count()).toBe(1);
       // The item checkboxes are there, off for the lines nobody can read yet.
       const items = page.querySelectorAll<HTMLInputElement>(
@@ -438,6 +443,202 @@ describe('r2m-book-page', () => {
       ]);
       expect(toasts).toEqual(['Queued 2 paragraphs']);
     });
+  });
+
+  describe('audio selection (ticket 13)', () => {
+    const NARRATION = (id: string): ParagraphDto => ({
+      id,
+      isPauseParagraph: false,
+      items: [
+        {
+          id: `${id}-i`,
+          itemType: 'Narration',
+          text: `${id} narration`,
+          characterId: 'narrator',
+          audioFileName: null,
+          voiceInstructions: null,
+          orderKey: 'a',
+          isPause: false,
+        },
+      ],
+    });
+    const REF = { id: 'p1-i', paragraphId: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' };
+
+    it('a tree checkbox reads the node item ids, selects them and shows the item action bar', async () => {
+      api
+        .on('GET', `${BASE}/nodes/chapter/c1/children`, {
+          paragraphs: [NARRATION('p1'), DIALOG('p2')],
+        })
+        .on('GET', `${BASE}/nodes/chapter/c1/item-ids`, [REF]);
+      const { page } = await start('projects/dune/book?mode=audio');
+      expect(page.querySelector('[data-testid=selection-bar]')).toBeNull();
+
+      page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      await page.rendered();
+
+      const selection = use(AudioSelectionStore, page);
+      expect(selection.ids()).toEqual(['p1-i']);
+      expect(selection.nodeState('chapter', 'c1')).toBe('checked');
+      expect(page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.checked).toBe(
+        true,
+      );
+      expect(text(page.querySelector('[data-testid=selection-count]'))).toBe('1 item');
+      const rows = Array.from(
+        page.querySelectorAll<HTMLInputElement>(
+          '.r2m-paragraph[data-chapter-id=c1] .r2m-item input[type=checkbox]',
+        ),
+      );
+      expect(rows.map((b) => [b.checked, b.disabled])).toEqual([
+        [true, false],
+        [false, true],
+      ]);
+      expect(use(SelectionStore, page).count()).toBe(0);
+    });
+
+    it('Select needs audio reads with the filter and narrator-only flag; Generate audio queues and clears', async () => {
+      api
+        .on('GET', BASE, {
+          folderName: 'dune',
+          title: 'Dune',
+          narrator: null,
+          narratorOnlyMode: true,
+        })
+        .on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [NARRATION('p1')] })
+        .on('GET', `${BASE}/nodes/chapter/c1/item-ids`, (_body, url) =>
+          url.searchParams.get('needsAudioOnly') === 'true' &&
+          url.searchParams.get('narratorOnlyMode') === 'true'
+            ? [REF]
+            : [],
+        );
+      const { page } = await start('projects/dune/book?mode=audio');
+      const generator = use(AudioGenerator, page);
+      const enqueueItems = mock(async () => true);
+      generator.enqueueItems = enqueueItems;
+
+      page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
+      await page.rendered();
+      page
+        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=select-needs-audio]')!
+        .click();
+      for (let i = 0; i < 4; i++) await settle();
+      await page.rendered();
+
+      const selection = use(AudioSelectionStore, page);
+      expect(selection.ids()).toEqual(['p1-i']);
+      page.querySelector<HTMLButtonElement>('[data-action=generate-audio-selection]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(enqueueItems).toHaveBeenCalledWith(['p1-i']);
+      expect(selection.count()).toBe(0);
+    });
+
+    it('Generate audio for this node hands the node to the generator', async () => {
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [NARRATION('p1')] });
+      const { page } = await start('projects/dune/book?mode=audio');
+      const generator = use(AudioGenerator, page);
+      const enqueueNode = mock(async () => true);
+      generator.enqueueNode = enqueueNode;
+
+      page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
+      await page.rendered();
+      page
+        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=generate-audio-node]')!
+        .click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(enqueueNode).toHaveBeenCalledWith('chapter', 'c1', false);
+    });
+  });
+
+  describe('book actions (ticket 11)', () => {
+    const open = async (page: BookPage) => {
+      page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!.click();
+      await page.rendered();
+    };
+
+    it('offers the title entries that add navigation, pauses, reread and manual reread', async () => {
+      const { page } = await open1();
+      const actions = Array.from(
+        page.querySelectorAll<HTMLElement>('[aria-label="Book actions"][role=menu] [data-action]'),
+        (e) => e.dataset['action'],
+      );
+      // One volume, one part, two chapters: only the chapter titles add navigation.
+      expect(actions).toEqual([
+        'add-book-title',
+        'add-chapter-titles',
+        'add-pauses',
+        'reread',
+        'manual-reread',
+      ]);
+    });
+
+    it('Add pauses posts its command through the editor', async () => {
+      api.on('POST', `${BASE}/commands`, { newEntityId: null });
+      const { page } = await open1();
+      page.querySelector<HTMLButtonElement>('[data-action=add-pauses]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([
+        { type: 'AddPauses' },
+      ]);
+    });
+
+    it('Reread confirms destructively, then rereads', async () => {
+      api.on('POST', `${BASE}/import`, undefined);
+      const confirms: unknown[] = [];
+      let answer = false;
+      override(ConfirmService, {
+        confirm: async (o: unknown) => {
+          confirms.push(o);
+          return answer;
+        },
+      } as unknown as ConfirmService);
+      const { page } = await open1();
+      page.querySelector<HTMLButtonElement>('[data-action=reread]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(confirms).toEqual([
+        expect.objectContaining({
+          title: 'Reread the book?',
+          destructive: true,
+          confirmLabel: 'Delete and reread',
+        }),
+      ]);
+      expect(api.calls('POST', `${BASE}/import`)).toHaveLength(0);
+
+      answer = true;
+      await open(page);
+      page.querySelector<HTMLButtonElement>('[data-action=reread]')!.click();
+      for (let i = 0; i < 6; i++) await settle();
+      expect(api.calls('POST', `${BASE}/import`)).toHaveLength(1);
+    });
+
+    it('Manual reread opens the dialog and sends its request', async () => {
+      api.on('POST', `${BASE}/import/manual`, undefined);
+      const { page } = await open1();
+      page.querySelector<HTMLButtonElement>('[data-action=manual-reread]')!.click();
+      await settle();
+      const dialog = document.querySelector('r2m-manual-reread-dialog')!;
+      await dialog.rendered();
+      const prefix = dialog.querySelector<HTMLInputElement>('input[data-level=chapter]')!;
+      prefix.value = 'Chapter';
+      prefix.dispatchEvent(new Event('input'));
+      await dialog.rendered();
+      dialog.querySelector<HTMLButtonElement>('.manual__submit')!.click();
+      for (let i = 0; i < 6; i++) await settle();
+      expect(api.calls('POST', `${BASE}/import/manual`).map((r) => r.body)).toEqual([
+        {
+          hasMultipleVolumes: false,
+          hasMultipleParts: false,
+          volume: null,
+          part: null,
+          chapter: { mode: 'Prefix', prefix: 'Chapter' },
+        },
+      ]);
+    });
+
+    async function open1() {
+      const started = await start('projects/dune/book');
+      await open(started.page);
+      return started;
+    }
   });
 
   it('a failed read shows the stale banner, and Refresh reads again', async () => {

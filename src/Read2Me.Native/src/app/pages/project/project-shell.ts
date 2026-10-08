@@ -3,6 +3,7 @@ import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { provide, use } from '@app/core/services';
 import { untracked } from '@app/core/signals';
+import { AudioGenerator } from '@app/pages/book/audio-generator';
 import { BookEditor } from '@app/pages/book/book-editor';
 import { BookStore } from '@app/pages/book/book-store';
 import { AudioSelectionStore, SelectionStore } from '@app/pages/book/selection-store';
@@ -31,8 +32,9 @@ export class ProjectShell extends R2mElement {
 
   constructor() {
     super();
-    // Provided for the rows only: the shell itself never reads it, so no field holds it.
+    // Provided for the rows and the page only: the shell itself never reads them, so no field holds them.
     provide(this, SpeakerAssigner, new SpeakerAssigner(this.editor, this.book, this.store));
+    provide(this, AudioGenerator, new AudioGenerator(this.editor, this.book));
   }
 
   protected override connected(): void {

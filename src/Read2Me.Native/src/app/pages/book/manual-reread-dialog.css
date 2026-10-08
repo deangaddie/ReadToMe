@@ -1,0 +1,35 @@
+/* Manual reread dialog (research §3): structure switches, then a detection rule per level. */
+@scope (r2m-manual-reread-dialog) {
+  :scope {
+    display: block;
+    min-width: 420px;
+    max-width: 560px;
+  }
+  .manual__content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  .manual__hint {
+    margin: 0 0 var(--r2m-space-2);
+    color: var(--r2m-text-muted);
+  }
+  .manual__heading {
+    margin: var(--r2m-space-3) 0 0;
+    font-size: var(--r2m-text-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--r2m-text-muted);
+  }
+  .manual__modes {
+    align-self: flex-start;
+  }
+  .manual__prefix {
+    width: 100%;
+  }
+  .manual__error {
+    margin: 0;
+    color: var(--r2m-status-error);
+  }
+}

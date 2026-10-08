@@ -1,5 +1,5 @@
 import { html, nothing } from 'lit-html';
-import { AttributionApi, BookApi, toApiError } from '@app/api';
+import { AttributionApi, BookApi, type BookCommand, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -7,14 +7,18 @@ import { computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
+import { ConfirmService } from '@app/ui/dialogs';
+import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
 import { emptyState, icon } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
 import { ProjectStore } from '../project/project-store';
+import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import type { TreeNode } from './book-tree';
+import { openManualRereadDialog } from './manual-reread-dialog';
 import { nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
@@ -51,9 +55,56 @@ const MODE_LABELS: Record<ReaderMode, string> = {
 
 const SKELETON = [1, 2, 3, 4, 5, 6];
 const BULK_MENU_ID = 'r2m-book-bulk-menu';
+const ACTIONS_MENU_ID = 'r2m-book-actions-menu';
+
+/** Which "Add … titles" entries apply: only levels that add navigation (research §3 Toolbar). */
+interface TitleLevels {
+  volumes: boolean;
+  parts: boolean;
+  chapters: boolean;
+}
+
+/** The book-level commands in the toolbar overflow (research §3 Toolbar), each with its icon. */
+const TITLE_ACTIONS: readonly {
+  action: string;
+  /** Which navigation level the titles add; a book title always applies. */
+  level: keyof TitleLevels | null;
+  label: string;
+  icon: IconName;
+  command: BookCommand;
+}[] = [
+  {
+    action: 'add-book-title',
+    level: null,
+    label: 'Add book title',
+    icon: 'title',
+    command: { type: 'AddBookTitle' },
+  },
+  {
+    action: 'add-volume-titles',
+    level: 'volumes',
+    label: 'Add volume titles',
+    icon: 'library_books',
+    command: { type: 'AddVolumeTitles' },
+  },
+  {
+    action: 'add-part-titles',
+    level: 'parts',
+    label: 'Add part titles',
+    icon: 'bookmark',
+    command: { type: 'AddPartTitles' },
+  },
+  {
+    action: 'add-chapter-titles',
+    level: 'chapters',
+    label: 'Add chapter titles',
+    icon: 'menu_book',
+    command: { type: 'AddChapterTitles' },
+  },
+];
 
 /**
- * `/projects/{folder}/book` (design §6.3, native-web 22 + 23 + 25): the structure tree beside a
+ * `/projects/{folder}/book` (design §6.3, native-web 22–26): the structure tree beside a
  * virtual-scrolled window of adjacent chapters in `<r2m-measured-list>`. The mode (`?mode=`)
  * changes what each row shows, never where it is; `?chapter=` opens at a chapter. Rows are
  * partials rendered from the list's one effect: they read {@link ctx} there, so a live status
@@ -63,9 +114,11 @@ const BULK_MENU_ID = 'r2m-book-bulk-menu';
  *
  * The paragraph selection (ticket 12) lives in Read and Speakers modes: row and tree checkboxes
  * and the tree's "Select unprocessed" over the {@link SelectionStore}, and the selection action
- * bar — Attribute (gated by preflight), Bulk assign speaker, Clear. Audio mode selects items
- * (ticket 13) through the row checkboxes over the {@link AudioSelectionStore}; its bar, tree
- * checkboxes and the generator arrive with native-web 26, the book actions with 24–27.
+ * bar — Attribute (gated by preflight), Bulk assign speaker, Clear. Audio mode (ticket 13) does
+ * the same for items over the {@link AudioSelectionStore}: item and tree checkboxes, "Select
+ * needs audio", and a bar with Generate audio and Clear through the {@link AudioGenerator}. The
+ * toolbar overflow holds the book-level actions (titles, pauses, reread, manual reread); Edit
+ * with AI arrives with native-web 27.
  */
 export class BookPage extends R2mElement {
   private readonly router = use(Router);
@@ -74,12 +127,14 @@ export class BookPage extends R2mElement {
   private readonly live = use(LiveService);
   private readonly preflight = use(Preflight);
   private readonly toast = use(ToastService);
+  private readonly confirm = use(ConfirmService);
   private project!: ProjectStore;
   private store!: BookStore;
   private editor!: BookEditor;
   private selection!: SelectionStore;
   private audioSelection!: AudioSelectionStore;
   private assigner!: SpeakerAssigner;
+  private generator!: AudioGenerator;
   private readonly treeOpen = signal(true);
   /** A selection read or enqueue in flight: the action bar waits for it. */
   private readonly working = signal(false);
@@ -95,11 +150,15 @@ export class BookPage extends R2mElement {
   /** Paragraph selection lives in Read and Speakers modes; Audio selects items (ticket 13). */
   private selectable = computed(() => true);
   private audioSelectable = computed(() => false);
-  /** Which selection the tree offers checkboxes and shortcuts for; null for none. */
-  private treeSelection = computed<SelectionKind | null>(() => null);
+  /** Which selection the tree offers checkboxes and shortcuts for. */
+  private selectionKind = computed<SelectionKind>(() => 'paragraphs');
+  /** Narrator-only mode reads unattributed lines too, so they count as voiced. */
+  private narratorOnlyMode = computed(() => false);
   private nodeStates = computed<Readonly<Record<string, TriState>>>(() => ({}));
   /** Bulk assign is disarmed while attribution runs anywhere (research §3). */
   private queueBusy = computed(() => false);
+  /** Which "Add … titles" entries apply (research §3 Toolbar): only levels that add navigation. */
+  private titleActions = computed(() => ({ volumes: false, parts: false, chapters: false }));
 
   protected override connected(): void {
     this.project = use(ProjectStore, this);
@@ -108,7 +167,8 @@ export class BookPage extends R2mElement {
     this.selection = use(SelectionStore, this);
     this.audioSelection = use(AudioSelectionStore, this);
     this.assigner = use(SpeakerAssigner, this);
-    const { project, store, editor, selection, audioSelection } = this;
+    this.generator = use(AudioGenerator, this);
+    const { project, store, editor, selection, audioSelection, generator } = this;
 
     this.noContent = computed(() => store.overview()?.hasContent === false);
     this.rows = computed(() => buildRows(store.chapters(), store.mode()));
@@ -117,17 +177,24 @@ export class BookPage extends R2mElement {
     );
     this.selectable = computed(() => store.mode() !== 'audio');
     this.audioSelectable = computed(() => store.mode() === 'audio');
-    // The item selection's tree checkboxes and shortcuts arrive with native-web 26.
-    this.treeSelection = computed(() => (this.selectable() ? 'paragraphs' : null));
+    this.selectionKind = computed(() => (this.audioSelectable() ? 'items' : 'paragraphs'));
     this.queueBusy = computed(() => this.live.queue()?.attribution.isBusy ?? false);
-    const narratorOnlyMode = computed(() => project.detail()?.narratorOnlyMode ?? false);
+    this.narratorOnlyMode = computed(() => project.detail()?.narratorOnlyMode ?? false);
+    this.titleActions = computed(() => {
+      const overview = store.overview();
+      const volumes = overview?.volumes.length ?? 0;
+      const parts = overview?.totalParts ?? 0;
+      const chapters = overview?.totalChapters ?? 0;
+      return { volumes: volumes > 1, parts: parts > volumes, chapters: chapters > parts };
+    });
 
-    // Every tree node's checkbox state over the paragraph selection.
+    // Every tree node's checkbox state over the selection the mode is in.
     this.nodeStates = computed(() => {
+      const active = this.activeSelection();
       const states: Record<string, TriState> = {};
       const walk = (nodes: readonly TreeNode[]) => {
         for (const node of nodes) {
-          states[node.id] = selection.nodeState(node.level, node.id);
+          states[node.id] = active.nodeState(node.level, node.id);
           walk(node.children);
         }
       };
@@ -147,10 +214,11 @@ export class BookPage extends R2mElement {
       selected: selection.selected(),
       itemSelectable: this.audioSelectable(),
       selectedItems: audioSelection.selected(),
-      narratorOnlyMode: narratorOnlyMode(),
+      narratorOnlyMode: this.narratorOnlyMode(),
       ancestry: store.ancestry(),
       roster: this.roster(),
       locked: editor.locked(),
+      generating: generator.working(),
     }));
 
     this.effect(() => {
@@ -164,7 +232,7 @@ export class BookPage extends R2mElement {
       untracked(() => selection.learnTotals(totals));
     });
     this.effect(() => {
-      const totals = chapterVoicedTotals(store.chapters(), narratorOnlyMode());
+      const totals = chapterVoicedTotals(store.chapters(), this.narratorOnlyMode());
       untracked(() => audioSelection.learnTotals(totals));
     });
 
@@ -191,11 +259,17 @@ export class BookPage extends R2mElement {
     this.onDisconnect(() => clearInterval(edges));
   }
 
+  /** The selection the mode is in: items in Audio, paragraphs otherwise. */
+  private activeSelection(): SelectionStore {
+    return this.audioSelectable() ? this.audioSelection : this.selection;
+  }
+
   protected template() {
     const store = this.store;
     const rows = this.rows();
     const stale = store.stale();
     const treeOpen = this.treeOpen();
+    const noContent = this.noContent();
     return html`
       <div class="book__toolbar" role="toolbar" aria-label="Reader">
         <button
@@ -222,8 +296,15 @@ export class BookPage extends R2mElement {
               </label>`,
           )}
         </fieldset>
-        ${this.selectable() && this.selection.count() > 0 ? this.selectionBar() : nothing}
+        ${
+          this.audioSelectable() && this.audioSelection.count() > 0
+            ? this.audioSelectionBar()
+            : this.selectable() && this.selection.count() > 0
+              ? this.selectionBar()
+              : nothing
+        }
         <span class="book__spacer"></span>
+        ${noContent ? nothing : this.bookActions()}
       </div>
 
       ${
@@ -236,7 +317,7 @@ export class BookPage extends R2mElement {
           : nothing
       }
       ${
-        this.noContent()
+        noContent
           ? emptyState(
               {
                 icon: 'menu_book',
@@ -254,7 +335,7 @@ export class BookPage extends R2mElement {
                         .statuses=${this.project.nodes()}
                         .currentChapterId=${store.currentChapterId()}
                         .expandedIds=${store.expanded()}
-                        .selection=${this.treeSelection()}
+                        .selection=${this.selectionKind()}
                         .nodeStates=${this.nodeStates()}
                         .locked=${this.editor.locked()}
                         @expanded-change=${this.onExpandedChange}
@@ -353,6 +434,76 @@ export class BookPage extends R2mElement {
     </div>`;
   }
 
+  /** The item selection's action bar (ticket 13): count, Generate audio, Clear. */
+  private audioSelectionBar() {
+    const count = this.audioSelection.count();
+    return html`<div
+      class="book__selection"
+      role="group"
+      aria-label="Selection"
+      data-testid="selection-bar"
+    >
+      <span class="book__selection-count" data-testid="selection-count"
+        >${count} item${count === 1 ? '' : 's'}</span
+      >
+      <button
+        type="button"
+        class="r2m-button r2m-button--filled"
+        data-action="generate-audio-selection"
+        ?disabled=${this.working() || this.generator.working() || this.editor.locked()}
+        @click=${this.generateSelection}
+      >
+        ${icon('graphic_eq')} Generate audio
+      </button>
+      <button
+        type="button"
+        class="r2m-button"
+        data-action="clear-selection"
+        @click=${() => this.audioSelection.clear()}
+      >
+        Clear
+      </button>
+    </div>`;
+  }
+
+  /** The toolbar overflow (ticket 11): the book-level commands, each posting through the editor. */
+  private bookActions() {
+    const titles = this.titleActions();
+    const shown = TITLE_ACTIONS.filter((a) => a.level === null || titles[a.level]);
+    const entry = (action: string, label: string, glyph: IconName, onClick: () => void) =>
+      html`<button
+        type="button"
+        role="menuitem"
+        class="r2m-menu__item"
+        data-action=${action}
+        @click=${() => {
+          this.closeMenu(ACTIONS_MENU_ID);
+          onClick();
+        }}
+      >
+        ${icon(glyph)}<span>${label}</span>
+      </button>`;
+    return html`<button
+        type="button"
+        class="r2m-icon-button"
+        aria-label="Book actions"
+        aria-haspopup="menu"
+        data-testid="book-actions"
+        popovertarget=${ACTIONS_MENU_ID}
+        ?disabled=${this.editor.locked()}
+      >
+        ${icon('more_vert')}
+      </button>
+      <div id=${ACTIONS_MENU_ID} popover class="r2m-menu" role="menu" aria-label="Book actions">
+        ${shown.map((a) => entry(a.action, a.label, a.icon, () => void this.editor.run(a.command)))}
+        <hr class="r2m-menu__divider" />
+        ${entry('add-pauses', 'Add pauses', 'pause', () => void this.editor.run({ type: 'AddPauses' }))}
+        <hr class="r2m-menu__divider" />
+        ${entry('reread', 'Reread…', 'restart_alt', () => void this.reread())}
+        ${entry('manual-reread', 'Manual reread…', 'tune', () => void this.rereadManually())}
+      </div>`;
+  }
+
   private readonly onExpandedChange = (e: Event): void => {
     const { node, expanded } = (e as CustomEvent<{ node: TreeNode; expanded: boolean }>).detail;
     this.store.setExpanded(node, expanded);
@@ -415,21 +566,29 @@ export class BookPage extends R2mElement {
     void this.store.refresh();
   };
 
-  // ---- selection (ticket 12) --------------------------------------------------------------------
+  // ---- selection (tickets 12 and 13) ----------------------------------------------------------------
 
-  /** A tree checkbox: every Character paragraph under the node joins or leaves the selection. */
+  /**
+   * A tree checkbox: everything the mode's selection holds under the node — Character paragraphs,
+   * or voiced items in Audio mode — joins or leaves it.
+   */
   private readonly onToggleNode = (e: Event): void => {
     const { node, on } = (e as CustomEvent<{ node: TreeNode; on: boolean }>).detail;
     void this.withSelectionRead(async (folder) => {
-      const refs = await this.book.paragraphIds(folder, node.level, node.id);
+      const store = this.activeSelection();
+      const refs = this.audioSelectable()
+        ? await this.book.itemIds(folder, node.level, node.id, {
+            narratorOnlyMode: this.narratorOnlyMode(),
+          })
+        : await this.book.paragraphIds(folder, node.level, node.id);
       // A full read is the node's total, whichever way the box went.
-      this.selection.learnTotals({ [node.id]: refs.length });
-      if (on) this.selection.add(refs);
-      else this.selection.remove(refs.map((r) => r.id));
+      store.learnTotals({ [node.id]: refs.length });
+      if (on) store.add(refs);
+      else store.remove(refs.map((r) => r.id));
     });
   };
 
-  /** The node menu's selection shortcuts; the audio ones arrive with native-web 26. */
+  /** The node menu's selection shortcuts, for whichever selection the mode is in. */
   private readonly onNodeAction = (e: Event): void => {
     const { node, action } = (e as CustomEvent<{ node: TreeNode; action: ActionEntryId }>).detail;
     switch (action) {
@@ -449,7 +608,19 @@ export class BookPage extends R2mElement {
           }),
         );
         return;
-      default:
+      case 'select-needs-audio':
+        // The node's Generatable items (voiced, still missing a WAV), without loading chapters.
+        void this.withSelectionRead(async (folder) => {
+          this.audioSelection.add(
+            await this.book.itemIds(folder, node.level, node.id, {
+              needsAudioOnly: true,
+              narratorOnlyMode: this.narratorOnlyMode(),
+            }),
+          );
+        });
+        return;
+      case 'generate-audio-node':
+        void this.generator.enqueueNode(node.level, node.id, this.narratorOnlyMode());
         return;
     }
   };
@@ -460,6 +631,12 @@ export class BookPage extends R2mElement {
     if (ids.length === 0) return;
     const queued = await this.enqueue((folder) => this.attribution.enqueueParagraphs(folder, ids));
     if (queued) this.selection.clear();
+  };
+
+  /** The action bar's Generate audio: queue the selection, then clear it: the queue owns it now. */
+  private readonly generateSelection = async (): Promise<void> => {
+    const queued = await this.generator.enqueueItems(this.audioSelection.ids());
+    if (queued) this.audioSelection.clear();
   };
 
   /** A pick, clear or create closes the menu, like a mat-menu item click. */
@@ -474,13 +651,14 @@ export class BookPage extends R2mElement {
     }
   };
 
-  private closeBulkMenu(): void {
-    const menu = this.querySelector<HTMLElement>('.book__bulk-menu');
+  /** Top-layer calls are optional: happy-dom has no popover API (web.md, conventions 11). */
+  private closeMenu(id: string): void {
+    const menu = this.querySelector<HTMLElement>(`#${id}`);
     if (menu?.matches(':popover-open')) menu.hidePopover?.();
   }
 
   private bulkAssign(characterId: string | null): void {
-    this.closeBulkMenu();
+    this.closeMenu(BULK_MENU_ID);
     void this.assigner.assign(
       { kind: 'selection', paragraphIds: this.selection.ids() },
       characterId,
@@ -488,7 +666,7 @@ export class BookPage extends R2mElement {
   }
 
   private bulkCreate(name: string): void {
-    this.closeBulkMenu();
+    this.closeMenu(BULK_MENU_ID);
     void this.assigner.createAndAssign(
       { kind: 'selection', paragraphIds: this.selection.ids() },
       name,
@@ -530,6 +708,25 @@ export class BookPage extends R2mElement {
     } finally {
       this.working.set(false);
     }
+  }
+
+  // ---- book actions (ticket 11) -------------------------------------------------------------------
+
+  private async reread(): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: 'Reread the book?',
+      message:
+        'This deletes all book data — attribution, generated audio, and edits — and ' +
+        'reprocesses the source file from scratch. This cannot be undone.',
+      destructive: true,
+      confirmLabel: 'Delete and reread',
+    });
+    if (ok) await this.editor.reread();
+  }
+
+  private async rereadManually(): Promise<void> {
+    const request = await openManualRereadDialog();
+    if (request) await this.editor.rereadManually(request);
   }
 
   // ---- the window ---------------------------------------------------------------------------------
@@ -644,6 +841,7 @@ const EMPTY_CONTEXT: RowContext = {
   ancestry: {},
   roster: [],
   locked: false,
+  generating: false,
 };
 
 define('r2m-book-page', BookPage);

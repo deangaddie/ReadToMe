@@ -1,5 +1,5 @@
 import { html, nothing } from 'lit-html';
-import type { ParagraphItemDto } from '@app/api';
+import { type ParagraphItemDto, workspaceUrl } from '@app/api';
 import { use } from '@app/core/services';
 import { icon, statusChip } from '@app/ui/partials';
 import { nodeMenuTrigger } from './node-menu';
@@ -8,6 +8,7 @@ import {
   type ChipView,
   type RowContext,
   type RowPosition,
+  clearableOutcome,
   isBusy,
   itemSpeaker,
   pauseLabel,
@@ -16,9 +17,11 @@ import {
   reviewOf,
   voiceLine,
 } from './reader-rows';
+import { AudioGenerator } from './audio-generator';
 import { ancestryFor, isVoicedItem } from './selection';
 import { AudioSelectionStore } from './selection-store';
 import { type AssignTarget, SpeakerAssigner } from './speaker-assigner';
+import '@app/ui/audio-player';
 import '@app/ui/speaker-chip';
 
 /** Where an item sits: an assign forgets its paragraph's outcome, a ticked item rolls up into its chapter. */
@@ -114,7 +117,7 @@ export function itemRow(
         >${nodeMenuTrigger(menuTarget, { disabled: busy || paragraphBusy || ctx.locked })}</span
       >
     </div>
-    ${ctx.mode === 'audio' ? audioLine(item, ctx) : nothing}
+    ${ctx.mode === 'audio' ? audioLine(item, ctx, voiced) : nothing}
   </div>`;
 }
 
@@ -143,10 +146,21 @@ export const chipOf = (view: ChipView) =>
     ...(view.tooltip ? { tooltip: view.tooltip } : {}),
   });
 
-function audioLine(item: ParagraphItemDto, ctx: RowContext) {
+/**
+ * Audio mode's second line (ticket 13): the resolved voice, instructions, the review chip with its
+ * Dismiss (a dismissed review is a faded icon), the queue chip with a Retry on a settled failure
+ * (once somebody can read the line), and a player for the generated take (`audioVersion` busts
+ * the browser cache). Retry and Dismiss reach the {@link AudioGenerator} through DOM ancestry.
+ */
+function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean) {
   const review = reviewOf(ctx, item.id);
   const reviewView = reviewChip(review);
-  const queue = queueChip(ctx.itemStatus[item.id]);
+  const status = ctx.itemStatus[item.id];
+  const queue = queueChip(status);
+  // A settled Failed/Unfinished take: Retry re-queues just this item.
+  const outcome = clearableOutcome(status);
+  const audioSrc = item.audioFileName ? workspaceUrl(ctx.folder, item.audioFileName) : null;
+  const generator = (e: Event) => use(AudioGenerator, e.currentTarget as Element);
   return html`<div class="r2m-item__audio">
     <span class="r2m-item__voice" data-testid="voice-line">${voiceLine(ctx.voices[item.id])}</span>
     ${
@@ -165,10 +179,41 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext) {
                 data-tooltip="Review dismissed"
                 >${reviewView.icon}</span
               >`
-            : chipOf(reviewView)
+            : html`${chipOf(reviewView)}
+                <button
+                  type="button"
+                  class="r2m-item__action"
+                  data-action="dismiss-review"
+                  ?disabled=${ctx.locked}
+                  @click=${(e: Event) => void generator(e).dismissReview(item.id)}
+                >
+                  Dismiss
+                </button>`
           : nothing
       }
       ${queue ? chipOf(queue) : nothing}
+      ${
+        queue && outcome && voiced
+          ? html`<button
+              type="button"
+              class="r2m-item__action"
+              data-action="retry-audio"
+              ?disabled=${ctx.generating || ctx.locked}
+              @click=${(e: Event) => void generator(e).retry(item.id)}
+            >
+              Retry
+            </button>`
+          : nothing
+      }
     </span>
+    ${
+      audioSrc
+        ? html`<r2m-audio-player
+            .compact=${true}
+            .src=${audioSrc}
+            .cacheKey=${status?.audioVersion ?? undefined}
+          ></r2m-audio-player>`
+        : nothing
+    }
   </div>`;
 }

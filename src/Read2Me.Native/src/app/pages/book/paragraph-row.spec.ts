@@ -62,6 +62,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
     locked: false,
+    generating: false,
     roster: ROSTER,
     ...overrides,
   };
@@ -331,6 +332,16 @@ describe('paragraphRow', () => {
       expect(text(rows[1]!.querySelector('.r2m-status-chip'))).toContain('Verify failed');
       expect(text(rows[2]!.querySelector('.r2m-status-chip'))).toContain('Processing');
       expect(rows[2]!.querySelector('.r2m-item__lock')).not.toBeNull();
+    });
+
+    it('offers a player only for items with audio, busting the cache with audioVersion', async () => {
+      const el = await mount(audio);
+      const players = el.querySelectorAll('r2m-audio-player');
+      expect(players.length).toBe(1);
+      await players[0]!.rendered();
+      expect(players[0]!.querySelector('audio')?.getAttribute('src')).toBe(
+        '/workspace/dune/audio/d.wav?v=3',
+      );
     });
 
     it('the hub review replaces the REST one once reported', async () => {

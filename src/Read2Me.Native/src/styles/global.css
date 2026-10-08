@@ -294,6 +294,69 @@ a {
   }
 }
 
+/* mat-slide-toggle: a checkbox with role=switch, drawn as a track with a knob (spec §5.3). */
+.r2m-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-2);
+
+  & input {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 20px;
+    margin: 0;
+    border-radius: var(--r2m-radius-pill);
+    background: var(--r2m-outline);
+    position: relative;
+    cursor: pointer;
+    transition: background 120ms;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--r2m-surface);
+      transition: translate 120ms;
+    }
+    &:checked {
+      background: var(--r2m-accent);
+    }
+    &:checked::before {
+      translate: 16px 0;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--r2m-accent);
+      outline-offset: 2px;
+    }
+  }
+}
+/* mat-radio-group: native radios, one label per option (spec §5.3). */
+.r2m-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r2m-space-2) var(--r2m-space-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.r2m-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r2m-space-2);
+
+  & input {
+    accent-color: var(--r2m-accent);
+    width: 18px;
+    height: 18px;
+    margin: 0;
+  }
+}
+
 /* ---- segmented control (mat-button-toggle-group): a radio group styled as joined pills -------- */
 .r2m-segmented {
   display: inline-flex;
@@ -734,6 +797,92 @@ dialog.r2m-dialog--sheet {
 /* base-select sizes to its content; keep it inside an inline field. */
 .r2m-field--inline select {
   width: 100%;
+}
+
+/* ---- audio player (r2m-audio-player) -------------------------------------------------------- */
+.r2m-audio-player {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r2m-space-2);
+  min-width: 220px;
+  height: 32px;
+  padding: 0 var(--r2m-space-2) 0 var(--r2m-space-1);
+  border-radius: var(--r2m-radius-pill);
+  background: var(--r2m-surface-low);
+  color: var(--r2m-text);
+  font-size: var(--r2m-text-sm);
+
+  & audio {
+    display: none;
+  }
+}
+.r2m-audio-player--compact {
+  min-width: 160px;
+  height: 28px;
+  gap: var(--r2m-space-1);
+}
+.r2m-audio-player__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--r2m-accent);
+  cursor: pointer;
+
+  &:disabled {
+    color: var(--r2m-text-muted);
+    cursor: default;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+  }
+}
+.r2m-audio-player--error .r2m-audio-player__toggle {
+  color: var(--r2m-status-warn);
+}
+.r2m-audio-player__label {
+  color: var(--r2m-text-muted);
+  white-space: nowrap;
+}
+.r2m-audio-player__scrub {
+  flex: 1 1 auto;
+  min-width: 60px;
+  margin: 0;
+  accent-color: var(--r2m-accent);
+}
+.r2m-audio-player__time {
+  font-variant-numeric: tabular-nums;
+  color: var(--r2m-text-muted);
+  white-space: nowrap;
+}
+.r2m-audio-player__error {
+  flex: 1 1 auto;
+  color: var(--r2m-status-warn);
+}
+.r2m-audio-player__ab {
+  display: inline-flex;
+  border: 1px solid var(--r2m-outline);
+  border-radius: var(--r2m-radius-pill);
+  overflow: hidden;
+}
+.r2m-audio-player__ab-btn {
+  padding: 2px var(--r2m-space-2);
+  border: none;
+  background: transparent;
+  color: var(--r2m-text-muted);
+  font: inherit;
+  font-size: var(--r2m-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.r2m-audio-player__ab-btn--active {
+  background: var(--r2m-accent);
+  color: var(--r2m-on-accent);
 }
 
 /* ---- count badge ---------------------------------------------------------------------------- */

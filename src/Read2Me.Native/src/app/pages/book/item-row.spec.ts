@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
 import type { ParagraphItemDto } from '@app/api';
 import { provide } from '@app/core/services';
+import { AudioGenerator } from './audio-generator';
 import { itemRow } from './item-row';
 import type { RowContext } from './reader-rows';
 import { AudioSelectionStore } from './selection-store';
@@ -51,6 +52,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
     locked: false,
+    generating: false,
     roster: [],
     ...overrides,
   };
@@ -59,11 +61,13 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
 /** The shell's page-scoped collaborators, reached by the row through DOM ancestry. */
 let selection: AudioSelectionStore;
 let assigner: { assign: ReturnType<typeof mock>; createAndAssign: ReturnType<typeof mock> };
+let generator: { retry: ReturnType<typeof mock>; dismissReview: ReturnType<typeof mock> };
 
 async function mount(context: RowContext, row: ParagraphItemDto) {
   const host = document.createElement('div');
   provide(host, AudioSelectionStore, selection);
   provide(host, SpeakerAssigner, assigner as unknown as SpeakerAssigner);
+  provide(host, AudioGenerator, generator as unknown as AudioGenerator);
   document.body.append(host);
   render(
     itemRow(row, { paragraphId: 'p1', chapterId: 'c1' }, context, { isFirst: true, isLast: true }),
@@ -82,6 +86,7 @@ const proto = HTMLElement.prototype as unknown as Record<string, () => void>;
 beforeEach(() => {
   selection = new AudioSelectionStore();
   assigner = { assign: mock(async () => undefined), createAndAssign: mock(async () => undefined) };
+  generator = { retry: mock(async () => true), dismissReview: mock(async () => true) };
   proto['hidePopover'] = () => undefined;
 });
 afterEach(() => {
@@ -193,6 +198,66 @@ describe('itemRow (speakers)', () => {
 });
 
 describe('itemRow (audio)', () => {
+  describe('retry flow (ticket 13)', () => {
+    it('a settled failure shows its reason and a Retry that re-queues just this item', async () => {
+      const el = await mount(
+        ctx({ itemStatus: { n: { outcome: { kind: 'Failed', reason: 'No default voice' } } } }),
+        NARRATION,
+      );
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Failed');
+      const retry = el.querySelector<HTMLButtonElement>('[data-action=retry-audio]')!;
+      expect(retry.disabled).toBe(false);
+      retry.click();
+      expect(generator.retry).toHaveBeenCalledWith('n');
+    });
+
+    it('an unfinished take can be retried too; a queued or clean item offers no Retry', async () => {
+      const unfinished = await mount(
+        ctx({ itemStatus: { n: { outcome: { kind: 'Unfinished', reason: 'cancelled' } } } }),
+        NARRATION,
+      );
+      expect(text(unfinished.querySelector('.r2m-status-chip'))).toContain('Unfinished');
+      expect(unfinished.querySelector('[data-action=retry-audio]')).not.toBeNull();
+
+      const queued = await mount(
+        ctx({ itemStatus: { n: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+        NARRATION,
+      );
+      expect(queued.querySelector('[data-action=retry-audio]')).toBeNull();
+      expect((await mount(ctx(), NARRATION)).querySelector('[data-action=retry-audio]')).toBeNull();
+    });
+
+    it('a line nobody can read yet has no Retry; a generating or locked page disables it', async () => {
+      const failed = { outcome: { kind: 'Failed' as const } };
+      const unvoiced = await mount(ctx({ itemStatus: { u: failed } }), UNATTRIBUTED);
+      expect(text(unvoiced.querySelector('.r2m-status-chip'))).toContain('Failed');
+      expect(unvoiced.querySelector('[data-action=retry-audio]')).toBeNull();
+      const busy = await mount(ctx({ itemStatus: { n: failed }, generating: true }), NARRATION);
+      expect(busy.querySelector<HTMLButtonElement>('[data-action=retry-audio]')!.disabled).toBe(
+        true,
+      );
+      const locked = await mount(ctx({ itemStatus: { n: failed }, locked: true }), NARRATION);
+      expect(locked.querySelector<HTMLButtonElement>('[data-action=retry-audio]')!.disabled).toBe(
+        true,
+      );
+    });
+  });
+
+  it('offers a player only for items with audio, busting the cache with audioVersion', async () => {
+    const el = await mount(ctx({ itemStatus: { d: { audioVersion: 3 } } }), DIALOG);
+    const player = el.querySelector('r2m-audio-player')!;
+    await player.rendered();
+    expect(player.querySelector('audio')?.getAttribute('src')).toBe(
+      '/workspace/dune/audio/d.wav?v=3',
+    );
+    expect((await mount(ctx(), NARRATION)).querySelector('r2m-audio-player')).toBeNull();
+    expect(
+      (await mount(ctx({ mode: 'speakers', itemSelectable: false }), DIALOG)).querySelector(
+        'r2m-audio-player',
+      ),
+    ).toBeNull();
+  });
+
   it('carries the item id and tints a selected row', async () => {
     const el = await mount(ctx(), NARRATION);
     expect(el.dataset['itemId']).toBe('n');
@@ -263,6 +328,23 @@ describe('itemRow (audio)', () => {
       const el = await mount(ctx({ reviews: { d: { ...review, state: 'Dismissed' } } }), DIALOG);
       expect(el.querySelector('.r2m-status-chip')).toBeNull();
       expect(el.querySelector('[data-testid=review-dismissed]')).not.toBeNull();
+    });
+
+    it('a verify failure carries a Dismiss that posts through the generator; a dismissed review has none', async () => {
+      const el = await mount(ctx({ reviews: { d: review } }), DIALOG);
+      el.querySelector<HTMLButtonElement>('[data-action=dismiss-review]')!.click();
+      expect(generator.dismissReview).toHaveBeenCalledWith('d');
+
+      const dismissed = await mount(
+        ctx({ reviews: { d: { ...review, state: 'Dismissed' } } }),
+        DIALOG,
+      );
+      expect(dismissed.querySelector('[data-action=dismiss-review]')).toBeNull();
+
+      const locked = await mount(ctx({ reviews: { d: review }, locked: true }), DIALOG);
+      expect(
+        locked.querySelector<HTMLButtonElement>('[data-action=dismiss-review]')!.disabled,
+      ).toBe(true);
     });
 
     it('the hub review wins over the REST map: a null hub review clears the chip', async () => {

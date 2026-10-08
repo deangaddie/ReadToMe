@@ -9,13 +9,9 @@ namespace Read2Me.E2eTests.Tests.Native;
 /// class of the same name): the item's node menu, the text prompt, <c>InsertParagraphItem</c>, and
 /// the reader reloading from its receipt. The mis-split fixture is the repair the command exists
 /// for: "mixed" holds two speakers, and the anchor is stamped with a speaker and audio so the test
-/// can see the insertion leave that work alone. Runs in Chromium and Firefox.
-/// <para>
-/// The Angular test read "nothing to generate" off the item's disabled selection checkbox and "the
-/// take still plays" off its player. Neither is on the native row until native-web 26 (audio
-/// review), so until then the anchor's audio is checked at the host; 26 puts both row assertions
-/// back.
-/// </para>
+/// can see the insertion leave that work alone. Audio mode shows both the item's selection
+/// checkbox and its player, so "unattributed" and "the take still plays" are read off the rows
+/// (native-web 26) as well as the host. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class InsertItemTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
@@ -53,14 +49,16 @@ public class InsertItemTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         await Expect(rows.Nth(2)).ToContainTextAsync(newText);
         await Expect(rows.Nth(3)).ToContainTextAsync("“Only me,” came the reply.");
 
-        // Born unattributed: the Unknown chip.
+        // Born unattributed: the Unknown chip, and nobody can read it yet, so it cannot be picked for audio.
         await Expect(rows.Nth(2).Locator(".r2m-speaker-chip--unknown")).ToHaveCountAsync(1);
+        await Expect(rows.Nth(2).Locator("input[type=checkbox]")).ToBeDisabledAsync();
         await Expect(Page.Locator(".r2m-toast")).ToHaveCountAsync(0);
 
-        // The anchor is untouched: same text, same speaker, and the host still holds its take.
+        // The anchor is untouched: same text, same speaker, its take still plays, and the host agrees.
         await Expect(rows.Nth(1)).ToContainTextAsync(
             "“Hello there,” she said. “And who might you be?” he answered.");
         await Expect(rows.Nth(1).Locator(".r2m-speaker-chip--named")).ToHaveTextAsync("Alice");
+        await Expect(rows.Nth(1).Locator("r2m-audio-player")).ToHaveCountAsync(1);
 
         var children = await Page.APIRequest.GetAsync(
             $"{App.BaseUrl}/api/projects/{folder}/nodes/chapter/{book.ChapterId("ch1")}/children");
