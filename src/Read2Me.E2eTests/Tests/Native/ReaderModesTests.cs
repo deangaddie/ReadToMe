@@ -7,10 +7,9 @@ namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
 /// The native reader's modes (native-web 22, from the Angular class of the same name): the mode
-/// toggle drives the URL and the row shape, a deep link opens in the named mode, and a chapter
-/// title changed on the host comes back through the reader's own receipt. The structure tree is
-/// native-web 23, so until then the title is changed through the agent API rather than the tree's
-/// node menu, and the tree assertions wait there. Runs in Chromium and Firefox.
+/// toggle drives the URL and the row shape, a deep link opens in the named mode, and a title edit
+/// from the tree's node menu (native-web 23) lands in the host and comes back through the reader's
+/// own receipt. The Speakers-mode tree checkboxes are native-web 25. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
@@ -50,22 +49,27 @@ public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
     }
 
     [Fact]
-    public async Task A_title_changed_on_the_host_reaches_the_reader_through_its_receipt()
+    public async Task Edit_title_from_the_tree_menu_updates_tree_and_reader_and_the_host()
     {
         var builder = await App.SeedProjectAsync("native-title", "Native Title Book", "A. Author");
 
         await GotoAppAsync("projects/native-title/book");
+        await Expect(Page.Locator(".tree__title")).ToHaveTextAsync(["ch1"]);
         await Expect(Page.Locator(".book__chapter")).ToHaveTextAsync(["ch1"]);
 
-        // The tree's node menu is native-web 23; the same command goes through the agent API.
-        var rename = await Page.APIRequest.PostAsync($"{App.BaseUrl}/api/projects/native-title/commands", new()
-        {
-            DataObject = new { type = "UpdateChapterTitle", chapterId = builder.ChapterId("ch1"), title = "Chapter the First" },
-        });
-        Assert.True(rename.Ok, await rename.TextAsync());
+        var node = Page.Locator(".tree__node").First;
+        await node.HoverAsync();
+        await node.Locator(".r2m-node-menu__trigger").ClickAsync();
+        await Page.Locator("[role='menu'] [data-entry='edit-title']").ClickAsync();
 
+        var prompt = Page.Locator("r2m-text-prompt-dialog");
+        await Expect(prompt.Locator(".r2m-text-prompt-dialog__input")).ToHaveValueAsync("ch1");
+        await prompt.Locator(".r2m-text-prompt-dialog__input").FillAsync("Chapter the First");
+        await prompt.Locator(".r2m-text-prompt-dialog__confirm").ClickAsync();
+
+        await Expect(Page.Locator(".tree__title")).ToHaveTextAsync(["Chapter the First"]);
         await Expect(Page.Locator(".book__chapter")).ToHaveTextAsync(["Chapter the First"]);
-        // A title change is not structural, so no "updated elsewhere" toast either.
+        // The reader's own receipt reloads it: no toast for a change made here.
         await Expect(Page.Locator(".r2m-toast")).ToHaveCountAsync(0);
 
         // The host agrees: the volume's one (implicit) part lists the renamed chapter.

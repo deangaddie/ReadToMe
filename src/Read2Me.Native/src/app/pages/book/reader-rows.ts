@@ -176,6 +176,8 @@ export interface RowContext {
   ancestry: Readonly<Record<string, ChapterParents>>;
   /** What the speaker menus offer; empty until the roster is known. */
   roster: readonly SpeakerRosterEntry[];
+  /** The editor is locked (stale view or a write in flight): every row menu is off (design §8). */
+  locked: boolean;
 }
 
 /** Queued or processing: the server rejects edits, so the row shows a lock (design §8). */

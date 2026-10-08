@@ -1,6 +1,8 @@
 import { html, nothing } from 'lit-html';
 import type { ParagraphItemDto } from '@app/api';
 import { icon, statusChip } from '@app/ui/partials';
+import { nodeMenuTrigger } from './node-menu';
+import type { NodeMenuTarget } from './node-menu-entries';
 import {
   type ChipView,
   type RowContext,
@@ -20,14 +22,17 @@ import '@app/ui/speaker-chip';
  * `<r2m-measured-list>` from one effect, so there is no element per row (spec §7, risk 1).
  * Speakers: speaker chip and text, an unknown speaker highlighted. Audio: the resolved voice, voice
  * instructions, the review chip (a dismissed review is a faded icon) and the queue chip; a queued
- * item shows a lock. The chip menu, item selection, Retry/Dismiss, the player and the item menu
- * arrive with native-web 23, 25 and 26.
+ * item shows a lock. Every item carries its node-menu trigger (ticket 11), off while the item or
+ * its paragraph is queued or the editor is locked. The chip menu, item selection, Retry/Dismiss
+ * and the player arrive with native-web 25 and 26.
  */
 export function itemRow(
   item: ParagraphItemDto,
   _paragraphId: string,
   ctx: RowContext,
-  _position: RowPosition,
+  position: RowPosition,
+  /** The paragraph around it is queued for attribution: its items are locked too. */
+  paragraphBusy = false,
 ) {
   if (item.isPause) {
     return html`<div class="r2m-item r2m-item--pause" data-item-id=${item.id}>
@@ -38,6 +43,12 @@ export function itemRow(
   const status = ctx.itemStatus[item.id];
   // Item queue state is audio's; attribution locks the whole paragraph instead.
   const busy = ctx.mode === 'audio' && isBusy(status);
+  const menuTarget: NodeMenuTarget = {
+    kind: 'item',
+    id: item.id,
+    text: item.text,
+    ...position,
+  };
   const selected = ctx.itemSelectable && ctx.selectedItems.has(item.id);
   const classes = [
     'r2m-item',
@@ -55,6 +66,9 @@ export function itemRow(
       ></r2m-speaker-chip>
       <span class="r2m-item__text">${item.text}</span>
       ${busy ? icon('lock', 'r2m-item__lock') : nothing}
+      <span class="r2m-item__menu"
+        >${nodeMenuTrigger(menuTarget, { disabled: busy || paragraphBusy || ctx.locked })}</span
+      >
     </div>
     ${ctx.mode === 'audio' ? audioLine(item, ctx) : nothing}
   </div>`;

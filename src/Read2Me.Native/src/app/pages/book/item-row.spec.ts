@@ -41,6 +41,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     selectedItems: new Set(),
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
+    locked: false,
     roster: [],
     ...overrides,
   };

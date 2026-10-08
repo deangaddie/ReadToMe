@@ -113,6 +113,20 @@ describe('Router', () => {
     expect(router.url().search).toBe('?sort=name&page=2');
   });
 
+  it('a query-only navigation keeps focus and scroll where they are; a page change lets the browser reset them', async () => {
+    const { nav, router } = start('projects/dune/book');
+    router.navigate('projects/dune/book', { replace: true, query: { chapter: 'c2' } });
+    await settle();
+    expect(nav.intercepts.at(-1)).toEqual({
+      url: 'http://localhost/app2/projects/dune/book?chapter=c2',
+      focusReset: 'manual',
+      scroll: 'manual',
+    });
+    router.navigate('projects');
+    await settle();
+    expect(nav.intercepts.at(-1)).toEqual({ url: 'http://localhost/app2/projects' });
+  });
+
   it('follows a link click inside the base', async () => {
     const { nav, router } = start('projects');
     nav.fire('projects/dune/book');

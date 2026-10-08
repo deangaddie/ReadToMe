@@ -1,0 +1,26 @@
+/* The node menu (design §6.3): one shared popover anchored to the trigger of the latest open. */
+@scope (r2m-node-menu) {
+  :scope {
+    display: contents;
+  }
+  .r2m-node-menu__panel {
+    position-anchor: --r2m-node-menu;
+    position-area: block-end span-inline-start;
+    position-try-fallbacks: flip-block, flip-inline;
+    min-width: 200px;
+    padding: var(--r2m-space-1) 0;
+  }
+  .r2m-node-menu__sub {
+    position-anchor: --r2m-node-menu-sub;
+    position-area: inline-end span-block-end;
+    position-try-fallbacks: flip-inline, flip-block;
+    margin: 0 var(--r2m-space-1);
+    min-width: 160px;
+    padding: var(--r2m-space-1) 0;
+  }
+  .r2m-node-menu__chevron {
+    margin-left: auto;
+  }
+}
+
+/* The trigger partial is styled by the page that hosts it (book.css), under its own scope. */

@@ -17,6 +17,8 @@ export class FakeNavigation extends EventTarget {
   readonly calls: { url: string; history: string | undefined }[] = [];
   /** URLs the browser would have loaded itself, because nothing intercepted them. */
   readonly passedThrough: string[] = [];
+  /** The options of every `intercept()` the router made, oldest first. */
+  readonly intercepts: { url: string; focusReset?: string; scroll?: string }[] = [];
   #current = 0;
 
   navigate(url: string, options: { history?: 'auto' | 'push' | 'replace' } = {}): void {
@@ -44,8 +46,14 @@ export class FakeNavigation extends EventTarget {
       formData: null,
       navigationType,
       destination: { url: href, key: String(key) },
-      intercept: (options: { handler: () => Promise<void> }) => {
+      intercept: (options: { handler: () => Promise<void>; focusReset?: string; scroll?: string }) => {
         handler = options.handler;
+        const { focusReset, scroll } = options;
+        this.intercepts.push({
+          url: href,
+          ...(focusReset === undefined ? {} : { focusReset }),
+          ...(scroll === undefined ? {} : { scroll }),
+        });
       },
     });
     this.dispatchEvent(event);

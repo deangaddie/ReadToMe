@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
@@ -201,5 +202,97 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         var afterPrepend = await Page.EvaluateAsync<double>(RowTop, header);
         Assert.InRange(afterPrepend, -TolerancePx, TolerancePx);
         await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", deep.ToString());
+    }
+
+    /// <summary>The node id of the tree item that has focus (or holds the focused control), or null.</summary>
+    private const string FocusedNode = """
+        () => document.activeElement?.closest('[role="treeitem"]')?.dataset.nodeId ?? null
+        """;
+
+    [Fact]
+    public async Task Tree_keys_move_expand_and_load_collapse_expand_all_and_type_ahead()
+    {
+        var book = await App.SeedNestedBookAsync("native-big-tree", "Native Tree Book", "A. Author");
+
+        await GotoAppAsync("projects/native-big-tree/book");
+        await Page.WaitForSelectorAsync(".r2m-paragraph", new() { State = WaitForSelectorState.Attached });
+
+        var tree = Page.GetByRole(AriaRole.Tree, new() { Name = "Book structure" });
+        ILocator Item(Guid id) => tree.Locator($"[data-node-id='{id}']");
+        async Task<string?> Focused() => await Page.EvaluateAsync<string?>(FocusedNode);
+        var vol1 = book.VolumeId("vol1");
+        var vol2 = book.VolumeId("vol2");
+        var part1 = book.PartId("vol2-part1");
+        var part2 = book.PartId("vol2-part2");
+        var ch1 = book.ChapterId("vol2-part1-ch1");
+        var ch2 = book.ChapterId("vol2-part1-ch2");
+
+        // Two collapsed volumes at the root; the first is the tab stop while no chapter is in view.
+        await Expect(tree.GetByRole(AriaRole.Treeitem)).ToHaveCountAsync(2);
+        await Expect(Item(vol1)).ToHaveAttributeAsync("tabindex", "0");
+        await Item(vol1).FocusAsync();
+
+        // Arrows and Home/End, without wrapping.
+        await Page.Keyboard.PressAsync("ArrowDown");
+        Assert.Equal(vol2.ToString(), await Focused());
+        await Page.Keyboard.PressAsync("ArrowDown");
+        Assert.Equal(vol2.ToString(), await Focused());
+        await Page.Keyboard.PressAsync("Home");
+        Assert.Equal(vol1.ToString(), await Focused());
+        await Page.Keyboard.PressAsync("End");
+        Assert.Equal(vol2.ToString(), await Focused());
+        await Expect(Item(vol2)).ToHaveAttributeAsync("tabindex", "0");
+        await Expect(Item(vol1)).ToHaveAttributeAsync("tabindex", "-1");
+
+        // Right on a collapsed, unloaded volume expands it and loads its parts; focus stays put.
+        await Page.Keyboard.PressAsync("ArrowRight");
+        await Expect(Item(vol2)).ToHaveAttributeAsync("aria-expanded", "true");
+        await Expect(Item(part1)).ToBeVisibleAsync();
+        await Expect(Item(part2)).ToHaveAttributeAsync("aria-level", "2");
+        await Expect(Item(part2)).ToHaveAttributeAsync("aria-posinset", "2");
+        await Expect(Item(part2)).ToHaveAttributeAsync("aria-setsize", "2");
+        Assert.Equal(vol2.ToString(), await Focused());
+
+        // Right again steps into the first child; Right on that expands and loads its chapters.
+        await Page.Keyboard.PressAsync("ArrowRight");
+        Assert.Equal(part1.ToString(), await Focused());
+        await Page.Keyboard.PressAsync("ArrowRight");
+        await Expect(Item(part1)).ToHaveAttributeAsync("aria-expanded", "true");
+        await Expect(Item(ch1)).ToBeVisibleAsync();
+        await Page.Keyboard.PressAsync("ArrowRight");
+        Assert.Equal(ch1.ToString(), await Focused());
+        await Expect(Item(ch1)).ToHaveAttributeAsync("aria-level", "3");
+        await Page.Keyboard.PressAsync("ArrowDown");
+        Assert.Equal(ch2.ToString(), await Focused());
+
+        // Enter opens the chapter in the reader and names it in the URL; the tree marks it current
+        // and keeps the focus (the query-only navigation must not reset it to the body).
+        await Page.Keyboard.PressAsync("Enter");
+        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", ch2.ToString());
+        await Expect(Item(ch2)).ToHaveAttributeAsync("aria-current", "true");
+        await Assertions.Expect(Page).ToHaveURLAsync(new Regex($"chapter={ch2}"));
+        Assert.Equal(ch2.ToString(), await Focused());
+
+        // Left goes to the parent, then collapses it.
+        await Page.Keyboard.PressAsync("ArrowLeft");
+        Assert.Equal(part1.ToString(), await Focused());
+        await Page.Keyboard.PressAsync("ArrowLeft");
+        await Expect(Item(part1)).ToHaveAttributeAsync("aria-expanded", "false");
+        await Expect(Item(ch1)).ToHaveCountAsync(0);
+        Assert.Equal(part1.ToString(), await Focused());
+
+        // * expands every sibling at this level, loading the one not loaded yet.
+        await Page.Keyboard.PressAsync("*");
+        await Expect(Item(part1)).ToHaveAttributeAsync("aria-expanded", "true");
+        await Expect(Item(part2)).ToHaveAttributeAsync("aria-expanded", "true");
+        await Expect(Item(book.ChapterId("vol2-part2-ch1"))).ToBeVisibleAsync();
+
+        // Type-ahead: letters typed together jump to the next title that starts with them, wrapping.
+        await Page.Keyboard.PressAsync("Home");
+        Assert.Equal(vol1.ToString(), await Focused());
+        await Page.Keyboard.TypeAsync("vol2-part2");
+        await Page.WaitForFunctionAsync($"(id) => ({FocusedNode})() === id", part2.ToString());
+        await Page.Keyboard.TypeAsync("vol1");
+        await Page.WaitForFunctionAsync($"(id) => ({FocusedNode})() === id", vol1.ToString());
     }
 }

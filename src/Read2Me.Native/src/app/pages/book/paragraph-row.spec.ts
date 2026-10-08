@@ -58,6 +58,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     selectedItems: new Set(),
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
+    locked: false,
     roster: ROSTER,
     ...overrides,
   };
@@ -201,15 +202,56 @@ describe('paragraphRow', () => {
       expect(el.querySelectorAll('.r2m-item')[1]!.querySelector('.r2m-status-chip')).toBeNull();
     });
 
-    it('does not show the paragraph attribution chip or lock', async () => {
+    it('does not show the paragraph attribution chip or lock, but keeps the paragraph menu (disabled while queued)', async () => {
       const el = await mount({ ...audio, paragraphStatus: { p1: { status: 'Queued' } } });
       expect(el.querySelector('.r2m-paragraph__status .r2m-status-chip')).toBeNull();
       expect(el.querySelector('.r2m-paragraph__status .r2m-paragraph__lock')).toBeNull();
+      const menu = el.querySelector<HTMLButtonElement>('.r2m-paragraph__menu button');
+      expect(menu?.disabled).toBe(true);
     });
 
     it('chips are not interactive until the speaker menu lands (native-web 25)', async () => {
       expect((await mount(audio)).querySelectorAll('r2m-speaker-chip button').length).toBe(0);
       expect((await mount(ctx())).querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    });
+  });
+
+  describe('menus (ticket 11)', () => {
+    const triggers = (el: Element) =>
+      Array.from(el.querySelectorAll<HTMLButtonElement>('.r2m-node-menu__trigger'));
+
+    it('every row has a menu: the paragraph in all modes, the items in split modes', async () => {
+      const read = await mount(ctx());
+      expect(triggers(read).length).toBe(1);
+      expect(triggers(read)[0]!.getAttribute('aria-label')).toBe(
+        'Actions for Hardin leaned back. "The Encyclopedia comes first." "Then face Anacreon."',
+      );
+      const speakers = await mount(ctx({ mode: 'speakers' }));
+      expect(triggers(speakers).length).toBe(4);
+      expect(speakers.querySelectorAll('.r2m-item__menu .r2m-node-menu__trigger').length).toBe(3);
+    });
+
+    it('a queued paragraph disables the paragraph menu and every item menu', async () => {
+      const el = await mount(
+        ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }),
+      );
+      expect(triggers(el).length).toBe(4);
+      expect(triggers(el).every((b) => b.disabled)).toBe(true);
+    });
+
+    it('an audio-queued item disables only its own menu', async () => {
+      const el = await mount(
+        ctx({ mode: 'audio', selectable: false, itemStatus: { d: { status: 'Queued' } } }),
+      );
+      const items = Array.from(el.querySelectorAll('.r2m-item'));
+      expect(
+        items.map((i) => i.querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!.disabled),
+      ).toEqual([false, true, false]);
+    });
+
+    it('a locked editor disables every menu', async () => {
+      const el = await mount(ctx({ mode: 'speakers', locked: true }));
+      expect(triggers(el).every((b) => b.disabled)).toBe(true);
     });
   });
 });

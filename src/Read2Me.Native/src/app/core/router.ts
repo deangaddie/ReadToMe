@@ -38,6 +38,12 @@ export interface HasUnsavedChanges {
   hasUnsavedChanges(): boolean;
 }
 
+/** Gives focus back to `el` when a navigation's focus reset moved it to the body. */
+function restoreFocus(el: HTMLElement): void {
+  if (!el.isConnected || document.activeElement !== document.body) return;
+  el.focus({ preventScroll: true });
+}
+
 export class Router {
   #routes: FlatRoute[] = [];
   #bypassNext = false;
@@ -104,7 +110,19 @@ export class Router {
       void this.#confirmThenRepeat(e);
       return;
     }
-    e.intercept({ handler: async () => this.#apply(url) });
+    // A query-only change (`?mode=`, `?chapter=`) is page state, not a new page: the browser's
+    // default would move focus to the body and reset the scroll after the transition, which
+    // would throw a keyboard user out of the tree that made the change. The options ask for
+    // that; the timer puts focus back for an engine that resets it anyway (seen in Firefox).
+    const samePage = url.pathname === this.#url().pathname;
+    const focused = samePage ? document.activeElement : null;
+    e.intercept({
+      handler: async () => {
+        this.#apply(url);
+        if (focused instanceof HTMLElement) setTimeout(() => restoreFocus(focused), 0);
+      },
+      ...(samePage ? { focusReset: 'manual' as const, scroll: 'manual' as const } : {}),
+    });
   }
 
   async #confirmThenRepeat(e: NavigateEvent): Promise<void> {

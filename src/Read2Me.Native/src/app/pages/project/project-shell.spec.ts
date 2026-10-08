@@ -73,6 +73,15 @@ describe('r2m-project-shell', () => {
     expect(shell.querySelector('x-project-child')).toBe(child);
   });
 
+  it('a query-only navigation keeps the project open', async () => {
+    const { router } = await start('projects/dune/book');
+    router.navigate('projects/dune/book', { replace: true, query: { chapter: 'c2' } });
+    await settle();
+    expect(live.left).toEqual([]);
+    expect(live.joined).toEqual(['dune']);
+    expect(api.calls('GET', '/api/projects/dune')).toHaveLength(1);
+  });
+
   it('leaves the group when the shell leaves the page', async () => {
     const { shell } = await start('projects/dune/book');
     shell.remove();

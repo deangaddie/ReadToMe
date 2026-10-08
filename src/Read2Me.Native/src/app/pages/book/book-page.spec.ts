@@ -116,6 +116,108 @@ describe('r2m-book-page', () => {
     expect(page.getAttribute('data-current-chapter')).toBe('c1');
   });
 
+  it('lists the chapters in the tree with their badges, and a tree click opens a chapter', async () => {
+    api.on('GET', `${BASE}/status`, {
+      revision: 1,
+      nodes: {
+        c1: {
+          attributionRemaining: 3,
+          audioRemaining: 0,
+          review: 0,
+          attributionProcessing: false,
+          attributionQueued: 0,
+          isDone: false,
+        },
+      },
+      audio: { remaining: 0 },
+    });
+    const { page, store } = await start('projects/dune/book');
+    const tree = page.querySelector('nav.book__tree r2m-structure-tree')!;
+    const titles = () =>
+      Array.from(tree.querySelectorAll('.tree__title')).map((n) => n.textContent?.trim());
+    expect(titles()).toEqual(['The Encyclopedists', 'Chapter 2']);
+    expect(tree.querySelector('[data-node-id=c1] .r2m-count-badge')?.textContent).toContain('3');
+    expect(tree.querySelector('[data-node-id=c1]')?.getAttribute('aria-current')).toBe('true');
+    expect(store.window()[0]).toBe('c1');
+    // One shared menu element serves every trigger on the page.
+    expect(page.querySelectorAll('r2m-node-menu').length).toBe(1);
+    expect(tree.querySelectorAll('.r2m-node-menu__trigger').length).toBe(2);
+
+    tree.querySelector<HTMLElement>('[data-node-id=c2] .tree__title')!.click();
+    for (let i = 0; i < 4; i++) await settle();
+    expect(store.currentChapterId()).toBe('c2');
+    expect(store.scrollRequest()?.chapterId).toBe('c2');
+
+    // The toolbar button hides the tree and the reader takes the width.
+    const toggle = page.querySelector<HTMLButtonElement>('[aria-label="Hide structure"]')!;
+    toggle.click();
+    await page.rendered();
+    expect(page.querySelector('r2m-structure-tree')).toBeNull();
+    expect(page.querySelector('.book__body--tree-hidden')).not.toBeNull();
+    expect(page.querySelector('[aria-label="Show structure"]')).not.toBeNull();
+  });
+
+  it('a pause paragraph row carries a node-menu trigger for its delete', async () => {
+    api.on('GET', `${BASE}/nodes/chapter/c1/children`, {
+      paragraphs: [
+        DIALOG('p1'),
+        {
+          id: 'pp',
+          isPauseParagraph: true,
+          items: [
+            {
+              id: 'pp-i',
+              itemType: 'ChapterPause',
+              text: '',
+              characterId: null,
+              audioFileName: null,
+              voiceInstructions: null,
+              orderKey: 'a',
+              isPause: true,
+            },
+          ],
+        },
+      ],
+    });
+    const { page } = await start('projects/dune/book?mode=speakers');
+    const pause = page.querySelector('.book__pause')!;
+    const trigger = pause.querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
+    expect(trigger.getAttribute('aria-label')).toBe('Actions for Chapter pause');
+    trigger.click();
+    await page.rendered();
+    const entries = Array.from(page.querySelectorAll<HTMLElement>('[role="menu"] [data-entry]'));
+    expect(entries.map((e) => e.dataset['entry'])).toEqual(['delete']);
+  });
+
+  it('a tree pick names the chapter in the URL', async () => {
+    const { page } = await start('projects/dune/book');
+    page.querySelector<HTMLElement>('[data-node-id=c2] .tree__title')!.click();
+    for (let i = 0; i < 4; i++) await settle();
+    const last = navigation.calls.at(-1)!;
+    expect(last.history).toBe('replace');
+    expect(new URL(last.url).searchParams.get('chapter')).toBe('c2');
+  });
+
+  it('expanding a tree node loads its children through the store', async () => {
+    api
+      .on('GET', `${BASE}/book`, { ...OVERVIEW, volumes: [{ id: 'v1', title: 'One' }, { id: 'v2', title: 'Two' }] })
+      .on('GET', `${BASE}/nodes/volume/v2/children`, { parts: [{ id: 'p2', title: 'Late' }] })
+      .on('GET', `${BASE}/nodes/part/p2/children`, { chapters: [{ id: 'c3', title: 'Three' }] });
+    const { page, store } = await start('projects/dune/book');
+    const tree = page.querySelector('r2m-structure-tree')!;
+    const ids = () =>
+      Array.from(tree.querySelectorAll<HTMLElement>('[role=treeitem]')).map((n) => n.dataset['nodeId']);
+    expect(ids()).toEqual(['v1', 'v2']);
+
+    tree.querySelector<HTMLElement>('[data-node-id=v2] .tree__toggle')!.click();
+    for (let i = 0; i < 4; i++) await settle();
+    expect([...store.expanded()]).toEqual(['v2']);
+    expect(api.calls('GET', `${BASE}/nodes/volume/v2/children`)).toHaveLength(1);
+    await page.rendered();
+    // A volume with one part shows that part's chapters directly (buildTree).
+    expect(ids()).toEqual(['v1', 'v2', 'c3']);
+  });
+
   it('?chapter= opens at that chapter instead of the first', async () => {
     const { page, store } = await start('projects/dune/book?chapter=c2');
     expect(store.window()).toContain('c2');

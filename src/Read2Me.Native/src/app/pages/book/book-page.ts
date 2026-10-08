@@ -2,12 +2,16 @@ import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
-import { computed, untracked } from '@app/core/signals';
+import { computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import type { MeasuredList } from '@app/ui/measured-list';
 import { emptyState, icon } from '@app/ui/partials';
 import { ProjectStore } from '../project/project-store';
+import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
+import type { TreeNode } from './book-tree';
+import { nodeMenuTrigger } from './node-menu';
+import type { NodeMenuTarget } from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
 import {
   READER_MODES,
@@ -19,6 +23,8 @@ import {
 } from './reader-rows';
 import { buildRoster } from './speaker-roster';
 import '@app/ui/measured-list';
+import './node-menu';
+import './structure-tree';
 import bookCss from './book.css' with { type: 'text' };
 
 adoptStyles(bookCss);
@@ -37,18 +43,21 @@ const MODE_LABELS: Record<ReaderMode, string> = {
 const SKELETON = [1, 2, 3, 4, 5, 6];
 
 /**
- * `/projects/{folder}/book` (design §6.3, native-web 22): a virtual-scrolled window of adjacent
- * chapters in `<r2m-measured-list>`. The mode (`?mode=`) changes what each row shows, never where
- * it is; `?chapter=` opens at a chapter. Rows are partials rendered from the list's one effect:
- * they read {@link ctx} there, so a live status delta re-renders the visible rows and nothing
- * else. The current chapter follows the list's top row (`data-current-chapter`), and the book
- * reloads from live receipts through the {@link BookStore}. The structure tree, node menus, book
- * actions, selection and the audio actions arrive with native-web 23–27.
+ * `/projects/{folder}/book` (design §6.3, native-web 22 + 23): the structure tree beside a
+ * virtual-scrolled window of adjacent chapters in `<r2m-measured-list>`. The mode (`?mode=`)
+ * changes what each row shows, never where it is; `?chapter=` opens at a chapter. Rows are
+ * partials rendered from the list's one effect: they read {@link ctx} there, so a live status
+ * delta re-renders the visible rows and nothing else. The current chapter follows the list's top
+ * row (`data-current-chapter`) and the tree, and the book reloads from live receipts through the
+ * {@link BookStore}. One shared `<r2m-node-menu>` serves every tree node and row trigger. Book
+ * actions, selection and the audio actions arrive with native-web 24–27.
  */
 export class BookPage extends R2mElement {
   private readonly router = use(Router);
   private project!: ProjectStore;
   private store!: BookStore;
+  private editor!: BookEditor;
+  private readonly treeOpen = signal(true);
 
   /** The chapter last opened from a link or the tree, until the viewport has scrolled it to the top. */
   private scrollTarget: string | null = null;
@@ -59,7 +68,8 @@ export class BookPage extends R2mElement {
   protected override connected(): void {
     this.project = use(ProjectStore, this);
     this.store = use(BookStore, this);
-    const { project, store } = this;
+    this.editor = use(BookEditor, this);
+    const { project, store, editor } = this;
 
     this.noContent = computed(() => store.overview()?.hasContent === false);
     this.rows = computed(() => buildRows(store.chapters(), store.mode()));
@@ -83,6 +93,7 @@ export class BookPage extends R2mElement {
       narratorOnlyMode: project.detail()?.narratorOnlyMode ?? false,
       ancestry: store.ancestry(),
       roster: roster(),
+      locked: editor.locked(),
     }));
 
     this.effect(() => {
@@ -117,8 +128,18 @@ export class BookPage extends R2mElement {
     const store = this.store;
     const rows = this.rows();
     const stale = store.stale();
+    const treeOpen = this.treeOpen();
     return html`
       <div class="book__toolbar" role="toolbar" aria-label="Reader">
+        <button
+          type="button"
+          class="r2m-icon-button"
+          aria-label=${treeOpen ? 'Hide structure' : 'Show structure'}
+          aria-expanded=${treeOpen ? 'true' : 'false'}
+          @click=${() => this.treeOpen.set(!treeOpen)}
+        >
+          ${icon(treeOpen ? 'left_panel_close' : 'left_panel_open')}
+        </button>
         <fieldset class="r2m-segmented" role="radiogroup" aria-label="Reader mode">
           ${READER_MODES.map(
             (m) =>
@@ -156,7 +177,22 @@ export class BookPage extends R2mElement {
               },
               html`<a class="r2m-button r2m-button--filled" href="./">Go to overview</a>`,
             )
-          : html`<div class="book__body">
+          : html`<div class="book__body ${treeOpen ? '' : 'book__body--tree-hidden'}">
+              ${
+                treeOpen
+                  ? html`<nav class="book__tree" aria-label="Structure">
+                      <r2m-structure-tree
+                        .nodes=${store.tree()}
+                        .statuses=${this.project.nodes()}
+                        .currentChapterId=${store.currentChapterId()}
+                        .expandedIds=${store.expanded()}
+                        .locked=${this.editor.locked()}
+                        @expanded-change=${this.onExpandedChange}
+                        @select-chapter=${this.onSelectChapter}
+                      ></r2m-structure-tree>
+                    </nav>`
+                  : nothing
+              }
               <section class="book__reader" aria-label="Chapter">
                 ${
                   rows.length === 0
@@ -179,8 +215,22 @@ export class BookPage extends R2mElement {
               </section>
             </div>`
       }
+      <r2m-node-menu></r2m-node-menu>
     `;
   }
+
+  private readonly onExpandedChange = (e: Event): void => {
+    const { node, expanded } = (e as CustomEvent<{ node: TreeNode; expanded: boolean }>).detail;
+    this.store.setExpanded(node, expanded);
+  };
+
+  /** A tree pick opens the chapter and names it in the URL, so a reload or a shared link keeps it. */
+  private readonly onSelectChapter = (e: Event): void => {
+    const chapterId = (e as CustomEvent<string>).detail;
+    void this.store.openChapter(chapterId);
+    const query = Object.fromEntries(this.router.query());
+    this.router.navigate(this.router.path(), { replace: true, query: { ...query, chapter: chapterId } });
+  };
 
   /** Reads {@link ctx} inside the list's effect, so status deltas re-render only the rows. */
   private readonly renderRow = (row: ReaderRow) => {
@@ -191,11 +241,22 @@ export class BookPage extends R2mElement {
         return html`<div class="book__row">
           ${paragraphRow(row.paragraph, row.chapterId, this.ctx(), row)}
         </div>`;
-      case 'pause':
+      case 'pause': {
+        const target: NodeMenuTarget = {
+          kind: 'pause-paragraph',
+          id: row.paragraph.id,
+          text: row.label,
+          isFirst: row.isFirst,
+          isLast: row.isLast,
+        };
         return html`<div class="book__pause book__row" role="separator" aria-label=${row.label}>
           <span class="book__pause-label">${row.label}</span>
           <span class="book__pause-rule"></span>
+          <span class="book__pause-menu"
+            >${nodeMenuTrigger(target, { disabled: this.ctx().locked })}</span
+          >
         </div>`;
+      }
     }
   };
 
@@ -326,6 +387,7 @@ const EMPTY_CONTEXT: RowContext = {
   narratorOnlyMode: false,
   ancestry: {},
   roster: [],
+  locked: false,
 };
 
 define('r2m-book-page', BookPage);

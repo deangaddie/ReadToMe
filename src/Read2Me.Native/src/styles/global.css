@@ -454,6 +454,20 @@ dialog.r2m-dialog--sheet {
   & .r2m-icon {
     color: var(--r2m-text-muted);
   }
+  &:disabled {
+    opacity: 0.38;
+    cursor: default;
+  }
+}
+.r2m-menu__item--destructive,
+.r2m-menu__item--destructive .r2m-icon {
+  color: var(--r2m-status-error);
+}
+/* mat-divider between entry groups. */
+.r2m-menu__divider {
+  margin: var(--r2m-space-1) 0;
+  border: 0;
+  border-top: 1px solid var(--r2m-outline);
 }
 
 /* ---- tooltip -------------------------------------------------------------------------------- */
