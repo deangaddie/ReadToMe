@@ -36,6 +36,12 @@ public sealed class PlaywrightFixture : IAsyncLifetime
         {
             Headless = Environment.GetEnvironmentVariable("E2E_HEADED") != "1",
             SlowMo = slowMo,
+            // Headless Firefox reports `pointer: none`, so a menu that focuses its search only for
+            // `(pointer: fine)` never does there. Declare the desktop pointer a real Firefox has
+            // (bit 2 = fine, bit 4 = hover), so the app behaves as on the user's machine.
+            FirefoxUserPrefs = IsFirefox
+                ? new Dictionary<string, object> { ["ui.primaryPointerCapabilities"] = 6, ["ui.allPointerCapabilities"] = 6 }
+                : null,
         });
     }
 

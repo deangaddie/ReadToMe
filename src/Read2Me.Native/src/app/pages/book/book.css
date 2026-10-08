@@ -17,6 +17,30 @@
   .book__spacer {
     flex: 1 1 auto;
   }
+  /* The selection action bar (ticket 12): count, Attribute, Bulk assign speaker, Clear. */
+  .book__selection {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    padding: 2px var(--r2m-space-2) 2px var(--r2m-space-3);
+    border-radius: var(--r2m-radius-pill);
+    background: color-mix(in srgb, var(--r2m-accent) 10%, transparent);
+  }
+  .book__selection-count {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .book__selection .r2m-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+  }
+  .book__bulk {
+    position: relative;
+  }
+  .book__bulk-menu {
+    min-width: 260px;
+  }
   .book__stale {
     display: flex;
     align-items: center;
@@ -176,6 +200,27 @@
     align-items: flex-start;
     gap: var(--r2m-space-1);
     padding-top: 2px;
+  }
+  /* A settled Failed/Unknown chip is a button that forgets the outcome. */
+  .r2m-paragraph__outcome {
+    padding: 0;
+    border: none;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+  }
+  .r2m-paragraph__outcome:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: 1px;
+    border-radius: var(--r2m-radius-pill);
+  }
+  .r2m-item__select {
+    flex: 0 0 auto;
+    margin: 0;
+    width: 13px;
+    height: 13px;
+    accent-color: var(--r2m-accent);
+    align-self: center;
   }
   .r2m-paragraph__lock,
   .r2m-item__lock {

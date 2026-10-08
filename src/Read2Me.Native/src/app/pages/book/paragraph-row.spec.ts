@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
 import type { ParagraphDto, ParagraphItemDto } from '@app/api';
+import { provide } from '@app/core/services';
 import { paragraphRow } from './paragraph-row';
 import type { RowContext } from './reader-rows';
+import { SelectionStore } from './selection-store';
+import { SpeakerAssigner } from './speaker-assigner';
 
 const NARRATOR_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -64,9 +67,25 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
   };
 }
 
+const NARRATION_ONLY: ParagraphDto = {
+  id: 'p2',
+  isPauseParagraph: false,
+  items: [item('n2', { itemType: 'Narration', characterId: NARRATOR_ID, text: 'Dawn broke.' })],
+};
+
+/** The shell's page-scoped collaborators, reached by the row through DOM ancestry. */
+let selection: SelectionStore;
+let assigner: {
+  assign: ReturnType<typeof mock>;
+  createAndAssign: ReturnType<typeof mock>;
+  clearOutcome: ReturnType<typeof mock>;
+};
+
 /** Renders the partial into a host and settles the speaker chips' first render. */
 async function mount(context: RowContext, paragraph = PARAGRAPH) {
   const host = document.createElement('div');
+  provide(host, SelectionStore, selection);
+  provide(host, SpeakerAssigner, assigner as unknown as SpeakerAssigner);
   document.body.append(host);
   render(paragraphRow(paragraph, 'c1', context, { isFirst: true, isLast: true }), host);
   await Promise.resolve();
@@ -76,7 +95,31 @@ async function mount(context: RowContext, paragraph = PARAGRAPH) {
 
 const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
-afterEach(() => document.body.replaceChildren());
+// happy-dom has no popover: the chip's menu opens on the `toggle` event the browser would fire.
+const proto = HTMLElement.prototype as unknown as Record<string, () => void>;
+beforeEach(() => {
+  selection = new SelectionStore();
+  assigner = {
+    assign: mock(async () => undefined),
+    createAndAssign: mock(async () => undefined),
+    clearOutcome: mock(async () => undefined),
+  };
+  proto['hidePopover'] = () => undefined;
+});
+afterEach(() => {
+  delete proto['hidePopover'];
+  document.body.replaceChildren();
+});
+
+async function openChipMenu(chip: Element) {
+  chip.querySelector<HTMLButtonElement>('button')!.click();
+  chip
+    .querySelector('.r2m-speaker-chip__menu')!
+    .dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open' }));
+  await (chip as HTMLElement & { rendered(): Promise<void> }).rendered();
+  await chip.querySelector('r2m-speaker-menu')!.rendered();
+  return Array.from(chip.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__row'));
+}
 
 describe('paragraphRow', () => {
   describe('read mode', () => {
@@ -121,10 +164,106 @@ describe('paragraphRow', () => {
       const unknown = await mount(ctx(), { ...PARAGRAPH, items: [item('u')] });
       expect(unknown.classList.contains('r2m-paragraph--unknown')).toBe(true);
     });
+  });
+
+  describe('selection (ticket 12)', () => {
+    it('a Character paragraph has a live checkbox that toggles the store with its ancestry', async () => {
+      const el = await mount(ctx());
+      const box = el.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+      expect(box.disabled).toBe(false);
+      expect(box.checked).toBe(false);
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      expect(selection.selection()).toEqual({
+        p1: { chapterId: 'c1', partId: 'pt1', volumeId: 'v1' },
+      });
+
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      expect(selection.count()).toBe(0);
+    });
 
     it('reflects the selection from the context and highlights the row', async () => {
       const el = await mount(ctx({ selected: new Set(['p1']) }));
+      expect(el.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
       expect(el.classList.contains('r2m-paragraph--selected')).toBe(true);
+    });
+
+    it('narration-only paragraphs and Audio mode offer no checkbox', async () => {
+      expect((await mount(ctx(), NARRATION_ONLY)).querySelector('input[type=checkbox]')).toBeNull();
+      expect(
+        (await mount(ctx({ mode: 'audio', selectable: false }))).querySelector(
+          '.r2m-paragraph__gutter input[type=checkbox]',
+        ),
+      ).toBeNull();
+    });
+  });
+
+  describe('speaker menu (ticket 12)', () => {
+    it('the Read chip opens the roster and a pick assigns the whole paragraph', async () => {
+      const el = await mount(ctx());
+      const rows = await openChipMenu(el.querySelector('r2m-speaker-chip')!);
+      expect(rows.map((r) => text(r.querySelector('.r2m-speaker-menu__name')))).toEqual([
+        'Narrator',
+        'Hardin',
+      ]);
+      rows[1]!.click();
+      expect(assigner.assign).toHaveBeenCalledWith({ kind: 'paragraph', paragraphId: 'p1' }, 'h');
+    });
+
+    it('Clear speaker and New character go through the assigner too', async () => {
+      const el = await mount(ctx());
+      await openChipMenu(el.querySelector('r2m-speaker-chip')!);
+      const actions = el.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__action');
+      actions[0]!.click();
+      expect(assigner.assign).toHaveBeenCalledWith({ kind: 'paragraph', paragraphId: 'p1' }, null);
+      actions[1]!.click();
+      expect(assigner.createAndAssign).toHaveBeenCalledWith(
+        { kind: 'paragraph', paragraphId: 'p1' },
+        '',
+      );
+    });
+
+    it('in Speakers mode each item chip assigns that item', async () => {
+      const el = await mount(ctx({ mode: 'speakers' }));
+      const chips = el.querySelectorAll('.r2m-item r2m-speaker-chip');
+      const rows = await openChipMenu(chips[2]!);
+      rows[0]!.click();
+      expect(assigner.assign).toHaveBeenCalledWith(
+        { kind: 'item', itemId: 'u', paragraphId: 'p1' },
+        NARRATOR_ID,
+      );
+    });
+
+    it('a queued paragraph keeps its chips inert', async () => {
+      const el = await mount(
+        ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }),
+      );
+      expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+      const read = await mount(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
+      expect(read.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    });
+  });
+
+  describe('outcomes (ticket 12)', () => {
+    it('a Failed chip carries the reason and clears the outcome on click', async () => {
+      const el = await mount(
+        ctx({ paragraphStatus: { p1: { outcome: { kind: 'Failed', reason: 'LLM timed out' } } } }),
+      );
+      const button = el.querySelector<HTMLButtonElement>('.r2m-paragraph__outcome')!;
+      expect(text(button)).toContain('Failed');
+      expect(button.getAttribute('data-tooltip')).toBe('LLM timed out — Click to clear');
+      button.click();
+      expect(assigner.clearOutcome).toHaveBeenCalledWith('p1');
+    });
+
+    it('a queued paragraph with a stale outcome shows Queued and nothing to clear', async () => {
+      const el = await mount(
+        ctx({ paragraphStatus: { p1: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+      );
+      expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
     });
   });
 
@@ -210,9 +349,10 @@ describe('paragraphRow', () => {
       expect(menu?.disabled).toBe(true);
     });
 
-    it('chips are not interactive until the speaker menu lands (native-web 25)', async () => {
-      expect((await mount(audio)).querySelectorAll('r2m-speaker-chip button').length).toBe(0);
-      expect((await mount(ctx())).querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    it('item chips are inert in Audio mode: the item selection checkbox is what the row offers', async () => {
+      const el = await mount({ ...audio, itemSelectable: true });
+      expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+      expect(el.querySelectorAll('.r2m-item input[type=checkbox]').length).toBe(3);
     });
   });
 

@@ -9,6 +9,7 @@ import { TypeAhead, typeAheadTarget } from '@app/ui/roving';
 import type { TreeNode } from './book-tree';
 import { NODE_MENU_OPEN, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
+import type { TriState } from './selection';
 import structureTreeCss from './structure-tree.css' with { type: 'text' };
 
 adoptStyles(structureTreeCss);
@@ -49,12 +50,13 @@ export function flattenTree(nodes: readonly TreeNode[], expanded: ReadonlySet<st
  * `aria-level`, `aria-setsize`, `aria-posinset` and `aria-expanded`, a roving tabindex, and the CDK
  * `TreeKeyManager` keys — arrows, Home/End, Enter/Space (a chapter opens; a parent is toggled by
  * its chevron or Left/Right, as in Angular), `*`, type-ahead over the titles, and Shift+F10 /
- * ContextMenu for the node menu, since the trigger inside a row is not a tab stop. The
- * selection's checkboxes and its menu shortcuts (tickets 12 and 13) arrive with native-web 25;
- * the tree already hands a chosen shortcut on as `node-action`.
+ * ContextMenu for the node menu, since the trigger inside a row is not a tab stop. With a
+ * `selection` kind every node has a tri-state checkbox — over its Character paragraphs (ticket
+ * 12) or its generatable items (ticket 13) — and the menu offers that selection's shortcuts; the
+ * tree only reports the gesture, the page reads the node and decides.
  *
  * Events: `expanded-change` ({ node, expanded }), `select-chapter` (chapter id),
- * `node-action` ({ node, action }).
+ * `toggle-node` ({ node, on }), `node-action` ({ node, action }).
  */
 export class StructureTree extends R2mElement {
   #nodes = signal<readonly TreeNode[]>([]);
@@ -90,13 +92,22 @@ export class StructureTree extends R2mElement {
     this.#expandedIds.set(value);
   }
 
-  /** Which selection is on (that selection's menu entries); null for none. */
+  /** Which selection is on (checkboxes per node and that selection's menu entries); null for none. */
   #selection = signal<SelectionKind | null>(null);
   get selection() {
     return this.#selection();
   }
   set selection(value: SelectionKind | null) {
     this.#selection.set(value);
+  }
+
+  /** Each node's roll-up over the current selection; absent reads as unchecked. */
+  #nodeStates = signal<Readonly<Record<string, TriState>>>({});
+  get nodeStates() {
+    return this.#nodeStates();
+  }
+  set nodeStates(value: Readonly<Record<string, TriState>>) {
+    this.#nodeStates.set(value);
   }
 
   /** The editor is locked (stale view or a write in flight): every node menu is off. */
@@ -141,6 +152,7 @@ export class StructureTree extends R2mElement {
     const expanded = this.#expandedIds();
     const statuses = this.#statuses();
     const selection = this.#selection();
+    const nodeStates = this.#nodeStates();
     const locked = this.#locked();
     return html`<div class="tree" role="tree" aria-label="Book structure">
       ${repeat(
@@ -181,6 +193,24 @@ export class StructureTree extends R2mElement {
                     ${icon(isOpen ? 'expand_more' : 'chevron_right')}
                   </button>`
                 : html`<span class="tree__toggle" aria-hidden="true"></span>`
+            }
+            ${
+              selection
+                ? html`<input
+                    type="checkbox"
+                    class="tree__select"
+                    tabindex="-1"
+                    aria-label="Select ${selection} of ${node.title}"
+                    .checked=${(nodeStates[node.id] ?? 'unchecked') === 'checked'}
+                    .indeterminate=${(nodeStates[node.id] ?? 'unchecked') === 'indeterminate'}
+                    @click=${(e: Event) => e.stopPropagation()}
+                    @change=${(e: Event) =>
+                      this.emit('toggle-node', {
+                        node,
+                        on: (e.target as HTMLInputElement).checked,
+                      })}
+                  />`
+                : nothing
             }
             <span class="tree__title">${node.title}</span>
             ${
@@ -354,9 +384,7 @@ function badges(s: NodeStatusSummary) {
     ${countBadge('review', s.review, 'Paragraphs with audio to review')}
     ${
       s.isDone
-        ? html`<span
-            class="material-symbols-rounded r2m-icon tree__done"
-            aria-label="Done"
+        ? html`<span class="material-symbols-rounded r2m-icon tree__done" aria-label="Done"
             >check_circle</span
           >`
         : nothing

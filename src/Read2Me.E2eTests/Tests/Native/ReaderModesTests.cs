@@ -9,7 +9,7 @@ namespace Read2Me.E2eTests.Tests.Native;
 /// The native reader's modes (native-web 22, from the Angular class of the same name): the mode
 /// toggle drives the URL and the row shape, a deep link opens in the named mode, and a title edit
 /// from the tree's node menu (native-web 23) lands in the host and comes back through the reader's
-/// own receipt. The Speakers-mode tree checkboxes are native-web 25. Runs in Chromium and Firefox.
+/// own receipt. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
@@ -34,6 +34,7 @@ public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         await Assertions.Expect(Page).ToHaveURLAsync(new Regex(@"mode=speakers$"));
         await Expect(Page.Locator(".r2m-item .r2m-speaker-chip")).ToHaveCountAsync(3);
         await Expect(Page.Locator(".r2m-item--unknown")).ToHaveCountAsync(1);
+        await Expect(Page.Locator("[data-node-id] .tree__select").First).ToBeVisibleAsync();
 
         // Audio: per-item rows carry the voice preview instead.
         await toggle.GetByText("Audio").ClickAsync();

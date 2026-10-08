@@ -55,7 +55,11 @@ const NODES: TreeNode[] = siblings(
 
 let tree: StructureTree;
 
-async function mount(options: Partial<Pick<StructureTree, 'nodes' | 'expandedIds' | 'statuses' | 'currentChapterId' | 'locked'>> = {}) {
+async function mount(
+  options: Partial<
+    Pick<StructureTree, 'nodes' | 'expandedIds' | 'statuses' | 'currentChapterId' | 'locked'>
+  > = {},
+) {
   tree = document.createElement('r2m-structure-tree');
   tree.nodes = options.nodes ?? NODES;
   tree.expandedIds = options.expandedIds ?? new Set(['v1', 'p1']);
@@ -102,7 +106,9 @@ afterEach(() => document.body.replaceChildren());
 describe('flattenTree', () => {
   it('lists the visible rows in order with their depth, set size and position', () => {
     const rows = flattenTree(NODES, new Set(['v1', 'p1']));
-    expect(rows.map((r: TreeRow) => [r.node.id, r.depth, r.setSize, r.position, r.parent?.id ?? null])).toEqual([
+    expect(
+      rows.map((r: TreeRow) => [r.node.id, r.depth, r.setSize, r.position, r.parent?.id ?? null]),
+    ).toEqual([
       ['v1', 0, 2, 1, null],
       ['p1', 1, 2, 1, 'v1'],
       ['Alpha', 2, 2, 1, 'p1'],
@@ -116,12 +122,23 @@ describe('flattenTree', () => {
 
 describe('r2m-structure-tree', () => {
   it('renders the ARIA tree: levels, set sizes, positions, expansion and the current chapter', async () => {
-    await mount({ currentChapterId: 'Bravo', statuses: { p1: status({ attributionRemaining: 3 }) } });
+    await mount({
+      currentChapterId: 'Bravo',
+      statuses: { p1: status({ attributionRemaining: 3 }) },
+    });
     expect(tree.querySelector('[role="tree"]')?.getAttribute('aria-label')).toBe('Book structure');
     expect(ids()).toEqual(['v1', 'p1', 'Alpha', 'Bravo', 'p2', 'v2']);
     const attrs = (id: string, name: string) => item(id).getAttribute(name);
-    expect([attrs('v1', 'aria-level'), attrs('v1', 'aria-setsize'), attrs('v1', 'aria-posinset')]).toEqual(['1', '2', '1']);
-    expect([attrs('Bravo', 'aria-level'), attrs('Bravo', 'aria-setsize'), attrs('Bravo', 'aria-posinset')]).toEqual(['3', '2', '2']);
+    expect([
+      attrs('v1', 'aria-level'),
+      attrs('v1', 'aria-setsize'),
+      attrs('v1', 'aria-posinset'),
+    ]).toEqual(['1', '2', '1']);
+    expect([
+      attrs('Bravo', 'aria-level'),
+      attrs('Bravo', 'aria-setsize'),
+      attrs('Bravo', 'aria-posinset'),
+    ]).toEqual(['3', '2', '2']);
     expect(attrs('v1', 'aria-expanded')).toBe('true');
     expect(attrs('p2', 'aria-expanded')).toBe('false');
     expect(item('Bravo').hasAttribute('aria-expanded')).toBe(false);
@@ -131,9 +148,9 @@ describe('r2m-structure-tree', () => {
     expect(item('p1').querySelector('.r2m-count-badge--attribution')?.textContent).toContain('3');
     expect(item('v2').querySelector('.tree__loading')).toBeNull();
     // Titles are the display titles; the current chapter is the one tab stop.
-    expect(Array.from(tree.querySelectorAll('.tree__title')).map((t) => t.textContent?.trim())).toEqual([
-      'v1', 'p1', 'Alpha', 'Bravo', 'p2', 'v2',
-    ]);
+    expect(
+      Array.from(tree.querySelectorAll('.tree__title')).map((t) => t.textContent?.trim()),
+    ).toEqual(['v1', 'p1', 'Alpha', 'Bravo', 'p2', 'v2']);
     expect(items().map((i) => i.tabIndex)).toEqual([-1, -1, -1, 0, -1, -1]);
   });
 
@@ -147,7 +164,9 @@ describe('r2m-structure-tree', () => {
   it('a click on a chapter selects it; the toggle asks the caller to expand or collapse', async () => {
     await mount();
     const selected: string[] = [];
-    tree.addEventListener('select-chapter', (e) => selected.push((e as CustomEvent<string>).detail));
+    tree.addEventListener('select-chapter', (e) =>
+      selected.push((e as CustomEvent<string>).detail),
+    );
     const log = expansions();
 
     item('Alpha').querySelector<HTMLElement>('.tree__title')!.click();
@@ -232,7 +251,9 @@ describe('r2m-structure-tree', () => {
   it('Enter and Space select a chapter; on a parent they do nothing (as in Angular)', async () => {
     await mount();
     const selected: string[] = [];
-    tree.addEventListener('select-chapter', (e) => selected.push((e as CustomEvent<string>).detail));
+    tree.addEventListener('select-chapter', (e) =>
+      selected.push((e as CustomEvent<string>).detail),
+    );
     const log = expansions();
     item('Bravo').focus();
     press('Enter');
@@ -287,6 +308,52 @@ describe('r2m-structure-tree', () => {
     expect(items().map((i) => i.tabIndex)).toEqual([0, -1, -1]);
   });
 
+  describe('selection checkboxes (tickets 12 and 13)', () => {
+    const box = (id: string) => item(id).querySelector<HTMLInputElement>('.tree__select');
+
+    it('appear only with a selection kind, labelled for it, and mirror the node states', async () => {
+      await mount();
+      expect(tree.querySelectorAll('.tree__select').length).toBe(0);
+
+      tree.selection = 'paragraphs';
+      tree.nodeStates = { v1: 'indeterminate', p1: 'checked' };
+      await tree.rendered();
+      expect(tree.querySelectorAll('.tree__select').length).toBe(items().length);
+      expect(box('p1')!.getAttribute('aria-label')).toBe('Select paragraphs of p1');
+      expect([box('v1')!.checked, box('v1')!.indeterminate]).toEqual([false, true]);
+      expect([box('p1')!.checked, box('p1')!.indeterminate]).toEqual([true, false]);
+      expect([box('Alpha')!.checked, box('Alpha')!.indeterminate]).toEqual([false, false]);
+      // Not a tab stop: the row is, and Space on the row opens a chapter, not the box.
+      expect(box('p1')!.tabIndex).toBe(-1);
+    });
+
+    it('ticking reports the node and the direction, and does not open the chapter', async () => {
+      await mount();
+      tree.selection = 'items';
+      await tree.rendered();
+      const toggles: { id: string; on: boolean }[] = [];
+      const opened: string[] = [];
+      tree.addEventListener('toggle-node', (e) => {
+        const { node: n, on } = (e as CustomEvent<{ node: TreeNode; on: boolean }>).detail;
+        toggles.push({ id: n.id, on });
+      });
+      tree.addEventListener('select-chapter', (e) =>
+        opened.push((e as CustomEvent<string>).detail),
+      );
+
+      // A click toggles the box and fires `change`; it stops at the box, since the row's own
+      // click handler would open the chapter.
+      const alpha = box('Alpha')!;
+      alpha.click();
+      alpha.click();
+      expect(toggles).toEqual([
+        { id: 'Alpha', on: true },
+        { id: 'Alpha', on: false },
+      ]);
+      expect(opened).toEqual([]);
+    });
+  });
+
   describe('node menu', () => {
     it('every node has a trigger, which the tree enriches with its own focus return and action handler', async () => {
       await mount();
@@ -296,13 +363,22 @@ describe('r2m-structure-tree', () => {
         actions.push({ id: n.id, action });
       });
       let request: NodeMenuRequest | undefined;
-      document.body.addEventListener(NODE_MENU_OPEN, (e) => (request = (e as CustomEvent<NodeMenuRequest>).detail));
+      document.body.addEventListener(
+        NODE_MENU_OPEN,
+        (e) => (request = (e as CustomEvent<NodeMenuRequest>).detail),
+      );
 
       const trigger = item('p1').querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
       expect(trigger.getAttribute('aria-label')).toBe('Actions for p1');
       expect(trigger.tabIndex).toBe(-1);
       trigger.click();
-      expect(request?.target).toEqual({ kind: 'part', id: 'p1', text: 'p1', isFirst: true, isLast: false });
+      expect(request?.target).toEqual({
+        kind: 'part',
+        id: 'p1',
+        text: 'p1',
+        isFirst: true,
+        isLast: false,
+      });
       expect(request?.returnTo).toBe(item('p1'));
       request?.onAction?.('select-unprocessed');
       expect(actions).toEqual([{ id: 'p1', action: 'select-unprocessed' }]);
@@ -310,13 +386,20 @@ describe('r2m-structure-tree', () => {
 
     it('the selection kind reaches the target, and a busy node or a locked editor disables the trigger', async () => {
       await mount({
-        statuses: { p1: status({ attributionQueued: 2 }), p2: status({ attributionProcessing: true }) },
+        statuses: {
+          p1: status({ attributionQueued: 2 }),
+          p2: status({ attributionProcessing: true }),
+        },
       });
       tree.selection = 'items';
       await tree.rendered();
       let request: NodeMenuRequest | undefined;
-      document.body.addEventListener(NODE_MENU_OPEN, (e) => (request = (e as CustomEvent<NodeMenuRequest>).detail));
-      const trigger = (id: string) => item(id).querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
+      document.body.addEventListener(
+        NODE_MENU_OPEN,
+        (e) => (request = (e as CustomEvent<NodeMenuRequest>).detail),
+      );
+      const trigger = (id: string) =>
+        item(id).querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
       expect(trigger('p1').disabled).toBe(true);
       expect(trigger('p2').disabled).toBe(true);
       expect(trigger('v1').disabled).toBe(false);
@@ -343,7 +426,9 @@ describe('r2m-structure-tree', () => {
     it('keys from inside a node trigger are not tree keys', async () => {
       await mount();
       const selected: string[] = [];
-      tree.addEventListener('select-chapter', (e) => selected.push((e as CustomEvent<string>).detail));
+      tree.addEventListener('select-chapter', (e) =>
+        selected.push((e as CustomEvent<string>).detail),
+      );
       const trigger = item('Alpha').querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
       trigger.focus();
       press('Enter');

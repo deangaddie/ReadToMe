@@ -38,6 +38,13 @@
   .tree__toggle .r2m-icon {
     font-size: 20px;
   }
+  .tree__select {
+    flex: 0 0 auto;
+    margin: 0 2px 0 0;
+    width: 13px;
+    height: 13px;
+    accent-color: var(--r2m-accent);
+  }
   .tree__title {
     flex: 1 1 auto;
     min-width: 0;

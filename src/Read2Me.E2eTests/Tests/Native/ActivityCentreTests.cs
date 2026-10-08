@@ -1,11 +1,8 @@
-using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 using Read2Me.App.Live;
-using Read2Me.Data;
 using Read2Me.E2eTests.Infrastructure;
 using Read2Me.E2eTests.Infrastructure.FakeAi;
-using Read2Me.TestUtils;
 
 namespace Read2Me.E2eTests.Tests.Native;
 
@@ -13,16 +10,12 @@ namespace Read2Me.E2eTests.Tests.Native;
 /// The native activity centre (native-web 21) over a real attribution run: the pill in the activity
 /// bar, the drawer's LLM stream joined only while its tab is open, the throughput table after the
 /// run, and cancel from the pill. The fake LLM is slowed so the queue is observable while busy.
-/// Until the reader is native (native-web 22–25) the run is queued through the agent API rather
-/// than the book page's "Attribute selection" button; the assertions are the Angular class's.
-/// Runs in Chromium and Firefox.
+/// The run is queued from the reader's own "Attribute" action (native-web 25); the assertions are
+/// the Angular class's. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
-    private static readonly string[] SpeechParagraphs = ["p2", "p3", "p4"];
-    private static readonly HttpClient Http = new();
-
     protected override WebApp WebApp => WebApp.Native;
 
     private LiveConnectionRegistry Registry => App.Services.GetRequiredService<LiveConnectionRegistry>();
@@ -30,14 +23,14 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
     [Fact]
     public async Task Pill_streams_only_while_the_llm_tab_is_open_and_table_after_the_run()
     {
-        var book = await App.SeedThreeDialogParagraphProjectAsync("native-activity", "Native Activity Book", "A. Author", characterName: "Alice");
+        await App.SeedThreeDialogParagraphProjectAsync("native-activity", "Native Activity Book", "A. Author", characterName: "Alice");
         App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
         App.FakeAi.LlmDelay = TimeSpan.FromSeconds(2);
 
         await GotoAppAsync("projects/native-activity/book");
         await Expect(Page.Locator("r2m-activity-bar")).ToContainTextAsync("No background work");
 
-        await EnqueueAttributionAsync("native-activity", book);
+        await AttributeChapterAsync();
 
         // The pill appears with live counts; the ETA follows once the first paragraph has timed.
         var pill = Page.Locator("r2m-activity-bar .r2m-job-pill");
@@ -74,12 +67,12 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
     [Fact]
     public async Task Cancel_from_the_pill_stops_the_queue()
     {
-        var book = await App.SeedThreeDialogParagraphProjectAsync("native-activity-cancel", "Native Cancel Book", "A. Author", characterName: "Alice");
+        await App.SeedThreeDialogParagraphProjectAsync("native-activity-cancel", "Native Cancel Book", "A. Author", characterName: "Alice");
         App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
         App.FakeAi.LlmDelay = TimeSpan.FromSeconds(3);
 
-        await GotoAppAsync("projects/native-activity-cancel/book");
-        await EnqueueAttributionAsync("native-activity-cancel", book);
+        await GotoAppAsync("projects/native-activity-cancel/book?mode=speakers");
+        await AttributeChapterAsync();
 
         var pill = Page.Locator("r2m-activity-bar .r2m-job-pill");
         await Expect(pill).ToContainTextAsync("queued");
@@ -88,27 +81,16 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         // Queued work is dropped; only the paragraph already in flight can still resolve.
         await Expect(pill).ToHaveCountAsync(0, new() { Timeout = 10_000 });
         await App.WaitForQueueDrainAsync("/api/attribution/queue");
-        var unknown = await CountUnattributedSpeechAsync("native-activity-cancel", book);
+        var unknown = await Page.Locator(".r2m-item .r2m-speaker-chip--unknown").CountAsync();
         Assert.True(unknown >= 2, $"expected at least 2 paragraphs left unattributed after cancel, got {unknown}");
     }
 
-    /// <summary>Queues the three dialog paragraphs, as the reader's "Attribute selection" does.</summary>
-    private async Task EnqueueAttributionAsync(string folder, BookHierarchyBuilder book)
+    /// <summary>Ticks the chapter in the tree, which selects its three dialog paragraphs, then queues them.</summary>
+    private async Task AttributeChapterAsync()
     {
-        var paragraphIds = SpeechParagraphs.Select(book.ParagraphId).ToArray();
-        var response = await Http.PostAsJsonAsync(
-            $"{App.BaseUrl}/api/projects/{folder}/attribution/enqueue-paragraphs",
-            new { paragraphIds });
-        response.EnsureSuccessStatusCode();
-    }
-
-    /// <summary>Speech items in the dialog paragraphs that still have no speaker (the reader's unknown chips).</summary>
-    private async Task<int> CountUnattributedSpeechAsync(string folder, BookHierarchyBuilder book)
-    {
-        var paragraphIds = SpeechParagraphs.Select(book.ParagraphId).ToHashSet();
-        var factory = App.Services.GetRequiredService<IProjectDbContextFactory>();
-        await using var db = await factory.CreateAsync(Path.Combine(App.WorkspaceDir, folder));
-        return db.ParagraphItems.AsEnumerable().Count(i => paragraphIds.Contains(i.ParagraphId) && i.CharacterId is null);
+        await Page.Locator("[data-node-id] .tree__select").First.CheckAsync();
+        await Expect(Page.Locator("[data-testid='selection-count']")).ToHaveTextAsync("3 paragraphs");
+        await Page.Locator("[data-action='attribute-selection']").ClickAsync();
     }
 
     private async Task WaitForMembersAsync(string group, int expected)

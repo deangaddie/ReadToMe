@@ -1,12 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { BookOverviewDto, ParagraphDto } from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
+import type { QueueMessage } from '@app/live/live-messages';
+import { Preflight } from '@app/shared/preflight';
+import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
 import { BookStore } from './book-store';
 import type { BookPage } from './book-page';
+import { SelectionStore } from './selection-store';
+import { SpeakerAssigner } from './speaker-assigner';
 import '../project/project-shell';
 import './book-page';
 
@@ -47,6 +52,9 @@ const ROUTES: RouteDef[] = [
 
 let api: FakeApi;
 let navigation: FakeNavigation;
+let live: FakeLive;
+let toasts: string[];
+let ensureReady: ReturnType<typeof mock>;
 
 /** The book page under the project shell, through a root outlet as in the app. */
 async function start(path: string) {
@@ -67,7 +75,17 @@ beforeEach(() => {
   resetServices();
   api = new FakeApi();
   api.install();
-  new FakeLive().install();
+  live = new FakeLive().install();
+  toasts = [];
+  ensureReady = mock(async () => true);
+  override(Preflight, { ensureReady } as unknown as Preflight);
+  override(ToastService, {
+    success: (m: string) => toasts.push(m),
+    info: (m: string) => toasts.push(m),
+    warn: (m: string) => toasts.push(m),
+    error: (m: string) => toasts.push(m),
+    problem: (p: { detail?: string }) => toasts.push(`problem: ${p.detail}`),
+  } as unknown as ToastService);
   api
     .on('GET', BASE, { folderName: 'dune', title: 'Dune', narrator: null, narratorOnlyMode: false })
     .on('GET', `${BASE}/status`, { revision: 1, nodes: {}, audio: { remaining: 0 } })
@@ -200,13 +218,21 @@ describe('r2m-book-page', () => {
 
   it('expanding a tree node loads its children through the store', async () => {
     api
-      .on('GET', `${BASE}/book`, { ...OVERVIEW, volumes: [{ id: 'v1', title: 'One' }, { id: 'v2', title: 'Two' }] })
+      .on('GET', `${BASE}/book`, {
+        ...OVERVIEW,
+        volumes: [
+          { id: 'v1', title: 'One' },
+          { id: 'v2', title: 'Two' },
+        ],
+      })
       .on('GET', `${BASE}/nodes/volume/v2/children`, { parts: [{ id: 'p2', title: 'Late' }] })
       .on('GET', `${BASE}/nodes/part/p2/children`, { chapters: [{ id: 'c3', title: 'Three' }] });
     const { page, store } = await start('projects/dune/book');
     const tree = page.querySelector('r2m-structure-tree')!;
     const ids = () =>
-      Array.from(tree.querySelectorAll<HTMLElement>('[role=treeitem]')).map((n) => n.dataset['nodeId']);
+      Array.from(tree.querySelectorAll<HTMLElement>('[role=treeitem]')).map(
+        (n) => n.dataset['nodeId'],
+      );
     expect(ids()).toEqual(['v1', 'v2']);
 
     tree.querySelector<HTMLElement>('[data-node-id=v2] .tree__toggle')!.click();
@@ -263,6 +289,155 @@ describe('r2m-book-page', () => {
     radios[0]!.dispatchEvent(new Event('change'));
     await settle();
     expect(new URL(navigation.calls.at(-1)!.url).searchParams.has('mode')).toBe(false);
+  });
+
+  describe('selection (ticket 12)', () => {
+    const A = { chapterId: 'c1', partId: 'p1', volumeId: 'v1' };
+    const bar = (page: BookPage) => page.querySelector('[data-testid=selection-bar]');
+    /** The paragraph checkboxes of chapter 1 (the window may hold chapter 2 as well). */
+    const rowBoxes = (page: BookPage) =>
+      Array.from(
+        page.querySelectorAll<HTMLInputElement>(
+          '.r2m-paragraph[data-chapter-id=c1] > .r2m-paragraph__gutter input[type=checkbox]',
+        ),
+      );
+
+    it('a tree checkbox reads the node paragraph ids, selects them and shows the action bar', async () => {
+      api.on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, [
+        { id: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
+        { id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
+      ]);
+      const { page } = await start('projects/dune/book?mode=speakers');
+      expect(bar(page)).toBeNull();
+
+      const box = page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!;
+      box.click();
+      for (let i = 0; i < 4; i++) await settle();
+      await page.rendered();
+
+      const selection = use(SelectionStore, page);
+      expect(selection.ids()).toEqual(['p1', 'p2']);
+      expect(selection.nodeState('chapter', 'c1')).toBe('checked');
+      expect(text(page.querySelector('[data-testid=selection-count]'))).toBe('2 paragraphs');
+      expect(page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.checked).toBe(
+        true,
+      );
+      expect(rowBoxes(page).map((b) => b.checked)).toEqual([true, true]);
+
+      // Unticking reads again and removes exactly those.
+      api.on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, [
+        { id: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
+      ]);
+      page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(selection.ids()).toEqual(['p2']);
+      expect(api.calls('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`)).toHaveLength(2);
+    });
+
+    it('Attribute gates on preflight, posts the selected ids, reports the count and clears the selection', async () => {
+      api.on('POST', `${BASE}/attribution/enqueue-paragraphs`, { enqueued: 1 });
+      const { page } = await start('projects/dune/book?mode=speakers');
+      const selection = use(SelectionStore, page);
+      selection.toggle('p1', A, true);
+      await page.rendered();
+      expect(text(page.querySelector('[data-testid=selection-count]'))).toBe('1 paragraph');
+
+      page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+
+      expect(ensureReady).toHaveBeenCalledWith('attribution');
+      expect(
+        api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`).map((r) => r.body),
+      ).toEqual([{ paragraphIds: ['p1'] }]);
+      expect(toasts).toEqual(['Queued 1 paragraph']);
+      expect(selection.count()).toBe(0);
+    });
+
+    it('a cancelled preflight sends nothing and keeps the selection', async () => {
+      ensureReady.mockResolvedValueOnce(false);
+      const { page } = await start('projects/dune/book?mode=speakers');
+      const selection = use(SelectionStore, page);
+      selection.toggle('p1', A, true);
+      await page.rendered();
+      page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`)).toHaveLength(0);
+      expect(selection.count()).toBe(1);
+      expect(toasts).toEqual([]);
+    });
+
+    it('Bulk assign hands the selection to the assigner and is disarmed while attribution runs', async () => {
+      const { page } = await start('projects/dune/book');
+      const selection = use(SelectionStore, page);
+      const assigner = use(SpeakerAssigner, page);
+      const assign = mock(async () => undefined);
+      assigner.assign = assign;
+      selection.toggle('p1', A, true);
+      await page.rendered();
+
+      const bulk = page.querySelector<HTMLButtonElement>('[data-action=bulk-assign]')!;
+      expect(bulk.disabled).toBe(false);
+      // happy-dom has no popover: the menu opens on the `toggle` event the browser would fire.
+      const menu = page.querySelector('.book__bulk-menu')!;
+      menu.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open' }));
+      await page.rendered();
+      await page.querySelector('r2m-speaker-menu')!.rendered();
+      page.querySelector<HTMLButtonElement>('.r2m-speaker-menu__row')!.click();
+      expect(assign).toHaveBeenCalledWith({ kind: 'selection', paragraphIds: ['p1'] }, 'h');
+
+      live.queue.set({ attribution: { isBusy: true } } as unknown as QueueMessage);
+      await page.rendered();
+      expect(bulk.disabled).toBe(true);
+      expect(bulk.getAttribute('data-tooltip')).toContain('waits until attribution has finished');
+    });
+
+    it('Audio mode hides the paragraph checkboxes and bar; the paragraph selection is kept aside', async () => {
+      const { page } = await start('projects/dune/book?mode=audio');
+      const selection = use(SelectionStore, page);
+      selection.toggle('p1', { chapterId: 'c1', partId: null, volumeId: null }, true);
+      await page.rendered();
+
+      expect(rowBoxes(page)).toEqual([]);
+      expect(bar(page)).toBeNull();
+      expect(page.querySelectorAll('.tree__select').length).toBe(0);
+      expect(selection.count()).toBe(1);
+      // The item checkboxes are there, off for the lines nobody can read yet.
+      const items = page.querySelectorAll<HTMLInputElement>(
+        '.r2m-paragraph[data-chapter-id=c1] .r2m-item input[type=checkbox]',
+      );
+      expect(Array.from(items, (b) => b.disabled)).toEqual([true, true]);
+    });
+
+    it('Select unprocessed and Attribute unprocessed from a node menu act on the node', async () => {
+      api
+        .on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, (_body, url) =>
+          url.searchParams.get('unprocessedOnly') === 'true'
+            ? [{ id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' }]
+            : [],
+        )
+        .on('POST', `${BASE}/attribution/enqueue`, { enqueued: 2 });
+      const { page } = await start('projects/dune/book?mode=speakers');
+      const open = async () => {
+        page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
+        await page.rendered();
+      };
+
+      await open();
+      page
+        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=select-unprocessed]')!
+        .click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(use(SelectionStore, page).ids()).toEqual(['p2']);
+
+      await open();
+      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=attribute-node]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(ensureReady).toHaveBeenCalledTimes(1);
+      expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
+        { level: 'chapter', nodeId: 'c1', unprocessedOnly: true },
+      ]);
+      expect(toasts).toEqual(['Queued 2 paragraphs']);
+    });
   });
 
   it('a failed read shows the stale banner, and Refresh reads again', async () => {

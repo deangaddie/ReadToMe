@@ -41,15 +41,18 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         await Page.Keyboard.PressAsync("Shift+F10");
         var menu = Page.GetByRole(AriaRole.Menu, new() { Name = "Actions for Chapter 1" });
         await Expect(menu).ToBeVisibleAsync();
-        Assert.Equal("edit-title", await Page.EvaluateAsync<string?>(FocusedEntry));
+        // Read mode selects paragraphs, so the selection shortcuts lead (native-web 25).
+        Assert.Equal("select-unprocessed", await Page.EvaluateAsync<string?>(FocusedEntry));
 
         // Arrows move through the entries, wrapping; the tree's tab stop does not move with them.
         await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal("split", await Page.EvaluateAsync<string?>(FocusedEntry));
+        Assert.Equal("attribute-node", await Page.EvaluateAsync<string?>(FocusedEntry));
+        await Page.Keyboard.PressAsync("ArrowDown");
+        Assert.Equal("edit-title", await Page.EvaluateAsync<string?>(FocusedEntry));
         await Page.Keyboard.PressAsync("End");
         Assert.Equal("delete", await Page.EvaluateAsync<string?>(FocusedEntry));
         await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal("edit-title", await Page.EvaluateAsync<string?>(FocusedEntry));
+        Assert.Equal("select-unprocessed", await Page.EvaluateAsync<string?>(FocusedEntry));
         await Expect(node).ToHaveAttributeAsync("tabindex", "0");
 
         // Escape closes the menu and puts focus back on the tree item.
