@@ -8,9 +8,8 @@ namespace Read2Me.E2eTests.Tests.Native;
 /// The live relay between two browsers on one host (native-web 22, from the Angular class of the
 /// same name): a mutation made from one context reaches the other through its receipt within two
 /// seconds, and a browser that loses the hub reconnects on its own and keeps receiving receipts.
-/// The reader's node menu is native-web 23, so the split is sent from the second context's own
-/// origin through the agent API; the reader on both sides reacts to the receipt alone. Runs in
-/// Chromium and Firefox.
+/// The split is made the way a user makes it, from the second context's row menu (native-web 24);
+/// the reader on both sides reacts to the receipt alone. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
@@ -20,7 +19,7 @@ public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
     [Fact]
     public async Task A_split_in_one_browser_reaches_the_other_within_two_seconds()
     {
-        var builder = await App.SeedProjectAsync("native-live-split", "Native Live Book", "A. Author");
+        await App.SeedProjectAsync("native-live-split", "Native Live Book", "A. Author");
 
         await GotoAppAsync("projects/native-live-split/book");
         await Expect(Page.Locator(".book__chapter")).ToHaveTextAsync(["ch1"]);
@@ -32,12 +31,14 @@ public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         var paragraphs = otherPage.Locator(".r2m-paragraph");
         await Expect(paragraphs).ToHaveCountAsync(3);
 
-        // The split the row menu will send (native-web 23/24), posted from the other context.
-        var split = await otherPage.APIRequest.PostAsync($"{App.BaseUrl}/api/projects/native-live-split/commands", new()
-        {
-            DataObject = new { type = "SplitAtParagraph", paragraphId = builder.ParagraphId("p2"), newChapterTitle = "From elsewhere" },
-        });
-        Assert.True(split.Ok, await split.TextAsync());
+        // The split, sent from the second context's row menu.
+        var menu = paragraphs.Nth(1).Locator(".r2m-paragraph__menu");
+        await menu.HoverAsync();
+        await menu.Locator("button").ClickAsync();
+        await otherPage.Locator("[role='menu'] [data-entry='split']").ClickAsync();
+        var prompt = otherPage.Locator("r2m-text-prompt-dialog");
+        await prompt.Locator(".r2m-text-prompt-dialog__input").FillAsync("From elsewhere");
+        await prompt.Locator(".r2m-text-prompt-dialog__confirm").ClickAsync();
         await Expect(otherPage.Locator(".book__chapter")).ToHaveTextAsync(["ch1", "From elsewhere"]);
 
         // The first browser did nothing and sees the new chapter from the receipt alone.
