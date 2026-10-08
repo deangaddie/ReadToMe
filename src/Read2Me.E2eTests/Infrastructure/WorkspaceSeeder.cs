@@ -407,4 +407,93 @@ public static class WorkspaceSeeder
 
         return builder;
     }
+    /// <summary>
+    /// A long book for the native reader's big-book tests: one volume and <paramref name="chapters"/>
+    /// chapters titled "Chapter 1"… (the builder names too), each holding <paramref name="paragraphs"/>
+    /// paragraphs that alternate two sentences of narration with a line spoken by the known
+    /// character, so every chapter is many screens tall. Returns the builder for named-id lookups.
+    /// </summary>
+    public static async Task<BookHierarchyBuilder> SeedLongBookAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string title, string author, int chapters = 12, int paragraphs = 30, string characterName = "Alice")
+    {
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        var folderPath = Path.Combine(workspaceDir, folderName);
+
+        var builder = new BookHierarchyBuilder(() => factory.CreateAsync(folderPath));
+        builder
+            .WithProject(title: title, author: author)
+            .WithCharacter(characterName, new Character { Id = Guid.NewGuid(), Name = characterName })
+            .AddVolume("v1", v =>
+            {
+                for (var c = 1; c <= chapters; c++)
+                {
+                    var chapter = c;
+                    v.AddChapter($"Chapter {chapter}", ch =>
+                    {
+                        for (var p = 1; p <= paragraphs; p++)
+                        {
+                            var para = p;
+                            if (para % 2 == 1)
+                                ch.AddParagraph($"c{chapter}p{para}", x => x.AddNarration($"c{chapter}n{para}",
+                                    $"Paragraph {para} of chapter {chapter} tells of the long road across the desert, " +
+                                    "where the wind carried the smell of spice and the horizon never came any closer."));
+                            else
+                                ch.AddParagraph($"c{chapter}p{para}", x => x.AddCharacterLine($"c{chapter}l{para}",
+                                    $"“We will reach the sietch before the second moon, or not at all,” she said, in paragraph {para}.",
+                                    characterName));
+                        }
+                    });
+                }
+            });
+        await builder.BuildAsync();
+
+        return builder;
+    }
+
+    /// <summary>
+    /// A nested book for the native reader's big-book tests: two volumes, each with two titled parts of
+    /// two short chapters, so the reader window crosses part and volume boundaries within a few
+    /// screens. Names: volumes "vol1"/"vol2", parts "vol1-part1"…, chapters "vol1-part1-ch1"….
+    /// </summary>
+    public static async Task<BookHierarchyBuilder> SeedNestedBookAsync(
+        IServiceProvider services, string workspaceDir, string folderName, string title, string author)
+    {
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        var folderPath = Path.Combine(workspaceDir, folderName);
+
+        var builder = new BookHierarchyBuilder(() => factory.CreateAsync(folderPath));
+        builder.WithProject(title: title, author: author);
+        for (var v = 1; v <= 2; v++)
+        {
+            var volume = v;
+            builder.AddVolume($"vol{volume}", vol =>
+            {
+                for (var p = 1; p <= 2; p++)
+                {
+                    var part = p;
+                    vol.AddPart($"vol{volume}-part{part}", pt =>
+                    {
+                        for (var c = 1; c <= 2; c++)
+                        {
+                            var chapter = c;
+                            pt.AddChapter($"vol{volume}-part{part}-ch{chapter}", ch =>
+                            {
+                                for (var n = 1; n <= 3; n++)
+                                {
+                                    var para = n;
+                                    ch.AddParagraph($"vol{volume}-part{part}-ch{chapter}-p{para}", x =>
+                                        x.AddNarration($"vol{volume}-part{part}-ch{chapter}-n{para}",
+                                            $"Volume {volume}, part {part}, chapter {chapter}, paragraph {para}."));
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        }
+        await builder.BuildAsync();
+
+        return builder;
+    }
 }

@@ -294,6 +294,49 @@ a {
   }
 }
 
+/* ---- segmented control (mat-button-toggle-group): a radio group styled as joined pills -------- */
+.r2m-segmented {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--r2m-outline);
+  border-radius: var(--r2m-radius-pill);
+  overflow: hidden;
+
+  & label {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 var(--r2m-space-4);
+    font: 500 var(--r2m-text-sm) var(--r2m-font-sans);
+    color: var(--r2m-text);
+    cursor: pointer;
+    user-select: none;
+  }
+  & label + label {
+    border-left: 1px solid var(--r2m-outline);
+  }
+  & input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  & label:has(input:checked) {
+    background: var(--r2m-secondary-container);
+    color: var(--r2m-on-secondary-container);
+  }
+  & label:has(input:focus-visible) {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -2px;
+  }
+  & label:hover:not(:has(input:checked)) {
+    background: color-mix(in srgb, var(--r2m-text) 6%, transparent);
+  }
+}
+
 /* Customizable select: Chromium styles the picker; Firefox (flagged only) keeps its native one. */
 @supports (appearance: base-select) {
   select,

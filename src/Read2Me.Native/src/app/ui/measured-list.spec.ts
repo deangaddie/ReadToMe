@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { html } from 'lit-html';
+import { signal } from '@app/core/signals';
 // Side-effect import registers the element; a type-only use alone would be elided.
 import './measured-list';
 import type { MeasuredList } from './measured-list';
@@ -162,5 +163,135 @@ describe('r2m-measured-list', () => {
     await list.rendered();
     expect(rendered(list)).toEqual(['r0', 'r9']);
     expect(list.querySelector('.r2m-vlist__row p')?.textContent).toBe('Changed');
+  });
+});
+
+describe('r2m-measured-list row re-measure', () => {
+  /** Stands in for the browser's ResizeObserver: the spec fires it for the rows it names. */
+  class FakeResizeObserver {
+    static instances: FakeResizeObserver[] = [];
+    readonly observed = new Set<Element>();
+    constructor(readonly callback: ResizeObserverCallback) {
+      FakeResizeObserver.instances.push(this);
+    }
+    observe(target: Element) {
+      this.observed.add(target);
+    }
+    unobserve(target: Element) {
+      this.observed.delete(target);
+    }
+    disconnect() {
+      this.observed.clear();
+    }
+    fire(targets: Element[]) {
+      const entries = targets.map((target) => ({ target }) as ResizeObserverEntry);
+      this.callback(entries, this as unknown as ResizeObserver);
+    }
+  }
+  const Native = globalThis.ResizeObserver;
+  beforeEach(() => {
+    FakeResizeObserver.instances = [];
+    globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
+  });
+  afterEach(() => {
+    globalThis.ResizeObserver = Native;
+  });
+
+  /** The observer that watches rows: the one holding `.r2m-vlist__row` elements. */
+  const rowObserver = () =>
+    FakeResizeObserver.instances.find((o) =>
+      [...o.observed].some((e) => e.classList.contains('r2m-vlist__row')),
+    )!;
+
+  it('observes every rendered row and drops rows that left the window', async () => {
+    const { list, scrollTo } = await mount(rows(1000));
+    const observer = rowObserver();
+    expect([...observer.observed].length).toBe(rendered(list).length);
+    expect([...observer.observed].every((e) => e.isConnected)).toBe(true);
+    await scrollTo(500 * ESTIMATE_PX);
+    expect([...observer.observed].every((e) => e.isConnected)).toBe(true);
+    expect([...observer.observed].map((e) => e.getAttribute('data-row-key'))).toEqual(
+      rendered(list),
+    );
+  });
+
+  it('a row that grows after its first measure keeps the top row in place', async () => {
+    const { list, scrollTo } = await mount(rows(100));
+    for (const key of rendered(list)) heights.set(key!, ESTIMATE_PX);
+    await scrollTo(20 * ESTIMATE_PX);
+    for (const key of rendered(list)) heights.set(key!, ESTIMATE_PX);
+    list.items = [...list.items];
+    await list.rendered();
+    expect(list.scrollTop).toBe(20 * ESTIMATE_PX);
+
+    // A chip wraps in the row above the top one: only that row reports a new size.
+    heights.set('r19', ESTIMATE_PX + 50);
+    const grown = list.querySelector('[data-row-key="r19"]')!;
+    rowObserver().fire([grown]);
+    expect(list.offsetOf(20) - list.offsetOf(19)).toBe(ESTIMATE_PX + 50);
+    expect(list.scrollTop).toBe(list.offsetOf(20));
+  });
+});
+
+describe('r2m-measured-list row functions', () => {
+  it('re-renders the visible rows when a signal the row function reads changes', async () => {
+    const label = signal('before');
+    const list = document.createElement('r2m-measured-list') as MeasuredList<Row>;
+    Object.defineProperty(list, 'clientHeight', { value: VIEWPORT_PX });
+    list.key = (row) => row.id;
+    list.row = (row) => html`<p>${row.text} ${label()}</p>`;
+    list.items = rows(3);
+    document.body.append(list);
+    await list.rendered();
+    expect(list.querySelector('.r2m-vlist__row p')?.textContent).toBe('Row 0 before');
+    label.set('after');
+    await list.rendered();
+    expect(list.querySelector('.r2m-vlist__row p')?.textContent).toBe('Row 0 after');
+  });
+});
+
+describe('r2m-measured-list under whole-pixel scrollTop', () => {
+  it('does not let rounding compound over repeated prepends', async () => {
+    const { list, scrollTo } = await mount(rows(40, 100));
+    // The browser keeps scrollTop on whole pixels: emulate it on this instance.
+    let stored = 0;
+    Object.defineProperty(list, 'scrollTop', {
+      get: () => stored,
+      set: (v: number) => {
+        stored = Math.ceil(v);
+      },
+    });
+    const fractional = 54.171875;
+    for (const key of rendered(list)) heights.set(key!, fractional);
+    await scrollTo(0);
+    list.items = [...list.items];
+    await list.rendered();
+    expect(list.scrollTop).toBe(0);
+
+    // Three prepends of four rows each, every row a fractional height.
+    for (let n = 1; n <= 3; n++) {
+      const added = rows(4, 100 - 4 * n);
+      for (const row of added) heights.set(row.id, fractional);
+      list.items = [...added, ...list.items];
+      await list.rendered();
+      const anchored = list.offsetOf(list.items.findIndex((r) => r.id === 'r100'));
+      expect(Math.abs(list.scrollTop - anchored)).toBeLessThan(1);
+    }
+  });
+});
+
+describe('r2m-measured-list anchor lifetime', () => {
+  it('setting the same items again neither re-renders nor leaves an anchor behind', async () => {
+    const { list, scrollTo } = await mount(rows(100));
+    await scrollTo(10 * ESTIMATE_PX);
+    const same = list.items;
+    list.items = same;
+    await list.rendered();
+    // A later user scroll followed by a measure must not snap back to the old position.
+    await scrollTo(30 * ESTIMATE_PX);
+    for (const key of rendered(list)) heights.set(key!, ESTIMATE_PX + 10);
+    list.items = [...same];
+    await list.rendered();
+    expect(list.scrollTop).toBeGreaterThanOrEqual(30 * ESTIMATE_PX);
   });
 });

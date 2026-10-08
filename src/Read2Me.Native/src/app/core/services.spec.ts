@@ -77,3 +77,19 @@ describe('override and resetServices', () => {
     expect(use(Counter)).not.toBe(first);
   });
 });
+
+describe('use with a constructor that takes arguments', () => {
+  class Scoped {
+    constructor(readonly counter: Counter) {}
+  }
+
+  it('returns the provided instance and refuses to build one of its own', () => {
+    const host = document.createElement('div');
+    const leaf = document.createElement('span');
+    host.append(leaf);
+    document.body.append(host);
+    const scoped = provide(host, Scoped, new Scoped(use(Counter)));
+    expect(use(Scoped, leaf)).toBe(scoped);
+    expect(() => use(Scoped)).toThrow(/provide\(\)/);
+  });
+});

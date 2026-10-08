@@ -41,7 +41,12 @@ export const routes: RouteDef[] = [
         load: () => import('@app/pages/project/project-shell'),
         children: [
           { path: '', title: 'Overview', tag: PLACEHOLDER, load: placeholder },
-          { path: 'book', title: 'Book', tag: PLACEHOLDER, load: placeholder },
+          {
+            path: 'book',
+            title: 'Book',
+            tag: 'r2m-book-page',
+            load: () => import('@app/pages/book/book-page'),
+          },
           { path: 'cast', title: 'Cast', tag: PLACEHOLDER, load: placeholder },
           { path: 'cast/:characterId', title: 'Cast', tag: PLACEHOLDER, load: placeholder },
           {

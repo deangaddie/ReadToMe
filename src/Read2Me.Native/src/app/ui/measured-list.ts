@@ -66,14 +66,26 @@ export class MeasuredList<T = unknown> extends R2mElement {
   readonly #items = signal<readonly T[]>([]);
   readonly #range = signal<Range>({ start: 0, end: 0 });
   private pendingAnchor: Anchor | null = null;
+  /**
+   * The fractional `scrollTop` the list last set itself. Browsers round the stored value to a
+   * whole pixel; anchoring against the intended value instead stops that half-pixel compounding
+   * over repeated prepends. Null once the reader scrolls on their own.
+   */
+  private intendedTop: number | null = null;
   private lastTop = -1;
   private resize: ResizeObserver | null = null;
-  private observed: Element | null = null;
+  /** Watches each rendered row, so a row that changes height after its first measure (a chip
+   * wrapping, an editor opening) re-measures on its own and the top row stays put (spec §7). */
+  private rowResize: ResizeObserver | null = null;
+  private readonly observedRows = new Set<Element>();
+  private sized = false;
 
   get items(): readonly T[] {
     return this.#items();
   }
   set items(items: readonly T[]) {
+    // The same array again would not re-render, so the anchor it captured would go stale.
+    if (items === this.#items()) return;
     this.pendingAnchor ??= this.anchor();
     this.index.setKeys(items.map(this.key));
     this.#items.set(items);
@@ -81,43 +93,88 @@ export class MeasuredList<T = unknown> extends R2mElement {
   }
 
   protected override connected(): void {
-    const onScroll = () => this.update();
+    const onScroll = () => {
+      if (this.intendedTop !== null && Math.abs(this.intendedTop - this.scrollTop) >= 1) {
+        // The reader scrolled: neither the intended offset nor a pending anchor describes where they are.
+        this.intendedTop = null;
+        this.pendingAnchor = null;
+      }
+      this.update();
+    };
     this.addEventListener('scroll', onScroll, { passive: true });
     this.resize = new ResizeObserver(() => this.measure());
     this.resize.observe(this);
+    this.rowResize = new ResizeObserver((entries) => this.measureRows(entries));
     this.onDisconnect(() => {
       this.removeEventListener('scroll', onScroll);
       this.resize?.disconnect();
       this.resize = null;
-      this.observed = null;
+      this.rowResize?.disconnect();
+      this.rowResize = null;
+      this.observedRows.clear();
+      this.sized = false;
     });
   }
 
   protected template() {
     const { start, end } = this.#range();
-    const visible = this.#items().slice(start, end);
+    // Row templates are built here, inside the effect, not in the repeat callback (which lit runs
+    // at commit time, outside it): a signal a row reads then re-renders the visible rows.
+    const rows = this.#items()
+      .slice(start, end)
+      .map((item) => ({ key: this.key(item), content: this.row(item) }));
     return html`<div class="r2m-vlist__spacer"></div>
       <div class="r2m-vlist__content">
         ${repeat(
-          visible,
-          this.key,
-          (item) =>
-            html`<div class="r2m-vlist__row" data-row-key=${this.key(item)}>
-              ${this.row(item)}
-            </div>`,
+          rows,
+          (row) => row.key,
+          (row) => html`<div class="r2m-vlist__row" data-row-key=${row.key}>${row.content}</div>`,
         )}
       </div>`;
   }
 
   protected override updated(): void {
-    const content = this.querySelector('.r2m-vlist__content');
-    if (content && content !== this.observed) {
-      // First render: the content now exists to observe and to size the range against.
-      this.observed = content;
-      this.resize?.observe(content);
+    if (!this.sized) {
+      // First render: the content now exists to size the range against.
+      this.sized = true;
       this.update();
     }
     this.measure();
+    this.observeRows();
+  }
+
+  /** Keeps the row observer on exactly the rows the last render left in the DOM. */
+  private observeRows(): void {
+    const observer = this.rowResize;
+    if (!observer) return;
+    const current = new Set<Element>(this.querySelectorAll(`[${ROW_KEY_ATTR}]`));
+    for (const row of this.observedRows) {
+      if (!current.has(row)) {
+        observer.unobserve(row);
+        this.observedRows.delete(row);
+      }
+    }
+    for (const row of current) {
+      if (!this.observedRows.has(row)) {
+        observer.observe(row);
+        this.observedRows.add(row);
+      }
+    }
+  }
+
+  /** One or a few rows changed height on their own: record them, then keep the top row still. */
+  private measureRows(entries: ResizeObserverEntry[]): void {
+    const anchor = this.pendingAnchor ?? this.anchor();
+    this.pendingAnchor = null;
+    let changed = false;
+    for (const { target } of entries) {
+      const key = target.getAttribute(ROW_KEY_ATTR);
+      const height = target.getBoundingClientRect().height;
+      if (key && height > 0 && this.index.setHeight(key, height)) changed = true;
+    }
+    if (!changed) return;
+    this.restore(anchor);
+    this.update();
   }
 
   /** Where row `index` starts, in pixels from the top of the content (estimated until measured). */
@@ -131,13 +188,13 @@ export class MeasuredList<T = unknown> extends R2mElement {
   }
 
   scrollToIndex(index: number, behavior: ScrollBehavior = 'auto'): void {
-    this.pendingAnchor = null;
-    this.applyTotalSize();
-    this.scrollTo({ top: this.index.offsetOf(index), behavior });
+    this.scrollToOffset(this.index.offsetOf(index), behavior);
   }
 
   scrollToOffset(top: number, behavior: ScrollBehavior = 'auto'): void {
+    this.pendingAnchor = null;
     this.applyTotalSize();
+    this.intendedTop = top;
     this.scrollTo({ top, behavior });
   }
 
@@ -150,18 +207,28 @@ export class MeasuredList<T = unknown> extends R2mElement {
     return this.index.indexAt(offset + TOP_TOLERANCE_PX);
   }
 
+  /** `scrollTop` as the list meant it, when the browser only rounded it; else as it is. */
+  private scrollOffsetIntended(): number {
+    const actual = this.scrollTop;
+    const intended = this.intendedTop;
+    return intended !== null && Math.abs(intended - actual) < 1 ? intended : actual;
+  }
+
   private anchor(): Anchor | null {
     if (!this.isConnected || this.index.length === 0) return null;
-    const offset = this.scrollTop;
+    const offset = this.scrollOffsetIntended();
     const top = this.topRow(offset);
     const key = this.index.keyAt(top);
     return key === undefined ? null : { key, delta: offset - this.index.offsetOf(top) };
   }
 
+  /**
+   * Restores the anchor against the estimated offsets now, and keeps it for the measure that
+   * follows the render: the corrected restore then starts from the original delta rather than
+   * from a `scrollTop` the browser has already rounded, so the two passes round only once.
+   */
   private settle(): void {
-    const anchor = this.pendingAnchor;
-    this.pendingAnchor = null;
-    this.restore(anchor);
+    this.restore(this.pendingAnchor);
     this.update();
   }
 
@@ -171,8 +238,9 @@ export class MeasuredList<T = unknown> extends R2mElement {
     const i = this.index.indexOf(anchor.key);
     if (i < 0) return;
     const target = this.index.offsetOf(i) + anchor.delta;
-    if (Math.abs(target - this.scrollTop) < 0.5) return;
+    if (Math.abs(target - this.scrollOffsetIntended()) < 0.5) return;
     this.applyTotalSize();
+    this.intendedTop = target;
     this.scrollTop = target;
   }
 
@@ -212,7 +280,7 @@ export class MeasuredList<T = unknown> extends R2mElement {
     if (content) content.style.transform = `translateY(${this.index.offsetOf(range.start)}px)`;
     const current = this.#range();
     if (current.start !== range.start || current.end !== range.end) this.#range.set(range);
-    const top = length > 0 ? this.topRow(offset) : -1;
+    const top = length > 0 ? this.topRow(this.scrollOffsetIntended()) : -1;
     if (top !== this.lastTop) {
       this.lastTop = top;
       this.emit('r2m-top-row', top);

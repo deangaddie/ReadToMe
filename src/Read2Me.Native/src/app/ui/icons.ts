@@ -35,6 +35,7 @@ export const ICON_NAMES = [
   'library_music',
   'light_mode',
   'link',
+  'lock',
   'memory',
   'menu',
   'menu_book',
@@ -61,6 +62,7 @@ export const ICON_NAMES = [
   'stop',
   'stop_circle',
   'subtitles',
+  'sync_problem',
   'trending_up',
   'warning',
 ] as const;

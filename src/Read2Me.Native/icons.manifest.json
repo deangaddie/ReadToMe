@@ -30,6 +30,7 @@
   "library_music",
   "light_mode",
   "link",
+  "lock",
   "memory",
   "menu",
   "menu_book",
@@ -56,6 +57,7 @@
   "stop",
   "stop_circle",
   "subtitles",
+  "sync_problem",
   "trending_up",
   "warning"
 ]

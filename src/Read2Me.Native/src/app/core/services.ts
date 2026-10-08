@@ -10,7 +10,8 @@ export interface Token<T> {
   readonly factory: () => T;
 }
 
-export type ServiceKey<T> = (new () => T) | Token<T>;
+/** A class (built with no arguments on first use, unless an ancestor {@link provide}s it) or a token. */
+export type ServiceKey<T> = (abstract new (...args: never[]) => T) | Token<T>;
 
 export function token<T>(name: string, factory: () => T): Token<T> {
   return { name, factory };
@@ -24,7 +25,7 @@ export function use<T>(key: ServiceKey<T>, from?: Element): T {
     const scoped = scopes.get(el);
     if (scoped?.has(key)) return scoped.get(key) as T;
   }
-  if (!root.has(key)) root.set(key, typeof key === 'function' ? new key() : key.factory());
+  if (!root.has(key)) root.set(key, build(key));
   return root.get(key) as T;
 }
 
@@ -42,6 +43,16 @@ export function override<T>(key: ServiceKey<T>, instance: T): void {
 
 export function resetServices(): void {
   root.clear();
+}
+
+/** The app-wide instance; a class whose constructor takes arguments must be provided by an ancestor. */
+function build<T>(key: ServiceKey<T>): T {
+  if (typeof key !== 'function') return key.factory();
+  if (key.length > 0)
+    throw new Error(
+      `${key.name} takes constructor arguments: provide() it from an ancestor element`,
+    );
+  return new (key as unknown as new () => T)();
 }
 
 function parentOf(el: Element): Element | null {

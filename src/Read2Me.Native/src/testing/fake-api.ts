@@ -1,7 +1,7 @@
 import { ApiClient } from '@app/api/api-client';
 import { override } from '@app/core/services';
 
-/** Answers a routed request: a JSON body, or a `Response` for a status other than 200. */
+/** Answers a routed request: a JSON body, or a `Response` for a status other than 200; a promise of either holds the reply. */
 export type FakeRoute = (body: unknown, url: URL) => unknown;
 
 export interface FakeRequest {
@@ -52,7 +52,7 @@ export class FakeApi {
           { status: 404 },
         );
       }
-      const result = route(body, url);
+      const result = await route(body, url);
       if (result instanceof Response) return result;
       if (result === undefined) return new Response(null, { status: 204 });
       return Response.json(result);

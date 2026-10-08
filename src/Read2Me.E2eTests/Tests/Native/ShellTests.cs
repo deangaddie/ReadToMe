@@ -20,23 +20,23 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
     [Fact]
     public async Task Shell_frames_a_placeholder_page_that_names_the_screen_and_links_back_to_angular()
     {
-        await GotoAppAsync("projects/foundation/book");
+        await GotoAppAsync("projects/foundation/cast");
 
-        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("projects/foundation/book$")));
+        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("projects/foundation/cast$")));
 
         await Expect(Page.Locator("app-root .shell__appbar .shell__brand")).ToHaveTextAsync(new Regex("Read2Me"));
 
         var placeholder = Page.Locator("r2m-placeholder-page");
-        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Book");
+        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Cast");
         await Expect(placeholder.Locator(".r2m-page-header__subtitle")).ToHaveTextAsync("Project: foundation");
         await Expect(placeholder.Locator(".r2m-empty-state__headline"))
             .ToHaveTextAsync("This screen has not moved to the native app yet");
         await Expect(placeholder.Locator("a.r2m-placeholder-page__link"))
-            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/projects/foundation/book");
+            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/projects/foundation/cast");
 
         // The project is not seeded, so the crumb keeps the folder name.
-        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Projects", "foundation", "Book"]);
-        Assert.Equal("Read2Me · Projects · foundation · Book", await Page.TitleAsync());
+        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Projects", "foundation", "Cast"]);
+        Assert.Equal("Read2Me · Projects · foundation · Cast", await Page.TitleAsync());
     }
 
     [Fact]
