@@ -1,0 +1,184 @@
+/* Edit with AI (research §3): Instruct → Plan → Proposing → Review in one full-screen dialog. */
+@scope (r2m-edit-with-ai-dialog) to (r2m-stream-llm) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .edit {
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: var(--r2m-space-2);
+    overflow-y: auto;
+  }
+  .edit__steps {
+    display: flex;
+    gap: var(--r2m-space-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex-wrap: wrap;
+  }
+  .edit__step {
+    padding: var(--r2m-space-1) var(--r2m-space-2);
+    border-radius: var(--r2m-radius-pill);
+    border: 1px solid var(--r2m-outline);
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-text-muted);
+  }
+  .edit__step--current {
+    border-color: var(--r2m-accent);
+    color: var(--r2m-text);
+    font-weight: 600;
+  }
+  .edit__step--done {
+    color: var(--r2m-text);
+  }
+  .edit__hint {
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+    margin: 0;
+  }
+  .edit__summary {
+    margin: 0;
+  }
+  .edit__error {
+    color: var(--r2m-status-error);
+    margin: 0;
+  }
+  .edit__warning {
+    color: var(--r2m-status-warn);
+    margin: 0;
+  }
+  .edit__instruction,
+  .edit__proposed,
+  .edit__hint-field {
+    font: inherit;
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--r2m-space-2);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-sm);
+    background: var(--r2m-surface);
+    color: var(--r2m-text);
+    resize: vertical;
+
+    &:focus-visible {
+      outline: 2px solid var(--r2m-accent);
+      outline-offset: -1px;
+    }
+  }
+  .edit__select {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .edit__spacer {
+    flex: 1 1 auto;
+  }
+  .edit__rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-1);
+  }
+  .edit__row {
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+    padding: var(--r2m-space-1) var(--r2m-space-2);
+  }
+  .edit__row-head {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .edit__tick {
+    accent-color: var(--r2m-accent);
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    margin: 0;
+  }
+  .edit__row-open {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: var(--r2m-space-2);
+    align-items: center;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: var(--r2m-space-1) 0;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--r2m-accent);
+      outline-offset: 2px;
+      border-radius: var(--r2m-radius-sm);
+    }
+  }
+  .edit__where {
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .edit__old {
+    text-decoration: line-through;
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .edit__new {
+    color: var(--r2m-status-ok);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .edit__new[data-state='failed'],
+  .edit__new[data-state='invalid'] {
+    color: var(--r2m-status-error);
+  }
+  .edit__new[data-state='noChange'] {
+    color: var(--r2m-text-muted);
+  }
+  .edit__detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-1);
+    padding: var(--r2m-space-2) 0;
+    border-top: 1px solid var(--r2m-outline);
+  }
+  .edit__current {
+    margin: 0;
+    max-height: 18vh;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .edit__row-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .edit__stream {
+    margin-top: auto;
+    border-top: 1px solid var(--r2m-outline);
+    padding-top: var(--r2m-space-1);
+  }
+  .edit__stream-body {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.15s ease;
+  }
+  .edit__stream-body--open {
+    height: 32vh;
+  }
+  .edit__stop {
+    color: var(--r2m-status-error);
+  }
+}

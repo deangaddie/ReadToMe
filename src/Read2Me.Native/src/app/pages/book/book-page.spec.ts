@@ -10,6 +10,7 @@ import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
 import { AudioGenerator } from './audio-generator';
+import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import type { BookPage } from './book-page';
 import { AudioSelectionStore, SelectionStore } from './selection-store';
@@ -566,6 +567,7 @@ describe('r2m-book-page', () => {
         'add-book-title',
         'add-chapter-titles',
         'add-pauses',
+        'edit-with-ai',
         'reread',
         'manual-reread',
       ]);
@@ -632,6 +634,21 @@ describe('r2m-book-page', () => {
           chapter: { mode: 'Prefix', prefix: 'Chapter' },
         },
       ]);
+    });
+
+    it('Edit with AI opens the dialog over the editor and reports what it applied', async () => {
+      const { page } = await open1();
+      page.querySelector<HTMLButtonElement>('[data-action=edit-with-ai]')!.click();
+      await settle();
+      const dialog = document.querySelector('r2m-edit-with-ai-dialog')!;
+      await dialog.rendered();
+      expect(dialog.closest('dialog')?.className).toBe('r2m-dialog r2m-dialog--fullscreen');
+      expect(dialog.data.editor).toBe(use(BookEditor, page));
+
+      dialog.dispatchEvent(new CustomEvent('r2m-close', { detail: { applied: 2 } }));
+      for (let i = 0; i < 4; i++) await settle();
+      expect(document.querySelector('r2m-edit-with-ai-dialog')).toBeNull();
+      expect(toasts).toEqual(['Applied 2 edits.']);
     });
 
     async function open1() {

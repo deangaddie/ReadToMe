@@ -475,6 +475,17 @@ dialog.r2m-dialog--sheet {
   box-shadow: var(--r2m-shadow-3);
 }
 
+/* Full-screen dialog (the Angular `r2m-fullscreen-dialog` panel): the whole viewport, square. */
+dialog.r2m-dialog--fullscreen {
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  margin: 0;
+  border-radius: 0;
+}
+
 /* ---- menu popover (anchored to its invoker by CSS anchor positioning) ----------------------- */
 [popover].r2m-menu {
   inset: auto;

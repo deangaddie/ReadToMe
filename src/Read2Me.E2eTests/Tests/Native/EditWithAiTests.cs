@@ -2,16 +2,19 @@ using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// Edit with AI in the web reader (Angular ticket 19) end to end on the fake-AI host: instruct →
-/// plan → propose → review, with a hand edit and a per-row retry, then one apply that the reader
-/// picks up from its own receipt and a fresh load confirms.
+/// Edit with AI in the native reader (native-web 27, from the Angular class of the same name) end
+/// to end on the fake-AI host: instruct → plan → propose → review, with a hand edit and a per-row
+/// retry, then one apply that the reader picks up from its own receipt and a fresh load confirms.
+/// Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
+    protected override WebApp WebApp => WebApp.Native;
+
     /// <summary>An LLM plan that hands every chapter title to the model to rewrite.</summary>
     private const string LlmPlan =
         """
@@ -37,9 +40,9 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
     {
         await GotoAppAsync($"projects/{folder}/book");
         await Page.Locator("[data-testid='book-actions']").ClickAsync();
-        await Page.Locator(".mat-mdc-menu-panel [data-action='edit-with-ai']").ClickAsync();
+        await Page.GetByRole(AriaRole.Menuitem, new() { Name = "Edit with AI…" }).ClickAsync();
 
-        var dialog = Page.Locator("app-edit-with-ai-dialog");
+        var dialog = Page.Locator("r2m-edit-with-ai-dialog");
         await Expect(dialog).ToBeVisibleAsync();
         await dialog.Locator("[data-testid='instruction']").FillAsync(instruction);
         await dialog.Locator("[data-action='analyze']").ClickAsync();
@@ -48,12 +51,12 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
     [Fact]
     public async Task Instruct_plan_propose_hand_edit_retry_and_apply()
     {
-        const string folder = "web-edit-ai";
+        const string folder = "native-edit-ai";
         await App.SeedMultiChapterProjectAsync(folder, "Edit With AI Book", "A. Author", chapters: 3);
         App.FakeAi.LlmReply = p => IsPlanPrompt(p) ? LlmPlan : UpperCaseBatchReply(p);
 
         await OpenDialogAsync(folder, "capitalise chapter titles");
-        var dialog = Page.Locator("app-edit-with-ai-dialog");
+        var dialog = Page.Locator("r2m-edit-with-ai-dialog");
 
         // 1. Plan: what the host understood, and how big the job is.
         await Expect(dialog.Locator(".edit")).ToHaveAttributeAsync("data-phase", "plan");
@@ -71,7 +74,7 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         var first = dialog.Locator("[data-row='0']");
         await first.Locator("[data-action='open-row']").ClickAsync();
         await first.Locator("[data-testid='proposed']").FillAsync("Chapter The First");
-        await Expect(first.Locator("r2m-status-chip")).ToContainTextAsync("Edited");
+        await Expect(first.Locator(".r2m-status-chip")).ToContainTextAsync("Edited");
         await first.GetByRole(AriaRole.Button, new() { Name = "Done" }).ClickAsync();
 
         // 4. Ask the AI again for the second row, steered by a hint.
@@ -108,12 +111,12 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
     [Fact]
     public async Task Cancelling_mid_proposal_keeps_the_rows_computed_so_far()
     {
-        const string folder = "web-edit-ai-cancel";
+        const string folder = "native-edit-ai-cancel";
         await App.SeedMultiChapterProjectAsync(folder, "Cancel Book", "A. Author", chapters: 24);
         App.FakeAi.LlmReply = p => IsPlanPrompt(p) ? LlmPlan : UpperCaseBatchReply(p);
 
         await OpenDialogAsync(folder, "capitalise chapter titles");
-        var dialog = Page.Locator("app-edit-with-ai-dialog");
+        var dialog = Page.Locator("r2m-edit-with-ai-dialog");
         await Expect(dialog.Locator(".edit")).ToHaveAttributeAsync("data-phase", "plan");
 
         // Slow the batches down so the run is still going when Cancel is clicked.

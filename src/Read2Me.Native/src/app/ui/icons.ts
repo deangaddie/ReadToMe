@@ -7,6 +7,7 @@ export const ICON_NAMES = [
   'add',
   'arrow_downward',
   'auto_awesome',
+  'auto_fix_high',
   'auto_stories',
   'bookmark',
   'brightness_auto',

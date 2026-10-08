@@ -18,6 +18,7 @@ import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import type { TreeNode } from './book-tree';
+import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
 import { nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
@@ -117,8 +118,9 @@ const TITLE_ACTIONS: readonly {
  * bar — Attribute (gated by preflight), Bulk assign speaker, Clear. Audio mode (ticket 13) does
  * the same for items over the {@link AudioSelectionStore}: item and tree checkboxes, "Select
  * needs audio", and a bar with Generate audio and Clear through the {@link AudioGenerator}. The
- * toolbar overflow holds the book-level actions (titles, pauses, reread, manual reread); Edit
- * with AI arrives with native-web 27.
+ * toolbar overflow holds the book-level actions (titles, pauses, Edit with AI, reread, manual
+ * reread); Edit with AI (ticket 27) is `r2m-edit-with-ai-dialog`, full screen, applying through
+ * this page's {@link BookEditor}.
  */
 export class BookPage extends R2mElement {
   private readonly router = use(Router);
@@ -499,6 +501,8 @@ export class BookPage extends R2mElement {
         <hr class="r2m-menu__divider" />
         ${entry('add-pauses', 'Add pauses', 'pause', () => void this.editor.run({ type: 'AddPauses' }))}
         <hr class="r2m-menu__divider" />
+        ${entry('edit-with-ai', 'Edit with AI…', 'auto_fix_high', () => void this.editWithAi())}
+        <hr class="r2m-menu__divider" />
         ${entry('reread', 'Reread…', 'restart_alt', () => void this.reread())}
         ${entry('manual-reread', 'Manual reread…', 'tune', () => void this.rereadManually())}
       </div>`;
@@ -727,6 +731,19 @@ export class BookPage extends R2mElement {
   private async rereadManually(): Promise<void> {
     const request = await openManualRereadDialog();
     if (request) await this.editor.rereadManually(request);
+  }
+
+  /**
+   * Edit with AI. The dialog applies through {@link BookEditor} itself, so the reader is already
+   * showing the result when it closes; this only reports what landed.
+   */
+  private async editWithAi(): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder) return;
+    const result = await openEditWithAiDialog(folder, this.editor);
+    if (result) {
+      this.toast.success(`Applied ${result.applied} edit${result.applied === 1 ? '' : 's'}.`);
+    }
   }
 
   // ---- the window ---------------------------------------------------------------------------------

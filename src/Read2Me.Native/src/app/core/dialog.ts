@@ -1,8 +1,11 @@
 import type { R2mElement } from './element';
 
 export interface DialogOptions {
-  /** `sheet` docks the dialog to the bottom edge (the preflight bottom sheet, spec §5.3). */
-  variant?: 'sheet';
+  /**
+   * `sheet` docks the dialog to the bottom edge (the preflight bottom sheet, spec §5.3);
+   * `fullscreen` fills the viewport (MatDialog's `r2m-fullscreen-dialog` panel).
+   */
+  variant?: 'sheet' | 'fullscreen';
   /** `none` disables light dismiss and Escape (MatBottomSheet's `disableClose`). */
   closedBy?: 'any' | 'none';
 }

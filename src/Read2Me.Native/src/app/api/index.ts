@@ -15,4 +15,5 @@ export * from './voices-api';
 export * from './ai-services-api';
 export * from './preflight-api';
 export * from './book-api';
+export * from './book-edits-api';
 export * from './workspace-url';
