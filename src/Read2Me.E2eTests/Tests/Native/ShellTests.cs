@@ -20,24 +20,23 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
     [Fact]
     public async Task Shell_frames_a_placeholder_page_that_names_the_screen_and_links_back_to_angular()
     {
-        // Export is still a placeholder (Cast moved natively in native-web 30).
-        await GotoAppAsync("projects/foundation/export");
+        // Every project screen is native now (Export moved in native-web 33); Settings pages are still placeholders.
+        await GotoAppAsync("settings/prompts");
 
-        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("projects/foundation/export$")));
+        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("settings/prompts$")));
 
         await Expect(Page.Locator("app-root .shell__appbar .shell__brand")).ToHaveTextAsync(new Regex("Read2Me"));
 
         var placeholder = Page.Locator("r2m-placeholder-page");
-        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Export");
-        await Expect(placeholder.Locator(".r2m-page-header__subtitle")).ToHaveTextAsync("Project: foundation");
+        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Prompts");
+        await Expect(placeholder.Locator(".r2m-page-header__subtitle")).ToHaveCountAsync(0);
         await Expect(placeholder.Locator(".r2m-empty-state__headline"))
             .ToHaveTextAsync("This screen has not moved to the native app yet");
         await Expect(placeholder.Locator("a.r2m-placeholder-page__link"))
-            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/projects/foundation/export");
+            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/settings/prompts");
 
-        // The project is not seeded, so the crumb keeps the folder name.
-        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Projects", "foundation", "Export"]);
-        Assert.Equal("Read2Me · Projects · foundation · Export", await Page.TitleAsync());
+        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Settings", "Prompts"]);
+        Assert.Equal("Read2Me · Settings · Prompts", await Page.TitleAsync());
     }
 
     [Fact]

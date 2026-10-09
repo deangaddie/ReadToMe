@@ -167,12 +167,12 @@ describe('app-root', () => {
   });
 
   it('frames the routed page in the main outlet and opens the project on a project route', async () => {
-    // Export is still a placeholder; the ported routes render their own pages.
+    // Every project child is ported now; the export page stands in for them here.
     const { shell } = await mount('projects/foundation/export');
     expect(shell.querySelector('main r2m-outlet')?.firstElementChild?.localName).toBe(
       'r2m-project-shell',
     );
-    expect(shell.querySelector('r2m-project-shell r2m-placeholder-page')).not.toBeNull();
+    expect(shell.querySelector('r2m-project-shell r2m-export-page')).not.toBeNull();
     expect(live.joined).toEqual(['foundation']);
   });
 

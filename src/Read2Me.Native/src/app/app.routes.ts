@@ -74,7 +74,12 @@ export const routes: RouteDef[] = [
             tag: 'r2m-voice-editor-page',
             load: () => import('@app/pages/voice-editor/voice-editor-page'),
           },
-          { path: 'export', title: 'Export', tag: PLACEHOLDER, load: placeholder },
+          {
+            path: 'export',
+            title: 'Export',
+            tag: 'r2m-export-page',
+            load: () => import('@app/pages/export/export-page'),
+          },
         ],
       },
     ],

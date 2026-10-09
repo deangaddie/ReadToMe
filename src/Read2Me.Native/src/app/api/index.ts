@@ -11,6 +11,7 @@ export * from './projects-api';
 export * from './attribution-api';
 export * from './audio-api';
 export * from './assembly-api';
+export * from './audio-processing-api';
 export * from './voices-api';
 export * from './characters-api';
 export * from './ai-services-api';

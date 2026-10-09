@@ -1,0 +1,125 @@
+/* The export page (ticket 20): readiness, the phase stepper and the assembled outputs, as cards. */
+@scope (r2m-export-page) to (.r2m-key-value > *, .r2m-status-chip > *, .r2m-empty-state > *) {
+  :scope {
+    display: block;
+  }
+  .export__cards {
+    display: grid;
+    gap: var(--r2m-space-4);
+    max-width: 880px;
+    margin-top: var(--r2m-space-3);
+  }
+  .export__card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    padding: var(--r2m-space-4);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface-low);
+  }
+  .export__heading {
+    margin: 0;
+    font-size: var(--r2m-text-lg);
+    font-weight: 500;
+  }
+  .export__hint {
+    margin: 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .export__hint a {
+    color: var(--r2m-accent);
+  }
+  .export__actions {
+    display: flex;
+    gap: var(--r2m-space-2);
+  }
+  .export__phases {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--r2m-space-2) var(--r2m-space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .export__phase {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    color: var(--r2m-text-muted);
+  }
+  .export__phase--active,
+  .export__phase--done {
+    color: inherit;
+  }
+  .export__phase--active .export__phase-label {
+    font-weight: 600;
+  }
+  .export__phase--failed {
+    color: var(--r2m-status-error);
+  }
+  .export__marker {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--r2m-outline);
+    border-radius: 50%;
+  }
+  .export__marker .r2m-icon {
+    font-size: 16px;
+  }
+  .export__percent {
+    font-variant-numeric: tabular-nums;
+  }
+  .export__error {
+    margin: 0;
+    max-height: 240px;
+    overflow: auto;
+    padding: var(--r2m-space-3);
+    border-radius: var(--r2m-radius-md);
+    background: color-mix(in srgb, var(--r2m-status-error) 8%, transparent);
+    font: var(--r2m-text-sm) var(--r2m-font-mono);
+    white-space: pre-wrap;
+  }
+  .export__skeleton {
+    height: 56px;
+    border-radius: var(--r2m-radius-md);
+    background: color-mix(in srgb, var(--r2m-text-muted) 12%, transparent);
+  }
+  .export__outputs {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .export__output {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-3);
+    padding: var(--r2m-space-2) 0;
+  }
+  .export__output + .export__output {
+    border-top: 1px solid var(--r2m-outline);
+  }
+  .export__output-icon {
+    color: var(--r2m-text-muted);
+  }
+  .export__output-main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .export__output-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .export__output-meta {
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+}
