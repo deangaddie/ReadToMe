@@ -56,8 +56,18 @@ export const routes: RouteDef[] = [
             tag: 'r2m-book-page',
             load: () => import('@app/pages/book/book-page'),
           },
-          { path: 'cast', title: 'Cast', tag: PLACEHOLDER, load: placeholder },
-          { path: 'cast/:characterId', title: 'Cast', tag: PLACEHOLDER, load: placeholder },
+          {
+            path: 'cast',
+            title: 'Cast',
+            tag: 'r2m-cast-page',
+            load: () => import('@app/pages/cast/cast-page'),
+          },
+          {
+            path: 'cast/:characterId',
+            title: 'Cast',
+            tag: 'r2m-cast-page',
+            load: () => import('@app/pages/cast/cast-page'),
+          },
           {
             path: 'voices/:voiceId/editor',
             title: 'Voice editor',

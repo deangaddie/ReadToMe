@@ -20,23 +20,24 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
     [Fact]
     public async Task Shell_frames_a_placeholder_page_that_names_the_screen_and_links_back_to_angular()
     {
-        await GotoAppAsync("projects/foundation/cast");
+        // Export is still a placeholder (Cast moved natively in native-web 30).
+        await GotoAppAsync("projects/foundation/export");
 
-        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("projects/foundation/cast$")));
+        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("projects/foundation/export$")));
 
         await Expect(Page.Locator("app-root .shell__appbar .shell__brand")).ToHaveTextAsync(new Regex("Read2Me"));
 
         var placeholder = Page.Locator("r2m-placeholder-page");
-        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Cast");
+        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Export");
         await Expect(placeholder.Locator(".r2m-page-header__subtitle")).ToHaveTextAsync("Project: foundation");
         await Expect(placeholder.Locator(".r2m-empty-state__headline"))
             .ToHaveTextAsync("This screen has not moved to the native app yet");
         await Expect(placeholder.Locator("a.r2m-placeholder-page__link"))
-            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/projects/foundation/cast");
+            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/projects/foundation/export");
 
         // The project is not seeded, so the crumb keeps the folder name.
-        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Projects", "foundation", "Cast"]);
-        Assert.Equal("Read2Me · Projects · foundation · Cast", await Page.TitleAsync());
+        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Projects", "foundation", "Export"]);
+        Assert.Equal("Read2Me · Projects · foundation · Export", await Page.TitleAsync());
     }
 
     [Fact]
@@ -70,11 +71,11 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
         await Expect(Page.Locator(".shell__crumb--current")).ToHaveTextAsync("Book");
         await Assertions.Expect(Page).ToHaveTitleAsync("Read2Me · Projects · Native Shell Book · Book");
 
-        // Rail navigation is an in-app navigation: the URL, crumbs and placeholder all move.
+        // Rail navigation is an in-app navigation: the URL, crumbs and page all move.
         await Page.Locator(".shell__nav-group--context a", new() { HasText = "Cast" }).ClickAsync();
         await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("projects/native-shell/cast$")));
         await Expect(Page.Locator(".shell__crumb--current")).ToHaveTextAsync("Cast");
-        await Expect(Page.Locator("r2m-placeholder-page .r2m-page-header__title")).ToHaveTextAsync("Cast");
+        await Expect(Page.Locator("r2m-cast-page .r2m-page-header__title")).ToHaveTextAsync("Cast");
         await Expect(Page.Locator(".shell__nav-item--active .shell__nav-label")).ToHaveTextAsync(["Cast"]);
 
         // A crumb link goes back up; the overview adds no crumb of its own.

@@ -6,6 +6,7 @@
 export const ICON_NAMES = [
   'add',
   'arrow_downward',
+  'arrow_forward',
   'auto_awesome',
   'auto_fix_high',
   'auto_stories',
@@ -56,6 +57,7 @@ export const ICON_NAMES = [
   'palette',
   'pause',
   'pending_actions',
+  'person',
   'person_add',
   'person_off',
   'person_search',

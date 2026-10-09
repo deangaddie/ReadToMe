@@ -167,7 +167,8 @@ describe('app-root', () => {
   });
 
   it('frames the routed page in the main outlet and opens the project on a project route', async () => {
-    const { shell } = await mount('projects/foundation/cast');
+    // Export is still a placeholder; the ported routes render their own pages.
+    const { shell } = await mount('projects/foundation/export');
     expect(shell.querySelector('main r2m-outlet')?.firstElementChild?.localName).toBe(
       'r2m-project-shell',
     );

@@ -1,21 +1,24 @@
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// What the cast page says about a linked narrator, beyond the link itself (which
-/// <see cref="NarratorLinkTests"/> drives): the banner offers only real characters and counts the
-/// linked one's ready voices, the Narrator row turns into a signpost that keeps the seed Narrator's
-/// voices listed as unused and jumps to the linked character, and deleting that character warns
-/// that narration goes back to the Narrator voice — a warning no other character's delete carries.
+/// What the native cast page says about a linked narrator (native-web 30, from the Angular class
+/// of the same name), beyond the link itself (which <see cref="NarratorLinkTests"/> drives): the
+/// banner offers only real characters and counts the linked one's ready voices, the Narrator row
+/// turns into a signpost that keeps the seed Narrator's voices listed as unused and jumps to the
+/// linked character, and deleting that character warns that narration goes back to the Narrator
+/// voice — a warning no other character's delete carries. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class NarratorCastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const string Folder = "web-narrator-cast";
 
-    private ILocator Banner => Page.Locator("app-narrator-banner");
+    protected override WebApp WebApp => WebApp.Native;
+
+    private ILocator Banner => Page.Locator("r2m-narrator-banner");
     private ILocator NarratorRow => Page.Locator(".cast__row", new() { HasText = "Narrator" });
     private ILocator Confirm => Page.Locator("r2m-confirm-dialog");
 
@@ -31,15 +34,14 @@ public class NarratorCastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         Assert.True(lestrade.Ok);
 
         await GotoAppAsync($"projects/{Folder}/cast");
+        await Expect(Page.Locator("r2m-cast-page")).ToBeVisibleAsync();
 
-        // The picker offers the characters, never the Narrator itself. It stays disabled until the
-        // roster loads, and a forced click on it then opens nothing: wait for it to enable first.
-        var picker = Banner.Locator("mat-select");
+        // The picker (a native select) offers the characters, never the Narrator itself. It stays
+        // disabled until the roster loads: wait for it to enable first.
+        var picker = Banner.GetByRole(AriaRole.Combobox);
         await Expect(picker).ToBeEnabledAsync();
-        await picker.ClickAsync(new() { Force = true });
-        var options = Page.Locator("mat-option");
-        await Expect(options).ToHaveTextAsync(["Dr. Watson", "Lestrade"]);
-        await options.Filter(new() { HasText = "Dr. Watson" }).ClickAsync();
+        await Expect(picker.Locator("option:not([disabled])")).ToHaveTextAsync(["Dr. Watson", "Lestrade"]);
+        await picker.SelectOptionAsync(new SelectOptionValue { Label = "Dr. Watson" });
 
         // Linked: the banner counts the linked character's ready voices.
         await Expect(Banner).ToContainTextAsync("Narrated by Dr. Watson");
@@ -54,7 +56,7 @@ public class NarratorCastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
 
         await signpost.GetByRole(AriaRole.Button, new() { Name = "Go to Dr. Watson" }).ClickAsync();
         await Assertions.Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex($"/cast/{watsonId}$"));
-        var detail = Page.Locator("app-character-detail");
+        var detail = Page.Locator("r2m-character-detail");
         await Expect(detail).ToContainTextAsync("Narrates this book");
 
         // Deleting the narrating character says what happens to narration; declined, nothing changes.

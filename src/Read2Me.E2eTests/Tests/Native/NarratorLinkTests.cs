@@ -1,19 +1,21 @@
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// The cast page's narrator link (Angular ticket 15): the
-/// banner's picker links a character, the seed row and the audio-mode voice preview read the link
-/// back, and Unlink (confirmed) restores the unlinked strings.
+/// The native cast page's narrator link (native-web 30, from the Angular class of the same name):
+/// the banner's picker links a character, the seed row and the audio-mode voice preview read the
+/// link back, and Unlink (confirmed) restores the unlinked strings. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class NarratorLinkTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const string Folder = "web-narrator-link";
 
-    private ILocator Banner => Page.Locator("app-narrator-banner");
+    protected override WebApp WebApp => WebApp.Native;
+
+    private ILocator Banner => Page.Locator("r2m-narrator-banner");
     private ILocator NarratorRow => Page.Locator(".cast__row", new() { HasText = "Narrator" });
 
     [Fact]
@@ -24,16 +26,15 @@ public class NarratorLinkTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         await App.SeedNarratorVoiceAsync(Folder);
 
         await GotoAppAsync($"projects/{Folder}/cast");
+        await Expect(Page.Locator("r2m-cast-page")).ToBeVisibleAsync();
         await Expect(Banner).ToContainTextAsync("First-person book? Say who tells it");
         await Expect(NarratorRow).ToHaveCountAsync(1);
         await Expect(NarratorRow).Not.ToContainTextAsync("→");
 
-        // Link from the banner's picker, once the roster has loaded and enabled it: a forced click
-        // on the still-disabled select opens nothing.
-        var picker = Banner.Locator("mat-select");
+        // Link from the banner's picker (a native select), once the roster has loaded and enabled it.
+        var picker = Banner.GetByRole(AriaRole.Combobox);
         await Expect(picker).ToBeEnabledAsync();
-        await picker.ClickAsync(new() { Force = true });
-        await Page.Locator("mat-option", new() { HasText = "Dr. Watson" }).ClickAsync();
+        await picker.SelectOptionAsync(new SelectOptionValue { Label = "Dr. Watson" });
         await Expect(Banner).ToContainTextAsync("Narrated by Dr. Watson");
         await Expect(NarratorRow).ToContainTextAsync("Narrator → Dr. Watson");
 
@@ -46,7 +47,7 @@ public class NarratorLinkTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         // Unlink, warning confirmed; the Narrator's own voice is still there.
         await Page.GotoAsync(AppPath($"projects/{Folder}/cast"));
         await Banner.Locator(".narrator-banner__unlink").ClickAsync();
-        var confirm = Page.Locator(".r2m-confirm-dialog");
+        var confirm = Page.Locator("r2m-confirm-dialog");
         await Expect(confirm).ToContainTextAsync("Unlink Dr. Watson as this book's narrator?");
         await confirm.Locator(".r2m-confirm-dialog__confirm").ClickAsync();
 
