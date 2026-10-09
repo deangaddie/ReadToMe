@@ -32,8 +32,8 @@ type DraftField = keyof NewProjectErrors;
  * New project dialog (design §6.1): book title, project title (follows the book title until
  * edited), author and an epub/txt drop. Create stays disabled until every field is valid; the
  * upload runs here so a host rejection (duplicate title, unreadable file) shows inline and the
- * form survives. Closes with the new project's folder name; Cancel and dismissal close with
- * nothing. While the upload runs the dialog refuses to close.
+ * form survives. Closes with the new project's folder name; Cancel and Escape close with
+ * nothing, a backdrop click does not. While the upload runs the dialog refuses to close.
  */
 export class NewProjectDialog extends R2mElement {
   private readonly store = use(ProjectsStore);
@@ -47,8 +47,9 @@ export class NewProjectDialog extends R2mElement {
 
   protected override connected(): void {
     this.classList.add('new-project');
-    // The upload must finish: no Escape or backdrop dismissal while it runs (MatDialog's disableClose).
-    this.effect(() => setDialogClosedBy(this, this.#busy() ? 'none' : 'any'));
+    // No backdrop dismissal: the second click of a double-click in the OS file picker can land on
+    // the backdrop and discard the form. The upload must finish: no Escape either while it runs.
+    this.effect(() => setDialogClosedBy(this, this.#busy() ? 'none' : 'closerequest'));
   }
 
   protected template() {

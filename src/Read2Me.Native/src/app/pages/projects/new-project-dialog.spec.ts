@@ -100,6 +100,11 @@ describe('r2m-new-project-dialog', () => {
     expect(createButton().disabled).toBe(false);
   });
 
+  it('closes on Escape but not on a backdrop click', async () => {
+    const { dialog } = await open();
+    expect(dialog.closest('dialog')?.getAttribute('closedby')).toBe('closerequest');
+  });
+
   it('Cancel closes with nothing', async () => {
     const { result, dialog } = await open();
     dialog.querySelector<HTMLButtonElement>('.new-project__cancel')!.click();

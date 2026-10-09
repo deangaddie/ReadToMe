@@ -1,20 +1,26 @@
 import type { R2mElement } from './element';
 
+export type DialogClosedBy = 'any' | 'closerequest' | 'none';
+
 export interface DialogOptions {
   /**
    * `sheet` docks the dialog to the bottom edge (the preflight bottom sheet, spec §5.3);
    * `fullscreen` fills the viewport (MatDialog's `r2m-fullscreen-dialog` panel).
    */
   variant?: 'sheet' | 'fullscreen';
-  /** `none` disables light dismiss and Escape (MatBottomSheet's `disableClose`). */
-  closedBy?: 'any' | 'none';
+  /**
+   * `any` (the default) closes on Escape and a backdrop click; `closerequest` on Escape only, for a
+   * form a stray click must not discard; `none` on neither (MatBottomSheet's `disableClose`).
+   */
+  closedBy?: DialogClosedBy;
 }
 
 /**
  * Lets dialog content change its own dismissal while open: `none` refuses Escape and light dismiss
- * (a form mid-upload), `any` restores them. A no-op when `content` is not inside a dialog.
+ * (a form mid-upload), `closerequest` allows Escape only, `any` both. A no-op when `content` is not
+ * inside a dialog.
  */
-export function setDialogClosedBy(content: HTMLElement, closedBy: 'any' | 'none'): void {
+export function setDialogClosedBy(content: HTMLElement, closedBy: DialogClosedBy): void {
   const dialog = content.closest('dialog');
   if (!dialog) return;
   dialog.setAttribute('closedby', closedBy);
