@@ -33,7 +33,9 @@ export function statusChip(options: {
     class="r2m-status-chip r2m-status-chip--${options.status} ${options.compact ? 'r2m-status-chip--compact' : ''}"
     role="status"
     data-tooltip=${options.tooltip ?? nothing}
-    >${icon(options.icon ?? DEFAULT_ICONS[options.status])}<span>${options.label}</span></span
+    >${icon(options.icon ?? DEFAULT_ICONS[options.status])}<span class="r2m-status-chip__label"
+      >${options.label}</span
+    ></span
   >`;
 }
 

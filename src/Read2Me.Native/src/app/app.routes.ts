@@ -89,8 +89,20 @@ export const routes: RouteDef[] = [
     title: 'Settings',
     children: [
       { path: '', redirectTo: 'settings/llm' },
-      settingsPage('llm', 'LLM'),
-      settingsPage('prompts', 'Prompts'),
+      {
+        path: 'llm',
+        title: 'LLM',
+        tag: 'r2m-llm-settings-page',
+        load: () => import('@app/pages/settings/llm/llm-settings-page'),
+        guardUnsaved: true,
+      },
+      {
+        path: 'prompts',
+        title: 'Prompts',
+        tag: 'r2m-prompts-page',
+        load: () => import('@app/pages/settings/prompts/prompts-page'),
+        guardUnsaved: true,
+      },
       settingsPage('tts', 'Paragraph TTS'),
       settingsPage('voice-design', 'Voice design'),
       settingsPage('transcription', 'Transcription'),

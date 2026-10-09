@@ -1,0 +1,155 @@
+/* The prompts settings page (ticket 23): the kind list beside the template editor. */
+@scope (r2m-prompts-page) to (.r2m-status-chip > *, r2m-prompt-editor > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-4);
+  }
+  .prompts__list {
+    margin: 0;
+    padding: var(--r2m-space-1);
+    list-style: none;
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface);
+  }
+  .prompts__main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--r2m-space-2);
+    width: 100%;
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border: 0;
+    border-radius: var(--r2m-radius-md);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--r2m-surface-high);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--r2m-accent);
+      outline-offset: -2px;
+    }
+  }
+  .prompts__row--selected .prompts__main {
+    background: var(--r2m-surface-high);
+    font-weight: 600;
+  }
+  .prompts__meta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    flex-shrink: 0;
+  }
+  .prompts__warning {
+    display: inline-flex;
+    color: var(--r2m-status-warn);
+    font-size: 20px;
+  }
+}
+
+@scope (r2m-prompt-editor) to (.r2m-field > *) {
+  :scope {
+    display: block;
+    min-width: 0;
+  }
+  .prompt-editor__description {
+    margin: 0 0 var(--r2m-space-3);
+    color: var(--r2m-text-muted);
+  }
+  .prompt-editor__warning {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    margin: 0 0 var(--r2m-space-3);
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border-radius: var(--r2m-radius-md);
+    background: color-mix(in srgb, var(--r2m-status-warn) 15%, transparent);
+    color: var(--r2m-status-warn);
+    font-size: var(--r2m-text-sm);
+  }
+  .prompt-editor__label {
+    display: block;
+    margin-bottom: var(--r2m-space-1);
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .prompt-editor__tokens {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--r2m-space-1);
+    margin-bottom: var(--r2m-space-3);
+
+    & .prompt-editor__label {
+      flex-basis: 100%;
+    }
+  }
+  .prompt-editor__token {
+    padding: 2px var(--r2m-space-2);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-pill);
+    background: transparent;
+    color: inherit;
+    font-family: var(--r2m-font-mono, monospace);
+    font-size: var(--r2m-text-sm);
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: var(--r2m-surface-high);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--r2m-accent);
+      outline-offset: 2px;
+    }
+  }
+  .prompt-editor__field {
+    width: 100%;
+  }
+  .prompt-editor__template {
+    min-height: 12lh;
+    max-height: 32lh;
+    font-family: var(--r2m-font-mono, monospace);
+    font-size: var(--r2m-text-sm);
+    line-height: 1.45;
+  }
+  .prompt-editor__note {
+    margin: var(--r2m-space-1) 0 var(--r2m-space-3);
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .prompt-editor__expected {
+    margin-bottom: var(--r2m-space-3);
+  }
+  .prompt-editor__pre {
+    margin: 0;
+    padding: var(--r2m-space-3);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+    background: var(--r2m-surface-low);
+    font-family: var(--r2m-font-mono, monospace);
+    font-size: var(--r2m-text-sm);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .prompt-editor__preview {
+    margin-bottom: var(--r2m-space-3);
+  }
+  .prompt-editor__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-3);
+
+    & .prompt-editor__note {
+      margin: 0;
+    }
+  }
+  .prompt-editor__error {
+    margin: var(--r2m-space-3) 0 0;
+    color: var(--r2m-status-error);
+  }
+}

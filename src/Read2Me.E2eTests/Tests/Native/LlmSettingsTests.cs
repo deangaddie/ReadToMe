@@ -5,29 +5,33 @@ using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 using Read2Me.E2eTests.Infrastructure.FakeAi;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// <c>/settings/llm</c> (Angular ticket 21) against the real host: config create / edit / make
-/// default / delete with Get models, the test console streaming and stopping, and the attribution
-/// chain reordered and read back over the API.
+/// The native <c>/settings/llm</c> page (native-web 34, moved from the Angular ticket 21 suite) against
+/// the real host: config create / edit / make default / delete with Get models, the test console
+/// streaming and stopping, and the attribution chain reordered and read back over the API. Runs in
+/// Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
+    protected override WebApp WebApp => WebApp.Native;
+
     private static readonly HttpClient Http = new();
 
     private ILocator Row(string name) => Page.Locator(".r2m-config-list__row", new()
     {
         Has = Page.Locator(".r2m-config-list__name", new() { HasTextRegex = new Regex($"^{Regex.Escape(name)}$") }),
     });
-    private ILocator Field(string field) => Page.Locator($"app-llm-config-editor [data-field='{field}']");
-    private ILocator Save => Page.Locator("r2m-config-editor-frame button", new() { HasText = "Save" });
+    private ILocator Field(string field) => Page.Locator($"r2m-llm-config-editor [data-field='{field}']");
+    private ILocator Save => Page.Locator(".r2m-config-editor-frame__foot button", new() { HasText = "Save" });
 
     private async Task RowActionAsync(string name, string action)
     {
-        await Page.Locator($"[aria-label='Actions for {name}']").ClickAsync();
-        await Page.Locator(".mat-mdc-menu-item", new() { HasText = action }).ClickAsync();
+        // By role: the row's menu popover carries the same label as its button.
+        await Page.GetByRole(AriaRole.Button, new() { Name = $"Actions for {name}", Exact = true }).ClickAsync();
+        await Page.GetByRole(AriaRole.Menuitem, new() { Name = action, Exact = true }).ClickAsync();
     }
 
     private async Task<JsonElement> GetJsonAsync(string path) =>
@@ -36,10 +40,11 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
     [Fact]
     public async Task Config_is_created_with_a_fetched_model_edited_made_default_and_deleted()
     {
-        var name = $"web-llm-{Guid.NewGuid():N}"[..16];
+        var name = $"native-llm-{Guid.NewGuid():N}"[..16];
         try
         {
             await GotoAppAsync("settings/llm");
+            await Expect(Page.Locator("r2m-llm-settings-page")).ToBeVisibleAsync();
             await Expect(Row("fake")).ToContainTextAsync("Default");
 
             await Page.Locator("r2m-config-list button", new() { HasText = "New" }).ClickAsync();
@@ -59,8 +64,8 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
             // …and one that answers fills the select.
             await Field("baseUrl").FillAsync("http://fake-llm");
             await Page.Locator("[data-action='get-models']").ClickAsync();
-            await Page.Locator("mat-select[data-field='model']").ClickAsync();
-            await Page.Locator("mat-option", new() { HasText = FakeAiRoutingHandler.DefaultModel }).ClickAsync();
+            await Page.Locator("select[data-field='model']")
+                .SelectOptionAsync(new SelectOptionValue { Label = FakeAiRoutingHandler.DefaultModel });
             await Save.ClickAsync();
 
             await Expect(Row(name)).ToContainTextAsync(FakeAiRoutingHandler.DefaultModel);
@@ -100,7 +105,7 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         try
         {
             await GotoAppAsync("settings/llm");
-            var console = Page.Locator("app-llm-test-console");
+            var console = Page.Locator("r2m-llm-test-console");
             await Expect(console).ToContainTextAsync("Test \"fake\"");
 
             await console.Locator("[data-field='prompt']").FillAsync("Say something");
@@ -129,11 +134,11 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         try
         {
             await GotoAppAsync("settings/llm");
-            var chain = Page.Locator("app-llm-chain-card");
+            var chain = Page.Locator("r2m-llm-chain-card");
             await Expect(chain.Locator(".chain__alert--info")).ToContainTextAsync("fake");
 
             await chain.Locator("[data-action='add-step']").ClickAsync();
-            await Page.Locator(".mat-mdc-menu-item", new() { HasText = "fake (simple)" }).First.ClickAsync();
+            await Page.GetByRole(AriaRole.Menuitem, new() { Name = "fake (simple)", Exact = true }).ClickAsync();
             await Expect(chain.Locator(".chain__step")).ToHaveCountAsync(1);
             await chain.Locator("[data-action='add-step']").ClickAsync();
             await Page.GetByRole(AriaRole.Menuitem, new() { Name = "fake (thinking)", Exact = true }).ClickAsync();
@@ -141,11 +146,12 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
 
             await chain.Locator("[aria-label='Move fake down']").First.ClickAsync();
             await Expect(chain.Locator(".chain__step").First).ToContainTextAsync("Thinking");
-            await chain.Locator("mat-slide-toggle button").ClickAsync();
+            var selfConsistency = chain.GetByRole(AriaRole.Switch);
+            await selfConsistency.ClickAsync();
 
-            await Expect(chain.Locator("mat-slide-toggle button")).ToHaveAttributeAsync("aria-checked", "true");
+            await Expect(selfConsistency).ToBeCheckedAsync();
             // The switch is held disabled until its PUT has answered.
-            await Expect(chain.Locator("mat-slide-toggle button")).ToBeEnabledAsync();
+            await Expect(selfConsistency).ToBeEnabledAsync();
             var stored = await GetJsonAsync("/api/settings/llm/attribution-chain");
             Assert.True(stored.GetProperty("selfConsistency").GetBoolean());
             var steps = stored.GetProperty("steps").EnumerateArray().ToList();
@@ -169,7 +175,7 @@ public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
         try
         {
             await GotoAppAsync("settings/llm");
-            var chain = Page.Locator("app-llm-chain-card");
+            var chain = Page.Locator("r2m-llm-chain-card");
             await Expect(chain.Locator(".chain__alert--info")).ToContainTextAsync("fake");
 
             await chain.Locator("[data-action='add-step']").ClickAsync();

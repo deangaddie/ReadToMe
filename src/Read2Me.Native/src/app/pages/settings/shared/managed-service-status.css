@@ -1,0 +1,6 @@
+/* No box of its own: an unmanaged URL leaves no gap in the editor's column. */
+@scope (r2m-managed-service-status) to (.r2m-docker-controls > *) {
+  :scope {
+    display: contents;
+  }
+}

@@ -3,6 +3,7 @@ import { routes } from '@app/app.routes';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { LiveService } from '@app/live/live.service';
+import { confirmDiscard } from '@app/shared/unsaved-changes';
 import { ThemeService } from '@app/theme/theme.service';
 import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -22,15 +23,9 @@ addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
 await use(ThemeService).load();
 await import('@app/shell/shell');
 
+// The same discard prompt the settings pages ask before switching their editor to another item.
 const confirm = use(ConfirmService);
-use(Router).start(routes, () =>
-  confirm.confirm({
-    title: 'Discard changes?',
-    message: 'You have unsaved changes. Leave this page and lose them?',
-    confirmLabel: 'Discard',
-    destructive: true,
-  }),
-);
+use(Router).start(routes, () => confirmDiscard(confirm));
 installTooltips();
 
 // Open the live hub once for the app's lifetime; it reconnects on its own.

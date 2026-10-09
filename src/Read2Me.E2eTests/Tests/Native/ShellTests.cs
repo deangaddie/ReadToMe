@@ -20,23 +20,23 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
     [Fact]
     public async Task Shell_frames_a_placeholder_page_that_names_the_screen_and_links_back_to_angular()
     {
-        // Every project screen is native now (Export moved in native-web 33); Settings pages are still placeholders.
-        await GotoAppAsync("settings/prompts");
+        // Every project screen, LLM and Prompts are native now (native-web 33–34); the provider settings pages are still placeholders.
+        await GotoAppAsync("settings/tts");
 
-        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("settings/prompts$")));
+        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("settings/tts$")));
 
         await Expect(Page.Locator("app-root .shell__appbar .shell__brand")).ToHaveTextAsync(new Regex("Read2Me"));
 
         var placeholder = Page.Locator("r2m-placeholder-page");
-        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Prompts");
+        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Paragraph TTS");
         await Expect(placeholder.Locator(".r2m-page-header__subtitle")).ToHaveCountAsync(0);
         await Expect(placeholder.Locator(".r2m-empty-state__headline"))
             .ToHaveTextAsync("This screen has not moved to the native app yet");
         await Expect(placeholder.Locator("a.r2m-placeholder-page__link"))
-            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/settings/prompts");
+            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/settings/tts");
 
-        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Settings", "Prompts"]);
-        Assert.Equal("Read2Me · Settings · Prompts", await Page.TitleAsync());
+        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Settings", "Paragraph TTS"]);
+        Assert.Equal("Read2Me · Settings · Paragraph TTS", await Page.TitleAsync());
     }
 
     [Fact]
@@ -88,8 +88,8 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
         await Page.Locator(".shell__settings").ClickAsync();
         await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("settings/llm$")));
         await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Settings", "LLM"]);
-        // Leaving the project shell swaps the root outlet's element for the placeholder.
-        await Expect(Page.Locator("main > r2m-outlet > r2m-placeholder-page .r2m-page-header__title")).ToHaveTextAsync("LLM");
+        // Leaving the project shell swaps the root outlet's element for the LLM settings page (native-web 34).
+        await Expect(Page.Locator("main > r2m-outlet > r2m-llm-settings-page .r2m-page-header__title")).ToHaveTextAsync("LLM");
         await Expect(Page.Locator(".shell__nav-group--context .shell__nav-label")).ToHaveCountAsync(9);
         await Expect(Page.Locator(".shell__nav-item--active .shell__nav-label")).ToHaveTextAsync(["LLM", "Settings"]);
     }

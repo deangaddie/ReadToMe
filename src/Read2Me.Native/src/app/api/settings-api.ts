@@ -2,6 +2,12 @@ import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import { ApiError } from './api-error';
 import type {
+  AttributionChainRequest,
+  AttributionChainResponse,
+  LlmModelsResponse,
+  LlmServerConfig,
+  LlmTestRequest,
+  LlmTestStatusResponse,
   ParagraphTtsServiceConfig,
   ParagraphTtsServiceType,
   ProviderSettingsSchema,
@@ -21,8 +27,8 @@ export type SettingsArea =
 /**
  * One instance per area of the generic `/api/settings/{area}` surface: list / create / update /
  * delete plus the active selection. Bodies are the raw AppData entities. Use the concrete
- * subclass for the area you need; the base is generic over the entity. The LLM, transcription
- * and similarity subclasses (and the per-area test calls) arrive with the settings screens.
+ * subclass for the area you need; the base is generic over the entity. The transcription and
+ * similarity subclasses (and their test calls) arrive with the provider settings screen.
  */
 export abstract class SettingsApi<TConfig extends SettingsConfig> {
   protected readonly api = use(ApiClient);
@@ -64,6 +70,42 @@ export abstract class SettingsApi<TConfig extends SettingsConfig> {
   /** 404 when `id` does not exist. */
   setActive(id: number): Promise<void> {
     return this.api.put<void>(`${this.base}/active`, { id });
+  }
+}
+
+/** `LlmSettingsEndpoints.cs` on top of the generic area: models, the test console and the chain. */
+export class LlmSettingsApi extends SettingsApi<LlmServerConfig> {
+  constructor() {
+    super('llm');
+  }
+
+  /** Model ids the server behind `config` offers; the config need not be saved. 422 carries the reason. */
+  async models(config: LlmServerConfig): Promise<string[]> {
+    const response = await this.api.post<LlmModelsResponse>('/api/settings/llm/models', config);
+    return response.models;
+  }
+
+  /** 202; tokens arrive on `stream:llm` and the outcome as `llmTest` on `connectionId`. 409 while one runs. */
+  startTest(id: number, request: LlmTestRequest): Promise<void> {
+    return this.api.post<void>(`/api/settings/llm/${id}/test`, request);
+  }
+
+  cancelTest(id: number): Promise<void> {
+    return this.api.post<void>(`/api/settings/llm/${id}/test/cancel`, null);
+  }
+
+  /** For a page that may have missed its `llmTest` message. */
+  testStatus(): Promise<LlmTestStatusResponse> {
+    return this.api.get<LlmTestStatusResponse>('/api/settings/llm/test');
+  }
+
+  attributionChain(): Promise<AttributionChainResponse> {
+    return this.api.get<AttributionChainResponse>('/api/settings/llm/attribution-chain');
+  }
+
+  /** Replaces the chain and the self-consistency flag; 422 when a step names no config. */
+  setAttributionChain(request: AttributionChainRequest): Promise<AttributionChainResponse> {
+    return this.api.put<AttributionChainResponse>('/api/settings/llm/attribution-chain', request);
   }
 }
 

@@ -1,6 +1,7 @@
 import { html } from 'lit-html';
 import { styleMap } from 'lit-html/directives/style-map.js';
 import { type ProjectSummary, workspaceUrl } from '@app/api';
+import { closeMenuOf } from './menu';
 import { icon } from './partials';
 
 /** One popover id per folder, stable across renders so the trigger and its menu always pair up. */
@@ -27,16 +28,12 @@ export function projectCard(
       ? 0
       : Math.floor((100 * project.audioItemDone) / project.audioItemTotal);
   const menuId = menuIdFor(project.folderName);
-  const closeMenu = (e: Event) => {
-    const menu = (e.currentTarget as HTMLElement).closest<HTMLElement>('[popover]');
-    if (menu?.matches(':popover-open')) menu.hidePopover?.();
-  };
   const open = (e: Event) => {
-    closeMenu(e);
+    closeMenuOf(e);
     options.onOpen();
   };
   const del = (e: Event) => {
-    closeMenu(e);
+    closeMenuOf(e);
     options.onDelete();
   };
   return html`<article
@@ -52,7 +49,11 @@ export function projectCard(
     >
       ${
         coverUrl
-          ? html`<img class="r2m-project-card__image" src=${coverUrl} alt=${`${project.title} cover`} />`
+          ? html`<img
+              class="r2m-project-card__image"
+              src=${coverUrl}
+              alt=${`${project.title} cover`}
+            />`
           : html`<span class="r2m-project-card__initials" aria-hidden="true"
               >${projectInitials(project.title)}</span
             >`
@@ -78,8 +79,19 @@ export function projectCard(
         >
           ${icon('more_vert')}
         </button>
-        <div id=${menuId} popover class="r2m-menu" role="menu" aria-label=${`Actions for ${project.title}`}>
-          <button type="button" class="r2m-menu__item r2m-project-card__open" role="menuitem" @click=${open}>
+        <div
+          id=${menuId}
+          popover
+          class="r2m-menu"
+          role="menu"
+          aria-label=${`Actions for ${project.title}`}
+        >
+          <button
+            type="button"
+            class="r2m-menu__item r2m-project-card__open"
+            role="menuitem"
+            @click=${open}
+          >
             ${icon('open_in_new')}<span>Open</span>
           </button>
           <button
@@ -105,7 +117,10 @@ export function projectCard(
               data-tooltip=${`Audio: ${project.audioItemDone} of ${project.audioItemTotal} items`}
             >
               <div class="r2m-project-card__bar">
-                <div class="r2m-project-card__fill" style=${styleMap({ width: `${percent}%` })}></div>
+                <div
+                  class="r2m-project-card__fill"
+                  style=${styleMap({ width: `${percent}%` })}
+                ></div>
               </div>
               <span class="r2m-project-card__percent">${percent}%</span>
             </div>`
