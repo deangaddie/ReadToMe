@@ -668,18 +668,6 @@
   .gen-prompt__error {
     color: var(--r2m-status-error);
   }
-  .gen-prompt__stream {
-    border-top: 1px solid var(--r2m-outline);
-    padding-top: var(--r2m-space-1);
-  }
-  .gen-prompt__stream-body {
-    height: 0;
-    overflow: hidden;
-    transition: height 0.15s ease;
-  }
-  .gen-prompt__stream-body--open {
-    height: 32vh;
-  }
 }
 
 /* Add voice rule: the cascading anchor picker (ticket 17). */
@@ -829,18 +817,6 @@
   }
   .discover__alias-remove .r2m-icon {
     font-size: 16px;
-  }
-  .discover__stream {
-    border-top: 1px solid var(--r2m-outline);
-    padding-top: var(--r2m-space-1);
-  }
-  .discover__stream-body {
-    height: 0;
-    overflow: hidden;
-    transition: height 0.15s ease;
-  }
-  .discover__stream-body--open {
-    height: 32vh;
   }
   .discover__cancel {
     color: var(--r2m-status-error);

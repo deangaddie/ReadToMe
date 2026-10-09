@@ -17,7 +17,7 @@ import {
   withAlias,
   withoutAlias,
 } from './discovery-rows';
-import '@app/ui/stream-llm';
+import { streamDisclosure } from '@app/ui/stream-disclosure';
 
 export interface DiscoveryDialogData {
   folder: string;
@@ -122,24 +122,11 @@ export class DiscoveryDialog extends R2mElement {
               ? this.review()
               : nothing
         }
-
-        <div class="discover__stream">
-          <button
-            type="button"
-            class="r2m-button"
-            aria-expanded=${showStream ? 'true' : 'false'}
-            @click=${() => this.showStream.set(!showStream)}
-          >
-            ${icon(showStream ? 'expand_more' : 'expand_less')}
-            ${showStream ? 'Hide AI activity' : 'Show AI activity'}
-          </button>
-          <div class="discover__stream-body ${showStream ? 'discover__stream-body--open' : ''}">
-            <r2m-stream-llm
-              .events=${this.feed.events()}
-              .maxTurns=${this.feed.maxUnits}
-            ></r2m-stream-llm>
-          </div>
-        </div>
+        ${streamDisclosure({
+          feed: this.feed,
+          open: showStream,
+          onToggle: () => this.showStream.set(!showStream),
+        })}
       </div>
       <div class="r2m-dialog__actions">
         ${

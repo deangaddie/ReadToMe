@@ -110,8 +110,12 @@ export class CharacterDetail extends R2mElement {
       }
       ${character.isNarrator ? nothing : this.aliases(character, busy)}
 
-      <r2m-voices-section .character=${character}></r2m-voices-section>
-      <r2m-voice-rules-section .character=${character}></r2m-voice-rules-section>
+      <section class="character-detail__section" aria-label="Voices">
+        <r2m-voices-section .character=${character}></r2m-voices-section>
+      </section>
+      <section class="character-detail__section" aria-label="Voice rules">
+        <r2m-voice-rules-section .character=${character}></r2m-voice-rules-section>
+      </section>
 
       <section class="character-detail__section" aria-label="Lines">
         <h3 class="character-detail__heading">

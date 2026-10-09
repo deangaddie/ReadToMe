@@ -149,6 +149,14 @@ describe('r2m-voice-card', () => {
     expect(card.querySelector('.voice-card__star--on')).not.toBeNull();
     expect(button(card, 'set-default')).toBeNull();
     expect(button(card, 'edit-audio')?.getAttribute('href')).toBe('projects/dune/voices/v1/editor');
+    // The header stops its controls' clicks so they don't toggle the panel, but the link keeps
+    // its default (the navigation) while anything else in the header loses it.
+    const linkClick = new MouseEvent('click', { bubbles: true, cancelable: true });
+    button(card, 'edit-audio')?.dispatchEvent(linkClick);
+    expect(linkClick.defaultPrevented).toBe(false);
+    const buttonClick = new MouseEvent('click', { bubbles: true, cancelable: true });
+    card.querySelector('[data-testid=voice-edited-chip]')?.dispatchEvent(buttonClick);
+    expect(buttonClick.defaultPrevented).toBe(true);
     expect(card.querySelector('[data-mode=reference]')).not.toBeNull();
     expect(card.querySelector('r2m-audio-player')?.src).toBe(
       '/workspace/dune/voices/alice/v1.wav?v=0',

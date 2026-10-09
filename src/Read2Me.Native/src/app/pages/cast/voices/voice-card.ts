@@ -440,8 +440,9 @@ export class VoiceCard extends R2mElement {
   /** Clicks and keys inside the header controls must not toggle the panel (Space/Enter do on the summary). */
   private readonly stop = (event: Event): void => {
     event.stopPropagation();
-    // A click on a control inside <summary> would also toggle the panel.
-    if (event.type === 'click') event.preventDefault();
+    // A click on a control inside <summary> would also toggle the panel; a link keeps its
+    // navigation (Edit audio), since stopping the bubble is enough for it.
+    if (event.type === 'click' && !(event.target as Element).closest('a')) event.preventDefault();
   };
 
   async setDefault(): Promise<void> {

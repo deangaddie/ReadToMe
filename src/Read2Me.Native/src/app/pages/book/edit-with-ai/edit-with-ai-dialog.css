@@ -167,16 +167,6 @@
   }
   .edit__stream {
     margin-top: auto;
-    border-top: 1px solid var(--r2m-outline);
-    padding-top: var(--r2m-space-1);
-  }
-  .edit__stream-body {
-    height: 0;
-    overflow: hidden;
-    transition: height 0.15s ease;
-  }
-  .edit__stream-body--open {
-    height: 32vh;
   }
   .edit__stop {
     color: var(--r2m-status-error);

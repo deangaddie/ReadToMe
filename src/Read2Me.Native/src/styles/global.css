@@ -1888,6 +1888,20 @@ progress {
   }
 }
 
+/* ---- stream disclosure: the "Show / Hide AI activity" strip at the foot of an AI dialog ----- */
+.r2m-stream-disclosure {
+  border-top: 1px solid var(--r2m-outline);
+  padding-top: var(--r2m-space-1);
+}
+.r2m-stream-disclosure__body {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.15s ease;
+}
+.r2m-stream-disclosure__body--open {
+  height: 32vh;
+}
+
 /* ---- expansion panel (mat-expansion-panel): details/summary with a chevron ------------------- */
 .r2m-expansion {
   border: 1px solid var(--r2m-outline);

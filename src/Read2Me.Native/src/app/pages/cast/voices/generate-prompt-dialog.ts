@@ -7,7 +7,7 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { icon } from '@app/ui/partials';
-import '@app/ui/stream-llm';
+import { streamDisclosure } from '@app/ui/stream-disclosure';
 
 export interface GeneratePromptDialogData {
   folder: string;
@@ -56,7 +56,7 @@ export class GeneratePromptDialog extends R2mElement {
       this.run++;
       this.releaseJob();
     });
-    void this.render();
+    void this.loadRenderedPrompt();
   }
 
   protected template() {
@@ -92,24 +92,11 @@ export class GeneratePromptDialog extends R2mElement {
                     : nothing
                 }`
         }
-
-        <div class="gen-prompt__stream">
-          <button
-            type="button"
-            class="r2m-button"
-            aria-expanded=${showStream ? 'true' : 'false'}
-            @click=${() => this.showStream.set(!showStream)}
-          >
-            ${icon(showStream ? 'expand_more' : 'expand_less')}
-            ${showStream ? 'Hide AI activity' : 'Show AI activity'}
-          </button>
-          <div class="gen-prompt__stream-body ${showStream ? 'gen-prompt__stream-body--open' : ''}">
-            <r2m-stream-llm
-              .events=${this.feed.events()}
-              .maxTurns=${this.feed.maxUnits}
-            ></r2m-stream-llm>
-          </div>
-        </div>
+        ${streamDisclosure({
+          feed: this.feed,
+          open: showStream,
+          onToggle: () => this.showStream.set(!showStream),
+        })}
       </div>
       <div class="r2m-dialog__actions">
         <button type="button" class="r2m-button" @click=${() => this.emit('r2m-close', null)}>
@@ -128,7 +115,7 @@ export class GeneratePromptDialog extends R2mElement {
     `;
   }
 
-  private async render(): Promise<void> {
+  private async loadRenderedPrompt(): Promise<void> {
     const run = ++this.run;
     try {
       const rendered = await this.voices.renderDesignPrompt(

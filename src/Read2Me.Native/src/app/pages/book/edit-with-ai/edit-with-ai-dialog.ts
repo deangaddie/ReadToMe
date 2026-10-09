@@ -28,7 +28,7 @@ import {
   planErrorMessage,
   rowState,
 } from './review-model';
-import '@app/ui/stream-llm';
+import { streamDisclosure } from '@app/ui/stream-disclosure';
 import editWithAiCss from './edit-with-ai-dialog.css' with { type: 'text' };
 
 adoptStyles(editWithAiCss);
@@ -173,22 +173,12 @@ export class EditWithAiDialog extends R2mElement {
             : nothing
         }
         ${this.body(phase)}
-
-        <!-- Always mounted, so it captures every request made while the dialog is open. -->
-        <div class="edit__stream">
-          <button
-            type="button"
-            class="r2m-button"
-            data-action="toggle-stream"
-            @click=${() => this.showStream.update((open) => !open)}
-          >
-            ${icon(this.showStream() ? 'expand_more' : 'expand_less')}
-            ${this.showStream() ? 'Hide AI activity' : 'Show AI activity'}
-          </button>
-          <div class="edit__stream-body ${this.showStream() ? 'edit__stream-body--open' : ''}">
-            <r2m-stream-llm .events=${this.feed.events()}></r2m-stream-llm>
-          </div>
-        </div>
+        ${streamDisclosure({
+          feed: this.feed,
+          open: this.showStream(),
+          onToggle: () => this.showStream.update((open) => !open),
+          cls: 'edit__stream',
+        })}
       </div>
       <div class="r2m-dialog__actions">${this.actions(phase)}</div>
     `;
