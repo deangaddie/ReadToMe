@@ -1,14 +1,23 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { type CharacterSummaryDto, type Guid, type NarratorDto, VoicesApi } from '@app/api';
+import { ActivityStore } from '@app/activity/activity-store';
+import {
+  type CharacterSummaryDto,
+  type Guid,
+  type NarratorDto,
+  VoicesApi,
+  toApiError,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { provide, use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
-import { PromptService } from '@app/ui/dialogs';
+import { Preflight } from '@app/shared/preflight';
+import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { emptyState, icon, statusChip } from '@app/ui/partials';
+import { ToastService } from '@app/ui/toast';
 import { ProjectStore } from '../project/project-store';
 import {
   CAST_SORTS,
@@ -22,7 +31,10 @@ import {
 } from './cast-rows';
 import { castPath } from './cast-path';
 import { CastStore } from './cast-store';
+import { openDiscoveryDialog } from './discovery-dialog';
 import { narratorSignpost } from './narrator-signpost';
+import { promptBatchRequest } from './voices/voice-logic';
+import { openVoiceScopeDialog } from './voices/voice-scope-dialog';
 import './character-detail';
 import './narrator-banner';
 import castCss from './cast.css' with { type: 'text' };
@@ -32,17 +44,21 @@ adoptStyles(castCss);
 /**
  * `/projects/{folder}/cast[/{characterId}]` (design §6.4, ticket 15): the roster on the left —
  * search, sort, narrator banner, rows with readiness — and the selected character on the right.
- * On narrow screens the list is the page and the detail is the pushed route. Provides the
- * {@link CastStore} to the detail and reads the project shell's {@link ProjectStore}. The
- * Discover and voice-batch toolbar actions (and `?discover=1`) arrive with the voices screens
- * (native-web 31).
+ * On narrow screens the list is the page and the detail is the pushed route. The toolbar starts the
+ * two voice batches (16): prompts behind the scope dialog when voices exist, audio directly.
+ * `?discover=1` (from the overview's pipeline) opens the discovery dialog on arrival. Provides the
+ * {@link CastStore} to the detail and reads the project shell's {@link ProjectStore}.
  */
 export class CastPage extends R2mElement {
   private readonly store = provide(this, CastStore, new CastStore());
   private readonly router = use(Router);
   private readonly voices = use(VoicesApi);
   private readonly live = use(LiveService);
+  private readonly activity = use(ActivityStore);
+  private readonly confirm = use(ConfirmService);
+  private readonly preflight = use(Preflight);
   private readonly prompt = use(PromptService);
+  private readonly toast = use(ToastService);
   private project!: ProjectStore;
 
   readonly query = signal('');
@@ -53,6 +69,12 @@ export class CastPage extends R2mElement {
   /** Route param; absent on `/cast`. */
   private readonly characterId = computed<Guid | null>(
     () => this.router.params()['characterId'] ?? null,
+  );
+  /** `?discover=1`: open the discovery dialog on arrival, then drop the param. */
+  private readonly discover = computed(() => this.router.query().get('discover'));
+  /** Discovery and creation are off while a write is in flight or a voice batch runs (research §4). */
+  private readonly toolbarLocked = computed(
+    () => this.store.busy() || this.live.voiceBatch().isRunning,
   );
 
   /** Built in `connected()`, once the shell's store is reachable through the DOM. */
@@ -92,6 +114,15 @@ export class CastPage extends R2mElement {
       if (!folder || !selected?.isNarrator || !this.narrator()?.isLinked) return;
       untracked(() => void this.loadNarratorVoices(folder, selected.id));
     });
+
+    // Waits for the roster: the dialog folds rows onto it and checks collisions against it.
+    this.effect(() => {
+      if (this.discover() !== '1' || !this.store.folder() || this.store.loading()) return;
+      untracked(() => {
+        this.router.navigate(this.router.path(), { query: { discover: null }, replace: true });
+        void this.runDiscovery();
+      });
+    });
   }
 
   protected template() {
@@ -100,8 +131,7 @@ export class CastPage extends R2mElement {
     const narrator = this.narrator();
     const rows = this.store.rows();
     const busy = this.store.busy();
-    // Creation is off while a write is in flight or a voice batch runs (research §4).
-    const toolbarLocked = busy || this.live.voiceBatch().isRunning;
+    const toolbarLocked = this.toolbarLocked();
     return html`
       <header class="r2m-page-header">
         <h1 class="r2m-page-header__title">Cast</h1>
@@ -117,6 +147,35 @@ export class CastPage extends R2mElement {
       <div class="cast ${characterId ? 'cast--detail' : ''}">
         <section class="cast__list" aria-label="Characters">
           <div class="cast__toolbar">
+            <button
+              type="button"
+              class="r2m-button r2m-button--filled"
+              data-action="discover"
+              ?disabled=${toolbarLocked}
+              @click=${() => void this.runDiscovery()}
+            >
+              ${icon('auto_awesome')} Discover
+            </button>
+            <button
+              type="button"
+              class="r2m-button r2m-button--stroked"
+              data-action="generate-prompts"
+              ?disabled=${toolbarLocked}
+              data-tooltip="One LLM voice plan per character; progress in the activity centre"
+              @click=${() => void this.generatePrompts()}
+            >
+              ${icon('record_voice_over')} Generate voice prompts
+            </button>
+            <button
+              type="button"
+              class="r2m-button r2m-button--stroked"
+              data-action="generate-audio"
+              ?disabled=${toolbarLocked}
+              data-tooltip="Synthesise every prompt voice without audio; progress in the activity centre"
+              @click=${() => void this.generateAudio()}
+            >
+              ${icon('graphic_eq')} Generate audio
+            </button>
             <button
               type="button"
               class="r2m-button r2m-button--stroked"
@@ -298,6 +357,59 @@ export class CastPage extends R2mElement {
   goToLinked(): void {
     const id = this.narrator()?.characterId;
     if (id) this.goTo(id);
+  }
+
+  /**
+   * The prompt batch (research §4): when any character already has voices, the scope dialog asks
+   * whether to plan only the characters without voices or clear and replan every one. Progress
+   * lives in the activity centre; the store patches cards from the batch's hub events.
+   */
+  async generatePrompts(): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder || this.toolbarLocked()) return;
+    const anyVoices = this.store.anyVoices();
+    const request = promptBatchRequest(anyVoices, anyVoices ? await openVoiceScopeDialog() : null);
+    if (!request) return;
+    if (request.confirm) {
+      const ok = await this.confirm.confirm({
+        title: 'Clear and regenerate all voices',
+        message: request.confirm,
+        confirmLabel: 'Delete and regenerate',
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    if (!(await this.preflight.ensureReady('voicePrompt'))) return;
+    await this.startBatch(() => this.voices.startPromptBatch(folder, request.regenerateAll));
+  }
+
+  async generateAudio(): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder || this.toolbarLocked()) return;
+    if (!(await this.preflight.ensureReady('voiceDesign'))) return;
+    await this.startBatch(() => this.voices.startAudioBatch(folder));
+  }
+
+  private async startBatch(start: () => Promise<unknown>): Promise<void> {
+    try {
+      await start();
+      this.activity.drawerOpen.set(true);
+    } catch (error) {
+      // 409: a batch is already running — the host's message says so.
+      this.toast.problem(toApiError(error).toProblem());
+    }
+  }
+
+  async runDiscovery(): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder || this.toolbarLocked()) return;
+    if (!(await this.preflight.ensureReady('discovery'))) return;
+    const result = await openDiscoveryDialog({ folder, roster: this.store.roster() });
+    if (!result) return;
+    await this.store.refresh();
+    this.toast.success(
+      result.applied === 1 ? '1 character added' : `${result.applied} characters added`,
+    );
   }
 
   private async loadNarratorVoices(folder: string, narratorId: Guid): Promise<void> {

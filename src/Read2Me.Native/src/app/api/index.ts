@@ -17,4 +17,6 @@ export * from './ai-services-api';
 export * from './preflight-api';
 export * from './book-api';
 export * from './book-edits-api';
+export * from './discovery-api';
+export * from './settings-api';
 export * from './workspace-url';

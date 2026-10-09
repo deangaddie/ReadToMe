@@ -66,6 +66,9 @@ async function mount(character: CharacterSummaryDto, rows = ROWS) {
   api.on('GET', `${BASE}/characters/${character.id}/lines`, [
     { itemId: 'i1', paragraphId: 'p1', chapterId: 'c7', text: 'Hello there.' },
   ]);
+  api.on('GET', `${BASE}/characters/${character.id}/voices`, { defaultVoiceId: null, voices: [] });
+  api.on('GET', `${BASE}/characters/${character.id}/voice-rules`, []);
+  api.on('GET', `${BASE}/characters/${character.id}/voice-rules/preview`, []);
   await store.open('dune');
   await store.select(character.id);
   const host = document.createElement('div');
@@ -90,6 +93,10 @@ describe('r2m-character-detail', () => {
     expect(detail.querySelector('.character-detail__alias[data-alias="Al"]')).not.toBeNull();
     expect(detail.querySelector('.character-detail__count')?.textContent).toBe('1');
     expect(detail.querySelector('r2m-character-lines')?.textContent).toContain('Hello there.');
+    // The Voices and Voice rules sections sit between the aliases and the lines (16, 17).
+    expect(detail.querySelector('r2m-voices-section')?.character).toEqual(ALICE);
+    expect(detail.querySelector('r2m-voices-section')?.textContent).toContain('No voices yet');
+    expect(detail.querySelector('r2m-voice-rules-section')?.character).toEqual(ALICE);
     expect(button(detail, 'merge').disabled).toBe(false);
 
     document.body.replaceChildren();

@@ -174,7 +174,7 @@
 }
 
 /* The character detail: header, aliases, lines (research §4). */
-@scope (r2m-character-detail) to (r2m-inline-edit > *, r2m-character-lines > *, .r2m-status-chip > *) {
+@scope (r2m-character-detail) to (r2m-inline-edit > *, r2m-character-lines > *, r2m-voices-section > *, r2m-voice-rules-section > *, .r2m-status-chip > *) {
   :scope {
     display: flex;
     flex-direction: column;
@@ -395,5 +395,454 @@
   .merge__error {
     color: var(--r2m-status-error);
     font-size: var(--r2m-text-sm);
+  }
+}
+
+/* The Voices section of the detail (research §4 "Voices"). */
+@scope (r2m-voices-section) to (r2m-voice-card > *, .r2m-empty-state > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  .voices-section__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--r2m-space-2);
+  }
+  .voices-section__heading {
+    margin: 0;
+    font-size: var(--r2m-text-md);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .voices-section__count {
+    color: var(--r2m-text-muted);
+    font-weight: 400;
+  }
+  .voices-section__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+}
+
+/* One voice card: a details panel with the header controls in its summary. */
+@scope (r2m-voice-card) to (r2m-inline-edit > *, r2m-audio-player > *, r2m-file-drop > *, r2m-voice-override-editor > *, .r2m-status-chip > *, .r2m-tabs > *) {
+  :scope {
+    display: block;
+  }
+  .voice-card__header {
+    gap: var(--r2m-space-2);
+  }
+  .voice-card__title {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .voice-card__star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex: none;
+  }
+  .voice-card__star--on {
+    color: var(--r2m-status-warn);
+  }
+  .voice-card__name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+  }
+  .voice-card__description {
+    font-size: var(--r2m-text-xs);
+    color: var(--r2m-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .voice-card__meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--r2m-space-1);
+    flex: 0 0 auto;
+  }
+  .voice-card__delete {
+    color: var(--r2m-status-error);
+  }
+  .voice-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    padding-top: var(--r2m-space-2);
+  }
+  .voice-card__block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  .voice-card__block > button {
+    align-self: flex-start;
+  }
+  .voice-card__wide {
+    width: 100%;
+  }
+  .voice-card__wide textarea {
+    min-height: 2lh;
+  }
+  .voice-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--r2m-space-2);
+  }
+  .voice-card__source {
+    align-self: flex-start;
+  }
+  .voice-card__generate--primary {
+    color: var(--r2m-accent);
+    border-color: var(--r2m-accent);
+  }
+  .voice-card__hint {
+    margin: 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .voice-card__sub .r2m-expansion__body {
+    padding-top: var(--r2m-space-2);
+  }
+}
+
+/* One Advanced-settings tab: the override form over the active provider's schema. */
+@scope (r2m-voice-override-editor) to (r2m-settings-form > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    padding: var(--r2m-space-3) 0;
+  }
+  .voice-override__note {
+    margin: 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  :scope > button {
+    align-self: flex-start;
+  }
+}
+
+/* The Voice rules section of the detail (research §4 "Voice rules"). */
+@scope (r2m-voice-rules-section) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  :scope:empty {
+    display: none;
+  }
+  .voice-rules__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--r2m-space-2);
+  }
+  .voice-rules__heading {
+    margin: 0;
+    font-size: var(--r2m-text-md);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .voice-rules__count {
+    color: var(--r2m-text-muted);
+    font-weight: 400;
+  }
+  .voice-rules__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-1);
+  }
+  .voice-rules__row {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    min-height: 36px;
+  }
+  .voice-rules__text {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: var(--r2m-text-sm);
+  }
+  .voice-rules__warning {
+    display: inline-flex;
+    color: var(--r2m-status-warn);
+  }
+  .voice-rules__warning .r2m-icon {
+    font-size: 18px;
+  }
+  .voice-rules__delete {
+    color: var(--r2m-status-error);
+  }
+  .voice-rules__preview {
+    border-collapse: collapse;
+    font-size: var(--r2m-text-sm);
+    max-width: 480px;
+  }
+  .voice-rules__preview th,
+  .voice-rules__preview td {
+    text-align: left;
+    padding: 2px var(--r2m-space-2) 2px 0;
+    border-bottom: 1px solid var(--r2m-outline);
+  }
+  .voice-rules__preview th {
+    color: var(--r2m-text-muted);
+    font-weight: 500;
+  }
+  .voice-rules__none {
+    color: var(--r2m-text-muted);
+  }
+}
+
+/* Add voice (research §4). */
+@scope (r2m-add-voice-dialog) {
+  .add-voice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    min-width: min(360px, 80vw);
+  }
+  .add-voice__name {
+    width: 100%;
+  }
+}
+
+/* The prompt-batch scope choice. */
+@scope (r2m-voice-scope-dialog) {
+  .voice-scope {
+    max-width: 480px;
+  }
+  .voice-scope p {
+    margin: 0 0 var(--r2m-space-2);
+  }
+  .voice-scope__warning {
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+}
+
+/* Generate voice prompt with AI (research §4). */
+@scope (r2m-generate-prompt-dialog) to (r2m-stream-llm > *) {
+  .gen-prompt {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+    width: min(720px, 90vw);
+  }
+  .gen-prompt p {
+    margin: 0;
+  }
+  .gen-prompt__field {
+    width: 100%;
+  }
+  .gen-prompt__textarea {
+    min-height: 8lh;
+    max-height: 18lh;
+  }
+  .gen-prompt__hint {
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .gen-prompt__error {
+    color: var(--r2m-status-error);
+  }
+  .gen-prompt__stream {
+    border-top: 1px solid var(--r2m-outline);
+    padding-top: var(--r2m-space-1);
+  }
+  .gen-prompt__stream-body {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.15s ease;
+  }
+  .gen-prompt__stream-body--open {
+    height: 32vh;
+  }
+}
+
+/* Add voice rule: the cascading anchor picker (ticket 17). */
+@scope (r2m-add-voice-rule-dialog) {
+  .add-rule {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    min-width: min(420px, 85vw);
+  }
+  .add-rule select {
+    width: 100%;
+  }
+  .add-rule__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  .add-rule__label {
+    font-size: var(--r2m-text-sm);
+    font-weight: 500;
+    color: var(--r2m-text-muted);
+  }
+  .add-rule__control {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+  }
+  .add-rule__control select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .add-rule__clear {
+    flex: none;
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* Discover characters (research §4 "Discover dialog"). */
+@scope (r2m-discovery-dialog) to (r2m-stream-llm > *, .r2m-status-chip > *) {
+  .discover {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    width: min(720px, 90vw);
+  }
+  .discover p {
+    margin: 0;
+  }
+  .discover__controls,
+  .discover__select {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .discover__spacer {
+    flex: 1 1 auto;
+  }
+  .discover__hint {
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .discover__error,
+  .discover__warning {
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border-radius: var(--r2m-radius-md);
+    font-size: var(--r2m-text-sm);
+    border: 1px solid var(--r2m-status-warn);
+    background: var(--r2m-status-warn-soft);
+  }
+  .discover__error {
+    border-color: var(--r2m-status-error);
+    background: var(--r2m-status-error-soft);
+  }
+  .discover__rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .discover__row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-2);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+  }
+  .discover__include {
+    margin-top: var(--r2m-space-2);
+  }
+  .discover__body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-1);
+  }
+  .discover__name {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .discover__input {
+    font: inherit;
+    padding: var(--r2m-space-1) var(--r2m-space-2);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-sm);
+    background: var(--r2m-surface);
+    color: var(--r2m-text);
+    max-width: 260px;
+  }
+  .discover__input[aria-invalid='true'] {
+    border-color: var(--r2m-status-error);
+  }
+  .discover__input--alias {
+    max-width: 160px;
+  }
+  .discover__aliases {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-1);
+  }
+  .discover__alias {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 var(--r2m-space-1) 0 var(--r2m-space-2);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-pill);
+    font-size: var(--r2m-text-sm);
+  }
+  .discover__alias--collides {
+    border-color: var(--r2m-status-warn);
+    background: var(--r2m-status-warn-soft);
+  }
+  .discover__alias-remove {
+    display: inline-flex;
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+  }
+  .discover__alias-remove .r2m-icon {
+    font-size: 16px;
+  }
+  .discover__stream {
+    border-top: 1px solid var(--r2m-outline);
+    padding-top: var(--r2m-space-1);
+  }
+  .discover__stream-body {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.15s ease;
+  }
+  .discover__stream-body--open {
+    height: 32vh;
+  }
+  .discover__cancel {
+    color: var(--r2m-status-error);
   }
 }

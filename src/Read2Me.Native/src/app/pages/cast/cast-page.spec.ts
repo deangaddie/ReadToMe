@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { ActivityStore } from '@app/activity/activity-store';
+import { LlmStreamFeed } from '@app/activity/stream-feed';
 import type { CharacterSummaryDto, ProjectDetailDto, ProjectStatusDto } from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import { Preflight } from '@app/shared/preflight';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../../testing/fake-api';
 import { IDLE_VOICE_BATCH } from '@app/live/live-state';
@@ -85,6 +89,9 @@ let api: FakeApi;
 let navigation: FakeNavigation;
 let toasts: string[];
 let liveFake: FakeLive;
+let preflightTasks: string[];
+let preflightAnswer: boolean;
+let drawerOpen: ReturnType<typeof signal<boolean>>;
 
 beforeEach(() => {
   resetServices();
@@ -96,14 +103,43 @@ beforeEach(() => {
     success: (m: string) => toasts.push(m),
     problem: (p: { detail?: string }) => toasts.push(`problem: ${p.detail}`),
   } as unknown as ToastService);
+  preflightTasks = [];
+  preflightAnswer = true;
+  override(Preflight, {
+    ensureReady: async (task: string) => {
+      preflightTasks.push(task);
+      return preflightAnswer;
+    },
+  } as unknown as Preflight);
+  drawerOpen = signal(false);
+  override(ActivityStore, { drawerOpen } as unknown as ActivityStore);
+  override(LlmStreamFeed, {
+    acquire: () => undefined,
+    release: () => undefined,
+    events: signal([]),
+    maxUnits: 50,
+  } as unknown as LlmStreamFeed);
 });
 afterEach(() => document.body.replaceChildren());
 
 /** The cast page under the project shell, through a root outlet as in the app. */
-async function render(path = 'projects/dune/cast', rows = ROWS, linked = false) {
+async function render(
+  path = 'projects/dune/cast',
+  rows = ROWS,
+  linked = false,
+  voiceNames: Record<string, string[]> = {},
+) {
   api.on('GET', BASE, detail(linked)).on('GET', `${BASE}/status`, STATUS);
   api.on('GET', SUMMARY, rows);
-  for (const r of rows) api.on('GET', `${BASE}/characters/${r.id}/lines`, []);
+  for (const r of rows) {
+    api.on('GET', `${BASE}/characters/${r.id}/lines`, []);
+    api.on('GET', `${BASE}/characters/${r.id}/voices`, {
+      defaultVoiceId: null,
+      voices: (voiceNames[r.id] ?? []).map((name) => ({ name })),
+    });
+    api.on('GET', `${BASE}/characters/${r.id}/voice-rules`, []);
+    api.on('GET', `${BASE}/characters/${r.id}/voice-rules/preview`, []);
+  }
   navigation = installNavigation(path);
   const router = new Router();
   override(Router, router);
@@ -210,13 +246,102 @@ describe('r2m-cast-page', () => {
     expect(navigation.calls.at(-1)?.url).toBe('http://localhost/app2/projects/dune/cast/stilgar');
   });
 
-  it('Add character is off while a voice batch runs', async () => {
+  it('the toolbar is off while a voice batch runs', async () => {
     const { page } = await render();
-    const add = () => page.querySelector<HTMLButtonElement>('[data-action="add-character"]')!;
-    expect(add().disabled).toBe(false);
+    const actions = ['discover', 'generate-prompts', 'generate-audio', 'add-character'];
+    const disabled = () =>
+      actions.map((a) => page.querySelector<HTMLButtonElement>(`[data-action="${a}"]`)!.disabled);
+    expect(disabled()).toEqual([false, false, false, false]);
     liveFake.voiceBatch.set({ ...IDLE_VOICE_BATCH, isRunning: true });
     await page.rendered();
-    expect(add().disabled).toBe(true);
+    expect(disabled()).toEqual([true, true, true, true]);
+  });
+
+  it('Discover is gated by preflight and opens the discovery dialog over the roster', async () => {
+    const { page } = await render();
+    preflightAnswer = false;
+    page.querySelector<HTMLButtonElement>('[data-action="discover"]')!.click();
+    await settle();
+    expect(preflightTasks).toEqual(['discovery']);
+    expect(document.querySelector('r2m-discovery-dialog')).toBeNull();
+
+    preflightAnswer = true;
+    api.on('POST', `${BASE}/characters/discover`, {
+      status: 'Ok',
+      reason: null,
+      characters: [{ name: 'Stilgar', aliases: [], existingCharacterId: null }],
+      collisions: [],
+    });
+    api.on('POST', `${BASE}/characters/discover/apply`, { applied: 1 });
+    page.querySelector<HTMLButtonElement>('[data-action="discover"]')!.click();
+    await settle();
+    const dialog = document.querySelector('r2m-discovery-dialog')!;
+    expect(dialog.data.roster.map((r) => r.name)).toEqual(['Narrator', 'Paul', 'Jessica']);
+    await settle();
+    await dialog.rendered();
+    api.on('GET', SUMMARY, [...ROWS, row('Stilgar')]);
+    dialog.querySelector<HTMLButtonElement>('[data-action="apply"]')!.click();
+    await settle();
+    await settle();
+    await page.rendered();
+    expect(toasts).toEqual(['1 character added']);
+    expect(names(page)).toContain('Stilgar');
+  });
+
+  it('?discover=1 opens discovery once the roster is up and drops the param', async () => {
+    api.on('POST', `${BASE}/characters/discover`, () => new Promise(() => undefined));
+    const { page } = await render('projects/dune/cast?discover=1');
+    await settle();
+    expect(preflightTasks).toEqual(['discovery']);
+    expect(document.querySelector('r2m-discovery-dialog')).not.toBeNull();
+    const last = navigation.calls.at(-1)!;
+    expect(last.url).toBe('http://localhost/app2/projects/dune/cast');
+    expect(last.history).toBe('replace');
+    expect(page.isConnected).toBe(true);
+  });
+
+  it('Generate voice prompts starts the batch at once without voices and opens the drawer', async () => {
+    const { page } = await render('projects/dune/cast', [row('Narrator'), row('Jessica')]);
+    api.on('POST', `${BASE}/voice-batch/prompts`, { started: true });
+    page.querySelector<HTMLButtonElement>('[data-action="generate-prompts"]')!.click();
+    await settle();
+    await settle();
+    expect(document.querySelector('r2m-voice-scope-dialog')).toBeNull();
+    expect(preflightTasks).toEqual(['voicePrompt']);
+    expect(api.calls('POST', `${BASE}/voice-batch/prompts`).map((r) => r.body)).toEqual([
+      { regenerateAll: false },
+    ]);
+    expect(drawerOpen()).toBe(true);
+  });
+
+  it('with voices the scope dialog comes first; Cancel starts nothing', async () => {
+    const { page } = await render();
+    page.querySelector<HTMLButtonElement>('[data-action="generate-prompts"]')!.click();
+    await settle();
+    const scope = document.querySelector('r2m-voice-scope-dialog')!;
+    await scope.rendered();
+    Array.from(scope.querySelectorAll('button'))
+      .find((b) => b.textContent?.trim() === 'Cancel')!
+      .click();
+    await settle();
+    expect(preflightTasks).toEqual([]);
+    expect(api.calls('POST', `${BASE}/voice-batch/prompts`)).toHaveLength(0);
+  });
+
+  it('Generate audio is gated by preflight and toasts a refused start', async () => {
+    const { page } = await render();
+    api.on('POST', `${BASE}/voice-batch/audio`, () =>
+      Response.json(
+        { title: 'Conflict', status: 409, detail: 'A batch is running' },
+        { status: 409 },
+      ),
+    );
+    page.querySelector<HTMLButtonElement>('[data-action="generate-audio"]')!.click();
+    await settle();
+    await settle();
+    expect(preflightTasks).toEqual(['voiceDesign']);
+    expect(toasts).toEqual(['problem: A batch is running']);
+    expect(drawerOpen()).toBe(false);
   });
 
   it('the banner links a narrator through SetNarratorCharacter', async () => {
@@ -232,11 +357,9 @@ describe('r2m-cast-page', () => {
 
   it('a linked narrator names the seed row and shows the signpost in its place', async () => {
     const linkedRows = [row('Narrator'), row('Paul', { narratesBook: true }), row('Jessica')];
-    api.on('GET', `${BASE}/characters/narrator/voices`, {
-      defaultVoiceId: null,
-      voices: [{ name: 'Narrator Voice' }],
+    const { page } = await render('projects/dune/cast/narrator', linkedRows, true, {
+      narrator: ['Narrator Voice'],
     });
-    const { page } = await render('projects/dune/cast/narrator', linkedRows, true);
     await settle();
     await page.rendered();
     expect(names(page)).toEqual(['Narrator → Paul', 'Jessica', 'Paul']);

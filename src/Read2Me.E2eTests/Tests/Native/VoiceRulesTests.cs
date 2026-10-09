@@ -3,18 +3,20 @@ using System.Text.Json;
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// The Voice rules section of the cast page (Angular ticket 17): add a "from here on" rule through
-/// the cascading dialog and watch the preview flip, reorder and delete rules, and see a rule whose
-/// chapter was deleted flagged as dangling. Every step is also asserted against the host's own
-/// reads.
+/// The Voice rules section of the native cast page (native-web 31, moved from the Angular ticket
+/// 17 suite): add a "from here on" rule through the cascading dialog and watch the preview flip,
+/// reorder and delete rules, and see a rule whose chapter was deleted flagged as dangling. Every
+/// step is also asserted against the host's own reads. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
+
+    protected override WebApp WebApp => WebApp.Native;
 
     private async Task<Guid> RunAsync(string folder, object command)
     {
@@ -32,12 +34,9 @@ public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         JsonDocument.Parse(await Http.GetStringAsync($"{App.BaseUrl}/api/projects/{folder}/characters/{characterId}/voice-rules/preview"))
             .RootElement.EnumerateArray().Select(r => r.GetProperty("voiceName").GetString() ?? "").ToArray();
 
-    /// <summary>Opens a Material select inside <paramref name="scope"/> and picks the option with <paramref name="text"/>.</summary>
-    private async Task ChooseAsync(ILocator scope, string field, string text)
-    {
-        await scope.Locator($"mat-select[data-field='{field}']").ClickAsync();
-        await Page.Locator("mat-option", new() { HasText = text }).First.ClickAsync();
-    }
+    /// <summary>Picks the option labelled <paramref name="text"/> in the native select for <paramref name="field"/>.</summary>
+    private static async Task ChooseAsync(ILocator scope, string field, string text) =>
+        await scope.Locator($"select[data-field='{field}']").SelectOptionAsync(new SelectOptionValue { Label = text });
 
     [Fact]
     public async Task Add_from_chapter_onward_rule_flips_the_preview_then_move_and_delete()
@@ -49,7 +48,8 @@ public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         await RunAsync(folder, new { type = "CreateVoice", characterId = alice, name = "Voice B", isGenerated = true });
 
         await GotoAppAsync($"projects/{folder}/cast/{alice}");
-        var section = Page.Locator("app-voice-rules-section");
+        await Expect(Page.Locator("r2m-cast-page")).ToBeVisibleAsync();
+        var section = Page.Locator("r2m-voice-rules-section");
         await Expect(section).ToBeVisibleAsync();
 
         // The first voice's default rule, and every chapter resolving to it.
@@ -64,15 +64,15 @@ public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
 
         // Add "From Chapter 3 onward → Voice B" through the cascading dialog.
         await section.Locator("[data-action='add-rule']").ClickAsync();
-        var dialog = Page.Locator("app-add-voice-rule-dialog");
+        var dialog = Page.Locator("r2m-add-voice-rule-dialog");
         await Expect(dialog.Locator("[data-action='add']")).ToBeDisabledAsync();
         await ChooseAsync(dialog, "voice", "Voice B");
-        await Expect(dialog.Locator("mat-select[data-field='part']")).ToHaveCountAsync(0);
+        await Expect(dialog.Locator("select[data-field='part']")).ToHaveCountAsync(0);
         await ChooseAsync(dialog, "volume", "v1");
         await Expect(dialog.Locator("[data-action='add']")).ToBeEnabledAsync();
         await ChooseAsync(dialog, "part", "Untitled");
         await ChooseAsync(dialog, "chapter", "Chapter 3");
-        await Expect(dialog.Locator("mat-select[data-field='paragraph']")).ToBeVisibleAsync();
+        await Expect(dialog.Locator("select[data-field='paragraph']")).ToBeVisibleAsync();
         await dialog.Locator("[data-action='add']").ClickAsync();
         await Expect(dialog).ToHaveCountAsync(0);
 
@@ -88,9 +88,9 @@ public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
 
         // A second, "just this node" rule for chapter 4 back to Voice A: later, so it wins there.
         await section.Locator("[data-action='add-rule']").ClickAsync();
-        dialog = Page.Locator("app-add-voice-rule-dialog");
+        dialog = Page.Locator("r2m-add-voice-rule-dialog");
         await ChooseAsync(dialog, "voice", "Voice A");
-        await dialog.Locator("mat-radio-button", new() { HasText = "Just this node" }).ClickAsync();
+        await dialog.GetByRole(AriaRole.Radio, new() { Name = "Just this node" }).CheckAsync();
         await ChooseAsync(dialog, "volume", "v1");
         await ChooseAsync(dialog, "part", "Untitled");
         await ChooseAsync(dialog, "chapter", "Chapter 4");
@@ -137,7 +137,8 @@ public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         });
 
         await GotoAppAsync($"projects/{folder}/cast/{alice}");
-        var section = Page.Locator("app-voice-rules-section");
+        await Expect(Page.Locator("r2m-cast-page")).ToBeVisibleAsync();
+        var section = Page.Locator("r2m-voice-rules-section");
         var rows = section.Locator("li.voice-rules__row");
         await Expect(rows).ToHaveCountAsync(2);
         await Expect(rows.Nth(1)).ToContainTextAsync("Chapter Chapter 3 → Voice B");

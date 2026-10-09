@@ -11,6 +11,8 @@ import { CastStore } from './cast-store';
 import { openMergeDialog } from './merge-dialog';
 import '@app/ui/inline-edit';
 import './character-lines';
+import './voices/voices-section';
+import './voice-rules/voice-rules-section';
 
 /** The extra note on Delete when the character narrates the book (research §4). */
 export function linkedNarratorDeleteMessage(name: string): string {
@@ -21,7 +23,7 @@ export function linkedNarratorDeleteMessage(name: string): string {
  * The right-hand panel (research §4 "Detail header", "Aliases", "Lines"): rename, Merge and
  * Delete — all hidden on the seed Narrator — the alias chips, and the lines list. Every write
  * goes through the {@link CastStore} the page provides; the panel re-renders from the roster it
- * reloads. The Voices and Voice rules sections arrive with the voices screens (native-web 31).
+ * reloads. The Voices (16) and Voice rules (17) sections sit between the aliases and the lines.
  */
 export class CharacterDetail extends R2mElement {
   private readonly confirm = use(ConfirmService);
@@ -107,6 +109,9 @@ export class CharacterDetail extends R2mElement {
           : nothing
       }
       ${character.isNarrator ? nothing : this.aliases(character, busy)}
+
+      <r2m-voices-section .character=${character}></r2m-voices-section>
+      <r2m-voice-rules-section .character=${character}></r2m-voice-rules-section>
 
       <section class="character-detail__section" aria-label="Lines">
         <h3 class="character-detail__heading">

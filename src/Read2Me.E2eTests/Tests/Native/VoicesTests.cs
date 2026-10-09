@@ -4,17 +4,20 @@ using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 using Read2Me.E2eTests.Infrastructure.FakeAi;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// The Voices section of the cast page (Angular ticket 16) on the fake-AI host: a prompt voice's
-/// whole life (AI prompt, generated audio, switch to reference, upload, transcribe), a TTS
-/// settings override round trip, and the prompt batch landing on the cards from hub events.
+/// The Voices section of the native cast page (native-web 31, moved from the Angular ticket 16
+/// suite) on the fake-AI host: a prompt voice's whole life (AI prompt, generated audio, switch to
+/// reference, upload, transcribe), a TTS settings override round trip, and the prompt batch landing
+/// on the cards from hub events. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
+
+    protected override WebApp WebApp => WebApp.Native;
 
     private const string VoicePlanReply =
         """[ { "name": "Main Voice", "description": "the only voice", "design_prompt": "A clear adult voice." } ]""";
@@ -45,6 +48,9 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         return path;
     }
 
+    /// <summary>The card's own summary row; the sub-sections have their own.</summary>
+    private static ILocator Header(ILocator card) => card.Locator("summary.voice-card__header");
+
     [Fact]
     public async Task Reference_upload_over_the_hard_limit_shows_the_error_and_over_the_soft_limit_the_badge()
     {
@@ -53,8 +59,9 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         var voiceId = await CreateVoiceAsync("web-voices-limit", alice, "Alice Reference", isGenerated: false);
 
         await GotoAppAsync($"projects/web-voices-limit/cast/{alice}");
-        var card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
-        await card.Locator("mat-expansion-panel-header").First.ClickAsync();
+        await Expect(Page.Locator("r2m-cast-page")).ToBeVisibleAsync();
+        var card = Page.Locator($"r2m-voice-card[data-voice-id='{voiceId}']");
+        await Header(card).ClickAsync();
         var badge = card.GetByTestId("voice-reference-warning");
 
         var tooLong = CanonicalWavFile(31_000);
@@ -63,7 +70,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         {
             // Over 30 s: the host refuses it, the card says why, and the voice still has no audio.
             await card.Locator(".r2m-file-drop__input").SetInputFilesAsync(tooLong);
-            await Expect(Page.Locator(".r2m-toast-panel", new() { HasText = "30 s or shorter" }))
+            await Expect(Page.Locator(".r2m-toast", new() { HasText = "30 s or shorter" }))
                 .ToBeVisibleAsync(new() { Timeout = 15_000 });
             await Expect(card.Locator("r2m-file-drop")).ToContainTextAsync("Upload audio");
             Assert.Equal(JsonValueKind.Null, (await VoiceAsync("web-voices-limit", voiceId.ToString()))
@@ -94,27 +101,28 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         App.FakeAi.LlmReply = _ => "A warm, unhurried alto with a faint Scottish lilt.";
 
         await GotoAppAsync($"projects/web-voices-life/cast/{alice}");
-        var section = Page.Locator("app-voices-section");
+        await Expect(Page.Locator("r2m-cast-page")).ToBeVisibleAsync();
+        var section = Page.Locator("r2m-voices-section");
         await Expect(section).ToBeVisibleAsync();
 
         // Add a prompt voice.
         await section.Locator("[data-action='add-voice']").ClickAsync();
-        var add = Page.Locator("app-add-voice-dialog");
+        var add = Page.Locator("r2m-add-voice-dialog");
         await add.Locator("input[type='text']").FillAsync("Alice Prompt");
-        await add.Locator("mat-radio-button", new() { HasText = "Prompt" }).ClickAsync();
+        await add.GetByRole(AriaRole.Radio, new() { Name = "Prompt" }).CheckAsync();
         await add.Locator("[data-action='add']").ClickAsync();
-        var card = section.Locator("app-voice-card");
+        var card = section.Locator("r2m-voice-card");
         await Expect(card).ToHaveCountAsync(1);
         await Expect(card).ToContainTextAsync("Alice Prompt");
-        await Expect(card.Locator("r2m-status-chip", new() { HasText = "Prompt" })).ToBeVisibleAsync();
+        await Expect(card.Locator(".r2m-status-chip", new() { HasText = "Prompt" })).ToBeVisibleAsync();
         var voiceId = (await card.GetAttributeAsync("data-voice-id"))!;
 
         // Regenerate with AI: render → editable prompt dialog → send → the answer is the draft.
-        await card.Locator("mat-expansion-panel-header").First.ClickAsync();
+        await Header(card).ClickAsync();
         await Expect(card.Locator("[data-action='generate-audio']")).ToBeDisabledAsync();
         await card.Locator("[data-action='regenerate-prompt']").ClickAsync();
-        var gen = Page.Locator("app-generate-prompt-dialog");
-        await Expect(gen.Locator("mat-dialog-content")).ToHaveAttributeAsync("data-phase", "edit", new() { Timeout = 15_000 });
+        var gen = Page.Locator("r2m-generate-prompt-dialog");
+        await Expect(gen.Locator("[data-phase]")).ToHaveAttributeAsync("data-phase", "edit", new() { Timeout = 15_000 });
         await Expect(gen.Locator("textarea")).ToHaveValueAsync(new System.Text.RegularExpressions.Regex("Alice"));
         await gen.Locator("[data-action='send']").ClickAsync();
         await Expect(gen).ToHaveCountAsync(0, new() { Timeout = 15_000 });
@@ -139,11 +147,11 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         await Expect(card.Locator("[data-action='edit-audio']")).ToBeVisibleAsync();
 
         // Switch to reference: the design prompt is dropped, so it is confirmed first.
-        await card.Locator("mat-button-toggle[data-source='Uploaded'] button").ClickAsync();
+        await card.Locator("[data-source='Uploaded']").ClickAsync();
         var confirm = Page.Locator("r2m-confirm-dialog");
         await Expect(confirm).ToContainTextAsync("design prompt");
         await confirm.Locator(".r2m-confirm-dialog__confirm").ClickAsync();
-        await Expect(card.Locator("r2m-status-chip", new() { HasText = "Reference" })).ToBeVisibleAsync();
+        await Expect(card.Locator(".r2m-status-chip", new() { HasText = "Reference" })).ToBeVisibleAsync();
         await Expect(card.Locator("[data-mode='reference']")).ToBeVisibleAsync();
 
         // Upload a WAV through the file drop; the host normalises and commits it.
@@ -164,7 +172,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
 
         // Transcript: a hand edit saves (dirty-gated), then Send to AI replaces it with the fake
         // whisper's answer (which echoes the last synthesised text) in the card and the host.
-        await card.Locator("[data-section='transcript'] mat-expansion-panel-header").ClickAsync();
+        await card.Locator("[data-section='transcript'] > summary").ClickAsync();
         var transcriptField = card.Locator("textarea[aria-label='Transcript']");
         await Expect(card.Locator("[data-action='save-transcript']")).ToBeDisabledAsync();
         await transcriptField.FillAsync("hand-written transcript");
@@ -187,12 +195,13 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         var voiceId = await CreateVoiceAsync("web-voices-override", alice, "Alice Voice", isGenerated: true);
 
         await GotoAppAsync($"projects/web-voices-override/cast/{alice}");
-        var card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
-        await card.Locator("mat-expansion-panel-header").First.ClickAsync();
-        await card.Locator("[data-section='advanced'] mat-expansion-panel-header").ClickAsync();
+        await Expect(Page.Locator("r2m-cast-page")).ToBeVisibleAsync();
+        var card = Page.Locator($"r2m-voice-card[data-voice-id='{voiceId}']");
+        await Header(card).ClickAsync();
+        await card.Locator("[data-section='advanced'] > summary").ClickAsync();
         await card.GetByRole(AriaRole.Tab, new() { Name = "Text-to-Speech" }).ClickAsync();
 
-        var tts = card.Locator("app-voice-override-editor[data-area='paragraph-tts']");
+        var tts = card.Locator("r2m-voice-override-editor[data-area='paragraph-tts']");
         var cfg = tts.Locator("[data-key='cfg_value']");
         await Expect(cfg).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await Expect(cfg.Locator(".r2m-settings-form__dot--on")).ToHaveCountAsync(0);
@@ -202,16 +211,17 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         await Expect(cfg.Locator(".r2m-settings-form__dot--on")).ToHaveCountAsync(1);
         await tts.Locator("[data-action='save-override']").ClickAsync();
         await Expect(tts.Locator("[data-action='save-override']")).ToBeDisabledAsync();
+        await Expect(card).Not.ToHaveAttributeAsync("aria-busy", "true");
         Assert.Equal("{\"cfg_value\":3.5}",
             (await VoiceAsync("web-voices-override", voiceId.ToString())).GetProperty("ttsSettingsOverrideJson").GetString());
 
         // Reload: the stored override shows the dot; reset restores the provider default.
         await GotoAppAsync($"projects/web-voices-override/cast/{alice}");
-        card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
-        await card.Locator("mat-expansion-panel-header").First.ClickAsync();
-        await card.Locator("[data-section='advanced'] mat-expansion-panel-header").ClickAsync();
+        card = Page.Locator($"r2m-voice-card[data-voice-id='{voiceId}']");
+        await Header(card).ClickAsync();
+        await card.Locator("[data-section='advanced'] > summary").ClickAsync();
         await card.GetByRole(AriaRole.Tab, new() { Name = "Text-to-Speech" }).ClickAsync();
-        tts = card.Locator("app-voice-override-editor[data-area='paragraph-tts']");
+        tts = card.Locator("r2m-voice-override-editor[data-area='paragraph-tts']");
         cfg = tts.Locator("[data-key='cfg_value']");
         await Expect(cfg.Locator(".r2m-settings-form__dot--on")).ToHaveCountAsync(1, new() { Timeout = 15_000 });
         await Expect(cfg.Locator(".r2m-settings-form__number")).ToHaveValueAsync("3.5");
@@ -221,6 +231,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         await Expect(cfg.Locator(".r2m-settings-form__number")).ToHaveValueAsync("2");
         await tts.Locator("[data-action='save-override']").ClickAsync();
         await Expect(tts.Locator("[data-action='save-override']")).ToBeDisabledAsync();
+        await Expect(card).Not.ToHaveAttributeAsync("aria-busy", "true");
         Assert.Equal(JsonValueKind.Null,
             (await VoiceAsync("web-voices-override", voiceId.ToString())).GetProperty("ttsSettingsOverrideJson").ValueKind);
     }
@@ -240,25 +251,26 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         App.FakeAi.LlmDelay = TimeSpan.FromMilliseconds(1200);
 
         await GotoAppAsync($"projects/web-voices-batch/cast/{alice}");
-        await Expect(Page.Locator("app-voices-section")).ToContainTextAsync("No voices yet");
+        await Expect(Page.Locator("r2m-cast-page")).ToBeVisibleAsync();
+        await Expect(Page.Locator("r2m-voices-section")).ToContainTextAsync("No voices yet");
         var rows = Page.Locator(".cast__row");
         await Expect(rows).ToHaveCountAsync(4);
-        await Expect(rows.Locator("r2m-status-chip")).ToHaveCountAsync(0);
+        await Expect(rows.Locator(".r2m-status-chip")).ToHaveCountAsync(0);
 
         // No voices exist, so the batch starts without the scope dialog.
         await Page.Locator("[data-action='generate-prompts']").ClickAsync();
-        await Expect(Page.Locator("app-voice-scope-dialog")).ToHaveCountAsync(0);
+        await Expect(Page.Locator("r2m-voice-scope-dialog")).ToHaveCountAsync(0);
         await Expect(Page.Locator("[data-action='generate-prompts']")).ToBeDisabledAsync(new() { Timeout = 10_000 });
 
         // Readiness chips appear one character at a time as the batch's hub events land (the
         // Narrator is planned too, so four in all), and Alice's card arrives without any click.
         // A part-way count proves the roster refreshed mid-batch rather than once at the end.
-        var chips = rows.Locator("r2m-status-chip");
+        var chips = rows.Locator(".r2m-status-chip");
         await Page.WaitForFunctionAsync(
-            "() => { const n = document.querySelectorAll('.cast__row r2m-status-chip').length; return n >= 1 && n < 4; }",
+            "() => { const n = document.querySelectorAll('.cast__row .r2m-status-chip').length; return n >= 1 && n < 4; }",
             null, new() { Timeout = 20_000 });
         await Expect(chips).ToHaveCountAsync(4, new() { Timeout = 20_000 });
-        var card = Page.Locator("app-voice-card");
+        var card = Page.Locator("r2m-voice-card");
         await Expect(card).ToHaveCountAsync(1, new() { Timeout = 15_000 });
         await Expect(card).ToContainTextAsync("Main Voice");
         await Expect(Page.Locator("[data-action='generate-prompts']")).ToBeEnabledAsync(new() { Timeout = 15_000 });
@@ -269,10 +281,10 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
 
         // Voices now exist: the next prompt batch asks for its scope, and Cancel starts nothing.
         await Page.Locator("[data-action='generate-prompts']").ClickAsync();
-        var scope = Page.Locator("app-voice-scope-dialog");
+        var scope = Page.Locator("r2m-voice-scope-dialog");
         await Expect(scope).ToBeVisibleAsync();
         await Expect(scope.Locator("[data-scope='regenerate-all']")).ToContainTextAsync("Clear and regenerate all");
-        await scope.Locator("mat-dialog-actions button", new() { HasText = "Cancel" }).ClickAsync();
+        await scope.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
         await Expect(scope).ToHaveCountAsync(0);
         await Expect(Page.Locator("[data-action='generate-prompts']")).ToBeEnabledAsync();
     }
