@@ -1,23 +1,25 @@
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// The Angular voice audio editor (ticket 18) end to end: tick two steps, preview, hear both stages,
-/// apply, see Edited on the cast card and after a reload, restore. Asserts on the <b>files</b> —
-/// <c>{voiceId}.orig.wav</c> exists ⟺ the voice has been edited. The filters
-/// are ffmpeg-gated and may skip on this host, so the live bytes are not asserted to differ.
+/// The native voice audio editor (native-web 32, moved from the Angular ticket 18 suite) end to end: tick two
+/// steps, preview, hear both stages, apply, see Edited on the cast card and after a reload, restore. Asserts on
+/// the <b>files</b> — <c>{voiceId}.orig.wav</c> exists ⟺ the voice has been edited. The filters
+/// are ffmpeg-gated and may skip on this host, so the live bytes are not asserted to differ. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 
+    protected override WebApp WebApp => WebApp.Native;
+
     [Fact]
     public async Task Tick_preview_apply_restore_round_trip()
     {
-        const string folder = "web-voice-editor";
+        const string folder = "native-voice-editor";
         var book = await App.SeedProjectAsync(folder, "Voice Editor Book", "A. Author", characterName: "Alice");
         var alice = book.CharacterId("Alice");
         var voiceId = await App.SeedEditableVoiceAsync(folder, alice);
@@ -29,12 +31,12 @@ public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
 
         // 1. The cast card's Edit audio link lands on the editor.
         await GotoAppAsync($"projects/{folder}/cast/{alice}");
-        var card = Page.Locator($"app-voice-card[data-voice-id='{voiceId}']");
-        await card.Locator("mat-expansion-panel-header").First.ClickAsync();
+        var card = Page.Locator($"r2m-voice-card[data-voice-id='{voiceId}']");
+        await card.Locator("summary.voice-card__header").ClickAsync();
         await card.Locator("[data-action='edit-audio']").ClickAsync();
         await Assertions.Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex(AppPath($"projects/{folder}/voices/{voiceId}/editor$")));
 
-        var editor = Page.Locator("app-voice-editor-page");
+        var editor = Page.Locator("r2m-voice-editor-page");
         var apply = editor.Locator("[data-action='apply']");
         var preview = editor.Locator("[data-action='preview']");
         await Expect(editor.Locator("[data-step]")).ToHaveCountAsync(5);

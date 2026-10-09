@@ -5,6 +5,7 @@
  */
 export const ICON_NAMES = [
   'add',
+  'arrow_back',
   'arrow_downward',
   'arrow_forward',
   'arrow_upward',
@@ -40,6 +41,7 @@ export const ICON_NAMES = [
   'groups',
   'health_and_safety',
   'hide_image',
+  'history',
   'hourglass_empty',
   'hourglass_top',
   'info',
@@ -78,6 +80,7 @@ export const ICON_NAMES = [
   'schedule',
   'search',
   'settings',
+  'skip_next',
   'speed',
   'star',
   'stop',
@@ -89,6 +92,7 @@ export const ICON_NAMES = [
   'sync_problem',
   'trending_up',
   'upload_file',
+  'voice_over_off',
   'volume_up',
   'warning',
 ] as const;

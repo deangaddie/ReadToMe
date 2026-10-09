@@ -1,0 +1,72 @@
+/* The voice audio editor (design §6.4, ticket 18): steps beside dials, players below. */
+@scope (r2m-voice-editor-page) to (r2m-settings-form > *, r2m-audio-player > *, .r2m-status-chip > *, .r2m-empty-state > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-4);
+  }
+  .voice-editor__back {
+    margin-inline-start: auto;
+    align-self: center;
+  }
+  .voice-editor__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .voice-editor__danger {
+    color: var(--r2m-status-error);
+  }
+  .voice-editor__body {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) 1fr;
+    gap: var(--r2m-space-4);
+  }
+  @media (max-width: 720px) {
+    .voice-editor__body {
+      grid-template-columns: 1fr;
+    }
+  }
+  .voice-editor__steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  .voice-editor__step {
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+    cursor: pointer;
+  }
+  .voice-editor__step:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: 2px;
+  }
+  .voice-editor__step--selected {
+    border-color: var(--r2m-accent);
+  }
+  .voice-editor__tick {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    cursor: pointer;
+  }
+  .voice-editor__blurb,
+  .voice-editor__hint {
+    margin: 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .voice-editor__hint {
+    margin-top: var(--r2m-space-1);
+  }
+  .voice-editor__dials h3 {
+    margin: 0 0 var(--r2m-space-2);
+  }
+  .voice-editor__players {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+}

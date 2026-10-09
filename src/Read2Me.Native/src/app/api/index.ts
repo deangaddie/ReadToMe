@@ -19,4 +19,5 @@ export * from './book-api';
 export * from './book-edits-api';
 export * from './discovery-api';
 export * from './settings-api';
+export * from './voice-editor-api';
 export * from './workspace-url';

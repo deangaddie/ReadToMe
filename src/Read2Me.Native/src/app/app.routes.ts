@@ -71,8 +71,8 @@ export const routes: RouteDef[] = [
           {
             path: 'voices/:voiceId/editor',
             title: 'Voice editor',
-            tag: PLACEHOLDER,
-            load: placeholder,
+            tag: 'r2m-voice-editor-page',
+            load: () => import('@app/pages/voice-editor/voice-editor-page'),
           },
           { path: 'export', title: 'Export', tag: PLACEHOLDER, load: placeholder },
         ],
