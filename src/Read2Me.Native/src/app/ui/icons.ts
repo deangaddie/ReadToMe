@@ -12,6 +12,7 @@ export const ICON_NAMES = [
   'bookmark',
   'brightness_auto',
   'call_split',
+  'check',
   'check_circle',
   'checklist',
   'chevron_right',
@@ -35,6 +36,7 @@ export const ICON_NAMES = [
   'graphic_eq',
   'groups',
   'health_and_safety',
+  'hide_image',
   'hourglass_empty',
   'hourglass_top',
   'info',
@@ -50,6 +52,7 @@ export const ICON_NAMES = [
   'menu_book',
   'merge',
   'more_vert',
+  'open_in_new',
   'palette',
   'pause',
   'pending_actions',
@@ -78,6 +81,8 @@ export const ICON_NAMES = [
   'tune',
   'sync_problem',
   'trending_up',
+  'upload_file',
+  'volume_up',
   'warning',
 ] as const;
 

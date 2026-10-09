@@ -7,6 +7,7 @@
   "bookmark",
   "brightness_auto",
   "call_split",
+  "check",
   "check_circle",
   "checklist",
   "chevron_right",
@@ -30,6 +31,7 @@
   "graphic_eq",
   "groups",
   "health_and_safety",
+  "hide_image",
   "hourglass_empty",
   "hourglass_top",
   "info",
@@ -45,6 +47,7 @@
   "menu_book",
   "merge",
   "more_vert",
+  "open_in_new",
   "palette",
   "pause",
   "pending_actions",
@@ -73,5 +76,7 @@
   "title",
   "trending_up",
   "tune",
+  "upload_file",
+  "volume_up",
   "warning"
 ]

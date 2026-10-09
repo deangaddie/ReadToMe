@@ -1,0 +1,29 @@
+/* New project dialog (design §6.1): three stacked fields, the book drop and its file chip. */
+@scope (r2m-new-project-dialog) to (r2m-file-drop > *) {
+  :scope {
+    display: block;
+    width: min(560px, 90vw);
+  }
+  .new-project__content {
+    gap: var(--r2m-space-3);
+  }
+  .new-project__field {
+    width: 100%;
+  }
+  .new-project__file {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--r2m-space-2);
+    min-height: 24px;
+
+    &:empty {
+      display: none;
+    }
+  }
+  .new-project__submit-error {
+    margin-top: var(--r2m-space-2);
+  }
+  progress {
+    margin-top: var(--r2m-space-4);
+  }
+}

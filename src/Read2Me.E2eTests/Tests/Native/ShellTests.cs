@@ -81,7 +81,8 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
         await Page.Locator("a.shell__crumb", new() { HasText = "Native Shell Book" }).ClickAsync();
         await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("projects/native-shell$")));
         await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Projects", "Native Shell Book"]);
-        await Expect(Page.Locator("r2m-placeholder-page .r2m-page-header__title")).ToHaveTextAsync("Overview");
+        // The overview is native (native-web 29): its header names the project, not the screen.
+        await Expect(Page.Locator("r2m-overview-page .r2m-page-header__title")).ToHaveTextAsync("Native Shell Book");
 
         // Settings shows its own context group and keeps Settings active in the global group.
         await Page.Locator(".shell__settings").ClickAsync();

@@ -32,7 +32,11 @@ export const routes: RouteDef[] = [
     path: 'projects',
     title: 'Projects',
     children: [
-      { path: '', tag: PLACEHOLDER, load: placeholder },
+      {
+        path: '',
+        tag: 'r2m-projects-page',
+        load: () => import('@app/pages/projects/projects-page'),
+      },
       {
         path: ':folder',
         title: projectTitle,
@@ -40,7 +44,12 @@ export const routes: RouteDef[] = [
         tag: 'r2m-project-shell',
         load: () => import('@app/pages/project/project-shell'),
         children: [
-          { path: '', title: 'Overview', tag: PLACEHOLDER, load: placeholder },
+          {
+            path: '',
+            title: 'Overview',
+            tag: 'r2m-overview-page',
+            load: () => import('@app/pages/project/overview-page'),
+          },
           {
             path: 'book',
             title: 'Book',
