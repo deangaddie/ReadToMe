@@ -49,6 +49,19 @@ public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid Paragr
 public record SetParagraphsCharacterCommand(ProjectFolderId FolderId, IReadOnlyList<Guid> ParagraphIds, Guid? CharacterId) : BookCommand(FolderId);
 
 /// <summary>
+/// Where a <see cref="ReleaseNarrationCommand"/> reaches. Its own enum rather than
+/// <see cref="BookNodeLevel"/>: that one has Volume, and a whole-book release is excluded on purpose.
+/// </summary>
+public enum NarrationReleaseScope { Part, Chapter, Paragraph }
+
+/// <summary>
+/// Release narration: clears the narrator stamp, and the audio, from every item of the scope's
+/// narration-only paragraphs (no dialog item at all), leaving them unattributed dialog. A speech tag
+/// inside a quoted paragraph is not in a narration-only paragraph, so it stays narration.
+/// </summary>
+public record ReleaseNarrationCommand(ProjectFolderId FolderId, NarrationReleaseScope Scope, Guid NodeId) : BookCommand(FolderId);
+
+/// <summary>
 /// One item's attribution, ready to apply: the item is addressed by id, and the speaker is already
 /// resolved to a character id (null = unknown, which never erases an existing stamp).
 /// <para>

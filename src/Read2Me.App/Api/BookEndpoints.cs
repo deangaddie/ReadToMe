@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -7,6 +8,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Characters;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
 
@@ -42,6 +44,12 @@ namespace Read2Me.App.Api
     public sealed record BulkAssignPreviewRequest(Guid[] ParagraphIds);
     /// <summary><see cref="BulkAssignPreview"/> on the wire: what a bulk assign over the ids would write.</summary>
     public sealed record BulkAssignPreviewDto(int ParagraphsWithCharacterItems, int CharacterItems);
+    /// <summary>The scope a Release narration would cover; the same shape as the command, minus its type.</summary>
+    public sealed record NarrationReleasePreviewRequest(
+        [property: JsonConverter(typeof(JsonStringEnumConverter<NarrationReleaseScope>))] NarrationReleaseScope Scope,
+        Guid NodeId);
+    /// <summary><see cref="NarrationReleasePreview"/> on the wire: what a Release narration over the scope would write.</summary>
+    public sealed record NarrationReleasePreviewDto(int Paragraphs, int ItemsWithAudio);
     public sealed record CharacterAliasDto(Guid Id, string Name);
     public sealed record CharacterDto(Guid Id, string Name, IReadOnlyList<CharacterAliasDto> Aliases);
     /// <summary><see cref="Revision"/>: the book revision the read ran against, a reader's baseline for receipts.</summary>
@@ -71,6 +79,8 @@ namespace Read2Me.App.Api
                 .WithSummary("All characters with their aliases.");
             endpoints.MapPost("/api/projects/{folder}/characters/bulk-assign-preview", BulkAssignPreviewAsync)
                 .WithSummary("What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither.");
+            endpoints.MapPost("/api/projects/{folder}/narration/release-preview", NarrationReleasePreviewAsync)
+                .WithSummary("What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release, and how many of their items have audio it would discard.");
         }
 
         private static async Task<IResult> GetOverviewAsync(
@@ -181,6 +191,19 @@ namespace Read2Me.App.Api
 
             var preview = await reader.GetBulkAssignPreviewAsync(folderId, request.ParagraphIds ?? [], ct);
             return Results.Ok(new BulkAssignPreviewDto(preview.ParagraphsWithCharacterItems, preview.CharacterItems));
+        }
+
+        private static async Task<IResult> NarrationReleasePreviewAsync(
+            string folder, NarrationReleasePreviewRequest request, IFileSystem fs, ICharacterReader reader, CancellationToken ct)
+        {
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+            if (!NarrationRelease.IsKnownScope(request.Scope))
+                return Results.Problem($"Unknown scope '{request.Scope}'. Expected Part, Chapter or Paragraph.",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            var preview = await reader.GetNarrationReleasePreviewAsync(folderId, request.Scope, request.NodeId, ct);
+            return Results.Ok(new NarrationReleasePreviewDto(preview.Paragraphs, preview.ItemsWithAudio));
         }
 
         private static CharacterDto ToCharacterDto(Character c) => new(

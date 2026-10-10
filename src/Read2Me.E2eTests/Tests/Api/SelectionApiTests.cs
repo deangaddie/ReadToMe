@@ -106,6 +106,40 @@ public class SelectionApiTests(E2eAppFixture app)
     }
 
     [Fact]
+    public async Task Release_narration_previews_then_makes_the_narration_paragraph_selectable()
+    {
+        var folder = $"api-sel-release-{Guid.NewGuid():N}";
+        var book = await app.SeedThreeDialogParagraphProjectAsync(folder, "Release Book", "Author");
+        var chapter = book.ChapterId("ch1");
+
+        // p1 is the chapter's one narration-only paragraph.
+        var response = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
+            new { scope = "Chapter", nodeId = chapter });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var preview = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(1, preview.GetProperty("paragraphs").GetInt32());
+        Assert.Equal(0, preview.GetProperty("itemsWithAudio").GetInt32());
+
+        var release = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
+            new { type = "ReleaseNarration", scope = "Chapter", nodeId = chapter });
+        Assert.Equal(HttpStatusCode.OK, release.StatusCode);
+
+        var ids = await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapter}/paragraph-ids?unprocessedOnly=true");
+        Assert.Contains(book.ParagraphId("p1"), ids.EnumerateArray().Select(r => r.GetProperty("id").GetGuid()));
+
+        // A whole-book release is not a scope.
+        var volume = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
+            new { scope = "Volume", nodeId = book.VolumeId("v1") });
+        Assert.Equal(HttpStatusCode.BadRequest, volume.StatusCode);
+        var unnamed = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
+            new { scope = 7, nodeId = chapter });
+        Assert.Equal(HttpStatusCode.BadRequest, unnamed.StatusCode);
+    }
+
+    [Fact]
     public async Task Clear_outcome_is_204_and_the_paragraph_status_forgets_it()
     {
         var folder = $"api-sel-outcome-{Guid.NewGuid():N}";
@@ -144,6 +178,8 @@ public class SelectionApiTests(E2eAppFixture app)
             (await Http.PostAsJsonAsync($"{b}/attribution/enqueue-paragraphs", new { paragraphIds = Array.Empty<Guid>() })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.PostAsJsonAsync($"{b}/characters/bulk-assign-preview", new { paragraphIds = Array.Empty<Guid>() })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await Http.PostAsJsonAsync($"{b}/narration/release-preview", new { scope = "Chapter", nodeId = Guid.NewGuid() })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.DeleteAsync($"{b}/attribution/paragraphs/{Guid.NewGuid()}/outcome")).StatusCode);
     }

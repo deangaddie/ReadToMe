@@ -63,6 +63,13 @@ public sealed class SetParagraphsCharacterHandler(BookMutations mutations)
             new SetParagraphsSpeakerMutation(c.FolderId, c.ParagraphIds, c.CharacterId), ct);
 }
 
+public sealed class ReleaseNarrationHandler(BookMutations mutations)
+    : ICommandHandler<ReleaseNarrationCommand>
+{
+    public Task<BookCommandResult> HandleAsync(ReleaseNarrationCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandAsync(new ReleaseNarrationMutation(c.FolderId, c.Scope, c.NodeId), ct);
+}
+
 public sealed class AddCharacterAliasHandler(BookMutations mutations) : ICommandHandler<AddCharacterAliasCommand>
 {
     public Task<BookCommandResult> HandleAsync(AddCharacterAliasCommand c, CancellationToken ct) =>

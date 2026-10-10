@@ -393,7 +393,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Book overview: volumes, characters and structure counts. hasContent=false means import has not run. */
+        /** Book overview: volumes, characters and structure counts, and the book revision they were read at. hasContent=false means import has not run. */
         get: {
             parameters: {
                 query?: never;
@@ -636,6 +636,46 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["BulkAssignPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/narration/release-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release, and how many of their items have audio it would discard. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["NarrationReleasePreviewRequest"];
                 };
             };
             responses: {
@@ -4973,6 +5013,13 @@ export interface components {
             part: null | components["schemas"]["SplitRuleRequest"];
             chapter: null | components["schemas"]["SplitRuleRequest"];
         };
+        NarrationReleasePreviewRequest: {
+            scope: components["schemas"]["NarrationReleaseScope"];
+            /** Format: uuid */
+            nodeId: string;
+        };
+        /** @enum {unknown} */
+        NarrationReleaseScope: "Part" | "Chapter" | "Paragraph";
         NarratorOnlyModeRequest: {
             enabled: boolean;
         };
