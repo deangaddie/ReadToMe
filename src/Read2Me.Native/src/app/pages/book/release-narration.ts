@@ -1,4 +1,4 @@
-import type { NarrationReleasePreviewDto } from '@app/api';
+import type { NarrationReleasePreviewDto, NarrationReleaseScope } from '@app/api';
 import type { ConfirmOptions } from '@app/ui/dialogs';
 
 /**
@@ -11,17 +11,37 @@ function plural(n: number): string {
   return n === 1 ? '' : 's';
 }
 
+/**
+ * Whether the release asks first. A single paragraph with no audio is a one-line fix with
+ * nothing to lose, so it is written straight away; anything bigger, or discarding audio, confirms.
+ */
+export function releaseNeedsConfirm(
+  scope: NarrationReleaseScope,
+  preview: NarrationReleasePreviewDto,
+): boolean {
+  return scope !== 'Paragraph' || preview.itemsWithAudio > 0;
+}
+
 /** The confirm to show, or null when the scope holds no narration-only paragraph. */
 export function releaseConfirm(
+  scope: NarrationReleaseScope,
   nodeTitle: string,
   preview: NarrationReleasePreviewDto,
 ): ConfirmOptions | null {
   const { paragraphs, itemsWithAudio } = preview;
   if (paragraphs === 0) return null;
 
-  let message = `Release ${paragraphs} narration paragraph${plural(paragraphs)} in ${nodeTitle}?`;
+  // A paragraph's "title" is its text: the row it was opened from already shows it.
+  let message =
+    scope === 'Paragraph'
+      ? 'Release this narration paragraph?'
+      : `Release ${paragraphs} narration paragraph${plural(paragraphs)} in ${nodeTitle}?`;
   if (itemsWithAudio > 0) {
-    message += ` ${itemsWithAudio} ${itemsWithAudio === 1 ? 'has' : 'have'} audio, which will be discarded.`;
+    const subject =
+      scope === 'Paragraph'
+        ? `${itemsWithAudio} item${plural(itemsWithAudio)}`
+        : `${itemsWithAudio}`;
+    message += ` ${subject} ${itemsWithAudio === 1 ? 'has' : 'have'} audio, which will be discarded.`;
   }
 
   return {

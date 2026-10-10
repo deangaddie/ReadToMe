@@ -145,4 +145,40 @@ public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E
         var queue = await Page.APIRequest.GetAsync($"{App.BaseUrl}/api/attribution/queue");
         Assert.Contains("\"queuedCount\":0", await queue.TextAsync());
     }
+
+    [Fact]
+    public async Task Release_one_unquoted_paragraph_from_its_menu_without_a_confirm()
+    {
+        var book = await App.SeedTranscriptProjectAsync("native-release-one", "Native Release One", "A. Author");
+        ILocator Row(string paragraph) => Page.Locator($"[data-paragraph-id='{book.ParagraphId(paragraph)}']");
+        ILocator Chip(string item, string state) =>
+            Page.Locator($"[data-item-id='{book.ItemId(item)}'] .r2m-speaker-chip--{state}");
+        async Task OpenMenu(string paragraph)
+        {
+            await Row(paragraph).HoverAsync();
+            await Row(paragraph).Locator(".r2m-paragraph__menu .r2m-node-menu__trigger").ClickAsync();
+        }
+        var release = Page.Locator("[role=menu] [data-entry='release-narration']");
+
+        await GotoAppAsync("projects/native-release-one/book?mode=speakers");
+        await Expect(Chip("q1", "narration")).ToHaveCountAsync(1);
+
+        // The quoted paragraph holds dialog, so its menu offers no release.
+        await OpenMenu("pquoted");
+        await Expect(Page.Locator("[role=menu] [data-entry='delete']")).ToBeVisibleAsync();
+        await Expect(release).ToHaveCountAsync(0);
+        await Page.Keyboard.PressAsync("Escape");
+
+        // A narration-only paragraph without audio is released straight away: no confirm.
+        await OpenMenu("pq1");
+        await release.ClickAsync();
+        await Expect(Chip("q1", "unknown")).ToHaveCountAsync(1);
+        await Expect(Row("pq1").Locator("input[type=checkbox]")).ToHaveCountAsync(1);
+        await Expect(Page.Locator(".r2m-confirm-dialog__confirm")).ToBeHiddenAsync();
+
+        // Only that paragraph: its neighbours and the speech tag stay narration.
+        await Expect(Chip("a1", "narration")).ToHaveCountAsync(1);
+        await Expect(Chip("tag", "narration")).ToHaveCountAsync(1);
+        await Expect(Page.Locator(".r2m-paragraph input[type=checkbox]")).ToHaveCountAsync(2);
+    }
 }

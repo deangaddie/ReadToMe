@@ -5,6 +5,7 @@ import {
   chapterDialogTotals,
   chapterVoicedTotals,
   isDialogParagraph,
+  isNarrationOnlyParagraph,
   isVoicedItem,
   nodeState,
   selectedUnder,
@@ -49,6 +50,23 @@ describe('isDialogParagraph', () => {
       false,
     );
     expect(isDialogParagraph(paragraph('p'))).toBe(false);
+  });
+});
+
+describe('isNarrationOnlyParagraph', () => {
+  it('is true only when every non-pause item is narration, and there is one', () => {
+    const narration = item({ itemType: 'Narration', characterId: 'n' });
+    const pause = item({ itemType: 'Pause', isPause: true });
+    expect(isNarrationOnlyParagraph(paragraph('p', narration))).toBe(true);
+    expect(isNarrationOnlyParagraph(paragraph('p', narration, pause))).toBe(true);
+    expect(isNarrationOnlyParagraph(paragraph('p', narration, item({ itemType: 'Character' })))).toBe(
+      false,
+    );
+    expect(
+      isNarrationOnlyParagraph(paragraph('p', item({ itemType: 'Character', characterId: 'h' }))),
+    ).toBe(false);
+    expect(isNarrationOnlyParagraph(paragraph('p', pause))).toBe(false);
+    expect(isNarrationOnlyParagraph(paragraph('p'))).toBe(false);
   });
 });
 

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
 import type { ParagraphDto, ParagraphItemDto } from '@app/api';
 import { provide } from '@app/core/services';
+import { NODE_MENU_OPEN, type NodeMenuRequest } from './node-menu';
+import type { NodeMenuTarget } from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
 import type { RowContext } from './reader-rows';
 import { SelectionStore } from './selection-store';
@@ -403,6 +405,26 @@ describe('paragraphRow', () => {
     it('a locked editor disables every menu', async () => {
       const el = await mount(ctx({ mode: 'speakers', locked: true }));
       expect(triggers(el).every((b) => b.disabled)).toBe(true);
+    });
+
+    /** The target the paragraph's trigger opens the shared menu for. */
+    async function paragraphTarget(context: RowContext, paragraph: ParagraphDto) {
+      const el = await mount(context, paragraph);
+      const opened: NodeMenuTarget[] = [];
+      el.addEventListener(NODE_MENU_OPEN, (e) =>
+        opened.push((e as CustomEvent<NodeMenuRequest>).detail.target),
+      );
+      el.querySelector<HTMLButtonElement>('.r2m-paragraph__menu button')!.click();
+      return opened[0]!;
+    }
+
+    it('a narration-only paragraph is marked so in Read and Speakers modes, never in Audio', async () => {
+      expect((await paragraphTarget(ctx(), NARRATION_ONLY)).narrationOnly).toBe(true);
+      const speakers = ctx({ mode: 'speakers' });
+      expect((await paragraphTarget(speakers, NARRATION_ONLY)).narrationOnly).toBe(true);
+      const audio = ctx({ mode: 'audio', selectable: false });
+      expect((await paragraphTarget(audio, NARRATION_ONLY)).narrationOnly).toBeFalsy();
+      expect((await paragraphTarget(ctx(), PARAGRAPH)).narrationOnly).toBeFalsy();
     });
   });
 });

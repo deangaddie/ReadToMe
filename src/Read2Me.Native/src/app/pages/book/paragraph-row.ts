@@ -16,7 +16,7 @@ import {
   paragraphText,
   queueChip,
 } from './reader-rows';
-import { ancestryFor, isDialogParagraph } from './selection';
+import { ancestryFor, isDialogParagraph, isNarrationOnlyParagraph } from './selection';
 import { SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 import '@app/ui/speaker-chip';
@@ -54,6 +54,8 @@ export function paragraphRow(
     id: paragraph.id,
     text: paragraphText(paragraph),
     ...position,
+    // Released, it joins the paragraph selection, so only where that selection is on offer.
+    narrationOnly: ctx.selectable && isNarrationOnlyParagraph(paragraph),
   };
   // Only Character paragraphs are selectable, and only where the selection is paragraphs.
   const selectable = ctx.selectable && isDialogParagraph(paragraph);

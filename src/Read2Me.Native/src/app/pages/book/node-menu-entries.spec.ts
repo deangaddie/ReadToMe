@@ -191,6 +191,23 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
     }
   });
 
+  it('a narration-only paragraph offers Release narration first; other rows never do', () => {
+    const entries = menuEntries(target('paragraph', { narrationOnly: true }));
+    expect(entries.map((e) => [e.id, e.group])).toEqual([
+      ['release-narration', 'release'],
+      ['split', 'structure'],
+      ['merge-previous', 'structure'],
+      ['merge-next', 'structure'],
+      ['delete', 'delete'],
+    ]);
+    expect(entries[0]!.label).toBe('Release narration');
+    expect(ids(target('paragraph'))).not.toContain('release-narration');
+    expect(ids(target('item', { narrationOnly: true }))).not.toContain('release-narration');
+    expect(ids(target('pause-paragraph', { narrationOnly: true }))).not.toContain(
+      'release-narration',
+    );
+  });
+
   it('rows never get them, whatever the selection', () => {
     expect(ids(target('paragraph', { selection: 'paragraphs' }))).not.toContain('select-unprocessed');
     expect(ids(target('item', { selection: 'items' }))).not.toContain('generate-audio-node');

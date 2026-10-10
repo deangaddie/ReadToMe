@@ -204,6 +204,28 @@ describe('SpeakerAssigner', () => {
     ]);
   });
 
+  it('release: one paragraph without audio is written with no confirm', async () => {
+    releaseNarrationPreview.mockResolvedValueOnce({ paragraphs: 1, itemsWithAudio: 0 });
+    expect(await assigner.releaseNarration('Paragraph', 'p7', 'Q: Your name?')).toBe(true);
+    expect(releaseNarrationPreview).toHaveBeenCalledWith('dune', 'Paragraph', 'p7');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(run.mock.calls).toEqual([
+      [{ type: 'ReleaseNarration', scope: 'Paragraph', nodeId: 'p7' }],
+    ]);
+  });
+
+  it('release: one paragraph with audio confirms first, naming the audio', async () => {
+    releaseNarrationPreview.mockResolvedValueOnce({ paragraphs: 1, itemsWithAudio: 1 });
+    confirm.mockResolvedValueOnce(false);
+    expect(await assigner.releaseNarration('Paragraph', 'p7', 'Q: Your name?')).toBe(false);
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Release this narration paragraph? 1 item has audio, which will be discarded.',
+      }),
+    );
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('release: a declined confirm, a refused write or a failed preview releases nothing', async () => {
     confirm.mockResolvedValueOnce(false);
     expect(await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6')).toBe(false);

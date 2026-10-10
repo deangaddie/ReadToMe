@@ -39,6 +39,16 @@ export function isDialogParagraph(paragraph: ParagraphDto): boolean {
 }
 
 /**
+ * A narration-only paragraph (CONTEXT.md "Release narration"): it speaks, and every spoken item
+ * is narration. The paragraph menu offers Release narration on it, which makes it a Character
+ * paragraph. Reads `itemType` as {@link isDialogParagraph} does.
+ */
+export function isNarrationOnlyParagraph(paragraph: ParagraphDto): boolean {
+  const spoken = paragraph.items.filter((i) => !i.isPause);
+  return spoken.length > 0 && spoken.every((i) => i.itemType === 'Narration');
+}
+
+/**
  * A voiced item (CONTEXT.md "Voiced item", the host's `voicedOnly` rule): a spoken item with
  * somebody to read it — any speaker at all (narration carries the narrator, ADR-0006), or any
  * line in narrator-only mode. Existing audio is no obstacle: a take can be regenerated. What the

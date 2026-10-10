@@ -12,7 +12,12 @@ import type { ProjectStore } from '../project/project-store';
 import type { BookEditor } from './book-editor';
 import type { BookStore } from './book-store';
 import { NOTHING_TO_ASSIGN, bulkConfirm, bulkDoneMessage } from './bulk-assign';
-import { NOTHING_TO_RELEASE, releaseConfirm, releaseDoneMessage } from './release-narration';
+import {
+  NOTHING_TO_RELEASE,
+  releaseConfirm,
+  releaseDoneMessage,
+  releaseNeedsConfirm,
+} from './release-narration';
 
 /** What a speaker menu pick lands on: one item, one paragraph, or the whole selection. */
 export type AssignTarget =
@@ -142,7 +147,8 @@ export class SpeakerAssigner {
   }
 
   /**
-   * Release narration over a part or chapter: preview, confirm, then one command. Nothing to
+   * Release narration over a part, chapter or paragraph: preview, confirm, then one command. A
+   * single paragraph without audio skips the confirm (`releaseNeedsConfirm`). Nothing to
    * release is a notice, not a confirm. Never enqueues attribution: the producer picks next
    * between bulk assign and "Attribute unprocessed". True when the release was written.
    */
@@ -162,12 +168,12 @@ export class SpeakerAssigner {
       return false;
     }
 
-    const options = releaseConfirm(nodeTitle, preview);
+    const options = releaseConfirm(scope, nodeTitle, preview);
     if (!options) {
       this.toast.info(NOTHING_TO_RELEASE);
       return false;
     }
-    if (!(await this.confirm.confirm(options))) return false;
+    if (releaseNeedsConfirm(scope, preview) && !(await this.confirm.confirm(options))) return false;
 
     if (!(await this.editor.run({ type: 'ReleaseNarration', scope, nodeId }))) return false;
     this.toast.success(releaseDoneMessage(preview));

@@ -482,6 +482,39 @@ describe('r2m-book-page', () => {
 
       expect(selection.count()).toBe(1);
     });
+
+    it("Release narration from a narration-only paragraph's menu releases that paragraph and clears the selection", async () => {
+      const narration: ParagraphDto = {
+        id: 'q1',
+        isPauseParagraph: false,
+        items: [{ ...DIALOG('q1').items[0]!, itemType: 'Narration', text: 'Q: Your name?' }],
+      };
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, {
+        paragraphs: [DIALOG('p1'), narration],
+      });
+      const { page } = await start('projects/dune/book?mode=speakers');
+      const selection = use(SelectionStore, page);
+      const release = mock(async () => true);
+      use(SpeakerAssigner, page).releaseNarration = release;
+      selection.toggle('p1', A, true);
+
+      page
+        .querySelector<HTMLButtonElement>('[data-paragraph-id=q1] .r2m-paragraph__menu button')!
+        .click();
+      await page.rendered();
+      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+
+      expect(release).toHaveBeenCalledWith('Paragraph', 'q1', 'Q: Your name?');
+      expect(selection.count()).toBe(0);
+
+      // A dialog-bearing row offers no release.
+      page
+        .querySelector<HTMLButtonElement>('[data-paragraph-id=p1] .r2m-paragraph__menu button')!
+        .click();
+      await page.rendered();
+      expect(page.querySelector('[role="menu"] [data-entry=release-narration]')).toBeNull();
+    });
   });
 
   describe('audio selection (ticket 13)', () => {

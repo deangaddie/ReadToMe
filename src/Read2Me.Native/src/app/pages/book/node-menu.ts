@@ -30,7 +30,10 @@ export interface NodeMenuRequest {
   target: NodeMenuTarget;
   /** Where focus goes when the menu closes; the anchor when unset. */
   returnTo?: HTMLElement;
-  /** Takes the selection entries (tree nodes only); without it they are ignored. */
+  /**
+   * Takes the action entries (tree nodes, and a narration-only paragraph's release); without it
+   * they are ignored.
+   */
   onAction?: (action: ActionEntryId) => void;
 }
 

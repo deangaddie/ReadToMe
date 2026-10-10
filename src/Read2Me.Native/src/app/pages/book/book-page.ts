@@ -1,5 +1,11 @@
 import { html, nothing } from 'lit-html';
-import { AttributionApi, BookApi, type BookCommand, toApiError } from '@app/api';
+import {
+  AttributionApi,
+  BookApi,
+  type BookCommand,
+  type NarrationReleaseScope,
+  toApiError,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -20,7 +26,7 @@ import { BookStore } from './book-store';
 import type { TreeNode } from './book-tree';
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
-import { nodeMenuTrigger } from './node-menu';
+import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
 import {
@@ -348,7 +354,11 @@ export class BookPage extends R2mElement {
                     </nav>`
                   : nothing
               }
-              <section class="book__reader" aria-label="Chapter">
+              <section
+                class="book__reader"
+                aria-label="Chapter"
+                @r2m-node-menu-open=${this.onRowMenuOpen}
+              >
                 ${
                   rows.length === 0
                     ? html`<div
@@ -627,7 +637,8 @@ export class BookPage extends R2mElement {
         void this.generator.enqueueNode(node.level, node.id, this.narratorOnlyMode());
         return;
       case 'release-narration':
-        void this.releaseNarration(node);
+        if (node.level === 'volume') return;
+        void this.releaseNarration(node.level === 'part' ? 'Part' : 'Chapter', node.id, node.title);
         return;
     }
   };
@@ -638,16 +649,34 @@ export class BookPage extends R2mElement {
    * part's total read before the release would undercount. Loaded chapters relearn theirs now, and
    * again when the receipt's reload lands.
    */
-  private async releaseNarration(node: TreeNode): Promise<void> {
-    if (node.level === 'volume') return;
-    const scope = node.level === 'part' ? 'Part' : 'Chapter';
-    if (!(await this.assigner.releaseNarration(scope, node.id, node.title))) return;
+  private async releaseNarration(
+    scope: NarrationReleaseScope,
+    nodeId: string,
+    title: string,
+  ): Promise<void> {
+    if (!(await this.assigner.releaseNarration(scope, nodeId, title))) return;
     const chapters = this.store.chapters();
     this.selection.reset();
     this.selection.learnTotals(chapterDialogTotals(chapters));
     this.audioSelection.reset();
     this.audioSelection.learnTotals(chapterVoicedTotals(chapters, this.narratorOnlyMode()));
   }
+
+  /**
+   * A paragraph row's menu opening (`NODE_MENU_OPEN`, on its way to the shared menu): rows have no
+   * tree to take their actions, so the reader does. The only one is a narration-only paragraph's
+   * Release narration.
+   */
+  private readonly onRowMenuOpen = (e: Event): void => {
+    const request = (e as CustomEvent<NodeMenuRequest>).detail;
+    const { target } = request;
+    if (target.kind !== 'paragraph') return;
+    request.onAction = (action) => {
+      if (action === 'release-narration') {
+        void this.releaseNarration('Paragraph', target.id, target.text ?? '');
+      }
+    };
+  };
 
   /** The action bar's Attribute: queue the selection, then clear it: the queue owns it now. */
   private readonly attributeSelection = async (): Promise<void> => {
