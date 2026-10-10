@@ -1,4 +1,10 @@
-import { AttributionApi, BookApi, type Guid, toApiError } from '@app/api';
+import {
+  AttributionApi,
+  BookApi,
+  type Guid,
+  type NarrationReleaseScope,
+  toApiError,
+} from '@app/api';
 import { use } from '@app/core/services';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -6,6 +12,7 @@ import type { ProjectStore } from '../project/project-store';
 import type { BookEditor } from './book-editor';
 import type { BookStore } from './book-store';
 import { NOTHING_TO_ASSIGN, bulkConfirm, bulkDoneMessage } from './bulk-assign';
+import { NOTHING_TO_RELEASE, releaseConfirm, releaseDoneMessage } from './release-narration';
 
 /** What a speaker menu pick lands on: one item, one paragraph, or the whole selection. */
 export type AssignTarget =
@@ -132,6 +139,39 @@ export class SpeakerAssigner {
       paragraphIds.filter((id) => statuses[id]?.outcome).map((id) => this.clearOutcome(id)),
     );
     this.toast.success(bulkDoneMessage(name, preview));
+  }
+
+  /**
+   * Release narration over a part or chapter: preview, confirm, then one command. Nothing to
+   * release is a notice, not a confirm. Never enqueues attribution: the producer picks next
+   * between bulk assign and "Attribute unprocessed". True when the release was written.
+   */
+  async releaseNarration(
+    scope: NarrationReleaseScope,
+    nodeId: Guid,
+    nodeTitle: string,
+  ): Promise<boolean> {
+    const folder = this.book.folder();
+    if (!folder) return false;
+
+    let preview;
+    try {
+      preview = await this.api.releaseNarrationPreview(folder, scope, nodeId);
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+      return false;
+    }
+
+    const options = releaseConfirm(nodeTitle, preview);
+    if (!options) {
+      this.toast.info(NOTHING_TO_RELEASE);
+      return false;
+    }
+    if (!(await this.confirm.confirm(options))) return false;
+
+    if (!(await this.editor.run({ type: 'ReleaseNarration', scope, nodeId }))) return false;
+    this.toast.success(releaseDoneMessage(preview));
+    return true;
   }
 
   private async resolveByName(name: string): Promise<Guid | null> {

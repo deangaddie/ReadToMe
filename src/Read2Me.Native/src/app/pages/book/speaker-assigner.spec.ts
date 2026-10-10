@@ -20,6 +20,7 @@ describe('SpeakerAssigner', () => {
   let execute: ReturnType<typeof mock>;
   let clearOutcome: ReturnType<typeof mock>;
   let bulkAssignPreview: ReturnType<typeof mock>;
+  let releaseNarrationPreview: ReturnType<typeof mock>;
   let characters: ReturnType<typeof mock>;
   let confirm: ReturnType<typeof mock>;
   let promptText: ReturnType<typeof mock>;
@@ -32,12 +33,17 @@ describe('SpeakerAssigner', () => {
     execute = mock(async () => ({ newEntityId: 'c-new' }));
     clearOutcome = mock(async () => undefined);
     bulkAssignPreview = mock(async () => ({ paragraphsWithCharacterItems: 2, characterItems: 3 }));
+    releaseNarrationPreview = mock(async () => ({ paragraphs: 41, itemsWithAudio: 12 }));
     characters = mock(async () => []);
     confirm = mock(async () => true);
     promptText = mock(async () => null);
     toasts = [];
     paragraphs.set({});
-    override(BookApi, { bulkAssignPreview, characters } as unknown as BookApi);
+    override(BookApi, {
+      bulkAssignPreview,
+      releaseNarrationPreview,
+      characters,
+    } as unknown as BookApi);
     override(AttributionApi, { clearOutcome } as unknown as AttributionApi);
     override(ConfirmService, { confirm } as unknown as ConfirmService);
     override(PromptService, { text: promptText } as unknown as PromptService);
@@ -169,5 +175,46 @@ describe('SpeakerAssigner', () => {
       'preview broke',
       'clear broke',
     ]);
+  });
+
+  it('release: previews the scope, confirms with the count and audio, then writes once', async () => {
+    const released = await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6');
+
+    expect(released).toBe(true);
+    expect(releaseNarrationPreview).toHaveBeenCalledWith('dune', 'Chapter', 'c6');
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Release 41 narration paragraphs in Chapter 6? 12 have audio, which will be discarded.',
+      }),
+    );
+    expect(run.mock.calls).toEqual([[{ type: 'ReleaseNarration', scope: 'Chapter', nodeId: 'c6' }]]);
+    expect(toasts).toEqual([
+      { kind: 'success', message: 'Released 41 paragraphs. Assign their speakers or attribute them.' },
+    ]);
+  });
+
+  it('release: nothing to release is a notice and sends no command', async () => {
+    releaseNarrationPreview.mockResolvedValueOnce({ paragraphs: 0, itemsWithAudio: 0 });
+    expect(await assigner.releaseNarration('Part', 'p1', 'Part 1')).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(toasts).toEqual([
+      { kind: 'info', message: 'No narration-only paragraphs here — nothing to release.' },
+    ]);
+  });
+
+  it('release: a declined confirm, a refused write or a failed preview releases nothing', async () => {
+    confirm.mockResolvedValueOnce(false);
+    expect(await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6')).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+
+    run.mockResolvedValueOnce(false);
+    expect(await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6')).toBe(false);
+
+    releaseNarrationPreview.mockRejectedValueOnce(new ApiError(500, 'Boom', 'preview broke'));
+    expect(await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6')).toBe(false);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(toasts.map((t) => t.kind)).toEqual(['problem']);
   });
 });

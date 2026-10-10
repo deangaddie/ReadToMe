@@ -150,7 +150,7 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
         ['select-unprocessed', 'select'],
         ['attribute-node', 'select'],
       ]);
-      expect(entries[2]!.id).toBe('edit-title');
+      expect(entries.find((e) => e.group === 'edit')!.id).toBe('edit-title');
     }
   });
 
@@ -163,6 +163,31 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
       ]);
       expect(entries[2]!.id).toBe('edit-title');
       expect(ids(target(kind, { selection: 'items' }))).not.toContain('select-unprocessed');
+    }
+  });
+
+  it('a part or chapter in a paragraph selection offers Release narration after the shortcuts', () => {
+    for (const kind of ['part', 'chapter'] as const) {
+      const entries = menuEntries(target(kind, { selection: 'paragraphs' }));
+      const release = entries[2]!;
+      expect([release.id, release.label, release.group]).toEqual([
+        'release-narration',
+        'Release narration',
+        'release',
+      ]);
+      expect(release.destructive).toBeUndefined();
+      expect(entries[3]!.id).toBe('edit-title');
+    }
+  });
+
+  it('Release narration is nowhere else: volumes, item selections, rows, pauses', () => {
+    expect(ids(target('volume', { selection: 'paragraphs' }))).not.toContain('release-narration');
+    for (const kind of ['part', 'chapter'] as const) {
+      expect(ids(target(kind, { selection: 'items' }))).not.toContain('release-narration');
+      expect(ids(target(kind))).not.toContain('release-narration');
+    }
+    for (const kind of ['paragraph', 'item', 'pause-paragraph'] as const) {
+      expect(ids(target(kind, { selection: 'paragraphs' }))).not.toContain('release-narration');
     }
   });
 

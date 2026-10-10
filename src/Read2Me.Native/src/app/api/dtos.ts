@@ -258,6 +258,21 @@ export interface BulkAssignPreviewDto {
   characterItems: number;
 }
 
+/** Where a Release narration reaches: no whole-book scope (`NarrationReleaseScope`). */
+export type NarrationReleaseScope = 'Part' | 'Chapter' | 'Paragraph';
+
+/** `POST …/narration/release-preview` body. */
+export interface NarrationReleasePreviewRequest {
+  scope: NarrationReleaseScope;
+  nodeId: Guid;
+}
+
+/** What a ReleaseNarration would write: paragraphs it releases, items whose audio it discards. */
+export interface NarrationReleasePreviewDto {
+  paragraphs: number;
+  itemsWithAudio: number;
+}
+
 export interface CharacterAliasDto {
   id: Guid;
   name: string;

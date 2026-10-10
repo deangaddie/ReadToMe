@@ -445,6 +445,43 @@ describe('r2m-book-page', () => {
       ]);
       expect(toasts).toEqual(['Queued 2 paragraphs']);
     });
+
+    it('Release narration from a node menu releases the node, then clears the selection and its stale totals', async () => {
+      const { page } = await start('projects/dune/book?mode=speakers');
+      const selection = use(SelectionStore, page);
+      const assigner = use(SpeakerAssigner, page);
+      const release = mock(async () => true);
+      assigner.releaseNarration = release;
+      selection.toggle('p1', A, true);
+      selection.learnTotals({ 'part-x': 3 });
+
+      page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
+      await page.rendered();
+      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+
+      expect(release).toHaveBeenCalledWith('Chapter', 'c1', 'The Encyclopedists');
+      expect(selection.count()).toBe(0);
+      expect(selection.totals()['part-x']).toBeUndefined();
+      // The loaded chapter's total is relearnt straight away.
+      expect(selection.totals()['c1']).toBeDefined();
+      // The release itself never queues attribution.
+      expect(api.calls('POST', `${BASE}/attribution/enqueue`)).toHaveLength(0);
+    });
+
+    it('a release that writes nothing keeps the selection', async () => {
+      const { page } = await start('projects/dune/book?mode=speakers');
+      const selection = use(SelectionStore, page);
+      use(SpeakerAssigner, page).releaseNarration = mock(async () => false);
+      selection.toggle('p1', A, true);
+
+      page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
+      await page.rendered();
+      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+
+      expect(selection.count()).toBe(1);
+    });
   });
 
   describe('audio selection (ticket 13)', () => {

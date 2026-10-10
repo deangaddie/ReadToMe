@@ -36,6 +36,7 @@ export const ACTION_ENTRIES = [
   'attribute-node',
   'select-needs-audio',
   'generate-audio-node',
+  'release-narration',
 ] as const;
 export type ActionEntryId = (typeof ACTION_ENTRIES)[number];
 
@@ -53,6 +54,7 @@ export type MenuEntryId =
 
 export type MenuGroup =
   | 'select'
+  | 'release'
   | 'edit'
   | 'structure'
   | 'insert'
@@ -117,6 +119,16 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
         { id: 'select-unprocessed', label: 'Select unprocessed', icon: 'checklist', group: 'select' },
         { id: 'attribute-node', label: 'Attribute unprocessed', icon: 'auto_awesome', group: 'select' },
       );
+      // Unquoted speech (a Q:/A: transcript) was stamped narration at import; this hands it back
+      // to the selection. No whole-book scope, so never on a volume.
+      if (kind !== 'volume') {
+        entries.push({
+          id: 'release-narration',
+          label: 'Release narration',
+          icon: 'voice_over_off',
+          group: 'release',
+        });
+      }
     } else if (target.selection === 'items') {
       entries.push(
         { id: 'select-needs-audio', label: 'Select needs audio', icon: 'checklist', group: 'select' },

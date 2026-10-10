@@ -178,6 +178,24 @@ public static class WorkspaceSeeder
                 .AddRawItem("clean", ParagraphItemType.Speech,
                     "“Only me,” came the reply.", characterId: null)));
 
+    /// <summary>
+    /// Creates a project whose chapter is a trial transcript: four unquoted <c>Q:</c>/<c>A:</c>
+    /// paragraphs the quote scan stamped as narration ("q1", "a1", "q2", "a2"), then one quoted
+    /// paragraph whose speech tag ("tag") is narration beside an unattributed line ("quote").
+    /// Release narration frees the four and leaves the tag alone.
+    /// </summary>
+    public static Task<BookHierarchyBuilder> SeedTranscriptProjectAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string title, string author, string characterName = "Alice") =>
+        SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c => c
+            .AddParagraph("pq1", p => p.AddNarration("q1", "Q: Your name?"))
+            .AddParagraph("pa1", p => p.AddNarration("a1", "A: Hari Seldon."))
+            .AddParagraph("pq2", p => p.AddNarration("q2", "Q: Your occupation?"))
+            .AddParagraph("pa2", p => p.AddNarration("a2", "A: Psychohistorian."))
+            .AddParagraph("pquoted", p => p
+                .AddRawItem("quote", ParagraphItemType.Speech, "“Order,”", characterId: null)
+                .AddNarration("tag", "the Commissioner said.")));
+
     /// One volume, one chapter named "ch1", one known character; the caller fills the chapter.
     private static async Task<BookHierarchyBuilder> SeedBookAsync(
         IServiceProvider services, string workspaceDir, string folderName,

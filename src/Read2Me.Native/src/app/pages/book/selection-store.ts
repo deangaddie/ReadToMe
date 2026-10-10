@@ -74,7 +74,7 @@ export class SelectionStore {
     return nodeState(this._selection(), level, nodeId, this._totals()[nodeId]);
   }
 
-  /** Everything forgotten — the shell leaving the project. */
+  /** Everything forgotten — the shell leaving the project, or a release flipping paragraphs. */
   reset(): void {
     this._selection.set({});
     this._totals.set({});

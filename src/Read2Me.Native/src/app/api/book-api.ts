@@ -10,6 +10,9 @@ import type {
   CharacterDto,
   CommandResponse,
   Guid,
+  NarrationReleasePreviewDto,
+  NarrationReleasePreviewRequest,
+  NarrationReleaseScope,
   NodeChildrenDto,
   NodeLevel,
   ParagraphRefDto,
@@ -86,6 +89,19 @@ export class BookApi {
     const request: BulkAssignPreviewRequest = { paragraphIds };
     return this.api.post<BulkAssignPreviewDto>(
       `${projectUrl(folder)}/characters/bulk-assign-preview`,
+      request,
+    );
+  }
+
+  /** What a ReleaseNarration over the node would write (the confirm quotes it). */
+  releaseNarrationPreview(
+    folder: string,
+    scope: NarrationReleaseScope,
+    nodeId: Guid,
+  ): Promise<NarrationReleasePreviewDto> {
+    const request: NarrationReleasePreviewRequest = { scope, nodeId };
+    return this.api.post<NarrationReleasePreviewDto>(
+      `${projectUrl(folder)}/narration/release-preview`,
       request,
     );
   }

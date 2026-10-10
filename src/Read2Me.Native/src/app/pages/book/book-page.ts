@@ -626,8 +626,28 @@ export class BookPage extends R2mElement {
       case 'generate-audio-node':
         void this.generator.enqueueNode(node.level, node.id, this.narratorOnlyMode());
         return;
+      case 'release-narration':
+        void this.releaseNarration(node);
+        return;
     }
   };
+
+  /**
+   * A release flips paragraphs into Character paragraphs, so both selections clear and their
+   * learnt totals reseed (CONTEXT.md "Character paragraph"): the receipt reloads the rows, but a
+   * part's total read before the release would undercount. Loaded chapters relearn theirs now, and
+   * again when the receipt's reload lands.
+   */
+  private async releaseNarration(node: TreeNode): Promise<void> {
+    if (node.level === 'volume') return;
+    const scope = node.level === 'part' ? 'Part' : 'Chapter';
+    if (!(await this.assigner.releaseNarration(scope, node.id, node.title))) return;
+    const chapters = this.store.chapters();
+    this.selection.reset();
+    this.selection.learnTotals(chapterDialogTotals(chapters));
+    this.audioSelection.reset();
+    this.audioSelection.learnTotals(chapterVoicedTotals(chapters, this.narratorOnlyMode()));
+  }
 
   /** The action bar's Attribute: queue the selection, then clear it: the queue owns it now. */
   private readonly attributeSelection = async (): Promise<void> => {

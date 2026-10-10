@@ -4,13 +4,14 @@
  * Hand-written from `src/Read2Me.Core/Models/BookCommands.cs`: `type` is the record name minus the
  * `Command` suffix, properties are the record's positional parameters camelCased, `folderId` comes
  * from the route and is never sent. String enums (`MergeDirection`, `InsertPosition`, `PauseKind`,
- * `RuleMoveDirection`, `VoiceAnchorLevel`, `BookEditTargetKind`) travel as their member names.
+ * `RuleMoveDirection`, `VoiceAnchorLevel`, `BookEditTargetKind`, `NarrationReleaseScope`) travel as
+ * their member names.
  *
  * `BOOK_COMMAND_TYPES` is the runtime list; `book-commands.spec.ts` checks it against the host's
  * "Known types" 400 whenever a host is reachable, and the exhaustiveness check at the bottom fails
  * `npm run typecheck` when the union and the list drift apart.
  */
-import type { Guid } from './dtos';
+import type { Guid, NarrationReleaseScope } from './dtos';
 
 export type MergeDirection = 'Previous' | 'Next';
 export type InsertPosition = 'Before' | 'After';
@@ -146,6 +147,12 @@ export interface SetParagraphsCharacter {
   type: 'SetParagraphsCharacter';
   paragraphIds: Guid[];
   characterId: Guid | null;
+}
+/** Narrator stamps (and audio) off the scope's narration-only paragraphs: they become dialog. */
+export interface ReleaseNarration {
+  type: 'ReleaseNarration';
+  scope: NarrationReleaseScope;
+  nodeId: Guid;
 }
 export interface AttributeItems {
   type: 'AttributeItems';
@@ -344,6 +351,7 @@ export type BookCommand =
   | CreateCharacter
   | SetParagraphCharacter
   | SetParagraphsCharacter
+  | ReleaseNarration
   | AttributeItems
   | AddCharacterAlias
   | RemoveCharacterAlias
@@ -412,6 +420,7 @@ export const BOOK_COMMAND_TYPES = [
   'MergePart',
   'MergeVolume',
   'MoveVoiceRule',
+  'ReleaseNarration',
   'RemoveCharacterAlias',
   'RenameCharacter',
   'SetAudioReview',
