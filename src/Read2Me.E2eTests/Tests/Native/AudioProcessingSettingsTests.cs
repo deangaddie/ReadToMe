@@ -7,19 +7,22 @@ using Read2Me.E2eTests.Infrastructure;
 using Read2Me.E2eTests.Infrastructure.FakeAi;
 using Read2Me.Services.Audio;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// The audio-processing settings page (Angular ticket 24) against the real host: change the
-/// silence-trim threshold, audition it on a recent sample through the A/B preview, save it, and
-/// read the new value back on a fresh load.
+/// The native audio-processing settings page (native-web 36, moved from the Angular ticket 24 suite)
+/// against the real host: change the silence-trim threshold, audition it on a recent sample through
+/// the A/B preview, save it, and read the new value back on a fresh load. Runs in Chromium and
+/// Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
+    protected override WebApp WebApp => WebApp.Native;
+
     private static readonly HttpClient Http = new();
 
-    private ILocator TrimCard => Page.Locator("[data-card='silence-trim']");
+    private ILocator TrimCard => Page.Locator("r2m-audio-settings-page [data-card='silence-trim']");
     private ILocator Threshold => TrimCard.Locator("[data-field='trim-threshold']");
     private ILocator Save => TrimCard.Locator("[data-action='save']");
 
@@ -31,7 +34,7 @@ public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture p
     [Fact]
     public async Task Trim_threshold_preview_on_a_recent_sample_save_and_reload_shows_it()
     {
-        var folder = $"web-audio-{Guid.NewGuid():N}";
+        var folder = $"native-audio-{Guid.NewGuid():N}";
         var builder = await App.SeedProjectAsync(folder, "Audio Settings Book", "Author");
         var itemId = builder.ItemId("n1");
         await App.SeedItemAudioAsync(folder, itemId, builder.CharacterId("Alice"));
@@ -53,9 +56,9 @@ public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture p
             await Expect(Save).ToBeEnabledAsync();
 
             // Pick the seeded sample and render the unsaved draft over it.
-            var preview = TrimCard.Locator("app-step-preview");
+            var preview = TrimCard.Locator("r2m-step-preview");
             await preview.Locator("[data-action='pick-sample']").ClickAsync();
-            var row = Page.Locator($"app-sample-picker-dialog [data-item='{itemId:D}']");
+            var row = Page.Locator($"r2m-sample-picker-dialog [data-item='{itemId:D}']");
             await Expect(row).ToContainTextAsync("Audio Settings Book");
             await row.ClickAsync();
             await Expect(preview.Locator("[data-role='sample']")).ToContainTextAsync("Alice");

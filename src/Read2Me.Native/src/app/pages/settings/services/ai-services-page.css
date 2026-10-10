@@ -1,0 +1,94 @@
+/* The AI services settings page (ticket 25): one card per managed container, then the watchdog log. */
+@scope (r2m-ai-services-page) to (.r2m-docker-controls > *, .r2m-status-chip > *, .r2m-empty-state > *) {
+  :scope {
+    display: block;
+  }
+  .services-page__note {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--r2m-space-2);
+    margin: var(--r2m-space-4) 0;
+    padding: var(--r2m-space-3);
+    border-radius: var(--r2m-radius-md);
+    background: var(--r2m-surface-low);
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .services-page__note .r2m-icon {
+    color: var(--r2m-accent);
+    flex: none;
+  }
+  .services-page__loading,
+  .services-page__muted {
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .services-page__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--r2m-space-4);
+  }
+  .services-page__card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-3);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface-low);
+  }
+  .services-page__card-head {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .services-page__card-head .r2m-icon {
+    color: var(--r2m-text-muted);
+  }
+  .services-page__name {
+    flex: 1;
+    margin: 0;
+    font-size: var(--r2m-text-md);
+    font-weight: 600;
+  }
+  .services-page__card-foot {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: auto;
+  }
+  .services-page__log {
+    margin-top: var(--r2m-space-6);
+  }
+  .services-page__log-title {
+    margin: 0 0 var(--r2m-space-2);
+    font-size: var(--r2m-text-md);
+    font-weight: 600;
+  }
+  .services-page__log-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+    max-height: 320px;
+    overflow: auto;
+  }
+  .services-page__log-row {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-3);
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border-bottom: 1px solid var(--r2m-outline);
+    font-size: var(--r2m-text-sm);
+  }
+  .services-page__log-row:last-child {
+    border-bottom: 0;
+  }
+  .services-page__log-row time {
+    font-family: var(--r2m-font-mono);
+    color: var(--r2m-text-muted);
+  }
+  .services-page__log-service {
+    font-weight: 500;
+  }
+}

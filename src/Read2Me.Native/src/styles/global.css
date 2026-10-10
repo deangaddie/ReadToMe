@@ -154,6 +154,14 @@ a {
   margin: 0;
   color: var(--r2m-text-muted);
 }
+/* Controls at the end of the header (the Angular page header's `actions` slot). */
+.r2m-page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-3);
+  margin-left: auto;
+  align-self: center;
+}
 
 /* ---- buttons: .r2m-button alone is the text variant ----------------------------------------- */
 .r2m-button {

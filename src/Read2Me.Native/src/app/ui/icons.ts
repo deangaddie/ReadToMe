@@ -13,6 +13,7 @@ export const ICON_NAMES = [
   'auto_awesome',
   'auto_fix_high',
   'auto_stories',
+  'backspace',
   'block',
   'bookmark',
   'brightness_auto',

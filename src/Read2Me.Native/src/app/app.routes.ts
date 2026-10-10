@@ -6,9 +6,10 @@ import { ProjectTitles } from '@app/shell/project-titles';
 /**
  * Information architecture from design §4, the Angular `app.routes.ts` in the native router's shape.
  * Every leaf names its element and lazily loads its chunk; a level with a title and no element
- * (`projects`, `settings`) groups its children and gives the breadcrumb its first segment. Until a
- * screen is ported its route renders the placeholder, which names the screen and links to the
- * same path in the Angular app. `guardUnsaved` replaces `canDeactivate: [unsavedChangesGuard]`.
+ * (`projects`, `settings`) groups its children and gives the breadcrumb its first segment. Every
+ * screen is native (native-web 36); the placeholder remains for an unknown path, where it names
+ * the screen and links to the same path in the Angular app. `guardUnsaved` replaces
+ * `canDeactivate: [unsavedChangesGuard]`.
  */
 const placeholder = () => import('@app/pages/placeholder-page');
 const PLACEHOLDER = 'r2m-placeholder-page';
@@ -18,14 +19,6 @@ const projectTitle = (params: Record<string, string>): string => {
   const folder = params['folder'] ?? '';
   return use(ProjectTitles).titles()[folder] ?? folder;
 };
-
-const settingsPage = (path: string, title: string, guardUnsaved = true): RouteDef => ({
-  path,
-  title,
-  tag: PLACEHOLDER,
-  load: placeholder,
-  guardUnsaved,
-});
 
 /** One of the four provider areas, whose page element `PROVIDER_PAGE_TAGS` names. */
 const providerPage = (path: string, title: string, tag: string): RouteDef => ({
@@ -117,9 +110,25 @@ export const routes: RouteDef[] = [
       providerPage('voice-design', 'Voice design', PROVIDER_PAGE_TAGS['voice-design']),
       providerPage('transcription', 'Transcription', PROVIDER_PAGE_TAGS.transcription),
       providerPage('similarity', 'Similarity', PROVIDER_PAGE_TAGS['semantic-similarity']),
-      settingsPage('audio', 'Audio processing'),
-      settingsPage('services', 'AI services', false),
-      settingsPage('themes', 'Themes', false),
+      {
+        path: 'audio',
+        title: 'Audio processing',
+        tag: 'r2m-audio-settings-page',
+        load: () => import('@app/pages/settings/audio/audio-settings-page'),
+        guardUnsaved: true,
+      },
+      {
+        path: 'services',
+        title: 'AI services',
+        tag: 'r2m-ai-services-page',
+        load: () => import('@app/pages/settings/services/ai-services-page'),
+      },
+      {
+        path: 'themes',
+        title: 'Themes',
+        tag: 'r2m-themes-page',
+        load: () => import('@app/pages/settings/themes/themes-page'),
+      },
     ],
   },
   { path: '*', title: 'Not found', tag: PLACEHOLDER, load: placeholder },
