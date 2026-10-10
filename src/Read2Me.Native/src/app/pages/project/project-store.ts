@@ -49,6 +49,8 @@ export class ProjectStore {
   private subscriptions: Unsubscribe[] = [];
   private readonly statusRefetch = new Debounced(() => this.refreshStatus());
   private readonly detailRefetch = new Debounced(() => this.refreshDetail());
+  /** The highest snapshot revision that arrived before `/status` answered, compared once it does. */
+  private heldSnapshot: number | null = null;
 
   private readonly _folder = signal<string | null>(null);
   private readonly _detail = signal<ProjectDetailDto | null>(null);
@@ -89,6 +91,7 @@ export class ProjectStore {
     this._detail.set(null);
     this._status.set(null);
     this._error.set(null);
+    this.heldSnapshot = null;
 
     this.subscriptions = [
       this.live.on('nodeStatus', (m) => this.applyNodeStatus(m)),
@@ -149,6 +152,9 @@ export class ProjectStore {
     this._revision.set(status.revision);
     this._nodes.set(status.nodes);
     this._folderAudioRemaining.set(status.audio.remaining);
+    const held = this.heldSnapshot;
+    this.heldSnapshot = null;
+    if (held !== null && held > status.revision) this.scheduleStatus();
   }
 
   private applyNodeStatus(m: NodeStatusMessage): void {
@@ -178,6 +184,12 @@ export class ProjectStore {
     const project = this.projectIn(snapshot.projects);
     if (!project) return;
     this.seedItems(project.paragraphs, project.items);
+    // Before `/status` answers there is no baseline to compare with (the revision still holds the
+    // previous project's, or 0): hold the snapshot rather than read `/status` twice on every open.
+    if (!this._status()) {
+      this.heldSnapshot = Math.max(this.heldSnapshot ?? project.revision, project.revision);
+      return;
+    }
     if (project.revision > this._revision()) this.scheduleStatus();
   }
 

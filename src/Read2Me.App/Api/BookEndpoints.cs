@@ -7,6 +7,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
 
 namespace Read2Me.App.Api
@@ -43,19 +44,21 @@ namespace Read2Me.App.Api
     public sealed record BulkAssignPreviewDto(int ParagraphsWithCharacterItems, int CharacterItems);
     public sealed record CharacterAliasDto(Guid Id, string Name);
     public sealed record CharacterDto(Guid Id, string Name, IReadOnlyList<CharacterAliasDto> Aliases);
+    /// <summary><see cref="Revision"/>: the book revision the read ran against, a reader's baseline for receipts.</summary>
     public sealed record BookOverviewDto(
         bool HasContent,
         IReadOnlyList<NodeDto> Volumes,
         IReadOnlyList<CharacterDto> Characters,
         int TotalParts,
-        int TotalChapters);
+        int TotalChapters,
+        long Revision);
 
     public static class BookEndpoints
     {
         public static void MapBookEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects/{folder}/book", GetOverviewAsync)
-                .WithSummary("Book overview: volumes, characters and structure counts. hasContent=false means import has not run.");
+                .WithSummary("Book overview: volumes, characters and structure counts, and the book revision they were read at. hasContent=false means import has not run.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/children", GetChildrenAsync)
                 .WithSummary("Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items.");
             endpoints.MapGet("/api/projects/{folder}/nodes/chapter/{id:guid}/voices", GetChapterVoicesAsync)
@@ -70,18 +73,23 @@ namespace Read2Me.App.Api
                 .WithSummary("What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither.");
         }
 
-        private static async Task<IResult> GetOverviewAsync(string folder, IFileSystem fs, IBookContentReader reader)
+        private static async Task<IResult> GetOverviewAsync(
+            string folder, IFileSystem fs, IBookContentReader reader, BookRevisionSequence revisions)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
+            // Stamped before the read, as `/status` is: a mutation that commits during it carries a
+            // higher revision, so a reader that baselines on this one still reloads.
+            var revision = revisions.Current(folderId);
             var overview = await reader.GetBookOverviewAsync(folderId);
             return Results.Ok(new BookOverviewDto(
                 overview.HasContent,
                 overview.Volumes.Select(v => new NodeDto(v.Id, v.Title)).ToList(),
                 overview.Characters.Select(ToCharacterDto).ToList(),
                 overview.TotalParts,
-                overview.TotalChapters));
+                overview.TotalChapters,
+                revision));
         }
 
         private static async Task<IResult> GetChildrenAsync(

@@ -46,6 +46,20 @@ public class BookApiTests(E2eAppFixture app)
     }
 
     [Fact]
+    public async Task Overview_carries_the_project_revision()
+    {
+        var folder = $"api-book-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Book Revision", "Author A");
+
+        var overview = await GetJsonAsync($"/api/projects/{folder}/book");
+        var status = await GetJsonAsync($"/api/projects/{folder}/status");
+
+        Assert.Equal(
+            status.RootElement.GetProperty("revision").GetInt64(),
+            overview.RootElement.GetProperty("revision").GetInt64());
+    }
+
+    [Fact]
     public async Task Characters_include_seeded_character()
     {
         var folder = $"api-chars-{Guid.NewGuid():N}";

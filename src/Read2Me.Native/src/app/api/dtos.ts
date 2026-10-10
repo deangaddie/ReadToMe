@@ -275,6 +275,8 @@ export interface BookOverviewDto {
   characters: CharacterDto[];
   totalParts: number;
   totalChapters: number;
+  /** The book revision the read ran against: the reader's baseline for receipts and snapshots. */
+  revision: number;
 }
 
 // ---- Commands (`CommandEndpoints.cs`) --------------------------------------------------------------

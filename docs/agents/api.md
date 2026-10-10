@@ -142,7 +142,8 @@ Every write (`/commands` and both imports) accepts an optional `X-Origin-Id` hea
 It is echoed as `originId` on the mutation receipt the live hub publishes, so a client can
 recognise its own commits among everyone else's. Absent or malformed, the receipt is unattributed.
 
-Inspect the result: `GET /api/projects/{folder}/book` (overview), then walk
+Inspect the result: `GET /api/projects/{folder}/book` (overview; its `revision` is the book
+revision the read ran against, stamped before it as `/status` stamps its own), then walk
 `GET /api/projects/{folder}/nodes/{level}/{id}/children` (volume → part → chapter;
 chapter children carry the paragraphs with their items). Each paragraph has
 `isPauseParagraph` (no items, or a single pause item); each item has `id`, `itemType`

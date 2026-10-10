@@ -239,6 +239,34 @@ describe('ProjectStore', () => {
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
   });
 
+  describe('a resync while /status is in flight', () => {
+    async function snapshotThenStatus(snapshot: number) {
+      let answer!: (body: unknown) => void;
+      api.on('GET', DETAIL_URL, DETAIL);
+      api.on('GET', STATUS_URL, () => new Promise((r) => (answer = r)));
+      const opened = store.open('dune');
+      await settle();
+      live.resyncedEmitter.emit({
+        projects: { dune: { revision: snapshot } },
+      } as unknown as LiveSnapshot);
+      answer(statusDto());
+      await opened;
+      api.on('GET', STATUS_URL, statusDto({ revision: snapshot }));
+      await settle(REFETCH_DEBOUNCE_MS + 20);
+    }
+
+    it('reads status once when the snapshot matches what /status read', async () => {
+      await snapshotThenStatus(5);
+      expect(api.calls('GET', STATUS_URL)).toHaveLength(1);
+    });
+
+    it('refetches status when the snapshot is ahead of what /status read', async () => {
+      await snapshotThenStatus(8);
+      expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
+      expect(store.revision()).toBe(8);
+    });
+  });
+
   it('seeds item status from the live snapshot once the group is joined', async () => {
     live.projects.set({
       Dune: {

@@ -23,6 +23,7 @@ const OVERVIEW: BookOverviewDto = {
   characters: [{ id: 'h', name: 'Hardin', aliases: [] }],
   totalParts: 2,
   totalChapters: 3,
+  revision: 5,
 };
 
 function paragraphs(...ids: string[]): { paragraphs: ParagraphDto[] } {
@@ -98,8 +99,6 @@ describe('BookStore', () => {
   let live: FakeBookLive;
   let store: BookStore;
   let toasts: string[];
-  let projectStatus: ReturnType<typeof signal<object | null>>;
-  let projectRevision: ReturnType<typeof signal<number>>;
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
   const calls = (path: string) => api.calls('GET', `${BASE}${path}`).length;
@@ -112,13 +111,7 @@ describe('BookStore', () => {
     override(LiveService, live as unknown as LiveService);
     toasts = [];
     override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
-    projectStatus = signal<object | null>({});
-    projectRevision = signal(5);
-    const project = {
-      revision: projectRevision,
-      status: projectStatus,
-      detail: signal(DETAIL),
-    } as unknown as ProjectStore;
+    const project = { detail: signal(DETAIL) } as unknown as ProjectStore;
     store = new BookStore(project);
 
     api
@@ -344,23 +337,79 @@ describe('BookStore', () => {
       expect(calls('/nodes/chapter/c1/children')).toBe(2);
     });
 
-    it('a resync before any baseline adopts its revision and refreshes in place instead of dropping the window', async () => {
-      projectStatus.set(null);
-      projectRevision.set(0);
+    it('a resync at the revision /book read against reads nothing again', async () => {
       await store.open('dune');
       await store.openFirstChapter();
-      live.resyncStream.emit({ projects: { dune: { revision: 3 } } } as unknown as LiveSnapshot);
+      live.resyncStream.emit({ projects: { dune: { revision: 5 } } } as unknown as LiveSnapshot);
+      await settle(RECEIPT_BATCH_MS + 20);
+      expect(calls('/book')).toBe(1);
+      expect(calls('/audio/reviews')).toBe(1);
+      expect(calls('/nodes/chapter/c1/children')).toBe(1);
+    });
+
+    describe('a resync while /book is in flight', () => {
+      let answer!: (body: unknown) => void;
+      let opened: Promise<void>;
+
+      beforeEach(async () => {
+        api.on('GET', `${BASE}/book`, () => new Promise((r) => (answer = r)));
+        opened = store.open('dune');
+        await settle();
+      });
+
+      async function snapshotThenBook(snapshot: number, book: number) {
+        live.resyncStream.emit({
+          projects: { dune: { revision: snapshot } },
+        } as unknown as LiveSnapshot);
+        answer({ ...OVERVIEW, revision: book });
+        await opened;
+        api.on('GET', `${BASE}/book`, OVERVIEW);
+        await store.openFirstChapter();
+        await settle(RECEIPT_BATCH_MS + 20);
+      }
+
+      it('waits for the baseline and reads nothing again when the book already holds that revision', async () => {
+        await snapshotThenBook(5, 5);
+        expect(calls('/book')).toBe(1);
+        expect(calls('/audio/reviews')).toBe(1);
+        expect(calls('/nodes/chapter/c1/children')).toBe(1);
+      });
+
+      it('reloads when the snapshot is ahead of the book, even if a later receipt came meanwhile', async () => {
+        // Commit 6 landed before the hub joined (no receipt); the receipt for 7 is not a gap yet.
+        live.receiptStream.emit(receipt(7, 'VoiceRules'));
+        await snapshotThenBook(6, 5);
+        expect(calls('/book')).toBe(2);
+        expect(calls('/audio/reviews')).toBe(2);
+      });
+
+      it('reloads in place, keeping the window, when the snapshot is ahead of the book', async () => {
+        await snapshotThenBook(6, 5);
+        expect(calls('/book')).toBe(2);
+        expect(calls('/audio/reviews')).toBe(2);
+        expect(store.window()).toEqual(['c1']);
+        expect(store.currentChapterId()).toBe('c1');
+        // The snapshot's revision is the baseline from now on: the next one is not a gap.
+        live.receiptStream.emit(receipt(7, 'Attribution', { paragraphIds: ['a'] }));
+        await settle(RECEIPT_BATCH_MS + 20);
+        expect(calls('/book')).toBe(2);
+      });
+    });
+
+    it('a failed opening read takes its baseline from Refresh, so a later snapshot ahead still reloads', async () => {
+      api.on('GET', `${BASE}/book`, () => problem(500, 'db locked'));
+      await store.open('dune');
+      expect(store.stale()).toBeTruthy();
+      live.resyncStream.emit({ projects: { dune: { revision: 5 } } } as unknown as LiveSnapshot);
+
+      api.on('GET', `${BASE}/book`, OVERVIEW);
+      await store.refresh();
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(2);
-      expect(calls('/audio/reviews')).toBe(2);
-      expect(calls('/nodes/chapter/c1/children')).toBe(2);
-      expect(store.window()).toEqual(['c1']);
-      // The adopted revision is the baseline from now on: the next one is not a gap.
-      live.receiptStream.emit(receipt(4, 'Attribution', { paragraphIds: ['a'] }));
+
+      live.resyncStream.emit({ projects: { dune: { revision: 6 } } } as unknown as LiveSnapshot);
       await settle(RECEIPT_BATCH_MS + 20);
-      expect(calls('/book')).toBe(2);
-      expect(calls('/nodes/chapter/c1/children')).toBe(3);
-      expect(store.window()).toEqual(['c1']);
+      expect(calls('/book')).toBe(3);
     });
 
     it('an open superseded by another open does not take the current chapter or the scroll', async () => {
@@ -410,8 +459,8 @@ describe('BookStore', () => {
       expect(store.stale()).toBeTruthy();
     });
 
-    it('revision 0 from /status is a real baseline, so revision 2 is a gap', async () => {
-      projectRevision.set(0);
+    it('revision 0 from /book is a real baseline, so revision 2 is a gap', async () => {
+      api.on('GET', `${BASE}/book`, { ...OVERVIEW, revision: 0 });
       await store.open('dune');
       await expand('p1');
       await store.openFirstChapter();
@@ -421,11 +470,14 @@ describe('BookStore', () => {
       expect(calls('/book')).toBe(2);
     });
 
-    it('before /status answers there is no baseline, so the first receipt is not a gap', async () => {
-      projectStatus.set(null);
-      projectRevision.set(0);
-      await store.open('dune');
+    it('before /book answers there is no baseline, so the first receipt is not a gap', async () => {
+      let answer!: (body: unknown) => void;
+      api.on('GET', `${BASE}/book`, () => new Promise((r) => (answer = r)));
+      const opened = store.open('dune');
+      await settle();
       live.receiptStream.emit(receipt(40, 'VoiceRules'));
+      answer(OVERVIEW);
+      await opened;
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(1);
     });

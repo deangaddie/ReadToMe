@@ -26,6 +26,7 @@ const OVERVIEW: BookOverviewDto = {
   characters: [{ id: 'h', name: 'Hardin', aliases: [] }],
   totalParts: 1,
   totalChapters: 2,
+  revision: 1,
 };
 
 const DIALOG = (id: string): ParagraphDto => ({
