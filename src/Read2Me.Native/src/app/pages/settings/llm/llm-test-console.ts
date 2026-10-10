@@ -14,8 +14,10 @@ import '@app/ui/stream-llm';
  * Test console for the default config (ticket 21): prompt, Send / Stop, the LLM stream inline
  * and the run's throughput. The host runs the send in the background; tokens arrive on
  * `stream:llm` and the ending as one `llmTest` message to this connection. A reconnect may have
- * swallowed that message, so the run state is read back on every resync. The feed is held while
- * the console is connected, so the stream group is joined exactly while it is on screen.
+ * swallowed that message, so the run state is read back on a resync after the hub was lost, or
+ * while a run shows: before the first connect an ending has no connection to reach. An idle
+ * console's first connect is covered by the opening read. The feed is held
+ * while the console is connected, so the stream group is joined exactly while it is on screen.
  */
 export class LlmTestConsole extends R2mElement {
   private readonly api = use(LlmSettingsApi);
@@ -38,6 +40,8 @@ export class LlmTestConsole extends R2mElement {
 
   /** Bumped by every send and read-back, so a read-back that started earlier cannot undo them. */
   private stateSeq = 0;
+  /** The hub dropped since the last read-back, so the next resync may hide an unseen ending. */
+  private hubLost = false;
 
   protected override connected(): void {
     this.classList.add('console');
@@ -56,7 +60,18 @@ export class LlmTestConsole extends R2mElement {
         if (m.kind === 'runEnded' && this.streaming()) void this.readBack();
       }),
     );
-    this.onDisconnect(this.live.resynced(() => void this.readBack()));
+    this.hubLost = false;
+    this.effect(() => {
+      const state = this.live.state();
+      if (state === 'reconnecting' || state === 'disconnected') this.hubLost = true;
+    });
+    this.onDisconnect(
+      this.live.resynced(() => {
+        if (!this.hubLost && !this.streaming()) return;
+        this.hubLost = false;
+        void this.readBack();
+      }),
+    );
     void this.readBack();
   }
 

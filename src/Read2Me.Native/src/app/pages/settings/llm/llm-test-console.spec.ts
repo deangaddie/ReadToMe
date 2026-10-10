@@ -77,6 +77,48 @@ describe('r2m-llm-test-console', () => {
     expect(live.leftStreams).toEqual(['llm']);
   });
 
+  it('does not read the run state again when the hub first connects after the console opened', async () => {
+    live.state.set('connecting');
+    await mount();
+    live.state.set('connected');
+    live.resync();
+    await settle();
+    expect(api.calls('GET', STATUS).length).toBe(1);
+  });
+
+  it('reads the run state back on the first connect while a run shows, since its ending may be lost', async () => {
+    live.state.set('connecting');
+    api.on('GET', STATUS, { running: true, configId: 7 });
+    const el = await mount();
+    expect(stop(el)).not.toBeNull();
+
+    api.on('GET', STATUS, { running: false, configId: null });
+    live.state.set('connected');
+    live.resync();
+    await flush(el);
+    expect(api.calls('GET', STATUS).length).toBe(2);
+    expect(stop(el)).toBeNull();
+  });
+
+  it('reads the run state back on a resync after the hub was lost, once per loss', async () => {
+    await mount();
+    live.state.set('reconnecting');
+    live.state.set('connected');
+    live.resync();
+    await settle();
+    expect(api.calls('GET', STATUS).length).toBe(2);
+
+    live.resync();
+    await settle();
+    expect(api.calls('GET', STATUS).length).toBe(2);
+
+    live.state.set('disconnected');
+    live.state.set('connected');
+    live.resync();
+    await settle();
+    expect(api.calls('GET', STATUS).length).toBe(3);
+  });
+
   it('sends the prompt with this connection id, streams until llmTest ends it', async () => {
     const el = await mount();
     await typePrompt(el, 'Say something');
