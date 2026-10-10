@@ -1,0 +1,128 @@
+/* The four provider settings pages (native-web 35): master–detail over configs, the editor, the test panels. */
+@scope (r2m-tts-settings-page, r2m-voice-design-settings-page, r2m-transcription-settings-page, r2m-similarity-settings-page) to (r2m-config-list > *, r2m-provider-config-editor > *, r2m-voice-design-sample-text > *, r2m-voice-design-test > *, r2m-transcription-test > *, r2m-similarity-test > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-4);
+  }
+  .providers__list {
+    max-height: 70vh;
+  }
+}
+
+@scope (r2m-provider-config-editor) to (r2m-managed-service-status > *, r2m-settings-form > *, .r2m-field > *) {
+  :scope {
+    display: block;
+  }
+  .provider-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    max-width: 640px;
+  }
+  .provider-editor__settings {
+    margin-bottom: var(--r2m-space-4);
+  }
+  .provider-editor__progress {
+    width: 100%;
+  }
+  .provider-editor__error {
+    margin: 0;
+    color: var(--r2m-status-error);
+  }
+  .text-processing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-4);
+  }
+  .text-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-1);
+  }
+  .text-steps__title {
+    margin: 0;
+    font-size: var(--r2m-text-sm);
+    font-weight: 600;
+  }
+  .text-steps__options {
+    display: flex;
+    flex-direction: column;
+    margin-left: var(--r2m-space-6);
+  }
+  .text-steps__length {
+    max-width: 200px;
+    margin-top: var(--r2m-space-2);
+  }
+  .text-steps__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+    gap: var(--r2m-space-2);
+    align-items: end;
+  }
+  @media (max-width: 600px) {
+    .text-steps__row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
+}
+
+/* The card every test panel and the sample text sit in. */
+@scope (r2m-voice-design-test, r2m-transcription-test, r2m-similarity-test, r2m-voice-design-sample-text) to (r2m-audio-player > *, r2m-file-drop > *, .r2m-status-chip > *, .r2m-field > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    padding: var(--r2m-space-4);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface);
+  }
+  .test__title,
+  .sample__title {
+    margin: 0;
+    font-size: var(--r2m-text-lg);
+    font-weight: 600;
+  }
+  .test__note,
+  .sample__note {
+    margin: 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .test__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--r2m-space-3);
+    align-items: flex-end;
+  }
+  .test__grow {
+    flex: 1 1 240px;
+  }
+  .test__progress {
+    width: 100%;
+  }
+  .test__result {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+  .sample__text {
+    width: 100%;
+  }
+  .sample__hint {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--r2m-space-3);
+  }
+  .sample__actions {
+    display: flex;
+    gap: var(--r2m-space-2);
+  }
+  .sample__over {
+    color: var(--r2m-status-error);
+  }
+  .sample__error {
+    margin: 0;
+    color: var(--r2m-status-error);
+  }
+}

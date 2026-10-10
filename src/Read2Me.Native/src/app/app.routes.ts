@@ -1,5 +1,6 @@
 import type { RouteDef } from '@app/core/router';
 import { use } from '@app/core/services';
+import { PROVIDER_PAGE_TAGS } from '@app/pages/settings/providers/provider-area';
 import { ProjectTitles } from '@app/shell/project-titles';
 
 /**
@@ -24,6 +25,15 @@ const settingsPage = (path: string, title: string, guardUnsaved = true): RouteDe
   tag: PLACEHOLDER,
   load: placeholder,
   guardUnsaved,
+});
+
+/** One of the four provider areas, whose page element `PROVIDER_PAGE_TAGS` names. */
+const providerPage = (path: string, title: string, tag: string): RouteDef => ({
+  path,
+  title,
+  tag,
+  load: () => import('@app/pages/settings/providers/provider-settings-page'),
+  guardUnsaved: true,
 });
 
 export const routes: RouteDef[] = [
@@ -103,10 +113,10 @@ export const routes: RouteDef[] = [
         load: () => import('@app/pages/settings/prompts/prompts-page'),
         guardUnsaved: true,
       },
-      settingsPage('tts', 'Paragraph TTS'),
-      settingsPage('voice-design', 'Voice design'),
-      settingsPage('transcription', 'Transcription'),
-      settingsPage('similarity', 'Similarity'),
+      providerPage('tts', 'Paragraph TTS', PROVIDER_PAGE_TAGS['paragraph-tts']),
+      providerPage('voice-design', 'Voice design', PROVIDER_PAGE_TAGS['voice-design']),
+      providerPage('transcription', 'Transcription', PROVIDER_PAGE_TAGS.transcription),
+      providerPage('similarity', 'Similarity', PROVIDER_PAGE_TAGS['semantic-similarity']),
       settingsPage('audio', 'Audio processing'),
       settingsPage('services', 'AI services', false),
       settingsPage('themes', 'Themes', false),

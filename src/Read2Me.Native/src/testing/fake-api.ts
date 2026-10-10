@@ -17,6 +17,8 @@ export interface FakeRequest {
  */
 export class FakeApi {
   readonly requests: FakeRequest[] = [];
+  /** The requests no route answered (they got the 404): a spec's HttpTestingController `verify()`. */
+  readonly unrouted: FakeRequest[] = [];
   readonly #routes = new Map<string, FakeRoute>();
 
   /** Routes `method path` to a handler, or to a canned JSON body (undefined → 204). */
@@ -43,6 +45,7 @@ export class FakeApi {
       this.requests.push({ method, path: url.pathname, body });
       const route = this.#routes.get(`${method} ${url.pathname}`);
       if (!route) {
+        this.unrouted.push({ method, path: url.pathname, body });
         return Response.json(
           {
             title: 'Not Found',

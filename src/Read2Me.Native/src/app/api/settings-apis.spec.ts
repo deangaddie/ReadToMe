@@ -2,11 +2,17 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { resetServices } from '@app/core/services';
 import { FakeApi, problem } from '../../testing/fake-api';
 import { PromptsApi } from './prompts-api';
-import { LlmSettingsApi, ParagraphTtsSettingsApi } from './settings-api';
+import {
+  LlmSettingsApi,
+  ParagraphTtsSettingsApi,
+  SemanticSimilaritySettingsApi,
+  TranscriptionSettingsApi,
+  VoiceDesignSettingsApi,
+} from './settings-api';
 
 /**
  * The settings cases of Angular's `api-services.spec.ts` (ported with the screens that use them),
- * plus the LLM page's own calls.
+ * plus the LLM page's own calls and the provider pages' text steps, sample text and Test calls.
  */
 let api: FakeApi;
 
@@ -96,5 +102,53 @@ describe('settings API services', () => {
     api.on('DELETE', '/api/settings/prompts/voice', undefined);
     await new PromptsApi().reset('voice');
     expect(api.calls('DELETE', '/api/settings/prompts/voice').length).toBe(1);
+  });
+
+  it('ParagraphTtsSettingsApi.textSteps lists the steps of one config', async () => {
+    const steps = [{ stepId: 'to-sentence-case', label: 'Sentence case', builtIn: true }];
+    api.on('GET', '/api/settings/paragraph-tts/4/text-steps', steps);
+    expect(await new ParagraphTtsSettingsApi().textSteps(4)).toEqual(steps as never);
+  });
+
+  it('VoiceDesignSettingsApi reads and writes the sample text and tests a prompt', async () => {
+    const stored = { text: null, default: 'The default.', maxLength: 40 };
+    api.on('GET', '/api/settings/voice-design/sample-text', stored);
+    api.on('PUT', '/api/settings/voice-design/sample-text', { ...stored, text: 'Mine.' });
+    api.on('POST', '/api/settings/voice-design/2/test', {
+      audioBase64: 'UklGRg==',
+      contentType: 'audio/wav',
+    });
+    const vd = new VoiceDesignSettingsApi();
+
+    expect(await vd.sampleText()).toEqual(stored);
+    expect((await vd.setSampleText('Mine.')).text).toBe('Mine.');
+    expect(api.calls('PUT', '/api/settings/voice-design/sample-text')[0]?.body).toEqual({
+      text: 'Mine.',
+    });
+    expect((await vd.test(2, 'A warm old man')).contentType).toBe('audio/wav');
+    expect(api.calls('POST', '/api/settings/voice-design/2/test')[0]?.body).toEqual({
+      prompt: 'A warm old man',
+    });
+  });
+
+  it('TranscriptionSettingsApi.test posts the file as form data and unwraps the transcript', async () => {
+    api.on('POST', '/api/settings/transcription/1/test', { transcript: 'hello there' });
+    const clip = new File([new Uint8Array([1, 2, 3])], 'clip.wav', { type: 'audio/wav' });
+
+    expect(await new TranscriptionSettingsApi().test(1, clip)).toBe('hello there');
+    const body = api.calls('POST', '/api/settings/transcription/1/test')[0]?.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect((body.get('file') as File).name).toBe('clip.wav');
+  });
+
+  it('SemanticSimilaritySettingsApi.test posts both texts', async () => {
+    const verdict = { score: 0.9, threshold: 0.85, pass: true };
+    api.on('POST', '/api/settings/semantic-similarity/1/test', verdict);
+
+    expect(await new SemanticSimilaritySettingsApi().test(1, 'a', 'b')).toEqual(verdict);
+    expect(api.calls('POST', '/api/settings/semantic-similarity/1/test')[0]?.body).toEqual({
+      text1: 'a',
+      text2: 'b',
+    });
   });
 });

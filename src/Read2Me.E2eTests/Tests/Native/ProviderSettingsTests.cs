@@ -7,34 +7,38 @@ using Read2Me.AppData.Entities;
 using Read2Me.E2eTests.Infrastructure;
 using Read2Me.Services;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// The four provider settings pages (Angular ticket 22) against the real host. The wire contract is
-/// checked against literal canonical <c>settingsJson</c>: what the Angular page stores is exactly
-/// that form, and a stored canonical config survives an Angular save with its <c>settingsJson</c>
+/// The native provider settings pages (native-web 35, moved from the Angular ticket 22 suite) against
+/// the real host; runs in Chromium and Firefox. The wire contract is
+/// checked against literal canonical <c>settingsJson</c>: what the native page stores is exactly
+/// that form, and a stored canonical config survives a native save with its <c>settingsJson</c>
 /// unchanged.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
+    protected override WebApp WebApp => WebApp.Native;
+
     private static readonly HttpClient Http = new();
 
     private ILocator Row(string name) => Page.Locator(".r2m-config-list__row", new()
     {
         Has = Page.Locator(".r2m-config-list__name", new() { HasTextRegex = new Regex($"^{Regex.Escape(name)}$") }),
     });
-    private ILocator Field(string field) => Page.Locator($"app-provider-config-editor [data-field='{field}']");
-    private ILocator Setting(string key) => Page.Locator($"app-provider-config-editor [data-key='{key}']");
-    private ILocator Save => Page.Locator("r2m-config-editor-frame button", new() { HasText = "Save" });
+    private ILocator Field(string field) => Page.Locator($"r2m-provider-config-editor [data-field='{field}']");
+    private ILocator Setting(string key) => Page.Locator($"r2m-provider-config-editor [data-key='{key}']");
+    private ILocator Save => Page.Locator(".r2m-config-editor-frame__foot button", new() { HasText = "Save" });
     private ILocator Dirty => Page.Locator(".r2m-config-editor-frame__dirty");
 
     private static string NewName(string prefix) => $"{prefix}-{Guid.NewGuid():N}"[..16];
 
     private async Task RowActionAsync(string name, string action)
     {
-        await Page.Locator($"[aria-label='Actions for {name}']").ClickAsync();
-        await Page.Locator(".mat-mdc-menu-item", new() { HasText = action }).ClickAsync();
+        // By role: the row's menu popover carries the same label as its button.
+        await Page.GetByRole(AriaRole.Button, new() { Name = $"Actions for {name}", Exact = true }).ClickAsync();
+        await Page.GetByRole(AriaRole.Menuitem, new() { Name = action, Exact = true }).ClickAsync();
     }
 
     private async Task<JsonElement> StoredAsync(string area, string name) =>
@@ -76,7 +80,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
             await Field("baseUrl").FillAsync("http://example-tts:8003");
 
             await Setting("maxChunkChars").Locator("input").FillAsync("350");
-            await Setting("carrierPrefixEnabled").Locator("button").ClickAsync();
+            await Setting("carrierPrefixEnabled").GetByRole(AriaRole.Switch).CheckAsync();
             await Setting("carrierMaxTargetChars").Locator("input").FillAsync("25");
             await Setting("cfg_value").Locator("input[type=number]").FillAsync("3.5");
 
@@ -127,7 +131,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
     }
 
     [Fact]
-    public async Task A_stored_canonical_config_keeps_its_settingsJson_through_an_Angular_save()
+    public async Task A_stored_canonical_config_keeps_its_settingsJson_through_a_native_save()
     {
         var name = NewName("stored-vd");
         var renamed = NewName("renamed-vd");
@@ -180,7 +184,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
         try
         {
             await GotoAppAsync("settings/voice-design");
-            var sample = Page.Locator("app-voice-design-sample-text");
+            var sample = Page.Locator("r2m-voice-design-sample-text");
             var saveSample = sample.Locator("[data-action='save-sample-text']");
             await Expect(saveSample).ToBeDisabledAsync();
 
@@ -195,7 +199,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
             await saveSample.ClickAsync();
             await Expect(saveSample).ToBeDisabledAsync();
 
-            var test = Page.Locator("app-voice-design-test");
+            var test = Page.Locator("r2m-voice-design-test");
             await Expect(test).ToContainTextAsync("Test \"fake\"");
             await test.Locator("[data-field='prompt']").FillAsync("A warm old man");
             await test.Locator("[data-action='test']").ClickAsync();
@@ -213,7 +217,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
     public async Task Transcription_test_shows_the_transcript_of_a_dropped_file()
     {
         await GotoAppAsync("settings/transcription");
-        var test = Page.Locator("app-transcription-test");
+        var test = Page.Locator("r2m-transcription-test");
         await Expect(test).ToContainTextAsync("Test \"fake\"");
 
         await test.Locator("input[type=file]").SetInputFilesAsync(new FilePayload
@@ -248,7 +252,7 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
             Assert.Equal("""{"BaseUrl":"http://no-such-similarity","PassThreshold":0.7}""", stored.SettingsJson);
 
             // The new config's server does not exist: the failure is reported, not thrown.
-            var test = Page.Locator("app-similarity-test");
+            var test = Page.Locator("r2m-similarity-test");
             await Expect(test).ToContainTextAsync($"Test \"{name}\"");
             await test.Locator("[data-field='text1']").FillAsync("The cat sat.");
             await test.Locator("[data-field='text2']").FillAsync("A cat was sitting.");

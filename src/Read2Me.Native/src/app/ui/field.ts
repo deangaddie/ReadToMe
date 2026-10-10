@@ -1,5 +1,9 @@
 import { html, nothing } from 'lit-html';
 
+/** The text of the input, select or textarea an event came from. */
+export const controlValue = (e: Event): string =>
+  (e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
+
 /**
  * What the control inside a {@link field} binds:
  * `id=${a.id} aria-describedby=${a.describedBy} aria-invalid=${a.invalid}`.
