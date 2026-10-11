@@ -195,6 +195,39 @@ describe('itemRow (speakers)', () => {
       expect(button(host)).toBeNull();
     });
   });
+
+  describe('delivery cue (delivery-cue-editing 01)', () => {
+    const speakers = () => ctx({ mode: 'speakers', itemSelectable: false });
+    const cued = item('c', { characterId: 'h', voiceInstructions: 'whispered' });
+
+    it('a speech item with a cue shows it under its text, styled as in Audio mode', async () => {
+      const el = await mount(speakers(), cued);
+      const cue = el.querySelector('[data-testid=delivery-cue]')!;
+      expect(text(cue)).toBe('whispered');
+      expect(cue.classList.contains('r2m-item__instructions')).toBe(true);
+      // Under the text, not on the speaker line.
+      expect(el.querySelector('.r2m-item__line [data-testid=delivery-cue]')).toBeNull();
+      expect(el.querySelector('.r2m-item__line')!.nextElementSibling).toBe(cue.parentElement);
+    });
+
+    it('a narration item shows its cue too', async () => {
+      const el = await mount(speakers(), { ...NARRATION, voiceInstructions: 'slowly' });
+      expect(text(el.querySelector('[data-testid=delivery-cue]'))).toBe('slowly');
+    });
+
+    it('an item with no cue renders no cue element at all', async () => {
+      const el = await mount(speakers(), DIALOG);
+      expect(el.querySelector('[data-testid=delivery-cue]')).toBeNull();
+      expect(el.children).toHaveLength(1);
+    });
+
+    it('Audio mode keeps its one cue on the audio line', async () => {
+      const el = await mount(ctx(), cued);
+      const cues = el.querySelectorAll('[data-testid=delivery-cue]');
+      expect(cues).toHaveLength(1);
+      expect(cues[0]!.closest('.r2m-item__audio')).not.toBeNull();
+    });
+  });
 });
 
 describe('itemRow (audio)', () => {

@@ -33,13 +33,14 @@ export interface ItemHome {
 /**
  * One paragraph item in Speakers or Audio mode (design §6.3), as a partial: rows render inside
  * `<r2m-measured-list>` from one effect, so there is no element per row (spec §7, risk 1).
- * Speakers: speaker chip and text, an unknown speaker highlighted; the chip opens the speaker
- * menu and assigns this item (ticket 12). Audio: a selection checkbox (off for a line nobody can
- * read yet, ticket 13), the resolved voice, voice instructions, the review chip (a dismissed
- * review is a faded icon) and the queue chip; a queued item shows a lock. Every item carries its
- * node-menu trigger (ticket 11), off while the item or its paragraph is queued or the editor is
- * locked. Retry/Dismiss and the player arrive with native-web 26. Like the paragraph row, the
- * stores are reached from the event's element through `use(X, element)`.
+ * Speakers: speaker chip and text, an unknown speaker highlighted, and the delivery cue under
+ * the text when there is one; the chip opens the speaker menu and assigns this item (ticket 12).
+ * Audio: a selection checkbox (off for a line nobody can read yet, ticket 13), the resolved
+ * voice, the delivery cue, the review chip (a dismissed review is a faded icon) and the queue
+ * chip; a queued item shows a lock. Every item carries its node-menu trigger (ticket 11), off
+ * while the item or its paragraph is queued or the editor is locked. Retry/Dismiss and the
+ * player arrive with native-web 26. Like the paragraph row, the stores are reached from the
+ * event's element through `use(X, element)`.
  */
 export function itemRow(
   item: ParagraphItemDto,
@@ -117,7 +118,13 @@ export function itemRow(
         >${nodeMenuTrigger(menuTarget, { disabled: busy || paragraphBusy || ctx.locked })}</span
       >
     </div>
-    ${ctx.mode === 'audio' ? audioLine(item, ctx, voiced) : nothing}
+    ${
+      ctx.mode === 'audio'
+        ? audioLine(item, ctx, voiced)
+        : item.voiceInstructions
+          ? html`<div class="r2m-item__cue">${deliveryCue(item)}</div>`
+          : nothing
+    }
   </div>`;
 }
 
@@ -147,10 +154,11 @@ export const chipOf = (view: ChipView) =>
   });
 
 /**
- * Audio mode's second line (ticket 13): the resolved voice, instructions, the review chip with its
- * Dismiss (a dismissed review is a faded icon), the queue chip with a Retry on a settled failure
- * (once somebody can read the line), and a player for the generated take (`audioVersion` busts
- * the browser cache). Retry and Dismiss reach the {@link AudioGenerator} through DOM ancestry.
+ * Audio mode's second line (ticket 13): the resolved voice, the delivery cue, the review chip
+ * with its Dismiss (a dismissed review is a faded icon), the queue chip with a Retry on a settled
+ * failure (once somebody can read the line), and a player for the generated take (`audioVersion`
+ * busts the browser cache). Retry and Dismiss reach the {@link AudioGenerator} through DOM
+ * ancestry.
  */
 function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean) {
   const review = reviewOf(ctx, item.id);
@@ -163,11 +171,7 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean) {
   const generator = (e: Event) => use(AudioGenerator, e.currentTarget as Element);
   return html`<div class="r2m-item__audio">
     <span class="r2m-item__voice" data-testid="voice-line">${voiceLine(ctx.voices[item.id])}</span>
-    ${
-      item.voiceInstructions
-        ? html`<span class="r2m-item__instructions">${item.voiceInstructions}</span>`
-        : nothing
-    }
+    ${deliveryCue(item)}
     <span class="r2m-item__chips">
       ${
         reviewView
@@ -216,4 +220,17 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean) {
         : nothing
     }
   </div>`;
+}
+
+/**
+ * An item's delivery cue (the `voiceInstructions` TTS reads the line with), one element in both
+ * Speakers and Audio modes so ticket 03 can make it clickable; nothing for an item without one.
+ * Read mode shows no item rows, so no cue.
+ */
+function deliveryCue(item: ParagraphItemDto) {
+  return item.voiceInstructions
+    ? html`<span class="r2m-item__instructions" data-testid="delivery-cue"
+        >${item.voiceInstructions}</span
+      >`
+    : nothing;
 }

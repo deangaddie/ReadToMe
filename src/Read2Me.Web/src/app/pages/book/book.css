@@ -272,6 +272,10 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--r2m-space-1) var(--r2m-space-3);
+  }
+  /* Audio mode's second line, and Speakers mode's delivery cue under the text. */
+  .r2m-item__audio,
+  .r2m-item__cue {
     margin: 2px 0 var(--r2m-space-1);
     font-size: var(--r2m-text-sm);
     color: var(--r2m-text-muted);
