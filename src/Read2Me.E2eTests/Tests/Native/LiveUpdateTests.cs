@@ -91,4 +91,33 @@ public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         await Expect(Page.Locator(".book__chapter")).ToHaveTextAsync(["After reconnect"], new() { Timeout = 5_000 });
     }
 
+    [Fact]
+    public async Task Opening_the_book_reads_it_once_when_the_hub_snapshot_matches()
+    {
+        await App.SeedProjectAsync("native-read-once", "Native Read Once", "A. Author");
+        var bookReads = 0;
+        var statusReads = 0;
+        var reviewReads = 0;
+        var chapterReads = 0;
+        Page.Request += (_, request) =>
+        {
+            var path = new Uri(request.Url).AbsolutePath;
+            if (path == "/api/projects/native-read-once/book") Interlocked.Increment(ref bookReads);
+            if (path == "/api/projects/native-read-once/status") Interlocked.Increment(ref statusReads);
+            if (path == "/api/projects/native-read-once/audio/reviews") Interlocked.Increment(ref reviewReads);
+            if (path.StartsWith("/api/projects/native-read-once/nodes/chapter/")) Interlocked.Increment(ref chapterReads);
+        };
+
+        await GotoAppAsync("projects/native-read-once/book");
+        await Expect(Page.Locator(".book__chapter")).ToHaveTextAsync(["ch1"]);
+        await Expect(Page.Locator(".shell__conn")).ToHaveClassAsync(new Regex("shell__conn--connected"));
+        // Past the receipt batch (150 ms) and the status debounce a snapshot-driven reread would
+        // have gone out by now.
+        await Page.WaitForTimeoutAsync(500);
+
+        Assert.Equal(1, Volatile.Read(ref bookReads));
+        Assert.Equal(1, Volatile.Read(ref statusReads));
+        Assert.Equal(1, Volatile.Read(ref reviewReads));
+        Assert.Equal(1, Volatile.Read(ref chapterReads));
+    }
 }

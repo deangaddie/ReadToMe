@@ -154,6 +154,14 @@ a {
   margin: 0;
   color: var(--r2m-text-muted);
 }
+/* Controls at the end of the header (the Angular page header's `actions` slot). */
+.r2m-page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-3);
+  margin-left: auto;
+  align-self: center;
+}
 
 /* ---- buttons: .r2m-button alone is the text variant ----------------------------------------- */
 .r2m-button {
@@ -1488,7 +1496,8 @@ progress {
 .r2m-field__error {
   color: var(--r2m-status-error);
 }
-.r2m-field:has(.r2m-field__error) input {
+.r2m-field:has(.r2m-field__error) :is(input, select, textarea),
+.r2m-field [aria-invalid='true'] {
   border-color: var(--r2m-status-error);
 }
 
@@ -2050,4 +2059,165 @@ textarea.r2m-settings-form__text {
     'wght' 400,
     'GRAD' 0,
     'opsz' 24;
+}
+
+/* ---- config list (r2m-config-list): the settings master list (design §6.4) ------------------ */
+.r2m-config-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.r2m-config-list__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--r2m-space-2);
+  padding: 0 0 var(--r2m-space-2);
+}
+.r2m-config-list__search {
+  flex: 1;
+  min-width: 0; /* lets the search shrink so New stays inside the 320 px column */
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-1);
+  height: 36px;
+  padding: 0 var(--r2m-space-2);
+  border: 1px solid var(--r2m-outline);
+  border-radius: var(--r2m-radius-pill);
+  color: var(--r2m-text-muted);
+  background: var(--r2m-surface);
+
+  & input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--r2m-text);
+    font: inherit;
+    outline: none;
+  }
+  & .r2m-icon {
+    font-size: 18px;
+  }
+  &:focus-within {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -1px;
+  }
+}
+.r2m-config-list__empty {
+  margin: var(--r2m-space-4) 0;
+  text-align: center;
+  color: var(--r2m-text-muted);
+  font-size: var(--r2m-text-sm);
+}
+.r2m-config-list__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+}
+.r2m-config-list__row {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-2);
+  padding: 0 var(--r2m-space-1) 0 0;
+  border-radius: var(--r2m-radius-md);
+
+  &:hover {
+    background: var(--r2m-surface-low);
+  }
+}
+.r2m-config-list__row--selected {
+  background: var(--r2m-nav-active-bg);
+  color: var(--r2m-nav-active-fg);
+}
+.r2m-config-list__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: var(--r2m-space-2) var(--r2m-space-3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -2px;
+  }
+}
+.r2m-config-list__name {
+  font-weight: 500;
+}
+.r2m-config-list__subtitle {
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text-muted);
+}
+.r2m-config-list__badge {
+  font-size: var(--r2m-text-xs);
+  padding: 2px var(--r2m-space-2);
+  border-radius: var(--r2m-radius-pill);
+  background: var(--r2m-surface-high);
+  color: var(--r2m-text-muted);
+}
+
+/* ---- config editor frame: the settings detail side (design §6.4) ---------------------------- */
+.r2m-config-editor-frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--r2m-outline);
+  border-radius: var(--r2m-radius-lg);
+  background: var(--r2m-surface);
+}
+.r2m-config-editor-frame__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--r2m-space-3);
+  padding: var(--r2m-space-4) var(--r2m-space-4) var(--r2m-space-3);
+  border-bottom: 1px solid var(--r2m-outline);
+}
+.r2m-config-editor-frame__title {
+  margin: 0;
+  font-size: var(--r2m-text-xl);
+  font-weight: 600;
+}
+.r2m-config-editor-frame__subtitle {
+  margin: var(--r2m-space-1) 0 0;
+  color: var(--r2m-text-muted);
+  font-size: var(--r2m-text-sm);
+}
+.r2m-config-editor-frame__dirty {
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-status-warn);
+}
+.r2m-config-editor-frame__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--r2m-space-4);
+}
+.r2m-config-editor-frame__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--r2m-space-2);
+  padding: var(--r2m-space-3) var(--r2m-space-4);
+  border-top: 1px solid var(--r2m-outline);
+}
+
+/* ---- settings master–detail: the list beside the editor, stacked on narrow screens ---------- */
+.r2m-master-detail {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: var(--r2m-space-4);
+  align-items: start;
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -7,6 +8,8 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Characters;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
 
 namespace Read2Me.App.Api
@@ -41,21 +44,31 @@ namespace Read2Me.App.Api
     public sealed record BulkAssignPreviewRequest(Guid[] ParagraphIds);
     /// <summary><see cref="BulkAssignPreview"/> on the wire: what a bulk assign over the ids would write.</summary>
     public sealed record BulkAssignPreviewDto(int ParagraphsWithCharacterItems, int CharacterItems);
+    /// <summary>The scope a Release narration would cover; the same shape as the command, minus its type.</summary>
+    public sealed record NarrationReleasePreviewRequest(
+        [property: JsonConverter(typeof(JsonStringEnumConverter<NarrationReleaseScope>))] NarrationReleaseScope Scope,
+        Guid NodeId);
+    /// <summary><see cref="NarrationReleasePreview"/> on the wire: what a Release narration over the scope would write.</summary>
+    public sealed record NarrationReleasePreviewDto(int Paragraphs, int ItemsWithAudio, IReadOnlyList<SpeechMarkerCountDto> SpeechMarkers);
+    /// <summary>A speech marker a Chapter or Part release detected, and how many paragraphs it would release.</summary>
+    public sealed record SpeechMarkerCountDto(string Marker, int Paragraphs);
     public sealed record CharacterAliasDto(Guid Id, string Name);
     public sealed record CharacterDto(Guid Id, string Name, IReadOnlyList<CharacterAliasDto> Aliases);
+    /// <summary><see cref="Revision"/>: the book revision the read ran against, a reader's baseline for receipts.</summary>
     public sealed record BookOverviewDto(
         bool HasContent,
         IReadOnlyList<NodeDto> Volumes,
         IReadOnlyList<CharacterDto> Characters,
         int TotalParts,
-        int TotalChapters);
+        int TotalChapters,
+        long Revision);
 
     public static class BookEndpoints
     {
         public static void MapBookEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects/{folder}/book", GetOverviewAsync)
-                .WithSummary("Book overview: volumes, characters and structure counts. hasContent=false means import has not run.");
+                .WithSummary("Book overview: volumes, characters and structure counts, and the book revision they were read at. hasContent=false means import has not run.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/children", GetChildrenAsync)
                 .WithSummary("Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items.");
             endpoints.MapGet("/api/projects/{folder}/nodes/chapter/{id:guid}/voices", GetChapterVoicesAsync)
@@ -68,20 +81,27 @@ namespace Read2Me.App.Api
                 .WithSummary("All characters with their aliases.");
             endpoints.MapPost("/api/projects/{folder}/characters/bulk-assign-preview", BulkAssignPreviewAsync)
                 .WithSummary("What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither.");
+            endpoints.MapPost("/api/projects/{folder}/narration/release-preview", NarrationReleasePreviewAsync)
+                .WithSummary("What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), how many of their items have audio it would discard, and for Part and Chapter the speechMarkers that passed with the paragraphs each covers (count descending, then marker; empty for a Paragraph and when nothing passes).");
         }
 
-        private static async Task<IResult> GetOverviewAsync(string folder, IFileSystem fs, IBookContentReader reader)
+        private static async Task<IResult> GetOverviewAsync(
+            string folder, IFileSystem fs, IBookContentReader reader, BookRevisionSequence revisions)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
+            // Stamped before the read, as `/status` is: a mutation that commits during it carries a
+            // higher revision, so a reader that baselines on this one still reloads.
+            var revision = revisions.Current(folderId);
             var overview = await reader.GetBookOverviewAsync(folderId);
             return Results.Ok(new BookOverviewDto(
                 overview.HasContent,
                 overview.Volumes.Select(v => new NodeDto(v.Id, v.Title)).ToList(),
                 overview.Characters.Select(ToCharacterDto).ToList(),
                 overview.TotalParts,
-                overview.TotalChapters));
+                overview.TotalChapters,
+                revision));
         }
 
         private static async Task<IResult> GetChildrenAsync(
@@ -173,6 +193,22 @@ namespace Read2Me.App.Api
 
             var preview = await reader.GetBulkAssignPreviewAsync(folderId, request.ParagraphIds ?? [], ct);
             return Results.Ok(new BulkAssignPreviewDto(preview.ParagraphsWithCharacterItems, preview.CharacterItems));
+        }
+
+        private static async Task<IResult> NarrationReleasePreviewAsync(
+            string folder, NarrationReleasePreviewRequest request, IFileSystem fs, ICharacterReader reader, CancellationToken ct)
+        {
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+            if (!NarrationRelease.IsKnownScope(request.Scope))
+                return Results.Problem($"Unknown scope '{request.Scope}'. Expected Part, Chapter or Paragraph.",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            var preview = await reader.GetNarrationReleasePreviewAsync(folderId, request.Scope, request.NodeId, ct);
+            return Results.Ok(new NarrationReleasePreviewDto(
+                preview.Paragraphs,
+                preview.ItemsWithAudio,
+                [.. preview.SpeechMarkers.Select(m => new SpeechMarkerCountDto(m.Marker, m.Paragraphs))]));
         }
 
         private static CharacterDto ToCharacterDto(Character c) => new(

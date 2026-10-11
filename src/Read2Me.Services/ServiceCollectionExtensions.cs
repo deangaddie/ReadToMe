@@ -50,6 +50,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<CreateCharacterCommand>, CreateCharacterHandler>();
         services.AddScoped<ICommandHandler<SetParagraphCharacterCommand>, SetParagraphCharacterHandler>();
         services.AddScoped<ICommandHandler<SetParagraphsCharacterCommand>, SetParagraphsCharacterHandler>();
+        services.AddScoped<ICommandHandler<ReleaseNarrationCommand>, ReleaseNarrationHandler>();
         services.AddScoped<ICommandHandler<AttributeItemsCommand>, AttributeItemsHandler>();
         services.AddScoped<ICommandHandler<AddCharacterAliasCommand>, AddCharacterAliasHandler>();
         services.AddScoped<ICommandHandler<RemoveCharacterAliasCommand>, RemoveCharacterAliasHandler>();
@@ -197,6 +198,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SetParagraphsSpeakerMutation>,
             Mutations.Implementations.SetParagraphsSpeakerMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.ReleaseNarrationMutation>,
+            Mutations.Implementations.ReleaseNarrationMutationImplementation>();
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.AttributeParagraphItemsMutation>,
             Mutations.Implementations.AttributeParagraphItemsMutationImplementation>();

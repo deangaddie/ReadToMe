@@ -4,6 +4,7 @@ import { override } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import type {
   AssemblyState,
+  LiveSnapshot,
   ProjectSnapshot,
   QueueMessage,
   ServiceStatusState,
@@ -17,7 +18,8 @@ import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
 /**
  * The slice of `LiveService` the shell, the project store and the activity centre read, with
  * group membership recorded. Streams are real Emitters: a spec pushes a hub message with
- * {@link emit} (fold the matching state signal first, as `LiveService` does).
+ * {@link emit} (fold the matching state signal first, as `LiveService` does) and a resync with
+ * {@link resync}.
  */
 export class FakeLive {
   readonly state = signal<LiveConnectionState>('connected');
@@ -35,6 +37,7 @@ export class FakeLive {
   readonly leftStreams: StreamKind[] = [];
 
   readonly #streams = new Map<string, Emitter<unknown>>();
+  readonly #resynced = new Emitter<LiveSnapshot>();
 
   /** `never` lets any family's typed listener in, as `LiveService.on<K>` does. */
   on(family: string, listener: (message: never) => void) {
@@ -52,8 +55,12 @@ export class FakeLive {
   receipts() {
     return () => undefined;
   }
-  resynced() {
-    return () => undefined;
+  resynced(listener: (snapshot: LiveSnapshot) => void) {
+    return this.#resynced.subscribe(listener);
+  }
+  /** Delivers a hub snapshot to every `resynced` listener, as a (re)connect does. */
+  resync(snapshot = {} as LiveSnapshot): void {
+    this.#resynced.emit(snapshot);
   }
   connectionId(): string | null {
     return 'fake-connection';

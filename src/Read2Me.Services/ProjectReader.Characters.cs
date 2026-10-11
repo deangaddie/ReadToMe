@@ -3,6 +3,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Services.Characters;
 using Read2Me.Services.Voice;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
@@ -309,6 +310,16 @@ namespace Read2Me.Services
                 .ToListAsync(ct);
 
             return new BulkAssignPreview(perParagraph.Count, perParagraph.Sum());
+        }
+
+        public async Task<NarrationReleasePreview> GetNarrationReleasePreviewAsync(
+            ProjectFolderId folderId, NarrationReleaseScope scope, Guid nodeId, CancellationToken ct = default)
+        {
+            var db = await _session.OpenAsync(folderId);
+            var selection = await NarrationRelease.SelectAsync(db, scope, nodeId, ct);
+
+            return new NarrationReleasePreview(
+                selection.Paragraphs.Count, selection.Items.Count(i => i.HasAudio), selection.Markers);
         }
 
         public async Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default)

@@ -1,0 +1,141 @@
+/* The LLM settings page (ticket 21): master–detail over configs, the chain card, the test console. */
+@scope (r2m-llm-settings-page) to (r2m-config-list > *, r2m-llm-config-editor > *, r2m-llm-chain-card > *, r2m-llm-test-console > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-4);
+  }
+  .llm__list {
+    max-height: 70vh;
+  }
+  .llm__note {
+    margin: 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+}
+
+@scope (r2m-llm-config-editor) to (r2m-managed-service-status > *, .r2m-field > *) {
+  :scope {
+    display: block;
+  }
+  .llm-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-3);
+    max-width: 640px;
+  }
+  .llm-editor__note {
+    margin: 0 0 var(--r2m-space-2);
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .llm-editor__param-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--r2m-space-3);
+  }
+  .llm-editor__error {
+    margin: 0;
+    color: var(--r2m-status-error);
+  }
+}
+
+@scope (r2m-llm-chain-card) to (.r2m-status-chip > *, .r2m-menu > *) {
+  :scope {
+    display: block;
+    padding: var(--r2m-space-4);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface);
+  }
+  .chain__title {
+    margin: 0 0 var(--r2m-space-1);
+    font-size: var(--r2m-text-lg);
+    font-weight: 600;
+  }
+  .chain__intro,
+  .chain__muted {
+    margin: 0 0 var(--r2m-space-3);
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .chain__alert {
+    margin: 0 0 var(--r2m-space-3);
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border-radius: var(--r2m-radius-md);
+    border-left: 3px solid var(--r2m-status-info);
+    background: var(--r2m-surface-low);
+  }
+  .chain__alert--warn {
+    border-left-color: var(--r2m-status-warn);
+  }
+  .chain__steps {
+    list-style: none;
+    margin: 0 0 var(--r2m-space-3);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  .chain__step {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-1) var(--r2m-space-2);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+  }
+  .chain__name {
+    font-weight: 500;
+  }
+  .chain__model {
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .chain__flags {
+    display: inline-flex;
+    gap: var(--r2m-space-1);
+    margin-left: auto;
+  }
+  .chain__remove {
+    color: var(--r2m-status-error);
+  }
+  .chain__self {
+    margin-top: var(--r2m-space-4);
+  }
+}
+
+@scope (r2m-llm-test-console) to (.r2m-field > *, .r2m-throughput > *, r2m-stream-llm > *) {
+  :scope {
+    display: block;
+    padding: var(--r2m-space-4);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface);
+  }
+  .console__title {
+    margin: 0 0 var(--r2m-space-3);
+    font-size: var(--r2m-text-lg);
+    font-weight: 600;
+  }
+  .console__prompt {
+    width: 100%;
+  }
+  .console__actions {
+    display: flex;
+    gap: var(--r2m-space-2);
+    margin: var(--r2m-space-3) 0;
+  }
+  .console__error {
+    margin: 0 0 var(--r2m-space-3);
+    color: var(--r2m-status-error);
+  }
+  .console__throughput {
+    margin-bottom: var(--r2m-space-3);
+  }
+  .console__stream {
+    height: 40vh;
+    border-top: 1px solid var(--r2m-outline);
+  }
+}

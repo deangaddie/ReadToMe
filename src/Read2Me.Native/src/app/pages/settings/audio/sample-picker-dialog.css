@@ -1,0 +1,46 @@
+/* The A/B preview's sample picker (ticket 24): recent generated items, newest first. */
+@scope (r2m-sample-picker-dialog) to (.r2m-spinner > *) {
+  :scope {
+    display: block;
+    min-width: min(420px, 90vw);
+    max-width: 640px;
+  }
+  .sample-picker__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-1);
+  }
+  .sample-picker__row {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border: 1px solid transparent;
+    border-radius: var(--r2m-radius-md);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .sample-picker__row:hover,
+  .sample-picker__row:focus-visible {
+    background: var(--r2m-surface-low);
+    border-color: var(--r2m-outline);
+  }
+  .sample-picker__text {
+    font-size: var(--r2m-text-sm);
+  }
+  .sample-picker__meta,
+  .sample-picker__empty {
+    font-size: var(--r2m-text-xs);
+    color: var(--r2m-text-muted);
+  }
+  .sample-picker__empty {
+    margin: 0;
+  }
+}

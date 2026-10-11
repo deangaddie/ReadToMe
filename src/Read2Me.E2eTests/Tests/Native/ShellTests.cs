@@ -9,8 +9,8 @@ namespace Read2Me.E2eTests.Tests.Native;
 /// The native app's shell at <c>/app2</c> (native-web 20), from the production bundle the in-proc
 /// host serves: the app bar with breadcrumbs from the route chain, the nav rail with the context
 /// and global groups, the theme loaded from the host on boot and switched from the quick menu, the
-/// live hub connected with the open project's group joined, and a placeholder for every screen not
-/// ported yet that links the same path in the Angular app. Runs in Chromium and Firefox.
+/// live hub connected with the open project's group joined, and the placeholder for an unknown
+/// path that links the same path in the Angular app. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
@@ -18,25 +18,26 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
     protected override WebApp WebApp => WebApp.Native;
 
     [Fact]
-    public async Task Shell_frames_a_placeholder_page_that_names_the_screen_and_links_back_to_angular()
+    public async Task Shell_frames_a_settings_page_with_crumbs_and_tab_title_from_the_route_chain()
     {
-        // Every project screen is native now (Export moved in native-web 33); Settings pages are still placeholders.
-        await GotoAppAsync("settings/prompts");
+        // Every screen is native (native-web 36): the last three settings pages frame like the rest.
+        await GotoAppAsync("settings/audio");
 
-        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("settings/prompts$")));
+        await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("settings/audio$")));
 
         await Expect(Page.Locator("app-root .shell__appbar .shell__brand")).ToHaveTextAsync(new Regex("Read2Me"));
+        await Expect(Page.Locator("r2m-placeholder-page")).ToHaveCountAsync(0);
+        await Expect(Page.Locator("main > r2m-outlet > r2m-audio-settings-page .r2m-page-header__title"))
+            .ToHaveTextAsync("Audio processing");
 
-        var placeholder = Page.Locator("r2m-placeholder-page");
-        await Expect(placeholder.Locator(".r2m-page-header__title")).ToHaveTextAsync("Prompts");
-        await Expect(placeholder.Locator(".r2m-page-header__subtitle")).ToHaveCountAsync(0);
-        await Expect(placeholder.Locator(".r2m-empty-state__headline"))
-            .ToHaveTextAsync("This screen has not moved to the native app yet");
-        await Expect(placeholder.Locator("a.r2m-placeholder-page__link"))
-            .ToHaveAttributeAsync("href", WebApp.Angular.Prefix() + "/settings/prompts");
+        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Settings", "Audio processing"]);
+        Assert.Equal("Read2Me · Settings · Audio processing", await Page.TitleAsync());
 
-        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Settings", "Prompts"]);
-        Assert.Equal("Read2Me · Settings · Prompts", await Page.TitleAsync());
+        await Page.Locator(".shell__nav-group--context a", new() { HasText = "AI services" }).ClickAsync();
+        await Expect(Page.Locator("r2m-ai-services-page .r2m-page-header__title")).ToHaveTextAsync("AI services");
+        await Page.Locator(".shell__nav-group--context a", new() { HasText = "Themes" }).ClickAsync();
+        await Expect(Page.Locator("r2m-themes-page .r2m-page-header__title")).ToHaveTextAsync("Themes");
+        await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Settings", "Themes"]);
     }
 
     [Fact]
@@ -88,8 +89,8 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
         await Page.Locator(".shell__settings").ClickAsync();
         await Assertions.Expect(Page).ToHaveURLAsync(new Regex(AppPath("settings/llm$")));
         await Expect(Page.Locator(".shell__crumb")).ToHaveTextAsync(["Settings", "LLM"]);
-        // Leaving the project shell swaps the root outlet's element for the placeholder.
-        await Expect(Page.Locator("main > r2m-outlet > r2m-placeholder-page .r2m-page-header__title")).ToHaveTextAsync("LLM");
+        // Leaving the project shell swaps the root outlet's element for the LLM settings page (native-web 34).
+        await Expect(Page.Locator("main > r2m-outlet > r2m-llm-settings-page .r2m-page-header__title")).ToHaveTextAsync("LLM");
         await Expect(Page.Locator(".shell__nav-group--context .shell__nav-label")).ToHaveCountAsync(9);
         await Expect(Page.Locator(".shell__nav-item--active .shell__nav-label")).ToHaveTextAsync(["LLM", "Settings"]);
     }

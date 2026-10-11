@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Data;
+using Read2Me.Services.Characters;
 
 namespace Read2Me.Services.Mutations.Implementations;
 
@@ -164,6 +165,46 @@ public sealed class SetParagraphsSpeakerMutationImplementation
             [.. affected.Select(a => a.ParagraphId).Distinct()],
             [.. affected.Select(a => a.Id)],
             affected.Any(a => a.HadAudio));
+    }
+}
+
+/// <summary>
+/// Release narration, in the bulk mutation's shape: name the items first (they are the receipt),
+/// then one set-based update. What qualifies is <see cref="NarrationRelease"/>'s rule, shared with
+/// the confirm's preview. <c>VoiceInstructions</c> are left alone; text, boundaries and pauses are
+/// never touched.
+/// <para>
+/// Nothing to release — an empty scope, a scope with only quoted paragraphs, or a second release —
+/// is <see cref="BookMutationEffects.Nothing"/>, so it consumes no revision. A node id that names
+/// nothing is the same answer: the scope simply holds nothing.
+/// </para>
+/// </summary>
+public sealed class ReleaseNarrationMutationImplementation
+    : IBookMutationImplementation<ReleaseNarrationMutation>
+{
+    public async Task<BookMutationEffects> ApplyAsync(
+        ReleaseNarrationMutation mutation, ProjectDbContext db, CancellationToken ct)
+    {
+        if (!NarrationRelease.IsKnownScope(mutation.Scope))
+            throw new BookMutationRejectedException(
+                BookMutationRejection.Validation, $"Unknown release scope '{mutation.Scope}'.");
+
+        var selection = await NarrationRelease.SelectAsync(db, mutation.Scope, mutation.NodeId, ct);
+
+        if (selection.Paragraphs.Count == 0) return BookMutationEffects.Nothing;
+
+        // Updated by id rather than by re-running the predicate: the write is exactly the receipt.
+        var ids = selection.Items.Select(i => i.Id).ToList();
+        await db.ParagraphItems
+            .Where(i => ids.Contains(i.Id))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(i => i.CharacterId, (Guid?)null)
+                .SetProperty(i => i.AudioFileName, (string?)null), ct);
+
+        return SpeakerEffects.Stamped(
+            [.. selection.Paragraphs.Select(p => p.ParagraphId)],
+            ids,
+            selection.Items.Any(i => i.HasAudio));
     }
 }
 

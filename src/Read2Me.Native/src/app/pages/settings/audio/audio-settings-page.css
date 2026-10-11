@@ -1,0 +1,75 @@
+/* The audio-processing settings page (ticket 24): seven independently saved cards. */
+@scope (r2m-audio-settings-page) to (r2m-step-preview > *, .r2m-field > *, .r2m-status-chip > *, .r2m-switch > *, .r2m-spinner > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-4);
+    max-width: 880px;
+  }
+  .audio__row,
+  .audio__grid {
+    display: grid;
+    gap: var(--r2m-space-3);
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+  .audio__narrow {
+    max-width: 320px;
+  }
+  .audio__info {
+    margin: 0;
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border-radius: var(--r2m-radius-md);
+    background: var(--r2m-surface-high, var(--r2m-surface-low));
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-text-muted);
+  }
+  .audio-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-4);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface-low);
+  }
+  .audio-card__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--r2m-space-3);
+  }
+  .audio-card__title {
+    margin: 0;
+    font-size: var(--r2m-text-lg);
+    font-weight: 600;
+  }
+  .audio-card__dirty {
+    font-size: var(--r2m-text-xs);
+    color: var(--r2m-status-warn);
+  }
+  .audio-card__blurb {
+    margin: 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .audio-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  .audio-card__foot {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-3);
+    margin-top: var(--r2m-space-1);
+  }
+  .audio-card__error {
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-status-error);
+  }
+  .audio-card__actions {
+    display: flex;
+    gap: var(--r2m-space-2);
+    margin-left: auto;
+  }
+}

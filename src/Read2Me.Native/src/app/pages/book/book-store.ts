@@ -46,7 +46,12 @@ export class BookStore {
   private readonly toast = use(ToastService);
 
   private subscriptions: Unsubscribe[] = [];
+  /** Highest revision accounted for; null until `/book` answers with the one it read against. */
   private lastRevision: number | null = null;
+  /** `/book` has answered, so {@link lastRevision} covers what the opening reads loaded. */
+  private baselined = false;
+  /** The highest snapshot revision that arrived before the baseline, compared once it is known. */
+  private heldSnapshot: number | null = null;
   private pending: ReceiptPlan | null = null;
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   /** One "updated elsewhere" toast per receipt burst. */
@@ -123,7 +128,7 @@ export class BookStore {
     Object.assign({}, ...this._window().map((id) => this._voices()[id] ?? {})),
   );
 
-  /** The project the shell opened: its narrator, revision and `/status` baseline. */
+  /** The project the shell opened: its narrator. */
   constructor(private readonly project: ProjectStore) {}
 
   // ---- lifecycle --------------------------------------------------------------------------------
@@ -133,7 +138,9 @@ export class BookStore {
     if (this._folder() === folder) return;
     this.close();
     this._folder.set(folder);
-    this.lastRevision = this.baselineRevision();
+    this.lastRevision = null;
+    this.baselined = false;
+    this.heldSnapshot = null;
     this.subscriptions = [
       this.live.receipts(folder, (r) => this.onReceipt(r)),
       this.live.resynced((s) => this.onResync(s)),
@@ -331,7 +338,7 @@ export class BookStore {
     const overview = await this.book.overview(folder);
     if (this._folder() !== folder) return;
     this._overview.set(overview);
-    this.lastRevision ??= this.baselineRevision();
+    this.adoptBaseline(overview.revision);
     const [only] = overview.volumes;
     if (only && overview.volumes.length === 1)
       await this.loadChildren({ level: 'volume', id: only.id });
@@ -342,6 +349,8 @@ export class BookStore {
     const folder = this._folder();
     if (!folder) return;
     const overview = await this.book.overview(folder);
+    // The opening read failed: this one (the stale banner's Refresh) is the baseline instead.
+    if (!this.baselined && this._folder() === folder) this.adoptBaseline(overview.revision);
     const loaded = this._children();
     const refs = childRefs(overview.volumes, loaded);
     const results = await Promise.all(
@@ -421,11 +430,6 @@ export class BookStore {
     this._window.set(window);
   }
 
-  /** The project revision once `/status` has answered (0 is a real revision); null before. */
-  private baselineRevision(): number | null {
-    return this.project.status() ? this.project.revision() : null;
-  }
-
   /** Runs a read; a failure marks the view stale instead of throwing into the caller. */
   private async readOrMarkStale(read: () => Promise<void>): Promise<void> {
     try {
@@ -492,18 +496,40 @@ export class BookStore {
     );
     const revision = key === undefined ? undefined : snapshot.projects[key]?.revision;
     if (revision === undefined) return;
-    // No baseline yet (the snapshot landed while the opening reads were in flight): it becomes the
-    // baseline, and what is loaded is read again in place. A gap plan here would drop the window
-    // mid-startup and race a `?chapter=` deep link; a silent adoption could miss a commit between
-    // the reads and the snapshot.
-    if (this.lastRevision === null) {
-      this.lastRevision = revision;
-      this.schedule(refreshPlan(this._window()));
+    // The snapshot landed before `/book` answered: hold it until the baseline is known, rather than
+    // read everything again on every open in case a commit fell between the reads and the snapshot.
+    if (!this.baselined) {
+      this.heldSnapshot = Math.max(this.heldSnapshot ?? revision, revision);
       return;
     }
-    if (revision <= this.lastRevision) return;
+    this.onSnapshotRevision(revision);
+  }
+
+  /**
+   * `/book` answered with the revision it read against (stamped before the read). A snapshot held
+   * meanwhile is compared with that revision, not with receipts that arrived during the read: a
+   * commit made before the hub joined sends no receipt, so a later receipt does not cover it.
+   */
+  private adoptBaseline(revision: number): void {
+    const held = this.heldSnapshot;
+    this.heldSnapshot = null;
+    this.baselined = true;
+    this.lastRevision = Math.max(this.lastRevision ?? revision, revision, held ?? revision);
+    if (held !== null && held > revision) this.catchUp();
+  }
+
+  /** A snapshot ahead of the baseline: commits this tab never heard about. */
+  private onSnapshotRevision(revision: number): void {
+    if (this.lastRevision !== null && revision <= this.lastRevision) return;
     this.lastRevision = revision;
-    this.schedule(gapPlan(this._current()));
+    this.catchUp();
+  }
+
+  private catchUp(): void {
+    // No chapter on screen yet (the opening reads are still under way): read again in place. A gap
+    // plan would drop the window mid-startup and race a `?chapter=` deep link.
+    const current = this._current();
+    this.schedule(current ? gapPlan(current) : refreshPlan(this._window()));
   }
 
   private toastOnce(): void {

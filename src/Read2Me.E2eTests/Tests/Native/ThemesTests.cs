@@ -2,16 +2,19 @@ using System.Text.Json;
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// The themes page (Angular ticket 04): applying a built-in theme restyles the document at once
-/// (the <c>data-theme</c> scheme on the root), the choice survives a reload because the host stores
-/// it, and it is the one selection every client reads.
+/// The native themes page (native-web 36, moved from the Angular ticket 04 suite): applying a
+/// built-in theme restyles the document at once (the <c>data-theme</c> scheme on the root), the
+/// choice survives a reload because the host stores it, and it is the one selection every client
+/// reads. Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class ThemesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
+    protected override WebApp WebApp => WebApp.Native;
+
     [Fact]
     public async Task Apply_restyles_immediately_persists_and_is_shared_with_the_host()
     {
@@ -21,12 +24,12 @@ public class ThemesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
             var html = Page.Locator("html");
             await Expect(html).ToHaveAttributeAsync("data-theme", "light");
 
-            var ocean = Page.Locator(".themes__card", new() { HasText = "Ocean" });
+            var ocean = Page.Locator("r2m-themes-page .themes__card", new() { HasText = "Ocean" });
             await Expect(ocean.Locator(".themes__lock")).ToBeVisibleAsync();
             await ocean.GetByRole(AriaRole.Button, new() { Name = "Apply" }).ClickAsync();
 
             await Expect(html).ToHaveAttributeAsync("data-theme", "dark");
-            await Expect(ocean.Locator("r2m-status-chip", new() { HasText = "Active" })).ToBeVisibleAsync();
+            await Expect(ocean.Locator(".r2m-status-chip", new() { HasText = "Active" })).ToBeVisibleAsync();
             await Expect(ocean.GetByRole(AriaRole.Button, new() { Name = "Applied" })).ToBeDisabledAsync();
 
             await Page.ReloadAsync();

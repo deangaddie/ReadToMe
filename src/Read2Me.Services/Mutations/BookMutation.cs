@@ -164,6 +164,14 @@ public sealed record SetParagraphsSpeakerMutation(
     ProjectFolderId FolderId, IReadOnlyList<Guid> ParagraphIds, Guid? CharacterId) : BookMutation(FolderId);
 
 /// <summary>
+/// Release narration: the narrator stamp, and the audio, come off every item of the scope's
+/// narration-only paragraphs, which leaves them unattributed dialog. It is the bulk form of clearing
+/// an item's speaker, so it discards audio the way a hand-flip does.
+/// </summary>
+public sealed record ReleaseNarrationMutation(
+    ProjectFolderId FolderId, NarrationReleaseScope Scope, Guid NodeId) : BookMutation(FolderId);
+
+/// <summary>
 /// The Character Queue's answer applied to one Paragraph's existing items. Unlike a hand-flip this
 /// keeps generated audio: see ADR-0006 for why that asymmetry stands.
 /// </summary>

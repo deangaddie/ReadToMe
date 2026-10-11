@@ -304,6 +304,21 @@ public sealed class BookHierarchyBuilder
             return this;
         }
 
+        /// <summary>
+        /// <paramref name="count"/> narration-only paragraphs <c>{prefix}1</c>… whose text starts with
+        /// <paramref name="marker"/> (<c>"Q."</c>, <c>"Seldon:"</c>); each one's item is
+        /// <c>{prefix}N-item</c>. A transcript the import split stamped as narration.
+        /// </summary>
+        public ChapterScope AddTranscript(string prefix, string marker, int count)
+        {
+            for (var n = 1; n <= count; n++)
+            {
+                var name = $"{prefix}{n}";
+                AddParagraph(name, p => p.AddNarration($"{name}-item", $"{marker} Line {name}."));
+            }
+            return this;
+        }
+
         internal void Flush()
         {
             // Only auto-add an implicit paragraph when this chapter was implicitly created.

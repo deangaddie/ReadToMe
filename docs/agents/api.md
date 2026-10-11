@@ -142,7 +142,8 @@ Every write (`/commands` and both imports) accepts an optional `X-Origin-Id` hea
 It is echoed as `originId` on the mutation receipt the live hub publishes, so a client can
 recognise its own commits among everyone else's. Absent or malformed, the receipt is unattributed.
 
-Inspect the result: `GET /api/projects/{folder}/book` (overview), then walk
+Inspect the result: `GET /api/projects/{folder}/book` (overview; its `revision` is the book
+revision the read ran against, stamped before it as `/status` stamps its own), then walk
 `GET /api/projects/{folder}/nodes/{level}/{id}/children` (volume → part → chapter;
 chapter children carry the paragraphs with their items). Each paragraph has
 `isPauseParagraph` (no items, or a single pause item); each item has `id`, `itemType`
@@ -246,6 +247,44 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/bulk-assi
   -H 'content-type: application/json' -d '{ "paragraphIds": ["<paragraphId>"] }'
 # → { "paragraphsWithCharacterItems": 1, "characterItems": 2 }
 ```
+
+A book that marks speech without quote marks (a transcript's `Q. …` / `A. …` paragraphs) imports
+as narration, which attribution skips and bulk assign never writes. `ReleaseNarration` clears the
+narrator stamp, and the audio, from every item of a scope's released paragraphs, leaving them
+unattributed dialog. `scope` is `Part`, `Chapter` or `Paragraph` — there is no whole-book scope.
+
+- **`Part` / `Chapter`** release only the **narration-only paragraphs** (no dialog item at all) that
+  carry a **speech marker** repeated in at least 5 narration-only paragraphs of their own chapter:
+  an initial prefix (`Q.`, `A:`), a name prefix naming a Character or alias of the book
+  (`Seldon:`), or em-dash speech (`—What is it?— she asked.`). The real narration around a
+  transcript keeps the narrator. Each chapter of a Part is judged by its own markers. The
+  thresholds are fixed; there is no unfiltered Chapter/Part release (ADR 0015).
+- **`Paragraph`** is unfiltered: it releases that narration-only paragraph whatever its text says —
+  the escape hatch for a line the filter misses.
+
+Speech tags inside quoted paragraphs stay narration at every scope. Preview it first with the same
+`{ scope, nodeId }`:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/narration/release-preview \
+  -H 'content-type: application/json' -d '{ "scope": "Chapter", "nodeId": "<chapterId>" }'
+# → { "paragraphs": 72, "itemsWithAudio": 12,
+#     "speechMarkers": [ { "marker": "A.", "paragraphs": 36 }, { "marker": "Q.", "paragraphs": 36 } ] }
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' -d '{ "type": "ReleaseNarration", "scope": "Chapter", "nodeId": "<chapterId>" }'
+```
+
+`paragraphs` is what the release would write and `itemsWithAudio` the audio it would discard.
+`speechMarkers` names the markers that passed, keyed as written (`Q.` and `Q:` are separate;
+em-dash speech is `—…—`), each with the released paragraphs it covers summed across a Part's
+chapters, ordered by count descending, then marker. It is empty for a `Paragraph` scope and when
+nothing passes.
+
+Released paragraphs are Character paragraphs from then on: `paragraph-ids` lists them,
+`SetParagraphsCharacter` stamps them, and `attribution/enqueue` (which the release never calls)
+sends them to the LLM. Nothing to release — including a Chapter or Part where nothing passes the
+filter — is a no-op with no revision, so a second release is harmless. `SetParagraphsCharacter`
+with the narrator's id undoes it.
 
 ## 3. Voices
 

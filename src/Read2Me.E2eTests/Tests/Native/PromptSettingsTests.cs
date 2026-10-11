@@ -3,20 +3,23 @@ using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 using Read2Me.Services.Llm;
 
-namespace Read2Me.E2eTests.Tests.Web;
+namespace Read2Me.E2eTests.Tests.Native;
 
 /// <summary>
-/// The prompts settings page (Angular ticket 23) against the real host: edit the character prompt,
-/// preview it with the sample book, save it, see the override and its compatibility warning survive
-/// a reload, then reset to the built-in default.
+/// The native prompts settings page (native-web 34, moved from the Angular ticket 23 suite) against
+/// the real host: edit the character prompt, preview it with the sample book, save it, see the
+/// override and its compatibility warning survive a reload, then reset to the built-in default.
+/// Runs in Chromium and Firefox.
 /// </summary>
 [Collection(E2eCollection.Name)]
 public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
+    protected override WebApp WebApp => WebApp.Native;
+
     private static readonly HttpClient Http = new();
 
-    private ILocator Template => Page.Locator("app-prompt-editor [data-field='template']");
-    private ILocator Save => Page.Locator("r2m-config-editor-frame button", new() { HasText = "Save" });
+    private ILocator Template => Page.Locator("r2m-prompt-editor [data-field='template']");
+    private ILocator Save => Page.Locator(".r2m-config-editor-frame__foot button", new() { HasText = "Save" });
     private ILocator Dirty => Page.Locator(".r2m-config-editor-frame__dirty");
     private ILocator CharacterRow => Page.Locator(".prompts__row", new() { Has = Page.Locator("[data-kind='character']") });
 
@@ -31,6 +34,7 @@ public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         try
         {
             await GotoAppAsync("settings/prompts");
+            await Expect(Page.Locator("r2m-prompts-page")).ToBeVisibleAsync();
             await Expect(Page.Locator(".r2m-config-editor-frame__title")).ToHaveTextAsync("Book Character Prompt");
             await Expect(Template).ToHaveValueAsync(PromptTemplates.DefaultCharacterPrompt);
             await Expect(Save).ToBeDisabledAsync();
@@ -44,7 +48,7 @@ public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
 
             // The preview renders the unsaved draft with the sample book.
             await Template.FillAsync(edited);
-            await Page.Locator("app-prompt-editor mat-expansion-panel-header").ClickAsync();
+            await Page.Locator("r2m-prompt-editor .prompt-editor__preview > summary").ClickAsync();
             var preview = Page.Locator("[data-role='preview']");
             await Expect(preview).ToContainTextAsync("Who speaks in The Hobbit?");
             await Expect(preview).ToContainTextAsync("going on an adventure!"); // the sample context, JSON-escaped
@@ -54,7 +58,7 @@ public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
             await Expect(Dirty).ToHaveCountAsync(0);
             await Expect(Page.Locator("[data-role='prompt-warning']"))
                 .ToContainTextAsync("Stored override missing {{narrator_identity}}");
-            await Expect(CharacterRow.Locator("r2m-status-chip")).ToContainTextAsync("Overridden");
+            await Expect(CharacterRow.Locator(".r2m-status-chip")).ToContainTextAsync("Overridden");
             await Expect(CharacterRow.Locator("[data-role='warning-icon']")).ToHaveCountAsync(1);
 
             var stored = await CatalogEntryAsync("character");
@@ -70,7 +74,7 @@ public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
             await Page.Locator("r2m-confirm-dialog button", new() { HasText = "Reset" }).ClickAsync();
             await Expect(Template).ToHaveValueAsync(PromptTemplates.DefaultCharacterPrompt);
             await Expect(Page.Locator("[data-role='prompt-warning']")).ToHaveCountAsync(0);
-            await Expect(CharacterRow.Locator("r2m-status-chip")).ToHaveCountAsync(0);
+            await Expect(CharacterRow.Locator(".r2m-status-chip")).ToHaveCountAsync(0);
 
             stored = await CatalogEntryAsync("character");
             Assert.False(stored.GetProperty("isOverridden").GetBoolean());

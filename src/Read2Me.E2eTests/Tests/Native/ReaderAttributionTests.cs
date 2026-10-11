@@ -91,4 +91,101 @@ public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E
         var status = await Page.APIRequest.GetAsync($"{App.BaseUrl}/api/projects/native-assign/status");
         Assert.Contains("\"unattributed\":0", await status.TextAsync());
     }
+
+    [Fact]
+    public async Task Release_a_transcript_chapter_then_bulk_assign_its_answers()
+    {
+        var book = await App.SeedTranscriptProjectAsync("native-release", "Native Release Book", "A. Author", characterName: "Alice");
+        var chapter = book.ChapterId("ch1");
+        ILocator Row(string paragraph) => Page.Locator($"[data-paragraph-id='{book.ParagraphId(paragraph)}']");
+        ILocator Chip(string item, string state) =>
+            Page.Locator($"[data-item-id='{book.ItemId(item)}'] .r2m-speaker-chip--{state}");
+
+        await GotoAppAsync("projects/native-release/book?mode=speakers");
+
+        // Before: the transcript is narration, so only the quoted paragraph can be selected.
+        var boxes = Page.Locator(".r2m-paragraph input[type=checkbox]");
+        await Expect(boxes).ToHaveCountAsync(1);
+        await Expect(Chip("a1", "narration")).ToHaveCountAsync(1);
+        await Expect(Chip("tag", "narration")).ToHaveCountAsync(1);
+        var node = Page.Locator($"[data-node-id='{chapter}']");
+        await Expect(node.Locator(".r2m-count-badge--attribution .r2m-count-badge__count")).ToHaveTextAsync("1");
+
+        // Release the chapter from its menu; the confirm quotes the preview and names the markers.
+        await node.HoverAsync();
+        await node.Locator(".r2m-node-menu__trigger").ClickAsync();
+        await Page.Locator("[role=menu] [data-entry='release-narration']").ClickAsync();
+        var confirm = Page.Locator("r2m-confirm-dialog");
+        await Expect(confirm).ToContainTextAsync("Release 10 narration paragraphs in");
+        await Expect(confirm).ToContainTextAsync("Speech markers: A: ×5, Q: ×5.");
+        await Expect(confirm).Not.ToContainTextAsync("discarded");
+        await confirm.Locator(".r2m-confirm-dialog__confirm").ClickAsync();
+
+        // The receipt converges the page: Q/A rows are unattributed dialog with checkboxes, the
+        // plain narration and the speech tag stay narration, and the badge counts the released
+        // paragraphs.
+        await Expect(boxes).ToHaveCountAsync(11);
+        for (var n = 1; n <= 5; n++)
+        {
+            await Expect(Chip($"q{n}", "unknown")).ToHaveCountAsync(1);
+            await Expect(Chip($"a{n}", "unknown")).ToHaveCountAsync(1);
+        }
+        await Expect(Chip("plain", "narration")).ToHaveCountAsync(1);
+        await Expect(Row("pplain").Locator("input[type=checkbox]")).ToHaveCountAsync(0);
+        await Expect(Chip("tag", "narration")).ToHaveCountAsync(1);
+        await Expect(node.Locator(".r2m-count-badge--attribution .r2m-count-badge__count")).ToHaveTextAsync("11");
+
+        // Bulk-assign Alice to the answers.
+        await Row("pa1").Locator("input[type=checkbox]").CheckAsync();
+        await Row("pa2").Locator("input[type=checkbox]").CheckAsync();
+        await Expect(Page.Locator("[data-testid='selection-count']")).ToHaveTextAsync("2 paragraphs");
+        await Page.Locator("[data-action='bulk-assign']").ClickAsync();
+        await Page.Locator(".r2m-speaker-menu__row", new() { HasText = "Alice" }).ClickAsync();
+        await Expect(confirm).ToContainTextAsync("Alice becomes the speaker for 2 dialog lines in 2 paragraphs");
+        await confirm.Locator(".r2m-confirm-dialog__confirm").ClickAsync();
+
+        await Expect(Chip("a1", "named")).ToHaveTextAsync("Alice");
+        await Expect(Chip("a2", "named")).ToHaveTextAsync("Alice");
+        await Expect(Chip("q1", "unknown")).ToHaveCountAsync(1);
+
+        // The release queued nothing for attribution.
+        var queue = await Page.APIRequest.GetAsync($"{App.BaseUrl}/api/attribution/queue");
+        Assert.Contains("\"queuedCount\":0", await queue.TextAsync());
+    }
+
+    [Fact]
+    public async Task Release_one_unquoted_paragraph_from_its_menu_without_a_confirm()
+    {
+        var book = await App.SeedTranscriptProjectAsync("native-release-one", "Native Release One", "A. Author");
+        ILocator Row(string paragraph) => Page.Locator($"[data-paragraph-id='{book.ParagraphId(paragraph)}']");
+        ILocator Chip(string item, string state) =>
+            Page.Locator($"[data-item-id='{book.ItemId(item)}'] .r2m-speaker-chip--{state}");
+        async Task OpenMenu(string paragraph)
+        {
+            await Row(paragraph).HoverAsync();
+            await Row(paragraph).Locator(".r2m-paragraph__menu .r2m-node-menu__trigger").ClickAsync();
+        }
+        var release = Page.Locator("[role=menu] [data-entry='release-narration']");
+
+        await GotoAppAsync("projects/native-release-one/book?mode=speakers");
+        await Expect(Chip("q1", "narration")).ToHaveCountAsync(1);
+
+        // The quoted paragraph holds dialog, so its menu offers no release.
+        await OpenMenu("pquoted");
+        await Expect(Page.Locator("[role=menu] [data-entry='delete']")).ToBeVisibleAsync();
+        await Expect(release).ToHaveCountAsync(0);
+        await Page.Keyboard.PressAsync("Escape");
+
+        // A narration-only paragraph without audio is released straight away: no confirm.
+        await OpenMenu("pq1");
+        await release.ClickAsync();
+        await Expect(Chip("q1", "unknown")).ToHaveCountAsync(1);
+        await Expect(Row("pq1").Locator("input[type=checkbox]")).ToHaveCountAsync(1);
+        await Expect(Page.Locator(".r2m-confirm-dialog__confirm")).ToBeHiddenAsync();
+
+        // Only that paragraph: its neighbours and the speech tag stay narration.
+        await Expect(Chip("a1", "narration")).ToHaveCountAsync(1);
+        await Expect(Chip("tag", "narration")).ToHaveCountAsync(1);
+        await Expect(Page.Locator(".r2m-paragraph input[type=checkbox]")).ToHaveCountAsync(2);
+    }
 }

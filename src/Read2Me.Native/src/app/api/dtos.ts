@@ -258,6 +258,32 @@ export interface BulkAssignPreviewDto {
   characterItems: number;
 }
 
+/** Where a Release narration reaches: no whole-book scope (`NarrationReleaseScope`). */
+export type NarrationReleaseScope = 'Part' | 'Chapter' | 'Paragraph';
+
+/** `POST …/narration/release-preview` body. */
+export interface NarrationReleasePreviewRequest {
+  scope: NarrationReleaseScope;
+  nodeId: Guid;
+}
+
+/**
+ * What a ReleaseNarration would write: paragraphs it releases, items whose audio it discards, and
+ * for a Chapter or Part the speech markers that passed (count descending, then marker; empty for a
+ * Paragraph and when nothing passes).
+ */
+export interface NarrationReleasePreviewDto {
+  paragraphs: number;
+  itemsWithAudio: number;
+  speechMarkers: SpeechMarkerCountDto[];
+}
+
+/** A speech marker as written (`Q.`, `Seldon:`, `—…—`) and how many paragraphs it releases. */
+export interface SpeechMarkerCountDto {
+  marker: string;
+  paragraphs: number;
+}
+
 export interface CharacterAliasDto {
   id: Guid;
   name: string;
@@ -275,6 +301,8 @@ export interface BookOverviewDto {
   characters: CharacterDto[];
   totalParts: number;
   totalChapters: number;
+  /** The book revision the read ran against: the reader's baseline for receipts and snapshots. */
+  revision: number;
 }
 
 // ---- Commands (`CommandEndpoints.cs`) --------------------------------------------------------------

@@ -1,0 +1,58 @@
+/* A post-process card's A/B preview (ticket 24): sample, render, then the A/B player. */
+@scope (r2m-step-preview) to (r2m-audio-player > *, .r2m-spinner > *) {
+  :scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+    margin-top: var(--r2m-space-3);
+    padding: var(--r2m-space-3);
+    border: 1px dashed var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+  }
+  .step-preview__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-2) var(--r2m-space-3);
+  }
+  .step-preview__title {
+    font-weight: 600;
+    font-size: var(--r2m-text-sm);
+  }
+  .step-preview__sample {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 200px;
+  }
+  .step-preview__snippet {
+    font-size: var(--r2m-text-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .step-preview__meta,
+  .step-preview__note {
+    font-size: var(--r2m-text-xs);
+    color: var(--r2m-text-muted);
+  }
+  .step-preview__actions {
+    display: flex;
+    gap: var(--r2m-space-2);
+    margin-left: auto;
+  }
+  .step-preview__note,
+  .step-preview__reason {
+    margin: 0;
+  }
+  .step-preview__reason {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-status-warn);
+  }
+  .step-preview__reason .r2m-icon {
+    font-size: 18px;
+  }
+}

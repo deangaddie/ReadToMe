@@ -25,6 +25,11 @@ export interface NodeMenuTarget {
    * needs audio, generate audio). Absent when nothing is selectable.
    */
   selection?: SelectionKind;
+  /**
+   * Paragraphs only: every spoken item is narration and the reader selects paragraphs, so the
+   * menu offers Release narration (CONTEXT.md "Release narration").
+   */
+  narrationOnly?: boolean;
 }
 
 /** What the reader selects: paragraphs (Read/Speakers modes) or items (Audio mode). */
@@ -36,6 +41,7 @@ export const ACTION_ENTRIES = [
   'attribute-node',
   'select-needs-audio',
   'generate-audio-node',
+  'release-narration',
 ] as const;
 export type ActionEntryId = (typeof ACTION_ENTRIES)[number];
 
@@ -53,6 +59,7 @@ export type MenuEntryId =
 
 export type MenuGroup =
   | 'select'
+  | 'release'
   | 'edit'
   | 'structure'
   | 'insert'
@@ -103,6 +110,13 @@ export const HAS_CHILDREN: Record<NodeMenuKind, boolean> = {
   'pause-paragraph': false,
 };
 
+const RELEASE_ENTRY: MenuEntry = {
+  id: 'release-narration',
+  label: 'Release narration',
+  icon: 'voice_over_off',
+  group: 'release',
+};
+
 export function isActionEntry(id: MenuEntryId): id is ActionEntryId {
   return (ACTION_ENTRIES as readonly string[]).includes(id);
 }
@@ -117,6 +131,9 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
         { id: 'select-unprocessed', label: 'Select unprocessed', icon: 'checklist', group: 'select' },
         { id: 'attribute-node', label: 'Attribute unprocessed', icon: 'auto_awesome', group: 'select' },
       );
+      // Unquoted speech (a Q:/A: transcript) was stamped narration at import; this hands it back
+      // to the selection. No whole-book scope, so never on a volume.
+      if (kind !== 'volume') entries.push(RELEASE_ENTRY);
     } else if (target.selection === 'items') {
       entries.push(
         { id: 'select-needs-audio', label: 'Select needs audio', icon: 'checklist', group: 'select' },
@@ -126,6 +143,9 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
     entries.push({ id: 'edit-title', label: 'Edit title', icon: 'edit', group: 'edit' });
   } else if (kind === 'item') {
     entries.push({ id: 'edit-text', label: 'Edit text', icon: 'edit', group: 'edit' });
+  } else if (kind === 'paragraph' && target.narrationOnly) {
+    // One unquoted line inside an otherwise quoted chapter.
+    entries.push(RELEASE_ENTRY);
   }
 
   const split = SPLIT_LABEL[kind];

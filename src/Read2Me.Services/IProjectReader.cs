@@ -3,6 +3,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Characters;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Voice;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
@@ -250,6 +251,15 @@ namespace Read2Me.Services
         Task<BulkAssignPreview> GetBulkAssignPreviewAsync(
             ProjectFolderId folderId, IReadOnlyList<Guid> paragraphIds, CancellationToken ct = default);
 
+        /// <summary>
+        /// What a Release narration over the scope would write: the narration-only paragraphs it
+        /// would release (for a Chapter or Part, only the speech-marked ones) and how many of their
+        /// items have audio it would discard. Counted from the command's own selection
+        /// (<c>NarrationRelease</c>), so the confirm matches the write. An unknown node is zeroes.
+        /// </summary>
+        Task<NarrationReleasePreview> GetNarrationReleasePreviewAsync(
+            ProjectFolderId folderId, NarrationReleaseScope scope, Guid nodeId, CancellationToken ct = default);
+
         /// <summary>The cast figures behind the pipeline's Cast and Voices steps, in one read.</summary>
         Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default);
     }
@@ -268,6 +278,14 @@ namespace Read2Me.Services
     /// <c>paragraphIds.Count - ParagraphsWithCharacterItems</c>.
     /// </summary>
     public sealed record BulkAssignPreview(int ParagraphsWithCharacterItems, int CharacterItems);
+
+    /// <summary>
+    /// The figures behind the Release narration confirm. <see cref="SpeechMarkers"/> names what a
+    /// Chapter or Part release detected (count descending, then marker); empty for a Paragraph
+    /// release and when nothing passes.
+    /// </summary>
+    public sealed record NarrationReleasePreview(
+        int Paragraphs, int ItemsWithAudio, IReadOnlyList<SpeechMarkerCount> SpeechMarkers);
 
     /// <summary>A generated paragraph item offered as an audio sample: its text and who speaks it.</summary>
     public sealed record AudioSampleInfo(

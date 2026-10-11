@@ -106,6 +106,52 @@ public class SelectionApiTests(E2eAppFixture app)
     }
 
     [Fact]
+    public async Task Release_narration_previews_then_makes_the_speech_marked_paragraphs_selectable()
+    {
+        var folder = $"api-sel-release-{Guid.NewGuid():N}";
+        var book = await app.SeedTranscriptProjectAsync(folder, "Release Book", "Author");
+        var chapter = book.ChapterId("ch1");
+
+        // The chapter's ten Q:/A: paragraphs carry speech markers; its plain narration does not.
+        var response = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
+            new { scope = "Chapter", nodeId = chapter });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var preview = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(10, preview.GetProperty("paragraphs").GetInt32());
+        Assert.Equal(0, preview.GetProperty("itemsWithAudio").GetInt32());
+        Assert.Equal(["A:=5", "Q:=5"], preview.GetProperty("speechMarkers").EnumerateArray()
+            .Select(m => $"{m.GetProperty("marker").GetString()}={m.GetProperty("paragraphs").GetInt32()}"));
+
+        var release = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
+            new { type = "ReleaseNarration", scope = "Chapter", nodeId = chapter });
+        Assert.Equal(HttpStatusCode.OK, release.StatusCode);
+
+        var ids = (await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapter}/paragraph-ids?unprocessedOnly=true"))
+            .EnumerateArray().Select(r => r.GetProperty("id").GetGuid()).ToList();
+        Assert.Contains(book.ParagraphId("pq1"), ids);
+        Assert.DoesNotContain(book.ParagraphId("pplain"), ids);
+
+        // A Paragraph release is unfiltered: the plain narration can still be released on its own.
+        var one = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
+            new { scope = "Paragraph", nodeId = book.ParagraphId("pplain") });
+        var onePreview = JsonDocument.Parse(await one.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(1, onePreview.GetProperty("paragraphs").GetInt32());
+        Assert.Equal(0, onePreview.GetProperty("speechMarkers").GetArrayLength());
+
+        // A whole-book release is not a scope.
+        var volume = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
+            new { scope = "Volume", nodeId = book.VolumeId("v1") });
+        Assert.Equal(HttpStatusCode.BadRequest, volume.StatusCode);
+        var unnamed = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
+            new { scope = 7, nodeId = chapter });
+        Assert.Equal(HttpStatusCode.BadRequest, unnamed.StatusCode);
+    }
+
+    [Fact]
     public async Task Clear_outcome_is_204_and_the_paragraph_status_forgets_it()
     {
         var folder = $"api-sel-outcome-{Guid.NewGuid():N}";
@@ -144,6 +190,8 @@ public class SelectionApiTests(E2eAppFixture app)
             (await Http.PostAsJsonAsync($"{b}/attribution/enqueue-paragraphs", new { paragraphIds = Array.Empty<Guid>() })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.PostAsJsonAsync($"{b}/characters/bulk-assign-preview", new { paragraphIds = Array.Empty<Guid>() })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await Http.PostAsJsonAsync($"{b}/narration/release-preview", new { scope = "Chapter", nodeId = Guid.NewGuid() })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.DeleteAsync($"{b}/attribution/paragraphs/{Guid.NewGuid()}/outcome")).StatusCode);
     }

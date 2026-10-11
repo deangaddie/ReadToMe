@@ -2,12 +2,30 @@ import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import { ApiError } from './api-error';
 import type {
+  AttributionChainRequest,
+  AttributionChainResponse,
+  LlmModelsResponse,
+  LlmServerConfig,
+  LlmTestRequest,
+  LlmTestStatusResponse,
   ParagraphTtsServiceConfig,
   ParagraphTtsServiceType,
   ProviderSettingsSchema,
+  SemanticSimilarityServiceConfig,
+  SemanticSimilarityServiceType,
   SettingsConfig,
+  SimilarityTestRequest,
+  SimilarityTestResponse,
+  TextStep,
+  TranscriptionServiceConfig,
+  TranscriptionServiceType,
+  TranscriptionTestResponse,
+  VoiceDesignSampleText,
+  VoiceDesignSampleTextRequest,
   VoiceDesignServiceConfig,
   VoiceDesignServiceType,
+  VoiceDesignTestRequest,
+  VoiceDesignTestResponse,
 } from './dtos';
 
 /** The five generic config areas `SettingsEndpoints.MapArea` serves. */
@@ -21,8 +39,8 @@ export type SettingsArea =
 /**
  * One instance per area of the generic `/api/settings/{area}` surface: list / create / update /
  * delete plus the active selection. Bodies are the raw AppData entities. Use the concrete
- * subclass for the area you need; the base is generic over the entity. The LLM, transcription
- * and similarity subclasses (and the per-area test calls) arrive with the settings screens.
+ * subclass for the area you need; the base is generic over the entity. The transcription and
+ * similarity subclasses (and their test calls) arrive with the provider settings screen.
  */
 export abstract class SettingsApi<TConfig extends SettingsConfig> {
   protected readonly api = use(ApiClient);
@@ -67,6 +85,42 @@ export abstract class SettingsApi<TConfig extends SettingsConfig> {
   }
 }
 
+/** `LlmSettingsEndpoints.cs` on top of the generic area: models, the test console and the chain. */
+export class LlmSettingsApi extends SettingsApi<LlmServerConfig> {
+  constructor() {
+    super('llm');
+  }
+
+  /** Model ids the server behind `config` offers; the config need not be saved. 422 carries the reason. */
+  async models(config: LlmServerConfig): Promise<string[]> {
+    const response = await this.api.post<LlmModelsResponse>('/api/settings/llm/models', config);
+    return response.models;
+  }
+
+  /** 202; tokens arrive on `stream:llm` and the outcome as `llmTest` on `connectionId`. 409 while one runs. */
+  startTest(id: number, request: LlmTestRequest): Promise<void> {
+    return this.api.post<void>(`/api/settings/llm/${id}/test`, request);
+  }
+
+  cancelTest(id: number): Promise<void> {
+    return this.api.post<void>(`/api/settings/llm/${id}/test/cancel`, null);
+  }
+
+  /** For a page that may have missed its `llmTest` message. */
+  testStatus(): Promise<LlmTestStatusResponse> {
+    return this.api.get<LlmTestStatusResponse>('/api/settings/llm/test');
+  }
+
+  attributionChain(): Promise<AttributionChainResponse> {
+    return this.api.get<AttributionChainResponse>('/api/settings/llm/attribution-chain');
+  }
+
+  /** Replaces the chain and the self-consistency flag; 422 when a step names no config. */
+  setAttributionChain(request: AttributionChainRequest): Promise<AttributionChainResponse> {
+    return this.api.put<AttributionChainResponse>('/api/settings/llm/attribution-chain', request);
+  }
+}
+
 export class ParagraphTtsSettingsApi extends SettingsApi<ParagraphTtsServiceConfig> {
   constructor() {
     super('paragraph-tts');
@@ -75,6 +129,11 @@ export class ParagraphTtsSettingsApi extends SettingsApi<ParagraphTtsServiceConf
   /** The editable fields of one TTS provider type with ranges and recommended defaults (ticket 16). */
   schema(type: ParagraphTtsServiceType): Promise<ProviderSettingsSchema> {
     return this.api.get<ProviderSettingsSchema>('/api/settings/paragraph-tts/schema', { type });
+  }
+
+  /** The built-in steps, then config `id`'s substitutions; id 0 lists the built-ins only. */
+  textSteps(id: number): Promise<TextStep[]> {
+    return this.api.get<TextStep[]>(`/api/settings/paragraph-tts/${id}/text-steps`);
   }
 }
 
@@ -86,5 +145,63 @@ export class VoiceDesignSettingsApi extends SettingsApi<VoiceDesignServiceConfig
   /** The editable fields of one voice-design provider type with ranges and recommended defaults (ticket 16). */
   schema(type: VoiceDesignServiceType): Promise<ProviderSettingsSchema> {
     return this.api.get<ProviderSettingsSchema>('/api/settings/voice-design/schema', { type });
+  }
+
+  sampleText(): Promise<VoiceDesignSampleText> {
+    return this.api.get<VoiceDesignSampleText>('/api/settings/voice-design/sample-text');
+  }
+
+  /** Null, blank or the default text clears the override. */
+  setSampleText(text: string | null): Promise<VoiceDesignSampleText> {
+    const request: VoiceDesignSampleTextRequest = { text };
+    return this.api.put<VoiceDesignSampleText>('/api/settings/voice-design/sample-text', request);
+  }
+
+  /** Designs a voice with the stored config `id` (up to 60 s); 422 carries the provider's reason. */
+  test(id: number, prompt: string): Promise<VoiceDesignTestResponse> {
+    const request: VoiceDesignTestRequest = { prompt };
+    return this.api.post<VoiceDesignTestResponse>(`/api/settings/voice-design/${id}/test`, request);
+  }
+}
+
+export class TranscriptionSettingsApi extends SettingsApi<TranscriptionServiceConfig> {
+  constructor() {
+    super('transcription');
+  }
+
+  schema(type: TranscriptionServiceType): Promise<ProviderSettingsSchema> {
+    return this.api.get<ProviderSettingsSchema>('/api/settings/transcription/schema', { type });
+  }
+
+  /** Transcribes a wav / mp3 / aac (≤ 50 MB) with the stored config `id`; 422 carries the provider's reason. */
+  async test(id: number, audio: File): Promise<string> {
+    const form = new FormData();
+    form.append('file', audio, audio.name);
+    const response = await this.api.postForm<TranscriptionTestResponse>(
+      `/api/settings/transcription/${id}/test`,
+      form,
+    );
+    return response.transcript;
+  }
+}
+
+export class SemanticSimilaritySettingsApi extends SettingsApi<SemanticSimilarityServiceConfig> {
+  constructor() {
+    super('semantic-similarity');
+  }
+
+  schema(type: SemanticSimilarityServiceType): Promise<ProviderSettingsSchema> {
+    return this.api.get<ProviderSettingsSchema>('/api/settings/semantic-similarity/schema', {
+      type,
+    });
+  }
+
+  /** Scores two texts with the stored config `id`; 422 carries the provider's reason. */
+  test(id: number, text1: string, text2: string): Promise<SimilarityTestResponse> {
+    const request: SimilarityTestRequest = { text1, text2 };
+    return this.api.post<SimilarityTestResponse>(
+      `/api/settings/semantic-similarity/${id}/test`,
+      request,
+    );
   }
 }

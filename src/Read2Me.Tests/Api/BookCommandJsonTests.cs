@@ -72,6 +72,29 @@ namespace Read2Me.Tests.Api
         }
 
         [Theory]
+        [InlineData("Part", NarrationReleaseScope.Part)]
+        [InlineData("Chapter", NarrationReleaseScope.Chapter)]
+        [InlineData("Paragraph", NarrationReleaseScope.Paragraph)]
+        public void ReleaseNarration_binds_scope_and_node(string scope, NarrationReleaseScope expected)
+        {
+            var nodeId = Guid.NewGuid();
+            var command = (ReleaseNarrationCommand)Deserialize(
+                "ReleaseNarration", $$"""{ "scope": "{{scope}}", "nodeId": "{{nodeId}}" }""");
+
+            Assert.Equal(expected, command.Scope);
+            Assert.Equal(nodeId, command.NodeId);
+            Assert.Equal(Folder, command.FolderId);
+        }
+
+        [Fact]
+        public void ReleaseNarration_has_no_volume_scope()
+        {
+            var body = JsonNode.Parse($$"""{ "scope": "Volume", "nodeId": "{{Guid.NewGuid()}}" }""")!.AsObject();
+
+            Assert.False(BookCommandJson.TryDeserialize("ReleaseNarration", body, Folder, out _, out _));
+        }
+
+        [Theory]
         [InlineData("Before", InsertPosition.Before)]
         [InlineData("After", InsertPosition.After)]
         public void Enums_bind_from_strings(string position, InsertPosition expected)

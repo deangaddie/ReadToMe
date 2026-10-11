@@ -178,6 +178,33 @@ public static class WorkspaceSeeder
                 .AddRawItem("clean", ParagraphItemType.Speech,
                     "“Only me,” came the reply.", characterId: null)));
 
+    /// <summary>
+    /// Creates a project whose chapter is a trial transcript: ten unquoted <c>Q:</c>/<c>A:</c>
+    /// paragraphs the quote scan stamped as narration ("pq1"…"pq5" with items "q1"…"q5", "pa1"…"pa5"
+    /// with "a1"…"a5"), one plain narration paragraph ("pplain", item "plain"), then one quoted
+    /// paragraph whose speech tag ("tag") is narration beside an unattributed line ("quote").
+    /// A Chapter release frees the ten — each marker repeats five times — and leaves the plain
+    /// narration and the tag alone.
+    /// </summary>
+    public static Task<BookHierarchyBuilder> SeedTranscriptProjectAsync(
+        IServiceProvider services, string workspaceDir, string folderName,
+        string title, string author, string characterName = "Alice") =>
+        SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c =>
+        {
+            string[] questions = ["Your name?", "Your occupation?", "Your age?", "Your home?", "Your purpose?"];
+            string[] answers = ["Hari Seldon.", "Psychohistorian.", "Forty.", "Trantor.", "To save it."];
+            for (var n = 1; n <= 5; n++)
+            {
+                var i = n;
+                c.AddParagraph($"pq{i}", p => p.AddNarration($"q{i}", $"Q: {questions[i - 1]}"))
+                 .AddParagraph($"pa{i}", p => p.AddNarration($"a{i}", $"A: {answers[i - 1]}"));
+            }
+            c.AddParagraph("pplain", p => p.AddNarration("plain", "The court fell silent."))
+             .AddParagraph("pquoted", p => p
+                .AddRawItem("quote", ParagraphItemType.Speech, "“Order,”", characterId: null)
+                .AddNarration("tag", "the Commissioner said."));
+        });
+
     /// One volume, one chapter named "ch1", one known character; the caller fills the chapter.
     private static async Task<BookHierarchyBuilder> SeedBookAsync(
         IServiceProvider services, string workspaceDir, string folderName,

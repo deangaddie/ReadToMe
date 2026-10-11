@@ -48,6 +48,8 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         await Page.Keyboard.PressAsync("ArrowDown");
         Assert.Equal("attribute-node", await Page.EvaluateAsync<string?>(FocusedEntry));
         await Page.Keyboard.PressAsync("ArrowDown");
+        Assert.Equal("release-narration", await Page.EvaluateAsync<string?>(FocusedEntry));
+        await Page.Keyboard.PressAsync("ArrowDown");
         Assert.Equal("edit-title", await Page.EvaluateAsync<string?>(FocusedEntry));
         await Page.Keyboard.PressAsync("End");
         Assert.Equal("delete", await Page.EvaluateAsync<string?>(FocusedEntry));

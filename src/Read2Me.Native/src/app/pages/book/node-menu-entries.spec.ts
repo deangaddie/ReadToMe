@@ -150,7 +150,7 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
         ['select-unprocessed', 'select'],
         ['attribute-node', 'select'],
       ]);
-      expect(entries[2]!.id).toBe('edit-title');
+      expect(entries.find((e) => e.group === 'edit')!.id).toBe('edit-title');
     }
   });
 
@@ -164,6 +164,48 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
       expect(entries[2]!.id).toBe('edit-title');
       expect(ids(target(kind, { selection: 'items' }))).not.toContain('select-unprocessed');
     }
+  });
+
+  it('a part or chapter in a paragraph selection offers Release narration after the shortcuts', () => {
+    for (const kind of ['part', 'chapter'] as const) {
+      const entries = menuEntries(target(kind, { selection: 'paragraphs' }));
+      const release = entries[2]!;
+      expect([release.id, release.label, release.group]).toEqual([
+        'release-narration',
+        'Release narration',
+        'release',
+      ]);
+      expect(release.destructive).toBeUndefined();
+      expect(entries[3]!.id).toBe('edit-title');
+    }
+  });
+
+  it('Release narration is nowhere else: volumes, item selections, rows, pauses', () => {
+    expect(ids(target('volume', { selection: 'paragraphs' }))).not.toContain('release-narration');
+    for (const kind of ['part', 'chapter'] as const) {
+      expect(ids(target(kind, { selection: 'items' }))).not.toContain('release-narration');
+      expect(ids(target(kind))).not.toContain('release-narration');
+    }
+    for (const kind of ['paragraph', 'item', 'pause-paragraph'] as const) {
+      expect(ids(target(kind, { selection: 'paragraphs' }))).not.toContain('release-narration');
+    }
+  });
+
+  it('a narration-only paragraph offers Release narration first; other rows never do', () => {
+    const entries = menuEntries(target('paragraph', { narrationOnly: true }));
+    expect(entries.map((e) => [e.id, e.group])).toEqual([
+      ['release-narration', 'release'],
+      ['split', 'structure'],
+      ['merge-previous', 'structure'],
+      ['merge-next', 'structure'],
+      ['delete', 'delete'],
+    ]);
+    expect(entries[0]!.label).toBe('Release narration');
+    expect(ids(target('paragraph'))).not.toContain('release-narration');
+    expect(ids(target('item', { narrationOnly: true }))).not.toContain('release-narration');
+    expect(ids(target('pause-paragraph', { narrationOnly: true }))).not.toContain(
+      'release-narration',
+    );
   });
 
   it('rows never get them, whatever the selection', () => {
