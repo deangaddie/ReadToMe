@@ -231,6 +231,20 @@ describe('r2m-measured-list row re-measure', () => {
     expect(list.offsetOf(20) - list.offsetOf(19)).toBe(ESTIMATE_PX + 50);
     expect(list.scrollTop).toBe(list.offsetOf(20));
   });
+
+  it('renders no new rows inside the row observer callback, only on the next frame', async () => {
+    const { list } = await mount(rows(100));
+    const before = rendered(list);
+    // A row far taller than estimated: the range must shrink, but rendering rows inside the
+    // callback would leave their first notification undelivered (the browser's loop error).
+    heights.set('r0', 5000);
+    rowObserver().fire([list.querySelector('[data-row-key="r0"]')!]);
+    await list.rendered();
+    expect(rendered(list)).toEqual(before);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await list.rendered();
+    expect(rendered(list)).not.toEqual(before);
+  });
 });
 
 describe('r2m-measured-list row functions', () => {

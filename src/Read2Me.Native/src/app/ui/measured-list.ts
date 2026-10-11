@@ -79,6 +79,8 @@ export class MeasuredList<T = unknown> extends R2mElement {
    * wrapping, an editor opening) re-measures on its own and the top row stays put (spec §7). */
   private rowResize: ResizeObserver | null = null;
   private readonly observedRows = new Set<Element>();
+  /** The frame a row re-measure deferred its range update to; see `measureRows`. */
+  private rowFrame = 0;
   private sized = false;
 
   get items(): readonly T[] {
@@ -113,6 +115,8 @@ export class MeasuredList<T = unknown> extends R2mElement {
       this.rowResize?.disconnect();
       this.rowResize = null;
       this.observedRows.clear();
+      cancelAnimationFrame(this.rowFrame);
+      this.rowFrame = 0;
       this.sized = false;
     });
   }
@@ -163,7 +167,13 @@ export class MeasuredList<T = unknown> extends R2mElement {
     }
   }
 
-  /** One or a few rows changed height on their own: record them, then keep the top row still. */
+  /**
+   * One or a few rows changed height on their own: record them, then keep the top row still.
+   * The anchor is restored now, before paint; the range update waits a frame. Run inside this
+   * observer callback, a new range renders new rows whose first notification sits at the depth
+   * just delivered, and the browser reports "ResizeObserver loop completed with undelivered
+   * notifications" (the dev server's overlay turns that into a blocking error).
+   */
   private measureRows(entries: ResizeObserverEntry[]): void {
     const anchor = this.pendingAnchor ?? this.anchor();
     this.pendingAnchor = null;
@@ -175,7 +185,12 @@ export class MeasuredList<T = unknown> extends R2mElement {
     }
     if (!changed) return;
     this.restore(anchor);
-    this.update();
+    this.applyTotalSize();
+    if (this.rowFrame) return;
+    this.rowFrame = requestAnimationFrame(() => {
+      this.rowFrame = 0;
+      this.update();
+    });
   }
 
   /** Where row `index` starts, in pixels from the top of the content (estimated until measured). */
