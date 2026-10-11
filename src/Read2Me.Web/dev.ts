@@ -14,7 +14,12 @@ const isForwarded = (pathname: string) =>
 const server = Bun.serve<Bridge>({
   port: 4300,
   development: { hmr: true, console: true },
-  routes: { [ROOT]: index, [`${ROOT}/*`]: index },
+  routes: {
+    // The root sends a browser to the app, as the host does; the router picks the home page.
+    '/': () => new Response(null, { status: 302, headers: { Location: BASE } }),
+    [ROOT]: index,
+    [`${ROOT}/*`]: index,
+  },
   async fetch(req, srv) {
     const url = new URL(req.url);
     if (!isForwarded(url.pathname)) return new Response('Not found', { status: 404 });
