@@ -330,6 +330,16 @@ public sealed record UpdateParagraphItemTextMutation(
     ProjectFolderId FolderId, Guid ItemId, string? Text) : BookMutation(FolderId);
 
 /// <summary>
+/// Sets one speech item's delivery cue by hand: trimmed, blank meaning none, at most
+/// <see cref="Implementations.SetItemDeliveryCueMutationImplementation.MaxLength"/> characters. A
+/// changed cue discards the audio spoken in the old delivery and the verdict on it, as a text edit
+/// does; a cue that comes back unchanged keeps both. Attribution's own cue writes go through
+/// <see cref="AttributeParagraphItemsMutation"/> and keep the audio.
+/// </summary>
+public sealed record SetItemDeliveryCueMutation(
+    ProjectFolderId FolderId, Guid ItemId, string? Cue) : BookMutation(FolderId);
+
+/// <summary>
 /// Applies an approved AI edit program as one Book mutation, however many titles and items it
 /// rewrites. One commit rather than one per row is what keeps a reader from watching a Book edited
 /// in front of them a row at a time, half of it under the old wording.

@@ -23,6 +23,12 @@ public record UpdatePartTitleCommand(ProjectFolderId FolderId, Guid PartId, stri
 public record UpdateChapterTitleCommand(ProjectFolderId FolderId, Guid ChapterId, string Title) : BookCommand(FolderId);
 public record UpdateParagraphItemTextCommand(ProjectFolderId FolderId, Guid ItemId, string Text) : BookCommand(FolderId);
 
+/// <summary>
+/// Adds, edits or removes one speech item's delivery cue by hand; null or blank removes it. Not
+/// <c>AttributeItems</c>: that is attribution's command, carries a speaker, and keeps the audio.
+/// </summary>
+public record SetItemDeliveryCueCommand(ProjectFolderId FolderId, Guid ItemId, string? Cue) : BookCommand(FolderId);
+
 // Split — "split at X boundary to create new parent"
 public record SplitAtPartCommand(ProjectFolderId FolderId, Guid PartId, string? NewVolumeTitle) : BookCommand(FolderId);
 public record SplitAtChapterCommand(ProjectFolderId FolderId, Guid ChapterId, string? NewPartTitle) : BookCommand(FolderId);

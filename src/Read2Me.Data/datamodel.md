@@ -73,7 +73,7 @@ The split is made once, at import, by `ParagraphSplitter`, and only a user may c
 | `ItemType`          | enum   | no       | `ParagraphItemType` — Speech, VolumePause, PartPause, ChapterPause, ParagraphPause, Pause; stored as text. Narration vs dialog comes from `CharacterId` (ADR 0006)  |
 | `Text`              | string | yes      | spoken / narration text                                                                                    |
 | `CharacterId`       | Guid   | yes      | FK → Character — what the item is: null = unattributed dialog, Narrator sentinel = narration, else that character's line |
-| `VoiceInstructions` | string | yes      | max 3000, JSON expression hints                                                                            |
+| `VoiceInstructions` | string | yes      | max 3000, free-text delivery cue                                                                           |
 | `AudioFileName`     | string | yes      | relative path to generated WAV                                                                             |
 
 ### Character
