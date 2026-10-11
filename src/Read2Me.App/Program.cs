@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Configuration;
 using Read2Me.AppData;
+using Read2Me.Services;
 using Serilog;
 
 namespace Read2Me.App
@@ -43,7 +45,10 @@ namespace Read2Me.App
             var workspace = scope.ServiceProvider.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
             Directory.CreateDirectory(workspace.FolderPath);
             var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
+            var isNewDatabase = !db.Database.GetAppliedMigrations().Any();
             db.Database.Migrate();
+            if (isNewDatabase && DefaultServiceConfigSeeder.SeedAsync(db).GetAwaiter().GetResult())
+                Log.Information("New app database: seeded the default AI service configs for the Infra containers");
         }
 
         public static IHostBuilder CreateHostBuilder(string[] args) =>

@@ -35,6 +35,8 @@ Infra/
 | MiniLM-L6            | `read2me-minilm-l6`         | 8200 | Semantic similarity — MiniLM-L6-v2                               |
 | MPNet-Base-v2        | `read2me-mpnet-base-v2`     | 8201 | Semantic similarity — all-mpnet-base-v2                          |
 
+On first run against a new workspace (no `app.db` yet) the app seeds a config for each service at these ports and makes it active. The LLM configs are the two qwen-28b presets and the gemma-12b Chapter preset, with `[gemma-12b · Chapter]` as the attribution chain. TTS and voice design get Breeze (active) and VoxCPM2, transcription gets Whisper, and similarity gets MPNet. Edit them under Settings afterwards. An existing `app.db` is never touched (`DefaultServiceConfigSeeder`).
+
 ### Health checks
 
 Every service defines its Docker health check in its image, except audio.cpp,
