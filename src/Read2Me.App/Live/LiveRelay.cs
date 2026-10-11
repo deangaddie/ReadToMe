@@ -28,7 +28,7 @@ namespace Read2Me.App.Live;
 /// <item><see cref="ThroughputTicker"/>: one throughput snapshot per second while a run is active.</item>
 /// </list>
 /// Nothing here consumes a receipt to reconcile Book state (ADR 0007): the relay forwards it
-/// verbatim, and the Angular client reimplements the projection from receipts.
+/// verbatim, and the web client reimplements the projection from receipts.
 /// </summary>
 public sealed class LiveRelay : IHostedService, IDisposable
 {

@@ -2,7 +2,7 @@
 // in fixed steps. Each step waits until the list settles (row set and row tops unchanged over two
 // frames, chapter loads included), then reports how far the row at the viewport top moved beyond
 // the requested delta (0 = no jump). Steps that would hit either end are skipped. Read-only.
-//   MSYS_NO_PATHCONV=1 R2M_APP=/app2 R2M_WEB=http://localhost:5000 bun native-scroll-jump.mjs dune 150 > jump.log 2>&1
+//   R2M_WEB=http://localhost:5000 bun native-scroll-jump.mjs dune 150 > jump.log 2>&1
 import { launch, openWeb } from './browse.mjs';
 
 const folder = process.argv[2] ?? 'dune';

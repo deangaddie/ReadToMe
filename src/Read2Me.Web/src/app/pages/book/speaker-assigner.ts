@@ -1,12 +1,23 @@
-import { Injectable, inject } from '@angular/core';
-import { AttributionApi, BookApi, Guid, toApiError } from '@app/api';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { PromptService } from '@app/ui/text-prompt-dialog/text-prompt-dialog';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { ProjectStore } from '../project/project-store';
-import { BookEditor } from './book-editor';
-import { BookStore } from './book-store';
+import {
+  AttributionApi,
+  BookApi,
+  type Guid,
+  type NarrationReleaseScope,
+  toApiError,
+} from '@app/api';
+import { use } from '@app/core/services';
+import { ConfirmService, PromptService } from '@app/ui/dialogs';
+import { ToastService } from '@app/ui/toast';
+import type { ProjectStore } from '../project/project-store';
+import type { BookEditor } from './book-editor';
+import type { BookStore } from './book-store';
 import { NOTHING_TO_ASSIGN, bulkConfirm, bulkDoneMessage } from './bulk-assign';
+import {
+  releaseConfirm,
+  releaseDoneMessage,
+  releaseNeedsConfirm,
+  releaseNothingMessage,
+} from './release-narration';
 
 /** What a speaker menu pick lands on: one item, one paragraph, or the whole selection. */
 export type AssignTarget =
@@ -19,18 +30,21 @@ export type AssignTarget =
  * clear on an item or a paragraph, the bulk assign behind a preview and a confirm, and creating a
  * character to assign in the same gesture. Writes go through {@link BookEditor} (own receipt, then
  * the rows reload); a paragraph's remembered Failed/Unfinished outcome is forgotten with the
- * assign, as a stamp by hand settles what the queue could not.
+ * assign, as a stamp by hand settles what the queue could not. Page-scoped like the editor: the
+ * project shell provides one per project, and the row partials reach it through DOM ancestry.
  */
-@Injectable()
 export class SpeakerAssigner {
-  private readonly editor = inject(BookEditor);
-  private readonly book = inject(BookStore);
-  private readonly project = inject(ProjectStore);
-  private readonly api = inject(BookApi);
-  private readonly attribution = inject(AttributionApi);
-  private readonly confirm = inject(ConfirmService);
-  private readonly prompt = inject(PromptService);
-  private readonly toast = inject(ToastService);
+  private readonly api = use(BookApi);
+  private readonly attribution = use(AttributionApi);
+  private readonly confirm = use(ConfirmService);
+  private readonly prompt = use(PromptService);
+  private readonly toast = use(ToastService);
+
+  constructor(
+    private readonly editor: BookEditor,
+    private readonly book: BookStore,
+    private readonly project: ProjectStore,
+  ) {}
 
   /** `characterId` null clears the speaker (the line needs attributing again). */
   async assign(target: AssignTarget, characterId: Guid | null): Promise<void> {
@@ -130,6 +144,40 @@ export class SpeakerAssigner {
       paragraphIds.filter((id) => statuses[id]?.outcome).map((id) => this.clearOutcome(id)),
     );
     this.toast.success(bulkDoneMessage(name, preview));
+  }
+
+  /**
+   * Release narration over a part, chapter or paragraph: preview, confirm, then one command. A
+   * single paragraph without audio skips the confirm (`releaseNeedsConfirm`). Nothing to
+   * release is a notice, not a confirm. Never enqueues attribution: the producer picks next
+   * between bulk assign and "Attribute unprocessed". True when the release was written.
+   */
+  async releaseNarration(
+    scope: NarrationReleaseScope,
+    nodeId: Guid,
+    nodeTitle: string,
+  ): Promise<boolean> {
+    const folder = this.book.folder();
+    if (!folder) return false;
+
+    let preview;
+    try {
+      preview = await this.api.releaseNarrationPreview(folder, scope, nodeId);
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+      return false;
+    }
+
+    const options = releaseConfirm(scope, nodeTitle, preview);
+    if (!options) {
+      this.toast.info(releaseNothingMessage(scope));
+      return false;
+    }
+    if (releaseNeedsConfirm(scope, preview) && !(await this.confirm.confirm(options))) return false;
+
+    if (!(await this.editor.run({ type: 'ReleaseNarration', scope, nodeId }))) return false;
+    this.toast.success(releaseDoneMessage(preview));
+    return true;
   }
 
   private async resolveByName(name: string): Promise<Guid | null> {

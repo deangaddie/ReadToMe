@@ -1,7 +1,7 @@
-// Verifies native-web 27 against the host's /app2 bundle: the Book actions menu carries "Edit
+// Verifies native-web 27 against the host's /app bundle: the Book actions menu carries "Edit
 // with AI…" with the auto_fix_high icon, and the entry opens r2m-edit-with-ai-dialog full screen on
 // the Instruct phase with the AI-activity toggle at the bottom. Read-only: no AI call is made.
-//   MSYS_NO_PATHCONV=1 R2M_APP=/app2 R2M_WEB=http://localhost:5000 bun native-edit-ai-verify.mjs
+//   R2M_WEB=http://localhost:5000 bun native-edit-ai-verify.mjs
 import { launch, openWeb } from './browse.mjs';
 
 const folder = process.argv[2] ?? 'alices-adventures-in-wonderland';

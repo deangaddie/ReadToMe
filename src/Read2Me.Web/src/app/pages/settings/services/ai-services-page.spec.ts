@@ -1,12 +1,14 @@
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
-import { AiServiceDto, AiServicesApi } from '@app/api';
-import { LiveFamily, LiveMessageMap } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { AiServicesPage } from './ai-services-page';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { type AiServiceDto, AiServicesApi } from '@app/api';
+import { override, resetServices } from '@app/core/services';
+import { ToastService } from '@app/ui/toast';
+import { FakeLive } from '../../../../testing/fake-live';
+import { settle } from '../../../../testing/fake-navigation';
+import type { AiServicesPage } from './ai-services-page';
+import { formatLogTime } from './ai-services-page';
+import './ai-services-page';
 
+/** Ported from the Angular TestBed spec, case for case, over a recorded `AiServicesApi` and `FakeLive`. */
 const CATALOG: AiServiceDto[] = [
   {
     name: 'llama',
@@ -22,114 +24,116 @@ const CATALOG: AiServiceDto[] = [
   },
 ];
 
-class FakeLive {
-  readonly serviceStatus = signal<Record<string, 'Ready' | 'Stopped' | 'Unknown'>>({});
-  readonly subjects = new Map<LiveFamily, Subject<unknown>>();
-  on<K extends LiveFamily>(family: K) {
-    let s = this.subjects.get(family);
-    if (!s) this.subjects.set(family, (s = new Subject()));
-    return s.asObservable();
-  }
-  emit<K extends LiveFamily>(family: K, message: LiveMessageMap[K]) {
-    this.subjects.get(family)?.next(message);
-  }
+let live: FakeLive;
+let calls: string[];
+
+beforeEach(() => {
+  resetServices();
+  live = new FakeLive().install();
+  calls = [];
+  const record = (what: string) => async (name?: string) => {
+    calls.push(name ? `${what}:${name}` : what);
+  };
+  override(AiServicesApi, {
+    list: async () => CATALOG,
+    statusAll: async () => {
+      calls.push('statusAll');
+      return [];
+    },
+    status: record('status'),
+    start: record('start'),
+    restart: record('restart'),
+    shutdown: record('shutdown'),
+  } as unknown as AiServicesApi);
+  override(ToastService, {
+    success: () => undefined,
+    error: () => undefined,
+    warn: () => undefined,
+    problem: () => undefined,
+  } as unknown as ToastService);
+});
+afterEach(() => document.body.replaceChildren());
+
+async function flush(page: AiServicesPage) {
+  for (let i = 0; i < 4; i++) await settle();
+  await page.rendered();
+  await page.rendered();
 }
 
-describe('AiServicesPage', () => {
-  let live: FakeLive;
-  let api: Record<
-    'list' | 'statusAll' | 'status' | 'start' | 'restart' | 'shutdown',
-    ReturnType<typeof vi.fn>
-  >;
+async function mount() {
+  const page = document.createElement('r2m-ai-services-page') as AiServicesPage;
+  document.body.append(page);
+  await flush(page);
+  return page;
+}
 
-  async function mount() {
-    await TestBed.configureTestingModule({
-      imports: [AiServicesPage],
-      providers: [
-        { provide: LiveService, useValue: live },
-        { provide: AiServicesApi, useValue: api },
-        {
-          provide: ToastService,
-          useValue: { success: vi.fn(), error: vi.fn(), warn: vi.fn(), problem: vi.fn() },
-        },
-      ],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(AiServicesPage);
-    await fixture.whenStable();
-    return fixture;
-  }
+const chip = (card: Element | null | undefined) =>
+  card?.querySelector('.r2m-docker-controls .r2m-status-chip')?.textContent;
 
-  beforeEach(() => {
-    live = new FakeLive();
-    api = {
-      list: vi.fn().mockResolvedValue(CATALOG),
-      statusAll: vi.fn().mockResolvedValue([]),
-      status: vi.fn().mockResolvedValue({ name: 'llama', status: 'Ready' }),
-      start: vi.fn().mockResolvedValue(undefined),
-      restart: vi.fn().mockResolvedValue(undefined),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    };
-  });
-
+describe('r2m-ai-services-page', () => {
   it('renders a card per service with the GPU chip and hub-fed status', async () => {
     live.serviceStatus.set({ llama: 'Ready', whisper: 'Stopped' });
-    const fixture = await mount();
-    const el = fixture.nativeElement as HTMLElement;
-    const cards = Array.from(el.querySelectorAll('.services-page__card'));
+    const page = await mount();
+
+    const cards = Array.from(page.querySelectorAll('.services-page__card'));
     expect(cards.map((c) => c.getAttribute('data-service'))).toEqual(['llama', 'whisper']);
     expect(
-      cards[0]?.querySelector('.services-page__card-head r2m-status-chip')?.textContent,
+      cards[0]?.querySelector('.services-page__card-head .r2m-status-chip')?.textContent,
     ).toContain('GPU');
-    expect(cards[1]?.querySelector('.services-page__card-head r2m-status-chip')).toBeNull();
-    expect(cards[0]?.querySelector('r2m-docker-controls r2m-status-chip')?.textContent).toContain(
-      'Ready',
-    );
-    expect(cards[1]?.querySelector('r2m-docker-controls r2m-status-chip')?.textContent).toContain(
-      'Stopped',
-    );
+    expect(cards[1]?.querySelector('.services-page__card-head .r2m-status-chip')).toBeNull();
+    expect(chip(cards[0])).toContain('Ready');
+    expect(chip(cards[1])).toContain('Stopped');
     expect(cards[0]?.textContent).toContain('read2me-llama');
-    expect(api.statusAll).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c === 'statusAll')).toHaveLength(1);
   });
 
   it('a status flip over the hub re-renders the chip, and the buttons drive the store', async () => {
     live.serviceStatus.set({ llama: 'Ready' });
-    const fixture = await mount();
-    const el = fixture.nativeElement as HTMLElement;
-    const llama = () => el.querySelector('[data-service="llama"]')!;
+    const page = await mount();
+    const llama = () => page.querySelector('[data-service="llama"]')!;
 
-    (llama().querySelector('button[aria-label="Shutdown"]') as HTMLButtonElement).click();
-    await fixture.whenStable();
-    expect(api.shutdown).toHaveBeenCalledWith('llama');
+    llama().querySelector<HTMLButtonElement>('button[aria-label="Shutdown"]')!.click();
+    await flush(page);
+    expect(calls).toContain('shutdown:llama');
     expect(llama().querySelectorAll('button:disabled')).toHaveLength(4);
 
     live.serviceStatus.set({ llama: 'Stopped' });
     live.emit('serviceStatus', { name: 'llama', status: 'Stopped', op: 'shutdown', ok: true });
-    await fixture.whenStable();
-    expect(llama().querySelector('r2m-docker-controls r2m-status-chip')?.textContent).toContain(
-      'Stopped',
+    await flush(page);
+    expect(chip(llama())).toContain('Stopped');
+    expect(llama().querySelector<HTMLButtonElement>('button[aria-label="Start"]')!.disabled).toBe(
+      false,
     );
-    expect(
-      (llama().querySelector('button[aria-label="Start"]') as HTMLButtonElement).disabled,
-    ).toBe(false);
   });
 
   it('lists watchdog events newest first with their labels', async () => {
-    const fixture = await mount();
+    const page = await mount();
     live.emit('watchdog', {
       kind: 'recoveryStarted',
       service: 'llama',
       reason: 'health timed out',
     });
     live.emit('watchdog', { kind: 'serviceHealthy', service: 'llama' });
-    await fixture.whenStable();
-    const rows = Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll('.services-page__log-row'),
-    );
+    await flush(page);
+    const rows = Array.from(page.querySelectorAll('.services-page__log-row'));
     expect(rows.map((r) => r.getAttribute('data-kind'))).toEqual([
       'serviceHealthy',
       'recoveryStarted',
     ]);
     expect(rows[1]?.textContent).toContain('Recovery started');
     expect(rows[1]?.textContent).toContain('health timed out');
+    expect(rows[1]?.querySelector('time')?.textContent).toMatch(/^\d\d:\d\d:\d\d$/);
+  });
+
+  it('Refresh all probes every service in one request', async () => {
+    const page = await mount();
+    page.querySelector<HTMLButtonElement>('[data-action="refresh-all"]')!.click();
+    await flush(page);
+    expect(calls.filter((c) => c === 'statusAll')).toHaveLength(2);
+  });
+
+  it('formatLogTime is the zero-padded local wall clock', () => {
+    const at = new Date(2026, 9, 10, 7, 5, 9);
+    expect(formatLogTime(at)).toBe('07:05:09');
   });
 });

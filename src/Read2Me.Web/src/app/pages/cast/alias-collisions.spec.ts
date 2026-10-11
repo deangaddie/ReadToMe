@@ -1,4 +1,10 @@
-import { AliasClaim, AliasOwner, collides, findAliasCollisions } from './alias-collisions';
+import { describe, expect, it } from 'bun:test';
+import {
+  type AliasClaim,
+  type AliasOwner,
+  collides,
+  findAliasCollisions,
+} from './alias-collisions';
 
 /** Mirrors `Read2Me.Tests/Core/AliasCollisionsTests.cs`; keep the two in step. */
 describe('findAliasCollisions', () => {

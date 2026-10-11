@@ -1,34 +1,16 @@
-import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  TestRequest,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MatSelect } from '@angular/material/select';
-import { By } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
-import { AudioProcessingFull, RecentAudioSample, StepPreviewResponse } from '@app/api';
-import { LiveService } from '@app/live/live.service';
-import { SettingsChangedMessage } from '@app/live/live-messages';
-import { Subject } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { AudioProcessingFull, RecentAudioSample, StepPreviewResponse } from '@app/api';
+import { override, resetServices } from '@app/core/services';
+import { ToastService } from '@app/ui/toast';
+import { FakeApi, problem } from '../../../../testing/fake-api';
+import { FakeLive } from '../../../../testing/fake-live';
+import { settle } from '../../../../testing/fake-navigation';
 import { ADYNEQ_PRESETS } from './audio-forms';
-import { AudioSettingsPage } from './audio-settings-page';
+import type { AudioSettingsPage } from './audio-settings-page';
 import { SamplePicker } from './sample-picker-dialog';
+import './audio-settings-page';
 
-class FakeLive {
-  readonly settingsChanged = new Subject<SettingsChangedMessage>();
-  on(family: string) {
-    if (family !== 'settingsChanged') throw new Error(`unexpected family ${family}`);
-    return this.settingsChanged.asObservable();
-  }
-}
-
-class FakePicker {
-  next: RecentAudioSample | null = null;
-  pick = vi.fn(async () => this.next);
-}
-
+/** Ported from the Angular TestBed spec, case for case, over `FakeApi`, `FakeLive` and a recorded picker. */
 const BASE = '/api/settings/audio-processing';
 const FULL = `${BASE}/full`;
 
@@ -65,78 +47,79 @@ function full(overrides: Partial<AudioProcessingFull> = {}): AudioProcessingFull
   };
 }
 
-describe('AudioSettingsPage', () => {
-  let http: HttpTestingController;
-  let live: FakeLive;
-  let picker: FakePicker;
+let api: FakeApi;
+let live: FakeLive;
+let nextSample: RecentAudioSample | null;
+let picks: number;
+let toasts: string[];
 
-  beforeEach(async () => {
-    live = new FakeLive();
-    picker = new FakePicker();
-    await TestBed.configureTestingModule({
-      imports: [AudioSettingsPage],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-        { provide: LiveService, useValue: live },
-        { provide: SamplePicker, useValue: picker },
-      ],
-    }).compileComponents();
-    http = TestBed.inject(HttpTestingController);
-  });
+beforeEach(() => {
+  resetServices();
+  api = new FakeApi();
+  api.install();
+  live = new FakeLive().install();
+  nextSample = null;
+  picks = 0;
+  toasts = [];
+  override(SamplePicker, {
+    pick: async () => {
+      picks++;
+      return nextSample;
+    },
+  } as unknown as SamplePicker);
+  override(ToastService, {
+    success: (m: string) => toasts.push(m),
+    error: (m: string) => toasts.push(m),
+    problem: () => undefined,
+  } as unknown as ToastService);
+});
+afterEach(() => {
+  document.body.replaceChildren();
+  // Angular's `http.verify()`: nothing the page asked for went unanswered.
+  expect(api.unrouted).toEqual([]);
+});
 
-  afterEach(() => {
-    http.verify();
-    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
-  });
+async function flush(page: AudioSettingsPage) {
+  for (let i = 0; i < 4; i++) await settle();
+  await page.rendered();
+  await page.rendered();
+}
 
-  const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+async function render(snapshot = full()) {
+  api.on('GET', FULL, snapshot);
+  const page = document.createElement('r2m-audio-settings-page') as AudioSettingsPage;
+  document.body.append(page);
+  await flush(page);
+  return page;
+}
 
-  async function eventually(method: string, url: string): Promise<TestRequest> {
-    for (let i = 0; i < 100; i++) {
-      const [match] = http.match((r) => r.method === method && r.urlWithParams === url);
-      if (match) return match;
-      await settle(10);
-    }
-    throw new Error(`No ${method} ${url}`);
-  }
+const card = (el: HTMLElement, id: string) => el.querySelector<HTMLElement>(`[data-card="${id}"]`)!;
+const field = (el: HTMLElement, key: string) =>
+  el.querySelector<HTMLInputElement>(`[data-field="${key}"]`)!;
+const saveButton = (el: HTMLElement, id: string) =>
+  card(el, id).querySelector<HTMLButtonElement>('[data-action="save"]')!;
 
-  async function stable(fixture: ComponentFixture<unknown>) {
-    await settle();
-    await fixture.whenStable();
-  }
+async function type(page: AudioSettingsPage, key: string, value: string) {
+  const input = field(page, key);
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+  await page.rendered();
+}
 
-  async function render(snapshot = full()) {
-    const fixture = TestBed.createComponent(AudioSettingsPage);
-    (await eventually('GET', FULL)).flush(snapshot);
-    await stable(fixture);
-    return { fixture, el: fixture.nativeElement as HTMLElement };
-  }
+/** Picks an option as a user would: the native select's value, then `change`. */
+async function selectValue(page: AudioSettingsPage, key: string, value: string) {
+  const select = page.querySelector<HTMLSelectElement>(`[data-field="${key}"]`)!;
+  select.value = value;
+  select.dispatchEvent(new Event('change'));
+  await page.rendered();
+}
 
-  const card = (el: HTMLElement, id: string) =>
-    el.querySelector<HTMLElement>(`[data-card="${id}"]`)!;
-  const field = (el: HTMLElement, key: string) =>
-    el.querySelector<HTMLInputElement>(`[data-field="${key}"]`)!;
-  const saveButton = (el: HTMLElement, id: string) =>
-    card(el, id).querySelector<HTMLButtonElement>('[data-action="save"]')!;
-
-  function type(input: HTMLInputElement, value: string) {
-    input.value = value;
-    input.dispatchEvent(new Event('input'));
-  }
-
-  function selectValue(fixture: ComponentFixture<unknown>, key: string, value: string) {
-    const select = fixture.debugElement.query(By.css(`[data-field="${key}"]`))
-      .componentInstance as MatSelect;
-    select.valueChange.emit(value);
-  }
-
+describe('r2m-audio-settings-page', () => {
   it('renders the seven cards seeded from the full snapshot, every Save disabled', async () => {
-    const { el } = await render();
+    const page = await render();
 
     expect(
-      Array.from(el.querySelectorAll('[data-card]')).map((c) => c.getAttribute('data-card')),
+      Array.from(page.querySelectorAll('[data-card]')).map((c) => c.getAttribute('data-card')),
     ).toEqual([
       'ffmpeg',
       'silence-trim',
@@ -146,146 +129,165 @@ describe('AudioSettingsPage', () => {
       'wer',
       'attempts',
     ]);
-    expect(field(el, 'ffmpegPath').value).toBe('D:\\ffmpeg\\bin\\ffmpeg.exe');
-    expect(field(el, 'trim-threshold').value).toBe('-50');
-    expect(field(el, 'trim-pad').value).toBe('50');
-    expect(field(el, 'chunkPauseMs').value).toBe('300');
-    expect(field(el, 'chapterMs').value).toBe('2500');
-    expect(field(el, 'werThreshold').value).toBe('0.15');
-    expect(field(el, 'audioMaxAttempts').value).toBe('1');
+    expect(field(page, 'ffmpegPath').value).toBe('D:\\ffmpeg\\bin\\ffmpeg.exe');
+    expect(field(page, 'trim-threshold').value).toBe('-50');
+    expect(field(page, 'trim-pad').value).toBe('50');
+    expect(field(page, 'chunkPauseMs').value).toBe('300');
+    expect(field(page, 'chapterMs').value).toBe('2500');
+    expect(field(page, 'werThreshold').value).toBe('0.15');
+    expect(field(page, 'audioMaxAttempts').value).toBe('1');
     expect(
-      Array.from(el.querySelectorAll<HTMLButtonElement>('[data-action="save"]')).map(
+      Array.from(page.querySelectorAll<HTMLButtonElement>('[data-action="save"]')).map(
         (b) => b.disabled,
       ),
     ).toEqual([true, true, true, true, true, true, true]);
     // Strong preset: no custom fields, no deesser caveat.
-    expect(el.querySelector('[data-role="custom-fields"]')).toBeNull();
-    expect(el.querySelector('[data-role="deesser-caveat"]')).toBeNull();
+    expect(page.querySelector('[data-role="custom-fields"]')).toBeNull();
+    expect(page.querySelector('[data-role="deesser-caveat"]')).toBeNull();
+    expect(page.hasUnsavedChanges()).toBe(false);
   });
 
   it('saves the WER threshold on its own, then reloads; out-of-range values block Save', async () => {
-    const { fixture, el } = await render();
+    const page = await render();
 
-    type(field(el, 'werThreshold'), '1.5');
-    await stable(fixture);
-    expect(card(el, 'wer').querySelector('[data-role="card-error"]')?.textContent).toContain(
+    await type(page, 'werThreshold', '1.5');
+    expect(card(page, 'wer').querySelector('[data-role="card-error"]')?.textContent).toContain(
       'between 0 and 1',
     );
-    expect(saveButton(el, 'wer').disabled).toBe(true);
+    expect(saveButton(page, 'wer').disabled).toBe(true);
 
-    type(field(el, 'werThreshold'), '0.2');
-    await stable(fixture);
-    expect(card(el, 'wer').querySelector('[data-role="card-error"]')).toBeNull();
-    expect(saveButton(el, 'wer').disabled).toBe(false);
+    await type(page, 'werThreshold', '0.2');
+    expect(card(page, 'wer').querySelector('[data-role="card-error"]')).toBeNull();
+    expect(saveButton(page, 'wer').disabled).toBe(false);
+    expect(page.hasUnsavedChanges()).toBe(true);
     // Other cards stay clean.
-    expect(saveButton(el, 'attempts').disabled).toBe(true);
+    expect(saveButton(page, 'attempts').disabled).toBe(true);
 
-    saveButton(el, 'wer').click();
-    const put = await eventually('PUT', BASE);
-    expect(put.request.body).toEqual({ werThreshold: 0.2 });
-    put.flush({});
-    (await eventually('GET', FULL)).flush(full({ werThreshold: 0.2 }));
-    await stable(fixture);
-    expect(saveButton(el, 'wer').disabled).toBe(true);
-    expect(field(el, 'werThreshold').value).toBe('0.2');
+    api.on('PUT', BASE, {});
+    api.on('GET', FULL, full({ werThreshold: 0.2 }));
+    saveButton(page, 'wer').click();
+    await flush(page);
+
+    expect(api.calls('PUT', BASE)[0]?.body).toEqual({ werThreshold: 0.2 });
+    expect(saveButton(page, 'wer').disabled).toBe(true);
+    expect(field(page, 'werThreshold').value).toBe('0.2');
+    expect(toasts).toEqual(['WER threshold saved']);
+  });
+
+  it('a failed save keeps the edit, dirty, through the next reload', async () => {
+    const page = await render();
+    await type(page, 'werThreshold', '0.4');
+
+    api.on('PUT', BASE, problem(500, 'disk full'));
+    saveButton(page, 'wer').click();
+    await flush(page);
+    expect(field(page, 'werThreshold').value).toBe('0.4');
+    expect(saveButton(page, 'wer').disabled).toBe(false);
+
+    // The host did not change, so a reload must not treat the failed edit as saved and drop it.
+    live.emit('settingsChanged', { area: 'audio-processing' });
+    await flush(page);
+    expect(field(page, 'werThreshold').value).toBe('0.4');
+    expect(page.hasUnsavedChanges()).toBe(true);
   });
 
   it('saves the five pauses together and refuses a negative one', async () => {
-    const { fixture, el } = await render();
+    const page = await render();
 
-    type(field(el, 'chapterMs'), '-5');
-    await stable(fixture);
-    expect(card(el, 'pauses').querySelector('[data-role="card-error"]')?.textContent).toContain(
+    await type(page, 'chapterMs', '-5');
+    expect(card(page, 'pauses').querySelector('[data-role="card-error"]')?.textContent).toContain(
       'Chapter pause',
     );
 
-    type(field(el, 'chapterMs'), '2600');
-    await stable(fixture);
-    saveButton(el, 'pauses').click();
-    const put = await eventually('PUT', `${BASE}/pauses`);
-    expect(put.request.body).toEqual({
+    await type(page, 'chapterMs', '2600');
+    api.on('PUT', `${BASE}/pauses`, (body) => body);
+    saveButton(page, 'pauses').click();
+    await flush(page);
+    expect(api.calls('PUT', `${BASE}/pauses`)[0]?.body).toEqual({
       volumeMs: 4000,
       partMs: 3000,
       chapterMs: 2600,
       paragraphMs: 800,
       pauseMs: 500,
     });
-    put.flush(put.request.body);
-    (await eventually('GET', FULL)).flush(full());
+    expect(api.calls('GET', FULL).length).toBe(2);
   });
 
   it('saves silence trim as a step config carrying the stored output floor', async () => {
-    const { fixture, el } = await render();
+    const page = await render();
 
-    type(field(el, 'trim-threshold'), '-42');
-    await stable(fixture);
-    saveButton(el, 'silence-trim').click();
-    const put = await eventually('PUT', `${BASE}/steps/silence-trim`);
-    expect(put.request.body).toEqual({
+    await type(page, 'trim-threshold', '-42');
+    api.on('PUT', `${BASE}/steps/silence-trim`, (body) => body);
+    saveButton(page, 'silence-trim').click();
+    await flush(page);
+    expect(api.calls('PUT', `${BASE}/steps/silence-trim`)[0]?.body).toEqual({
       stepId: 'silence-trim',
       enabled: true,
       settings: { thresholdDb: -42, padMs: 50, minOutputMs: 200 },
     });
-    put.flush(put.request.body);
-    (await eventually('GET', FULL)).flush(full());
   });
 
   it('a hub refresh reseeds untouched cards and leaves typing in progress alone', async () => {
-    const { fixture, el } = await render();
+    const page = await render();
 
-    type(field(el, 'werThreshold'), '0.3');
-    await stable(fixture);
+    await type(page, 'werThreshold', '0.3');
 
-    live.settingsChanged.next({ area: 'audio-processing' });
-    (await eventually('GET', FULL)).flush(
-      full({ werThreshold: 0.25, chunkPauseMs: 450, ffmpegPath: null }),
-    );
-    await stable(fixture);
+    api.on('GET', FULL, full({ werThreshold: 0.25, chunkPauseMs: 450, ffmpegPath: null }));
+    live.emit('settingsChanged', { area: 'audio-processing' });
+    await flush(page);
 
-    expect(field(el, 'werThreshold').value).toBe('0.3'); // the edit survives
-    expect(saveButton(el, 'wer').disabled).toBe(false);
-    expect(field(el, 'chunkPauseMs').value).toBe('450'); // untouched card follows the host
-    expect(field(el, 'ffmpegPath').value).toBe('');
+    expect(field(page, 'werThreshold').value).toBe('0.3'); // the edit survives
+    expect(saveButton(page, 'wer').disabled).toBe(false);
+    expect(field(page, 'chunkPauseMs').value).toBe('450'); // untouched card follows the host
+    expect(field(page, 'ffmpegPath').value).toBe('');
   });
 
   it('other areas do not trigger a reload', async () => {
-    await render();
-    live.settingsChanged.next({ area: 'llm' });
-    await settle(20);
-    expect(http.match(() => true)).toEqual([]);
+    const page = await render();
+    live.emit('settingsChanged', { area: 'llm' });
+    await flush(page);
+    expect(api.calls('GET', FULL).length).toBe(1);
+  });
+
+  it('stops listening while detached and listens again once re-attached', async () => {
+    const page = await render();
+    page.remove();
+    live.emit('settingsChanged', { area: 'audio-processing' });
+    await settle();
+    expect(api.calls('GET', FULL).length).toBe(1);
+
+    document.body.append(page);
+    await flush(page);
+    expect(api.calls('GET', FULL).length).toBe(2);
   });
 
   it('custom preset shows the engine fields; picking a preset re-seeds them', async () => {
-    const { fixture, el } = await render();
+    const page = await render();
 
-    selectValue(fixture, 'soften-preset', 'custom');
-    await stable(fixture);
-    expect(el.querySelector('[data-role="custom-fields"]')).not.toBeNull();
-    expect(field(el, 'adyneq-ratio').value).toBe(String(ADYNEQ_PRESETS.strong.ratio));
-    expect(el.querySelector('[data-field="soften-highpass-hz"]')).toBeNull();
+    await selectValue(page, 'soften-preset', 'custom');
+    expect(page.querySelector('[data-role="custom-fields"]')).not.toBeNull();
+    expect(field(page, 'adyneq-ratio').value).toBe(String(ADYNEQ_PRESETS.strong.ratio));
+    expect(page.querySelector('[data-field="soften-highpass-hz"]')).toBeNull();
 
-    type(field(el, 'adyneq-ratio'), '9');
-    await stable(fixture);
-    expect(field(el, 'adyneq-ratio').value).toBe('9');
+    await type(page, 'adyneq-ratio', '9');
+    expect(field(page, 'adyneq-ratio').value).toBe('9');
 
-    selectValue(fixture, 'soften-preset', 'light');
-    await stable(fixture);
-    expect(el.querySelector('[data-role="custom-fields"]')).toBeNull();
+    await selectValue(page, 'soften-preset', 'light');
+    expect(page.querySelector('[data-role="custom-fields"]')).toBeNull();
 
-    selectValue(fixture, 'soften-preset', 'custom');
-    await stable(fixture);
-    expect(field(el, 'adyneq-ratio').value).toBe(String(ADYNEQ_PRESETS.light.ratio));
+    await selectValue(page, 'soften-preset', 'custom');
+    expect(field(page, 'adyneq-ratio').value).toBe(String(ADYNEQ_PRESETS.light.ratio));
 
     // The deesser engine shows its own fields and the sample-rate caveat.
-    selectValue(fixture, 'soften-engine', 'deesser');
-    await stable(fixture);
-    expect(el.querySelector('[data-role="deesser-caveat"]')).not.toBeNull();
-    expect(field(el, 'deesser-intensity')).not.toBeNull();
-    expect(el.querySelector('[data-field="adyneq-ratio"]')).toBeNull();
+    await selectValue(page, 'soften-engine', 'deesser');
+    expect(page.querySelector('[data-role="deesser-caveat"]')).not.toBeNull();
+    expect(field(page, 'deesser-intensity')).not.toBeNull();
+    expect(page.querySelector('[data-field="adyneq-ratio"]')).toBeNull();
 
-    saveButton(el, 'consonant-soften').click();
-    const put = await eventually('PUT', `${BASE}/steps/consonant-soften`);
-    expect(put.request.body).toMatchObject({
+    api.on('PUT', `${BASE}/steps/consonant-soften`, (body) => body);
+    saveButton(page, 'consonant-soften').click();
+    await flush(page);
+    expect(api.calls('PUT', `${BASE}/steps/consonant-soften`)[0]?.body).toMatchObject({
       stepId: 'consonant-soften',
       enabled: false,
       settings: {
@@ -295,36 +297,52 @@ describe('AudioSettingsPage', () => {
         deesser: { intensity: 0.35, makeupAmount: 0.5 },
       },
     });
-    put.flush(put.request.body);
-    (await eventually('GET', FULL)).flush(full());
+  });
+
+  it('the highpass switch adds its cutoff field and the saved params carry it', async () => {
+    const page = await render();
+    await selectValue(page, 'soften-preset', 'custom');
+
+    const highpass = field(page, 'soften-highpass');
+    highpass.checked = true;
+    highpass.dispatchEvent(new Event('change'));
+    await page.rendered();
+    expect(field(page, 'soften-highpass-hz').value).toBe('80');
+
+    await type(page, 'soften-highpass-hz', '20');
+    expect(
+      card(page, 'consonant-soften').querySelector('[data-role="card-error"]')?.textContent,
+    ).toContain('between 40 and 160');
+
+    await type(page, 'soften-highpass-hz', '100');
+    api.on('PUT', `${BASE}/steps/consonant-soften`, (body) => body);
+    saveButton(page, 'consonant-soften').click();
+    await flush(page);
+    expect(api.calls('PUT', `${BASE}/steps/consonant-soften`)[0]?.body).toMatchObject({
+      settings: { adynEq: { ...ADYNEQ_PRESETS.strong, highpassHz: 100 } },
+    });
   });
 
   it('renders an A/B preview of the unsaved draft over the picked sample', async () => {
-    const { fixture, el } = await render();
-    const preview = card(el, 'silence-trim').querySelector<HTMLElement>('app-step-preview')!;
+    const page = await render();
+    const preview = card(page, 'silence-trim').querySelector<HTMLElement>('r2m-step-preview')!;
     const pick = preview.querySelector<HTMLButtonElement>('[data-action="pick-sample"]')!;
     const renderButton = preview.querySelector<HTMLButtonElement>(
       '[data-action="render-preview"]',
     )!;
     expect(renderButton.disabled).toBe(true);
 
-    picker.next = SAMPLE;
+    nextSample = SAMPLE;
     pick.click();
-    await stable(fixture);
+    await flush(page);
+    expect(picks).toBe(1);
     expect(preview.querySelector('[data-role="sample"]')?.textContent).toContain(
       'Hardin · Hardin Voice · Foundation',
     );
     expect(pick.textContent?.trim()).toBe('Change sample');
     expect(renderButton.disabled).toBe(false);
 
-    type(field(el, 'trim-threshold'), '-40');
-    await stable(fixture);
-    renderButton.click();
-    const post = await eventually('POST', `${BASE}/steps/silence-trim/preview`);
-    expect(post.request.body).toEqual({
-      sample: { folder: 'foundation', itemId: 'item-1' },
-      settings: { thresholdDb: -40, padMs: 50, minOutputMs: 200 },
-    });
+    await type(page, 'trim-threshold', '-40');
     const response: StepPreviewResponse = {
       previewId: 'p1',
       originalUrl: '/preview-source/foundation/item-1',
@@ -333,9 +351,14 @@ describe('AudioSettingsPage', () => {
       reason: null,
       appliedOk: true,
     };
-    post.flush(response);
-    await stable(fixture);
+    api.on('POST', `${BASE}/steps/silence-trim/preview`, response);
+    renderButton.click();
+    await flush(page);
 
+    expect(api.calls('POST', `${BASE}/steps/silence-trim/preview`)[0]?.body).toEqual({
+      sample: { folder: 'foundation', itemId: 'item-1' },
+      settings: { thresholdDb: -40, padMs: 50, minOutputMs: 200 },
+    });
     const audio = preview.querySelector('audio')!;
     expect(audio.getAttribute('src')).toBe('/preview-source/foundation/item-1?v=p1');
     const ab = preview.querySelectorAll('.r2m-audio-player__ab-btn');
@@ -343,22 +366,17 @@ describe('AudioSettingsPage', () => {
     expect(preview.querySelector('[data-role="removed"]')?.textContent).toContain('Removed 312 ms');
     expect(preview.querySelector('[data-role="reason"]')).toBeNull();
     // Nothing was saved by previewing.
-    expect(saveButton(el, 'silence-trim').disabled).toBe(false);
+    expect(saveButton(page, 'silence-trim').disabled).toBe(false);
+    expect(api.calls('PUT', `${BASE}/steps/silence-trim`)).toEqual([]);
   });
 
   it('a fallen-back render shows the reason', async () => {
-    const { fixture, el } = await render();
-    const preview = card(el, 'consonant-soften').querySelector<HTMLElement>('app-step-preview')!;
-    picker.next = SAMPLE;
+    const page = await render();
+    const preview = card(page, 'consonant-soften').querySelector<HTMLElement>('r2m-step-preview')!;
+    nextSample = SAMPLE;
     preview.querySelector<HTMLButtonElement>('[data-action="pick-sample"]')!.click();
-    await stable(fixture);
-    preview.querySelector<HTMLButtonElement>('[data-action="render-preview"]')!.click();
-    const post = await eventually('POST', `${BASE}/steps/consonant-soften/preview`);
-    expect(post.request.body).toEqual({
-      sample: { folder: 'foundation', itemId: 'item-1' },
-      settings: { engine: 'adyneq', preset: 'strong' },
-    });
-    post.flush({
+    await flush(page);
+    api.on('POST', `${BASE}/steps/consonant-soften/preview`, {
       previewId: 'p2',
       originalUrl: '/o',
       processedUrl: '/p',
@@ -366,23 +384,28 @@ describe('AudioSettingsPage', () => {
       reason: 'ffmpeg exited 1',
       appliedOk: false,
     });
-    await stable(fixture);
+    preview.querySelector<HTMLButtonElement>('[data-action="render-preview"]')!.click();
+    await flush(page);
+    expect(api.calls('POST', `${BASE}/steps/consonant-soften/preview`)[0]?.body).toEqual({
+      sample: { folder: 'foundation', itemId: 'item-1' },
+      settings: { engine: 'adyneq', preset: 'strong' },
+    });
     expect(preview.querySelector('[data-role="reason"]')?.textContent).toContain('ffmpeg exited 1');
     expect(preview.querySelector('[data-role="removed"]')).toBeNull();
   });
 
   it('Test ffmpeg posts the path in the field, then reloads', async () => {
-    const { fixture, el } = await render();
-    type(field(el, 'ffmpegPath'), 'C:\\tools\\ffmpeg.exe');
-    await stable(fixture);
-    card(el, 'ffmpeg').querySelector<HTMLButtonElement>('[data-action="test-ffmpeg"]')!.click();
-    const post = await eventually('POST', `${BASE}/ffmpeg/test`);
-    expect(post.request.body).toEqual({ ffmpegPath: 'C:\\tools\\ffmpeg.exe' });
-    post.flush({ success: true, message: 'ffmpeg version 7.1' });
-    (await eventually('GET', FULL)).flush(full({ ffmpegPath: 'C:\\tools\\ffmpeg.exe' }));
-    await stable(fixture);
+    const page = await render();
+    await type(page, 'ffmpegPath', 'C:\\tools\\ffmpeg.exe');
+    api.on('POST', `${BASE}/ffmpeg/test`, { success: true, message: 'ffmpeg version 7.1' });
+    api.on('GET', FULL, full({ ffmpegPath: 'C:\\tools\\ffmpeg.exe' }));
+    card(page, 'ffmpeg').querySelector<HTMLButtonElement>('[data-action="test-ffmpeg"]')!.click();
+    await flush(page);
+    expect(api.calls('POST', `${BASE}/ffmpeg/test`)[0]?.body).toEqual({
+      ffmpegPath: 'C:\\tools\\ffmpeg.exe',
+    });
     // The test persisted the path, so the card is clean against the reloaded value.
-    expect(saveButton(el, 'ffmpeg').disabled).toBe(true);
-    expect(document.querySelector('.r2m-toast-panel')?.textContent).toContain('ffmpeg version 7.1');
+    expect(saveButton(page, 'ffmpeg').disabled).toBe(true);
+    expect(toasts).toEqual(['ffmpeg version 7.1']);
   });
 });

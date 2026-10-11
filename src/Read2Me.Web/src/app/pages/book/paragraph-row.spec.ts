@@ -1,11 +1,11 @@
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { ParagraphDto, ParagraphItemDto } from '@app/api';
-import { AudioGenerator } from './audio-generator';
-import { AudioSelectionStore } from './audio-selection-store';
-import { BookEditor } from './book-editor';
-import { ParagraphRow } from './paragraph-row';
-import { RowContext } from './reader-rows';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { render } from 'lit-html';
+import type { ParagraphDto, ParagraphItemDto } from '@app/api';
+import { provide } from '@app/core/services';
+import { NODE_MENU_OPEN, type NodeMenuRequest } from './node-menu';
+import type { NodeMenuTarget } from './node-menu-entries';
+import { paragraphRow } from './paragraph-row';
+import type { RowContext } from './reader-rows';
 import { SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 
@@ -40,12 +40,6 @@ const PARAGRAPH: ParagraphDto = {
   ],
 };
 
-const NARRATION_ONLY: ParagraphDto = {
-  id: 'p2',
-  isPauseParagraph: false,
-  items: [item('n2', { itemType: 'Narration', characterId: NARRATOR_ID, text: 'Rain fell.' })],
-};
-
 const ROSTER = [
   { id: NARRATOR_ID, name: 'Narrator', isNarrator: true },
   { id: 'h', name: 'Hardin' },
@@ -69,113 +63,150 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     selectedItems: new Set(),
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
+    locked: false,
+    generating: false,
     roster: ROSTER,
     ...overrides,
   };
 }
 
-function render(context: RowContext, paragraph = PARAGRAPH) {
-  const fixture = TestBed.createComponent(ParagraphRow);
-  fixture.componentRef.setInput('paragraph', paragraph);
-  fixture.componentRef.setInput('chapterId', 'c1');
-  fixture.componentRef.setInput('ctx', context);
-  fixture.detectChanges();
-  return fixture.nativeElement as HTMLElement;
+const NARRATION_ONLY: ParagraphDto = {
+  id: 'p2',
+  isPauseParagraph: false,
+  items: [item('n2', { itemType: 'Narration', characterId: NARRATOR_ID, text: 'Dawn broke.' })],
+};
+
+/** The shell's page-scoped collaborators, reached by the row through DOM ancestry. */
+let selection: SelectionStore;
+let assigner: {
+  assign: ReturnType<typeof mock>;
+  createAndAssign: ReturnType<typeof mock>;
+  clearOutcome: ReturnType<typeof mock>;
+};
+
+/** Renders the partial into a host and settles the speaker chips' first render. */
+async function mount(context: RowContext, paragraph = PARAGRAPH) {
+  const host = document.createElement('div');
+  provide(host, SelectionStore, selection);
+  provide(host, SpeakerAssigner, assigner as unknown as SpeakerAssigner);
+  document.body.append(host);
+  render(paragraphRow(paragraph, 'c1', context, { isFirst: true, isLast: true }), host);
+  await Promise.resolve();
+  await Promise.resolve();
+  return host.firstElementChild as HTMLElement;
 }
 
 const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
-describe('ParagraphRow', () => {
-  let assigner: { assign: ReturnType<typeof vi.fn>; createAndAssign: ReturnType<typeof vi.fn>; clearOutcome: ReturnType<typeof vi.fn> };
+// happy-dom has no popover: the chip's menu opens on the `toggle` event the browser would fire.
+const proto = HTMLElement.prototype as unknown as Record<string, () => void>;
+beforeEach(() => {
+  selection = new SelectionStore();
+  assigner = {
+    assign: mock(async () => undefined),
+    createAndAssign: mock(async () => undefined),
+    clearOutcome: mock(async () => undefined),
+  };
+  proto['hidePopover'] = () => undefined;
+});
+afterEach(() => {
+  delete proto['hidePopover'];
+  document.body.replaceChildren();
+});
 
-  beforeEach(() => {
-    assigner = {
-      assign: vi.fn().mockResolvedValue(undefined),
-      createAndAssign: vi.fn().mockResolvedValue(undefined),
-      clearOutcome: vi.fn().mockResolvedValue(undefined),
-    };
-    TestBed.configureTestingModule({
-      imports: [ParagraphRow],
-      providers: [
-        SelectionStore,
-        AudioSelectionStore,
-        { provide: AudioGenerator, useValue: { retry: vi.fn(), dismissReview: vi.fn(), working: signal(false) } },
-        { provide: BookEditor, useValue: { locked: signal(false), run: vi.fn() } },
-        { provide: SpeakerAssigner, useValue: assigner },
-      ],
-    });
-  });
+async function openChipMenu(chip: Element) {
+  chip.querySelector<HTMLButtonElement>('button')!.click();
+  chip
+    .querySelector('.r2m-speaker-chip__menu')!
+    .dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open' }));
+  await (chip as HTMLElement & { rendered(): Promise<void> }).rendered();
+  await chip.querySelector('r2m-speaker-menu')!.rendered();
+  return Array.from(chip.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__row'));
+}
 
-  afterEach(() => {
-    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
-  });
-
+describe('paragraphRow', () => {
   describe('read mode', () => {
-    it('renders prose with one paragraph speaker chip and no item rows', () => {
-      const el = render(ctx());
+    it('renders prose with one paragraph speaker chip and no item rows', async () => {
+      const el = await mount(ctx());
+      expect(el.classList.contains('r2m-paragraph')).toBe(true);
+      expect(el.dataset['paragraphId']).toBe('p1');
       expect(text(el.querySelector('.r2m-paragraph__prose'))).toBe(
         'Hardin leaned back. "The Encyclopedia comes first." "Then face Anacreon."',
       );
       const chips = el.querySelectorAll('r2m-speaker-chip');
       expect(chips.length).toBe(1);
       expect(text(chips[0]!)).toBe('Hardin +?');
-      expect(el.querySelectorAll('r2m-item').length).toBe(0);
+      expect(el.querySelectorAll('.r2m-item').length).toBe(0);
     });
 
-    it('shows the attribution queue chip and a lock while queued', () => {
-      const el = render(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
-      expect(text(el.querySelector('r2m-status-chip'))).toContain('Queued');
+    it('shows the attribution queue chip and a lock while queued', async () => {
+      const el = await mount(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
       expect(el.querySelector('.r2m-paragraph__lock')).not.toBeNull();
     });
 
-    it('an unfinished attribution outcome reads Unknown', () => {
-      const el = render(
+    it('an unfinished attribution outcome reads Unknown', async () => {
+      const el = await mount(
         ctx({ paragraphStatus: { p1: { outcome: { kind: 'Unfinished', reason: 'x' } } } }),
       );
-      expect(text(el.querySelector('r2m-status-chip'))).toContain('Unknown');
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Unknown');
+      expect(el.querySelector('.r2m-paragraph__lock')).toBeNull();
+    });
+
+    it('a queued paragraph with a stale outcome shows Queued', async () => {
+      const el = await mount(
+        ctx({ paragraphStatus: { p1: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+      );
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
+    });
+
+    it('colours the row by the paragraph speaker and marks its state', async () => {
+      const el = await mount(ctx());
+      expect(el.classList.contains('r2m-paragraph--named')).toBe(true);
+      expect(el.style.getPropertyValue('--r2m-speaker-hue')).not.toBe('');
+      const unknown = await mount(ctx(), { ...PARAGRAPH, items: [item('u')] });
+      expect(unknown.classList.contains('r2m-paragraph--unknown')).toBe(true);
     });
   });
 
   describe('selection (ticket 12)', () => {
-    it('a Character paragraph has a live checkbox that toggles the store with its ancestry', () => {
-      const el = render(ctx());
+    it('a Character paragraph has a live checkbox that toggles the store with its ancestry', async () => {
+      const el = await mount(ctx());
       const box = el.querySelector<HTMLInputElement>('input[type=checkbox]')!;
       expect(box.disabled).toBe(false);
       expect(box.checked).toBe(false);
 
       box.checked = true;
       box.dispatchEvent(new Event('change'));
-      const store = TestBed.inject(SelectionStore);
-      expect(store.selection()).toEqual({ p1: { chapterId: 'c1', partId: 'pt1', volumeId: 'v1' } });
+      expect(selection.selection()).toEqual({
+        p1: { chapterId: 'c1', partId: 'pt1', volumeId: 'v1' },
+      });
 
       box.checked = false;
       box.dispatchEvent(new Event('change'));
-      expect(store.count()).toBe(0);
+      expect(selection.count()).toBe(0);
     });
 
-    it('reflects the selection from the context and highlights the row', () => {
-      const el = render(ctx({ selected: new Set(['p1']) }));
+    it('reflects the selection from the context and highlights the row', async () => {
+      const el = await mount(ctx({ selected: new Set(['p1']) }));
       expect(el.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
       expect(el.classList.contains('r2m-paragraph--selected')).toBe(true);
     });
 
-    it('narration-only paragraphs and Audio mode offer no checkbox', () => {
-      expect(render(ctx(), NARRATION_ONLY).querySelector('input[type=checkbox]')).toBeNull();
+    it('narration-only paragraphs and Audio mode offer no checkbox', async () => {
+      expect((await mount(ctx(), NARRATION_ONLY)).querySelector('input[type=checkbox]')).toBeNull();
       expect(
-        render(ctx({ mode: 'audio', selectable: false })).querySelector('input[type=checkbox]'),
+        (await mount(ctx({ mode: 'audio', selectable: false }))).querySelector(
+          '.r2m-paragraph__gutter input[type=checkbox]',
+        ),
       ).toBeNull();
     });
   });
 
   describe('speaker menu (ticket 12)', () => {
-    const openMenu = (el: HTMLElement, chip: Element) => {
-      chip.querySelector<HTMLButtonElement>('button')!.click();
-      return Array.from(document.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__row'));
-    };
-
-    it('the Read chip opens the roster and a pick assigns the whole paragraph', () => {
-      const el = render(ctx());
-      const rows = openMenu(el, el.querySelector('r2m-speaker-chip')!);
+    it('the Read chip opens the roster and a pick assigns the whole paragraph', async () => {
+      const el = await mount(ctx());
+      const rows = await openChipMenu(el.querySelector('r2m-speaker-chip')!);
       expect(rows.map((r) => text(r.querySelector('.r2m-speaker-menu__name')))).toEqual([
         'Narrator',
         'Hardin',
@@ -184,10 +215,10 @@ describe('ParagraphRow', () => {
       expect(assigner.assign).toHaveBeenCalledWith({ kind: 'paragraph', paragraphId: 'p1' }, 'h');
     });
 
-    it('Clear speaker and New character go through the assigner too', () => {
-      const el = render(ctx());
-      openMenu(el, el.querySelector('r2m-speaker-chip')!);
-      const actions = document.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__action');
+    it('Clear speaker and New character go through the assigner too', async () => {
+      const el = await mount(ctx());
+      await openChipMenu(el.querySelector('r2m-speaker-chip')!);
+      const actions = el.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__action');
       actions[0]!.click();
       expect(assigner.assign).toHaveBeenCalledWith({ kind: 'paragraph', paragraphId: 'p1' }, null);
       actions[1]!.click();
@@ -197,10 +228,10 @@ describe('ParagraphRow', () => {
       );
     });
 
-    it('in Speakers mode each item chip assigns that item', () => {
-      const el = render(ctx({ mode: 'speakers' }));
-      const chips = el.querySelectorAll('r2m-item r2m-speaker-chip');
-      const rows = openMenu(el, chips[2]!);
+    it('in Speakers mode each item chip assigns that item', async () => {
+      const el = await mount(ctx({ mode: 'speakers' }));
+      const chips = el.querySelectorAll('.r2m-item r2m-speaker-chip');
+      const rows = await openChipMenu(chips[2]!);
       rows[0]!.click();
       expect(assigner.assign).toHaveBeenCalledWith(
         { kind: 'item', itemId: 'u', paragraphId: 'p1' },
@@ -208,38 +239,41 @@ describe('ParagraphRow', () => {
       );
     });
 
-    it('a queued paragraph keeps its chips inert', () => {
-      const el = render(ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }));
+    it('a queued paragraph keeps its chips inert', async () => {
+      const el = await mount(
+        ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }),
+      );
       expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
-      const read = render(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
+      const read = await mount(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
       expect(read.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
     });
   });
 
   describe('outcomes (ticket 12)', () => {
-    it('a Failed chip carries the reason and clears the outcome on click', () => {
-      const el = render(
+    it('a Failed chip carries the reason and clears the outcome on click', async () => {
+      const el = await mount(
         ctx({ paragraphStatus: { p1: { outcome: { kind: 'Failed', reason: 'LLM timed out' } } } }),
       );
       const button = el.querySelector<HTMLButtonElement>('.r2m-paragraph__outcome')!;
       expect(text(button)).toContain('Failed');
+      expect(button.getAttribute('data-tooltip')).toBe('LLM timed out — Click to clear');
       button.click();
       expect(assigner.clearOutcome).toHaveBeenCalledWith('p1');
     });
 
-    it('a queued paragraph with a stale outcome shows Queued and nothing to clear', () => {
-      const el = render(
+    it('a queued paragraph with a stale outcome shows Queued and nothing to clear', async () => {
+      const el = await mount(
         ctx({ paragraphStatus: { p1: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
       );
       expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
-      expect(text(el.querySelector('r2m-status-chip'))).toContain('Queued');
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
     });
   });
 
   describe('speakers mode', () => {
-    it('renders one item row per item with its own speaker chip, unknown highlighted', () => {
-      const el = render(ctx({ mode: 'speakers' }));
-      const rows = Array.from(el.querySelectorAll('r2m-item'));
+    it('renders one item row per item with its own speaker chip, unknown highlighted', async () => {
+      const el = await mount(ctx({ mode: 'speakers' }));
+      const rows = Array.from(el.querySelectorAll('.r2m-item'));
       expect(rows.map((r) => text(r.querySelector('.r2m-speaker-chip__name')))).toEqual([
         'Narration',
         'Hardin',
@@ -254,12 +288,12 @@ describe('ParagraphRow', () => {
       expect(el.querySelector('[data-testid=voice-line]')).toBeNull();
     });
 
-    it('a pause item inside a paragraph renders as its label', () => {
+    it('a pause item inside a paragraph renders as its label', async () => {
       const paragraph = {
         ...PARAGRAPH,
         items: [...PARAGRAPH.items, item('z', { itemType: 'Pause', isPause: true, text: null })],
       };
-      const el = render(ctx({ mode: 'speakers' }), paragraph);
+      const el = await mount(ctx({ mode: 'speakers' }), paragraph);
       expect(text(el.querySelector('.r2m-item--pause'))).toBe('Pause');
     });
   });
@@ -288,74 +322,109 @@ describe('ParagraphRow', () => {
       },
     });
 
-    it('renders voice lines, instructions, review and queue chips per item', () => {
-      const el = render(audio);
-      const rows = Array.from(el.querySelectorAll('r2m-item'));
+    it('renders voice lines, instructions, review and queue chips per item', async () => {
+      const el = await mount(audio);
+      const rows = Array.from(el.querySelectorAll('.r2m-item'));
       expect(rows.map((r) => text(r.querySelector('[data-testid=voice-line]')))).toEqual([
         'Voice: Deep',
         'Voice: Hardin Voice',
         'Voice: —',
       ]);
       expect(text(rows[1]!.querySelector('.r2m-item__instructions'))).toBe('dry');
-      expect(text(rows[1]!.querySelector('r2m-status-chip'))).toContain('Verify failed');
-      expect(text(rows[2]!.querySelector('r2m-status-chip'))).toContain('Processing');
+      expect(text(rows[1]!.querySelector('.r2m-status-chip'))).toContain('Verify failed');
+      expect(text(rows[2]!.querySelector('.r2m-status-chip'))).toContain('Processing');
       expect(rows[2]!.querySelector('.r2m-item__lock')).not.toBeNull();
     });
 
-    it('offers a player only for items with audio, busting the cache with audioVersion', () => {
-      const el = render(audio);
+    it('offers a player only for items with audio, busting the cache with audioVersion', async () => {
+      const el = await mount(audio);
       const players = el.querySelectorAll('r2m-audio-player');
       expect(players.length).toBe(1);
+      await players[0]!.rendered();
       expect(players[0]!.querySelector('audio')?.getAttribute('src')).toBe(
         '/workspace/dune/audio/d.wav?v=3',
       );
     });
 
-    it('the hub review replaces the REST one once reported', () => {
-      const el = render({
+    it('the hub review replaces the REST one once reported', async () => {
+      const el = await mount({
         ...audio,
         itemStatus: { ...audio.itemStatus, d: { audioVersion: 4, review: null } },
       });
-      expect(el.querySelectorAll('r2m-item')[1]!.querySelector('r2m-status-chip')).toBeNull();
+      expect(el.querySelectorAll('.r2m-item')[1]!.querySelector('.r2m-status-chip')).toBeNull();
     });
 
-    it('does not show the paragraph attribution chip, but keeps the paragraph menu (disabled while queued)', () => {
-      const el = render({ ...audio, paragraphStatus: { p1: { status: 'Queued' } } });
-      expect(el.querySelector('.r2m-paragraph__status r2m-status-chip')).toBeNull();
+    it('does not show the paragraph attribution chip or lock, but keeps the paragraph menu (disabled while queued)', async () => {
+      const el = await mount({ ...audio, paragraphStatus: { p1: { status: 'Queued' } } });
+      expect(el.querySelector('.r2m-paragraph__status .r2m-status-chip')).toBeNull();
       expect(el.querySelector('.r2m-paragraph__status .r2m-paragraph__lock')).toBeNull();
       const menu = el.querySelector<HTMLButtonElement>('.r2m-paragraph__menu button');
       expect(menu?.disabled).toBe(true);
     });
 
-    it('item chips are not interactive in Audio mode', () => {
-      expect(render(audio).querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    it('item chips are inert in Audio mode: the item selection checkbox is what the row offers', async () => {
+      const el = await mount({ ...audio, itemSelectable: true });
+      expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+      expect(el.querySelectorAll('.r2m-item input[type=checkbox]').length).toBe(3);
     });
   });
 
   describe('menus (ticket 11)', () => {
-    it('every row has a menu: the paragraph in all modes, the items in split modes', () => {
-      const read = render(ctx());
-      expect(read.querySelectorAll('r2m-node-menu').length).toBe(1);
-      const speakers = render(ctx({ mode: 'speakers' }));
-      expect(speakers.querySelectorAll('r2m-node-menu').length).toBe(4);
+    const triggers = (el: Element) =>
+      Array.from(el.querySelectorAll<HTMLButtonElement>('.r2m-node-menu__trigger'));
+
+    it('every row has a menu: the paragraph in all modes, the items in split modes', async () => {
+      const read = await mount(ctx());
+      expect(triggers(read).length).toBe(1);
+      expect(triggers(read)[0]!.getAttribute('aria-label')).toBe(
+        'Actions for Hardin leaned back. "The Encyclopedia comes first." "Then face Anacreon."',
+      );
+      const speakers = await mount(ctx({ mode: 'speakers' }));
+      expect(triggers(speakers).length).toBe(4);
+      expect(speakers.querySelectorAll('.r2m-item__menu .r2m-node-menu__trigger').length).toBe(3);
     });
 
-    it('a queued paragraph disables the paragraph menu and every item menu', () => {
-      const el = render(ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }));
-      const triggers = Array.from(el.querySelectorAll<HTMLButtonElement>('r2m-node-menu button'));
-      expect(triggers.length).toBe(4);
-      expect(triggers.every((b) => b.disabled)).toBe(true);
+    it('a queued paragraph disables the paragraph menu and every item menu', async () => {
+      const el = await mount(
+        ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }),
+      );
+      expect(triggers(el).length).toBe(4);
+      expect(triggers(el).every((b) => b.disabled)).toBe(true);
     });
 
-    it('an audio-queued item disables only its own menu', () => {
-      const el = render(
+    it('an audio-queued item disables only its own menu', async () => {
+      const el = await mount(
         ctx({ mode: 'audio', selectable: false, itemStatus: { d: { status: 'Queued' } } }),
       );
-      const items = Array.from(el.querySelectorAll('r2m-item'));
-      const disabled = items.map(
-        (i) => i.querySelector<HTMLButtonElement>('r2m-node-menu button')!.disabled,
+      const items = Array.from(el.querySelectorAll('.r2m-item'));
+      expect(
+        items.map((i) => i.querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!.disabled),
+      ).toEqual([false, true, false]);
+    });
+
+    it('a locked editor disables every menu', async () => {
+      const el = await mount(ctx({ mode: 'speakers', locked: true }));
+      expect(triggers(el).every((b) => b.disabled)).toBe(true);
+    });
+
+    /** The target the paragraph's trigger opens the shared menu for. */
+    async function paragraphTarget(context: RowContext, paragraph: ParagraphDto) {
+      const el = await mount(context, paragraph);
+      const opened: NodeMenuTarget[] = [];
+      el.addEventListener(NODE_MENU_OPEN, (e) =>
+        opened.push((e as CustomEvent<NodeMenuRequest>).detail.target),
       );
-      expect(disabled).toEqual([false, true, false]);
+      el.querySelector<HTMLButtonElement>('.r2m-paragraph__menu button')!.click();
+      return opened[0]!;
+    }
+
+    it('a narration-only paragraph is marked so in Read and Speakers modes, never in Audio', async () => {
+      expect((await paragraphTarget(ctx(), NARRATION_ONLY)).narrationOnly).toBe(true);
+      const speakers = ctx({ mode: 'speakers' });
+      expect((await paragraphTarget(speakers, NARRATION_ONLY)).narrationOnly).toBe(true);
+      const audio = ctx({ mode: 'audio', selectable: false });
+      expect((await paragraphTarget(audio, NARRATION_ONLY)).narrationOnly).toBeFalsy();
+      expect((await paragraphTarget(ctx(), PARAGRAPH)).narrationOnly).toBeFalsy();
     });
   });
 });

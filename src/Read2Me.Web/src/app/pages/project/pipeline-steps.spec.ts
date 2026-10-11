@@ -1,6 +1,7 @@
-import { ProjectStatusDto } from '@app/api';
-import { NodeStatusSummary } from '@app/live/live-messages';
-import { PipelineInput, StepId, derivePipeline } from './pipeline-steps';
+import { describe, expect, it } from 'bun:test';
+import type { ProjectStatusDto } from '@app/api';
+import type { NodeStatusSummary } from '@app/live/live-messages';
+import { type PipelineInput, type StepId, derivePipeline } from './pipeline-steps';
 
 const VOL = 'v1';
 

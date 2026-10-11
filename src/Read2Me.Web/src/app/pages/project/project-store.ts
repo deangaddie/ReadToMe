@@ -1,19 +1,19 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
-import { ProjectDetailDto, ProjectStatusDto, ProjectsApi } from '@app/api';
+import { type ProjectDetailDto, type ProjectStatusDto, ProjectsApi } from '@app/api';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
 import {
-  BookFacet,
-  ItemStatusEntry,
-  ItemStatusMessage,
-  LiveSnapshot,
-  NodeStatusMessage,
-  NodeStatusSummary,
-  ParagraphStatusEntry,
-  Receipt,
+  type BookFacet,
+  type ItemStatusEntry,
+  type ItemStatusMessage,
+  type LiveSnapshot,
+  type NodeStatusMessage,
+  type NodeStatusSummary,
+  type ParagraphStatusEntry,
+  type Receipt,
   hasFacet,
 } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
+import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ProjectTitles } from '@app/shell/project-titles';
-import { Subscription } from 'rxjs';
 import { Debounced, REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 
 export { REFETCH_DEBOUNCE_MS };
@@ -35,21 +35,22 @@ const DETAIL_FACETS: readonly BookFacet[] = ['Characters', 'Narrator', 'ProjectP
 type StatusMap<T> = Record<string, T | null>;
 
 /**
- * One project's state for every route under `/projects/{folder}` (ticket 09, design §9), provided
- * by the project shell. Holds the detail and the `/status` bootstrap, keeps the node and item
- * status maps current from hub deltas, and turns receipts into refetches — never into entity
- * patches (spec D6): a receipt whose facets move a count, or whose revision skips one, refetches
- * `/status`; one that touches the narrator or project policy refetches the detail.
+ * One project's state for every route under `/projects/{folder}` (design §9), provided by the
+ * project shell. Holds the detail and the `/status` bootstrap, keeps the node and item status maps
+ * current from hub deltas, and turns receipts into refetches — never into entity patches (spec D6):
+ * a receipt whose facets move a count, or whose revision skips one, refetches `/status`; one that
+ * touches the narrator or project policy refetches the detail.
  */
-@Injectable()
 export class ProjectStore {
-  private readonly api = inject(ProjectsApi);
-  private readonly live = inject(LiveService);
-  private readonly titles = inject(ProjectTitles);
+  private readonly api = use(ProjectsApi);
+  private readonly live = use(LiveService);
+  private readonly titles = use(ProjectTitles);
 
-  private subscriptions: Subscription[] = [];
+  private subscriptions: Unsubscribe[] = [];
   private readonly statusRefetch = new Debounced(() => this.refreshStatus());
   private readonly detailRefetch = new Debounced(() => this.refreshDetail());
+  /** The highest snapshot revision that arrived before `/status` answered, compared once it does. */
+  private heldSnapshot: number | null = null;
 
   private readonly _folder = signal<string | null>(null);
   private readonly _detail = signal<ProjectDetailDto | null>(null);
@@ -90,12 +91,13 @@ export class ProjectStore {
     this._detail.set(null);
     this._status.set(null);
     this._error.set(null);
+    this.heldSnapshot = null;
 
     this.subscriptions = [
-      this.live.on('nodeStatus').subscribe((m) => this.applyNodeStatus(m)),
-      this.live.on('itemStatus').subscribe((m) => this.applyItemStatus(m)),
-      this.live.receipts$(folder).subscribe((r) => this.onReceipt(r)),
-      this.live.resynced$.subscribe((s) => this.onResync(s)),
+      this.live.on('nodeStatus', (m) => this.applyNodeStatus(m)),
+      this.live.on('itemStatus', (m) => this.applyItemStatus(m)),
+      this.live.receipts(folder, (r) => this.onReceipt(r)),
+      this.live.resynced((s) => this.onResync(s)),
     ];
     void this.live.joinProject(folder).then(() => this.seedItemsFromLive());
 
@@ -117,7 +119,7 @@ export class ProjectStore {
 
   /** Leaves the group and drops pending refetches. Safe to call when nothing is open. */
   close(): void {
-    for (const s of this.subscriptions) s.unsubscribe();
+    for (const unsubscribe of this.subscriptions) unsubscribe();
     this.subscriptions = [];
     this.clearTimers();
     const folder = this._folder();
@@ -150,6 +152,9 @@ export class ProjectStore {
     this._revision.set(status.revision);
     this._nodes.set(status.nodes);
     this._folderAudioRemaining.set(status.audio.remaining);
+    const held = this.heldSnapshot;
+    this.heldSnapshot = null;
+    if (held !== null && held > status.revision) this.scheduleStatus();
   }
 
   private applyNodeStatus(m: NodeStatusMessage): void {
@@ -179,6 +184,12 @@ export class ProjectStore {
     const project = this.projectIn(snapshot.projects);
     if (!project) return;
     this.seedItems(project.paragraphs, project.items);
+    // Before `/status` answers there is no baseline to compare with (the revision still holds the
+    // previous project's, or 0): hold the snapshot rather than read `/status` twice on every open.
+    if (!this._status()) {
+      this.heldSnapshot = Math.max(this.heldSnapshot ?? project.revision, project.revision);
+      return;
+    }
     if (project.revision > this._revision()) this.scheduleStatus();
   }
 

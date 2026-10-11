@@ -1,4 +1,4 @@
-import { CharacterSummaryDto, Guid } from '@app/api';
+import type { CharacterSummaryDto, Guid } from '@app/api';
 
 /**
  * The merge dialog's rules (research §4 "Merge"): the survivor is any other non-narrator
@@ -31,8 +31,7 @@ export function validateMerge(
 ): string | null {
   if (!form.survivorId) return 'Select a character to merge into.';
   if (form.survivorId === mergedId) return 'A character cannot be merged into itself.';
-  if (!candidates.some((c) => c.id === form.survivorId))
-    return 'Select a character to merge into.';
+  if (!candidates.some((c) => c.id === form.survivorId)) return 'Select a character to merge into.';
   return null;
 }
 
@@ -46,7 +45,9 @@ export function lostVoicesWarning(
 ): string | null {
   if (voiceNames.length === 0) return null;
   const goes =
-    voiceNames.length === 1 ? 'its voice goes with it' : `its ${voiceNames.length} voices go with it`;
+    voiceNames.length === 1
+      ? 'its voice goes with it'
+      : `its ${voiceNames.length} voices go with it`;
   return (
     `${mergedName} is deleted by this merge, and ${goes} — including any generated audio and ` +
     `voice rules: ${[...voiceNames].sort((a, b) => a.localeCompare(b)).join(', ')}. ` +

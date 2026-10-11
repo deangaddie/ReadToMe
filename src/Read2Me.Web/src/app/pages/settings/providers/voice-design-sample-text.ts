@@ -1,122 +1,28 @@
-import { TextFieldModule } from '@angular/cdk/text-field';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { VoiceDesignSampleText, VoiceDesignSettingsApi, toApiError } from '@app/api';
+import { html, nothing } from 'lit-html';
+import { type VoiceDesignSampleText, VoiceDesignSettingsApi, toApiError } from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
 import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { field } from '@app/ui/field';
+import { ToastService } from '@app/ui/toast';
 
 /**
- * The sentence every designed voice speaks (ticket 22): Save is dirty-gated, Reset to default only
- * refills the draft — and saving the default text stores "no override".
+ * The sentence every designed voice speaks (native-web 35): Save is dirty-gated, Reset to default only
+ * refills the draft — and saving the default text stores "no override". Reloads on the hub's
+ * `settingsChanged { area: 'voice-design' }` while connected; `dirty()` tells the page whether
+ * edits would be lost.
  */
-@Component({
-  selector: 'app-voice-design-sample-text',
-  imports: [MatButtonModule, MatFormFieldModule, MatInputModule, TextFieldModule],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h2 class="sample__title">Sample text</h2>
-    <p class="sample__note">The sentence every designed voice speaks.</p>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="sample__text">
-      <mat-label>Sample text</mat-label>
-      <textarea
-        matInput
-        cdkTextareaAutosize
-        cdkAutosizeMinRows="3"
-        cdkAutosizeMaxRows="10"
-        data-field="sampleText"
-        [disabled]="stored() === null || saving()"
-        [value]="draft()"
-        (input)="draft.set($any($event.target).value)"
-      ></textarea>
-      @if (stored()) {
-        <mat-hint>Kept short so every designed voice lands within the Reference Limit.</mat-hint>
-      }
-      @if (stored(); as s) {
-        <mat-hint align="end" data-testid="sample-text-count" [class.sample__over]="overLimit()">
-          {{ draft().length }} / {{ s.maxLength }}
-        </mat-hint>
-      }
-    </mat-form-field>
-    <div class="sample__actions">
-      <button
-        mat-flat-button
-        type="button"
-        data-action="save-sample-text"
-        [disabled]="!dirty() || overLimit() || saving()"
-        (click)="save()"
-      >
-        Save
-      </button>
-      <button
-        mat-button
-        type="button"
-        data-action="reset-sample-text"
-        [disabled]="isDefault() || saving()"
-        (click)="resetToDefault()"
-      >
-        Reset to default
-      </button>
-    </div>
-    @if (error()) {
-      <p class="sample__error" role="alert">{{ error() }}</p>
-    }
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-3);
-      padding: var(--r2m-space-4);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-lg);
-      background: var(--r2m-surface);
-    }
-    .sample__title {
-      margin: 0;
-      font-size: var(--r2m-text-lg);
-      font-weight: 600;
-    }
-    .sample__note {
-      margin: 0;
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .sample__text {
-      width: 100%;
-    }
-    .sample__actions {
-      display: flex;
-      gap: var(--r2m-space-2);
-    }
-    .sample__over {
-      color: var(--r2m-status-error);
-    }
-    .sample__error {
-      margin: 0;
-      color: var(--r2m-status-error);
-    }
-  `,
-})
-export class VoiceDesignSampleTextCard {
-  private readonly api = inject(VoiceDesignSettingsApi);
-  private readonly live = inject(LiveService);
-  private readonly toast = inject(ToastService);
+export class VoiceDesignSampleTextCard extends R2mElement {
+  private readonly api = use(VoiceDesignSettingsApi);
+  private readonly live = use(LiveService);
+  private readonly toast = use(ToastService);
 
   /** Null until the first load lands. */
-  protected readonly stored = signal<VoiceDesignSampleText | null>(null);
-  protected readonly draft = signal('');
-  protected readonly saving = signal(false);
-  protected readonly error = signal<string | null>(null);
+  readonly stored = signal<VoiceDesignSampleText | null>(null);
+  readonly draft = signal('');
+  readonly saving = signal(false);
+  readonly error = signal<string | null>(null);
 
   private readonly effective = computed(() => {
     const stored = this.stored();
@@ -124,20 +30,77 @@ export class VoiceDesignSampleTextCard {
   });
   readonly dirty = computed(() => this.stored() !== null && this.draft() !== this.effective());
   /** Over the host's cap: the host would refuse it, so Save does not offer it. */
-  protected readonly overLimit = computed(() => {
+  readonly overLimit = computed(() => {
     const stored = this.stored();
     return stored !== null && this.draft().length > stored.maxLength;
   });
-  protected readonly isDefault = computed(() => this.draft() === (this.stored()?.default ?? ''));
+  readonly isDefault = computed(() => this.draft() === (this.stored()?.default ?? ''));
 
-  constructor() {
+  protected override connected(): void {
+    this.classList.add('sample');
     void this.load();
-    this.live
-      .on('settingsChanged')
-      .pipe(takeUntilDestroyed(inject(DestroyRef)))
-      .subscribe((m) => {
+    this.onDisconnect(
+      this.live.on('settingsChanged', (m) => {
         if (m.area === 'voice-design') void this.load();
-      });
+      }),
+    );
+  }
+
+  protected template() {
+    const stored = this.stored();
+    const saving = this.saving();
+    const error = this.error();
+    const over = this.overLimit();
+    return html`
+      <h2 class="sample__title">Sample text</h2>
+      <p class="sample__note">The sentence every designed voice speaks.</p>
+      ${field(
+        {
+          id: 'voice-design-sample-text',
+          label: 'Sample text',
+          cls: 'sample__text',
+          hint: stored
+            ? html`<span class="sample__hint">
+                <span>Kept short so every designed voice lands within the Reference Limit.</span>
+                <span data-testid="sample-text-count" class=${over ? 'sample__over' : ''}
+                  >${this.draft().length} / ${stored.maxLength}</span
+                >
+              </span>`
+            : null,
+        },
+        (a) =>
+          html`<textarea
+            id=${a.id}
+            aria-describedby=${a.describedBy}
+            aria-invalid=${a.invalid}
+            data-field="sampleText"
+            ?disabled=${stored === null || saving}
+            .value=${this.draft()}
+            @input=${(e: Event) => this.draft.set((e.target as HTMLTextAreaElement).value)}
+          ></textarea>`,
+      )}
+      <div class="sample__actions">
+        <button
+          type="button"
+          class="r2m-button r2m-button--filled"
+          data-action="save-sample-text"
+          ?disabled=${!this.dirty() || over || saving}
+          @click=${() => void this.save()}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          class="r2m-button"
+          data-action="reset-sample-text"
+          ?disabled=${this.isDefault() || saving}
+          @click=${() => this.resetToDefault()}
+        >
+          Reset to default
+        </button>
+      </div>
+      ${error ? html`<p class="sample__error" role="alert">${error}</p>` : nothing}
+    `;
   }
 
   private async load(): Promise<void> {
@@ -155,11 +118,11 @@ export class VoiceDesignSampleTextCard {
     this.error.set(null);
   }
 
-  protected resetToDefault(): void {
+  private resetToDefault(): void {
     this.draft.set(this.stored()?.default ?? '');
   }
 
-  protected async save(): Promise<void> {
+  private async save(): Promise<void> {
     this.saving.set(true);
     try {
       this.accept(await this.api.setSampleText(this.draft()), true);
@@ -169,5 +132,12 @@ export class VoiceDesignSampleTextCard {
     } finally {
       this.saving.set(false);
     }
+  }
+}
+define('r2m-voice-design-sample-text', VoiceDesignSampleTextCard);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-voice-design-sample-text': VoiceDesignSampleTextCard;
   }
 }

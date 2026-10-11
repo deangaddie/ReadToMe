@@ -1,4 +1,3 @@
-import { Type } from '@angular/core';
 import {
   ParagraphTtsServiceType,
   ParagraphTtsSettingsApi,
@@ -10,11 +9,15 @@ import {
   VoiceDesignServiceType,
   VoiceDesignSettingsApi,
 } from '@app/api';
-import { SettingsField, SettingsValues } from '@app/ui/settings-form/settings-form';
-import { ProviderConfig, ProviderForm } from './provider-form';
+import type { IconName } from '@app/ui/icons';
+import type { SettingsField, SettingsValues } from '@app/ui/settings-form';
+import type { ProviderConfig, ProviderForm } from './provider-form';
 
 export type ProviderAreaKey =
-  'paragraph-tts' | 'voice-design' | 'transcription' | 'semantic-similarity';
+  | 'paragraph-tts'
+  | 'voice-design'
+  | 'transcription'
+  | 'semantic-similarity';
 
 /** The part of an area's `SettingsApi` the shared page, store and editor use. */
 export interface ProviderAreaApi {
@@ -43,10 +46,10 @@ export interface ProviderArea {
   key: ProviderAreaKey;
   title: string;
   subtitle: string;
-  icon: string;
+  icon: IconName;
   /** "No {noun} configurations yet". */
   noun: string;
-  api: Type<ProviderAreaApi>;
+  api: new () => ProviderAreaApi;
   types: ProviderTypeOption[];
   /** Only a TTS config has text-processing steps and substitutions. */
   hasTextProcessing: boolean;
@@ -98,7 +101,11 @@ export const PARAGRAPH_TTS_AREA: ProviderArea = {
   noun: 'TTS',
   api: ParagraphTtsSettingsApi,
   types: [
-    { value: ParagraphTtsServiceType.VoxCpm2, label: 'VoxCpm2', urlExample: 'http://localhost:8004' },
+    {
+      value: ParagraphTtsServiceType.VoxCpm2,
+      label: 'VoxCpm2',
+      urlExample: 'http://localhost:8004',
+    },
     {
       value: ParagraphTtsServiceType.Chatterbox,
       label: 'Chatterbox',
@@ -129,7 +136,11 @@ export const VOICE_DESIGN_AREA: ProviderArea = {
   noun: 'voice design',
   api: VoiceDesignSettingsApi,
   types: [
-    { value: VoiceDesignServiceType.VoxCpm2, label: 'VoxCpm2', urlExample: 'http://localhost:8004' },
+    {
+      value: VoiceDesignServiceType.VoxCpm2,
+      label: 'VoxCpm2',
+      urlExample: 'http://localhost:8004',
+    },
     { value: VoiceDesignServiceType.Qwen3, label: 'Qwen3', urlExample: 'http://localhost:8004' },
     { value: VoiceDesignServiceType.Breeze, label: 'Breeze', urlExample: 'http://localhost:8004' },
   ],
@@ -202,6 +213,14 @@ export function providerType(area: ProviderArea, type: number): ProviderTypeOpti
     }
   );
 }
+
+/** The page element of each area: the routes name it and the page module defines it. */
+export const PROVIDER_PAGE_TAGS = {
+  'paragraph-tts': 'r2m-tts-settings-page',
+  'voice-design': 'r2m-voice-design-settings-page',
+  transcription: 'r2m-transcription-settings-page',
+  'semantic-similarity': 'r2m-similarity-settings-page',
+} as const satisfies Record<ProviderAreaKey, string>;
 
 export const PROVIDER_AREAS: Record<ProviderAreaKey, ProviderArea> = {
   'paragraph-tts': PARAGRAPH_TTS_AREA,

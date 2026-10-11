@@ -5,7 +5,7 @@
  * response content (every endpoint returns `Results.Ok(...)` untyped), so `schema.d.ts` cannot
  * type what comes back. Response DTOs are therefore hand-written here, mirrored from the C# records
  * in `src/Read2Me.App/Api/*.cs`, and every shape that *does* exist in the generated schema is pinned
- * to it in `schema-pins.ts` so a renamed or removed field fails `npm run typecheck`.
+ * to it in `schema-pins.ts` so a renamed or removed field fails `bun run typecheck`.
  *
  * Conventions: the host serialises with Minimal API defaults: camelCase names, `Guid` as string,
  * entity enums as their integer value, `ToString()`-ed enums as their member name.
@@ -258,6 +258,32 @@ export interface BulkAssignPreviewDto {
   characterItems: number;
 }
 
+/** Where a Release narration reaches: no whole-book scope (`NarrationReleaseScope`). */
+export type NarrationReleaseScope = 'Part' | 'Chapter' | 'Paragraph';
+
+/** `POST …/narration/release-preview` body. */
+export interface NarrationReleasePreviewRequest {
+  scope: NarrationReleaseScope;
+  nodeId: Guid;
+}
+
+/**
+ * What a ReleaseNarration would write: paragraphs it releases, items whose audio it discards, and
+ * for a Chapter or Part the speech markers that passed (count descending, then marker; empty for a
+ * Paragraph and when nothing passes).
+ */
+export interface NarrationReleasePreviewDto {
+  paragraphs: number;
+  itemsWithAudio: number;
+  speechMarkers: SpeechMarkerCountDto[];
+}
+
+/** A speech marker as written (`Q.`, `Seldon:`, `—…—`) and how many paragraphs it releases. */
+export interface SpeechMarkerCountDto {
+  marker: string;
+  paragraphs: number;
+}
+
 export interface CharacterAliasDto {
   id: Guid;
   name: string;
@@ -275,6 +301,8 @@ export interface BookOverviewDto {
   characters: CharacterDto[];
   totalParts: number;
   totalChapters: number;
+  /** The book revision the read ran against: the reader's baseline for receipts and snapshots. */
+  revision: number;
 }
 
 // ---- Commands (`CommandEndpoints.cs`) --------------------------------------------------------------
@@ -888,7 +916,13 @@ export interface AiServiceDto {
 }
 
 export type AiServiceStatus =
-  'NotFound' | 'Stopped' | 'Starting' | 'Ready' | 'Recovering' | 'Down' | 'Unknown';
+  | 'NotFound'
+  | 'Stopped'
+  | 'Starting'
+  | 'Ready'
+  | 'Recovering'
+  | 'Down'
+  | 'Unknown';
 
 export interface AiServiceStatusDto {
   name: string;
@@ -1035,7 +1069,12 @@ export interface ApplyPreviewRequest {
 
 /** `Ok` is the only status that carries a program; the rest explain why there is nothing to do. */
 export type BookEditPlanStatus =
-  'Ok' | 'NoLlmConfigured' | 'Unsupported' | 'ServiceUnavailable' | 'Failed' | 'NoTargets';
+  | 'Ok'
+  | 'NoLlmConfigured'
+  | 'Unsupported'
+  | 'ServiceUnavailable'
+  | 'Failed'
+  | 'NoTargets';
 
 /** `TransformKind`: only `Llm` plans send a request per item, so only they offer per-row retries. */
 export type BookEditTransformKind = 'RegexReplace' | 'SetTemplate' | 'ChangeCase' | 'Llm';

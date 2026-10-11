@@ -1,5 +1,5 @@
-import { CharacterDto, NarratorDto } from '@app/api';
-import { SpeakerRosterEntry } from '@app/ui/speaker-menu/speaker-menu';
+import type { CharacterDto, NarratorDto } from '@app/api';
+import type { SpeakerRosterEntry } from '@app/ui/speaker-menu';
 
 /**
  * The roster the speaker menu offers (ticket 12, research §3 "Speaker chip menu"): the narrator

@@ -1,12 +1,10 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-
 import type { AppTheme, ThemeSelection, ThemeSelectionUpdate } from './dtos';
 
-/** Everything the host exposes under `/api/settings/themes` (ticket 04). */
-@Injectable({ providedIn: 'root' })
+/** Everything the host exposes under `/api/settings/themes`. */
 export class ThemesApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
   private readonly base = '/api/settings/themes';
 
   list(): Promise<AppTheme[]> {

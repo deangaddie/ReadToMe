@@ -1,7 +1,7 @@
-import { ConfirmOptions } from '@app/ui/confirm-dialog/confirm-dialog';
-import { TextPromptOptions } from '@app/ui/text-prompt-dialog/text-prompt-dialog';
-import { MenuDialogs, commandFor, displayName } from './node-menu-commands';
-import { NodeMenuKind, NodeMenuTarget } from './node-menu-entries';
+import { describe, expect, it } from 'bun:test';
+import type { ConfirmOptions, TextPromptOptions } from '@app/ui/dialogs';
+import { type MenuDialogs, commandFor, displayName } from './node-menu-commands';
+import type { NodeMenuKind, NodeMenuTarget } from './node-menu-entries';
 
 function target(kind: NodeMenuKind, overrides: Partial<NodeMenuTarget> = {}): NodeMenuTarget {
   return { kind, id: 'n1', text: 'Old', isFirst: false, isLast: false, ...overrides };
@@ -33,12 +33,12 @@ describe('commandFor', () => {
       const { fake, asked } = dialogs({ text: 'New' });
       const command = await commandFor('edit-title', target(kind), fake);
       expect(asked.text[0]).toMatchObject({ title: `Edit ${kind} title`, initial: 'Old', required: true });
-      expect(command).toEqual({ type, [key]: 'n1', title: 'New' });
+      expect<unknown>(command).toEqual({ type, [key]: 'n1', title: 'New' });
     });
 
     it('sends nothing when cancelled or unchanged', async () => {
-      expect(await commandFor('edit-title', target('chapter'), dialogs({ text: null }).fake)).toBeNull();
-      expect(await commandFor('edit-title', target('chapter'), dialogs({ text: 'Old' }).fake)).toBeNull();
+      expect<unknown>(await commandFor('edit-title', target('chapter'), dialogs({ text: null }).fake)).toBeNull();
+      expect<unknown>(await commandFor('edit-title', target('chapter'), dialogs({ text: 'Old' }).fake)).toBeNull();
     });
   });
 
@@ -47,11 +47,11 @@ describe('commandFor', () => {
       const { fake, asked } = dialogs({ text: 'Rewritten.' });
       const command = await commandFor('edit-text', target('item'), fake);
       expect(asked.text[0]).toMatchObject({ multiline: true, required: true, initial: 'Old' });
-      expect(command).toEqual({ type: 'UpdateParagraphItemText', itemId: 'n1', text: 'Rewritten.' });
+      expect<unknown>(command).toEqual({ type: 'UpdateParagraphItemText', itemId: 'n1', text: 'Rewritten.' });
     });
 
     it('sends nothing when unchanged', async () => {
-      expect(await commandFor('edit-text', target('item'), dialogs({ text: 'Old' }).fake)).toBeNull();
+      expect<unknown>(await commandFor('edit-text', target('item'), dialogs({ text: 'Old' }).fake)).toBeNull();
     });
   });
 
@@ -62,7 +62,7 @@ describe('commandFor', () => {
       ['paragraph', 'SplitAtParagraph', 'paragraphId', 'newChapterTitle', 'chapter'],
     ] as const)('%s asks for the new title, blank allowed', async (kind, type, key, titleKey, created) => {
       const { fake, asked } = dialogs({ text: '' });
-      expect(await commandFor('split', target(kind), fake)).toEqual({
+      expect<unknown>(await commandFor('split', target(kind), fake)).toEqual({
         type,
         [key]: 'n1',
         [titleKey]: null,
@@ -70,17 +70,17 @@ describe('commandFor', () => {
       expect(asked.text[0]).toMatchObject({ title: `New ${created} title` });
       expect(asked.text[0]!.required).toBeFalsy();
 
-      expect(await commandFor('split', target(kind), dialogs({ text: 'Two' }).fake)).toEqual({
+      expect<unknown>(await commandFor('split', target(kind), dialogs({ text: 'Two' }).fake)).toEqual({
         type,
         [key]: 'n1',
         [titleKey]: 'Two',
       });
-      expect(await commandFor('split', target(kind), dialogs({ text: null }).fake)).toBeNull();
+      expect<unknown>(await commandFor('split', target(kind), dialogs({ text: null }).fake)).toBeNull();
     });
 
     it('item splits the paragraph without a prompt', async () => {
       const { fake, asked } = dialogs();
-      expect(await commandFor('split', target('item'), fake)).toEqual({
+      expect<unknown>(await commandFor('split', target('item'), fake)).toEqual({
         type: 'SplitAtItem',
         itemId: 'n1',
       });
@@ -97,12 +97,12 @@ describe('commandFor', () => {
       ['item', 'MergeParagraphItem', 'itemId'],
     ] as const)('%s merges in the chosen direction', async (kind, type, key) => {
       const { fake } = dialogs();
-      expect(await commandFor('merge-previous', target(kind), fake)).toEqual({
+      expect<unknown>(await commandFor('merge-previous', target(kind), fake)).toEqual({
         type,
         [key]: 'n1',
         direction: 'Previous',
       });
-      expect(await commandFor('merge-next', target(kind), fake)).toEqual({
+      expect<unknown>(await commandFor('merge-next', target(kind), fake)).toEqual({
         type,
         [key]: 'n1',
         direction: 'Next',
@@ -113,19 +113,19 @@ describe('commandFor', () => {
   describe('insert', () => {
     it('item text is required and anchored at the item', async () => {
       const { fake, asked } = dialogs({ text: 'New line.' });
-      expect(await commandFor('insert-after', target('item'), fake)).toEqual({
+      expect<unknown>(await commandFor('insert-after', target('item'), fake)).toEqual({
         type: 'InsertParagraphItem',
         anchorItemId: 'n1',
         position: 'After',
         text: 'New line.',
       });
       expect(asked.text[0]).toMatchObject({ title: 'Insert item after', required: true, multiline: true });
-      expect(await commandFor('insert-before', target('item'), dialogs({ text: null }).fake)).toBeNull();
+      expect<unknown>(await commandFor('insert-before', target('item'), dialogs({ text: null }).fake)).toBeNull();
     });
 
     it('pauses post without a prompt', async () => {
       const { fake, asked } = dialogs();
-      expect(await commandFor('pause-before:ChapterPause', target('item'), fake)).toEqual({
+      expect<unknown>(await commandFor('pause-before:ChapterPause', target('item'), fake)).toEqual({
         type: 'InsertPauseParagraph',
         anchorItemId: 'n1',
         position: 'Before',
@@ -145,7 +145,7 @@ describe('commandFor', () => {
       ['pause-paragraph', 'DeleteParagraph', 'paragraphId', false],
     ] as const)('%s confirms destructively and mentions contents only for containers', async (kind, type, key, contents) => {
       const { fake, asked } = dialogs({ confirm: true });
-      expect(await commandFor('delete', target(kind), fake)).toEqual({ type, [key]: 'n1' });
+      expect<unknown>(await commandFor('delete', target(kind), fake)).toEqual({ type, [key]: 'n1' });
       const confirm = asked.confirm[0]!;
       expect(confirm.destructive).toBe(true);
       expect(confirm.message).toContain('Delete “Old”?');
@@ -153,7 +153,7 @@ describe('commandFor', () => {
     });
 
     it('sends nothing when declined', async () => {
-      expect(await commandFor('delete', target('chapter'), dialogs({ confirm: false }).fake)).toBeNull();
+      expect<unknown>(await commandFor('delete', target('chapter'), dialogs({ confirm: false }).fake)).toBeNull();
     });
   });
 

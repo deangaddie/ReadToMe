@@ -1,69 +1,110 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
-import { MatIconModule } from '@angular/material/icon';
-import { Router } from '@angular/router';
-import { ProjectSummary } from '@app/api';
-import { toApiError } from '@app/api/api-client';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { EmptyState } from '@app/ui/empty-state/empty-state';
-import { PageHeader } from '@app/ui/page-header/page-header';
-import { ProjectCard } from '@app/ui/project-card/project-card';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { NewProjectDialog, NewProjectResult } from './new-project-dialog';
+import { html, nothing } from 'lit-html';
+import { repeat } from 'lit-html/directives/repeat.js';
+import { type ProjectSummary, toApiError } from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import { Router } from '@app/core/router';
+import { use } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import { adoptStyles } from '@app/core/styles';
+import { ConfirmService } from '@app/ui/dialogs';
+import { emptyState, icon, statusChip } from '@app/ui/partials';
+import { projectCard } from '@app/ui/project-card';
+import { ToastService } from '@app/ui/toast';
+import { openNewProjectDialog } from './new-project-dialog';
 import { ProjectsStore } from './projects-store';
+import projectsCss from './projects-page.css' with { type: 'text' };
+
+adoptStyles(projectsCss);
 
 /** Skeleton cards drawn while the first load is in flight. */
-const SKELETON_COUNT = 6;
+const SKELETONS = [0, 1, 2, 3, 4, 5];
 
 /**
- * `/projects` (design §6.1, ticket 08): the shelf. Card grid over {@link ProjectsStore}, New project
+ * `/projects` (design §6.1): the shelf. Card grid over {@link ProjectsStore}, the New project
  * dialog, and delete with a destructive confirm. Opening a card navigates to the overview.
  */
-@Component({
-  selector: 'app-projects-page',
-  imports: [MatButtonModule, MatIconModule, PageHeader, EmptyState, StatusChip, ProjectCard],
-  templateUrl: './projects-page.html',
-  styleUrl: './projects-page.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-})
-export class ProjectsPage {
-  readonly store = inject(ProjectsStore);
-  private readonly router = inject(Router);
-  private readonly dialog = inject(MatDialog);
-  private readonly confirm = inject(ConfirmService);
-  private readonly toast = inject(ToastService);
+export class ProjectsPage extends R2mElement {
+  private readonly store = use(ProjectsStore);
+  private readonly router = use(Router);
+  private readonly confirm = use(ConfirmService);
+  private readonly toast = use(ToastService);
 
-  readonly projects = this.store.projects;
-  readonly skeletons = Array.from({ length: SKELETON_COUNT }, (_, i) => i);
   /** Folder of the project whose delete is in flight; its card is disabled meanwhile. */
-  readonly deleting = signal<string | null>(null);
+  private readonly deleting = signal<string | null>(null);
 
-  constructor() {
+  protected override connected(): void {
+    this.classList.add('projects');
     // Refresh on every visit; a failure surfaces through the store's error signal, not a toast.
     void this.store.load().catch(() => undefined);
   }
 
-  showSkeleton(): boolean {
-    return this.store.loading() && !this.store.loaded();
+  protected template() {
+    const error = this.store.error();
+    const projects = this.store.projects();
+    const newButton = html`<button
+      type="button"
+      class="r2m-button r2m-button--filled projects__new"
+      @click=${() => void this.create()}
+    >
+      ${icon('add')} New project
+    </button>`;
+    return html`
+      <header class="r2m-page-header projects__header">
+        <h1 class="r2m-page-header__title">Projects</h1>
+        <p class="r2m-page-header__subtitle">Every audiobook in the workspace.</p>
+        <span class="projects__actions">${newButton}</span>
+      </header>
+
+      ${
+        error
+          ? statusChip({ status: 'error', label: `Projects could not be loaded: ${error}` })
+          : nothing
+      }
+      ${
+        this.store.loading() && !this.store.loaded()
+          ? html`<div class="projects__grid" aria-busy="true" aria-label="Loading projects">
+              ${SKELETONS.map(
+                () => html`<div class="projects__skeleton">
+                  <div class="projects__skeleton-cover"></div>
+                  <div class="projects__skeleton-line projects__skeleton-line--title"></div>
+                  <div class="projects__skeleton-line"></div>
+                </div>`,
+              )}
+            </div>`
+          : projects.length === 0 && !error
+            ? emptyState(
+                {
+                  icon: 'library_books',
+                  headline: 'No projects yet',
+                  hint: 'Import an epub or text file to create your first audiobook project.',
+                },
+                newButton,
+              )
+            : html`<div class="projects__grid">
+                ${repeat(
+                  projects,
+                  (p) => p.folderName,
+                  (p) =>
+                    projectCard(p, {
+                      onOpen: () => this.open(p),
+                      onDelete: () => void this.delete(p),
+                      deleting: this.deleting() === p.folderName,
+                    }),
+                )}
+              </div>`
+      }
+    `;
   }
 
   open(project: ProjectSummary): void {
-    void this.router.navigate(['/projects', project.folderName]);
+    this.router.navigate(`projects/${encodeURIComponent(project.folderName)}`);
   }
 
   async create(): Promise<void> {
-    const ref = this.dialog.open<NewProjectDialog, void, NewProjectResult>(NewProjectDialog, {
-      autoFocus: 'input',
-      maxWidth: '95vw',
-    });
-    const folder = await new Promise<NewProjectResult | undefined>((resolve) =>
-      ref.afterClosed().subscribe((r) => resolve(r)),
-    );
+    const folder = await openNewProjectDialog();
     if (!folder) return;
     this.toast.success('Project created');
-    void this.router.navigate(['/projects', folder]);
+    this.router.navigate(`projects/${encodeURIComponent(folder)}`);
   }
 
   async delete(project: ProjectSummary): Promise<void> {
@@ -85,5 +126,12 @@ export class ProjectsPage {
     } finally {
       this.deleting.set(null);
     }
+  }
+}
+define('r2m-projects-page', ProjectsPage);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-projects-page': ProjectsPage;
   }
 }

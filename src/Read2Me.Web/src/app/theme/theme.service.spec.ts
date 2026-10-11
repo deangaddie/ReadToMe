@@ -1,7 +1,7 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
-import { AppTheme } from '@app/api';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { AppTheme } from '@app/api';
+import { resetServices } from '@app/core/services';
+import { FakeApi, problem } from '../../testing/fake-api';
 import { ThemeService } from './theme.service';
 
 const light: AppTheme = {
@@ -36,7 +36,7 @@ function installMatchMedia(initialDark: boolean): FakeMediaQuery {
       handler?.({ matches });
     },
   };
-  Object.defineProperty(window, 'matchMedia', {
+  Object.defineProperty(globalThis, 'matchMedia', {
     configurable: true,
     writable: true,
     value: () => ({
@@ -48,32 +48,35 @@ function installMatchMedia(initialDark: boolean): FakeMediaQuery {
   return fake;
 }
 
+const THEMES = '/api/settings/themes';
+const SELECTION = '/api/settings/themes/selection';
+
 describe('ThemeService', () => {
-  let http: HttpTestingController;
+  let api: FakeApi;
   let media: FakeMediaQuery;
 
   beforeEach(() => {
+    resetServices();
     media = installMatchMedia(false);
     document.getElementById('r2m-theme')?.remove();
     delete document.documentElement.dataset['theme'];
-    TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
-    });
-    http = TestBed.inject(HttpTestingController);
+    api = new FakeApi();
+    api.install();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    document.getElementById('r2m-theme')?.remove();
+    delete document.documentElement.dataset['theme'];
+  });
 
   async function boot(selection: {
     selectedThemeId: number | null;
     followSystemPreference: boolean;
   }) {
-    const service = TestBed.inject(ThemeService);
-    const loading = service.load();
-    http.expectOne('/api/settings/themes').flush([light, dark, orange]);
-    http.expectOne('/api/settings/themes/selection').flush(selection);
-    await loading;
-    TestBed.tick();
+    api.on('GET', THEMES, [light, dark, orange]);
+    api.on('GET', SELECTION, selection);
+    const service = new ThemeService();
+    await service.load();
     return service;
   }
 
@@ -86,7 +89,7 @@ describe('ThemeService', () => {
 
     expect(service.effective()?.name).toBe('Orange');
     expect(document.documentElement.dataset['theme']).toBe('dark');
-    expect(styleText()).toContain('--mat-sys-primary: #ff9900;');
+    expect(styleText()).toContain('--r2m-accent: #ff9900;');
     expect(service.preference()).toBe('dark');
   });
 
@@ -97,67 +100,70 @@ describe('ThemeService', () => {
     expect(service.preference()).toBe('system');
 
     media.fire(true);
-    TestBed.tick();
 
     expect(service.effective()?.name).toBe('Dark');
     expect(document.documentElement.dataset['theme']).toBe('dark');
-    expect(styleText()).toContain('--mat-sys-primary: #7c5cbf;');
+    expect(styleText()).toContain('--r2m-accent: #7c5cbf;');
   });
 
   it('applyTheme writes the selection and turns follow-system off', async () => {
     const service = await boot({ selectedThemeId: null, followSystemPreference: true });
+    api.on('PUT', SELECTION, (body) => body);
 
-    const applying = service.applyTheme(orange.id);
-    const req = http.expectOne('/api/settings/themes/selection');
-    expect(req.request.method).toBe('PUT');
-    expect(req.request.body).toEqual({ selectedThemeId: orange.id, followSystemPreference: false });
-    req.flush({ selectedThemeId: orange.id, followSystemPreference: false });
-    await applying;
-    TestBed.tick();
+    await service.applyTheme(orange.id);
 
+    expect(api.calls('PUT', SELECTION).map((r) => r.body)).toEqual([
+      { selectedThemeId: orange.id, followSystemPreference: false },
+    ]);
     expect(service.effective()?.name).toBe('Orange');
     expect(service.selectedId()).toBe(orange.id);
   });
 
   it('setPreference("light") selects the built-in Light row', async () => {
     const service = await boot({ selectedThemeId: orange.id, followSystemPreference: false });
+    api.on('PUT', SELECTION, (body) => body);
 
-    const setting = service.setPreference('light');
-    const req = http.expectOne('/api/settings/themes/selection');
-    expect(req.request.body).toEqual({ selectedThemeId: light.id, followSystemPreference: false });
-    req.flush({ selectedThemeId: light.id, followSystemPreference: false });
-    await setting;
-    TestBed.tick();
+    await service.setPreference('light');
+
+    expect(api.calls('PUT', SELECTION)[0]?.body).toEqual({
+      selectedThemeId: light.id,
+      followSystemPreference: false,
+    });
     expect(document.documentElement.dataset['theme']).toBe('light');
   });
 
+  it('setPreference("system") flips the follow flag', async () => {
+    const service = await boot({ selectedThemeId: orange.id, followSystemPreference: false });
+    api.on('PUT', SELECTION, (body) => ({ selectedThemeId: orange.id, ...(body as object) }));
+
+    await service.setPreference('system');
+
+    expect(api.calls('PUT', SELECTION)[0]?.body).toEqual({ followSystemPreference: true });
+    expect(service.preference()).toBe('system');
+    expect(service.effective()?.name).toBe('Light');
+  });
+
   it('keeps the compiled defaults and records the error when the host is unreachable', async () => {
-    const service = TestBed.inject(ThemeService);
-    const loading = service.load();
-    http.expectOne('/api/settings/themes').error(new ProgressEvent('error'), { status: 0 });
-    http
-      .expectOne('/api/settings/themes/selection')
-      .flush({ selectedThemeId: null, followSystemPreference: false });
-    await loading;
+    api.on('GET', THEMES, () => problem(503, 'down'));
+    api.on('GET', SELECTION, { selectedThemeId: null, followSystemPreference: false });
+    const service = new ThemeService();
+    await service.load();
 
     expect(service.loaded()).toBe(true);
     expect(service.error()).toBeTruthy();
     expect(service.effective()).toBeNull();
     expect(document.getElementById('r2m-theme')).toBeNull();
+    expect(document.documentElement.dataset['theme']).toBeUndefined();
   });
 
   it('delete clears the selection locally when the active theme is removed', async () => {
     const service = await boot({ selectedThemeId: orange.id, followSystemPreference: false });
+    api.on('DELETE', `${THEMES}/${orange.id}`, undefined);
+    api.on('GET', THEMES, [light, dark]);
 
-    const deleting = service.delete(orange.id);
-    http
-      .expectOne(`/api/settings/themes/${orange.id}`)
-      .flush(null, { status: 204, statusText: 'No Content' });
-    await new Promise((resolve) => setTimeout(resolve)); // let the delete continuation issue the reload
-    http.expectOne('/api/settings/themes').flush([light, dark]);
-    await deleting;
-    TestBed.tick();
+    await service.delete(orange.id);
 
+    expect(api.calls('DELETE', `${THEMES}/${orange.id}`)).toHaveLength(1);
     expect(service.selectedId()).toBeNull();
     expect(service.effective()?.name).toBe('Light');
   });

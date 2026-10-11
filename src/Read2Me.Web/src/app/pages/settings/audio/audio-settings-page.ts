@@ -1,36 +1,31 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  Signal,
-  WritableSignal,
-  computed,
-  effect,
-  inject,
-  signal,
-  untracked,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { html, nothing } from 'lit-html';
 import {
   AUDIO_STEP_IDS,
-  ConsonantSoftenEngine,
-  ConsonantSoftenPreset,
-  PauseDurations,
+  type ConsonantSoftenEngine,
+  type ConsonantSoftenPreset,
+  type PauseDurations,
   toApiError,
 } from '@app/api';
-import { HasUnsavedChanges } from '@app/shared/unsaved-changes.guard';
-import { PageHeader } from '@app/ui/page-header/page-header';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { AudioCard } from './audio-card';
+import { R2mElement, define } from '@app/core/element';
+import type { HasUnsavedChanges } from '@app/core/router';
+import { provide, use } from '@app/core/services';
 import {
-  ConsonantSoftenForm,
+  type ReadonlySignal,
+  type WritableSignal,
+  computed,
+  signal,
+  untracked,
+} from '@app/core/signals';
+import { adoptStyles } from '@app/core/styles';
+import { controlValue, field } from '@app/ui/field';
+import { statusChip } from '@app/ui/partials';
+import { ToastService } from '@app/ui/toast';
+import { audioCard } from './audio-card';
+import {
+  type ConsonantSoftenForm,
   MAX_HIGHPASS_HZ,
   MIN_HIGHPASS_HZ,
-  SilenceTrimForm,
+  type SilenceTrimForm,
   buildConsonantSoftenConfig,
   buildSilenceTrimConfig,
   sameForm,
@@ -46,7 +41,10 @@ import {
   validateWer,
 } from './audio-forms';
 import { AudioSettingsStore } from './audio-settings-store';
-import { StepPreview } from './step-preview';
+import css from './audio-settings-page.css' with { type: 'text' };
+import './step-preview';
+
+adoptStyles(css);
 
 /**
  * One card's draft against the store's snapshot. The draft is re-seeded from a reload only while
@@ -54,22 +52,22 @@ import { StepPreview } from './step-preview';
  * the API lands here without wiping typing in progress. After a save the card marks itself
  * untouched, so the reload that follows seeds it with whatever the host normalised.
  */
-class CardState<T> {
+export class CardState<T> {
   readonly draft: WritableSignal<T>;
-  readonly dirty: Signal<boolean>;
+  readonly dirty: ReadonlySignal<boolean>;
   readonly saving = signal(false);
+  readonly error: ReadonlySignal<string | null>;
   private seeded: T;
 
   constructor(
-    readonly baseline: Signal<T>,
+    readonly baseline: ReadonlySignal<T>,
     readonly validate: (draft: T) => string | null,
   ) {
     this.seeded = baseline();
     this.draft = signal(this.seeded);
     this.dirty = computed(() => !sameForm(this.draft(), this.baseline()));
+    this.error = computed(() => this.validate(this.draft()));
   }
-
-  readonly error = computed(() => this.validate(this.draft()));
 
   /** Takes the baseline's current value, unless the draft has been touched since it was last seeded. */
   reseed(): void {
@@ -78,8 +76,16 @@ class CardState<T> {
     this.seeded = next;
   }
 
-  markSaved(): void {
+  /**
+   * Marks the draft untouched, so the reload after a write seeds the card with the stored value.
+   * Returns the undo for a failed write, which leaves the edit in place and dirty.
+   */
+  markSaved(): () => void {
+    const previous = this.seeded;
     this.seeded = this.draft();
+    return () => {
+      this.seeded = previous;
+    };
   }
 
   /** Immutable update of one field. */
@@ -88,9 +94,10 @@ class CardState<T> {
   }
 }
 
-/** A number input's value; NaN when blank, so validation catches it. */
-export function num(event: Event): number {
-  return (event.target as HTMLInputElement).valueAsNumber;
+/** The number typed into the input an event came from; NaN when blank, so validation catches it. */
+export function numberValue(event: Event): number {
+  const text = controlValue(event).trim();
+  return text === '' ? NaN : Number(text);
 }
 
 const ENGINE_OPTIONS: { value: ConsonantSoftenEngine; label: string }[] = [
@@ -149,414 +156,92 @@ const PAUSE_FIELDS: { key: keyof PauseDurations; label: string; step: number }[]
   { key: 'pauseMs', label: 'Pause (ms)', step: 50 },
 ];
 
+interface NumberFieldOptions {
+  id: string;
+  label: string;
+  value: number;
+  step?: number;
+  min?: number | undefined;
+  max?: number | undefined;
+  hint?: string;
+  cls?: string;
+  onInput: (e: Event) => void;
+}
+
+/** A labelled `<input type=number data-field=id>`; `value` renders as text so NaN shows blank. */
+const numberField = (o: NumberFieldOptions) =>
+  field(
+    {
+      id: `audio-${o.id}`,
+      label: o.label,
+      ...(o.hint === undefined ? {} : { hint: o.hint }),
+      ...(o.cls === undefined ? {} : { cls: o.cls }),
+    },
+    (a) =>
+      html`<input
+        id=${a.id}
+        aria-describedby=${a.describedBy}
+        aria-invalid=${a.invalid}
+        type="number"
+        data-field=${o.id}
+        step=${o.step ?? nothing}
+        min=${o.min ?? nothing}
+        max=${o.max ?? nothing}
+        .value=${Number.isFinite(o.value) ? String(o.value) : ''}
+        @input=${o.onInput}
+      />`,
+  );
+
+const switchField = (
+  id: string,
+  checked: boolean,
+  label: string,
+  onChange: (on: boolean) => void,
+) =>
+  html`<label class="r2m-switch">
+    <input
+      type="checkbox"
+      role="switch"
+      data-field=${id}
+      .checked=${checked}
+      @change=${(e: Event) => onChange((e.target as HTMLInputElement).checked)}
+    />
+    ${label}
+  </label>`;
+
 /**
  * `/settings/audio` (ticket 24): the seven independently saved cards of the Audio Processing
  * settings — ffmpeg, silence trim and consonant soften (each with an A/B preview of the unsaved
- * draft), chunk pause, pause durations, WER threshold, max audio attempts.
+ * draft), chunk pause, pause durations, WER threshold, max audio attempts. Provides the
+ * {@link AudioSettingsStore}; the router's `guardUnsaved` asks {@link hasUnsavedChanges} before
+ * leaving.
  */
-@Component({
-  selector: 'app-audio-settings-page',
-  imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatSlideToggleModule,
-    PageHeader,
-    StatusChip,
-    AudioCard,
-    StepPreview,
-  ],
-  providers: [AudioSettingsStore],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <r2m-page-header
-      title="Audio processing"
-      subtitle="ffmpeg, the paragraph post-process steps, assembly pauses and verification."
-    />
+export class AudioSettingsPage extends R2mElement implements HasUnsavedChanges {
+  readonly store = provide(this, AudioSettingsStore, new AudioSettingsStore());
+  private readonly toast = use(ToastService);
 
-    @if (store.error(); as error) {
-      <r2m-status-chip status="error" [label]="'Audio settings could not be loaded: ' + error" />
-    }
-
-    @if (store.full()) {
-      <!-- ffmpeg -->
-      <app-audio-card
-        card="ffmpeg"
-        title="ffmpeg"
-        blurb="Path to the ffmpeg executable used by the audio post-processing pipeline. Leave blank to rely on the system PATH."
-        [dirty]="ffmpeg.dirty()"
-        [saving]="ffmpeg.saving()"
-        [error]="ffmpeg.error()"
-        (save)="saveFfmpeg()"
-      >
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>ffmpeg path</mat-label>
-          <input
-            matInput
-            autocomplete="off"
-            placeholder="(blank = rely on PATH)"
-            data-field="ffmpegPath"
-            [value]="ffmpeg.draft()"
-            (input)="ffmpeg.draft.set($any($event.target).value)"
-          />
-        </mat-form-field>
-        <button
-          actions
-          mat-stroked-button
-          type="button"
-          data-action="test-ffmpeg"
-          [disabled]="testing() || ffmpeg.saving()"
-          (click)="testFfmpeg()"
-        >
-          {{ testing() ? 'Testing…' : 'Test ffmpeg' }}
-        </button>
-      </app-audio-card>
-
-      <!-- Silence trim -->
-      <app-audio-card
-        card="silence-trim"
-        title="Silence trim"
-        blurb="Strips leading and trailing dead air from generated paragraph audio, so the gap between items is the configured pause and nothing else. Runs before consonant soften. If the trim would remove nearly all of a clip it is skipped and the audio is kept as generated."
-        [dirty]="trim.dirty()"
-        [saving]="trim.saving()"
-        [error]="trim.error()"
-        (save)="saveTrim()"
-      >
-        <mat-slide-toggle
-          data-field="trim-enabled"
-          [checked]="trim.draft().enabled"
-          (change)="trim.set('enabled', $event.checked)"
-        >
-          Enable silence trim
-        </mat-slide-toggle>
-        <div class="audio__row">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Silence threshold (dB)</mat-label>
-            <input
-              matInput
-              type="number"
-              max="0"
-              step="1"
-              data-field="trim-threshold"
-              [value]="trim.draft().thresholdDb"
-              (input)="trim.set('thresholdDb', num($event))"
-            />
-            <mat-hint>Peak level below which audio counts as silence. Lower is stricter.</mat-hint>
-          </mat-form-field>
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Keep at each end (ms)</mat-label>
-            <input
-              matInput
-              type="number"
-              min="0"
-              step="10"
-              data-field="trim-pad"
-              [value]="trim.draft().padMs"
-              (input)="trim.set('padMs', num($event))"
-            />
-            <mat-hint>Silence deliberately kept at each end. 0 = hard trim.</mat-hint>
-          </mat-form-field>
-        </div>
-        <app-step-preview
-          [stepId]="stepIds.silenceTrim"
-          [settings]="trimConfig().settings"
-          [canRender]="!trim.error()"
-          processedLabel="Trimmed"
-          showRemovedMs
-        />
-      </app-audio-card>
-
-      <!-- Consonant soften -->
-      <app-audio-card
-        card="consonant-soften"
-        title="Consonant soften"
-        blurb="Optional ffmpeg filter applied to paragraph audio after loudness normalize and before verification — tames harsh sibilants and plosives. A filter failure falls back to the unfiltered audio."
-        [dirty]="soften.dirty()"
-        [saving]="soften.saving()"
-        [error]="soften.error()"
-        (save)="saveSoften()"
-      >
-        <mat-slide-toggle
-          data-field="soften-enabled"
-          [checked]="soften.draft().enabled"
-          (change)="soften.set('enabled', $event.checked)"
-        >
-          Enable consonant soften
-        </mat-slide-toggle>
-        <div class="audio__row">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Engine</mat-label>
-            <mat-select
-              data-field="soften-engine"
-              [value]="soften.draft().engine"
-              (valueChange)="soften.draft.set(setEngine(soften.draft(), $event))"
-            >
-              @for (option of engineOptions; track option.value) {
-                <mat-option [value]="option.value">{{ option.label }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Preset</mat-label>
-            <mat-select
-              data-field="soften-preset"
-              [value]="soften.draft().preset"
-              (valueChange)="soften.draft.set(setPreset(soften.draft(), $event))"
-            >
-              @for (option of presetOptions; track option.value) {
-                <mat-option [value]="option.value">{{ option.label }}</mat-option>
-              }
-            </mat-select>
-            <mat-hint
-              >Picking a preset re-seeds the custom fields — unsaved tweaks are discarded.</mat-hint
-            >
-          </mat-form-field>
-        </div>
-
-        @if (soften.draft().engine === 'deesser') {
-          <p class="audio__info" data-role="deesser-caveat">
-            deesser intensity is sample-rate-sensitive: higher provider sample rates need a higher
-            intensity to engage at all.
-          </p>
-        }
-
-        @if (soften.draft().preset === 'custom') {
-          <div class="audio__grid" data-role="custom-fields">
-            @if (soften.draft().engine === 'adyneq') {
-              @for (field of adynEqFields; track field.key) {
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>{{ field.label }}</mat-label>
-                  <input
-                    matInput
-                    type="number"
-                    [attr.data-field]="'adyneq-' + field.key"
-                    [step]="field.step"
-                    [attr.min]="field.min ?? null"
-                    [value]="soften.draft().adynEq[field.key]"
-                    (input)="setAdynEq(field.key, num($event))"
-                  />
-                </mat-form-field>
-              }
-            } @else {
-              @for (field of deesserFields; track field.key) {
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>{{ field.label }}</mat-label>
-                  <input
-                    matInput
-                    type="number"
-                    [attr.data-field]="'deesser-' + field.key"
-                    [step]="field.step"
-                    [attr.min]="field.min ?? null"
-                    [attr.max]="field.max ?? null"
-                    [value]="soften.draft().deesser[field.key]"
-                    (input)="setDeesser(field.key, num($event))"
-                  />
-                </mat-form-field>
-              }
-            }
-          </div>
-          <mat-slide-toggle
-            data-field="soften-highpass"
-            [checked]="soften.draft().highpassEnabled"
-            (change)="soften.set('highpassEnabled', $event.checked)"
-          >
-            Highpass (removes plosive thump)
-          </mat-slide-toggle>
-          @if (soften.draft().highpassEnabled) {
-            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="audio__narrow">
-              <mat-label>Highpass cutoff (Hz)</mat-label>
-              <input
-                matInput
-                type="number"
-                step="10"
-                data-field="soften-highpass-hz"
-                [min]="minHighpass"
-                [max]="maxHighpass"
-                [value]="soften.draft().highpassHz"
-                (input)="soften.set('highpassHz', num($event))"
-              />
-            </mat-form-field>
-          }
-        }
-
-        <app-step-preview
-          [stepId]="stepIds.consonantSoften"
-          [settings]="softenConfig().settings"
-          [canRender]="!soften.error()"
-          processedLabel="Filtered"
-        />
-      </app-audio-card>
-
-      <!-- Chunk pause -->
-      <app-audio-card
-        card="chunk-pause"
-        title="Chunk pause"
-        blurb="Silence inserted between stitched audio chunks of a paragraph."
-        [dirty]="chunk.dirty()"
-        [saving]="chunk.saving()"
-        [error]="chunk.error()"
-        (save)="saveChunk()"
-      >
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="audio__narrow">
-          <mat-label>Pause between chunks (ms)</mat-label>
-          <input
-            matInput
-            type="number"
-            min="0"
-            step="50"
-            data-field="chunkPauseMs"
-            [value]="chunk.draft()"
-            (input)="chunk.draft.set(num($event))"
-          />
-        </mat-form-field>
-      </app-audio-card>
-
-      <!-- Pause durations -->
-      <app-audio-card
-        card="pauses"
-        title="Pause durations"
-        blurb="Silence inserted between sections during audiobook assembly. Each kind maps to a millisecond duration."
-        [dirty]="pauses.dirty()"
-        [saving]="pauses.saving()"
-        [error]="pauses.error()"
-        (save)="savePauses()"
-      >
-        <div class="audio__grid">
-          @for (field of pauseFields; track field.key) {
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>{{ field.label }}</mat-label>
-              <input
-                matInput
-                type="number"
-                min="0"
-                [step]="field.step"
-                [attr.data-field]="field.key"
-                [value]="pauses.draft()[field.key]"
-                (input)="pauses.set(field.key, num($event))"
-              />
-            </mat-form-field>
-          }
-        </div>
-      </app-audio-card>
-
-      <!-- WER threshold -->
-      <app-audio-card
-        card="wer"
-        title="Transcript verification"
-        blurb="Word-error-rate threshold below which a generated clip passes verification."
-        [dirty]="wer.dirty()"
-        [saving]="wer.saving()"
-        [error]="wer.error()"
-        (save)="saveWer()"
-      >
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="audio__narrow">
-          <mat-label>WER threshold</mat-label>
-          <input
-            matInput
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            data-field="werThreshold"
-            [value]="wer.draft()"
-            (input)="wer.draft.set(num($event))"
-          />
-        </mat-form-field>
-      </app-audio-card>
-
-      <!-- Max audio attempts -->
-      <app-audio-card
-        card="attempts"
-        title="Max audio attempts"
-        blurb="Total generation attempts per item, including the first. 1 = no retry."
-        [dirty]="attempts.dirty()"
-        [saving]="attempts.saving()"
-        [error]="attempts.error()"
-        (save)="saveAttempts()"
-      >
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="audio__narrow">
-          <mat-label>Max audio attempts</mat-label>
-          <input
-            matInput
-            type="number"
-            min="1"
-            step="1"
-            data-field="audioMaxAttempts"
-            [value]="attempts.draft()"
-            (input)="attempts.draft.set(num($event))"
-          />
-        </mat-form-field>
-      </app-audio-card>
-    }
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-4);
-      max-width: 880px;
-    }
-    .audio__row,
-    .audio__grid {
-      display: grid;
-      gap: var(--r2m-space-3);
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    }
-    .audio__narrow {
-      max-width: 320px;
-    }
-    .audio__info {
-      margin: 0;
-      padding: var(--r2m-space-2) var(--r2m-space-3);
-      border-radius: var(--r2m-radius-md);
-      background: var(--r2m-surface-high, var(--r2m-surface-low));
-      font-size: var(--r2m-text-sm);
-      color: var(--r2m-text-muted);
-    }
-    mat-form-field {
-      width: 100%;
-    }
-  `,
-})
-export class AudioSettingsPage implements HasUnsavedChanges {
-  protected readonly store = inject(AudioSettingsStore);
-  private readonly toast = inject(ToastService);
-
-  protected readonly stepIds = AUDIO_STEP_IDS;
-  protected readonly engineOptions = ENGINE_OPTIONS;
-  protected readonly presetOptions = PRESET_OPTIONS;
-  protected readonly adynEqFields = ADYNEQ_FIELDS;
-  protected readonly deesserFields = DEESSER_FIELDS;
-  protected readonly pauseFields = PAUSE_FIELDS;
-  protected readonly minHighpass = MIN_HIGHPASS_HZ;
-  protected readonly maxHighpass = MAX_HIGHPASS_HZ;
-  protected readonly num = num;
-  protected readonly setEngine = setSoftenEngine;
-  protected readonly setPreset = setSoftenPreset;
-
-  protected readonly testing = signal(false);
+  readonly testing = signal(false);
 
   private readonly trimStored = computed(() => this.store.step(AUDIO_STEP_IDS.silenceTrim));
   private readonly softenStored = computed(() => this.store.step(AUDIO_STEP_IDS.consonantSoften));
 
-  protected readonly ffmpeg = new CardState<string>(
+  readonly ffmpeg = new CardState<string>(
     computed(() => this.store.full()?.ffmpegPath ?? ''),
     () => null,
   );
-  protected readonly trim = new CardState<SilenceTrimForm>(
+  readonly trim = new CardState<SilenceTrimForm>(
     computed(() => toSilenceTrimForm(this.trimStored())),
     validateSilenceTrim,
   );
-  protected readonly soften = new CardState<ConsonantSoftenForm>(
+  readonly soften = new CardState<ConsonantSoftenForm>(
     computed(() => toConsonantSoftenForm(this.softenStored())),
     validateConsonantSoften,
   );
-  protected readonly chunk = new CardState<number>(
+  readonly chunk = new CardState<number>(
     computed(() => this.store.full()?.chunkPauseMs ?? 300),
     validateChunkPause,
   );
-  protected readonly pauses = new CardState<PauseDurations>(
+  readonly pauses = new CardState<PauseDurations>(
     computed(
       () =>
         this.store.full()?.pauses ?? {
@@ -569,11 +254,11 @@ export class AudioSettingsPage implements HasUnsavedChanges {
     ),
     validatePauses,
   );
-  protected readonly wer = new CardState<number>(
+  readonly wer = new CardState<number>(
     computed(() => this.store.full()?.werThreshold ?? 0.15),
     validateWer,
   );
-  protected readonly attempts = new CardState<number>(
+  readonly attempts = new CardState<number>(
     computed(() => this.store.full()?.audioMaxAttempts ?? 1),
     validateAttempts,
   );
@@ -589,18 +274,20 @@ export class AudioSettingsPage implements HasUnsavedChanges {
   ] as const;
 
   /** The draft as the host would store it — what Save writes and what the preview renders. */
-  protected readonly trimConfig = computed(() =>
+  readonly trimConfig = computed(() =>
     buildSilenceTrimConfig(this.trim.draft(), this.trimStored()),
   );
-  protected readonly softenConfig = computed(() => buildConsonantSoftenConfig(this.soften.draft()));
+  readonly softenConfig = computed(() => buildConsonantSoftenConfig(this.soften.draft()));
 
-  constructor() {
-    void this.store.load();
-    effect(() => {
+  protected override connected(): void {
+    this.classList.add('audio');
+    void this.store.open();
+    this.effect(() => {
       const full = this.store.full();
       if (!full) return;
       untracked(() => this.reseed());
     });
+    this.onDisconnect(() => this.store.close());
   }
 
   hasUnsavedChanges(): boolean {
@@ -611,15 +298,356 @@ export class AudioSettingsPage implements HasUnsavedChanges {
     for (const card of this.cards) card.reseed();
   }
 
-  protected setAdynEq(key: keyof ConsonantSoftenForm['adynEq'], value: number): void {
+  protected template() {
+    const error = this.store.error();
+    return html`
+      <header class="r2m-page-header">
+        <h1 class="r2m-page-header__title">Audio processing</h1>
+        <p class="r2m-page-header__subtitle">
+          ffmpeg, the paragraph post-process steps, assembly pauses and verification.
+        </p>
+      </header>
+
+      ${
+        error
+          ? statusChip({ status: 'error', label: `Audio settings could not be loaded: ${error}` })
+          : nothing
+      }
+      ${
+        this.store.full()
+          ? html`${this.ffmpegCard()} ${this.trimCard()} ${this.softenCard()} ${this.chunkCard()}
+            ${this.pausesCard()} ${this.werCard()} ${this.attemptsCard()}`
+          : nothing
+      }
+    `;
+  }
+
+  private ffmpegCard() {
+    const card = this.ffmpeg;
+    const testing = this.testing();
+    return audioCard(
+      {
+        card: 'ffmpeg',
+        title: 'ffmpeg',
+        blurb:
+          'Path to the ffmpeg executable used by the audio post-processing pipeline. Leave blank to rely on the system PATH.',
+        state: card,
+        onSave: () => void this.saveFfmpeg(),
+        actions: html`<button
+          type="button"
+          class="r2m-button r2m-button--stroked"
+          data-action="test-ffmpeg"
+          ?disabled=${testing || card.saving()}
+          @click=${() => void this.testFfmpeg()}
+        >
+          ${testing ? 'Testing…' : 'Test ffmpeg'}
+        </button>`,
+      },
+      field(
+        { id: 'audio-ffmpegPath', label: 'ffmpeg path' },
+        (a) =>
+          html`<input
+            id=${a.id}
+            aria-describedby=${a.describedBy}
+            aria-invalid=${a.invalid}
+            type="text"
+            autocomplete="off"
+            placeholder="(blank = rely on PATH)"
+            data-field="ffmpegPath"
+            .value=${card.draft()}
+            @input=${(e: Event) => card.draft.set(controlValue(e))}
+          />`,
+      ),
+    );
+  }
+
+  private trimCard() {
+    const card = this.trim;
+    const draft = card.draft();
+    return audioCard(
+      {
+        card: 'silence-trim',
+        title: 'Silence trim',
+        blurb:
+          'Strips leading and trailing dead air from generated paragraph audio, so the gap between items is the configured pause and nothing else. Runs before consonant soften. If the trim would remove nearly all of a clip it is skipped and the audio is kept as generated.',
+        state: card,
+        onSave: () => void this.saveTrim(),
+      },
+      html`
+        ${switchField('trim-enabled', draft.enabled, 'Enable silence trim', (on) =>
+          card.set('enabled', on),
+        )}
+        <div class="audio__row">
+          ${numberField({
+            id: 'trim-threshold',
+            label: 'Silence threshold (dB)',
+            value: draft.thresholdDb,
+            max: 0,
+            step: 1,
+            hint: 'Peak level below which audio counts as silence. Lower is stricter.',
+            onInput: (e) => card.set('thresholdDb', numberValue(e)),
+          })}
+          ${numberField({
+            id: 'trim-pad',
+            label: 'Keep at each end (ms)',
+            value: draft.padMs,
+            min: 0,
+            step: 10,
+            hint: 'Silence deliberately kept at each end. 0 = hard trim.',
+            onInput: (e) => card.set('padMs', numberValue(e)),
+          })}
+        </div>
+        <r2m-step-preview
+          .stepId=${AUDIO_STEP_IDS.silenceTrim}
+          .settings=${this.trimConfig().settings}
+          .canRender=${!card.error()}
+          .processedLabel=${'Trimmed'}
+          .showRemovedMs=${true}
+        ></r2m-step-preview>
+      `,
+    );
+  }
+
+  private softenCard() {
+    const card = this.soften;
+    const draft = card.draft();
+    return audioCard(
+      {
+        card: 'consonant-soften',
+        title: 'Consonant soften',
+        blurb:
+          'Optional ffmpeg filter applied to paragraph audio after loudness normalize and before verification — tames harsh sibilants and plosives. A filter failure falls back to the unfiltered audio.',
+        state: card,
+        onSave: () => void this.saveSoften(),
+      },
+      html`
+        ${switchField('soften-enabled', draft.enabled, 'Enable consonant soften', (on) =>
+          card.set('enabled', on),
+        )}
+        <div class="audio__row">
+          ${field(
+            { id: 'audio-soften-engine', label: 'Engine' },
+            (a) =>
+              html`<select
+                id=${a.id}
+                aria-describedby=${a.describedBy}
+                data-field="soften-engine"
+                .value=${draft.engine}
+                @change=${(e: Event) =>
+                  card.draft.set(
+                    setSoftenEngine(card.draft(), controlValue(e) as ConsonantSoftenEngine),
+                  )}
+              >
+                ${ENGINE_OPTIONS.map(
+                  (o) =>
+                    html`<option value=${o.value} ?selected=${o.value === draft.engine}>
+                      ${o.label}
+                    </option>`,
+                )}
+              </select>`,
+          )}
+          ${field(
+            {
+              id: 'audio-soften-preset',
+              label: 'Preset',
+              hint: 'Picking a preset re-seeds the custom fields — unsaved tweaks are discarded.',
+            },
+            (a) =>
+              html`<select
+                id=${a.id}
+                aria-describedby=${a.describedBy}
+                data-field="soften-preset"
+                .value=${draft.preset}
+                @change=${(e: Event) =>
+                  card.draft.set(
+                    setSoftenPreset(card.draft(), controlValue(e) as ConsonantSoftenPreset),
+                  )}
+              >
+                ${PRESET_OPTIONS.map(
+                  (o) =>
+                    html`<option value=${o.value} ?selected=${o.value === draft.preset}>
+                      ${o.label}
+                    </option>`,
+                )}
+              </select>`,
+          )}
+        </div>
+
+        ${
+          draft.engine === 'deesser'
+            ? html`<p class="audio__info" data-role="deesser-caveat">
+                deesser intensity is sample-rate-sensitive: higher provider sample rates need a
+                higher intensity to engage at all.
+              </p>`
+            : nothing
+        }
+        ${draft.preset === 'custom' ? this.customFields(draft) : nothing}
+
+        <r2m-step-preview
+          .stepId=${AUDIO_STEP_IDS.consonantSoften}
+          .settings=${this.softenConfig().settings}
+          .canRender=${!card.error()}
+          .processedLabel=${'Filtered'}
+        ></r2m-step-preview>
+      `,
+    );
+  }
+
+  private customFields(draft: ConsonantSoftenForm) {
+    const card = this.soften;
+    return html`
+      <div class="audio__grid" data-role="custom-fields">
+        ${
+          draft.engine === 'adyneq'
+            ? ADYNEQ_FIELDS.map((f) =>
+                numberField({
+                  id: `adyneq-${f.key}`,
+                  label: f.label,
+                  value: draft.adynEq[f.key],
+                  step: f.step,
+                  min: f.min,
+                  onInput: (e) => this.setAdynEq(f.key, numberValue(e)),
+                }),
+              )
+            : DEESSER_FIELDS.map((f) =>
+                numberField({
+                  id: `deesser-${f.key}`,
+                  label: f.label,
+                  value: draft.deesser[f.key],
+                  step: f.step,
+                  min: f.min,
+                  max: f.max,
+                  onInput: (e) => this.setDeesser(f.key, numberValue(e)),
+                }),
+              )
+        }
+      </div>
+      ${switchField(
+        'soften-highpass',
+        draft.highpassEnabled,
+        'Highpass (removes plosive thump)',
+        (on) => card.set('highpassEnabled', on),
+      )}
+      ${
+        draft.highpassEnabled
+          ? numberField({
+              id: 'soften-highpass-hz',
+              label: 'Highpass cutoff (Hz)',
+              value: draft.highpassHz,
+              step: 10,
+              min: MIN_HIGHPASS_HZ,
+              max: MAX_HIGHPASS_HZ,
+              cls: 'audio__narrow',
+              onInput: (e) => card.set('highpassHz', numberValue(e)),
+            })
+          : nothing
+      }
+    `;
+  }
+
+  private chunkCard() {
+    const card = this.chunk;
+    return audioCard(
+      {
+        card: 'chunk-pause',
+        title: 'Chunk pause',
+        blurb: 'Silence inserted between stitched audio chunks of a paragraph.',
+        state: card,
+        onSave: () => void this.saveChunk(),
+      },
+      numberField({
+        id: 'chunkPauseMs',
+        label: 'Pause between chunks (ms)',
+        value: card.draft(),
+        min: 0,
+        step: 50,
+        cls: 'audio__narrow',
+        onInput: (e) => card.draft.set(numberValue(e)),
+      }),
+    );
+  }
+
+  private pausesCard() {
+    const card = this.pauses;
+    const draft = card.draft();
+    return audioCard(
+      {
+        card: 'pauses',
+        title: 'Pause durations',
+        blurb:
+          'Silence inserted between sections during audiobook assembly. Each kind maps to a millisecond duration.',
+        state: card,
+        onSave: () => void this.savePauses(),
+      },
+      html`<div class="audio__grid">
+        ${PAUSE_FIELDS.map((f) =>
+          numberField({
+            id: f.key,
+            label: f.label,
+            value: draft[f.key],
+            min: 0,
+            step: f.step,
+            onInput: (e) => card.set(f.key, numberValue(e)),
+          }),
+        )}
+      </div>`,
+    );
+  }
+
+  private werCard() {
+    const card = this.wer;
+    return audioCard(
+      {
+        card: 'wer',
+        title: 'Transcript verification',
+        blurb: 'Word-error-rate threshold below which a generated clip passes verification.',
+        state: card,
+        onSave: () => void this.saveWer(),
+      },
+      numberField({
+        id: 'werThreshold',
+        label: 'WER threshold',
+        value: card.draft(),
+        min: 0,
+        max: 1,
+        step: 0.01,
+        cls: 'audio__narrow',
+        onInput: (e) => card.draft.set(numberValue(e)),
+      }),
+    );
+  }
+
+  private attemptsCard() {
+    const card = this.attempts;
+    return audioCard(
+      {
+        card: 'attempts',
+        title: 'Max audio attempts',
+        blurb: 'Total generation attempts per item, including the first. 1 = no retry.',
+        state: card,
+        onSave: () => void this.saveAttempts(),
+      },
+      numberField({
+        id: 'audioMaxAttempts',
+        label: 'Max audio attempts',
+        value: card.draft(),
+        min: 1,
+        step: 1,
+        cls: 'audio__narrow',
+        onInput: (e) => card.draft.set(numberValue(e)),
+      }),
+    );
+  }
+
+  private setAdynEq(key: keyof ConsonantSoftenForm['adynEq'], value: number): void {
     this.soften.draft.update((d) => ({ ...d, adynEq: { ...d.adynEq, [key]: value } }));
   }
 
-  protected setDeesser(key: keyof ConsonantSoftenForm['deesser'], value: number): void {
+  private setDeesser(key: keyof ConsonantSoftenForm['deesser'], value: number): void {
     this.soften.draft.update((d) => ({ ...d, deesser: { ...d.deesser, [key]: value } }));
   }
 
-  protected saveFfmpeg(): Promise<void> {
+  private saveFfmpeg(): Promise<void> {
     return this.save(
       this.ffmpeg,
       () => this.store.saveScalars({ ffmpegPath: this.ffmpeg.draft() }),
@@ -627,11 +655,11 @@ export class AudioSettingsPage implements HasUnsavedChanges {
     );
   }
 
-  protected saveTrim(): Promise<void> {
+  private saveTrim(): Promise<void> {
     return this.save(this.trim, () => this.store.saveStep(this.trimConfig()), 'Silence trim saved');
   }
 
-  protected saveSoften(): Promise<void> {
+  private saveSoften(): Promise<void> {
     return this.save(
       this.soften,
       () => this.store.saveStep(this.softenConfig()),
@@ -639,7 +667,7 @@ export class AudioSettingsPage implements HasUnsavedChanges {
     );
   }
 
-  protected saveChunk(): Promise<void> {
+  private saveChunk(): Promise<void> {
     return this.save(
       this.chunk,
       () => this.store.saveScalars({ chunkPauseMs: this.chunk.draft() }),
@@ -647,7 +675,7 @@ export class AudioSettingsPage implements HasUnsavedChanges {
     );
   }
 
-  protected savePauses(): Promise<void> {
+  private savePauses(): Promise<void> {
     return this.save(
       this.pauses,
       () => this.store.savePauses(this.pauses.draft()),
@@ -655,7 +683,7 @@ export class AudioSettingsPage implements HasUnsavedChanges {
     );
   }
 
-  protected saveWer(): Promise<void> {
+  private saveWer(): Promise<void> {
     return this.save(
       this.wer,
       () => this.store.saveScalars({ werThreshold: this.wer.draft() }),
@@ -663,7 +691,7 @@ export class AudioSettingsPage implements HasUnsavedChanges {
     );
   }
 
-  protected saveAttempts(): Promise<void> {
+  private saveAttempts(): Promise<void> {
     return this.save(
       this.attempts,
       () => this.store.saveScalars({ audioMaxAttempts: this.attempts.draft() }),
@@ -672,7 +700,7 @@ export class AudioSettingsPage implements HasUnsavedChanges {
   }
 
   /** Probes the path currently in the field, persisting it first so the probe matches the UI. */
-  protected async testFfmpeg(): Promise<void> {
+  private async testFfmpeg(): Promise<void> {
     this.testing.set(true);
     try {
       const path = this.ffmpeg.draft();
@@ -695,15 +723,24 @@ export class AudioSettingsPage implements HasUnsavedChanges {
   ): Promise<void> {
     if (card.error() || card.saving()) return;
     card.saving.set(true);
+    // Untouched from here on, so the reload inside the write seeds the card with the stored value.
+    const undo = card.markSaved();
     try {
-      // Untouched from here on: the reload after the write seeds the card with the stored value.
-      card.markSaved();
       await write();
       this.toast.success(success);
     } catch (e) {
+      // Nothing was stored: the edit stays, and stays dirty against the next reload.
+      undo();
       this.toast.problem(toApiError(e).toProblem());
     } finally {
       card.saving.set(false);
     }
+  }
+}
+define('r2m-audio-settings-page', AudioSettingsPage);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-audio-settings-page': AudioSettingsPage;
   }
 }

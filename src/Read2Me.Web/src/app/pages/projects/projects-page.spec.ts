@@ -1,9 +1,12 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
-import { ProjectSummary } from '@app/api';
-import { ProjectsPage } from './projects-page';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { ProjectSummary } from '@app/api';
+import { Router } from '@app/core/router';
+import { override, resetServices } from '@app/core/services';
+import { ToastService } from '@app/ui/toast';
+import { FakeApi, problem } from '../../../testing/fake-api';
+import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
+import type { ProjectsPage } from './projects-page';
+import './projects-page';
 
 const dune: ProjectSummary = {
   folderName: 'dune',
@@ -26,101 +29,113 @@ const emma: ProjectSummary = {
   fileType: 'Text',
 };
 
-describe('ProjectsPage', () => {
-  let http: HttpTestingController;
+let api: FakeApi;
+let navigation: FakeNavigation;
+let toasts: string[];
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [ProjectsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
-    }).compileComponents();
-    http = TestBed.inject(HttpTestingController);
-  });
+beforeEach(() => {
+  resetServices();
+  api = new FakeApi();
+  api.install();
+  navigation = installNavigation('projects');
+  const router = new Router();
+  override(Router, router);
+  router.start([{ path: 'projects', tag: 'x-nothing' }], async () => true);
+  toasts = [];
+  override(ToastService, {
+    success: (m: string) => toasts.push(m),
+    problem: (p: { detail?: string }) => toasts.push(`problem: ${p.detail}`),
+  } as unknown as ToastService);
+});
+afterEach(() => document.body.replaceChildren());
 
-  afterEach(() => {
-    http.verify();
-    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
-  });
+/** Mounts the page over a pending list, checks the skeletons, then answers the list. */
+async function render(projects: ProjectSummary[]) {
+  let answer!: (value: ProjectSummary[]) => void;
+  api.on('GET', '/api/projects', () => new Promise<ProjectSummary[]>((r) => (answer = r)));
+  const page = document.createElement('r2m-projects-page');
+  document.body.append(page);
+  await page.rendered();
+  await settle();
+  expect(page.querySelectorAll('.projects__skeleton').length).toBeGreaterThan(0);
+  answer(projects);
+  await settle();
+  await page.rendered();
+  return page;
+}
 
-  async function settle(ms = 0) {
-    await new Promise((r) => setTimeout(r, ms));
-  }
+const cards = (page: ProjectsPage) =>
+  Array.from(page.querySelectorAll('.r2m-project-card'), (c) => c.getAttribute('data-folder'));
 
-  /** MatDialog's afterClosed waits for the exit animation, so poll for the follow-on request. */
-  async function expectEventually(method: string, url: string) {
-    for (let i = 0; i < 100; i++) {
-      const [req] = http.match({ method, url });
-      if (req) return req;
-      await settle(10);
-    }
-    throw new Error(`No ${method} ${url} request arrived`);
-  }
-
-  async function render(projects: ProjectSummary[]) {
-    const fixture = TestBed.createComponent(ProjectsPage);
-    fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelectorAll('.projects__skeleton').length).toBeGreaterThan(0);
-    http.expectOne({ method: 'GET', url: '/api/projects' }).flush(projects);
-    await settle();
-    fixture.detectChanges();
-    return { fixture, el };
-  }
-
+describe('r2m-projects-page', () => {
   it('shows skeletons, then a card per project sorted by title', async () => {
-    const { el } = await render([emma, dune]);
-    expect(el.querySelector('.projects__skeleton')).toBeNull();
-    const cards = Array.from(el.querySelectorAll('r2m-project-card'));
-    expect(cards.map((c) => c.getAttribute('data-folder'))).toEqual(['dune', 'emma']);
-    expect(cards[0]?.textContent).toContain('Frank Herbert');
-    expect(cards[1]?.textContent).toContain('Not read in yet');
+    const page = await render([emma, dune]);
+    expect(page.querySelector('.projects__skeleton')).toBeNull();
+    expect(cards(page)).toEqual(['dune', 'emma']);
+    const [first, second] = Array.from(page.querySelectorAll('.r2m-project-card'));
+    expect(first?.textContent).toContain('Frank Herbert');
+    expect(second?.textContent).toContain('Not read in yet');
   });
 
   it('shows the empty state with the primary action when there are no projects', async () => {
-    const { el } = await render([]);
-    expect(el.querySelector('r2m-empty-state')).not.toBeNull();
-    expect(el.querySelectorAll('.projects__new').length).toBe(2);
+    const page = await render([]);
+    expect(page.querySelector('.r2m-empty-state')).not.toBeNull();
+    expect(page.querySelectorAll('.projects__new').length).toBe(2);
+  });
+
+  it('shows the load failure as an error chip, not a toast', async () => {
+    api.on('GET', '/api/projects', () => problem(500, 'disk gone'));
+    const page = document.createElement('r2m-projects-page');
+    document.body.append(page);
+    await settle();
+    await page.rendered();
+    expect(page.querySelector('.r2m-status-chip--error')?.textContent).toContain(
+      'Projects could not be loaded',
+    );
+    expect(toasts).toEqual([]);
   });
 
   it('opens a card by navigating to the overview', async () => {
-    const { el } = await render([dune]);
-    const router = TestBed.inject(Router);
-    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const page = await render([dune]);
 
-    (el.querySelector('.r2m-project-card__cover') as HTMLButtonElement).click();
+    page.querySelector<HTMLButtonElement>('.r2m-project-card__cover')!.click();
 
-    expect(navigate).toHaveBeenCalledWith(['/projects', 'dune']);
+    expect(navigation.calls.map((c) => c.url)).toEqual(['http://localhost/app/projects/dune']);
   });
 
   it('delete asks for confirmation, then DELETEs and drops the card', async () => {
-    const { fixture, el } = await render([dune, emma]);
+    const page = await render([dune, emma]);
+    api.on('DELETE', '/api/projects/dune', undefined);
 
-    const deleting = fixture.componentInstance.delete(dune);
+    page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
     await settle();
     const dialog = document.querySelector('r2m-confirm-dialog')!;
+    await dialog.rendered();
     expect(dialog.textContent).toContain('Delete Dune?');
-    expect(dialog.classList.contains('r2m-confirm-dialog--destructive')).toBe(true);
-    (dialog.querySelector('.r2m-confirm-dialog__confirm') as HTMLButtonElement).click();
+    expect(dialog.querySelector('.r2m-confirm-dialog__confirm')?.classList).toContain(
+      'r2m-button--danger',
+    );
+    dialog.querySelector<HTMLButtonElement>('.r2m-confirm-dialog__confirm')!.click();
+    await settle();
+    await page.rendered();
 
-    const req = await expectEventually('DELETE', '/api/projects/dune');
-    req.flush(null, { status: 204, statusText: 'No Content' });
-    await deleting;
-    fixture.detectChanges();
-
-    const cards = Array.from(el.querySelectorAll('r2m-project-card'));
-    expect(cards.map((c) => c.getAttribute('data-folder'))).toEqual(['emma']);
+    expect(api.calls('DELETE', '/api/projects/dune')).toHaveLength(1);
+    expect(cards(page)).toEqual(['emma']);
+    expect(toasts).toEqual(['Deleted Dune']);
   });
 
   it('cancelling the confirm sends nothing', async () => {
-    const { fixture, el } = await render([dune]);
+    const page = await render([dune]);
 
-    const deleting = fixture.componentInstance.delete(dune);
+    page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
     await settle();
-    (document.querySelector('.r2m-confirm-dialog__cancel') as HTMLButtonElement).click();
-    await deleting;
-    fixture.detectChanges();
+    const dialog = document.querySelector('r2m-confirm-dialog')!;
+    await dialog.rendered();
+    dialog.querySelector<HTMLButtonElement>('.r2m-confirm-dialog__cancel')!.click();
+    await settle();
+    await page.rendered();
 
-    http.expectNone({ method: 'DELETE', url: '/api/projects/dune' });
-    expect(el.querySelectorAll('r2m-project-card').length).toBe(1);
+    expect(api.calls('DELETE', '/api/projects/dune')).toHaveLength(0);
+    expect(cards(page)).toEqual(['dune']);
   });
 });

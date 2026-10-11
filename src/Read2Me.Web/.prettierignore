@@ -1,4 +1,0 @@
-dist
-.angular
-node_modules
-src/app/api/schema.d.ts

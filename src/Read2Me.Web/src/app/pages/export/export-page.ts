@@ -1,345 +1,55 @@
-import { DatePipe } from '@angular/common';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  signal,
-  untracked,
-} from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { RouterLink } from '@angular/router';
+import { html, nothing } from 'lit-html';
+import { repeat } from 'lit-html/directives/repeat.js';
 import {
   AssemblyApi,
-  AssemblyOutputDto,
+  type AssemblyOutputDto,
   AudioProcessingApi,
   assemblyOutputUrl,
   toApiError,
 } from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal, untracked } from '@app/core/signals';
+import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { EmptyState } from '@app/ui/empty-state/empty-state';
-import { KeyValue, KeyValueRow } from '@app/ui/key-value/key-value';
-import { PageHeader } from '@app/ui/page-header/page-header';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { ConfirmService } from '@app/ui/dialogs';
+import { type KeyValueRow, keyValue } from '@app/ui/key-value';
+import { emptyState, icon, spinner, statusChip } from '@app/ui/partials';
+import { ToastService } from '@app/ui/toast';
 import { ProjectStore } from '../project/project-store';
 import {
-  RunOutcome,
+  type PhaseStep,
+  type RunOutcome,
   formatBytes,
   missingAudioCount,
   partialPrompt,
   phaseSteps,
   runBanner,
 } from './export-model';
+import exportCss from './export-page.css' with { type: 'text' };
+
+adoptStyles(exportCss);
+
+/** Angular's `date: 'medium'` under its default `en-US` locale: "Sep 19, 2026, 10:00:00 AM". */
+export function formatOutputDate(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' });
+}
 
 /**
  * `/projects/{folder}/export` (ticket 20): readiness, assemble (full or partial), the live phase
  * stepper with encode progress and cancel, and the project's assembled audiobooks to download or
  * delete. Assembly is one global run, so another project's run disables Assemble here; progress
- * comes from the hub's `assembly` family, never from polling.
+ * comes from the hub's `assembly` family, never from polling. Reads the folder from the project
+ * shell's {@link ProjectStore}, resolved in `connected()`; the computeds below that read the store
+ * are lazy, so the render that follows is their first evaluation.
  */
-@Component({
-  selector: 'app-export-page',
-  imports: [
-    DatePipe,
-    RouterLink,
-    MatButtonModule,
-    MatIconModule,
-    MatProgressBarModule,
-    MatProgressSpinnerModule,
-    EmptyState,
-    KeyValue,
-    PageHeader,
-    StatusChip,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <r2m-page-header title="Export" subtitle="Assemble the .m4b audiobook and download it" />
-
-    <div class="export">
-      <section class="export__card" aria-labelledby="export-readiness" data-card="readiness">
-        <h2 class="export__heading" id="export-readiness">Readiness</h2>
-        <r2m-key-value dense [rows]="readiness()" />
-        <p class="export__hint">
-          Assembly only needs ffmpeg — no TTS or LLM service has to be running.
-          <a routerLink="/settings/audio">Audio processing settings</a>
-        </p>
-        @if (otherProjectRunning()) {
-          <r2m-status-chip
-            status="busy"
-            [label]="'Another project is being assembled: ' + assembly().folder"
-          />
-        }
-        <div class="export__actions">
-          <button
-            mat-flat-button
-            type="button"
-            data-action="assemble"
-            [disabled]="!canAssemble()"
-            (click)="assemble()"
-          >
-            @if (starting()) {
-              <mat-spinner diameter="18" />
-            } @else {
-              <mat-icon>library_music</mat-icon>
-            }
-            {{ audioRemaining() > 0 ? 'Assemble…' : 'Assemble' }}
-          </button>
-        </div>
-      </section>
-
-      @if (showProgress()) {
-        <section class="export__card" aria-labelledby="export-progress" data-card="progress">
-          <h2 class="export__heading" id="export-progress">Progress</h2>
-          <ol class="export__phases">
-            @for (step of steps(); track step.phase) {
-              <li
-                [class]="'export__phase export__phase--' + step.state"
-                [attr.data-phase]="step.phase"
-                [attr.data-state]="step.state"
-                [attr.aria-current]="step.state === 'active' ? 'step' : null"
-              >
-                <span class="export__marker" aria-hidden="true">
-                  @switch (step.state) {
-                    @case ('done') {
-                      <mat-icon>check</mat-icon>
-                    }
-                    @case ('active') {
-                      <mat-spinner diameter="16" />
-                    }
-                    @case ('failed') {
-                      <mat-icon>error</mat-icon>
-                    }
-                    @case ('cancelled') {
-                      <mat-icon>block</mat-icon>
-                    }
-                  }
-                </span>
-                <span class="export__phase-label">{{ step.label }}</span>
-                @if (step.phase === 'Encode' && step.state === 'active') {
-                  <span class="export__percent" data-role="encode-percent"
-                    >{{ encodePercent() }}%</span
-                  >
-                }
-              </li>
-            }
-          </ol>
-          @if (
-            isThisProjectsRun() && assembly().isRunning && assembly().currentPhase === 'Encode'
-          ) {
-            <mat-progress-bar
-              mode="determinate"
-              [value]="assembly().encodePercent"
-              aria-label="Encode progress"
-            />
-          }
-          @if (banner(); as b) {
-            <r2m-status-chip data-role="outcome" [status]="b.status" [label]="b.label" />
-          }
-          @if (outcome() === 'failed' && assembly().lastError; as error) {
-            <pre class="export__error">{{ error }}</pre>
-          }
-          @if (isThisProjectsRun() && assembly().isRunning) {
-            <div class="export__actions">
-              <button
-                mat-stroked-button
-                type="button"
-                data-action="cancel-assembly"
-                [disabled]="cancelling()"
-                (click)="cancel()"
-              >
-                <mat-icon>stop_circle</mat-icon> Cancel
-              </button>
-            </div>
-          }
-        </section>
-      }
-
-      <section class="export__card" aria-labelledby="export-outputs" data-card="outputs">
-        <h2 class="export__heading" id="export-outputs">Outputs</h2>
-        @if (outputsError(); as error) {
-          <r2m-status-chip status="error" [label]="'Outputs could not be loaded: ' + error" />
-        } @else if (!outputsLoaded()) {
-          <div class="export__skeleton" aria-busy="true" aria-label="Loading outputs"></div>
-        } @else if (outputs().length === 0) {
-          <r2m-empty-state
-            compact
-            icon="library_music"
-            headline="No audiobooks yet"
-            hint="Assembled .m4b files appear here."
-          />
-        } @else {
-          <ul class="export__outputs">
-            @for (output of outputs(); track output.fileName) {
-              <li class="export__output" [attr.data-output]="output.fileName">
-                <mat-icon class="export__output-icon" aria-hidden="true">audio_file</mat-icon>
-                <div class="export__output-main">
-                  <span class="export__output-name">{{ output.fileName }}</span>
-                  <span class="export__output-meta">
-                    {{ size(output) }} · {{ output.createdAt | date: 'medium' }}
-                  </span>
-                </div>
-                @if (output.isPartial) {
-                  <r2m-status-chip status="warn" label="Partial" compact />
-                }
-                <a
-                  mat-button
-                  data-action="download-output"
-                  [href]="downloadUrl(output)"
-                  [attr.download]="output.fileName"
-                >
-                  <mat-icon>download</mat-icon> Download
-                </a>
-                <button
-                  mat-icon-button
-                  type="button"
-                  data-action="delete-output"
-                  [attr.aria-label]="'Delete ' + output.fileName"
-                  (click)="deleteOutput(output)"
-                >
-                  <mat-icon>delete</mat-icon>
-                </button>
-              </li>
-            }
-          </ul>
-        }
-      </section>
-    </div>
-  `,
-  styles: `
-    .export {
-      display: grid;
-      gap: var(--r2m-space-4);
-      max-width: 880px;
-      margin-top: var(--r2m-space-3);
-    }
-    .export__card {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-3);
-      padding: var(--r2m-space-4);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-lg);
-      background: var(--r2m-surface-low);
-    }
-    .export__heading {
-      margin: 0;
-      font: var(--mat-sys-title-medium);
-    }
-    .export__hint {
-      margin: 0;
-      color: var(--r2m-text-muted);
-      font: var(--mat-sys-body-small);
-    }
-    .export__actions {
-      display: flex;
-      gap: var(--r2m-space-2);
-    }
-    .export__phases {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--r2m-space-2) var(--r2m-space-4);
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .export__phase {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-2);
-      color: var(--r2m-text-muted);
-    }
-    .export__phase--active,
-    .export__phase--done {
-      color: inherit;
-    }
-    .export__phase--active .export__phase-label {
-      font-weight: 600;
-    }
-    .export__phase--failed {
-      color: var(--mat-sys-error);
-    }
-    .export__marker {
-      display: grid;
-      place-items: center;
-      width: 22px;
-      height: 22px;
-      border: 1px solid var(--r2m-outline);
-      border-radius: 50%;
-    }
-    .export__marker mat-icon {
-      width: 16px;
-      height: 16px;
-      font-size: 16px;
-    }
-    .export__percent {
-      font-variant-numeric: tabular-nums;
-    }
-    .export__error {
-      margin: 0;
-      max-height: 240px;
-      overflow: auto;
-      padding: var(--r2m-space-3);
-      border-radius: var(--r2m-radius-md);
-      background: color-mix(in srgb, var(--mat-sys-error) 8%, transparent);
-      font: var(--mat-sys-body-small);
-      font-family: var(--r2m-font-mono, monospace);
-      white-space: pre-wrap;
-    }
-    .export__skeleton {
-      height: 56px;
-      border-radius: var(--r2m-radius-md);
-      background: color-mix(in srgb, var(--r2m-text-muted) 12%, transparent);
-    }
-    .export__outputs {
-      display: flex;
-      flex-direction: column;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .export__output {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-3);
-      padding: var(--r2m-space-2) 0;
-    }
-    .export__output + .export__output {
-      border-top: 1px solid var(--r2m-outline);
-    }
-    .export__output-icon {
-      color: var(--r2m-text-muted);
-    }
-    .export__output-main {
-      display: flex;
-      flex: 1;
-      flex-direction: column;
-      min-width: 0;
-    }
-    .export__output-name {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .export__output-meta {
-      color: var(--r2m-text-muted);
-      font: var(--mat-sys-body-small);
-    }
-  `,
-})
-export class ExportPage {
-  readonly store = inject(ProjectStore);
-  private readonly live = inject(LiveService);
-  private readonly api = inject(AssemblyApi);
-  private readonly audioProcessing = inject(AudioProcessingApi);
-  private readonly confirm = inject(ConfirmService);
-  private readonly toast = inject(ToastService);
+export class ExportPage extends R2mElement {
+  private readonly live = use(LiveService);
+  private readonly api = use(AssemblyApi);
+  private readonly audioProcessing = use(AudioProcessingApi);
+  private readonly confirm = use(ConfirmService);
+  private readonly toast = use(ToastService);
+  private store!: ProjectStore;
 
   readonly assembly = this.live.assembly;
   readonly outputs = signal<AssemblyOutputDto[]>([]);
@@ -363,6 +73,8 @@ export class ExportPage {
   readonly otherProjectRunning = computed(
     () => this.assembly().isRunning && !this.isThisProjectsRun(),
   );
+  /** This project's run is going: the stepper is live, Cancel is offered. */
+  readonly running = computed(() => this.isThisProjectsRun() && this.assembly().isRunning);
 
   readonly audioRemaining = computed(() => this.store.folderAudioRemaining());
 
@@ -381,28 +93,25 @@ export class ExportPage {
   });
 
   readonly steps = computed(() => {
-    const state = this.assembly();
-    const running = this.isThisProjectsRun() && state.isRunning;
+    const running = this.running();
     return phaseSteps({
       isRunning: running,
-      phase: running ? state.currentPhase : this.reachedPhase(),
+      phase: running ? this.assembly().currentPhase : this.reachedPhase(),
       outcome: this.outcome(),
     });
   });
 
   readonly banner = computed(() =>
     runBanner({
-      isRunning: this.isThisProjectsRun() && this.assembly().isRunning,
+      isRunning: this.running(),
       outcome: this.outcome(),
       error: this.assembly().lastError,
       outputFileName: this.assembly().outputFileName,
     }),
   );
 
-  readonly showProgress = computed(
-    () => (this.isThisProjectsRun() && this.assembly().isRunning) || this.outcome() !== null,
-  );
-
+  readonly showProgress = computed(() => this.running() || this.outcome() !== null);
+  readonly encoding = computed(() => this.running() && this.assembly().currentPhase === 'Encode');
   readonly encodePercent = computed(() => Math.round(this.assembly().encodePercent));
 
   readonly readiness = computed<KeyValueRow[]>(() => {
@@ -420,8 +129,11 @@ export class ExportPage {
     ];
   });
 
-  constructor() {
-    effect(() => {
+  protected override connected(): void {
+    this.classList.add('export');
+    this.store = use(ProjectStore, this);
+
+    this.effect(() => {
       const folder = this.store.folder();
       untracked(() => {
         this.watchedOutcome.set(null);
@@ -432,10 +144,8 @@ export class ExportPage {
       });
     });
 
-    this.live
-      .on('assembly')
-      .pipe(takeUntilDestroyed())
-      .subscribe((m) => {
+    this.onDisconnect(
+      this.live.on('assembly', (m) => {
         if ((m.folder ?? this.store.folder()) !== this.store.folder()) return;
         switch (m.kind) {
           case 'phaseStarted':
@@ -451,7 +161,8 @@ export class ExportPage {
           default:
             this.watchedOutcome.set(m.kind);
         }
-      });
+      }),
+    );
 
     void this.audioProcessing
       .get()
@@ -460,8 +171,204 @@ export class ExportPage {
       .catch(() => undefined);
   }
 
-  size(output: AssemblyOutputDto): string {
-    return formatBytes(output.sizeBytes);
+  protected template() {
+    return html`
+      <header class="r2m-page-header">
+        <h1 class="r2m-page-header__title">Export</h1>
+        <p class="r2m-page-header__subtitle">Assemble the .m4b audiobook and download it</p>
+      </header>
+
+      <div class="export__cards">
+        ${this.readinessTemplate()} ${this.showProgress() ? this.progressTemplate() : nothing}
+        ${this.outputsTemplate()}
+      </div>
+    `;
+  }
+
+  private readinessTemplate() {
+    return html`<section
+      class="export__card"
+      aria-labelledby="export-readiness"
+      data-card="readiness"
+    >
+      <h2 class="export__heading" id="export-readiness">Readiness</h2>
+      ${keyValue(this.readiness(), { dense: true })}
+      <p class="export__hint">
+        Assembly only needs ffmpeg — no TTS or LLM service has to be running.
+        <a href="settings/audio">Audio processing settings</a>
+      </p>
+      ${
+        this.otherProjectRunning()
+          ? statusChip({
+              status: 'busy',
+              label: `Another project is being assembled: ${this.assembly().folder}`,
+            })
+          : nothing
+      }
+      <div class="export__actions">
+        <button
+          type="button"
+          class="r2m-button r2m-button--filled"
+          data-action="assemble"
+          ?disabled=${!this.canAssemble()}
+          @click=${() => void this.assemble()}
+        >
+          ${this.starting() ? spinner(18) : icon('library_music')}
+          ${this.audioRemaining() > 0 ? 'Assemble…' : 'Assemble'}
+        </button>
+      </div>
+    </section>`;
+  }
+
+  private progressTemplate() {
+    const banner = this.banner();
+    const error = this.assembly().lastError;
+    return html`<section
+      class="export__card"
+      aria-labelledby="export-progress"
+      data-card="progress"
+    >
+      <h2 class="export__heading" id="export-progress">Progress</h2>
+      <ol class="export__phases">
+        ${repeat(
+          this.steps(),
+          (step) => step.phase,
+          (step) => this.phaseTemplate(step),
+        )}
+      </ol>
+      ${
+        this.encoding()
+          ? html`<progress
+              max="1"
+              value=${this.assembly().encodePercent / 100}
+              aria-label="Encode progress"
+            ></progress>`
+          : nothing
+      }
+      ${
+        banner
+          ? html`<span data-role="outcome"
+              >${statusChip({ status: banner.status, label: banner.label })}</span
+            >`
+          : nothing
+      }
+      ${
+        this.outcome() === 'failed' && error
+          ? html`<pre class="export__error">${error}</pre>`
+          : nothing
+      }
+      ${
+        this.running()
+          ? html`<div class="export__actions">
+              <button
+                type="button"
+                class="r2m-button r2m-button--stroked"
+                data-action="cancel-assembly"
+                ?disabled=${this.cancelling()}
+                @click=${() => void this.cancel()}
+              >
+                ${icon('stop_circle')} Cancel
+              </button>
+            </div>`
+          : nothing
+      }
+    </section>`;
+  }
+
+  private phaseTemplate(step: PhaseStep) {
+    return html`<li
+      class="export__phase export__phase--${step.state}"
+      data-phase=${step.phase}
+      data-state=${step.state}
+      aria-current=${step.state === 'active' ? 'step' : nothing}
+    >
+      <span class="export__marker" aria-hidden="true">${this.markerTemplate(step)}</span>
+      <span class="export__phase-label">${step.label}</span>
+      ${
+        step.phase === 'Encode' && step.state === 'active'
+          ? html`<span class="export__percent" data-role="encode-percent"
+              >${this.encodePercent()}%</span
+            >`
+          : nothing
+      }
+    </li>`;
+  }
+
+  private markerTemplate(step: PhaseStep) {
+    switch (step.state) {
+      case 'done':
+        return icon('check');
+      case 'active':
+        return spinner(16);
+      case 'failed':
+        return icon('error');
+      case 'cancelled':
+        return icon('block');
+      default:
+        return nothing;
+    }
+  }
+
+  private outputsTemplate() {
+    const error = this.outputsError();
+    const outputs = this.outputs();
+    return html`<section class="export__card" aria-labelledby="export-outputs" data-card="outputs">
+      <h2 class="export__heading" id="export-outputs">Outputs</h2>
+      ${
+        error !== null
+          ? statusChip({ status: 'error', label: `Outputs could not be loaded: ${error}` })
+          : !this.outputsLoaded()
+            ? html`<div
+                class="export__skeleton"
+                aria-busy="true"
+                aria-label="Loading outputs"
+              ></div>`
+            : outputs.length === 0
+              ? emptyState({
+                  icon: 'library_music',
+                  headline: 'No audiobooks yet',
+                  hint: 'Assembled .m4b files appear here.',
+                  compact: true,
+                })
+              : html`<ul class="export__outputs">
+                  ${repeat(
+                    outputs,
+                    (output) => output.fileName,
+                    (output) => this.outputTemplate(output),
+                  )}
+                </ul>`
+      }
+    </section>`;
+  }
+
+  private outputTemplate(output: AssemblyOutputDto) {
+    return html`<li class="export__output" data-output=${output.fileName}>
+      ${icon('audio_file', 'export__output-icon')}
+      <div class="export__output-main">
+        <span class="export__output-name">${output.fileName}</span>
+        <span class="export__output-meta">
+          ${formatBytes(output.sizeBytes)} · ${formatOutputDate(output.createdAt)}
+        </span>
+      </div>
+      ${output.isPartial ? statusChip({ status: 'warn', label: 'Partial', compact: true }) : nothing}
+      <a
+        class="r2m-button"
+        data-action="download-output"
+        href=${this.downloadUrl(output)}
+        download=${output.fileName}
+      >
+        ${icon('download')} Download
+      </a>
+      <button
+        type="button"
+        class="r2m-icon-button"
+        data-action="delete-output"
+        aria-label=${`Delete ${output.fileName}`}
+        @click=${() => void this.deleteOutput(output)}
+      >
+        ${icon('delete')}
+      </button>
+    </li>`;
   }
 
   downloadUrl(output: AssemblyOutputDto): string {
@@ -534,5 +441,12 @@ export class ExportPage {
     } catch (error) {
       if (this.store.folder() === folder) this.outputsError.set(toApiError(error).message);
     }
+  }
+}
+define('r2m-export-page', ExportPage);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-export-page': ExportPage;
   }
 }

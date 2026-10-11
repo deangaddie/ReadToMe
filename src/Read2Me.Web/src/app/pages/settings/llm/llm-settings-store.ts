@@ -1,25 +1,26 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
-  AttributionChainResponse,
-  AttributionChainStep,
-  LlmServerConfig,
+  type AttributionChainResponse,
+  type AttributionChainStep,
+  type LlmServerConfig,
   LlmSettingsApi,
   toApiError,
 } from '@app/api';
-import { LiveService } from '@app/live/live.service';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { chainOptions, chainRows } from './chain-steps';
 
 /**
  * State behind `/settings/llm` (ticket 21), provided by the page. Every write goes to the host and
  * the store reloads from it; the hub's `settingsChanged { area: 'llm' }` reloads it too, so an edit
  * made in another tab or over the agent API shows up here. Reloads are sequenced: a slow answer
- * never overwrites a newer one.
+ * never overwrites a newer one. The page calls {@link open} on connect and {@link close} on
+ * disconnect.
  */
-@Injectable()
 export class LlmSettingsStore {
-  private readonly api = inject(LlmSettingsApi);
-  private readonly live = inject(LiveService);
+  private readonly api = use(LlmSettingsApi);
+  private readonly live = use(LiveService);
+  private subscription: Unsubscribe | null = null;
 
   private readonly _configs = signal<LlmServerConfig[] | null>(null);
   private readonly _activeId = signal<number | null>(null);
@@ -44,13 +45,23 @@ export class LlmSettingsStore {
   /** What attribution runs when the chain is empty: the default config, or nothing. */
   readonly chainFallback = computed(() => this._chain()?.resolved[0]?.config ?? null);
 
-  constructor() {
-    this.live
-      .on('settingsChanged')
-      .pipe(takeUntilDestroyed(inject(DestroyRef)))
-      .subscribe((m) => {
-        if (m.area === 'llm') void this.load();
-      });
+  /**
+   * Follows the hub's `settingsChanged { area: 'llm' }` and loads. The page calls it on every
+   * connect, so a page the router re-attaches listens again after {@link close}.
+   */
+  open(): Promise<void> {
+    this.subscription?.();
+    this.subscription = this.live.on('settingsChanged', (m) => {
+      if (m.area === 'llm') void this.load();
+    });
+    return this.load();
+  }
+
+  /** Drops the hub subscription and any load still in flight. */
+  close(): void {
+    this.subscription?.();
+    this.subscription = null;
+    this.loadSeq++;
   }
 
   async load(): Promise<void> {

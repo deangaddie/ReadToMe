@@ -1,4 +1,4 @@
-import { PromptCatalogEntry } from '@app/api';
+import type { PromptCatalogEntry } from '@app/api';
 
 /**
  * Pure editing rules of the prompts page (ticket 23): a draft is compared with the *resolved*

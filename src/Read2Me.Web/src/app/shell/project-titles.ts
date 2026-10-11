@@ -1,10 +1,10 @@
-import { Injectable, signal } from '@angular/core';
+import { signal } from '@app/core/signals';
 
 /**
- * Project titles the breadcrumb shows instead of the folder name. The project shell writes the
- * title once its detail loads; the app shell only reads, so it never fetches a project itself.
+ * Project titles the breadcrumb shows instead of the folder name. The project store writes the
+ * title once its detail loads; the project route's title function only reads, so the shell never
+ * fetches a project itself.
  */
-@Injectable({ providedIn: 'root' })
 export class ProjectTitles {
   private readonly _titles = signal<Record<string, string>>({});
 

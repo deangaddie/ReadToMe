@@ -1,5 +1,5 @@
 // Verify the native activity centre and the preflight gate (native-web 21) against a real host.
-//   R2M_APP=/app2 R2M_WEB=http://localhost:5000 bun activity-check.mjs > activity-check.log 2>&1
+//   R2M_WEB=http://localhost:5000 bun activity-check.mjs > activity-check.log 2>&1
 import { launch, openWeb } from './browse.mjs';
 
 const { page, close } = await launch();

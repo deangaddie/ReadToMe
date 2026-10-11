@@ -1,268 +1,162 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
-import { MatIconModule } from '@angular/material/icon';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { ParagraphDto } from '@app/api';
+import { html, nothing } from 'lit-html';
+import { repeat } from 'lit-html/directives/repeat.js';
+import type { ParagraphDto } from '@app/api';
+import { use } from '@app/core/services';
 import { speakerHue } from '@app/shared/speaker-color';
-import { SpeakerChip } from '@app/ui/speaker-chip/speaker-chip';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { ItemRow } from './item-row';
-import { NodeMenu } from './node-menu';
-import { NodeMenuTarget } from './node-menu-entries';
+import { icon } from '@app/ui/partials';
+import { chipOf, itemRow, speakerChipEvents } from './item-row';
+import { nodeMenuTrigger } from './node-menu';
+import type { NodeMenuTarget } from './node-menu-entries';
 import {
-  RowContext,
+  type RowContext,
+  type RowPosition,
   clearableOutcome,
   isBusy,
   paragraphSpeaker,
   paragraphText,
   queueChip,
 } from './reader-rows';
-import { ancestryFor, isDialogParagraph } from './selection';
+import { ancestryFor, isDialogParagraph, isNarrationOnlyParagraph } from './selection';
 import { SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
+import '@app/ui/speaker-chip';
 
 /**
- * One paragraph in the reader (design §6.3): a gutter with the selection checkbox (Character
- * paragraphs only, in Read and Speakers modes — ticket 12) and a rail in the speaker's colour,
- * then the body the mode chooses — prose with one paragraph speaker chip in Read, one
- * {@link ItemRow} per item in Speakers and Audio. The Read chip opens the speaker menu and assigns
- * the whole paragraph. The paragraph menu (ticket 11) sits at the right in every mode, off while
- * attribution is queued; a settled Failed/Unknown chip is a button that forgets the outcome.
+ * One paragraph in the reader (design §6.3), as a partial — no element per row (spec §7, risk 1).
+ * A gutter with the selection checkbox (Character paragraphs only, in Read and Speakers modes —
+ * ticket 12) and a rail in the speaker's colour, then the body the mode chooses: prose with one
+ * paragraph speaker chip in Read, one {@link itemRow} per item in Speakers and Audio. The Read
+ * chip opens the speaker menu and assigns the whole paragraph. The status column shows the
+ * attribution queue chip and a lock while queued (not in Audio mode) — a settled Failed/Unknown
+ * chip is a button that forgets the outcome — then the paragraph's node-menu trigger (ticket 11),
+ * off while the paragraph is queued or the editor is locked.
+ *
+ * A row holds no state of its own: the selection and the assigner are the project shell's,
+ * reached from the event's element through `use(X, element)` (DOM ancestry), as the Angular row
+ * reached them through `inject()`.
  */
-@Component({
-  selector: 'r2m-paragraph',
-  imports: [MatIconModule, MatTooltipModule, ItemRow, NodeMenu, SpeakerChip, StatusChip],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    class: 'r2m-paragraph',
-    '[class]': '"r2m-paragraph--" + speaker().state',
-    '[class.r2m-paragraph--selected]': 'selected()',
-    '[style.--r2m-speaker-hue]': 'hue()',
-    '[attr.data-paragraph-id]': 'paragraph().id',
-  },
-  template: `
+export function paragraphRow(
+  paragraph: ParagraphDto,
+  chapterId: string,
+  ctx: RowContext,
+  position: RowPosition,
+) {
+  const speaker = paragraphSpeaker(paragraph, ctx.speakers);
+  const status = ctx.paragraphStatus[paragraph.id];
+  // Audio mode shows the item queue instead; attribution state stays with Read and Speakers.
+  const queue = ctx.mode === 'audio' ? null : queueChip(status, 'Unknown');
+  const outcome = queue ? clearableOutcome(status) : null;
+  // Queued or processing: the server would refuse an edit whatever the mode shows.
+  const queued = isBusy(status);
+  const busy = queue !== null && queued;
+  const menuTarget: NodeMenuTarget = {
+    kind: 'paragraph',
+    id: paragraph.id,
+    text: paragraphText(paragraph),
+    ...position,
+    // Released, it joins the paragraph selection, so only where that selection is on offer.
+    narrationOnly: ctx.selectable && isNarrationOnlyParagraph(paragraph),
+  };
+  // Only Character paragraphs are selectable, and only where the selection is paragraphs.
+  const selectable = ctx.selectable && isDialogParagraph(paragraph);
+  const selected = ctx.selected.has(paragraph.id);
+  // The Read chip assigns the whole paragraph; a queued one is the server's to stamp.
+  const assignable = selectable && !queued && ctx.roster.length > 0;
+  const classes = [
+    'r2m-paragraph',
+    `r2m-paragraph--${speaker.state}`,
+    selected ? 'r2m-paragraph--selected' : '',
+  ].join(' ');
+  const hue = speakerHue(speaker.characterId ?? speaker.name);
+  const items = paragraph.items;
+  const home = { paragraphId: paragraph.id, chapterId };
+  const chip = speakerChipEvents({ kind: 'paragraph', paragraphId: paragraph.id });
+
+  const toggle = (e: Event) => {
+    const input = e.currentTarget as HTMLInputElement;
+    use(SelectionStore, input).toggle(
+      paragraph.id,
+      ancestryFor(ctx.ancestry, chapterId),
+      input.checked,
+    );
+  };
+  const clearOutcome = (e: Event) =>
+    void use(SpeakerAssigner, e.currentTarget as Element).clearOutcome(paragraph.id);
+
+  return html`<div
+    class=${classes}
+    data-paragraph-id=${paragraph.id}
+    data-chapter-id=${chapterId}
+    style="--r2m-speaker-hue: ${hue}"
+  >
     <div class="r2m-paragraph__gutter">
-      @if (selectable()) {
-        <input
-          type="checkbox"
-          class="r2m-paragraph__select"
-          aria-label="Select paragraph"
-          [checked]="selected()"
-          (change)="toggle($event)"
-        />
-      } @else {
-        <span class="r2m-paragraph__select r2m-paragraph__select--none" aria-hidden="true"></span>
+      ${
+        selectable
+          ? html`<input
+              type="checkbox"
+              class="r2m-paragraph__select"
+              aria-label="Select paragraph"
+              .checked=${selected}
+              @change=${toggle}
+            />`
+          : html`<span
+              class="r2m-paragraph__select r2m-paragraph__select--none"
+              aria-hidden="true"
+            ></span>`
       }
       <span class="r2m-paragraph__rail" aria-hidden="true"></span>
     </div>
 
     <div class="r2m-paragraph__body">
-      @if (ctx().mode === 'read') {
-        <div class="r2m-paragraph__meta">
-          <r2m-speaker-chip
-            compact
-            [state]="speaker().state"
-            [name]="speaker().name"
-            [characterId]="speaker().characterId"
-            [interactive]="assignable()"
-            [roster]="assignable() ? ctx().roster : undefined"
-            (pick)="assign($event)"
-            (clear)="assign(null)"
-            (create)="create($event)"
-          />
-        </div>
-        <p class="r2m-paragraph__prose">{{ text() }}</p>
-      } @else {
-        @for (item of paragraph().items; track item.id) {
-          <r2m-item
-            [item]="item"
-            [paragraphId]="paragraph().id"
-            [chapterId]="chapterId()"
-            [ctx]="ctx()"
-            [isFirst]="$first"
-            [isLast]="$last"
-            [paragraphBusy]="busy()"
-          />
-        }
+      ${
+        ctx.mode === 'read'
+          ? html`<div class="r2m-paragraph__meta">
+                <r2m-speaker-chip
+                  .compact=${true}
+                  .state=${speaker.state}
+                  .name=${speaker.name}
+                  .characterId=${speaker.characterId}
+                  .roster=${assignable ? ctx.roster : undefined}
+                  @pick=${chip.pick}
+                  @clear=${chip.clear}
+                  @create=${chip.create}
+                ></r2m-speaker-chip>
+              </div>
+              <p class="r2m-paragraph__prose">${paragraphText(paragraph)}</p>`
+          : repeat(
+              items,
+              (item) => item.id,
+              (item, i) =>
+                itemRow(
+                  item,
+                  home,
+                  ctx,
+                  { isFirst: i === 0, isLast: i === items.length - 1 },
+                  queued,
+                ),
+            )
       }
     </div>
 
     <div class="r2m-paragraph__status">
-      @if (ctx().mode !== 'audio') {
-        @if (queue(); as chip) {
-          @if (outcome()) {
-            <button
+      ${
+        queue && outcome
+          ? html`<button
               type="button"
               class="r2m-paragraph__outcome"
-              [matTooltip]="(chip.tooltip ? chip.tooltip + ' — ' : '') + 'Click to clear'"
-              (click)="clearOutcome()"
+              data-tooltip="${queue.tooltip ? `${queue.tooltip} — ` : ''}Click to clear"
+              @click=${clearOutcome}
             >
-              <r2m-status-chip compact [status]="chip.status" [label]="chip.label" [icon]="chip.icon" />
-            </button>
-          } @else {
-            <r2m-status-chip
-              compact
-              [status]="chip.status"
-              [label]="chip.label"
-              [icon]="chip.icon"
-              [tooltip]="chip.tooltip ?? ''"
-            />
-          }
-        }
-        @if (busy()) {
-          <mat-icon class="r2m-paragraph__lock" aria-label="Locked while queued">lock</mat-icon>
-        }
+              ${chipOf({ ...queue, tooltip: undefined })}
+            </button>`
+          : queue
+            ? chipOf(queue)
+            : nothing
       }
-      <r2m-node-menu class="r2m-paragraph__menu" [target]="menuTarget()" [disabled]="busy()" />
+      ${busy ? icon('lock', 'r2m-paragraph__lock') : nothing}
+      <span class="r2m-paragraph__menu"
+        >${nodeMenuTrigger(menuTarget, { disabled: queued || ctx.locked })}</span
+      >
     </div>
-  `,
-  styles: `
-    @use 'tokens';
-    :host {
-      display: flex;
-      align-items: stretch;
-      gap: var(--r2m-space-2);
-      padding: var(--r2m-space-1) 0;
-      border-radius: var(--r2m-radius-sm);
-      @include tokens.speaker-colors;
-      --_rail: var(--r2m-speaker-fg);
-    }
-    :host(.r2m-paragraph--selected) {
-      background: color-mix(in srgb, var(--r2m-accent) 8%, transparent);
-    }
-    :host(.r2m-paragraph--unknown) {
-      --_rail: var(--r2m-status-warn);
-    }
-    :host(.r2m-paragraph--mixed) {
-      --_rail: var(--r2m-status-neutral);
-    }
-    :host(.r2m-paragraph--narration) {
-      --_rail: var(--r2m-outline);
-    }
-    .r2m-paragraph__gutter {
-      flex: 0 0 auto;
-      display: flex;
-      align-items: flex-start;
-      gap: var(--r2m-space-2);
-      padding-top: 4px;
-    }
-    .r2m-paragraph__select {
-      margin: 2px 0 0;
-      width: 13px;
-      height: 13px;
-      accent-color: var(--r2m-accent);
-    }
-    .r2m-paragraph__select--none {
-      display: inline-block;
-    }
-    .r2m-paragraph__rail {
-      width: 3px;
-      align-self: stretch;
-      border-radius: 2px;
-      background: var(--_rail);
-    }
-    .r2m-paragraph__body {
-      flex: 1 1 auto;
-      min-width: 0;
-    }
-    .r2m-paragraph__meta {
-      margin-bottom: 2px;
-    }
-    .r2m-paragraph__prose {
-      margin: 0;
-      line-height: var(--r2m-line-normal);
-      font-size: var(--r2m-text-md);
-    }
-    .r2m-paragraph__status {
-      flex: 0 0 auto;
-      display: flex;
-      align-items: flex-start;
-      gap: var(--r2m-space-1);
-      padding-top: 2px;
-    }
-    .r2m-paragraph__outcome {
-      padding: 0;
-      border: none;
-      background: transparent;
-      font: inherit;
-      cursor: pointer;
-    }
-    .r2m-paragraph__outcome:focus-visible {
-      outline: 2px solid var(--r2m-accent);
-      outline-offset: 1px;
-      border-radius: var(--r2m-radius-pill);
-    }
-    .r2m-paragraph__lock {
-      font-size: 16px;
-      width: 16px;
-      height: 16px;
-      color: var(--r2m-text-muted);
-    }
-    .r2m-paragraph__menu {
-      opacity: 0;
-      transition: opacity 120ms;
-    }
-    :host(:hover) .r2m-paragraph__menu,
-    :host(:focus-within) .r2m-paragraph__menu {
-      opacity: 1;
-    }
-  `,
-})
-export class ParagraphRow {
-  private readonly selection = inject(SelectionStore);
-  private readonly assigner = inject(SpeakerAssigner);
-
-  readonly paragraph = input.required<ParagraphDto>();
-  readonly ctx = input.required<RowContext>();
-  /** The chapter the paragraph is in (the row knows; the DTO does not). */
-  readonly chapterId = input<string>('');
-  /** Position among the chapter's paragraphs (merge entries hide at the ends). */
-  readonly isFirst = input(false);
-  readonly isLast = input(false);
-
-  protected readonly menuTarget = computed<NodeMenuTarget>(() => ({
-    kind: 'paragraph',
-    id: this.paragraph().id,
-    text: paragraphText(this.paragraph()),
-    isFirst: this.isFirst(),
-    isLast: this.isLast(),
-  }));
-
-  protected readonly speaker = computed(() =>
-    paragraphSpeaker(this.paragraph(), this.ctx().speakers),
-  );
-  protected readonly hue = computed(() =>
-    speakerHue(this.speaker().characterId ?? this.speaker().name),
-  );
-  protected readonly text = computed(() => paragraphText(this.paragraph()));
-  private readonly status = computed(() => this.ctx().paragraphStatus[this.paragraph().id]);
-  protected readonly queue = computed(() => queueChip(this.status(), 'Unknown'));
-  protected readonly outcome = computed(() => clearableOutcome(this.status()));
-  protected readonly busy = computed(() => isBusy(this.status()));
-
-  /** Only Character paragraphs are selectable, and only where the selection is paragraphs. */
-  protected readonly selectable = computed(
-    () => this.ctx().selectable && isDialogParagraph(this.paragraph()),
-  );
-  protected readonly selected = computed(() => this.ctx().selected.has(this.paragraph().id));
-  /** The Read chip assigns the whole paragraph; a queued one is the server's to stamp. */
-  protected readonly assignable = computed(
-    () => this.selectable() && !this.busy() && this.ctx().roster.length > 0,
-  );
-
-  protected toggle(event: Event): void {
-    const on = (event.target as HTMLInputElement).checked;
-    this.selection.toggle(this.paragraph().id, ancestryFor(this.ctx().ancestry, this.chapterId()), on);
-  }
-
-  protected assign(characterId: string | null): void {
-    void this.assigner.assign({ kind: 'paragraph', paragraphId: this.paragraph().id }, characterId);
-  }
-
-  protected create(name: string): void {
-    void this.assigner.createAndAssign({ kind: 'paragraph', paragraphId: this.paragraph().id }, name);
-  }
-
-  protected clearOutcome(): void {
-    void this.assigner.clearOutcome(this.paragraph().id);
-  }
+  </div>`;
 }

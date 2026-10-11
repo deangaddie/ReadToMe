@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { signal } from '@app/core/signals';
 
 const STORAGE_KEY = 'r2m.rail.expanded';
 
@@ -6,7 +6,6 @@ const STORAGE_KEY = 'r2m.rail.expanded';
  * Nav-rail expanded/collapsed preference, remembered per browser (design §5). Storage failures
  * (private mode, blocked storage) degrade to the in-memory default, never to an error.
  */
-@Injectable({ providedIn: 'root' })
 export class RailState {
   private readonly _expanded = signal(read());
   readonly expanded = this._expanded.asReadonly();

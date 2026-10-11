@@ -3,7 +3,9 @@
 ## Status
 
 accepted (2026-10-06). Decided in the native-web wayfinder map (`.scratch/native-web/`, go/no-go ticket 06).
-Amends [ADR 0012](0012-blazor-ui-removed.md): Angular stays the only UI until the native app takes over `/app`.
+Amends [ADR 0012](0012-blazor-ui-removed.md): Angular stays the only UI until the native app takes over `/app`. That
+amendment is done: the cutover (native-web ticket 37, 2026-10-11) moved the native app to `/app` and
+`src/Read2Me.Web`, removed the Angular app and the `/app2` prefix, and made Bun the only front-end toolchain.
 
 ## Context
 

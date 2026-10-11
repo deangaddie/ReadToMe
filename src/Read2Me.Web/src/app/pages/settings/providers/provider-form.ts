@@ -1,11 +1,6 @@
 import { TextSubstitutionStep, ToSentenceCaseConfig } from '@app/api';
 import { duplicateName, isAbsoluteUrl } from '@app/shared/config-form';
-import {
-  SettingsField,
-  SettingsValues,
-  effectiveValue,
-  isFieldValid,
-} from '@app/ui/settings-form/settings-form';
+import { SettingsField, SettingsValues, effectiveValue, isFieldValid } from '@app/ui/settings-form';
 
 /**
  * What the four provider config entities share: identity in properties, everything else in
@@ -121,7 +116,10 @@ export function toProviderForm(config: ProviderConfig, withText: boolean): Provi
 // ---- schema fields ⇄ settings -------------------------------------------------------------------
 
 /** The stored values of `fields`, keyed as the settings form wants them; absent keys take the default. */
-export function fieldValues(fields: readonly SettingsField[], settings: SettingsValues): SettingsValues {
+export function fieldValues(
+  fields: readonly SettingsField[],
+  settings: SettingsValues,
+): SettingsValues {
   const values: SettingsValues = {};
   for (const field of fields) {
     const key = field.key.toLowerCase();
@@ -207,7 +205,8 @@ export function buildProviderConfig(
     Object.entries(form.settings).filter(([key]) => !edited.has(key)),
   );
   settings['baseUrl'] = form.baseUrl.trim();
-  for (const field of fields) settings[field.key] = storedValue(field, effectiveValue(field, values));
+  for (const field of fields)
+    settings[field.key] = storedValue(field, effectiveValue(field, values));
 
   const config: ProviderConfig = {
     id,

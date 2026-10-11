@@ -1,4 +1,4 @@
-import { CreateVoiceRule, Guid, VoiceAnchorLevel, VoiceRuleDto } from '@app/api';
+import type { CreateVoiceRule, Guid, VoiceAnchorLevel, VoiceRuleDto } from '@app/api';
 
 // ---- Rule list ---------------------------------------------------------------------------------------
 

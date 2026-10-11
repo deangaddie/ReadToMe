@@ -1,4 +1,4 @@
-import { AttributionChainStep, AttributionPromptStyle, LlmServerConfig } from '@app/api';
+import { type AttributionChainStep, AttributionPromptStyle, type LlmServerConfig } from '@app/api';
 
 /**
  * Pure edits over the stored attribution chain. Steps

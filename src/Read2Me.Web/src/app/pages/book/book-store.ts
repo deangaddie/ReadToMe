@@ -1,30 +1,29 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
-import {
-  AudioApi,
+import type {
   AudioReviewsDto,
-  BookApi,
   BookOverviewDto,
   ChapterVoicesDto,
   NodeChildrenDto,
   NodeDto,
   ParagraphDto,
 } from '@app/api';
-import { LiveSnapshot, Receipt } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { Subscription } from 'rxjs';
-import { ProjectStore } from '../project/project-store';
+import { AudioApi, BookApi } from '@app/api';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import type { LiveSnapshot, Receipt } from '@app/live/live-messages';
+import { LiveService, type Unsubscribe } from '@app/live/live.service';
+import { ToastService } from '@app/ui/toast';
+import type { ProjectStore } from '../project/project-store';
 import {
-  ChildrenMap,
-  NodeRef,
-  TreeNode,
+  type ChildrenMap,
+  type NodeRef,
+  type TreeNode,
   buildTree,
   chapterAncestry,
   chapterSequence,
   firstUnloaded,
 } from './book-tree';
-import { LoadedChapter, ReceiptPlan, gapPlan, planReceipt } from './receipt-plan';
-import { LoadedChapterView, ReaderMode, SpeakerContext } from './reader-rows';
+import { type LoadedChapter, type ReceiptPlan, gapPlan, planReceipt } from './receipt-plan';
+import type { LoadedChapterView, ReaderMode, SpeakerContext } from './reader-rows';
 
 /** Receipts arrive in bursts (attribution commits per paragraph); apply one merged plan per burst. */
 export const RECEIPT_BATCH_MS = 150;
@@ -40,16 +39,19 @@ type Direction = 'next' | 'previous';
  * their voice maps, the audio review map and the reader mode. Receipts never patch rows (spec D6):
  * {@link planReceipt} decides what to read again and the store reads it.
  */
-@Injectable()
 export class BookStore {
-  private readonly book = inject(BookApi);
-  private readonly audio = inject(AudioApi);
-  private readonly live = inject(LiveService);
-  private readonly project = inject(ProjectStore);
-  private readonly toast = inject(ToastService);
+  private readonly book = use(BookApi);
+  private readonly audio = use(AudioApi);
+  private readonly live = use(LiveService);
+  private readonly toast = use(ToastService);
 
-  private subscriptions: Subscription[] = [];
+  private subscriptions: Unsubscribe[] = [];
+  /** Highest revision accounted for; null until `/book` answers with the one it read against. */
   private lastRevision: number | null = null;
+  /** `/book` has answered, so {@link lastRevision} covers what the opening reads loaded. */
+  private baselined = false;
+  /** The highest snapshot revision that arrived before the baseline, compared once it is known. */
+  private heldSnapshot: number | null = null;
   private pending: ReceiptPlan | null = null;
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   /** One "updated elsewhere" toast per receipt burst. */
@@ -126,6 +128,9 @@ export class BookStore {
     Object.assign({}, ...this._window().map((id) => this._voices()[id] ?? {})),
   );
 
+  /** The project the shell opened: its narrator. */
+  constructor(private readonly project: ProjectStore) {}
+
   // ---- lifecycle --------------------------------------------------------------------------------
 
   /** Loads the overview and reviews and starts listening for receipts. No-op when already open. */
@@ -133,10 +138,12 @@ export class BookStore {
     if (this._folder() === folder) return;
     this.close();
     this._folder.set(folder);
-    this.lastRevision = this.baselineRevision();
+    this.lastRevision = null;
+    this.baselined = false;
+    this.heldSnapshot = null;
     this.subscriptions = [
-      this.live.receipts$(folder).subscribe((r) => this.onReceipt(r)),
-      this.live.resynced$.subscribe((s) => this.onResync(s)),
+      this.live.receipts(folder, (r) => this.onReceipt(r)),
+      this.live.resynced((s) => this.onResync(s)),
     ];
 
     try {
@@ -148,7 +155,7 @@ export class BookStore {
   }
 
   close(): void {
-    for (const s of this.subscriptions) s.unsubscribe();
+    for (const unsubscribe of this.subscriptions) unsubscribe();
     this.subscriptions = [];
     if (this.batchTimer) clearTimeout(this.batchTimer);
     this.batchTimer = null;
@@ -241,6 +248,8 @@ export class BookStore {
     if (!this._window().includes(chapterId)) {
       this._window.set([chapterId]);
       await this.readOrMarkStale(() => this.loadChapter(chapterId));
+      // Another open (a deep link racing the first-chapter fallback) replaced the window meanwhile.
+      if (!this._window().includes(chapterId)) return;
     }
     this._current.set(chapterId);
     this._scrollRequest.update((r) => ({ chapterId, seq: (r?.seq ?? 0) + 1 }));
@@ -329,7 +338,7 @@ export class BookStore {
     const overview = await this.book.overview(folder);
     if (this._folder() !== folder) return;
     this._overview.set(overview);
-    this.lastRevision ??= this.baselineRevision();
+    this.adoptBaseline(overview.revision);
     const [only] = overview.volumes;
     if (only && overview.volumes.length === 1)
       await this.loadChildren({ level: 'volume', id: only.id });
@@ -340,6 +349,8 @@ export class BookStore {
     const folder = this._folder();
     if (!folder) return;
     const overview = await this.book.overview(folder);
+    // The opening read failed: this one (the stale banner's Refresh) is the baseline instead.
+    if (!this.baselined && this._folder() === folder) this.adoptBaseline(overview.revision);
     const loaded = this._children();
     const refs = childRefs(overview.volumes, loaded);
     const results = await Promise.all(
@@ -419,11 +430,6 @@ export class BookStore {
     this._window.set(window);
   }
 
-  /** The project revision once `/status` has answered (0 is a real revision); null before. */
-  private baselineRevision(): number | null {
-    return this.project.status() ? this.project.revision() : null;
-  }
-
   /** Runs a read; a failure marks the view stale instead of throwing into the caller. */
   private async readOrMarkStale(read: () => Promise<void>): Promise<void> {
     try {
@@ -454,7 +460,7 @@ export class BookStore {
   }
 
   private settleOwnWaiters(hit: boolean): void {
-    for (const waiter of [...this.ownWaiters]) waiter(hit);
+    for (const waiter of Array.from(this.ownWaiters)) waiter(hit);
   }
 
   private loadedIndex(): LoadedChapter[] {
@@ -489,10 +495,41 @@ export class BookStore {
       (k) => k.toLowerCase() === folder.toLowerCase(),
     );
     const revision = key === undefined ? undefined : snapshot.projects[key]?.revision;
-    if (revision === undefined || (this.lastRevision !== null && revision <= this.lastRevision))
+    if (revision === undefined) return;
+    // The snapshot landed before `/book` answered: hold it until the baseline is known, rather than
+    // read everything again on every open in case a commit fell between the reads and the snapshot.
+    if (!this.baselined) {
+      this.heldSnapshot = Math.max(this.heldSnapshot ?? revision, revision);
       return;
+    }
+    this.onSnapshotRevision(revision);
+  }
+
+  /**
+   * `/book` answered with the revision it read against (stamped before the read). A snapshot held
+   * meanwhile is compared with that revision, not with receipts that arrived during the read: a
+   * commit made before the hub joined sends no receipt, so a later receipt does not cover it.
+   */
+  private adoptBaseline(revision: number): void {
+    const held = this.heldSnapshot;
+    this.heldSnapshot = null;
+    this.baselined = true;
+    this.lastRevision = Math.max(this.lastRevision ?? revision, revision, held ?? revision);
+    if (held !== null && held > revision) this.catchUp();
+  }
+
+  /** A snapshot ahead of the baseline: commits this tab never heard about. */
+  private onSnapshotRevision(revision: number): void {
+    if (this.lastRevision !== null && revision <= this.lastRevision) return;
     this.lastRevision = revision;
-    this.schedule(gapPlan(this._current()));
+    this.catchUp();
+  }
+
+  private catchUp(): void {
+    // No chapter on screen yet (the opening reads are still under way): read again in place. A gap
+    // plan would drop the window mid-startup and race a `?chapter=` deep link.
+    const current = this._current();
+    this.schedule(current ? gapPlan(current) : refreshPlan(this._window()));
   }
 
   private toastOnce(): void {
@@ -537,6 +574,19 @@ export class BookStore {
       this._stale.set(messageOf(error));
     }
   }
+}
+
+/** Read the overview, reviews and these chapters again, keeping the window as it is. */
+function refreshPlan(chapters: readonly string[]): ReceiptPlan {
+  return {
+    reloadChapters: [...chapters],
+    reloadVoices: [],
+    reloadOverview: true,
+    reloadReviews: true,
+    dropOtherChapters: false,
+    toast: false,
+    gap: true,
+  };
 }
 
 function mergePlans(a: ReceiptPlan, b: ReceiptPlan): ReceiptPlan {

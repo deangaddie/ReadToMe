@@ -79,10 +79,7 @@ export class ReviewSelection {
   static from(proposals: readonly BookEditRow[]): ReviewSelection {
     const rows = proposals.map((proposal) => ({ proposal, userValue: null }));
     // A program has one target selector, so an id names at most one row within a session.
-    return new ReviewSelection(
-      rows,
-      new Set(rows.filter(isAppliable).map((r) => r.proposal.id)),
-    );
+    return new ReviewSelection(rows, new Set(rows.filter(isAppliable).map((r) => r.proposal.id)));
   }
 
   static empty(): ReviewSelection {
@@ -151,7 +148,11 @@ export class ReviewSelection {
   toEdits(): BookEditItem[] {
     return this.rows
       .filter((r) => this.isApplying(r))
-      .map((r) => ({ kind: r.proposal.kind, id: r.proposal.id, newValue: effectiveValue(r) ?? '' }));
+      .map((r) => ({
+        kind: r.proposal.kind,
+        id: r.proposal.id,
+        newValue: effectiveValue(r) ?? '',
+      }));
   }
 
   private isApplying(row: ReviewRow): boolean {

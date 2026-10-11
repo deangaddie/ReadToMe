@@ -1,15 +1,15 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { BookOverviewDto, ParagraphDto, ProjectDetailDto } from '@app/api';
-import { LiveSnapshot, Receipt } from '@app/live/live-messages';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { BookOverviewDto, ParagraphDto, ProjectDetailDto } from '@app/api';
+import { Emitter } from '@app/core/emitter';
+import { override, resetServices } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import type { LiveSnapshot, Receipt } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { Subject } from 'rxjs';
-import { ProjectStore } from '../project/project-store';
+import { ToastService } from '@app/ui/toast';
+import { FakeApi, problem } from '../../../testing/fake-api';
+import type { ProjectStore } from '../project/project-store';
 import { BookStore, RECEIPT_BATCH_MS, WINDOW_CAP } from './book-store';
-import { TreeNode } from './book-tree';
+import type { TreeNode } from './book-tree';
 
 const BASE = '/api/projects/dune';
 
@@ -23,6 +23,7 @@ const OVERVIEW: BookOverviewDto = {
   characters: [{ id: 'h', name: 'Hardin', aliases: [] }],
   totalParts: 2,
   totalChapters: 3,
+  revision: 5,
 };
 
 function paragraphs(...ids: string[]): { paragraphs: ParagraphDto[] } {
@@ -72,66 +73,64 @@ function receipt(
   };
 }
 
-class FakeLive {
-  readonly receipts = new Subject<Receipt>();
-  readonly resynced = new Subject<LiveSnapshot>();
-  readonly resynced$ = this.resynced.asObservable();
-  receipts$() {
-    return this.receipts.asObservable();
+/** The receipt and resync streams the store subscribes to. */
+class FakeBookLive {
+  readonly receiptStream = new Emitter<Receipt>();
+  readonly resyncStream = new Emitter<LiveSnapshot>();
+  receipts(_folder: string, listener: (r: Receipt) => void) {
+    return this.receiptStream.subscribe(listener);
+  }
+  resynced(listener: (s: LiveSnapshot) => void) {
+    return this.resyncStream.subscribe(listener);
   }
 }
 
+const chapterList = (ids: string[]) => ({
+  chapters: ids.map((id) => ({ id, title: id.toUpperCase() })),
+});
+
+/**
+ * The Angular spec answered requests one by one through HttpTestingController; here the routes
+ * are canned up front (`FakeApi`) and the spec reads what was asked afterwards. The book is one
+ * volume with two parts: p1 → c1, c2; p2 → c3.
+ */
 describe('BookStore', () => {
-  let http: HttpTestingController;
-  let live: FakeLive;
+  let api: FakeApi;
+  let live: FakeBookLive;
   let store: BookStore;
   let toasts: string[];
-  let projectStatus: ReturnType<typeof signal<object | null>>;
-  let projectRevision: ReturnType<typeof signal<number>>;
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+  const calls = (path: string) => api.calls('GET', `${BASE}${path}`).length;
 
   beforeEach(() => {
-    live = new FakeLive();
+    resetServices();
+    api = new FakeApi();
+    api.install();
+    live = new FakeBookLive();
+    override(LiveService, live as unknown as LiveService);
     toasts = [];
-    projectStatus = signal<object | null>({});
-    projectRevision = signal(5);
-    TestBed.configureTestingModule({
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        BookStore,
-        { provide: LiveService, useValue: live },
-        {
-          provide: ProjectStore,
-          useValue: { revision: projectRevision, status: projectStatus, detail: signal(DETAIL) },
-        },
-        { provide: ToastService, useValue: { info: (m: string) => toasts.push(m) } },
-      ],
-    });
-    http = TestBed.inject(HttpTestingController);
-    store = TestBed.inject(BookStore);
+    override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
+    const project = { detail: signal(DETAIL) } as unknown as ProjectStore;
+    store = new BookStore(project);
+
+    api
+      .on('GET', `${BASE}/book`, OVERVIEW)
+      .on('GET', `${BASE}/audio/reviews`, {})
+      .on('GET', `${BASE}/nodes/volume/v1/children`, {
+        parts: [
+          { id: 'p1', title: 'One' },
+          { id: 'p2', title: 'Two' },
+        ],
+      })
+      .on('GET', `${BASE}/nodes/part/p1/children`, chapterList(['c1', 'c2']))
+      .on('GET', `${BASE}/nodes/part/p2/children`, { chapters: [{ id: 'c3', title: null }] })
+      .on('GET', `${BASE}/nodes/chapter/c1/children`, paragraphs('a', 'b'))
+      .on('GET', `${BASE}/nodes/chapter/c2/children`, paragraphs('c'))
+      .on('GET', `${BASE}/nodes/chapter/c3/children`, paragraphs('d'));
   });
 
-  afterEach(() => {
-    store.close();
-    http.verify();
-  });
-
-  /** One volume, two parts: p1 → c1, c2; p2 → c3. */
-  async function open() {
-    const opened = store.open('dune');
-    http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-    http.expectOne(`${BASE}/audio/reviews`).flush({});
-    await settle();
-    http.expectOne(`${BASE}/nodes/volume/v1/children`).flush({
-      parts: [
-        { id: 'p1', title: 'One' },
-        { id: 'p2', title: 'Two' },
-      ],
-    });
-    await opened;
-  }
+  afterEach(() => store.close());
 
   function partNode(id: string): TreeNode {
     return {
@@ -148,71 +147,47 @@ describe('BookStore', () => {
     };
   }
 
-  async function expand(part: string, chapters: string[]) {
+  async function expand(part: string) {
     store.setExpanded(partNode(part), true);
-    http
-      .expectOne(`${BASE}/nodes/part/${part}/children`)
-      .flush({ chapters: chapters.map((id) => ({ id, title: id.toUpperCase() })) });
     await settle();
-  }
-
-  async function openFirst() {
-    const opening = store.openFirstChapter();
-    await settle();
-    http.expectOne(`${BASE}/nodes/part/p1/children`).flush({
-      chapters: [
-        { id: 'c1', title: 'C1' },
-        { id: 'c2', title: 'C2' },
-      ],
-    });
-    await settle();
-    http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a', 'b'));
-    await opening;
   }
 
   it('opens: overview, reviews, and the single volume collapses to its parts', async () => {
-    await open();
+    await store.open('dune');
+    expect(calls('/book')).toBe(1);
+    expect(calls('/audio/reviews')).toBe(1);
     expect(store.tree().map((n) => `${n.level}:${n.title}`)).toEqual(['part:One', 'part:Two']);
     expect(store.speakers().names).toEqual({ h: 'Hardin' });
   });
 
   it('openFirstChapter while the volume is still loading waits for that read instead of re-asking', async () => {
+    let answer!: (parts: unknown) => void;
+    const held = new Promise((r) => (answer = r));
+    api.on('GET', `${BASE}/nodes/volume/v1/children`, () => held);
     const opened = store.open('dune');
-    http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-    http.expectOne(`${BASE}/audio/reviews`).flush({});
     await settle();
     // The volume read is in flight; a concurrent first-chapter request must share it.
     const first = store.openFirstChapter();
     await settle();
-    http.expectOne(`${BASE}/nodes/volume/v1/children`).flush({
-      parts: [
-        { id: 'p1', title: 'One' },
-        { id: 'p2', title: 'Two' },
-      ],
-    });
+    answer({ parts: [{ id: 'p1', title: 'One' }] });
     await opened;
-    await settle();
-    http.expectOne(`${BASE}/nodes/part/p1/children`).flush({ chapters: [{ id: 'c1', title: 'C1' }] });
-    await settle();
-    http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a'));
     await first;
+    expect(calls('/nodes/volume/v1/children')).toBe(1);
     expect(store.window()).toEqual(['c1']);
   });
 
   it('a children read that leaves the node unloaded ends the search instead of looping', async () => {
-    await open();
+    await store.open('dune');
     const first = store.openFirstChapter();
-    await settle();
     // Closing mid-read: the store forgets the folder, the read is discarded, and the search ends.
     store.close();
-    http.expectOne(`${BASE}/nodes/part/p1/children`).flush({ chapters: [{ id: 'c1', title: 'C1' }] });
-    await expect(first).resolves.toBeUndefined();
+    expect(await first).toBeUndefined();
     expect(store.window()).toEqual([]);
   });
 
   it('openFirstChapter loads structure down to the first chapter and asks the reader to scroll', async () => {
-    await open();
-    await openFirst();
+    await store.open('dune');
+    await store.openFirstChapter();
     expect(store.window()).toEqual(['c1']);
     expect(store.chapters()).toEqual([
       expect.objectContaining({ id: 'c1', title: 'C1', paragraphs: expect.any(Array) }),
@@ -221,286 +196,305 @@ describe('BookStore', () => {
   });
 
   it('loadNext crosses a part boundary, loading the next part on demand', async () => {
-    await open();
-    await openFirst();
+    await store.open('dune');
+    await store.openFirstChapter();
 
-    const next = store.loadNext();
-    await settle();
-    http.expectOne(`${BASE}/nodes/chapter/c2/children`).flush(paragraphs('c'));
-    await next;
+    await store.loadNext();
+    expect(store.window()).toEqual(['c1', 'c2']);
+    expect(calls('/nodes/part/p2/children')).toBe(0);
 
-    const past = store.loadNext();
-    await settle();
-    http
-      .expectOne(`${BASE}/nodes/part/p2/children`)
-      .flush({ chapters: [{ id: 'c3', title: null }] });
-    await settle();
-    http.expectOne(`${BASE}/nodes/chapter/c3/children`).flush(paragraphs('d'));
-    await past;
-
+    await store.loadNext();
+    expect(calls('/nodes/part/p2/children')).toBe(1);
     expect(store.window()).toEqual(['c1', 'c2', 'c3']);
     expect(store.atEnd()).toBe(true);
-    const previous = store.loadPrevious();
-    await previous;
+
+    await store.loadPrevious();
     expect(store.window()).toEqual(['c1', 'c2', 'c3']);
   });
 
   it('atEnd is false while a later part is unread', async () => {
-    await open();
-    await openFirst();
-    const next = store.loadNext();
-    await settle();
-    http.expectOne(`${BASE}/nodes/chapter/c2/children`).flush(paragraphs('c'));
-    await next;
+    await store.open('dune');
+    await store.openFirstChapter();
+    await store.loadNext();
     // c2 ends p1, but p2 has not been read: there may be more.
     expect(store.atEnd()).toBe(false);
   });
 
   it('a full window drops its far end, unless the reader says it is still on screen', async () => {
     const ids = Array.from({ length: WINDOW_CAP + 2 }, (_, i) => `c${i + 1}`);
-    await open();
-    await expand('p1', ids);
-    await openFirstFromLoaded();
-    for (const id of ids.slice(1, WINDOW_CAP + 1)) {
-      const next = store.loadNext(false);
-      await settle();
-      http.expectOne(`${BASE}/nodes/chapter/${id}/children`).flush(paragraphs(`${id}-p`));
-      await next;
-    }
+    api.on('GET', `${BASE}/nodes/part/p1/children`, chapterList(ids));
+    for (const id of ids)
+      api.on('GET', `${BASE}/nodes/chapter/${id}/children`, paragraphs(`${id}-p`));
+    await store.open('dune');
+    await expand('p1');
+    await store.openFirstChapter();
+    for (let i = 1; i <= WINDOW_CAP; i++) await store.loadNext(false);
     expect(store.window()).toEqual(ids.slice(0, WINDOW_CAP + 1));
 
-    const next = store.loadNext();
-    await settle();
-    const last = ids.at(-1)!;
-    http.expectOne(`${BASE}/nodes/chapter/${last}/children`).flush(paragraphs(`${last}-p`));
-    await next;
+    await store.loadNext();
     // One chapter in, one out: the window shrinks back toward the cap as the reader moves on.
     expect(store.window()).toEqual(ids.slice(1));
   });
 
   it('audio mode loads the voice map for loaded chapters', async () => {
-    await open();
-    await openFirst();
+    api.on('GET', `${BASE}/nodes/chapter/c1/voices`, {
+      'a-i': { voiceName: 'Deep', narratedBy: null },
+    });
+    await store.open('dune');
+    await store.openFirstChapter();
     store.setMode('audio');
-    http
-      .expectOne(`${BASE}/nodes/chapter/c1/voices`)
-      .flush({ 'a-i': { voiceName: 'Deep', narratedBy: null } });
     await settle();
     expect(store.itemVoices()['a-i']?.voiceName).toBe('Deep');
   });
 
   describe('receipts', () => {
     it('expectOwnReceipt settles true on this tab’s receipt, false on timeout, cancel or close', async () => {
-      await open();
+      await store.open('dune');
 
       const own = store.expectOwnReceipt(1000);
       const foreign = store.expectOwnReceipt(1000);
-      live.receipts.next(receipt(6, 'NodeTitle', {}, false));
-      live.receipts.next(receipt(7, 'NodeTitle', {}, true));
-      await expect(own.settled).resolves.toBe(true);
-      await expect(foreign.settled).resolves.toBe(true);
+      live.receiptStream.emit(receipt(6, 'NodeTitle', {}, false));
+      live.receiptStream.emit(receipt(7, 'NodeTitle', {}, true));
+      expect(await own.settled).toBe(true);
+      expect(await foreign.settled).toBe(true);
 
       const late = store.expectOwnReceipt(10);
-      await expect(late.settled).resolves.toBe(false);
+      expect(await late.settled).toBe(false);
 
       const cancelled = store.expectOwnReceipt(1000);
       cancelled.cancel();
-      await expect(cancelled.settled).resolves.toBe(false);
+      expect(await cancelled.settled).toBe(false);
 
       const closed = store.expectOwnReceipt(1000);
       store.close();
-      await expect(closed.settled).resolves.toBe(false);
-      await settle(RECEIPT_BATCH_MS + 20);
-      http.match(() => true).forEach((r) => r.flush({}));
+      expect(await closed.settled).toBe(false);
     });
 
     it('a speaker change on a loaded paragraph reloads that chapter, batched, with no toast', async () => {
-      await open();
-      await openFirst();
+      await store.open('dune');
+      await store.openFirstChapter();
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, paragraphs('a', 'b', 'z'));
 
-      live.receipts.next(receipt(6, 'Attribution', { paragraphIds: ['a'] }));
-      live.receipts.next(receipt(7, 'Attribution', { paragraphItemIds: ['b-i'] }));
-      http.expectNone(`${BASE}/nodes/chapter/c1/children`);
+      live.receiptStream.emit(receipt(6, 'Attribution', { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(7, 'Attribution', { paragraphItemIds: ['b-i'] }));
+      expect(calls('/nodes/chapter/c1/children')).toBe(1);
       await settle(RECEIPT_BATCH_MS + 20);
 
-      http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a', 'b', 'z'));
-      await settle();
+      expect(calls('/nodes/chapter/c1/children')).toBe(2);
       expect(store.chapters()[0]?.paragraphs.map((p) => p.id)).toEqual(['a', 'b', 'z']);
       expect(toasts).toEqual([]);
     });
 
     it('a foreign split reloads the chapter and the tree and toasts once', async () => {
-      await open();
-      await expand('p1', ['c1']);
-      await openFirstFromLoaded();
+      await store.open('dune');
+      await expand('p1');
+      await store.openFirstChapter();
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, paragraphs('a', 'a2'));
 
-      live.receipts.next(receipt(6, 'Structure', { paragraphIds: ['a'] }));
-      live.receipts.next(receipt(7, 'Structure', { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(6, 'Structure', { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(7, 'Structure', { paragraphIds: ['a'] }));
       expect(toasts).toEqual(['Book updated elsewhere']);
       await settle(RECEIPT_BATCH_MS + 20);
 
-      http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-      http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a', 'a2'));
-      await settle();
-      http
-        .expectOne(`${BASE}/nodes/volume/v1/children`)
-        .flush({ parts: [{ id: 'p1' }, { id: 'p2' }] });
-      http
-        .expectOne(`${BASE}/nodes/part/p1/children`)
-        .flush({ chapters: [{ id: 'c1', title: 'C1' }] });
-      await settle();
+      expect(calls('/book')).toBe(2);
+      expect(calls('/nodes/volume/v1/children')).toBe(2);
+      expect(calls('/nodes/part/p1/children')).toBe(2);
       expect(store.chapters()[0]?.paragraphs.map((p) => p.id)).toEqual(['a', 'a2']);
     });
 
     it('an own split does not toast', async () => {
-      await open();
-      await expand('p1', ['c1']);
-      await openFirstFromLoaded();
-      live.receipts.next(receipt(6, 'Structure', { paragraphIds: ['a'] }, true));
+      await store.open('dune');
+      await expand('p1');
+      await store.openFirstChapter();
+      live.receiptStream.emit(receipt(6, 'Structure', { paragraphIds: ['a'] }, true));
       expect(toasts).toEqual([]);
       await settle(RECEIPT_BATCH_MS + 20);
-      http
-        .match(() => true)
-        .forEach((r) => r.flush(r.request.url.endsWith('/book') ? OVERVIEW : {}));
-      await settle();
-      http.match(() => true).forEach((r) => r.flush({}));
     });
 
     it('a revision gap reloads overview, reviews and the visible chapter', async () => {
-      await open();
-      await expand('p1', ['c1']);
-      await openFirstFromLoaded();
+      await store.open('dune');
+      await expand('p1');
+      await store.openFirstChapter();
+      api.on('GET', `${BASE}/audio/reviews`, { 'a-i': { state: 'NeedsReview' } });
 
-      live.receipts.next(receipt(9, 'VoiceRules'));
+      live.receiptStream.emit(receipt(9, 'VoiceRules'));
       await settle(RECEIPT_BATCH_MS + 20);
 
-      http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-      http.expectOne(`${BASE}/audio/reviews`).flush({ 'a-i': { state: 'NeedsReview' } });
-      http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a'));
-      await settle();
-      http
-        .match(`${BASE}/nodes/volume/v1/children`)
-        .forEach((r) => r.flush({ parts: [{ id: 'p1' }] }));
-      http
-        .match(`${BASE}/nodes/part/p1/children`)
-        .forEach((r) => r.flush({ chapters: [{ id: 'c1' }] }));
-      await settle();
+      expect(calls('/book')).toBe(2);
+      expect(calls('/audio/reviews')).toBe(2);
+      expect(calls('/nodes/chapter/c1/children')).toBe(2);
       expect(Object.keys(store.reviews())).toEqual(['a-i']);
     });
 
     it('a resync ahead of the last revision is treated as a gap', async () => {
-      await open();
-      await expand('p1', ['c1']);
-      await openFirstFromLoaded();
-      live.resynced.next({ projects: { DUNE: { revision: 12 } } } as unknown as LiveSnapshot);
+      await store.open('dune');
+      await expand('p1');
+      await store.openFirstChapter();
+      live.resyncStream.emit({ projects: { DUNE: { revision: 12 } } } as unknown as LiveSnapshot);
       await settle(RECEIPT_BATCH_MS + 20);
-      http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-      http.expectOne(`${BASE}/audio/reviews`).flush({});
-      http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a'));
+      expect(calls('/book')).toBe(2);
+      expect(calls('/audio/reviews')).toBe(2);
+      expect(calls('/nodes/chapter/c1/children')).toBe(2);
+    });
+
+    it('a resync at the revision /book read against reads nothing again', async () => {
+      await store.open('dune');
+      await store.openFirstChapter();
+      live.resyncStream.emit({ projects: { dune: { revision: 5 } } } as unknown as LiveSnapshot);
+      await settle(RECEIPT_BATCH_MS + 20);
+      expect(calls('/book')).toBe(1);
+      expect(calls('/audio/reviews')).toBe(1);
+      expect(calls('/nodes/chapter/c1/children')).toBe(1);
+    });
+
+    describe('a resync while /book is in flight', () => {
+      let answer!: (body: unknown) => void;
+      let opened: Promise<void>;
+
+      beforeEach(async () => {
+        api.on('GET', `${BASE}/book`, () => new Promise((r) => (answer = r)));
+        opened = store.open('dune');
+        await settle();
+      });
+
+      async function snapshotThenBook(snapshot: number, book: number) {
+        live.resyncStream.emit({
+          projects: { dune: { revision: snapshot } },
+        } as unknown as LiveSnapshot);
+        answer({ ...OVERVIEW, revision: book });
+        await opened;
+        api.on('GET', `${BASE}/book`, OVERVIEW);
+        await store.openFirstChapter();
+        await settle(RECEIPT_BATCH_MS + 20);
+      }
+
+      it('waits for the baseline and reads nothing again when the book already holds that revision', async () => {
+        await snapshotThenBook(5, 5);
+        expect(calls('/book')).toBe(1);
+        expect(calls('/audio/reviews')).toBe(1);
+        expect(calls('/nodes/chapter/c1/children')).toBe(1);
+      });
+
+      it('reloads when the snapshot is ahead of the book, even if a later receipt came meanwhile', async () => {
+        // Commit 6 landed before the hub joined (no receipt); the receipt for 7 is not a gap yet.
+        live.receiptStream.emit(receipt(7, 'VoiceRules'));
+        await snapshotThenBook(6, 5);
+        expect(calls('/book')).toBe(2);
+        expect(calls('/audio/reviews')).toBe(2);
+      });
+
+      it('reloads in place, keeping the window, when the snapshot is ahead of the book', async () => {
+        await snapshotThenBook(6, 5);
+        expect(calls('/book')).toBe(2);
+        expect(calls('/audio/reviews')).toBe(2);
+        expect(store.window()).toEqual(['c1']);
+        expect(store.currentChapterId()).toBe('c1');
+        // The snapshot's revision is the baseline from now on: the next one is not a gap.
+        live.receiptStream.emit(receipt(7, 'Attribution', { paragraphIds: ['a'] }));
+        await settle(RECEIPT_BATCH_MS + 20);
+        expect(calls('/book')).toBe(2);
+      });
+    });
+
+    it('a failed opening read takes its baseline from Refresh, so a later snapshot ahead still reloads', async () => {
+      api.on('GET', `${BASE}/book`, () => problem(500, 'db locked'));
+      await store.open('dune');
+      expect(store.stale()).toBeTruthy();
+      live.resyncStream.emit({ projects: { dune: { revision: 5 } } } as unknown as LiveSnapshot);
+
+      api.on('GET', `${BASE}/book`, OVERVIEW);
+      await store.refresh();
+      await settle(RECEIPT_BATCH_MS + 20);
+      expect(calls('/book')).toBe(2);
+
+      live.resyncStream.emit({ projects: { dune: { revision: 6 } } } as unknown as LiveSnapshot);
+      await settle(RECEIPT_BATCH_MS + 20);
+      expect(calls('/book')).toBe(3);
+    });
+
+    it('an open superseded by another open does not take the current chapter or the scroll', async () => {
+      let answer!: (body: unknown) => void;
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, () => new Promise((r) => (answer = r)));
+      await store.open('dune');
+      await expand('p1');
+      const slow = store.openChapter('c1');
       await settle();
-      http.match(() => true).forEach((r) => r.flush({ parts: [], chapters: [] }));
-      await settle();
+      await store.openChapter('c2');
+      answer(paragraphs('a'));
+      await slow;
+      expect(store.window()).toEqual(['c2']);
+      expect(store.currentChapterId()).toBe('c2');
+      expect(store.scrollRequest()?.chapterId).toBe('c2');
     });
 
     it('a failed reload marks the view stale; Refresh retries and clears it', async () => {
-      await open();
-      await expand('p1', ['c1']);
-      await openFirstFromLoaded();
+      await store.open('dune');
+      await expand('p1');
+      await store.openFirstChapter();
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, () => problem(500, 'db locked'));
 
-      live.receipts.next(receipt(6, 'ItemText', { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(6, 'ItemText', { paragraphIds: ['a'] }));
       await settle(RECEIPT_BATCH_MS + 20);
-      http
-        .expectOne(`${BASE}/nodes/chapter/c1/children`)
-        .flush({ detail: 'db locked' }, { status: 500, statusText: 'Error' });
-      await settle();
       expect(store.stale()).toBeTruthy();
 
-      const refreshed = store.refresh();
-      http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-      http.expectOne(`${BASE}/audio/reviews`).flush({});
-      http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a'));
-      await settle();
-      http
-        .match(`${BASE}/nodes/volume/v1/children`)
-        .forEach((r) => r.flush({ parts: [{ id: 'p1' }] }));
-      http
-        .match(`${BASE}/nodes/part/p1/children`)
-        .forEach((r) => r.flush({ chapters: [{ id: 'c1' }] }));
-      await refreshed;
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, paragraphs('a'));
+      await store.refresh();
       expect(store.stale()).toBeNull();
     });
   });
 
   describe('review fixes', () => {
     it('remembers expanded tree nodes and forgets collapsed ones', async () => {
-      await open();
-      await expand('p1', ['c1']);
+      await store.open('dune');
+      await expand('p1');
       expect([...store.expanded()]).toEqual(['p1']);
       store.setExpanded({ ...partNode('p1'), loaded: true }, false);
       expect([...store.expanded()]).toEqual([]);
     });
 
     it('a failed expand marks the view stale', async () => {
-      await open();
-      store.setExpanded(partNode('p2'), true);
-      http
-        .expectOne(`${BASE}/nodes/part/p2/children`)
-        .flush({ detail: 'locked' }, { status: 500, statusText: 'Error' });
-      await settle();
+      api.on('GET', `${BASE}/nodes/part/p2/children`, () => problem(500, 'locked'));
+      await store.open('dune');
+      await expand('p2');
       expect(store.stale()).toBeTruthy();
     });
 
-    it('revision 0 from /status is a real baseline, so revision 2 is a gap', async () => {
-      projectRevision.set(0);
-      await open();
-      await expand('p1', ['c1']);
-      await openFirstFromLoaded();
+    it('revision 0 from /book is a real baseline, so revision 2 is a gap', async () => {
+      api.on('GET', `${BASE}/book`, { ...OVERVIEW, revision: 0 });
+      await store.open('dune');
+      await expand('p1');
+      await store.openFirstChapter();
 
-      live.receipts.next(receipt(2, 'VoiceRules'));
+      live.receiptStream.emit(receipt(2, 'VoiceRules'));
       await settle(RECEIPT_BATCH_MS + 20);
-      http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-      http.expectOne(`${BASE}/audio/reviews`).flush({});
-      http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a'));
-      await settle();
-      http
-        .match(`${BASE}/nodes/volume/v1/children`)
-        .forEach((r) => r.flush({ parts: [{ id: 'p1' }] }));
-      http
-        .match(`${BASE}/nodes/part/p1/children`)
-        .forEach((r) => r.flush({ chapters: [{ id: 'c1' }] }));
-      await settle();
+      expect(calls('/book')).toBe(2);
     });
 
-    it('before /status answers there is no baseline, so the first receipt is not a gap', async () => {
-      projectStatus.set(null);
-      projectRevision.set(0);
-      await open();
-      live.receipts.next(receipt(40, 'VoiceRules'));
+    it('before /book answers there is no baseline, so the first receipt is not a gap', async () => {
+      let answer!: (body: unknown) => void;
+      api.on('GET', `${BASE}/book`, () => new Promise((r) => (answer = r)));
+      const opened = store.open('dune');
+      await settle();
+      live.receiptStream.emit(receipt(40, 'VoiceRules'));
+      answer(OVERVIEW);
+      await opened;
       await settle(RECEIPT_BATCH_MS + 20);
-      http.expectNone(`${BASE}/book`);
+      expect(calls('/book')).toBe(1);
     });
 
     async function windowOfTwo() {
-      await open();
-      await openFirst();
-      const next = store.loadNext();
-      await settle();
-      http.expectOne(`${BASE}/nodes/chapter/c2/children`).flush(paragraphs('c'));
-      await next;
+      await store.open('dune');
+      await store.openFirstChapter();
+      await store.loadNext();
       expect(store.window()).toEqual(['c1', 'c2']);
     }
 
     async function structuralReload(nodeId: string, chapters: string[]) {
-      live.receipts.next(receipt(6, 'Structure', { nodeIds: [nodeId] }));
+      api.on('GET', `${BASE}/nodes/part/p1/children`, {
+        chapters: chapters.map((id) => ({ id, title: id })),
+      });
+      live.receiptStream.emit(receipt(6, 'Structure', { nodeIds: [nodeId] }));
       await settle(RECEIPT_BATCH_MS + 20);
-      http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-      http.expectOne(`${BASE}/nodes/chapter/${nodeId}/children`).flush(paragraphs('x'));
-      await settle();
-      http.expectOne(`${BASE}/nodes/volume/v1/children`).flush({ parts: [{ id: 'p1' }] });
-      http
-        .expectOne(`${BASE}/nodes/part/p1/children`)
-        .flush({ chapters: chapters.map((id) => ({ id, title: id })) });
-      await settle();
     }
 
     it('after a structural reload, a chapter that no longer exists leaves the window', async () => {
@@ -511,46 +505,24 @@ describe('BookStore', () => {
 
     it('after a structural reload, a chapter split in between the window ends is loaded in', async () => {
       await windowOfTwo();
+      api.on('GET', `${BASE}/nodes/chapter/c1b/children`, paragraphs('b2'));
       await structuralReload('c1', ['c1', 'c1b', 'c2']);
-      http.expectOne(`${BASE}/nodes/chapter/c1b/children`).flush(paragraphs('b2'));
-      await settle();
       expect(store.window()).toEqual(['c1', 'c1b', 'c2']);
     });
 
     it('after a structural reload, a chapter in a later part stays open while earlier parts are unread', async () => {
-      await open();
-      await expand('p2', ['c3']);
-      const opening = store.openChapter('c3');
-      http.expectOne(`${BASE}/nodes/chapter/c3/children`).flush(paragraphs('d'));
-      await opening;
+      await store.open('dune');
+      await expand('p2');
+      await store.openChapter('c3');
+      const before = calls('/nodes/part/p1/children');
 
-      live.receipts.next(receipt(6, 'Structure', { nodeIds: ['c3'] }));
+      live.receiptStream.emit(receipt(6, 'Structure', { nodeIds: ['c3'] }));
       await settle(RECEIPT_BATCH_MS + 20);
-      http.expectOne(`${BASE}/book`).flush(OVERVIEW);
-      http.expectOne(`${BASE}/nodes/chapter/c3/children`).flush(paragraphs('d'));
-      await settle();
-      http.expectOne(`${BASE}/nodes/volume/v1/children`).flush({
-        parts: [
-          { id: 'p1', title: 'One' },
-          { id: 'p2', title: 'Two' },
-        ],
-      });
-      http.expectOne(`${BASE}/nodes/part/p2/children`).flush({ chapters: [{ id: 'c3', title: 'C3' }] });
-      await settle();
-      // p1 was never read, so c3 is not in the chapter sequence yet: read on rather than drop it.
-      http.expectOne(`${BASE}/nodes/part/p1/children`).flush({ chapters: [{ id: 'c1', title: 'C1' }] });
-      await settle();
 
+      // p1 was never read, so c3 is not in the chapter sequence yet: read on rather than drop it.
+      expect(calls('/nodes/part/p1/children')).toBe(before + 1);
       expect(store.window()).toEqual(['c3']);
       expect(store.currentChapterId()).toBe('c3');
     });
   });
-
-  /** After `expand('p1', …)`, the first chapter needs only its paragraphs. */
-  async function openFirstFromLoaded() {
-    const opening = store.openFirstChapter();
-    await settle();
-    http.expectOne(`${BASE}/nodes/chapter/c1/children`).flush(paragraphs('a', 'b'));
-    await opening;
-  }
 });

@@ -1,21 +1,30 @@
-import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
-import { AudioGenMessage, LiveSnapshot, LlmMessage, StreamKind } from '@app/live/live-messages';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { Emitter } from '@app/core/emitter';
+import { override, resetServices, use } from '@app/core/services';
+import type {
+  AudioGenMessage,
+  LiveSnapshot,
+  LlmMessage,
+  StreamKind,
+} from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { AudioStreamFeed, LlmStreamFeed } from './stream-feed';
 
 class FakeLive {
-  readonly llm = new Subject<LlmMessage>();
-  readonly audioGen = new Subject<AudioGenMessage>();
-  readonly resynced = new Subject<LiveSnapshot>();
-  readonly resynced$ = this.resynced.asObservable();
+  readonly llm = new Emitter<LlmMessage>();
+  readonly audioGen = new Emitter<AudioGenMessage>();
+  readonly resyncedSubject = new Emitter<LiveSnapshot>();
   readonly joined: StreamKind[] = [];
   readonly left: StreamKind[] = [];
 
-  on(family: string) {
-    if (family === 'llm') return this.llm.asObservable();
-    if (family === 'audioGen') return this.audioGen.asObservable();
+  on(family: string, listener: (m: unknown) => void) {
+    if (family === 'llm') return this.llm.subscribe(listener as (m: LlmMessage) => void);
+    if (family === 'audioGen')
+      return this.audioGen.subscribe(listener as (m: AudioGenMessage) => void);
     throw new Error(`unexpected family ${family}`);
+  }
+  resynced(listener: (s: LiveSnapshot) => void) {
+    return this.resyncedSubject.subscribe(listener);
   }
   async joinStream(kind: StreamKind) {
     this.joined.push(kind);
@@ -25,11 +34,13 @@ class FakeLive {
   }
 }
 
-function setup() {
-  const live = new FakeLive();
-  TestBed.configureTestingModule({ providers: [{ provide: LiveService, useValue: live }] });
-  return { live, llm: TestBed.inject(LlmStreamFeed), audio: TestBed.inject(AudioStreamFeed) };
-}
+let live: FakeLive;
+
+beforeEach(() => {
+  resetServices();
+  live = new FakeLive();
+  override(LiveService, live as unknown as LiveService);
+});
 
 const started: LlmMessage = {
   kind: 'requestStarted',
@@ -41,7 +52,7 @@ const started: LlmMessage = {
 
 describe('LlmStreamFeed', () => {
   it('joins stream:llm on the first acquire and leaves on the last release', () => {
-    const { live, llm } = setup();
+    const llm = use(LlmStreamFeed);
     expect(live.joined).toEqual([]);
 
     llm.acquire();
@@ -58,13 +69,13 @@ describe('LlmStreamFeed', () => {
   });
 
   it('buffers mapped events only while acquired and clears them on re-acquire', () => {
-    const { live, llm } = setup();
-    live.llm.next(started);
+    const llm = use(LlmStreamFeed);
+    live.llm.emit(started);
     expect(llm.events()).toEqual([]);
 
     llm.acquire();
-    live.llm.next(started);
-    live.llm.next({ kind: 'delta', thinking: 't', content: 'c' });
+    live.llm.emit(started);
+    live.llm.emit({ kind: 'delta', thinking: 't', content: 'c' });
     expect(llm.events().map((e) => e.kind)).toEqual([
       'requestStarted',
       'thinkingDelta',
@@ -72,7 +83,7 @@ describe('LlmStreamFeed', () => {
     ]);
 
     llm.release();
-    live.llm.next({ kind: 'delta', content: 'ignored' });
+    live.llm.emit({ kind: 'delta', content: 'ignored' });
     expect(llm.events()).toHaveLength(3);
 
     llm.acquire();
@@ -80,31 +91,31 @@ describe('LlmStreamFeed', () => {
   });
 
   it('caps the buffer at maxTurns turns', () => {
-    const { live, llm } = setup();
+    const llm = use(LlmStreamFeed);
     llm.acquire();
     for (let i = 0; i < llm.maxUnits + 5; i++)
-      live.llm.next({ ...started, paragraphPreview: `p${i}` });
+      live.llm.emit({ ...started, paragraphPreview: `p${i}` });
     const previews = llm.events().map((e) => (e as { paragraphPreview: string }).paragraphPreview);
     expect(previews).toHaveLength(llm.maxUnits);
     expect(previews[0]).toBe('p5');
   });
 
   it('clears the buffer on resync because the server replays the current turn', () => {
-    const { live, llm } = setup();
+    const llm = use(LlmStreamFeed);
     llm.acquire();
-    live.llm.next(started);
-    live.resynced.next({} as LiveSnapshot);
+    live.llm.emit(started);
+    live.resyncedSubject.emit({} as LiveSnapshot);
     expect(llm.events()).toEqual([]);
   });
 });
 
 describe('AudioStreamFeed', () => {
   it('joins stream:audio and maps audio phases', () => {
-    const { live, audio } = setup();
+    const audio = use(AudioStreamFeed);
     audio.acquire();
     expect(live.joined).toEqual(['audio']);
-    live.audioGen.next({ kind: 'itemStarted', id: 'i1', attempt: 1, character: 'Alice' });
-    live.audioGen.next({ kind: 'audioGenerated', id: 'i1', attempt: 1 });
+    live.audioGen.emit({ kind: 'itemStarted', id: 'i1', attempt: 1, character: 'Alice' });
+    live.audioGen.emit({ kind: 'audioGenerated', id: 'i1', attempt: 1 });
     expect(audio.events().map((e) => e.kind)).toEqual(['itemStarted', 'audioGenerated']);
     audio.release();
     expect(live.left).toEqual(['audio']);

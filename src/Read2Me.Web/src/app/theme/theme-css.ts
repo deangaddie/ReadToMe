@@ -1,9 +1,10 @@
-import { AppTheme, ThemeSelection } from '@app/api';
+import type { AppTheme, ThemeSelection } from '@app/api';
 
 /**
- * AppTheme → CSS custom properties (design §3.2). Pure functions so the mapping table is unit
- * tested without a DOM. Angular Material 22 reads `--mat-sys-*`; the app's own surfaces read
- * `--r2m-*` (tokens.scss). Status colours are deliberately absent: themes never touch them.
+ * AppTheme → CSS custom properties (spec §5.1). Pure functions so the mapping table is unit tested
+ * without a DOM. Every variable is a `--r2m-*` token from `global.css`, whose `light-dark()` values
+ * are the compiled fallback a theme overrides. Status colours are deliberately absent: themes
+ * never touch them.
  */
 
 export type Scheme = 'light' | 'dark';
@@ -45,29 +46,24 @@ function has(value: string | null | undefined): value is string {
 }
 
 /**
- * Variables that depend only on the theme's accent colours, not on its surfaces. These are also
- * applied inside the style guide's pinned `[data-scheme]` panels so a custom primary is previewed
- * in both schemes; containers mix against whatever `--mat-sys-surface` is in scope.
+ * Variables that depend only on the theme's accent colours, not on its surfaces; the containers
+ * mix against whatever `--r2m-surface` is in force.
  */
 export function accentCssVars(theme: AppTheme): Record<string, string> {
   const primary = normalizeHex(theme.primary);
   const secondary = normalizeHex(theme.secondary);
   const dark = theme.isDark;
   return {
-    '--mat-sys-primary': primary,
-    '--mat-sys-on-primary': contrastText(primary),
-    '--mat-sys-primary-container': mix(primary, dark ? 32 : 20, 'var(--mat-sys-surface)'),
-    '--mat-sys-on-primary-container': dark
-      ? mix(primary, 45, '#ffffff')
-      : mix(primary, 65, '#000000'),
-    '--mat-sys-surface-tint': primary,
-    '--mat-sys-secondary': secondary,
-    '--mat-sys-on-secondary': contrastText(secondary),
-    '--mat-sys-secondary-container': mix(secondary, dark ? 32 : 20, 'var(--mat-sys-surface)'),
-    '--mat-sys-on-secondary-container': dark
+    '--r2m-accent': primary,
+    '--r2m-on-accent': contrastText(primary),
+    '--r2m-accent-container': mix(primary, dark ? 32 : 20, 'var(--r2m-surface)'),
+    '--r2m-on-accent-container': dark ? mix(primary, 45, '#ffffff') : mix(primary, 65, '#000000'),
+    '--r2m-secondary': secondary,
+    '--r2m-on-secondary': contrastText(secondary),
+    '--r2m-secondary-container': mix(secondary, dark ? 32 : 20, 'var(--r2m-surface)'),
+    '--r2m-on-secondary-container': dark
       ? mix(secondary, 45, '#ffffff')
       : mix(secondary, 65, '#000000'),
-    '--r2m-accent': primary,
   };
 }
 
@@ -76,17 +72,14 @@ export function themeCssVars(theme: AppTheme): Record<string, string> {
   const vars = accentCssVars(theme);
 
   if (has(theme.background)) {
-    const background = normalizeHex(theme.background);
-    vars['--mat-sys-background'] = background;
-    vars['--mat-sys-surface'] = background;
-    vars['--mat-sys-surface-container-lowest'] = background;
+    vars['--r2m-surface'] = normalizeHex(theme.background);
   }
   if (has(theme.surface)) {
     const surface = normalizeHex(theme.surface);
-    vars['--mat-sys-surface-container'] = surface;
-    vars['--mat-sys-surface-container-low'] = mix(surface, 50, 'var(--mat-sys-surface)');
-    vars['--mat-sys-surface-container-high'] = mix(surface, 90, 'var(--mat-sys-on-surface)');
-    vars['--mat-sys-surface-container-highest'] = mix(surface, 82, 'var(--mat-sys-on-surface)');
+    vars['--r2m-surface-container'] = surface;
+    vars['--r2m-surface-low'] = mix(surface, 50, 'var(--r2m-surface)');
+    vars['--r2m-surface-high'] = mix(surface, 90, 'var(--r2m-text)');
+    vars['--r2m-surface-highest'] = mix(surface, 82, 'var(--r2m-text)');
   }
   if (has(theme.appbarBackground)) {
     const appbar = normalizeHex(theme.appbarBackground);
@@ -98,36 +91,29 @@ export function themeCssVars(theme: AppTheme): Record<string, string> {
     const fg = contrastText(drawer);
     vars['--r2m-nav-bg'] = drawer;
     vars['--r2m-nav-fg'] = mix(fg, 80, drawer);
-    vars['--r2m-nav-active-bg'] = mix(vars['--mat-sys-primary'] ?? theme.primary, 28, drawer);
+    vars['--r2m-nav-active-bg'] = mix(vars['--r2m-accent'] ?? theme.primary, 28, drawer);
     vars['--r2m-nav-active-fg'] = fg;
   }
   if (has(theme.textPrimary)) {
-    const text = normalizeHex(theme.textPrimary);
-    vars['--mat-sys-on-surface'] = text;
-    vars['--mat-sys-on-background'] = text;
+    vars['--r2m-text'] = normalizeHex(theme.textPrimary);
   }
   if (has(theme.textSecondary)) {
-    vars['--mat-sys-on-surface-variant'] = normalizeHex(theme.textSecondary);
+    vars['--r2m-text-muted'] = normalizeHex(theme.textSecondary);
   }
   return vars;
 }
 
-/** Stylesheet text injected as `<style id="r2m-theme">`; `[data-scheme]` panels get the accent set. */
+/** Stylesheet text injected as `<style id="r2m-theme">`: one `:root` block. */
 export function buildThemeStylesheet(theme: AppTheme): string {
-  const block = (selector: string, vars: Record<string, string>) =>
-    `${selector} {\n${Object.entries(vars)
-      .map(([k, v]) => `  ${k}: ${v};`)
-      .join('\n')}\n}`;
-  return [
-    `/* ${theme.name} (${theme.isDark ? 'dark' : 'light'}) */`,
-    block(':root', themeCssVars(theme)),
-    block("[data-scheme='light'], [data-scheme='dark']", accentCssVars(theme)),
-  ].join('\n');
+  const body = Object.entries(themeCssVars(theme))
+    .map(([k, v]) => `  ${k}: ${v};`)
+    .join('\n');
+  return `/* ${theme.name} (${theme.isDark ? 'dark' : 'light'}) */\n:root {\n${body}\n}`;
 }
 
 /**
- * Which theme is in force (design §3.4): follow-system picks the built-in Light/Dark row by the OS
- * preference; otherwise the selected row; otherwise the first built-in light theme.
+ * Which theme is in force: follow-system picks the built-in Light/Dark row by the OS preference;
+ * otherwise the selected row; otherwise the first built-in light theme.
  */
 export function resolveEffectiveTheme(
   themes: readonly AppTheme[],

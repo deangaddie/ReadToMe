@@ -1,28 +1,13 @@
-import { TextFieldModule } from '@angular/cdk/text-field';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  OnDestroy,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import {
-  MAT_DIALOG_DATA,
-  MatDialog,
-  MatDialogModule,
-  MatDialogRef,
-} from '@angular/material/dialog';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { Guid, VoicesApi, toApiError } from '@app/api';
+import { html, nothing } from 'lit-html';
 import { ActivityStore } from '@app/activity/activity-store';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
-import { StreamLlm } from '@app/ui/stream-llm/stream-llm';
-import { firstValueFrom } from 'rxjs';
+import { type Guid, VoicesApi, toApiError } from '@app/api';
+import { openDialog } from '@app/core/dialog';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import { icon } from '@app/ui/partials';
+import { streamDisclosure } from '@app/ui/stream-disclosure';
 
 export interface GeneratePromptDialogData {
   folder: string;
@@ -46,136 +31,91 @@ export const VOICE_PROMPT_JOB_ID = 'voicePrompt';
  * registered with the activity centre so the pill shows it. Cancel while generating closes the
  * dialog; the host finishes on its own and the answer is dropped.
  */
-@Component({
-  selector: 'app-generate-prompt-dialog',
-  imports: [
-    MatDialogModule,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatIconModule,
-    MatProgressBarModule,
-    TextFieldModule,
-    StreamLlm,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h2 mat-dialog-title>Generate voice prompt with AI</h2>
-    <mat-dialog-content class="gen-prompt" [attr.data-phase]="phase()">
-      @if (error(); as error) {
-        <p class="gen-prompt__error" role="alert">{{ error }}</p>
-      }
-      @if (phase() === 'rendering') {
-        <mat-progress-bar mode="indeterminate" aria-label="Rendering prompt" />
-        <p class="gen-prompt__hint">Rendering the prompt for {{ data.characterName }}…</p>
-      } @else {
-        <p class="gen-prompt__hint">Review or edit the prompt before sending to the LLM.</p>
-        <mat-form-field appearance="outline" class="gen-prompt__field" subscriptSizing="dynamic">
-          <mat-label>Prompt</mat-label>
-          <textarea
-            matInput
-            cdkTextareaAutosize
-            cdkAutosizeMinRows="8"
-            cdkAutosizeMaxRows="18"
-            aria-label="Prompt"
-            [value]="prompt()"
-            [disabled]="phase() === 'generating'"
-            (input)="prompt.set($any($event.target).value)"
-          ></textarea>
-        </mat-form-field>
-        @if (phase() === 'generating') {
-          <mat-progress-bar mode="indeterminate" aria-label="Generating" />
-        }
-      }
+export class GeneratePromptDialog extends R2mElement {
+  private readonly feed = use(LlmStreamFeed);
+  private readonly voices = use(VoicesApi);
+  private readonly activity = use(ActivityStore);
 
-      <div class="gen-prompt__stream">
-        <button mat-button type="button" (click)="showStream.set(!showStream())">
-          <mat-icon>{{ showStream() ? 'keyboard_arrow_down' : 'keyboard_arrow_up' }}</mat-icon>
-          {{ showStream() ? 'Hide AI activity' : 'Show AI activity' }}
-        </button>
-        <div class="gen-prompt__stream-body" [class.gen-prompt__stream-body--open]="showStream()">
-          <r2m-stream-llm [events]="feed.events()" [maxTurns]="feed.maxUnits" />
-        </div>
-      </div>
-    </mat-dialog-content>
-    <mat-dialog-actions align="end">
-      <button mat-button type="button" (click)="ref.close()">Cancel</button>
-      <button
-        mat-flat-button
-        type="button"
-        data-action="send"
-        [disabled]="!canSend()"
-        (click)="generate()"
-      >
-        <mat-icon>auto_awesome</mat-icon> Send to AI
-      </button>
-    </mat-dialog-actions>
-  `,
-  styles: `
-    .gen-prompt {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-2);
-      width: min(720px, 90vw);
-    }
-    .gen-prompt__field {
-      width: 100%;
-    }
-    .gen-prompt__hint {
-      margin: 0;
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .gen-prompt__error {
-      margin: 0;
-      color: var(--r2m-status-error);
-    }
-    .gen-prompt__stream {
-      border-top: 1px solid var(--r2m-outline);
-      padding-top: var(--r2m-space-1);
-    }
-    .gen-prompt__stream-body {
-      height: 0;
-      overflow: hidden;
-      transition: height 0.15s ease;
-    }
-    .gen-prompt__stream-body--open {
-      height: 32vh;
-    }
-  `,
-})
-export class GeneratePromptDialog implements OnDestroy {
-  protected readonly data = inject<GeneratePromptDialogData>(MAT_DIALOG_DATA);
-  protected readonly ref =
-    inject<MatDialogRef<GeneratePromptDialog, GeneratePromptDialogResult>>(MatDialogRef);
-  protected readonly feed = inject(LlmStreamFeed);
-  private readonly voices = inject(VoicesApi);
-  private readonly activity = inject(ActivityStore);
+  data!: GeneratePromptDialogData;
 
-  protected readonly phase = signal<GeneratePromptPhase>('rendering');
-  protected readonly prompt = signal('');
-  protected readonly error = signal<string | null>(null);
-  protected readonly showStream = signal(false);
-  protected readonly canSend = computed(
-    () => this.phase() === 'edit' && this.prompt().trim().length > 0,
-  );
+  readonly phase = signal<GeneratePromptPhase>('rendering');
+  readonly prompt = signal('');
+  readonly error = signal<string | null>(null);
+  readonly showStream = signal(false);
+  readonly canSend = computed(() => this.phase() === 'edit' && this.prompt().trim().length > 0);
 
   /** Which host call is current; an answer from an earlier one is dropped. */
   private run = 0;
   private unregisterJob: (() => void) | null = null;
 
-  constructor() {
+  protected override connected(): void {
+    this.classList.add('gen-prompt-dialog');
     this.feed.acquire();
-    void this.render();
+    this.onDisconnect(() => {
+      this.feed.release();
+      this.run++;
+      this.releaseJob();
+    });
+    void this.loadRenderedPrompt();
   }
 
-  ngOnDestroy(): void {
-    this.feed.release();
-    this.run++;
-    this.unregisterJob?.();
+  protected template() {
+    const phase = this.phase();
+    const error = this.error();
+    const showStream = this.showStream();
+    return html`
+      <h2 class="r2m-dialog__title">Generate voice prompt with AI</h2>
+      <div class="r2m-dialog__content gen-prompt" data-phase=${phase}>
+        ${error ? html`<p class="gen-prompt__error" role="alert">${error}</p>` : nothing}
+        ${
+          phase === 'rendering'
+            ? html`<progress max="1" aria-label="Rendering prompt"></progress>
+                <p class="gen-prompt__hint">
+                  Rendering the prompt for ${this.data.characterName}…
+                </p>`
+            : html`<p class="gen-prompt__hint">
+                  Review or edit the prompt before sending to the LLM.
+                </p>
+                <label class="r2m-field gen-prompt__field">
+                  <span class="r2m-field__label">Prompt</span>
+                  <textarea
+                    aria-label="Prompt"
+                    class="gen-prompt__textarea"
+                    .value=${this.prompt()}
+                    ?disabled=${phase === 'generating'}
+                    @input=${(e: Event) => this.prompt.set((e.target as HTMLTextAreaElement).value)}
+                  ></textarea>
+                </label>
+                ${
+                  phase === 'generating'
+                    ? html`<progress max="1" aria-label="Generating"></progress>`
+                    : nothing
+                }`
+        }
+        ${streamDisclosure({
+          feed: this.feed,
+          open: showStream,
+          onToggle: () => this.showStream.set(!showStream),
+        })}
+      </div>
+      <div class="r2m-dialog__actions">
+        <button type="button" class="r2m-button" @click=${() => this.emit('r2m-close', null)}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="r2m-button r2m-button--filled"
+          data-action="send"
+          ?disabled=${!this.canSend()}
+          @click=${() => void this.generate()}
+        >
+          ${icon('auto_awesome')} Send to AI
+        </button>
+      </div>
+    `;
   }
 
-  private async render(): Promise<void> {
+  private async loadRenderedPrompt(): Promise<void> {
     const run = ++this.run;
     try {
       const rendered = await this.voices.renderDesignPrompt(
@@ -192,7 +132,7 @@ export class GeneratePromptDialog implements OnDestroy {
     }
   }
 
-  protected async generate(): Promise<void> {
+  async generate(): Promise<void> {
     if (!this.canSend()) return;
     const run = ++this.run;
     this.error.set(null);
@@ -211,27 +151,37 @@ export class GeneratePromptDialog implements OnDestroy {
         this.prompt(),
       );
       if (run !== this.run) return;
-      this.ref.close({ designPrompt: result.designPrompt });
+      const answer: GeneratePromptDialogResult = { designPrompt: result.designPrompt };
+      this.emit('r2m-close', answer);
     } catch (e) {
       if (run !== this.run) return;
       this.error.set(toApiError(e).message);
       this.phase.set('edit');
     } finally {
-      this.unregisterJob?.();
-      this.unregisterJob = null;
+      this.releaseJob();
     }
   }
+
+  /** Once: closing the dialog and the call settling both land here. */
+  private releaseJob(): void {
+    const unregister = this.unregisterJob;
+    this.unregisterJob = null;
+    unregister?.();
+  }
 }
+define('r2m-generate-prompt-dialog', GeneratePromptDialog);
 
 /** Opens the dialog; resolves the generated design prompt, or null when cancelled. */
 export async function openGeneratePromptDialog(
-  dialog: MatDialog,
   data: GeneratePromptDialogData,
 ): Promise<GeneratePromptDialogResult | null> {
-  const ref = dialog.open<
-    GeneratePromptDialog,
-    GeneratePromptDialogData,
-    GeneratePromptDialogResult
-  >(GeneratePromptDialog, { data, autoFocus: 'dialog', restoreFocus: true });
-  return (await firstValueFrom(ref.afterClosed())) ?? null;
+  const dialog = document.createElement('r2m-generate-prompt-dialog');
+  dialog.data = data;
+  return (await openDialog<GeneratePromptDialogResult | null>(dialog)) ?? null;
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-generate-prompt-dialog': GeneratePromptDialog;
+  }
 }

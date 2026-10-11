@@ -50,8 +50,8 @@ public sealed class E2eAppFixture : IAsyncLifetime
                 new Dictionary<string, string?> { ["Workspace:FolderPath"] = WorkspaceDir }))
             .ConfigureWebHostDefaults(web => web
                 .UseStartup<Startup>()
-                // Isolated physical web root so tests can stage (or withhold) the Angular bundle
-                // without depending on whether a developer has run ng build.
+                // Isolated physical web root so tests can stage (or withhold) the web bundle
+                // without depending on whether a developer has run bun run build.
                 .UseWebRoot(WebRootDir)
                 .UseUrls("http://127.0.0.1:0"))
             .ConfigureServices(s =>

@@ -1,14 +1,17 @@
-import { ParagraphDto, ParagraphItemDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { ParagraphDto, ParagraphItemDto } from '@app/api';
 import {
-  SelectionMap,
-  chapterVoicedTotals,
+  type SelectionMap,
   chapterDialogTotals,
+  chapterVoicedTotals,
   isDialogParagraph,
+  isNarrationOnlyParagraph,
   isVoicedItem,
   nodeState,
   selectedUnder,
 } from './selection';
 
+/** Copied verbatim from the Angular spec (spec §6 point 3): the pure rules port as they are. */
 function item(overrides: Partial<ParagraphItemDto>): ParagraphItemDto {
   return {
     id: 'i',
@@ -37,10 +40,33 @@ const SELECTION: SelectionMap = {
 describe('isDialogParagraph', () => {
   it('is true only when a non-pause Character item is present', () => {
     expect(isDialogParagraph(paragraph('p', item({ itemType: 'Character' })))).toBe(true);
-    expect(isDialogParagraph(paragraph('p', item({ itemType: 'Character', characterId: 'h' })))).toBe(true);
-    expect(isDialogParagraph(paragraph('p', item({ itemType: 'Narration', characterId: 'n' })))).toBe(false);
-    expect(isDialogParagraph(paragraph('p', item({ itemType: 'Pause', isPause: true })))).toBe(false);
+    expect(
+      isDialogParagraph(paragraph('p', item({ itemType: 'Character', characterId: 'h' }))),
+    ).toBe(true);
+    expect(
+      isDialogParagraph(paragraph('p', item({ itemType: 'Narration', characterId: 'n' }))),
+    ).toBe(false);
+    expect(isDialogParagraph(paragraph('p', item({ itemType: 'Pause', isPause: true })))).toBe(
+      false,
+    );
     expect(isDialogParagraph(paragraph('p'))).toBe(false);
+  });
+});
+
+describe('isNarrationOnlyParagraph', () => {
+  it('is true only when every non-pause item is narration, and there is one', () => {
+    const narration = item({ itemType: 'Narration', characterId: 'n' });
+    const pause = item({ itemType: 'Pause', isPause: true });
+    expect(isNarrationOnlyParagraph(paragraph('p', narration))).toBe(true);
+    expect(isNarrationOnlyParagraph(paragraph('p', narration, pause))).toBe(true);
+    expect(isNarrationOnlyParagraph(paragraph('p', narration, item({ itemType: 'Character' })))).toBe(
+      false,
+    );
+    expect(
+      isNarrationOnlyParagraph(paragraph('p', item({ itemType: 'Character', characterId: 'h' }))),
+    ).toBe(false);
+    expect(isNarrationOnlyParagraph(paragraph('p', pause))).toBe(false);
+    expect(isNarrationOnlyParagraph(paragraph('p'))).toBe(false);
   });
 });
 
@@ -92,7 +118,11 @@ describe('chapterDialogTotals', () => {
           paragraph('p1', item({ itemType: 'Narration', characterId: 'n' })),
           paragraph('p2', item({ itemType: 'Character' })),
           paragraph('p3', item({ itemType: 'Pause', isPause: true })),
-          paragraph('p4', item({ itemType: 'Narration', characterId: 'n' }), item({ itemType: 'Character', characterId: 'h' })),
+          paragraph(
+            'p4',
+            item({ itemType: 'Narration', characterId: 'n' }),
+            item({ itemType: 'Character', characterId: 'h' }),
+          ),
         ],
       },
       { id: 'c2', title: 'Two', paragraphs: [] },
@@ -115,7 +145,12 @@ describe('isVoicedItem (ticket 13)', () => {
   });
 
   it('an item that already has audio can be generated again', () => {
-    expect(isVoicedItem(item({ itemType: 'Narration', characterId: 'n', audioFileName: 'a.wav' }), false)).toBe(true);
+    expect(
+      isVoicedItem(
+        item({ itemType: 'Narration', characterId: 'n', audioFileName: 'a.wav' }),
+        false,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -127,7 +162,11 @@ describe('chapterVoicedTotals', () => {
         title: 'One',
         paragraphs: [
           paragraph('p1', item({ itemType: 'Narration', characterId: 'n' })),
-          paragraph('p2', item({ itemType: 'Character' }), item({ itemType: 'Character', characterId: 'h' })),
+          paragraph(
+            'p2',
+            item({ itemType: 'Character' }),
+            item({ itemType: 'Character', characterId: 'h' }),
+          ),
           paragraph('p3', item({ itemType: 'Pause', isPause: true })),
         ],
       },

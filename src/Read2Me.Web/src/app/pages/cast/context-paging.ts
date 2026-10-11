@@ -1,4 +1,4 @@
-import { ContextParagraphDto, MAX_CONTEXT_WINDOW } from '@app/api';
+import { type ContextParagraphDto, MAX_CONTEXT_WINDOW } from '@app/api';
 
 /**
  * The line-context window (research §4 "Lines"): opens at 3 before / 2 after, "+ previous" grows
@@ -50,7 +50,9 @@ export function contextSpeakers(paragraph: ContextParagraphDto): ContextSpeaker[
     const key = item.speaker ?? '';
     if (seen.has(key)) continue;
     seen.add(key);
-    speakers.push(item.speaker ? { name: item.speaker, unknown: false } : { name: '?', unknown: true });
+    speakers.push(
+      item.speaker ? { name: item.speaker, unknown: false } : { name: '?', unknown: true },
+    );
   }
   return speakers;
 }

@@ -1,9 +1,8 @@
-import { Injectable, inject } from '@angular/core';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { firstValueFrom } from 'rxjs';
-import { AiTaskKind, PreflightApi, toApiError } from '@app/api';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { PreflightSheetData, PreflightSheetHost } from './preflight-sheet-host';
+import { type AiTaskKind, PreflightApi, toApiError } from '@app/api';
+import { openDialog } from '@app/core/dialog';
+import { use } from '@app/core/services';
+import { ToastService } from '@app/ui/toast';
+import '@app/ui/preflight-sheet';
 
 /** AI task kinds a preflight checks services for (`IAiPreflight`, spec D10). */
 export type PreflightTask =
@@ -29,14 +28,13 @@ export const PREFLIGHT_TASKS: Record<PreflightTask, { kind: AiTaskKind; label: s
 /**
  * Design principle 4: every AI action is preceded by readiness. Asks the host what the task needs
  * (`POST /api/preflight/{kind}/plan`); when everything is up the caller proceeds at once, otherwise
- * the `r2m-preflight-sheet` shows the services to start and the GPU conflicts to stop, and the run
- * (`/run`, progress over the hub) decides. Cancelling never starts anything.
+ * the `r2m-preflight-sheet` opens as a bottom sheet (`openDialog`, docked, no light dismiss) with
+ * the services to start and the GPU conflicts to stop, and the run (`/run`, progress over the hub)
+ * decides. Cancelling never starts anything.
  */
-@Injectable({ providedIn: 'root' })
 export class Preflight {
-  private readonly api = inject(PreflightApi);
-  private readonly sheet = inject(MatBottomSheet);
-  private readonly toast = inject(ToastService);
+  private readonly api = use(PreflightApi);
+  private readonly toast = use(ToastService);
 
   /** Resolves true when the task may run, false when the user cancelled or a service failed to start. */
   async ensureReady(task: PreflightTask): Promise<boolean> {
@@ -50,15 +48,8 @@ export class Preflight {
     }
     if (plan.ready) return true;
 
-    const data: PreflightSheetData = { kind, label, plan };
-    const ref = this.sheet.open<PreflightSheetHost, PreflightSheetData, boolean>(
-      PreflightSheetHost,
-      {
-        data,
-        disableClose: true,
-        panelClass: 'r2m-preflight-panel',
-      },
-    );
-    return (await firstValueFrom(ref.afterDismissed())) === true;
+    const sheet = document.createElement('r2m-preflight-sheet');
+    sheet.data = { kind, label, plan };
+    return (await openDialog<boolean>(sheet, { variant: 'sheet', closedBy: 'none' })) === true;
   }
 }

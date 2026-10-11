@@ -1,15 +1,16 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
 import {
   ApiError,
   BookApi,
-  BookCommand,
-  CommandResponse,
-  ManualImportRequest,
+  type BookCommand,
+  type CommandResponse,
+  type ManualImportRequest,
   ProjectsApi,
   toApiError,
 } from '@app/api';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { BookStore } from './book-store';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import { ToastService } from '@app/ui/toast';
+import type { BookStore } from './book-store';
 
 /** How long a committed write may take to come back as this tab's own receipt before we reload. */
 export const OWN_RECEIPT_TIMEOUT_MS = 2000;
@@ -20,13 +21,12 @@ export const OWN_RECEIPT_TIMEOUT_MS = 2000;
  * and only reloads by hand when no receipt arrives in time (a no-op commit, or a hub that is down).
  * A refusal (422) is shown verbatim as a toast; a success shows nothing, the change itself is the
  * feedback. `newEntityId` is ignored: the receipt-driven reload already covers what was created.
+ * Page-scoped like the store: the project shell provides one per project.
  */
-@Injectable()
 export class BookEditor {
-  private readonly book = inject(BookApi);
-  private readonly projects = inject(ProjectsApi);
-  private readonly store = inject(BookStore);
-  private readonly toast = inject(ToastService);
+  private readonly book = use(BookApi);
+  private readonly projects = use(ProjectsApi);
+  private readonly toast = use(ToastService);
 
   private readonly _busy = signal(false);
 
@@ -34,6 +34,8 @@ export class BookEditor {
   readonly busy = this._busy.asReadonly();
   /** Every mutation affordance is off: a write is in flight, or the view is stale (design §6.3). */
   readonly locked = computed(() => this._busy() || this.store.stale() !== null);
+
+  constructor(private readonly store: BookStore) {}
 
   /** Posts one command. Resolves true when the host accepted it. */
   async run(command: BookCommand): Promise<boolean> {
@@ -57,7 +59,9 @@ export class BookEditor {
     // Read before the await: `settle` declining is only explicable from the state it saw.
     const declined = this.declineReason();
     const outcome = await this.settle((folder) => this.book.execute(folder, command), true);
-    return outcome === null ? new ApiError(0, declined ?? 'The change was not sent.') : outcome.error;
+    return outcome === null
+      ? new ApiError(0, declined ?? 'The change was not sent.')
+      : outcome.error;
   }
 
   /** Why a write would not be sent right now, or null when it would. */

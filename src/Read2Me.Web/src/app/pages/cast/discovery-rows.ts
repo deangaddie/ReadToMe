@@ -1,5 +1,10 @@
-import { ApiError, ApplyDiscoveryRow, DiscoveryOutcomeDto, Guid } from '@app/api';
-import { AliasOwner, findAliasCollisions } from './alias-collisions';
+import {
+  type ApiError,
+  type ApplyDiscoveryRow,
+  type DiscoveryOutcomeDto,
+  type Guid,
+} from '@app/api';
+import { type AliasOwner, findAliasCollisions } from './alias-collisions';
 
 /**
  * One proposed character in the discovery review (research §4 "Discover dialog"). The dialog
@@ -23,7 +28,10 @@ export function toDiscoveryRows(outcome: DiscoveryOutcomeDto): DiscoveryRow[] {
 }
 
 /** The strings two characters would share once the included rows are applied. */
-export function rowCollisions(rows: readonly DiscoveryRow[], roster: readonly AliasOwner[]): string[] {
+export function rowCollisions(
+  rows: readonly DiscoveryRow[],
+  roster: readonly AliasOwner[],
+): string[] {
   return findAliasCollisions(
     rows.filter((r) => r.included),
     roster,
@@ -64,7 +72,6 @@ export function discoveryFailureMessage(outcome: DiscoveryOutcomeDto): string | 
 }
 
 export function discoveryErrorMessage(error: ApiError): string {
-  if (error.status === 422)
-    return 'No LLM server is configured. Set one up under Settings → LLM.';
+  if (error.status === 422) return 'No LLM server is configured. Set one up under Settings → LLM.';
   return `Character discovery failed: ${error.detail ?? error.message}`;
 }

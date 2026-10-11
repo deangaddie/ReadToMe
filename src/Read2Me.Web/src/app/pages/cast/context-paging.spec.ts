@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import {
   INITIAL_WINDOW,
   canGrowAfter,
@@ -53,7 +54,10 @@ describe('contextSpeakers', () => {
       { name: '?', unknown: true },
     ]);
     expect(
-      contextSpeakers({ text: 'n', items: [{ itemId: '1', text: 'a', isDialog: false, speaker: null }] }),
+      contextSpeakers({
+        text: 'n',
+        items: [{ itemId: '1', text: 'a', isDialog: false, speaker: null }],
+      }),
     ).toEqual([]);
   });
 });

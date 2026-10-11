@@ -1,11 +1,10 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type { PromptCatalogEntry, PromptKind, PromptPreviewResponse } from './dtos';
 
 /** `SettingsEndpoints.MapPromptEndpoints`: LLM prompt templates keyed by kind. */
-@Injectable({ providedIn: 'root' })
 export class PromptsApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
   private readonly base = '/api/settings/prompts';
 
   /** Every template, resolved (stored override or built-in default). */

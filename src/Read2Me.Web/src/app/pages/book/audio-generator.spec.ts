@@ -1,47 +1,43 @@
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { ApiError, AudioApi } from '@app/api';
+import { override, resetServices } from '@app/core/services';
+import { signal } from '@app/core/signals';
 import { Preflight } from '@app/shared/preflight';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { ToastService } from '@app/ui/toast';
 import { AudioGenerator } from './audio-generator';
-import { BookEditor } from './book-editor';
-import { BookStore } from './book-store';
+import type { BookEditor } from './book-editor';
+import type { BookStore } from './book-store';
 
+/** Ported from the Angular TestBed spec, case for case. */
 describe('AudioGenerator', () => {
   let generator: AudioGenerator;
-  let enqueueItems: ReturnType<typeof vi.fn>;
-  let enqueue: ReturnType<typeof vi.fn>;
-  let run: ReturnType<typeof vi.fn>;
-  let ensureReady: ReturnType<typeof vi.fn>;
+  let enqueueItems: ReturnType<typeof mock>;
+  let enqueue: ReturnType<typeof mock>;
+  let run: ReturnType<typeof mock>;
+  let ensureReady: ReturnType<typeof mock>;
   let toasts: { kind: string; message: unknown }[];
 
   beforeEach(() => {
-    enqueueItems = vi.fn().mockResolvedValue({ enqueued: 2 });
-    enqueue = vi.fn().mockResolvedValue({ enqueued: 5 });
-    run = vi.fn().mockResolvedValue(true);
-    ensureReady = vi.fn().mockResolvedValue(true);
+    resetServices();
+    enqueueItems = mock(async () => ({ enqueued: 2 }));
+    enqueue = mock(async () => ({ enqueued: 5 }));
+    run = mock(async () => true);
+    ensureReady = mock(async () => true);
     toasts = [];
-    TestBed.configureTestingModule({
-      providers: [
-        AudioGenerator,
-        { provide: AudioApi, useValue: { enqueueItems, enqueue } },
-        { provide: BookEditor, useValue: { run } },
-        { provide: BookStore, useValue: { folder: signal('dune') } },
-        { provide: Preflight, useValue: { ensureReady } },
-        {
-          provide: ToastService,
-          useValue: {
-            success: (m: string) => toasts.push({ kind: 'success', message: m }),
-            problem: (p: unknown) => toasts.push({ kind: 'problem', message: p }),
-          },
-        },
-      ],
-    });
-    generator = TestBed.inject(AudioGenerator);
+    override(AudioApi, { enqueueItems, enqueue } as unknown as AudioApi);
+    override(Preflight, { ensureReady } as unknown as Preflight);
+    override(ToastService, {
+      success: (m: string) => toasts.push({ kind: 'success', message: m }),
+      problem: (p: unknown) => toasts.push({ kind: 'problem', message: p }),
+    } as unknown as ToastService);
+    generator = new AudioGenerator(
+      { run } as unknown as BookEditor,
+      { folder: signal('dune') } as unknown as BookStore,
+    );
   });
 
   it('a selection runs the audio preflight, posts the ids and reports the count', async () => {
-    await expect(generator.enqueueItems(['i1', 'i2'])).resolves.toBe(true);
+    expect(await generator.enqueueItems(['i1', 'i2'])).toBe(true);
     expect(ensureReady).toHaveBeenCalledWith('audio');
     expect(enqueueItems).toHaveBeenCalledWith('dune', ['i1', 'i2']);
     expect(toasts).toEqual([{ kind: 'success', message: 'Queued 2 items' }]);
@@ -49,21 +45,21 @@ describe('AudioGenerator', () => {
   });
 
   it('an empty selection and a cancelled preflight post nothing', async () => {
-    await expect(generator.enqueueItems([])).resolves.toBe(false);
+    expect(await generator.enqueueItems([])).toBe(false);
     ensureReady.mockResolvedValue(false);
-    await expect(generator.retry('i1')).resolves.toBe(false);
+    expect(await generator.retry('i1')).toBe(false);
     expect(enqueueItems).not.toHaveBeenCalled();
   });
 
   it('retry re-queues just that item', async () => {
     enqueueItems.mockResolvedValue({ enqueued: 1 });
-    await expect(generator.retry('i9')).resolves.toBe(true);
+    expect(await generator.retry('i9')).toBe(true);
     expect(enqueueItems).toHaveBeenCalledWith('dune', ['i9']);
     expect(toasts).toEqual([{ kind: 'success', message: 'Queued 1 item' }]);
   });
 
   it('a node asks for what still needs audio, with the narrator-only flag', async () => {
-    await expect(generator.enqueueNode('chapter', 'c1', true)).resolves.toBe(true);
+    expect(await generator.enqueueNode('chapter', 'c1', true)).toBe(true);
     expect(enqueue).toHaveBeenCalledWith('dune', {
       level: 'chapter',
       nodeId: 'c1',
@@ -74,19 +70,21 @@ describe('AudioGenerator', () => {
 
   it('nothing queued is said so and answers false; a 409 becomes a problem toast', async () => {
     enqueueItems.mockResolvedValue({ enqueued: 0 });
-    await expect(generator.enqueueItems(['i1'])).resolves.toBe(false);
+    expect(await generator.enqueueItems(['i1'])).toBe(false);
     expect(toasts).toEqual([{ kind: 'success', message: 'Nothing to queue' }]);
 
     toasts = [];
-    enqueueItems.mockRejectedValue(new ApiError(409, 'Conflict', 'No paragraph TTS service configured.'));
-    await expect(generator.enqueueItems(['i1'])).resolves.toBe(false);
+    enqueueItems.mockRejectedValue(
+      new ApiError(409, 'Conflict', 'No paragraph TTS service configured.'),
+    );
+    expect(await generator.enqueueItems(['i1'])).toBe(false);
     expect(toasts[0]?.kind).toBe('problem');
-    expect((toasts[0]?.message as { detail?: string }).detail).toContain('No paragraph TTS');
+    expect((toasts[0]!.message as { detail?: string }).detail).toContain('No paragraph TTS');
     expect(generator.working()).toBe(false);
   });
 
   it('dismissing a review posts the command through the editor', async () => {
-    await expect(generator.dismissReview('i1')).resolves.toBe(true);
+    expect(await generator.dismissReview('i1')).toBe(true);
     expect(run).toHaveBeenCalledWith({ type: 'DismissAudioReview', paragraphItemId: 'i1' });
   });
 });

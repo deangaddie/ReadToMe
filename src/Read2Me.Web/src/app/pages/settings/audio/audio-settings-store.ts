@@ -1,27 +1,27 @@
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
-  AudioPostProcessStepConfig,
+  type AudioPostProcessStepConfig,
   AudioProcessingApi,
-  AudioProcessingFull,
-  AudioProcessingUpdateRequest,
-  FfmpegProbeResult,
-  PauseDurations,
+  type AudioProcessingFull,
+  type AudioProcessingUpdateRequest,
+  type FfmpegProbeResult,
+  type PauseDurations,
   toApiError,
 } from '@app/api';
-import { LiveService } from '@app/live/live.service';
+import { use } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import { LiveService, type Unsubscribe } from '@app/live/live.service';
 
 /**
  * State behind `/settings/audio` (ticket 24), provided by the page: the one full snapshot every
  * card seeds from. Every write goes to the host and the store reloads from it; the hub's
  * `settingsChanged { area: 'audio-processing' }` reloads it too, so an edit made in another tab
  * or over the agent API shows up here. Reloads are sequenced: a slow answer never overwrites a
- * newer one.
+ * newer one. The page calls {@link open} on connect and {@link close} on disconnect.
  */
-@Injectable()
 export class AudioSettingsStore {
-  private readonly api = inject(AudioProcessingApi);
-  private readonly live = inject(LiveService);
+  private readonly api = use(AudioProcessingApi);
+  private readonly live = use(LiveService);
+  private subscription: Unsubscribe | null = null;
 
   private readonly _full = signal<AudioProcessingFull | null>(null);
   private readonly _error = signal<string | null>(null);
@@ -31,13 +31,20 @@ export class AudioSettingsStore {
   readonly full = this._full.asReadonly();
   readonly error = this._error.asReadonly();
 
-  constructor() {
-    this.live
-      .on('settingsChanged')
-      .pipe(takeUntilDestroyed(inject(DestroyRef)))
-      .subscribe((m) => {
-        if (m.area === 'audio-processing') void this.load();
-      });
+  /** Follows the hub's `settingsChanged` for the area and loads; called on every connect. */
+  open(): Promise<void> {
+    this.subscription?.();
+    this.subscription = this.live.on('settingsChanged', (m) => {
+      if (m.area === 'audio-processing') void this.load();
+    });
+    return this.load();
+  }
+
+  /** Drops the hub subscription and any load still in flight. */
+  close(): void {
+    this.subscription?.();
+    this.subscription = null;
+    this.loadSeq++;
   }
 
   async load(): Promise<void> {

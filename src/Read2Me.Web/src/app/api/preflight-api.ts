@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   AiTaskKind,
@@ -12,9 +12,8 @@ import type {
  * the background run that reconciles it. Progress arrives as `preflight` hub messages on the
  * connection named in the run request.
  */
-@Injectable({ providedIn: 'root' })
 export class PreflightApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   plan(task: AiTaskKind): Promise<PreflightPlanDto> {
     return this.api.post<PreflightPlanDto>(`/api/preflight/${task}/plan`);

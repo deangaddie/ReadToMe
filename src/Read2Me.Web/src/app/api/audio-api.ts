@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   AudioEnqueueRequest,
@@ -12,9 +12,8 @@ import type {
 import { projectUrl } from './projects-api';
 
 /** `AudioEndpoints.cs` + the audio half of `QueueStatusEndpoints.cs`. */
-@Injectable({ providedIn: 'root' })
 export class AudioApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   /** 202 with the number of items queued; 400 on an unknown level, 409 when no TTS config is active. */
   enqueue(folder: string, request: AudioEnqueueRequest): Promise<EnqueueResponse> {

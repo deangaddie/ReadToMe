@@ -1,11 +1,13 @@
+import { describe, expect, it } from 'bun:test';
 import {
   DEFAULT_MANUAL_REREAD_FORM,
-  ManualRereadForm,
+  type ManualRereadForm,
   activeLevels,
   toManualImportRequest,
   validateManualReread,
 } from './manual-reread-form';
 
+/** Copied verbatim from the Angular spec. */
 function form(overrides: Partial<ManualRereadForm> = {}): ManualRereadForm {
   return { ...DEFAULT_MANUAL_REREAD_FORM, ...overrides };
 }
@@ -13,11 +15,15 @@ function form(overrides: Partial<ManualRereadForm> = {}): ManualRereadForm {
 describe('manual reread form', () => {
   it('starts as chapters-only by text prefix, which needs a prefix before it can be sent', () => {
     expect(activeLevels(DEFAULT_MANUAL_REREAD_FORM)).toEqual(['chapter']);
-    expect(validateManualReread(DEFAULT_MANUAL_REREAD_FORM)).toBe('Chapter prefix cannot be empty.');
+    expect(validateManualReread(DEFAULT_MANUAL_REREAD_FORM)).toBe(
+      'Chapter prefix cannot be empty.',
+    );
     expect(validateManualReread(form({ chapter: { mode: 'Prefix', prefix: '  ' } }))).toBe(
       'Chapter prefix cannot be empty.',
     );
-    expect(validateManualReread(form({ chapter: { mode: 'Prefix', prefix: 'Chapter' } }))).toBeNull();
+    expect(
+      validateManualReread(form({ chapter: { mode: 'Prefix', prefix: 'Chapter' } })),
+    ).toBeNull();
   });
 
   it('number and roman modes need no prefix', () => {
@@ -27,12 +33,17 @@ describe('manual reread form', () => {
 
   it('switched-on levels are validated in book order; switched-off ones are ignored', () => {
     const chapter = { mode: 'Roman', prefix: '' } as const;
-    expect(
-      validateManualReread(form({ hasVolumes: true, hasParts: true, chapter })),
-    ).toBe('Volume prefix cannot be empty.');
+    expect(validateManualReread(form({ hasVolumes: true, hasParts: true, chapter }))).toBe(
+      'Volume prefix cannot be empty.',
+    );
     expect(
       validateManualReread(
-        form({ hasVolumes: true, hasParts: true, volume: { mode: 'Prefix', prefix: 'Book' }, chapter }),
+        form({
+          hasVolumes: true,
+          hasParts: true,
+          volume: { mode: 'Prefix', prefix: 'Book' },
+          chapter,
+        }),
       ),
     ).toBe('Part prefix cannot be empty.');
     expect(validateManualReread(form({ hasParts: false, chapter }))).toBeNull();

@@ -1,176 +1,155 @@
+import { html, nothing } from 'lit-html';
 import {
-  ChangeDetectionStrategy,
-  Component,
-  booleanAttribute,
-  inject,
-  input,
-  signal,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { AudioProcessingApi, RecentAudioSample, StepPreviewResponse, toApiError } from '@app/api';
-import { AudioPlayer } from '@app/ui/audio-player/audio-player';
-import { ToastService } from '@app/ui/toast/toast.service';
+  AudioProcessingApi,
+  type RecentAudioSample,
+  type StepPreviewResponse,
+  toApiError,
+} from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import { adoptStyles } from '@app/core/styles';
+import { icon, spinner } from '@app/ui/partials';
+import { ToastService } from '@app/ui/toast';
 import { SamplePicker, provenance, snippet } from './sample-picker-dialog';
+import css from './step-preview.css' with { type: 'text' };
+import '@app/ui/audio-player';
+
+adoptStyles(css);
 
 /**
  * A post-process card's A/B preview (ticket 24): pick a recent sample, render the card's
  * *unsaved* settings over its Preview Source, then hear off-vs-draft on one A/B player. Renders
  * are on demand — the draft is only pushed through ffmpeg when asked, never per keystroke — and
- * a new sample drops the parked render rather than pairing it with the wrong original.
+ * a new sample drops the parked render rather than pairing it with the wrong original. An element:
+ * it owns the picked sample and the render.
  */
-@Component({
-  selector: 'app-step-preview',
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, AudioPlayer],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'step-preview' },
-  template: `
-    <div class="step-preview__head">
-      <span class="step-preview__title">A/B preview</span>
-      @if (sample(); as sample) {
-        <span class="step-preview__sample" data-role="sample">
-          <span class="step-preview__snippet">{{ snippet(sample.text) }}</span>
-          <span class="step-preview__meta">{{ provenance(sample) }}</span>
-        </span>
-      }
-      <span class="step-preview__actions">
-        <button
-          mat-stroked-button
-          type="button"
-          data-action="pick-sample"
-          [disabled]="rendering()"
-          (click)="pick()"
-        >
-          {{ sample() ? 'Change sample' : 'Pick sample' }}
-        </button>
-        <button
-          mat-flat-button
-          type="button"
-          data-action="render-preview"
-          [disabled]="!sample() || rendering() || !canRender()"
-          (click)="render()"
-        >
-          @if (rendering()) {
-            <mat-progress-spinner mode="indeterminate" diameter="16" />
-            Rendering…
-          } @else {
-            Render preview
-          }
-        </button>
-      </span>
-    </div>
+export class StepPreview extends R2mElement {
+  private readonly api = use(AudioProcessingApi);
+  private readonly picker = use(SamplePicker);
+  private readonly toast = use(ToastService);
 
-    @if (result(); as result) {
-      <r2m-audio-player
-        [src]="result.originalUrl"
-        [srcB]="result.processedUrl"
-        [cacheKey]="result.previewId"
-        labelA="Original"
-        [labelB]="processedLabel()"
-        [label]="sample()?.characterName ?? 'Narration'"
-      />
-      @if (showRemovedMs() && result.removedMs !== null) {
-        <p class="step-preview__note" data-role="removed">Removed {{ removedLabel(result) }} ms</p>
-      }
-      @if (!result.appliedOk) {
-        <p class="step-preview__reason" role="alert" data-role="reason">
-          <mat-icon>info</mat-icon>
-          {{ result.reason ?? 'The step fell back to the unprocessed audio.' }}
-        </p>
-      }
-    }
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-2);
-      margin-top: var(--r2m-space-3);
-      padding: var(--r2m-space-3);
-      border: 1px dashed var(--r2m-outline);
-      border-radius: var(--r2m-radius-md);
-    }
-    .step-preview__head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--r2m-space-2) var(--r2m-space-3);
-    }
-    .step-preview__title {
-      font-weight: 600;
-      font-size: var(--r2m-text-sm);
-    }
-    .step-preview__sample {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      flex: 1 1 200px;
-    }
-    .step-preview__snippet {
-      font-size: var(--r2m-text-sm);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .step-preview__meta,
-    .step-preview__note {
-      font-size: var(--r2m-text-xs);
-      color: var(--r2m-text-muted);
-    }
-    .step-preview__actions {
-      display: flex;
-      gap: var(--r2m-space-2);
-      margin-left: auto;
-    }
-    .step-preview__note,
-    .step-preview__reason {
-      margin: 0;
-    }
-    .step-preview__reason {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-1);
-      font-size: var(--r2m-text-sm);
-      color: var(--r2m-status-warn);
-    }
-    .step-preview__reason mat-icon {
-      font-size: 18px;
-      width: 18px;
-      height: 18px;
-    }
-    mat-progress-spinner {
-      display: inline-block;
-      margin-right: var(--r2m-space-1);
-    }
-  `,
-})
-export class StepPreview {
-  private readonly api = inject(AudioProcessingApi);
-  private readonly picker = inject(SamplePicker);
-  private readonly toast = inject(ToastService);
+  readonly #stepId = signal('');
+  get stepId() {
+    return this.#stepId();
+  }
+  set stepId(value: string) {
+    this.#stepId.set(value);
+  }
 
-  readonly stepId = input.required<string>();
   /** The card's unsaved settings payload — what a render sends. */
-  readonly settings = input.required<Record<string, unknown> | null>();
-  readonly processedLabel = input('Processed');
+  readonly #settings = signal<Record<string, unknown> | null>(null);
+  get settings() {
+    return this.#settings();
+  }
+  set settings(value: Record<string, unknown> | null) {
+    this.#settings.set(value);
+  }
+
+  readonly #processedLabel = signal('Processed');
+  get processedLabel() {
+    return this.#processedLabel();
+  }
+  set processedLabel(value: string) {
+    this.#processedLabel.set(value);
+  }
+
   /** Cards that trim report how much audio the step removed. */
-  readonly showRemovedMs = input(false, { transform: booleanAttribute });
+  readonly #showRemovedMs = signal(false);
+  get showRemovedMs() {
+    return this.#showRemovedMs();
+  }
+  set showRemovedMs(value: boolean) {
+    this.#showRemovedMs.set(value);
+  }
+
   /** False while the card's draft is invalid: nothing to audition yet. */
-  readonly canRender = input(true);
+  readonly #canRender = signal(true);
+  get canRender() {
+    return this.#canRender();
+  }
+  set canRender(value: boolean) {
+    this.#canRender.set(value);
+  }
 
   readonly sample = signal<RecentAudioSample | null>(null);
   readonly result = signal<StepPreviewResponse | null>(null);
   readonly rendering = signal(false);
 
-  protected readonly snippet = snippet;
-  protected readonly provenance = provenance;
-
-  protected removedLabel(result: StepPreviewResponse): string {
-    return Math.round(result.removedMs ?? 0).toString();
+  protected override connected(): void {
+    this.classList.add('step-preview');
   }
 
-  protected async pick(): Promise<void> {
+  protected template() {
+    const sample = this.sample();
+    const result = this.result();
+    const rendering = this.rendering();
+    return html`
+      <div class="step-preview__head">
+        <span class="step-preview__title">A/B preview</span>
+        ${
+          sample
+            ? html`<span class="step-preview__sample" data-role="sample">
+                <span class="step-preview__snippet">${snippet(sample.text)}</span>
+                <span class="step-preview__meta">${provenance(sample)}</span>
+              </span>`
+            : nothing
+        }
+        <span class="step-preview__actions">
+          <button
+            type="button"
+            class="r2m-button r2m-button--stroked"
+            data-action="pick-sample"
+            ?disabled=${rendering}
+            @click=${() => void this.pick()}
+          >
+            ${sample ? 'Change sample' : 'Pick sample'}
+          </button>
+          <button
+            type="button"
+            class="r2m-button r2m-button--filled"
+            data-action="render-preview"
+            ?disabled=${!sample || rendering || !this.#canRender()}
+            @click=${() => void this.render()}
+          >
+            ${rendering ? html`${spinner(16)} Rendering…` : 'Render preview'}
+          </button>
+        </span>
+      </div>
+
+      ${
+        result
+          ? html`
+              <r2m-audio-player
+                .src=${result.originalUrl}
+                .srcB=${result.processedUrl}
+                .cacheKey=${result.previewId}
+                .labelA=${'Original'}
+                .labelB=${this.#processedLabel()}
+                .label=${sample?.characterName ?? 'Narration'}
+              ></r2m-audio-player>
+              ${
+                this.#showRemovedMs() && result.removedMs !== null
+                  ? html`<p class="step-preview__note" data-role="removed">
+                      Removed ${Math.round(result.removedMs)} ms
+                    </p>`
+                  : nothing
+              }
+              ${
+                result.appliedOk
+                  ? nothing
+                  : html`<p class="step-preview__reason" role="alert" data-role="reason">
+                      ${icon('info')}
+                      ${result.reason ?? 'The step fell back to the unprocessed audio.'}
+                    </p>`
+              }
+            `
+          : nothing
+      }
+    `;
+  }
+
+  private async pick(): Promise<void> {
     const picked = await this.picker.pick();
     if (!picked) return;
     this.sample.set(picked);
@@ -178,15 +157,15 @@ export class StepPreview {
     this.result.set(null);
   }
 
-  protected async render(): Promise<void> {
+  private async render(): Promise<void> {
     const sample = this.sample();
     if (!sample || this.rendering()) return;
     this.rendering.set(true);
     try {
       this.result.set(
-        await this.api.previewStep(this.stepId(), {
+        await this.api.previewStep(this.#stepId(), {
           sample: { folder: sample.folder, itemId: sample.itemId },
-          settings: this.settings(),
+          settings: this.#settings(),
         }),
       );
     } catch (e) {
@@ -194,5 +173,12 @@ export class StepPreview {
     } finally {
       this.rendering.set(false);
     }
+  }
+}
+define('r2m-step-preview', StepPreview);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-step-preview': StepPreview;
   }
 }

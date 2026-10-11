@@ -1,4 +1,5 @@
-import { VoiceRuleDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { VoiceRuleDto } from '@app/api';
 import {
   EMPTY_ANCHOR,
   canSubmitRule,

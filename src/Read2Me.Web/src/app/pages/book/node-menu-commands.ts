@@ -1,11 +1,10 @@
-import { BookCommand, InsertPosition, MergeDirection } from '@app/api';
-import { ConfirmOptions } from '@app/ui/confirm-dialog/confirm-dialog';
-import { TextPromptOptions } from '@app/ui/text-prompt-dialog/text-prompt-dialog';
+import type { BookCommand, InsertPosition, MergeDirection } from '@app/api';
+import type { ConfirmOptions, TextPromptOptions } from '@app/ui/dialogs';
 import {
   HAS_CHILDREN,
-  MenuEntryId,
-  NodeMenuKind,
-  NodeMenuTarget,
+  type MenuEntryId,
+  type NodeMenuKind,
+  type NodeMenuTarget,
   mergeDirectionOf,
   pauseInsertOf,
 } from './node-menu-entries';

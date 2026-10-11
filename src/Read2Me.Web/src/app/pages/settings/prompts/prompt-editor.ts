@@ -1,27 +1,13 @@
-import { TextFieldModule } from '@angular/cdk/text-field';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  ElementRef,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  untracked,
-  viewChild,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatExpansionModule } from '@angular/material/expansion';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { PromptCatalogEntry, toApiError } from '@app/api';
-import { ConfigEditorFrame } from '@app/ui/config-editor-frame/config-editor-frame';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { html, nothing } from 'lit-html';
+import { type PromptCatalogEntry, toApiError } from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal, untracked } from '@app/core/signals';
+import { configEditorFrame } from '@app/ui/config-editor-frame';
+import { ConfirmService } from '@app/ui/dialogs';
+import { field } from '@app/ui/field';
+import { icon, spinner } from '@app/ui/partials';
+import { ToastService } from '@app/ui/toast';
 import { canReset, insertToken, isDirty, tokenLiteral } from './prompt-editing';
 import { PromptsStore } from './prompts-store';
 
@@ -32,254 +18,52 @@ export const PREVIEW_DEBOUNCE_MS = 300;
  * Detail side of the prompts page (ticket 23): one kind's description, compatibility warnings,
  * token chips that insert at the caret, the monospace template, the expected response and a
  * preview of the *unsaved* draft rendered by the host with its sample book. Save is dirty-gated;
- * Reset to default drops the stored override (or just the unsaved edits) after a confirm.
+ * Reset to default drops the stored override (or just the unsaved edits) after a confirm. Set
+ * `entry`; `dirty()` tells the page whether edits would be lost.
  */
-@Component({
-  selector: 'app-prompt-editor',
-  imports: [
-    MatButtonModule,
-    MatExpansionModule,
-    MatFormFieldModule,
-    MatIconModule,
-    MatInputModule,
-    MatProgressSpinnerModule,
-    TextFieldModule,
-    ConfigEditorFrame,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <r2m-config-editor-frame
-      [title]="entry().title"
-      [dirty]="dirty()"
-      [saving]="saving()"
-      (save)="save()"
-      (cancel)="draft.set(entry().template)"
-    >
-      <p class="prompt-editor__description">{{ entry().description }}</p>
+export class PromptEditor extends R2mElement {
+  private readonly confirm = use(ConfirmService);
+  private readonly toast = use(ToastService);
+  private store!: PromptsStore;
 
-      @for (warning of entry().warnings; track warning) {
-        <p class="prompt-editor__warning" role="alert" data-role="prompt-warning">
-          <mat-icon aria-hidden="true">warning</mat-icon>
-          {{ warning }}
-        </p>
-      }
+  readonly #entry = signal<PromptCatalogEntry | null>(null);
+  get entry() {
+    return this.#entry();
+  }
+  set entry(value: PromptCatalogEntry | null) {
+    this.#entry.set(value);
+  }
 
-      <div class="prompt-editor__tokens" role="group" aria-label="Available tokens">
-        <span class="prompt-editor__label">Available tokens — click to insert:</span>
-        @for (token of entry().tokens; track token) {
-          <button
-            type="button"
-            class="prompt-editor__token"
-            [attr.data-token]="token"
-            [disabled]="saving()"
-            (click)="insert(token)"
-          >
-            {{ literal(token) }}
-          </button>
-        }
-      </div>
+  readonly draft = signal('');
+  readonly saving = signal(false);
+  readonly error = signal<string | null>(null);
 
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-editor__field">
-        <mat-label>Prompt template</mat-label>
-        <textarea
-          #template
-          matInput
-          cdkTextareaAutosize
-          cdkAutosizeMinRows="12"
-          cdkAutosizeMaxRows="32"
-          class="prompt-editor__template"
-          data-field="template"
-          spellcheck="false"
-          [disabled]="saving()"
-          [value]="draft()"
-          (input)="draft.set($any($event.target).value)"
-        ></textarea>
-      </mat-form-field>
-      @if (entry().tokens.includes('narrator_identity')) {
-        <p class="prompt-editor__note">
-          <code>{{ literal('narrator_identity') }}</code> renders empty unless the book has a
-          narrator link.
-        </p>
-      }
-      @if (entry().tokens.includes('also_narrates')) {
-        <p class="prompt-editor__note">
-          <code>{{ literal('also_narrates') }}</code> renders empty unless this character has the
-          book's narrator link.
-        </p>
-      }
-
-      @if (entry().expectedResponse; as expected) {
-        <section class="prompt-editor__expected">
-          <span class="prompt-editor__label">
-            Expected response (JSON) — displayed for reference, not editable:
-          </span>
-          <pre class="prompt-editor__pre" data-role="expected-response">{{ expected }}</pre>
-        </section>
-      }
-
-      <mat-expansion-panel
-        class="prompt-editor__preview"
-        [expanded]="previewOpen()"
-        (opened)="previewOpen.set(true)"
-        (closed)="previewOpen.set(false)"
-      >
-        <mat-expansion-panel-header>
-          <mat-panel-title>Preview with sample values</mat-panel-title>
-        </mat-expansion-panel-header>
-        @if (previewError(); as error) {
-          <p class="prompt-editor__error" role="alert">The preview failed: {{ error }}</p>
-        } @else if (preview() === null) {
-          <mat-progress-spinner mode="indeterminate" diameter="20" />
-        } @else {
-          <pre class="prompt-editor__pre" data-role="preview">{{ preview() }}</pre>
-        }
-      </mat-expansion-panel>
-
-      <div class="prompt-editor__actions">
-        <button
-          mat-stroked-button
-          type="button"
-          data-action="reset-prompt"
-          [disabled]="!resettable() || saving()"
-          (click)="reset()"
-        >
-          <mat-icon>restart_alt</mat-icon>
-          Reset to default
-        </button>
-        @if (entry().isOverridden) {
-          <span class="prompt-editor__note">A stored override is in use.</span>
-        } @else {
-          <span class="prompt-editor__note">The built-in default is in use.</span>
-        }
-      </div>
-
-      @if (error(); as error) {
-        <p class="prompt-editor__error" role="alert">{{ error }}</p>
-      }
-    </r2m-config-editor-frame>
-  `,
-  styles: `
-    :host {
-      display: block;
-      min-width: 0;
-    }
-    .prompt-editor__description {
-      margin: 0 0 var(--r2m-space-3);
-      color: var(--r2m-text-muted);
-    }
-    .prompt-editor__warning {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-2);
-      margin: 0 0 var(--r2m-space-3);
-      padding: var(--r2m-space-2) var(--r2m-space-3);
-      border-radius: var(--r2m-radius-md);
-      background: color-mix(in srgb, var(--r2m-status-warn) 15%, transparent);
-      color: var(--r2m-status-warn);
-      font-size: var(--r2m-text-sm);
-    }
-    .prompt-editor__label {
-      display: block;
-      margin-bottom: var(--r2m-space-1);
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .prompt-editor__tokens {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--r2m-space-1);
-      margin-bottom: var(--r2m-space-3);
-    }
-    .prompt-editor__tokens .prompt-editor__label {
-      flex-basis: 100%;
-    }
-    .prompt-editor__token {
-      padding: 2px var(--r2m-space-2);
-      border: 1px solid var(--r2m-outline);
-      border-radius: 999px;
-      background: transparent;
-      color: inherit;
-      font-family: var(--r2m-font-mono, monospace);
-      font-size: var(--r2m-text-sm);
-      cursor: pointer;
-    }
-    .prompt-editor__token:hover:not(:disabled) {
-      background: var(--r2m-surface-high);
-    }
-    .prompt-editor__field {
-      width: 100%;
-    }
-    .prompt-editor__template {
-      font-family: var(--r2m-font-mono, monospace);
-      font-size: var(--r2m-text-sm);
-      line-height: 1.45;
-    }
-    .prompt-editor__note {
-      margin: var(--r2m-space-1) 0 var(--r2m-space-3);
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .prompt-editor__expected {
-      margin-bottom: var(--r2m-space-3);
-    }
-    .prompt-editor__pre {
-      margin: 0;
-      padding: var(--r2m-space-3);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-md);
-      background: var(--r2m-surface-low);
-      font-family: var(--r2m-font-mono, monospace);
-      font-size: var(--r2m-text-sm);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-    .prompt-editor__preview {
-      margin-bottom: var(--r2m-space-3);
-    }
-    .prompt-editor__actions {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-3);
-    }
-    .prompt-editor__actions .prompt-editor__note {
-      margin: 0;
-    }
-    .prompt-editor__error {
-      margin: var(--r2m-space-3) 0 0;
-      color: var(--r2m-status-error);
-    }
-  `,
-})
-export class PromptEditor {
-  private readonly store = inject(PromptsStore);
-  private readonly confirm = inject(ConfirmService);
-  private readonly toast = inject(ToastService);
-
-  readonly entry = input.required<PromptCatalogEntry>();
-
-  private readonly textarea = viewChild<ElementRef<HTMLTextAreaElement>>('template');
-
-  protected readonly draft = signal('');
-  protected readonly saving = signal(false);
-  protected readonly error = signal<string | null>(null);
-
-  protected readonly previewOpen = signal(false);
+  readonly previewOpen = signal(false);
   /** Null while a rendering is on its way. */
-  protected readonly preview = signal<string | null>(null);
-  protected readonly previewError = signal<string | null>(null);
+  readonly preview = signal<string | null>(null);
+  readonly previewError = signal<string | null>(null);
   private previewSeq = 0;
   private previewTimer: ReturnType<typeof setTimeout> | null = null;
 
-  readonly dirty = computed(() => isDirty(this.entry(), this.draft()));
-  protected readonly resettable = computed(() => canReset(this.entry(), this.draft()));
+  readonly dirty = computed(() => {
+    const entry = this.#entry();
+    return !!entry && isDirty(entry, this.draft());
+  });
+  readonly resettable = computed(() => {
+    const entry = this.#entry();
+    return !!entry && canReset(entry, this.draft());
+  });
 
-  constructor() {
+  protected override connected(): void {
+    this.classList.add('prompt-editor');
+    this.store = use(PromptsStore, this);
     // A new kind replaces the draft; a reload of the same kind replaces it only while the draft
     // is still the text this editor last showed — a save made in another tab or over the API
     // must not wipe typing in progress, but must reach an untouched editor.
     let shown: { kind: string; template: string } | null = null;
-    effect(() => {
-      const entry = this.entry();
+    this.effect(() => {
+      const entry = this.#entry();
+      if (!entry) return;
       untracked(() => {
         if (entry.kind !== shown?.kind) {
           this.draft.set(entry.template);
@@ -293,40 +77,178 @@ export class PromptEditor {
       });
     });
     // The preview follows the draft while the panel is open, after a short pause in typing.
-    effect(() => {
+    this.effect(() => {
       const open = this.previewOpen();
       const template = this.draft();
-      const kind = this.entry().kind;
-      untracked(() => this.schedulePreview(open, kind, template));
+      const kind = this.#entry()?.kind;
+      untracked(() => {
+        if (kind) this.schedulePreview(open, kind, template);
+      });
     });
-    inject(DestroyRef).onDestroy(() => this.clearPreviewTimer());
+    this.onDisconnect(() => this.clearPreviewTimer());
   }
 
-  protected literal(token: string): string {
-    return tokenLiteral(token);
+  protected template() {
+    const entry = this.#entry();
+    if (!entry) return nothing;
+    return configEditorFrame(
+      {
+        title: entry.title,
+        dirty: this.dirty(),
+        saving: this.saving(),
+        onSave: () => void this.save(),
+        onCancel: () => this.draft.set(entry.template),
+      },
+      this.body(entry),
+    );
   }
 
-  protected insert(token: string): void {
-    const element = this.textarea()?.nativeElement;
+  private body(entry: PromptCatalogEntry) {
+    const saving = this.saving();
+    const error = this.error();
+    const previewError = this.previewError();
+    const preview = this.preview();
+    return html`
+      <p class="prompt-editor__description">${entry.description}</p>
+
+      ${entry.warnings.map(
+        (warning) =>
+          html`<p class="prompt-editor__warning" role="alert" data-role="prompt-warning">
+            ${icon('warning')} ${warning}
+          </p>`,
+      )}
+
+      <div class="prompt-editor__tokens" role="group" aria-label="Available tokens">
+        <span class="prompt-editor__label">Available tokens — click to insert:</span>
+        ${entry.tokens.map(
+          (token) =>
+            html`<button
+              type="button"
+              class="prompt-editor__token"
+              data-token=${token}
+              ?disabled=${saving}
+              @click=${() => void this.insert(token)}
+            >
+              ${tokenLiteral(token)}
+            </button>`,
+        )}
+      </div>
+
+      ${field(
+        { id: 'prompt-template', label: 'Prompt template', cls: 'prompt-editor__field' },
+        (a) =>
+          html`<textarea
+            id=${a.id}
+            aria-describedby=${a.describedBy}
+            aria-invalid=${a.invalid}
+            class="prompt-editor__template"
+            data-field="template"
+            spellcheck="false"
+            ?disabled=${saving}
+            .value=${this.draft()}
+            @input=${(e: Event) => this.draft.set((e.target as HTMLTextAreaElement).value)}
+          ></textarea>`,
+      )}
+      ${
+        entry.tokens.includes('narrator_identity')
+          ? html`<p class="prompt-editor__note">
+              <code>${tokenLiteral('narrator_identity')}</code> renders empty unless the book has a
+              narrator link.
+            </p>`
+          : nothing
+      }
+      ${
+        entry.tokens.includes('also_narrates')
+          ? html`<p class="prompt-editor__note">
+              <code>${tokenLiteral('also_narrates')}</code> renders empty unless this character has
+              the book's narrator link.
+            </p>`
+          : nothing
+      }
+      ${
+        entry.expectedResponse
+          ? html`<section class="prompt-editor__expected">
+              <span class="prompt-editor__label">
+                Expected response (JSON) — displayed for reference, not editable:
+              </span>
+              <!-- Bound as a property: whitespace a formatter adds inside a <pre> would show. -->
+              <pre
+                class="prompt-editor__pre"
+                data-role="expected-response"
+                .textContent=${entry.expectedResponse}
+              ></pre>
+            </section>`
+          : nothing
+      }
+
+      <details
+        class="r2m-expansion prompt-editor__preview"
+        ?open=${this.previewOpen()}
+        @toggle=${(e: Event) => this.previewOpen.set((e.target as HTMLDetailsElement).open)}
+      >
+        <summary><span class="r2m-expansion__title">Preview with sample values</span></summary>
+        <div class="r2m-expansion__body">
+          ${
+            previewError
+              ? html`<p class="prompt-editor__error" role="alert">
+                  The preview failed: ${previewError}
+                </p>`
+              : preview === null
+                ? spinner(20)
+                : html`<pre
+                    class="prompt-editor__pre"
+                    data-role="preview"
+                    .textContent=${preview}
+                  ></pre>`
+          }
+        </div>
+      </details>
+
+      <div class="prompt-editor__actions">
+        <button
+          type="button"
+          class="r2m-button r2m-button--stroked"
+          data-action="reset-prompt"
+          ?disabled=${!this.resettable() || saving}
+          @click=${() => void this.reset()}
+        >
+          ${icon('restart_alt')} Reset to default
+        </button>
+        <span class="prompt-editor__note">
+          ${entry.isOverridden ? 'A stored override is in use.' : 'The built-in default is in use.'}
+        </span>
+      </div>
+
+      ${error ? html`<p class="prompt-editor__error" role="alert">${error}</p>` : nothing}
+    `;
+  }
+
+  private textarea(): HTMLTextAreaElement | null {
+    return this.querySelector<HTMLTextAreaElement>('[data-field="template"]');
+  }
+
+  private async insert(token: string): Promise<void> {
+    const element = this.textarea();
     const start = element ? element.selectionStart : null;
     const end = element ? element.selectionEnd : null;
     const { text, caret } = insertToken(this.draft(), token, start, end);
     this.draft.set(text);
     if (!element) return;
-    // The binding writes the value on the next change detection; place the caret after it.
-    queueMicrotask(() => {
-      element.value = text;
-      element.setSelectionRange(caret, caret);
-      element.focus();
-    });
+    // The binding writes the value on the next render; place the caret after it.
+    await this.rendered();
+    element.value = text;
+    element.setSelectionRange(caret, caret);
+    element.focus();
   }
 
-  protected async save(): Promise<void> {
+  private async save(): Promise<void> {
+    const entry = this.#entry();
+    if (!entry) return;
     this.saving.set(true);
     this.error.set(null);
     try {
-      await this.store.save(this.entry().kind, this.draft());
-      this.toast.success(`${this.entry().title} saved`);
+      await this.store.save(entry.kind, this.draft());
+      this.toast.success(`${entry.title} saved`);
     } catch (e) {
       this.error.set(toApiError(e).message);
     } finally {
@@ -334,8 +256,9 @@ export class PromptEditor {
     }
   }
 
-  protected async reset(): Promise<void> {
-    const entry = this.entry();
+  private async reset(): Promise<void> {
+    const entry = this.#entry();
+    if (!entry) return;
     const message = entry.isOverridden
       ? 'The stored override and any unsaved edits are discarded; the built-in default is used again.'
       : 'Your unsaved edits are discarded.';
@@ -392,3 +315,4 @@ export class PromptEditor {
     this.previewTimer = null;
   }
 }
+define('r2m-prompt-editor', PromptEditor);

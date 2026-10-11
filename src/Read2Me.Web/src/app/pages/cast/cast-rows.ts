@@ -1,5 +1,5 @@
-import { CharacterSummaryDto, NarratorDto } from '@app/api';
-import { StatusKind } from '@app/ui/status-chip/status-chip';
+import type { CharacterSummaryDto, NarratorDto } from '@app/api';
+import type { StatusKind } from '@app/ui/partials';
 
 export const CAST_SORTS = ['name', 'lines', 'readiness'] as const;
 export type CastSort = (typeof CAST_SORTS)[number];

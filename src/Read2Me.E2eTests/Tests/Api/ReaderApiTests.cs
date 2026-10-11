@@ -10,7 +10,7 @@ using Read2Me.E2eTests.Infrastructure;
 namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
-/// The reads behind the Angular reader (ticket 10): the enriched chapter children, resolved voice
+/// The reads behind the web reader (ticket 10): the enriched chapter children, resolved voice
 /// names per chapter and the sparse audio review map.
 /// </summary>
 [Collection(E2eCollection.Name)]

@@ -1,9 +1,53 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { PreviewResponse, StepCatalogEntryDto, VoiceDto } from '@app/api';
-import { VoiceEditorPage } from './voice-editor-page';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type {
+  PreviewResponse,
+  ProjectDetailDto,
+  ProjectStatusDto,
+  StepCatalogEntryDto,
+  VoiceDto,
+} from '@app/api';
+import { Router, type RouteDef } from '@app/core/router';
+import { override, resetServices } from '@app/core/services';
+import { ConfirmService } from '@app/ui/dialogs';
+import { FakeApi, problem } from '../../../testing/fake-api';
+import { FakeLive } from '../../../testing/fake-live';
+import { installNavigation, settle } from '../../../testing/fake-navigation';
+import type { VoiceEditorPage } from './voice-editor-page';
+import '../project/project-shell';
+import './voice-editor-page';
+
+const BASE = '/api/projects/dune';
+const VOICE_URL = `${BASE}/voices/v1`;
+const CATALOG_URL = '/api/audio/steps/catalog';
+const PREVIEW_URL = `${VOICE_URL}/editor/preview`;
+const APPLY_URL = `${VOICE_URL}/editor/apply`;
+const RESTORE_URL = `${VOICE_URL}/editor/restore`;
+
+const DETAIL: ProjectDetailDto = {
+  folderName: 'dune',
+  title: 'Dune',
+  bookTitle: 'Dune',
+  author: 'Frank Herbert',
+  filename: 'dune.epub',
+  fileType: 'Epub',
+  coverImage: null,
+  narratorOnlyMode: false,
+  narrator: { characterId: 'n', displayName: 'Narrator', isLinked: false },
+};
+
+const STATUS: ProjectStatusDto = {
+  hasContent: true,
+  characters: 1,
+  charactersWithLines: 1,
+  readyVoices: 1,
+  items: { total: 1, withAudio: 0, unattributed: 0 },
+  attribution: { remaining: 0, processing: false, queued: 0 },
+  audio: { remaining: 1 },
+  review: 0,
+  volumeIds: [],
+  nodes: {},
+  revision: 1,
+};
 
 const CATALOG: StepCatalogEntryDto[] = [
   {
@@ -89,174 +133,234 @@ const PREVIEW: PreviewResponse = {
   ],
 };
 
-const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+const ROUTES: RouteDef[] = [
+  {
+    path: 'projects/:folder',
+    tag: 'r2m-project-shell',
+    children: [{ path: 'voices/:voiceId/editor', tag: 'r2m-voice-editor-page' }],
+  },
+];
 
-describe('VoiceEditorPage', () => {
-  let http: HttpTestingController;
-  let fixture: ComponentFixture<VoiceEditorPage>;
+let api: FakeApi;
+let confirms: string[];
+let confirmAnswer: boolean;
 
-  const el = (): HTMLElement => fixture.nativeElement as HTMLElement;
-  const button = (action: string) =>
-    el().querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
+beforeEach(() => {
+  resetServices();
+  api = new FakeApi();
+  api.install();
+  new FakeLive().install();
+  confirms = [];
+  confirmAnswer = true;
+  override(ConfirmService, {
+    confirm: async (o: { title: string }) => {
+      confirms.push(o.title);
+      return confirmAnswer;
+    },
+  } as unknown as ConfirmService);
+});
+afterEach(() => document.body.replaceChildren());
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [VoiceEditorPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
-    }).compileComponents();
-    http = TestBed.inject(HttpTestingController);
-    fixture = TestBed.createComponent(VoiceEditorPage);
-    fixture.componentRef.setInput('folder', 'dune');
-    fixture.componentRef.setInput('voiceId', 'v1');
+/** The editor under the project shell, through a root outlet as in the app. */
+async function render(voice: VoiceDto | Response = VOICE) {
+  api.on('GET', BASE, DETAIL).on('GET', `${BASE}/status`, STATUS);
+  api.on('GET', VOICE_URL, voice);
+  api.on('GET', CATALOG_URL, CATALOG);
+  installNavigation('projects/dune/voices/v1/editor');
+  const router = new Router();
+  override(Router, router);
+  router.start(ROUTES, async () => true);
+  const outlet = document.createElement('r2m-outlet');
+  document.body.append(outlet);
+  for (let i = 0; i < 4; i++) await settle();
+  const page = outlet.querySelector<VoiceEditorPage>('r2m-voice-editor-page');
+  if (!page) throw new Error('the voice editor page did not render');
+  await page.rendered();
+  await page.rendered();
+  return page;
+}
+
+const button = (el: Element, action: string) =>
+  el.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
+const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+
+async function tick(page: VoiceEditorPage, stepId: string): Promise<void> {
+  page.querySelector<HTMLInputElement>(`[data-tick="${stepId}"]`)!.click();
+  await settle();
+  await page.rendered();
+}
+
+/** Preview with the seeded dials, and check the request carried exactly them. */
+async function previewDefaultChain(page: VoiceEditorPage): Promise<void> {
+  button(page, 'preview').click();
+  for (let i = 0; i < 3; i++) await settle();
+  await page.rendered();
+  const [req] = api.calls('POST', PREVIEW_URL);
+  expect(req?.body).toEqual({
+    steps: [
+      { stepId: 'denoise', settings: { strength: 20 } },
+      { stepId: 'silence-trim', settings: { thresholdDb: -35 } },
+    ],
   });
+}
 
-  afterEach(() => {
-    http.verify();
-    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
-  });
-
-  async function load(voice: VoiceDto | null = VOICE): Promise<void> {
-    fixture.detectChanges();
-    await fixture.whenStable();
-    const voiceReq = http.expectOne('/api/projects/dune/voices/v1');
-    if (voice) voiceReq.flush(voice);
-    else voiceReq.flush({ title: 'Not Found' }, { status: 404, statusText: 'Not Found' });
-    http.expectOne((r) => r.url === '/api/audio/steps/catalog').flush(CATALOG);
-    await settle();
-    fixture.detectChanges();
-    await fixture.whenStable();
-  }
-
-  async function tick(stepId: string): Promise<void> {
-    el().querySelector<HTMLInputElement>(`[data-tick="${stepId}"] input[type=checkbox]`)!.click();
-    await settle();
-    fixture.detectChanges();
-  }
-
-  async function previewAndFlush(): Promise<void> {
-    button('preview').click();
-    await settle();
-    const req = http.expectOne('/api/projects/dune/voices/v1/editor/preview');
-    expect(req.request.body).toEqual({
-      steps: [
-        { stepId: 'denoise', settings: { strength: 20 } },
-        { stepId: 'silence-trim', settings: { thresholdDb: -35 } },
-      ],
-    });
-    req.flush(PREVIEW);
-    await settle();
-    fixture.detectChanges();
-    await fixture.whenStable();
-  }
-
+describe('r2m-voice-editor-page', () => {
   it('lists the catalog steps, plays the live WAV as Original, and gates Preview and Apply', async () => {
-    await load();
+    const page = await render();
 
     expect(
-      Array.from(el().querySelectorAll('[data-step]')).map((n) => n.getAttribute('data-step')),
+      Array.from(page.querySelectorAll('[data-step]')).map((n) => n.getAttribute('data-step')),
     ).toEqual(['denoise', 'hiss-reduce', 'silence-trim']);
-    expect(el().querySelector('[data-testid="original-player"] audio')?.getAttribute('src')).toBe(
+    expect(text(page.querySelector('.r2m-page-header__subtitle'))).toBe('Main');
+    expect(page.querySelector('[data-testid="original-player"] audio')?.getAttribute('src')).toBe(
       '/workspace/dune/voices/alice/v1-main.wav?v=0',
     );
-    expect(button('preview').disabled).toBe(true);
-    expect(button('apply').disabled).toBe(true);
-    expect(el().querySelector('[data-action="restore"]')).toBeNull();
+    expect(button(page, 'preview').disabled).toBe(true);
+    expect(button(page, 'apply').disabled).toBe(true);
+    expect(page.querySelector('[data-action="restore"]')).toBeNull();
+    expect(
+      page.querySelector<HTMLAnchorElement>('[data-action="back"]')?.getAttribute('href'),
+    ).toBe('projects/dune/cast/alice');
   });
 
   it('renders the ticked steps in catalog order and stacks an After player per stage', async () => {
-    await load();
-    await tick('silence-trim');
-    await tick('denoise');
-    expect(button('preview').disabled).toBe(false);
+    api.on('POST', PREVIEW_URL, PREVIEW);
+    const page = await render();
+    await tick(page, 'silence-trim');
+    await tick(page, 'denoise');
+    expect(button(page, 'preview').disabled).toBe(false);
 
-    await previewAndFlush();
+    await previewDefaultChain(page);
 
-    const stages = Array.from(el().querySelectorAll('[data-stage]'));
+    const stages = Array.from(page.querySelectorAll('[data-stage]'));
     expect(stages.map((n) => n.getAttribute('data-stage'))).toEqual(['denoise', 'silence-trim']);
     expect(stages[1]!.querySelector('audio')?.getAttribute('src')).toContain(
       '/api/previews/p1/silence-trim.wav',
     );
-    expect(el().querySelector('[data-testid="skipped-chip"]')?.textContent).toContain(
+    expect(text(page.querySelector('[data-testid="skipped-chip"]'))).toContain(
       'Skipped — trimmed result under 1000 ms',
     );
-    expect(button('apply').disabled).toBe(false);
+    expect(button(page, 'apply').disabled).toBe(false);
   });
 
   it('stales the render when a dial changes after Preview, until the next Preview', async () => {
-    await load();
-    await tick('silence-trim');
-    await tick('denoise');
-    await previewAndFlush();
-    expect(button('apply').disabled).toBe(false);
+    let previewId = 'p1';
+    api.on('POST', PREVIEW_URL, () => ({ ...PREVIEW, previewId }));
+    const page = await render();
+    await tick(page, 'silence-trim');
+    await tick(page, 'denoise');
+    await previewDefaultChain(page);
+    expect(button(page, 'apply').disabled).toBe(false);
 
-    const strength = el().querySelector<HTMLInputElement>(
+    const strength = page.querySelector<HTMLInputElement>(
       '[data-key="strength"] input[type="number"]',
     )!;
     strength.value = '31';
     strength.dispatchEvent(new Event('input'));
     await settle();
-    fixture.detectChanges();
+    await page.rendered();
 
-    expect(button('apply').disabled).toBe(true);
-    expect(el().querySelector('[data-testid="stale-hint"]')).not.toBeNull();
+    expect(button(page, 'apply').disabled).toBe(true);
+    expect(page.querySelector('[data-testid="stale-hint"]')).not.toBeNull();
 
-    button('preview').click();
-    await settle();
-    const req = http.expectOne('/api/projects/dune/voices/v1/editor/preview');
-    expect(req.request.body.steps[0]).toEqual({ stepId: 'denoise', settings: { strength: 31 } });
-    req.flush({ ...PREVIEW, previewId: 'p2' });
-    await settle();
-    fixture.detectChanges();
-    expect(button('apply').disabled).toBe(false);
-    expect(el().querySelector('[data-testid="stale-hint"]')).toBeNull();
+    previewId = 'p2';
+    button(page, 'preview').click();
+    for (let i = 0; i < 3; i++) await settle();
+    await page.rendered();
+    const second = api.calls('POST', PREVIEW_URL)[1]!.body as { steps: unknown[] };
+    expect(second.steps[0]).toEqual({ stepId: 'denoise', settings: { strength: 31 } });
+    expect(button(page, 'apply').disabled).toBe(false);
+    expect(page.querySelector('[data-testid="stale-hint"]')).toBeNull();
   });
 
   it('stales the render when a tick changes', async () => {
-    await load();
-    await tick('silence-trim');
-    await tick('denoise');
-    await previewAndFlush();
+    api.on('POST', PREVIEW_URL, PREVIEW);
+    const page = await render();
+    await tick(page, 'silence-trim');
+    await tick(page, 'denoise');
+    await previewDefaultChain(page);
 
-    await tick('hiss-reduce');
+    await tick(page, 'hiss-reduce');
 
-    expect(button('apply').disabled).toBe(true);
-    expect(el().querySelector('[data-testid="hiss-hint"]')).not.toBeNull();
+    expect(button(page, 'apply').disabled).toBe(true);
+    expect(page.querySelector('[data-testid="hiss-hint"]')).not.toBeNull();
   });
 
   it('applies the heard previewId and switches Original to the stored original', async () => {
-    await load();
-    await tick('silence-trim');
-    await tick('denoise');
-    await previewAndFlush();
+    api.on('POST', PREVIEW_URL, PREVIEW);
+    api.on('POST', APPLY_URL, { ...VOICE, isEdited: true });
+    const page = await render();
+    await tick(page, 'silence-trim');
+    await tick(page, 'denoise');
+    await previewDefaultChain(page);
 
-    button('apply').click();
-    await settle();
-    const req = http.expectOne('/api/projects/dune/voices/v1/editor/apply');
-    expect(req.request.body).toEqual({ previewId: 'p1' });
-    req.flush({ ...VOICE, isEdited: true });
-    await settle();
-    fixture.detectChanges();
+    button(page, 'apply').click();
+    for (let i = 0; i < 3; i++) await settle();
+    await page.rendered();
 
-    expect(el().querySelector('[data-testid="edited-chip"]')).not.toBeNull();
-    expect(el().querySelector('[data-action="restore"]')).not.toBeNull();
-    expect(el().querySelector('[data-testid="original-player"] audio')?.getAttribute('src')).toBe(
+    expect(api.calls('POST', APPLY_URL)[0]?.body).toEqual({ previewId: 'p1' });
+    expect(page.querySelector('[data-testid="edited-chip"]')).not.toBeNull();
+    expect(page.querySelector('[data-action="restore"]')).not.toBeNull();
+    expect(text(page.querySelector('[data-testid="action-note"]'))).toContain(
+      'Voice audio updated.',
+    );
+    expect(page.querySelector('[data-testid="original-player"] audio')?.getAttribute('src')).toBe(
       '/api/projects/dune/voices/v1/original.wav?v=1',
     );
   });
 
-  it('shows a message and a way back when the voice is gone', async () => {
-    await load(null);
+  it('restores behind the destructive confirm and resets the chain', async () => {
+    api.on('POST', RESTORE_URL, VOICE);
+    const page = await render({ ...VOICE, isEdited: true });
+    expect(page.querySelector('[data-testid="edited-chip"]')).not.toBeNull();
+    await tick(page, 'denoise');
 
-    expect(el().querySelector('r2m-empty-state')?.textContent).toContain(
-      'That voice no longer exists.',
+    confirmAnswer = false;
+    button(page, 'restore').click();
+    for (let i = 0; i < 3; i++) await settle();
+    expect(confirms).toEqual(['Restore original audio?']);
+    expect(api.calls('POST', RESTORE_URL)).toHaveLength(0);
+
+    confirmAnswer = true;
+    button(page, 'restore').click();
+    for (let i = 0; i < 3; i++) await settle();
+    await page.rendered();
+
+    expect(api.calls('POST', RESTORE_URL)).toHaveLength(1);
+    expect(page.querySelector('[data-testid="edited-chip"]')).toBeNull();
+    expect(page.querySelector<HTMLInputElement>('[data-tick="denoise"]')!.checked).toBe(false);
+    expect(text(page.querySelector('[data-testid="action-note"]'))).toContain(
+      'Original audio restored.',
     );
-    expect(el().querySelector('[data-action="back-empty"]')).not.toBeNull();
+  });
+
+  it('shows the failure inline when a preview is refused', async () => {
+    api.on('POST', PREVIEW_URL, problem(422, 'The voice has no audio.'));
+    const page = await render();
+    await tick(page, 'denoise');
+    button(page, 'preview').click();
+    for (let i = 0; i < 3; i++) await settle();
+    await page.rendered();
+
+    expect(text(page.querySelector('[data-testid="action-error"]'))).toContain(
+      'The voice has no audio.',
+    );
+    expect(button(page, 'apply').disabled).toBe(true);
+  });
+
+  it('shows a message and a way back when the voice is gone', async () => {
+    const page = await render(problem(404, 'no such voice'));
+
+    expect(text(page.querySelector('.r2m-empty-state'))).toContain('That voice no longer exists.');
+    expect(page.querySelector('[data-action="back-empty"]')?.getAttribute('href')).toBe(
+      'projects/dune/cast',
+    );
   });
 
   it('refuses a voice without audio', async () => {
-    await load({ ...VOICE, audioFileName: null });
+    const page = await render({ ...VOICE, audioFileName: null });
 
-    expect(el().querySelector('r2m-empty-state')?.textContent).toContain(
+    expect(text(page.querySelector('.r2m-empty-state'))).toContain(
       'This voice has no audio to edit.',
     );
   });

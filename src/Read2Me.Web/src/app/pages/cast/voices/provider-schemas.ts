@@ -1,8 +1,12 @@
-import { Injectable, inject } from '@angular/core';
-import { ParagraphTtsSettingsApi, ProviderSettingsSchema, VoiceDesignSettingsApi } from '@app/api';
+import {
+  ParagraphTtsSettingsApi,
+  type ProviderSettingsSchema,
+  VoiceDesignSettingsApi,
+} from '@app/api';
+import { use } from '@app/core/services';
 import { LiveService } from '@app/live/live.service';
 import { toFormField } from '@app/shared/settings-schema';
-import { SettingsSchema } from '@app/ui/settings-form/settings-form';
+import type { SettingsSchema } from '@app/ui/settings-form';
 import { overrideValues } from './voice-logic';
 
 export type ProviderArea = 'paragraph-tts' | 'voice-design';
@@ -19,18 +23,18 @@ export const PROVIDER_AREA_LABEL: Record<ProviderArea, string> = {
  * The schema's defaults are the **active config's** values (its `settingsJson` merged over the
  * provider's recommended defaults), so "provider default" on a card means what that config would
  * use — the override editors seed from it. Null when no config is active — the editor then
- * says so instead of rendering fields.
+ * says so instead of rendering fields. App-wide: created once by `use()`, like the Angular root
+ * service.
  */
-@Injectable({ providedIn: 'root' })
 export class ProviderSchemas {
-  private readonly tts = inject(ParagraphTtsSettingsApi);
-  private readonly voiceDesign = inject(VoiceDesignSettingsApi);
-  private readonly live = inject(LiveService);
+  private readonly tts = use(ParagraphTtsSettingsApi);
+  private readonly voiceDesign = use(VoiceDesignSettingsApi);
+  private readonly live = use(LiveService);
 
   private readonly cache = new Map<ProviderArea, Promise<SettingsSchema | null>>();
 
   constructor() {
-    this.live.on('settingsChanged').subscribe((m) => {
+    this.live.on('settingsChanged', (m) => {
       if (m.area === 'paragraph-tts' || m.area === 'voice-design') this.cache.delete(m.area);
     });
   }

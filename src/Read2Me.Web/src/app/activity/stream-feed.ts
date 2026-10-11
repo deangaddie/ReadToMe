@@ -1,8 +1,8 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { Observable, Subscription } from 'rxjs';
-import { AudioGenEvent, LlmStreamEvent } from '@app/live/hub-events';
-import { AudioGenMessage, LlmMessage, StreamKind } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
+import { use } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import type { AudioGenEvent, LlmStreamEvent } from '@app/live/hub-events';
+import type { AudioGenMessage, LlmMessage, StreamKind } from '@app/live/live-messages';
+import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import {
   appendCapped,
   mapAudioGenMessage,
@@ -24,14 +24,14 @@ export const STREAM_MAX_UNITS = 50;
 export abstract class StreamFeed<TWire, TEvent> {
   private readonly _events = signal<TEvent[]>([]);
   private count = 0;
-  private subscription: Subscription | null = null;
+  private subscriptions: Unsubscribe[] = [];
 
   readonly events = this._events.asReadonly();
 
   protected constructor(
     private readonly live: LiveService,
     private readonly kind: StreamKind,
-    private readonly source: (live: LiveService) => Observable<TWire>,
+    private readonly source: (live: LiveService, listener: (m: TWire) => void) => Unsubscribe,
     private readonly map: (m: TWire) => readonly TEvent[],
     private readonly startsUnit: (e: TEvent) => boolean,
     readonly maxUnits: number,
@@ -40,17 +40,17 @@ export abstract class StreamFeed<TWire, TEvent> {
   acquire(): void {
     if (this.count++ > 0) return;
     this._events.set([]);
-    this.subscription = new Subscription();
-    this.subscription.add(this.source(this.live).subscribe((m) => this.receive(m)));
-    this.subscription.add(this.live.resynced$.subscribe(() => this._events.set([])));
+    this.subscriptions = [
+      this.source(this.live, (m) => this.receive(m)),
+      this.live.resynced(() => this._events.set([])),
+    ];
     void this.live.joinStream(this.kind);
   }
 
   release(): void {
     if (this.count === 0) return;
     if (--this.count > 0) return;
-    this.subscription?.unsubscribe();
-    this.subscription = null;
+    for (const unsubscribe of this.subscriptions.splice(0)) unsubscribe();
     void this.live.leaveStream(this.kind);
   }
 
@@ -61,13 +61,12 @@ export abstract class StreamFeed<TWire, TEvent> {
   }
 }
 
-@Injectable({ providedIn: 'root' })
 export class LlmStreamFeed extends StreamFeed<LlmMessage, LlmStreamEvent> {
   constructor() {
     super(
-      inject(LiveService),
+      use(LiveService),
       'llm',
-      (live) => live.on('llm'),
+      (live, listener) => live.on('llm', listener),
       mapLlmMessage,
       startsLlmTurn,
       STREAM_MAX_UNITS,
@@ -75,13 +74,12 @@ export class LlmStreamFeed extends StreamFeed<LlmMessage, LlmStreamEvent> {
   }
 }
 
-@Injectable({ providedIn: 'root' })
 export class AudioStreamFeed extends StreamFeed<AudioGenMessage, AudioGenEvent> {
   constructor() {
     super(
-      inject(LiveService),
+      use(LiveService),
       'audio',
-      (live) => live.on('audioGen'),
+      (live, listener) => live.on('audioGen', listener),
       (m) => [mapAudioGenMessage(m)],
       startsAudioCard,
       STREAM_MAX_UNITS,

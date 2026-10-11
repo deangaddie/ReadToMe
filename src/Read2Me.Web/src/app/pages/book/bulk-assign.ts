@@ -1,5 +1,5 @@
-import { BulkAssignPreviewDto } from '@app/api';
-import { ConfirmOptions } from '@app/ui/confirm-dialog/confirm-dialog';
+import type { BulkAssignPreviewDto } from '@app/api';
+import type { ConfirmOptions } from '@app/ui/dialogs';
 
 /**
  * The bulk speaker assign's wording (ticket 12): the confirmation says exactly what the command

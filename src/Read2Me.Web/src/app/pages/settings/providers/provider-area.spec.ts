@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import { ParagraphTtsServiceType } from '@app/api';
 import { PARAGRAPH_TTS_AREA, providerType } from './provider-area';
 

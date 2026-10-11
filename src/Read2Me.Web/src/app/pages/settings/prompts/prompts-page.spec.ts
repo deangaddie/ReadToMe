@@ -1,26 +1,16 @@
-import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  TestRequest,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { PromptCatalogEntry } from '@app/api';
-import { LiveService } from '@app/live/live.service';
-import { SettingsChangedMessage } from '@app/live/live-messages';
-import { Subject } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { PromptCatalogEntry } from '@app/api';
+import { override, resetServices } from '@app/core/services';
+import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
+import { ToastService } from '@app/ui/toast';
+import { FakeApi } from '../../../../testing/fake-api';
+import { FakeLive } from '../../../../testing/fake-live';
+import { settle } from '../../../../testing/fake-navigation';
 import { PREVIEW_DEBOUNCE_MS } from './prompt-editor';
-import { PromptsPage } from './prompts-page';
+import type { PromptsPage } from './prompts-page';
+import './prompts-page';
 
-class FakeLive {
-  readonly settingsChanged = new Subject<SettingsChangedMessage>();
-  on(family: string) {
-    if (family !== 'settingsChanged') throw new Error(`unexpected family ${family}`);
-    return this.settingsChanged.asObservable();
-  }
-}
-
+/** Ported from the Angular TestBed spec, case for case, over `FakeApi`, `FakeLive` and a recorded confirm. */
 const CATALOG = '/api/settings/prompts/catalog';
 
 function entry(overrides: Partial<PromptCatalogEntry> = {}): PromptCatalogEntry {
@@ -50,240 +40,253 @@ const VOICE = entry({
   warnings: ['Stored override missing {{narrator_identity}}'],
 });
 
-describe('PromptsPage', () => {
-  let http: HttpTestingController;
-  let live: FakeLive;
+let api: FakeApi;
+let live: FakeLive;
+let confirms: ConfirmOptions[];
+let confirmAnswer: boolean;
 
-  beforeEach(async () => {
-    live = new FakeLive();
-    await TestBed.configureTestingModule({
-      imports: [PromptsPage],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-        { provide: LiveService, useValue: live },
-      ],
-    }).compileComponents();
-    http = TestBed.inject(HttpTestingController);
-  });
+beforeEach(() => {
+  resetServices();
+  api = new FakeApi();
+  api.install();
+  live = new FakeLive().install();
+  confirms = [];
+  confirmAnswer = true;
+  override(ConfirmService, {
+    confirm: async (o: ConfirmOptions) => {
+      confirms.push(o);
+      return confirmAnswer;
+    },
+  } as unknown as ConfirmService);
+  override(ToastService, {
+    success: () => undefined,
+    info: () => undefined,
+    problem: () => undefined,
+  } as unknown as ToastService);
+});
+afterEach(() => document.body.replaceChildren());
 
-  afterEach(() => {
-    http.verify();
-    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
-  });
+async function flush(page: PromptsPage) {
+  for (let i = 0; i < 4; i++) await settle();
+  await page.rendered();
+  await page.rendered();
+}
 
-  const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  async function eventually(method: string, url: string): Promise<TestRequest> {
-    for (let i = 0; i < 100; i++) {
-      const [match] = http.match((r) => r.method === method && r.urlWithParams === url);
-      if (match) return match;
-      await settle(10);
-    }
-    throw new Error(`No ${method} ${url}`);
-  }
+async function render(catalog = [CHARACTER, VOICE]) {
+  api.on('GET', CATALOG, catalog);
+  const page = document.createElement('r2m-prompts-page') as PromptsPage;
+  document.body.append(page);
+  await flush(page);
+  return page;
+}
 
-  async function stable(fixture: ComponentFixture<unknown>) {
-    await settle();
-    await fixture.whenStable();
-  }
+const textarea = (page: Element) =>
+  page.querySelector<HTMLTextAreaElement>('[data-field="template"]')!;
 
-  async function render(catalog = [CHARACTER, VOICE]) {
-    const fixture = TestBed.createComponent(PromptsPage);
-    (await eventually('GET', CATALOG)).flush(catalog);
-    await stable(fixture);
-    return { fixture, el: fixture.nativeElement as HTMLElement };
-  }
+async function type(page: PromptsPage, value: string) {
+  const input = textarea(page);
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+  await page.rendered();
+}
 
-  const textarea = (el: HTMLElement) =>
-    el.querySelector<HTMLTextAreaElement>('[data-field="template"]')!;
+const button = (el: Element, label: string) =>
+  Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === label)!;
 
-  function type(el: HTMLElement, value: string) {
-    const input = textarea(el);
-    input.value = value;
-    input.dispatchEvent(new Event('input'));
-  }
+const row = (page: Element, kind: string) =>
+  page.querySelector<HTMLButtonElement>(`[data-kind="${kind}"]`)!;
 
-  const button = (el: HTMLElement, label: string) =>
-    Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === label)!;
+/** Opens the preview panel as a click on its summary would. */
+async function openPreview(page: PromptsPage) {
+  const details = page.querySelector<HTMLDetailsElement>('.prompt-editor__preview')!;
+  details.open = true;
+  details.dispatchEvent(new Event('toggle'));
+  await page.rendered();
+}
 
-  const row = (el: HTMLElement, kind: string) =>
-    el.querySelector<HTMLButtonElement>(`[data-kind="${kind}"]`)!;
-
+describe('r2m-prompts-page', () => {
   it('lists every kind with its override marker and warning, and opens the first', async () => {
-    const { el } = await render();
+    const page = await render();
 
-    const rows = Array.from(el.querySelectorAll('.prompts__row'));
+    const rows = Array.from(page.querySelectorAll('.prompts__row'));
     expect(rows.map((r) => r.querySelector('.prompts__name')?.textContent?.trim())).toEqual([
       'Book Character Prompt',
       'Character Voice Prompt',
     ]);
-    expect(rows[0]!.querySelector('r2m-status-chip')).toBeNull();
+    expect(rows[0]!.querySelector('.r2m-status-chip')).toBeNull();
     expect(rows[0]!.querySelector('[data-role="warning-icon"]')).toBeNull();
-    expect(rows[1]!.querySelector('r2m-status-chip')?.textContent).toContain('Overridden');
+    expect(rows[1]!.querySelector('.r2m-status-chip')?.textContent).toContain('Overridden');
     expect(rows[1]!.querySelector('[data-role="warning-icon"]')).not.toBeNull();
 
-    expect(el.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe(
+    expect(page.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe(
       'Book Character Prompt',
     );
-    expect(textarea(el).value).toBe('DEFAULT {{book_title}}');
-    expect(el.querySelector('[data-role="expected-response"]')?.textContent).toBe(
+    expect(textarea(page).value).toBe('DEFAULT {{book_title}}');
+    expect(page.querySelector('[data-role="expected-response"]')?.textContent).toBe(
       '{ "items": [] }',
     );
     expect(
-      Array.from(el.querySelectorAll('[data-token]')).map((b) => b.textContent?.trim()),
+      Array.from(page.querySelectorAll('[data-token]')).map((b) => b.textContent?.trim()),
     ).toEqual(['{{book_title}}', '{{context_json}}', '{{narrator_identity}}']);
-    expect(button(el, 'Save').disabled).toBe(true);
-    expect(el.querySelector<HTMLButtonElement>('[data-action="reset-prompt"]')!.disabled).toBe(
+    expect(button(page, 'Save').disabled).toBe(true);
+    expect(page.querySelector<HTMLButtonElement>('[data-action="reset-prompt"]')!.disabled).toBe(
       true,
     );
   });
 
   it('shows the warning and hides the expected response for an overridden plain-text kind', async () => {
-    const { fixture, el } = await render();
-    row(el, 'voice').click();
-    await stable(fixture);
+    const page = await render();
+    row(page, 'voice').click();
+    await flush(page);
 
-    expect(textarea(el).value).toBe('MINE {{character_name}}');
-    expect(el.querySelector('[data-role="prompt-warning"]')?.textContent).toContain(
+    expect(textarea(page).value).toBe('MINE {{character_name}}');
+    expect(page.querySelector('[data-role="prompt-warning"]')?.textContent).toContain(
       'Stored override missing {{narrator_identity}}',
     );
-    expect(el.querySelector('[data-role="expected-response"]')).toBeNull();
-    expect(el.querySelector<HTMLButtonElement>('[data-action="reset-prompt"]')!.disabled).toBe(
+    expect(page.querySelector('[data-role="expected-response"]')).toBeNull();
+    expect(page.querySelector<HTMLButtonElement>('[data-action="reset-prompt"]')!.disabled).toBe(
       false,
     );
   });
 
   it('inserts a token at the caret, replacing the selection', async () => {
-    const { fixture, el } = await render();
-    const input = textarea(el);
+    const page = await render();
+    const input = textarea(page);
     input.setSelectionRange(8, 22); // "{{book_title}}"
-    el.querySelector<HTMLButtonElement>('[data-token="context_json"]')!.click();
-    await stable(fixture);
+    page.querySelector<HTMLButtonElement>('[data-token="context_json"]')!.click();
+    await flush(page);
 
     expect(input.value).toBe('DEFAULT {{context_json}}');
     expect(input.selectionStart).toBe(24);
-    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(true);
+    expect(page.hasUnsavedChanges()).toBe(true);
   });
 
   it('saves the draft and reloads the catalog', async () => {
-    const { fixture, el } = await render();
-    type(el, 'DEFAULT {{book_title}} more');
-    await stable(fixture);
-    expect(el.querySelector('.r2m-config-editor-frame__dirty')).not.toBeNull();
+    const page = await render();
+    await type(page, 'DEFAULT {{book_title}} more');
+    expect(page.querySelector('.r2m-config-editor-frame__dirty')).not.toBeNull();
 
-    button(el, 'Save').click();
-    const put = await eventually('PUT', '/api/settings/prompts/character');
-    expect(put.request.body).toEqual({ template: 'DEFAULT {{book_title}} more' });
-    put.flush(null);
+    api.on('PUT', '/api/settings/prompts/character', undefined);
     const saved = entry({ template: 'DEFAULT {{book_title}} more', isOverridden: true });
-    (await eventually('GET', CATALOG)).flush([saved, VOICE]);
-    await stable(fixture);
+    api.on('GET', CATALOG, [saved, VOICE]);
+    button(page, 'Save').click();
+    await flush(page);
 
-    expect(el.querySelector('.r2m-config-editor-frame__dirty')).toBeNull();
-    expect(el.querySelector('.prompts__row r2m-status-chip')?.textContent).toContain('Overridden');
-    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(false);
+    expect(api.calls('PUT', '/api/settings/prompts/character')[0]?.body).toEqual({
+      template: 'DEFAULT {{book_title}} more',
+    });
+    expect(page.querySelector('.r2m-config-editor-frame__dirty')).toBeNull();
+    expect(page.querySelector('.prompts__row .r2m-status-chip')?.textContent).toContain(
+      'Overridden',
+    );
+    expect(page.hasUnsavedChanges()).toBe(false);
   });
 
   it('resets a stored override after a confirm and shows the default again', async () => {
-    const { fixture, el } = await render();
-    row(el, 'voice').click();
-    await stable(fixture);
+    const page = await render();
+    row(page, 'voice').click();
+    await flush(page);
 
-    el.querySelector<HTMLButtonElement>('[data-action="reset-prompt"]')!.click();
-    await stable(fixture);
-    const dialog = document.querySelector('r2m-confirm-dialog') as HTMLElement;
-    expect(dialog.textContent).toContain('Reset Character Voice Prompt to default?');
-    button(dialog, 'Reset').click();
-    (await eventually('DELETE', '/api/settings/prompts/voice')).flush(null);
-    (await eventually('GET', CATALOG)).flush([
+    api.on('DELETE', '/api/settings/prompts/voice', undefined);
+    api.on('GET', CATALOG, [
       CHARACTER,
       { ...VOICE, template: VOICE.defaultTemplate, isOverridden: false, warnings: [] },
     ]);
-    await settle(300);
-    await stable(fixture);
+    page.querySelector<HTMLButtonElement>('[data-action="reset-prompt"]')!.click();
+    await flush(page);
 
-    expect(textarea(el).value).toBe('DEFAULT voice');
-    expect(el.querySelector('[data-role="prompt-warning"]')).toBeNull();
+    expect(confirms[0]?.title).toBe('Reset Character Voice Prompt to default?');
+    expect(api.calls('DELETE', '/api/settings/prompts/voice').length).toBe(1);
+    expect(textarea(page).value).toBe('DEFAULT voice');
+    expect(page.querySelector('[data-role="prompt-warning"]')).toBeNull();
   });
 
   it('previews the unsaved draft and follows further edits', async () => {
-    const { fixture, el } = await render();
-    type(el, 'Hello {{book_title}}');
-    await stable(fixture);
+    const page = await render();
+    await type(page, 'Hello {{book_title}}');
+    const previews: string[] = [];
+    api.on('POST', '/api/settings/prompts/character/preview', (body) => {
+      const { template } = body as { template: string };
+      previews.push(template);
+      return { rendered: template.replace('{{book_title}}', 'The Hobbit') };
+    });
 
-    el.querySelector<HTMLElement>('mat-expansion-panel-header')!.click();
-    await settle(PREVIEW_DEBOUNCE_MS + 50);
-    const first = await eventually('POST', '/api/settings/prompts/character/preview');
-    expect(first.request.body).toEqual({ template: 'Hello {{book_title}}' });
-    first.flush({ rendered: 'Hello The Hobbit' });
-    await stable(fixture);
-    expect(el.querySelector('[data-role="preview"]')?.textContent).toBe('Hello The Hobbit');
+    await openPreview(page);
+    expect(page.querySelector('.prompt-editor__preview .r2m-spinner')).not.toBeNull();
+    await wait(PREVIEW_DEBOUNCE_MS + 50);
+    await flush(page);
+    expect(previews).toEqual(['Hello {{book_title}}']);
+    expect(page.querySelector('[data-role="preview"]')?.textContent).toBe('Hello The Hobbit');
 
-    type(el, 'Bye {{book_title}}');
-    await settle(PREVIEW_DEBOUNCE_MS + 50);
-    const second = await eventually('POST', '/api/settings/prompts/character/preview');
-    expect(second.request.body).toEqual({ template: 'Bye {{book_title}}' });
-    second.flush({ rendered: 'Bye The Hobbit' });
-    await stable(fixture);
-    expect(el.querySelector('[data-role="preview"]')?.textContent).toBe('Bye The Hobbit');
+    await type(page, 'Bye {{book_title}}');
+    await wait(PREVIEW_DEBOUNCE_MS + 50);
+    await flush(page);
+    expect(previews).toEqual(['Hello {{book_title}}', 'Bye {{book_title}}']);
+    expect(page.querySelector('[data-role="preview"]')?.textContent).toBe('Bye The Hobbit');
   });
 
   it('a reload reaches an untouched editor without lighting it up as dirty', async () => {
-    const { fixture, el } = await render();
+    const page = await render();
 
-    live.settingsChanged.next({ area: 'prompts' });
-    (await eventually('GET', CATALOG)).flush([
-      entry({ template: 'FROM ANOTHER TAB', isOverridden: true }),
-      VOICE,
-    ]);
-    await stable(fixture);
+    api.on('GET', CATALOG, [entry({ template: 'FROM ANOTHER TAB', isOverridden: true }), VOICE]);
+    live.emit('settingsChanged', { area: 'prompts' });
+    await flush(page);
 
-    expect(textarea(el).value).toBe('FROM ANOTHER TAB');
-    expect(el.querySelector('.r2m-config-editor-frame__dirty')).toBeNull();
-    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(false);
+    expect(textarea(page).value).toBe('FROM ANOTHER TAB');
+    expect(page.querySelector('.r2m-config-editor-frame__dirty')).toBeNull();
+    expect(page.hasUnsavedChanges()).toBe(false);
   });
 
   it('reloads on settingsChanged for prompts without wiping a draft in progress', async () => {
-    const { fixture, el } = await render();
-    type(el, 'typing…');
-    await stable(fixture);
+    const page = await render();
+    await type(page, 'typing…');
 
-    live.settingsChanged.next({ area: 'llm' });
-    await settle(20);
-    expect(http.match((r) => r.url === CATALOG)).toEqual([]);
+    live.emit('settingsChanged', { area: 'llm' });
+    await flush(page);
+    expect(api.calls('GET', CATALOG).length).toBe(1);
 
-    live.settingsChanged.next({ area: 'prompts' });
-    (await eventually('GET', CATALOG)).flush([
-      entry({ template: 'FROM ANOTHER TAB', isOverridden: true }),
-      VOICE,
-    ]);
-    await stable(fixture);
+    api.on('GET', CATALOG, [entry({ template: 'FROM ANOTHER TAB', isOverridden: true }), VOICE]);
+    live.emit('settingsChanged', { area: 'prompts' });
+    await flush(page);
 
-    expect(textarea(el).value).toBe('typing…');
-    expect(el.querySelector('.prompts__row r2m-status-chip')?.textContent).toContain('Overridden');
+    expect(textarea(page).value).toBe('typing…');
+    expect(page.querySelector('.prompts__row .r2m-status-chip')?.textContent).toContain(
+      'Overridden',
+    );
 
-    button(el, 'Cancel').click();
-    await stable(fixture);
-    expect(textarea(el).value).toBe('FROM ANOTHER TAB');
+    button(page, 'Cancel').click();
+    await flush(page);
+    expect(textarea(page).value).toBe('FROM ANOTHER TAB');
+  });
+
+  it('stops listening while detached and listens again once re-attached', async () => {
+    const page = await render();
+    page.remove();
+    live.emit('settingsChanged', { area: 'prompts' });
+    await settle();
+    expect(api.calls('GET', CATALOG).length).toBe(1);
+
+    document.body.append(page);
+    await flush(page);
+    expect(api.calls('GET', CATALOG).length).toBe(2);
+    live.emit('settingsChanged', { area: 'prompts' });
+    await flush(page);
+    expect(api.calls('GET', CATALOG).length).toBe(3);
   });
 
   it('asks before switching kinds with unsaved edits', async () => {
-    const { fixture, el } = await render();
-    type(el, 'edited');
-    await stable(fixture);
+    const page = await render();
+    await type(page, 'edited');
 
-    row(el, 'voice').click();
-    await stable(fixture);
-    const dialog = document.querySelector('r2m-confirm-dialog') as HTMLElement;
-    expect(dialog.textContent).toContain('unsaved changes');
-    button(dialog, 'Cancel').click();
-    await settle(300);
-    await stable(fixture);
+    confirmAnswer = false;
+    row(page, 'voice').click();
+    await flush(page);
+    expect(confirms[0]?.message).toContain('unsaved changes');
 
-    expect(textarea(el).value).toBe('edited');
-    expect(el.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe(
+    expect(textarea(page).value).toBe('edited');
+    expect(page.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe(
       'Book Character Prompt',
     );
   });

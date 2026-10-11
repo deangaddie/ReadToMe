@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   BookEditRow,
@@ -16,9 +16,8 @@ import { projectUrl } from './projects-api';
  * opaque `program` id, so this client passes ids and rows around and never the plan itself. Apply
  * is not here — it is the ordinary `ApplyBookEdits` book command over the rows the user kept.
  */
-@Injectable({ providedIn: 'root' })
 export class BookEditsApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   /** One LLM call plus scope resolution. Every non-`Ok` status is an answer, not an error. */
   plan(folder: string, instruction: string, thinking: boolean): Promise<PlanBookEditResponse> {

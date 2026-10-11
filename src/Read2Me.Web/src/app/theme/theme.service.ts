@@ -1,6 +1,6 @@
-import { DOCUMENT } from '@angular/common';
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { AppTheme, ThemeSelection, ThemesApi } from '@app/api';
+import { type AppTheme, type ThemeSelection, ThemesApi } from '@app/api';
+import { use } from '@app/core/services';
+import { computed, effect, signal } from '@app/core/signals';
 import { buildThemeStylesheet, resolveEffectiveTheme } from './theme-css';
 
 const STYLE_ID = 'r2m-theme';
@@ -9,15 +9,13 @@ const DARK_QUERY = '(prefers-color-scheme: dark)';
 export type SchemePreference = 'light' | 'dark' | 'system';
 
 /**
- * Runtime theming (spec D9, design §3): loads the shared theme store from the host, resolves the
- * effective AppTheme (following the OS preference live when asked), and applies it as CSS custom
- * properties in a `<style id="r2m-theme">` element plus `data-theme` on `<html>` (which styles.scss
- * maps to `color-scheme`). The host stores the selection, so every client loads the same theme.
+ * Runtime theming: loads the shared theme store from the host, resolves the effective AppTheme
+ * (following the OS preference live when asked), and applies it as CSS custom properties in a
+ * `<style id="r2m-theme">` element plus `data-theme` on `<html>` (which global.css maps to
+ * `color-scheme`). The host stores the selection, so every client loads the same theme.
  */
-@Injectable({ providedIn: 'root' })
 export class ThemeService {
-  private readonly api = inject(ThemesApi);
-  private readonly doc = inject(DOCUMENT);
+  private readonly api = use(ThemesApi);
 
   private readonly _themes = signal<AppTheme[]>([]);
   private readonly _selection = signal<ThemeSelection | null>(null);
@@ -46,7 +44,7 @@ export class ThemeService {
     effect(() => this.apply(this.effective()));
   }
 
-  /** Called once from the app initializer; a failure keeps the compiled defaults and records why. */
+  /** Called once on boot; a failure keeps the compiled defaults and records why. */
   async load(): Promise<void> {
     try {
       const [themes, selection] = await Promise.all([this.api.list(), this.api.selection()]);
@@ -115,16 +113,15 @@ export class ThemeService {
   }
 
   private watchSystemPreference(): void {
-    const win = this.doc.defaultView;
-    if (!win || typeof win.matchMedia !== 'function') return;
-    const query = win.matchMedia(DARK_QUERY);
+    if (typeof matchMedia !== 'function') return;
+    const query = matchMedia(DARK_QUERY);
     this._prefersDark.set(query.matches);
     query.addEventListener('change', (event) => this._prefersDark.set(event.matches));
   }
 
   private apply(theme: AppTheme | null): void {
-    const root = this.doc.documentElement;
-    let style = this.doc.getElementById(STYLE_ID) as HTMLStyleElement | null;
+    const root = document.documentElement;
+    let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
     if (!theme) {
       delete root.dataset['theme'];
       style?.remove();
@@ -132,9 +129,9 @@ export class ThemeService {
     }
     root.dataset['theme'] = theme.isDark ? 'dark' : 'light';
     if (!style) {
-      style = this.doc.createElement('style');
+      style = document.createElement('style');
       style.id = STYLE_ID;
-      this.doc.head.appendChild(style);
+      document.head.appendChild(style);
     }
     style.textContent = buildThemeStylesheet(theme);
   }

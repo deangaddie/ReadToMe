@@ -1,10 +1,10 @@
-import { Injectable, computed, signal } from '@angular/core';
-import { NodeLevel } from '@app/api';
+import type { NodeLevel } from '@app/api';
+import { computed, signal } from '@app/core/signals';
 import {
-  ParagraphAncestry,
-  SelectionMap,
-  SelectionRef,
-  TriState,
+  type ParagraphAncestry,
+  type SelectionMap,
+  type SelectionRef,
+  type TriState,
   ancestryOf,
   nodeState,
 } from './selection';
@@ -16,7 +16,6 @@ import {
  * so a tree checkbox can say "all of them". The rules are in `selection.ts`. The audio selection
  * ({@link AudioSelectionStore}) is the same store over item ids.
  */
-@Injectable()
 export class SelectionStore {
   private readonly _selection = signal<SelectionMap>({});
   private readonly _totals = signal<Readonly<Record<string, number>>>({});
@@ -75,9 +74,17 @@ export class SelectionStore {
     return nodeState(this._selection(), level, nodeId, this._totals()[nodeId]);
   }
 
-  /** Everything forgotten — the shell leaving the project. */
+  /** Everything forgotten — the shell leaving the project, or a release flipping paragraphs. */
   reset(): void {
     this._selection.set({});
     this._totals.set({});
   }
 }
+
+/**
+ * The reader's item selection in Audio mode (ticket 13, design §6.3): the {@link SelectionStore}
+ * shape — ids with the nodes each rolls up into, and the per-node totals it has learnt — over
+ * voiced item ids instead of paragraph ids. A separate instance so switching mode never mixes
+ * the two selections; the project shell provides and resets both.
+ */
+export class AudioSelectionStore extends SelectionStore {}

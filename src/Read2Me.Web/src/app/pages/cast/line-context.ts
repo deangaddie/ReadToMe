@@ -1,20 +1,16 @@
+import { html, nothing } from 'lit-html';
 import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  untracked,
-} from '@angular/core';
-import { NgTemplateOutlet } from '@angular/common';
-import { MatButtonModule } from '@angular/material/button';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { CharacterLineDto, CharactersApi, ParagraphContextDto, toApiError } from '@app/api';
-import { SpeakerChip } from '@app/ui/speaker-chip/speaker-chip';
+  type CharacterLineDto,
+  CharactersApi,
+  type ContextParagraphDto,
+  type ParagraphContextDto,
+  toApiError,
+} from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { signal, untracked } from '@app/core/signals';
 import {
-  ContextWindow,
+  type ContextWindow,
   INITIAL_WINDOW,
   canGrowAfter,
   canGrowBefore,
@@ -22,149 +18,142 @@ import {
   growAfter,
   growBefore,
 } from './context-paging';
+import '@app/ui/speaker-chip';
 
 /**
  * A line's surroundings (research §4 "Lines"): the paragraph and its neighbours in the chapter,
  * each with a speaker chip per dialog speaker. Loads on demand; "+ previous" / "+ next" widen the
  * window by the paging steps up to the host's cap. Changing the line resets the window.
  */
-@Component({
-  selector: 'app-line-context',
-  imports: [NgTemplateOutlet, MatButtonModule, MatProgressBarModule, SpeakerChip],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'line-context' },
-  template: `
-    @if (loading()) {
-      <mat-progress-bar mode="indeterminate" aria-label="Loading context" />
-    }
-    @if (error(); as error) {
-      <p class="line-context__error">{{ error }}</p>
-    }
-    @if (context(); as ctx) {
-      @for (p of ctx.before; track $index) {
-        <ng-container *ngTemplateOutlet="paragraph; context: { $implicit: p, query: false }" />
-      }
-      <ng-container *ngTemplateOutlet="paragraph; context: { $implicit: ctx.paragraph, query: true }" />
-      @for (p of ctx.after; track $index) {
-        <ng-container *ngTemplateOutlet="paragraph; context: { $implicit: p, query: false }" />
-      }
-      <div class="line-context__more">
-        @if (canGrowBefore(window())) {
-          <button mat-button type="button" data-action="context-previous" (click)="more('before')">
-            + previous
-          </button>
-        }
-        @if (canGrowAfter(window())) {
-          <button mat-button type="button" data-action="context-next" (click)="more('after')">
-            + next
-          </button>
-        }
-      </div>
-    } @else if (!loading()) {
-      <button mat-button type="button" data-action="load-context" (click)="load()">Load context</button>
-    }
+export class LineContext extends R2mElement {
+  private readonly api = use(CharactersApi);
 
-    <ng-template #paragraph let-p let-query="query">
-      <div class="line-context__paragraph" [class.line-context__paragraph--query]="query">
-        <div class="line-context__speakers">
-          @for (s of speakers(p); track $index) {
-            <r2m-speaker-chip [name]="s.name" [state]="s.unknown ? 'unknown' : 'named'" compact />
-          } @empty {
-            <span class="line-context__narration">—</span>
-          }
-        </div>
-        <p class="line-context__text">{{ p.text }}</p>
-      </div>
-    </ng-template>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-1);
-      padding: var(--r2m-space-2);
-    }
-    .line-context__paragraph {
-      display: grid;
-      grid-template-columns: 110px minmax(0, 1fr);
-      gap: var(--r2m-space-2);
-      align-items: start;
-      padding: var(--r2m-space-1) var(--r2m-space-2);
-      border-radius: var(--r2m-radius-sm);
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .line-context__paragraph--query {
-      background: color-mix(in srgb, var(--r2m-accent) 10%, transparent);
-      color: var(--r2m-text);
-      font-size: var(--r2m-text-md);
-    }
-    .line-context__speakers {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--r2m-space-1);
-    }
-    .line-context__narration {
-      color: var(--r2m-text-muted);
-    }
-    .line-context__text {
-      margin: 0;
-      white-space: pre-wrap;
-    }
-    .line-context__more {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--r2m-space-1);
-    }
-    .line-context__error {
-      margin: 0;
-      color: var(--r2m-status-error);
-      font-size: var(--r2m-text-sm);
-    }
-  `,
-})
-export class LineContext {
-  private readonly api = inject(CharactersApi);
+  readonly #folder = signal('');
+  get folder() {
+    return this.#folder();
+  }
+  set folder(value: string) {
+    this.#folder.set(value);
+  }
 
-  readonly folder = input.required<string>();
-  readonly line = input.required<CharacterLineDto>();
+  readonly #line = signal<CharacterLineDto | null>(null);
+  get line() {
+    return this.#line();
+  }
+  set line(value: CharacterLineDto | null) {
+    this.#line.set(value);
+  }
 
-  protected readonly context = signal<ParagraphContextDto | null>(null);
-  protected readonly loading = signal(false);
-  protected readonly error = signal<string | null>(null);
-  protected readonly window = signal<ContextWindow>(INITIAL_WINDOW);
+  readonly context = signal<ParagraphContextDto | null>(null);
+  readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly contextWindow = signal<ContextWindow>(INITIAL_WINDOW);
 
-  protected readonly canGrowBefore = canGrowBefore;
-  protected readonly canGrowAfter = canGrowAfter;
-  protected readonly speakers = contextSpeakers;
-
-  private readonly lineId = computed(() => this.line().itemId);
-
-  constructor() {
-    effect(() => {
-      this.lineId();
+  protected override connected(): void {
+    this.classList.add('line-context');
+    // Tracks the line's identity only, so a reloaded list with the same line keeps its context.
+    this.effect(() => {
+      const itemId = this.#line()?.itemId;
       untracked(() => {
+        if (this.context() === null && itemId === undefined) return;
         this.context.set(null);
         this.error.set(null);
-        this.window.set(INITIAL_WINDOW);
+        this.contextWindow.set(INITIAL_WINDOW);
       });
     });
   }
 
-  protected async load(): Promise<void> {
-    const line = this.line();
-    const window = this.window();
+  protected template() {
+    const ctx = this.context();
+    const error = this.error();
+    const loading = this.loading();
+    const window = this.contextWindow();
+    return html`
+      ${loading ? html`<progress aria-label="Loading context"></progress>` : nothing}
+      ${error ? html`<p class="line-context__error">${error}</p>` : nothing}
+      ${
+        ctx
+          ? html`${ctx.before.map((p) => this.paragraph(p, false))}
+              ${this.paragraph(ctx.paragraph, true)}
+              ${ctx.after.map((p) => this.paragraph(p, false))}
+              <div class="line-context__more">
+                ${
+                  canGrowBefore(window)
+                    ? html`<button
+                        type="button"
+                        class="r2m-button"
+                        data-action="context-previous"
+                        @click=${() => void this.more('before')}
+                      >
+                        + previous
+                      </button>`
+                    : nothing
+                }
+                ${
+                  canGrowAfter(window)
+                    ? html`<button
+                        type="button"
+                        class="r2m-button"
+                        data-action="context-next"
+                        @click=${() => void this.more('after')}
+                      >
+                        + next
+                      </button>`
+                    : nothing
+                }
+              </div>`
+          : loading
+            ? nothing
+            : html`<button
+                type="button"
+                class="r2m-button"
+                data-action="load-context"
+                @click=${() => void this.load()}
+              >
+                Load context
+              </button>`
+      }
+    `;
+  }
+
+  private paragraph(p: ContextParagraphDto, query: boolean) {
+    const speakers = contextSpeakers(p);
+    return html`<div
+      class="line-context__paragraph ${query ? 'line-context__paragraph--query' : ''}"
+    >
+      <div class="line-context__speakers">
+        ${
+          speakers.length === 0
+            ? html`<span class="line-context__narration">—</span>`
+            : speakers.map(
+                (s) =>
+                  html`<r2m-speaker-chip
+                    .name=${s.name}
+                    .state=${s.unknown ? 'unknown' : 'named'}
+                    .compact=${true}
+                  ></r2m-speaker-chip>`,
+              )
+        }
+      </div>
+      <p class="line-context__text">${p.text}</p>
+    </div>`;
+  }
+
+  async load(): Promise<void> {
+    const line = this.#line();
+    if (!line) return;
+    const window = this.contextWindow();
     this.loading.set(true);
     this.error.set(null);
     try {
       const ctx = await this.api.context(
-        this.folder(),
+        this.#folder(),
         line.chapterId,
         line.paragraphId,
         window.before,
         window.after,
       );
-      if (this.line().itemId === line.itemId) this.context.set(ctx);
+      if (this.#line()?.itemId === line.itemId) this.context.set(ctx);
     } catch (e) {
       this.error.set(toApiError(e).message);
     } finally {
@@ -172,8 +161,15 @@ export class LineContext {
     }
   }
 
-  protected async more(side: 'before' | 'after'): Promise<void> {
-    this.window.update((w) => (side === 'before' ? growBefore(w) : growAfter(w)));
+  async more(side: 'before' | 'after'): Promise<void> {
+    this.contextWindow.update((w) => (side === 'before' ? growBefore(w) : growAfter(w)));
     await this.load();
+  }
+}
+define('r2m-line-context', LineContext);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-line-context': LineContext;
   }
 }

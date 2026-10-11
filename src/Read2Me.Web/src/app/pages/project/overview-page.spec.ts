@@ -1,11 +1,18 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
-import { AssemblyOutputDto, ProjectDetailDto, ProjectStatusDto } from '@app/api';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { AssemblyOutputDto, ProjectDetailDto, ProjectStatusDto } from '@app/api';
+import { Router, type RouteDef } from '@app/core/router';
+import { override, resetServices } from '@app/core/services';
 import { Preflight } from '@app/shared/preflight';
-import { OverviewPage } from './overview-page';
-import { ProjectStore } from './project-store';
+import { ToastService } from '@app/ui/toast';
+import { FakeApi, problem } from '../../../testing/fake-api';
+import { FakeLive } from '../../../testing/fake-live';
+import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
+import type { OverviewPage } from './overview-page';
+import { formatBuildDate } from './overview-page';
+import './project-shell';
+import './overview-page';
+
+const BASE = '/api/projects/dune';
 
 const DETAIL: ProjectDetailDto = {
   folderName: 'dune',
@@ -53,59 +60,72 @@ function status(overrides: Partial<ProjectStatusDto> = {}): ProjectStatusDto {
   };
 }
 
-describe('OverviewPage', () => {
-  let http: HttpTestingController;
+const ROUTES: RouteDef[] = [
+  {
+    path: 'projects/:folder',
+    tag: 'r2m-project-shell',
+    children: [{ path: '', tag: 'r2m-overview-page' }],
+  },
+];
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [OverviewPage],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-        ProjectStore,
-        { provide: Preflight, useValue: { ensureReady: () => Promise.resolve(true) } },
-      ],
-    }).compileComponents();
-    http = TestBed.inject(HttpTestingController);
-  });
+let api: FakeApi;
+let navigation: FakeNavigation;
+let toasts: string[];
+let ensureReady: ReturnType<typeof mock>;
 
-  afterEach(() => {
-    TestBed.inject(ProjectStore).close();
-    http.verify();
-    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
-  });
+beforeEach(() => {
+  resetServices();
+  api = new FakeApi();
+  api.install();
+  new FakeLive().install();
+  toasts = [];
+  ensureReady = mock(async () => true);
+  override(Preflight, { ensureReady } as unknown as Preflight);
+  override(ToastService, {
+    success: (m: string) => toasts.push(m),
+    warn: (m: string) => toasts.push(m),
+    problem: (p: { detail?: string }) => toasts.push(`problem: ${p.detail}`),
+  } as unknown as ToastService);
+});
+afterEach(() => document.body.replaceChildren());
 
-  const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+/** The overview under the project shell, through a root outlet as in the app. */
+async function render(s = status(), outputs: AssemblyOutputDto[] = []) {
+  api.on('GET', BASE, DETAIL).on('GET', `${BASE}/status`, s);
+  api.on('GET', `${BASE}/assembly/outputs`, outputs);
+  navigation = installNavigation('projects/dune');
+  const router = new Router();
+  override(Router, router);
+  router.start(ROUTES, async () => true);
+  const outlet = document.createElement('r2m-outlet');
+  document.body.append(outlet);
+  for (let i = 0; i < 4; i++) await settle();
+  const page = outlet.querySelector<OverviewPage>('r2m-overview-page');
+  if (!page) throw new Error('the overview page did not render');
+  await page.rendered();
+  return page;
+}
 
-  async function render(s = status(), outputs: AssemblyOutputDto[] = []) {
-    const store = TestBed.inject(ProjectStore);
-    const opened = store.open('dune');
-    http.expectOne('/api/projects/dune').flush(DETAIL);
-    http.expectOne('/api/projects/dune/status').flush(s);
-    await opened;
-    const fixture = TestBed.createComponent(OverviewPage);
-    await settle();
-    http.expectOne('/api/projects/dune/assembly/outputs').flush(outputs);
-    await fixture.whenStable();
-    return { fixture, el: fixture.nativeElement as HTMLElement };
-  }
+const button = (el: Element, action: string) =>
+  el.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
+const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
-  function button(el: HTMLElement, action: string): HTMLButtonElement {
-    return el.querySelector(`[data-action="${action}"]`) as HTMLButtonElement;
-  }
-
+describe('r2m-overview-page', () => {
   it('shows the stepper and the project card side by side', async () => {
-    const { el } = await render();
-    expect(el.querySelectorAll('.r2m-pipeline__step').length).toBe(6);
-    expect(el.querySelector('[data-step="attribute"]')?.textContent).toContain('3 remaining');
-    const details = el.querySelector('app-project-details-panel')!;
+    const page = await render();
+    expect(page.querySelectorAll('.r2m-pipeline__step').length).toBe(6);
+    expect(text(page.querySelector('[data-step="attribute"]'))).toContain('3 remaining');
+    const details = page.querySelector('r2m-project-details-panel')!;
     expect(details.textContent).toContain('Narrated by Watson');
     expect(details.textContent).toContain('dune.epub');
+    expect(details.querySelector('a.details__cast-link')?.getAttribute('href')).toBe(
+      'projects/dune/cast/w',
+    );
+    expect(details.querySelector<HTMLInputElement>('input[name=narratorOnly]')?.checked).toBe(true);
   });
 
   it('a fresh project offers Read book as the next step and imports then refetches status', async () => {
-    const { fixture, el } = await render(
+    const page = await render(
       status({
         hasContent: false,
         volumeIds: [],
@@ -113,115 +133,148 @@ describe('OverviewPage', () => {
         items: { total: 0, withAudio: 0, unattributed: 0 },
       }),
     );
-    expect(el.querySelector('[aria-current="step"]')?.getAttribute('data-step')).toBe('import');
+    expect(page.querySelector('[aria-current="step"]')?.getAttribute('data-step')).toBe('import');
+    api.on('POST', `${BASE}/import`, undefined).on('GET', `${BASE}/status`, status());
 
-    button(el, 'readBook').click();
-    const req = http.expectOne({ method: 'POST', url: '/api/projects/dune/import' });
-    expect(req.request.body).toEqual({ reread: false });
-    req.flush(null);
+    button(page, 'readBook').click();
     await settle();
-    http.expectOne('/api/projects/dune/status').flush(status());
-    await settle();
-    await fixture.whenStable();
+    await page.rendered();
 
-    expect(el.querySelector('[data-step="import"]')?.textContent).toContain('Done');
+    expect(api.calls('POST', `${BASE}/import`).map((r) => r.body)).toEqual([{ reread: false }]);
+    expect(api.calls('GET', `${BASE}/status`)).toHaveLength(2);
+    expect(text(page.querySelector('[data-step="import"]'))).toContain('Done');
+    expect(toasts).toEqual(['Book read in']);
   });
 
-  it('Attribute unprocessed enqueues every volume with unprocessedOnly', async () => {
-    const { el } = await render();
-    button(el, 'attribute').click();
+  it('Attribute unprocessed enqueues every volume with unprocessedOnly, in book order', async () => {
+    const page = await render();
+    api.on('POST', `${BASE}/attribution/enqueue`, { enqueued: 2 });
+
+    button(page, 'attribute').click();
     await settle();
 
-    // One volume at a time, in book order.
-    for (const nodeId of ['v1', 'v2']) {
-      const req = http.expectOne({ method: 'POST', url: '/api/projects/dune/attribution/enqueue' });
-      expect(req.request.body).toEqual({ level: 'volume', nodeId, unprocessedOnly: true });
-      req.flush({ enqueued: 2 }, { status: 202, statusText: 'Accepted' });
-      await settle();
-    }
+    expect(ensureReady).toHaveBeenCalledWith('attribution');
+    expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
+      { level: 'volume', nodeId: 'v1', unprocessedOnly: true },
+      { level: 'volume', nodeId: 'v2', unprocessedOnly: true },
+    ]);
+    expect(api.calls('GET', `${BASE}/status`)).toHaveLength(2);
+    expect(toasts).toEqual(['Queued 4 paragraphs']);
+  });
+
+  it('a cancelled preflight queues nothing', async () => {
+    const page = await render();
+    ensureReady.mockImplementation(async () => false);
+    api.on('POST', `${BASE}/attribution/enqueue`, { enqueued: 2 });
+
+    button(page, 'attribute').click();
     await settle();
-    http.expectOne('/api/projects/dune/status').flush(status());
-    await settle();
+
+    expect(api.calls('POST', `${BASE}/attribution/enqueue`)).toHaveLength(0);
+    expect(toasts).toEqual([]);
   });
 
   it('Generate needed audio enqueues every volume with needsAudioOnly and the narrator-only policy', async () => {
-    const { el } = await render();
-    button(el, 'generateAudio').click();
+    const page = await render();
+    api.on('POST', `${BASE}/audio/enqueue`, { enqueued: 1 });
+
+    button(page, 'generateAudio').click();
     await settle();
 
-    for (const nodeId of ['v1', 'v2']) {
-      const req = http.expectOne({ method: 'POST', url: '/api/projects/dune/audio/enqueue' });
-      expect(req.request.body).toEqual({
-        level: 'volume',
-        nodeId,
-        needsAudioOnly: true,
-        narratorOnlyMode: true,
-      });
-      req.flush({ enqueued: 1 }, { status: 202, statusText: 'Accepted' });
-      await settle();
-    }
-    await settle();
-    http.expectOne('/api/projects/dune/status').flush(status());
-    await settle();
+    expect(ensureReady).toHaveBeenCalledWith('audio');
+    expect(api.calls('POST', `${BASE}/audio/enqueue`).map((r) => r.body)).toEqual([
+      { level: 'volume', nodeId: 'v1', needsAudioOnly: true, narratorOnlyMode: true },
+      { level: 'volume', nodeId: 'v2', needsAudioOnly: true, narratorOnlyMode: true },
+    ]);
+    expect(toasts).toEqual(['Queued 2 items']);
   });
 
   it('Reread asks for a destructive confirm before posting reread: true', async () => {
-    const { el } = await render();
-    button(el, 'reread').click();
-    await settle();
+    const page = await render();
+    api.on('POST', `${BASE}/import`, undefined);
 
+    button(page, 'reread').click();
+    await settle();
     const dialog = document.querySelector('r2m-confirm-dialog')!;
-    expect(dialog.classList.contains('r2m-confirm-dialog--destructive')).toBe(true);
-    (dialog.querySelector('.r2m-confirm-dialog__confirm') as HTMLButtonElement).click();
+    await dialog.rendered();
+    expect(dialog.querySelector('.r2m-confirm-dialog__confirm')?.classList).toContain(
+      'r2m-button--danger',
+    );
+    dialog.querySelector<HTMLButtonElement>('.r2m-confirm-dialog__confirm')!.click();
+    await settle();
 
-    let req;
-    for (let i = 0; i < 100 && !req; i++) {
-      [req] = http.match({ method: 'POST', url: '/api/projects/dune/import' });
-      if (!req) await settle(10);
-    }
-    expect(req?.request.body).toEqual({ reread: true });
-    req!.flush(null);
-    await settle();
-    http.expectOne('/api/projects/dune/status').flush(status());
-    await settle();
+    expect(api.calls('POST', `${BASE}/import`).map((r) => r.body)).toEqual([{ reread: true }]);
+    expect(toasts).toEqual(['Book reread']);
   });
 
   it('navigation actions route to cast, book modes and export', async () => {
-    const { el } = await render();
-    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-
-    button(el, 'discover').click();
-    expect(navigate).toHaveBeenLastCalledWith(['/projects', 'dune', 'cast'], {
-      queryParams: { discover: 1 },
-    });
-    button(el, 'openSpeakers').click();
-    expect(navigate).toHaveBeenLastCalledWith(['/projects', 'dune', 'book'], {
-      queryParams: { mode: 'speakers' },
-    });
-    button(el, 'openAudioMode').click();
-    expect(navigate).toHaveBeenLastCalledWith(['/projects', 'dune', 'book'], {
-      queryParams: { mode: 'audio' },
-    });
-    button(el, 'assemble').click();
-    expect(navigate).toHaveBeenLastCalledWith(['/projects', 'dune', 'export']);
+    // Each navigation leaves the overview, so every action starts from a fresh page.
+    const routes: [string, string][] = [
+      ['discover', 'projects/dune/cast?discover=1'],
+      ['openCast', 'projects/dune/cast'],
+      ['openSpeakers', 'projects/dune/book?mode=speakers'],
+      ['openAudioMode', 'projects/dune/book?mode=audio'],
+      ['assemble', 'projects/dune/export'],
+    ];
+    for (const [action, expected] of routes) {
+      document.body.replaceChildren();
+      const page = await render();
+      button(page, action).click();
+      expect(navigation.calls.at(-1)?.url).toBe(`http://localhost/app/${expected}`);
+    }
   });
 
   it('editing the title inline PATCHes and shows the returned detail', async () => {
-    const { fixture, el } = await render();
-    const edit = el.querySelector('.details__title .r2m-inline-edit__display') as HTMLButtonElement;
+    const page = await render();
+    api.on('PATCH', BASE, { ...DETAIL, title: 'Dune Messiah' });
+    const edit = page.querySelector<HTMLButtonElement>('.details__title .r2m-inline-edit__display')!;
     edit.click();
-    await fixture.whenStable();
-    const input = el.querySelector('.details__title input') as HTMLInputElement;
+    await page.rendered();
+    const input = page.querySelector<HTMLInputElement>('.details__title input')!;
     input.value = 'Dune Messiah';
     input.dispatchEvent(new Event('input'));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-
-    const req = http.expectOne({ method: 'PATCH', url: '/api/projects/dune' });
-    expect(req.request.body).toEqual({ title: 'Dune Messiah' });
-    req.flush({ ...DETAIL, title: 'Dune Messiah' });
     await settle();
-    await fixture.whenStable();
+    await page.rendered();
 
-    expect(el.querySelector('r2m-page-header')?.textContent).toContain('Dune Messiah');
+    expect(api.calls('PATCH', BASE).map((r) => r.body)).toEqual([{ title: 'Dune Messiah' }]);
+    expect(page.querySelector('.r2m-page-header__title')?.textContent).toBe('Dune Messiah');
+  });
+
+  it('the narrator-only switch PUTs the policy and refetches the detail', async () => {
+    const page = await render();
+    api.on('PUT', `${BASE}/narrator-only-mode`, undefined);
+    const toggle = page.querySelector<HTMLInputElement>('input[name=narratorOnly]')!;
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change'));
+    await settle();
+
+    expect(api.calls('PUT', `${BASE}/narrator-only-mode`).map((r) => r.body)).toEqual([
+      { enabled: false },
+    ]);
+    expect(api.calls('GET', BASE)).toHaveLength(2);
+  });
+
+  it('a refused narrator-only toggle snaps back to what the host holds', async () => {
+    const page = await render();
+    api.on('PUT', `${BASE}/narrator-only-mode`, () => problem(409, 'policy locked'));
+    const toggle = page.querySelector<HTMLInputElement>('input[name=narratorOnly]')!;
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change'));
+    await settle();
+    await page.rendered();
+
+    expect(toasts).toEqual(['problem: policy locked']);
+    expect(api.calls('GET', BASE)).toHaveLength(2);
+    expect(page.querySelector<HTMLInputElement>('input[name=narratorOnly]')?.checked).toBe(true);
+  });
+
+  it('shows the newest build on the export step', async () => {
+    const page = await render(status(), [
+      { fileName: 'dune.m4b', sizeBytes: 1, createdAt: '2026-09-19T10:00:00Z', isPartial: false },
+    ]);
+    const exportStep = page.querySelector('[data-step="export"]')!;
+    expect(text(exportStep)).toContain(`Last build: ${formatBuildDate('2026-09-19T10:00:00Z')}`);
+    expect(exportStep.classList.contains('r2m-pipeline__step--done')).toBe(true);
   });
 });

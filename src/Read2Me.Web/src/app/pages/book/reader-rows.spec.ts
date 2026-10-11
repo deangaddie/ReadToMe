@@ -1,6 +1,7 @@
-import { NarratorDto, ParagraphDto, ParagraphItemDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { NarratorDto, ParagraphDto, ParagraphItemDto } from '@app/api';
 import {
-  SpeakerContext,
+  type SpeakerContext,
   buildRows,
   itemSpeaker,
   paragraphSpeaker,

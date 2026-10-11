@@ -1,4 +1,5 @@
-import { CharacterDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { CharacterDto } from '@app/api';
 import { buildRoster } from './speaker-roster';
 
 const NARRATOR_ID = '00000000-0000-0000-0000-000000000001';
@@ -24,7 +25,11 @@ describe('buildRoster', () => {
   });
 
   it('a linked narrator is labelled with the character and listed once', () => {
-    const roster = buildRoster(CHARACTERS, { characterId: 'h', displayName: 'Hardin', isLinked: true });
+    const roster = buildRoster(CHARACTERS, {
+      characterId: 'h',
+      displayName: 'Hardin',
+      isLinked: true,
+    });
     expect(roster.map((e) => e.name)).toEqual(['Narrator (Hardin)', 'Narrator', 'Pirenne']);
     expect(roster[0]).toEqual({ id: 'h', name: 'Narrator (Hardin)', isNarrator: true });
     expect(new Set(roster.map((e) => e.id)).size).toBe(roster.length);

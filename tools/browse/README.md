@@ -1,33 +1,28 @@
 # tools/browse — drive a running ReadToMe in a browser
 
 For ad-hoc verification and bug hunting against a real host: write a short `.mjs` script with
-the helpers in `browse.mjs`, run it, read the log. Automated E2E tests do **not** live here —
-they are in `src/Read2Me.E2eTests` (xUnit + Microsoft.Playwright, in-proc host, fake AI), with
-Angular pages under `Tests/Web/` and native pages under `Tests/Native/`, both on `E2eTestBase`.
+the helpers in `browse.mjs`, run it under Bun, read the log. Automated E2E tests do **not** live
+here — they are in `src/Read2Me.E2eTests` (xUnit + Microsoft.Playwright, in-proc host, fake AI),
+with the browser tests under `Tests/Web/` on `E2eTestBase`.
 
 ```bash
 cd tools/browse && bun install        # playwright-core only; Chromium is the one the E2E tests installed
-cd tools/browse && npm ci             # the same under Node, which still works until the native cutover
 ```
 
-## Which app
+## Where the app is
 
-Two apps run side by side while the native migration is in progress (`docs/agents/web.md`,
-"Native app"): Angular at `/app` and the native app at `/app2`. `R2M_APP` picks the prefix
-`openWeb` uses, and `R2M_WEB` picks the origin serving it:
+`openWeb` opens a path under `/app`, the web app's prefix on the host and on its dev server.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `R2M_HOST` | `http://localhost:5000` | the host: the API, the hub, and the built bundles at `/app` and `/app2` |
-| `R2M_APP` | `/app` | the app to drive: `/app` (Angular) or `/app2` (native) |
-| `R2M_WEB` | by app: `:4200` for `/app`, `:4300` for `/app2` | the origin serving the app — a dev server, or `R2M_HOST` for the host's own bundle |
+| `R2M_HOST` | `http://localhost:5000` | the host: the API, the hub, and the built bundle at `/app` |
+| `R2M_WEB` | `http://localhost:4300` | the origin serving the app — the dev server, or `R2M_HOST` for the host's own bundle |
 
 Start what the script needs:
 
 ```bash
-dotnet run --project src/Read2Me.App --urls http://localhost:5000     # host (API, hub, /app and /app2 bundles)
-cd src/Read2Me.Web && npm start                                       # Angular dev server at :4200 (R2M_APP=/app, the default)
-cd src/Read2Me.Native && bun run dev                                  # native dev server at :4300 (R2M_APP=/app2)
+dotnet run --project src/Read2Me.App --urls http://localhost:5000     # host (API, hub, /app bundle)
+cd src/Read2Me.Web && bun run dev                                     # dev server at :4300, proxying to the host
 ```
 
 Then, from `tools/browse` (write scripts here or anywhere; they import `./browse.mjs`):
@@ -39,7 +34,7 @@ const { page, close } = await launch();
 const project = await throwawayProject('I\n\nFirst chapter.\n\nII\n\nSecond chapter.');
 try {
   await openWeb(page, `/projects/${project.folder}/book?mode=speakers`);
-  await openNodeMenu(page, page.locator('r2m-paragraph').nth(1).locator('.r2m-paragraph__menu'));
+  await openNodeMenu(page, page.locator('.r2m-paragraph').nth(1).locator('.r2m-paragraph__menu'));
   await chooseEntry(page, 'split');
   await answerPrompt(page, 'Two');
   // The import is one chapter, titled after the uploaded file (book.txt); the split adds "Two".
@@ -52,19 +47,14 @@ try {
 ```
 
 ```bash
-bun my-check.mjs > my-check.log 2>&1; cat my-check.log                 # or `node my-check.mjs`
+bun my-check.mjs > my-check.log 2>&1; cat my-check.log
 R2M_WEB=http://localhost:5000 bun my-check.mjs                         # no dev server: drive the host's own /app bundle
-R2M_APP=/app2 bun my-check.mjs                                         # the native app on its dev server (:4300)
-R2M_APP=/app2 R2M_WEB=http://localhost:5000 bun my-check.mjs           # the native app from the host's /app2 bundle
 ```
 
-`openWeb` waits for `app-root *` in both apps. The menu, prompt and confirm helpers
-(`openNodeMenu`, `chooseEntry`, `answerPrompt`, `acceptConfirm`) and `waitForTreeTitles` are
-written against the Angular reader's markup; the native shell keeps the same `r2m-*` element
-names, BEM classes and `data-*` attributes (`docs/agents/web.md`, "Conventions"), but the Material
-overlay panel (`.mat-mdc-menu-panel`) does not exist there, so `openNodeMenu` / `chooseEntry` need a
-native counterpart once the reader is ported. `browse.test.mjs` covers the `R2M_APP` / `R2M_WEB`
-resolution: `bun test` or `node --test browse.test.mjs`.
+`openWeb` waits for `app-root *`. `openNodeMenu` / `chooseEntry` drive the shared
+`r2m-node-menu` popover (`#r2m-node-menu-panel`, entries by `data-entry`), `answerPrompt` and
+`acceptConfirm` the `r2m-text-prompt-dialog` and `r2m-confirm-dialog`, and `waitForTreeTitles` the
+reader's structure tree. `browse.test.mjs` covers the `R2M_WEB` resolution: `bun test`.
 
 Rules that keep runs honest:
 

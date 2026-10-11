@@ -1,8 +1,8 @@
-// Verifies native-web 22 against the host's /app2 bundle on a real workspace book: the reader
+// Verifies native-web 22 against the host's /app bundle on a real workspace book: the reader
 // renders in the measured list, modes switch and mirror the URL, the chapter window loads on
 // scroll and caps at 5, the current chapter follows the top row, and anchoring holds over a
 // prepend and a resize. Read-only: it mutates nothing.
-//   MSYS_NO_PATHCONV=1 R2M_APP=/app2 R2M_WEB=http://localhost:5000 bun native-reader-verify.mjs
+//   R2M_WEB=http://localhost:5000 bun native-reader-verify.mjs
 import { launch, openWeb, waitFor } from './browse.mjs';
 
 const folder = process.argv[2] ?? 'dune';

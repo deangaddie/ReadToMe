@@ -1,65 +1,72 @@
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { ApiError, AttributionApi, BookApi } from '@app/api';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { PromptService } from '@app/ui/text-prompt-dialog/text-prompt-dialog';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { ProjectStore } from '../project/project-store';
-import { BookEditor } from './book-editor';
-import { BookStore } from './book-store';
+import { override, resetServices } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import { ConfirmService, PromptService } from '@app/ui/dialogs';
+import { ToastService } from '@app/ui/toast';
+import type { ParagraphStatusEntry } from '@app/live/live-messages';
+import type { ProjectStore } from '../project/project-store';
+import type { BookEditor } from './book-editor';
+import type { BookStore } from './book-store';
 import { SpeakerAssigner } from './speaker-assigner';
 
+/**
+ * Ported from the Angular TestBed spec, case for case: the app-wide collaborators go in through
+ * `override()`, the page-scoped ones (editor, stores) through the constructor.
+ */
 describe('SpeakerAssigner', () => {
   let assigner: SpeakerAssigner;
-  let run: ReturnType<typeof vi.fn>;
-  let execute: ReturnType<typeof vi.fn>;
-  let clearOutcome: ReturnType<typeof vi.fn>;
-  let bulkAssignPreview: ReturnType<typeof vi.fn>;
-  let characters: ReturnType<typeof vi.fn>;
-  let confirm: ReturnType<typeof vi.fn>;
-  let promptText: ReturnType<typeof vi.fn>;
+  let run: ReturnType<typeof mock>;
+  let execute: ReturnType<typeof mock>;
+  let clearOutcome: ReturnType<typeof mock>;
+  let bulkAssignPreview: ReturnType<typeof mock>;
+  let releaseNarrationPreview: ReturnType<typeof mock>;
+  let characters: ReturnType<typeof mock>;
+  let confirm: ReturnType<typeof mock>;
+  let promptText: ReturnType<typeof mock>;
   let toasts: { kind: string; message: unknown }[];
-  const paragraphs = signal<Record<string, { outcome?: { kind: 'Failed' } } | null>>({});
+  const paragraphs = signal<Record<string, ParagraphStatusEntry | null>>({});
 
   beforeEach(() => {
-    run = vi.fn().mockResolvedValue(true);
-    execute = vi.fn().mockResolvedValue({ newEntityId: 'c-new' });
-    clearOutcome = vi.fn().mockResolvedValue(undefined);
-    bulkAssignPreview = vi
-      .fn()
-      .mockResolvedValue({ paragraphsWithCharacterItems: 2, characterItems: 3 });
-    characters = vi.fn().mockResolvedValue([]);
-    confirm = vi.fn().mockResolvedValue(true);
-    promptText = vi.fn().mockResolvedValue(null);
+    resetServices();
+    run = mock(async () => true);
+    execute = mock(async () => ({ newEntityId: 'c-new' }));
+    clearOutcome = mock(async () => undefined);
+    bulkAssignPreview = mock(async () => ({ paragraphsWithCharacterItems: 2, characterItems: 3 }));
+    releaseNarrationPreview = mock(async () => ({
+      paragraphs: 41,
+      itemsWithAudio: 12,
+      speechMarkers: [
+        { marker: 'Q.', paragraphs: 21 },
+        { marker: 'A.', paragraphs: 20 },
+      ],
+    }));
+    characters = mock(async () => []);
+    confirm = mock(async () => true);
+    promptText = mock(async () => null);
     toasts = [];
     paragraphs.set({});
-    TestBed.configureTestingModule({
-      providers: [
-        SpeakerAssigner,
-        { provide: BookEditor, useValue: { run, execute } },
-        {
-          provide: BookStore,
-          useValue: {
-            folder: signal('dune'),
-            speakers: signal({ names: { h: 'Hardin' }, narrator: null }),
-          },
-        },
-        { provide: ProjectStore, useValue: { paragraphs } },
-        { provide: BookApi, useValue: { bulkAssignPreview, characters } },
-        { provide: AttributionApi, useValue: { clearOutcome } },
-        { provide: ConfirmService, useValue: { confirm } },
-        { provide: PromptService, useValue: { text: promptText } },
-        {
-          provide: ToastService,
-          useValue: {
-            success: (m: string) => toasts.push({ kind: 'success', message: m }),
-            info: (m: string) => toasts.push({ kind: 'info', message: m }),
-            problem: (p: unknown) => toasts.push({ kind: 'problem', message: p }),
-          },
-        },
-      ],
-    });
-    assigner = TestBed.inject(SpeakerAssigner);
+    override(BookApi, {
+      bulkAssignPreview,
+      releaseNarrationPreview,
+      characters,
+    } as unknown as BookApi);
+    override(AttributionApi, { clearOutcome } as unknown as AttributionApi);
+    override(ConfirmService, { confirm } as unknown as ConfirmService);
+    override(PromptService, { text: promptText } as unknown as PromptService);
+    override(ToastService, {
+      success: (m: string) => toasts.push({ kind: 'success', message: m }),
+      info: (m: string) => toasts.push({ kind: 'info', message: m }),
+      problem: (p: unknown) => toasts.push({ kind: 'problem', message: p }),
+    } as unknown as ToastService);
+    assigner = new SpeakerAssigner(
+      { run, execute } as unknown as BookEditor,
+      {
+        folder: signal('dune'),
+        speakers: signal({ names: { h: 'Hardin' }, narrator: null }),
+      } as unknown as BookStore,
+      { paragraphs } as unknown as ProjectStore,
+    );
   });
 
   it('an item pick posts SetItemCharacter, then forgets the paragraph outcome', async () => {
@@ -85,7 +92,11 @@ describe('SpeakerAssigner', () => {
   it('new character: creates by name and assigns the id the host resolved', async () => {
     await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, '  Gaal ');
     expect(execute).toHaveBeenCalledWith({ type: 'CreateCharacter', name: 'Gaal' });
-    expect(run).toHaveBeenCalledWith({ type: 'SetItemCharacter', itemId: 'i1', characterId: 'c-new' });
+    expect(run).toHaveBeenCalledWith({
+      type: 'SetItemCharacter',
+      itemId: 'i1',
+      characterId: 'c-new',
+    });
   });
 
   it('new character with a blank search asks for the name, then creates and assigns', async () => {
@@ -93,7 +104,11 @@ describe('SpeakerAssigner', () => {
     await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, '  ');
     expect(promptText).toHaveBeenCalledTimes(1);
     expect(execute).toHaveBeenCalledWith({ type: 'CreateCharacter', name: 'Gaal' });
-    expect(run).toHaveBeenCalledWith({ type: 'SetItemCharacter', itemId: 'i1', characterId: 'c-new' });
+    expect(run).toHaveBeenCalledWith({
+      type: 'SetItemCharacter',
+      itemId: 'i1',
+      characterId: 'c-new',
+    });
   });
 
   it('new character: a cancelled name prompt writes nothing', async () => {
@@ -140,7 +155,9 @@ describe('SpeakerAssigner', () => {
       characterId: 'h',
     });
     expect(clearOutcome.mock.calls).toEqual([['dune', 'p1']]);
-    expect(toasts).toEqual([{ kind: 'success', message: 'Assigned Hardin to 3 lines in 2 paragraphs.' }]);
+    expect(toasts).toEqual([
+      { kind: 'success', message: 'Assigned Hardin to 3 lines in 2 paragraphs.' },
+    ]);
   });
 
   it('bulk: a declined confirm writes nothing; no dialog in the selection is an info toast', async () => {
@@ -151,7 +168,9 @@ describe('SpeakerAssigner', () => {
     bulkAssignPreview.mockResolvedValueOnce({ paragraphsWithCharacterItems: 0, characterItems: 0 });
     await assigner.assign({ kind: 'selection', paragraphIds: ['p1'] }, 'h');
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(toasts).toEqual([{ kind: 'info', message: 'No dialog in the selection — nothing to assign.' }]);
+    expect(toasts).toEqual([
+      { kind: 'info', message: 'No dialog in the selection — nothing to assign.' },
+    ]);
   });
 
   it('a failed preview or outcome clear becomes a problem toast', async () => {
@@ -163,5 +182,86 @@ describe('SpeakerAssigner', () => {
       'preview broke',
       'clear broke',
     ]);
+  });
+
+  it('release: previews the scope, confirms with the count, markers and audio, then writes once', async () => {
+    const released = await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6');
+
+    expect(released).toBe(true);
+    expect(releaseNarrationPreview).toHaveBeenCalledWith('dune', 'Chapter', 'c6');
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Release 41 narration paragraphs in Chapter 6? Speech markers: Q. ×21, A. ×20. ' +
+          '12 have audio, which will be discarded.',
+      }),
+    );
+    expect(run.mock.calls).toEqual([
+      [{ type: 'ReleaseNarration', scope: 'Chapter', nodeId: 'c6' }],
+    ]);
+    expect(toasts).toEqual([
+      {
+        kind: 'success',
+        message: 'Released 41 paragraphs. Assign their speakers or attribute them.',
+      },
+    ]);
+  });
+
+  it('release: a part with nothing speech-like is a notice and sends no command', async () => {
+    releaseNarrationPreview.mockResolvedValueOnce({
+      paragraphs: 0,
+      itemsWithAudio: 0,
+      speechMarkers: [],
+    });
+    expect(await assigner.releaseNarration('Part', 'p1', 'Part 1')).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(toasts).toEqual([
+      { kind: 'info', message: 'No speech-like paragraphs here — nothing to release.' },
+    ]);
+  });
+
+  it('release: one paragraph without audio is written with no confirm', async () => {
+    releaseNarrationPreview.mockResolvedValueOnce({
+      paragraphs: 1,
+      itemsWithAudio: 0,
+      speechMarkers: [],
+    });
+    expect(await assigner.releaseNarration('Paragraph', 'p7', 'Q: Your name?')).toBe(true);
+    expect(releaseNarrationPreview).toHaveBeenCalledWith('dune', 'Paragraph', 'p7');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(run.mock.calls).toEqual([
+      [{ type: 'ReleaseNarration', scope: 'Paragraph', nodeId: 'p7' }],
+    ]);
+  });
+
+  it('release: one paragraph with audio confirms first, naming the audio', async () => {
+    releaseNarrationPreview.mockResolvedValueOnce({
+      paragraphs: 1,
+      itemsWithAudio: 1,
+      speechMarkers: [],
+    });
+    confirm.mockResolvedValueOnce(false);
+    expect(await assigner.releaseNarration('Paragraph', 'p7', 'Q: Your name?')).toBe(false);
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Release this narration paragraph? 1 item has audio, which will be discarded.',
+      }),
+    );
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('release: a declined confirm, a refused write or a failed preview releases nothing', async () => {
+    confirm.mockResolvedValueOnce(false);
+    expect(await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6')).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+
+    run.mockResolvedValueOnce(false);
+    expect(await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6')).toBe(false);
+
+    releaseNarrationPreview.mockRejectedValueOnce(new ApiError(500, 'Boom', 'preview broke'));
+    expect(await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6')).toBe(false);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(toasts.map((t) => t.kind)).toEqual(['problem']);
   });
 });

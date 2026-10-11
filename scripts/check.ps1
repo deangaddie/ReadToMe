@@ -5,22 +5,20 @@ The PR gate: runs the stages CI runs, in the same order, and stops at the first 
 .DESCRIPTION
 Stages, in order (each one is a separate named step in .github/workflows/ci.yml):
 
-  1. build-native.ps1 -Check   lint + typecheck + api:check + icons:check + bun tests + build into wwwroot/app2
-  2. build-web.ps1             a plain Angular build into wwwroot/app (the Angular E2E tests still need the bundle)
-  3. dotnet build              the whole solution
-  4. unit tests                src/Read2Me.Tests
-  5. E2E in Chromium           src/Read2Me.E2eTests with R2M_E2E_BROWSER=chromium
-  6. E2E in Firefox            src/Read2Me.E2eTests with R2M_E2E_BROWSER=firefox (Angular classes skip, native run)
+  1. build-web.ps1 -Check      lint + typecheck + api:check + icons:check + bun tests + build into wwwroot/app
+  2. dotnet build              the whole solution
+  3. unit tests                src/Read2Me.Tests
+  4. E2E in Chromium           src/Read2Me.E2eTests with R2M_E2E_BROWSER=chromium
+  5. E2E in Firefox            src/Read2Me.E2eTests with R2M_E2E_BROWSER=firefox
 
 Before the E2E stages it installs any Playwright browser the driver wants that is not in the Playwright cache
 yet (Firefox on first use; Chromium too on a fresh machine). The cache is PLAYWRIGHT_BROWSERS_PATH when set,
 else Playwright's per-OS default.
 
-Two deliberate differences from CI: the Angular stage here is a plain build, while CI keeps `npm run check` for
-Angular until the native cutover; and this builds Debug by default (what the IDE builds) while CI builds Release.
+One deliberate difference from CI: this builds Debug by default (what the IDE builds) while CI builds Release.
 Pass -Configuration Release to match CI exactly.
 
-Pass -SkipInstall to skip `bun install` and `npm ci` when node_modules is already current (local loops).
+Pass -SkipInstall to skip `bun install` when node_modules is already current (local loops).
 
 .EXAMPLE
 pwsh scripts/check.ps1                 # before opening a PR
@@ -118,11 +116,8 @@ $skip = @{}
 if ($SkipInstall) { $skip.SkipInstall = $true }
 
 try {
-    Invoke-Stage 'Native check and build (build-native.ps1 -Check)' {
-        & (Join-Path $PSScriptRoot 'build-native.ps1') -Check @skip
-    }
-    Invoke-Stage 'Web build (build-web.ps1)' {
-        & (Join-Path $PSScriptRoot 'build-web.ps1') @skip
+    Invoke-Stage 'Web check and build (build-web.ps1 -Check)' {
+        & (Join-Path $PSScriptRoot 'build-web.ps1') -Check @skip
     }
     Invoke-Stage "dotnet build ($Configuration)" {
         dotnet build $solution --configuration $Configuration

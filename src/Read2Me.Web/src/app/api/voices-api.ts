@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   CharacterVoicesDto,
@@ -22,9 +22,8 @@ export const MAX_VOICE_AUDIO_BYTES = 200 * 1024 * 1024;
  * the design-prompt render / generate pair, single-voice synthesis and the two voice batches.
  * Voice edits (rename, prompt, overrides, source, delete…) go through `BookApi.execute`.
  */
-@Injectable({ providedIn: 'root' })
 export class VoicesApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   list(folder: string, characterId: Guid): Promise<CharacterVoicesDto> {
     return this.api.get<CharacterVoicesDto>(

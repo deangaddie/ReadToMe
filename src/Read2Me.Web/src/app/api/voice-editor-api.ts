@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   ApplyPreviewRequest,
@@ -20,9 +20,8 @@ export function voiceOriginalUrl(folder: string, voiceId: Guid): string {
  * `VoiceEditorEndpoints.cs` (ticket 18): the voice-scope step catalog, preview → per-stage WAVs,
  * apply by `previewId` (the host guarantees you apply what you heard), restore.
  */
-@Injectable({ providedIn: 'root' })
 export class VoiceEditorApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   /** The voice-scope steps in chain order, each with dials and defaults. */
   catalog(): Promise<StepCatalogEntryDto[]> {

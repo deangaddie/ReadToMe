@@ -337,11 +337,8 @@ Infra/ContainerHealth/test-results/
 Infra/ContainerHealth/playwright-report/
 Infra/ContainerHealth/dist/
 
-# Angular front end (src/Read2Me.Web) build + cache output
+# Web front end (src/Read2Me.Web) build output
 src/Read2Me.App/wwwroot/app/
-src/Read2Me.App/wwwroot/app2/
-.angular/
-src/Read2Me.Web/dist/
 
 # Visual Studio 6 build log
 *.plg
@@ -414,7 +411,6 @@ ASALocalRun/
 /scripts/*.ps1
 # ...except the checked-in front-end build scripts and the PR gate (see docs/agents/web.md)
 !/scripts/build-web.ps1
-!/scripts/build-native.ps1
 !/scripts/check.ps1
 dotnet-format-analyzers-report.json
 roslynator*.txt

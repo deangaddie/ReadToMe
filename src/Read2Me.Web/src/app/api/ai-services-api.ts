@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import { ApiError } from './api-error';
 import type { AiServiceDto, AiServiceStatusDto } from './dtos';
@@ -8,9 +8,8 @@ import type { AiServiceDto, AiServiceStatusDto } from './dtos';
  * lifecycle ops. An op answers 202 and its outcome arrives as a `serviceStatus` hub message
  * (`{ name, status, op, ok, error? }`) — the store, not the caller, learns how it went.
  */
-@Injectable({ providedIn: 'root' })
 export class AiServicesApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   list(): Promise<AiServiceDto[]> {
     return this.api.get<AiServiceDto[]>('/api/ai-services');

@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import { duplicateName, isAbsoluteUrl } from './config-form';
 
 describe('config form helpers', () => {

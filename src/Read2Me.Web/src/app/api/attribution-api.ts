@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   AttributionQueueSnapshot,
@@ -11,9 +11,8 @@ import type {
 import { projectUrl } from './projects-api';
 
 /** `AttributionEndpoints.cs` + the attribution half of `QueueStatusEndpoints.cs`. */
-@Injectable({ providedIn: 'root' })
 export class AttributionApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   /** 202 with the number of paragraphs queued; 400 on an unknown level. */
   enqueue(folder: string, request: NodeEnqueueRequest): Promise<EnqueueResponse> {

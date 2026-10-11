@@ -3,19 +3,18 @@ using Microsoft.Playwright;
 namespace Read2Me.E2eTests.Infrastructure;
 
 /// <summary>
-/// Base for tests that drive a web app on the in-proc host: a fresh browser context and page per
-/// test, over the collection's shared fixture, fakes and seeders. A class declares the app it
-/// drives through <see cref="WebApp"/> (Angular at <c>/app</c> by default, or the native app at
-/// <c>/app2</c>); <see cref="GotoAppAsync"/> takes paths relative to that app's prefix.
+/// Base for tests that drive the web app on the in-proc host: a fresh browser context and page per
+/// test, over the collection's shared fixture, fakes and seeders. <see cref="GotoAppAsync"/> takes
+/// paths relative to the app's prefix, <c>/app</c>.
 /// <para>
-/// The host's web root is a throwaway directory, so the bundle the app's build emitted into
-/// <c>src/Read2Me.App/wwwroot/&lt;app&gt;</c> is copied in before every test (other tests in the
+/// The host's web root is a throwaway directory, so the bundle the web build emitted into
+/// <c>src/Read2Me.App/wwwroot/app</c> is copied in before every test (other tests in the
 /// collection stage and remove stub bundles there). Without a built bundle the test is skipped with
-/// the command that produces one, never failed: the .NET build touches neither front end.
+/// the command that produces one, never failed: the .NET build does not touch the front end.
 /// </para>
 /// <para>
-/// The browser comes from <see cref="PlaywrightFixture"/> (<c>R2M_E2E_BROWSER</c>). Native classes
-/// run in Chromium and Firefox; Angular classes are skipped under Firefox.
+/// The browser comes from <see cref="PlaywrightFixture"/> (<c>R2M_E2E_BROWSER</c>); every class
+/// runs in Chromium and Firefox.
 /// </para>
 /// <para>
 /// On failure, saves a Playwright trace (.zip), a final screenshot, and the session video under
@@ -25,14 +24,9 @@ namespace Read2Me.E2eTests.Infrastructure;
 /// </summary>
 public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAsyncLifetime
 {
-    /// <summary>
-    /// Where each app's build puts its bundle (<c>src/Read2Me.App/wwwroot/app</c> or <c>app2</c>),
-    /// found from the test binary upwards; null when that app has not been built.
-    /// </summary>
-    public static string? BuiltBundleDir(WebApp webApp) => FindBuiltBundle(webApp);
-
-    /// <summary>The app this class drives. Native test classes override it with <see cref="WebApp.Native"/>.</summary>
-    protected virtual WebApp WebApp => WebApp.Angular;
+    /// <summary>The host prefix the web app is served under, and its bundle folder in the web root.</summary>
+    private const string AppPrefix = "/app";
+    private const string BundleFolder = "app";
 
     protected E2eAppFixture App => app;
     protected IPage Page { get; private set; } = null!;
@@ -41,10 +35,6 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
 
     public async ValueTask InitializeAsync()
     {
-        // Before any seeding or browser work: an Angular class has nothing to do under Firefox.
-        if (WebApp == WebApp.Angular && pw.IsFirefox)
-            Assert.Skip($"Angular classes run in Chromium only; unset {PlaywrightFixture.BrowserVariable} or set it to chromium.");
-
         // The app fixture is collection-shared and tests mutate its fakes (e.g. shutting the fake
         // service down makes the AI pre-flight sheet block every later queue click, and leaves the
         // shutdown in the op log a later test asserts on). Restore defaults so test order can't
@@ -99,20 +89,19 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
     }
 
     /// <summary>
-    /// Stages the built bundle for <see cref="WebApp"/> and navigates to an app-relative path
-    /// (<c>"projects/x/book"</c>), returning once the live hub socket has opened and the shell has
-    /// rendered, the point after which receipts drive the screen. Skips the test
-    /// when that app has no built bundle (the Angular-under-Firefox skip happens in <see cref="InitializeAsync"/>).
+    /// Stages the built bundle and navigates to an app-relative path (<c>"projects/x/book"</c>),
+    /// returning once the live hub socket has opened and the shell has rendered, the point after
+    /// which receipts drive the screen. Skips the test when the app has no built bundle.
     /// </summary>
     protected async Task GotoAppAsync(string path)
     {
-        var bundle = BuiltBundleDir(WebApp);
+        var bundle = FindBuiltBundle();
         if (bundle is null)
-            Assert.Skip($"No {WebApp} bundle at src/Read2Me.App/wwwroot/{WebApp.BundleFolder()} — run {WebApp.BuildCommand()} first.");
+            Assert.Skip($"No web bundle at src/Read2Me.App/wwwroot/{BundleFolder} — run `pwsh scripts/build-web.ps1` (or `bun run build` in src/Read2Me.Web) first.");
 
-        StageBundle(bundle, Path.Combine(App.WebRootDir, WebApp.BundleFolder()));
+        StageBundle(bundle, Path.Combine(App.WebRootDir, BundleFolder));
 
-        // Both apps open the live hub on boot; receipts drive the screen from then on.
+        // The app opens the live hub on boot; receipts drive the screen from then on.
         var hub = Page.WaitForWebSocketAsync(new PageWaitForWebSocketOptions { Timeout = 15_000 });
         await Page.GotoAsync(AppPath(path));
         Assert.Contains("/hubs/live", (await hub).Url);
@@ -120,15 +109,15 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
     }
 
     /// <summary>
-    /// The host path for an app-relative path: <c>"projects/x"</c> becomes <c>/app/projects/x</c> or
-    /// <c>/app2/projects/x</c>, and <c>""</c> the app root. For direct <c>Page.GotoAsync</c> calls
-    /// and URL assertions. A <c>/</c>-prefixed path is a mistake and throws.
+    /// The host path for an app-relative path: <c>"projects/x"</c> becomes <c>/app/projects/x</c>,
+    /// and <c>""</c> the app root. For direct <c>Page.GotoAsync</c> calls and URL assertions. A
+    /// <c>/</c>-prefixed path is a mistake and throws.
     /// </summary>
-    protected string AppPath(string relativePath)
+    protected static string AppPath(string relativePath)
     {
         if (relativePath.StartsWith('/'))
             throw new ArgumentException($"App paths are relative to the app prefix; got '{relativePath}'.", nameof(relativePath));
-        return $"{WebApp.Prefix()}/{relativePath}";
+        return $"{AppPrefix}/{relativePath}";
     }
 
     protected static ILocatorAssertions Expect(ILocator locator) => Assertions.Expect(locator);
@@ -145,12 +134,12 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
         }
     }
 
-    private static string? FindBuiltBundle(WebApp webApp)
+    private static string? FindBuiltBundle()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
             if (!File.Exists(Path.Combine(dir.FullName, "Read2Me.slnx"))) continue;
-            var bundle = Path.Combine(dir.FullName, "Read2Me.App", "wwwroot", webApp.BundleFolder());
+            var bundle = Path.Combine(dir.FullName, "Read2Me.App", "wwwroot", BundleFolder);
             return File.Exists(Path.Combine(bundle, "index.html")) ? bundle : null;
         }
         return null;
