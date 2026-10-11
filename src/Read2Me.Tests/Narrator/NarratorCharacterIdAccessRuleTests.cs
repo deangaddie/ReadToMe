@@ -75,14 +75,6 @@ namespace Read2Me.Tests.Narrator
                 // Migrations and the model snapshot are generated schema, not consumers.
                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}"));
 
-        private static string SourceRoot()
-        {
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Read2Me.slnx")))
-                dir = dir.Parent;
-
-            Assert.NotNull(dir);
-            return dir!.FullName;
-        }
+        private static string SourceRoot() => SourceTree.Root;
     }
 }

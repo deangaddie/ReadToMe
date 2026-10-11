@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using Read2Me.TestUtils;
 
 namespace Read2Me.E2eTests.Infrastructure;
 
@@ -136,12 +137,7 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
 
     private static string? FindBuiltBundle()
     {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            if (!File.Exists(Path.Combine(dir.FullName, "Read2Me.slnx"))) continue;
-            var bundle = Path.Combine(dir.FullName, "Read2Me.App", "wwwroot", BundleFolder);
-            return File.Exists(Path.Combine(bundle, "index.html")) ? bundle : null;
-        }
-        return null;
+        var bundle = Path.Combine(SourceTree.Root, "Read2Me.App", "wwwroot", BundleFolder);
+        return File.Exists(Path.Combine(bundle, "index.html")) ? bundle : null;
     }
 }
