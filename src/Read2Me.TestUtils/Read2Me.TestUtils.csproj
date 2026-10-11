@@ -5,6 +5,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The src folder, recorded at build time: tests that read source files find it from here, so
+         they pass wherever the binaries are built (artifacts path, CI output dir). -->
+    <AssemblyMetadata Include="Read2Me.SourceRoot" Value="$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="FractionalIndexing" Version="1.0.1" />
   </ItemGroup>
 

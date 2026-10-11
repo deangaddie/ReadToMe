@@ -79,14 +79,6 @@ namespace Read2Me.Tests.Narrator
                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}Read2Me.E2eTests{Path.DirectorySeparatorChar}"))
                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}Read2Me.TestUtils{Path.DirectorySeparatorChar}"));
 
-        private static string SourceRoot()
-        {
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Read2Me.slnx")))
-                dir = dir.Parent;
-
-            Assert.NotNull(dir);
-            return dir!.FullName;
-        }
+        private static string SourceRoot() => SourceTree.Root;
     }
 }
