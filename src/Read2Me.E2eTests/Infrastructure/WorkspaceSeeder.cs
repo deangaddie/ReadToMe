@@ -246,6 +246,17 @@ public static class WorkspaceSeeder
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Gives one item a delivery cue, as attribution would have stamped it.</summary>
+    public static async Task SeedDeliveryCueAsync(
+        IServiceProvider services, string workspaceDir, string folderName, Guid itemId, string cue)
+    {
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        await using var db = await factory.CreateAsync(Path.Combine(workspaceDir, folderName));
+
+        db.ParagraphItems.First(i => i.Id == itemId).VoiceInstructions = cue;
+        await db.SaveChangesAsync();
+    }
+
     public static async Task SeedAllItemAudioAsync(IServiceProvider services, string workspaceDir, string folderName)
     {
         var folderPath = Path.Combine(workspaceDir, folderName);

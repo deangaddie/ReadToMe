@@ -48,6 +48,26 @@ public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTest
     }
 
     [Fact]
+    public async Task Delivery_cue_shows_under_the_item_in_Speakers_mode_and_not_in_Read()
+    {
+        var builder = await App.SeedProjectAsync("native-cue", "Native Cue Book", "A. Author");
+        await App.SeedDeliveryCueAsync("native-cue", builder.ItemId("line1"), "whispered");
+
+        await GotoAppAsync("projects/native-cue/book?mode=speakers");
+
+        // Only the cued item shows one, under its text.
+        var line = Page.Locator($"[data-item-id='{builder.ItemId("line1")}']");
+        await Expect(line.Locator("[data-testid=delivery-cue]")).ToHaveTextAsync("whispered");
+        await Expect(Page.Locator("[data-testid=delivery-cue]")).ToHaveCountAsync(1);
+
+        // Read mode stays free of cues.
+        var toggle = Page.GetByRole(AriaRole.Radiogroup, new() { Name = "Reader mode" });
+        await toggle.GetByText("Read").ClickAsync();
+        await Expect(Page.Locator(".r2m-paragraph")).ToHaveCountAsync(3);
+        await Expect(Page.GetByText("whispered")).ToHaveCountAsync(0);
+    }
+
+    [Fact]
     public async Task Edit_title_from_the_tree_menu_updates_tree_and_reader_and_the_host()
     {
         var builder = await App.SeedProjectAsync("native-title", "Native Title Book", "A. Author");
