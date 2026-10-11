@@ -106,27 +106,36 @@ public class SelectionApiTests(E2eAppFixture app)
     }
 
     [Fact]
-    public async Task Release_narration_previews_then_makes_the_narration_paragraph_selectable()
+    public async Task Release_narration_previews_then_makes_the_speech_marked_paragraphs_selectable()
     {
         var folder = $"api-sel-release-{Guid.NewGuid():N}";
-        var book = await app.SeedThreeDialogParagraphProjectAsync(folder, "Release Book", "Author");
+        var book = await app.SeedTranscriptProjectAsync(folder, "Release Book", "Author");
         var chapter = book.ChapterId("ch1");
 
-        // p1 is the chapter's one narration-only paragraph.
+        // The chapter's ten Q:/A: paragraphs carry speech markers; its plain narration does not.
         var response = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
             new { scope = "Chapter", nodeId = chapter });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var preview = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal(1, preview.GetProperty("paragraphs").GetInt32());
+        Assert.Equal(10, preview.GetProperty("paragraphs").GetInt32());
         Assert.Equal(0, preview.GetProperty("itemsWithAudio").GetInt32());
 
         var release = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
             new { type = "ReleaseNarration", scope = "Chapter", nodeId = chapter });
         Assert.Equal(HttpStatusCode.OK, release.StatusCode);
 
-        var ids = await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapter}/paragraph-ids?unprocessedOnly=true");
-        Assert.Contains(book.ParagraphId("p1"), ids.EnumerateArray().Select(r => r.GetProperty("id").GetGuid()));
+        var ids = (await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapter}/paragraph-ids?unprocessedOnly=true"))
+            .EnumerateArray().Select(r => r.GetProperty("id").GetGuid()).ToList();
+        Assert.Contains(book.ParagraphId("pq1"), ids);
+        Assert.DoesNotContain(book.ParagraphId("pplain"), ids);
+
+        // A Paragraph release is unfiltered: the plain narration can still be released on its own.
+        var one = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/narration/release-preview",
+            new { scope = "Paragraph", nodeId = book.ParagraphId("pplain") });
+        var onePreview = JsonDocument.Parse(await one.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(1, onePreview.GetProperty("paragraphs").GetInt32());
 
         // A whole-book release is not a scope.
         var volume = await Http.PostAsJsonAsync(

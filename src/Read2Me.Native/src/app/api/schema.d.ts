@@ -663,7 +663,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release, and how many of their items have audio it would discard. */
+        /** What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), and how many of their items have audio it would discard. */
         post: {
             parameters: {
                 query?: never;

@@ -252,9 +252,9 @@ namespace Read2Me.Services
 
         /// <summary>
         /// What a Release narration over the scope would write: the narration-only paragraphs it
-        /// would release and how many of their items have audio it would discard. Counted with the
-        /// command's own predicate (<c>NarrationRelease</c>), so the confirm matches the write. An
-        /// unknown node is zeroes.
+        /// would release (for a Chapter or Part, only the speech-marked ones) and how many of their
+        /// items have audio it would discard. Counted from the command's own selection
+        /// (<c>NarrationRelease</c>), so the confirm matches the write. An unknown node is zeroes.
         /// </summary>
         Task<NarrationReleasePreview> GetNarrationReleasePreviewAsync(
             ProjectFolderId folderId, NarrationReleaseScope scope, Guid nodeId, CancellationToken ct = default);

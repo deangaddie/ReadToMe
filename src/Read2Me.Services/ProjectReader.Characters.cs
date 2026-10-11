@@ -316,12 +316,9 @@ namespace Read2Me.Services
             ProjectFolderId folderId, NarrationReleaseScope scope, Guid nodeId, CancellationToken ct = default)
         {
             var db = await _session.OpenAsync(folderId);
-            var perParagraph = await NarrationRelease.ReleasableItems(db, scope, nodeId)
-                .GroupBy(i => i.ParagraphId)
-                .Select(g => g.Count(i => i.AudioFileName != null))
-                .ToListAsync(ct);
+            var selection = await NarrationRelease.SelectAsync(db, scope, nodeId, ct);
 
-            return new NarrationReleasePreview(perParagraph.Count, perParagraph.Sum());
+            return new NarrationReleasePreview(selection.Paragraphs.Count, selection.Items.Count(i => i.HasAudio));
         }
 
         public async Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default)

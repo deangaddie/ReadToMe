@@ -189,14 +189,12 @@ public sealed class ReleaseNarrationMutationImplementation
             throw new BookMutationRejectedException(
                 BookMutationRejection.Validation, $"Unknown release scope '{mutation.Scope}'.");
 
-        var affected = await NarrationRelease.ReleasableItems(db, mutation.Scope, mutation.NodeId)
-            .Select(i => new { i.Id, i.ParagraphId, HadAudio = i.AudioFileName != null })
-            .ToListAsync(ct);
+        var selection = await NarrationRelease.SelectAsync(db, mutation.Scope, mutation.NodeId, ct);
 
-        if (affected.Count == 0) return BookMutationEffects.Nothing;
+        if (selection.Paragraphs.Count == 0) return BookMutationEffects.Nothing;
 
         // Updated by id rather than by re-running the predicate: the write is exactly the receipt.
-        var ids = affected.Select(a => a.Id).ToList();
+        var ids = selection.Items.Select(i => i.Id).ToList();
         await db.ParagraphItems
             .Where(i => ids.Contains(i.Id))
             .ExecuteUpdateAsync(s => s
@@ -204,9 +202,9 @@ public sealed class ReleaseNarrationMutationImplementation
                 .SetProperty(i => i.AudioFileName, (string?)null), ct);
 
         return SpeakerEffects.Stamped(
-            [.. affected.Select(a => a.ParagraphId).Distinct()],
+            [.. selection.Paragraphs.Select(p => p.ParagraphId)],
             ids,
-            affected.Any(a => a.HadAudio));
+            selection.Items.Any(i => i.HasAudio));
     }
 }
 

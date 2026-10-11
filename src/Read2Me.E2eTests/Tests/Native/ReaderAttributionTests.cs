@@ -116,17 +116,23 @@ public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E
         await node.Locator(".r2m-node-menu__trigger").ClickAsync();
         await Page.Locator("[role=menu] [data-entry='release-narration']").ClickAsync();
         var confirm = Page.Locator("r2m-confirm-dialog");
-        await Expect(confirm).ToContainTextAsync("Release 4 narration paragraphs in");
+        await Expect(confirm).ToContainTextAsync("Release 10 narration paragraphs in");
         await Expect(confirm).Not.ToContainTextAsync("discarded");
         await confirm.Locator(".r2m-confirm-dialog__confirm").ClickAsync();
 
         // The receipt converges the page: Q/A rows are unattributed dialog with checkboxes, the
-        // speech tag stays narration, and the badge counts the released paragraphs.
-        await Expect(boxes).ToHaveCountAsync(5);
-        foreach (var item in new[] { "q1", "a1", "q2", "a2" })
-            await Expect(Chip(item, "unknown")).ToHaveCountAsync(1);
+        // plain narration and the speech tag stay narration, and the badge counts the released
+        // paragraphs.
+        await Expect(boxes).ToHaveCountAsync(11);
+        for (var n = 1; n <= 5; n++)
+        {
+            await Expect(Chip($"q{n}", "unknown")).ToHaveCountAsync(1);
+            await Expect(Chip($"a{n}", "unknown")).ToHaveCountAsync(1);
+        }
+        await Expect(Chip("plain", "narration")).ToHaveCountAsync(1);
+        await Expect(Row("pplain").Locator("input[type=checkbox]")).ToHaveCountAsync(0);
         await Expect(Chip("tag", "narration")).ToHaveCountAsync(1);
-        await Expect(node.Locator(".r2m-count-badge--attribution .r2m-count-badge__count")).ToHaveTextAsync("5");
+        await Expect(node.Locator(".r2m-count-badge--attribution .r2m-count-badge__count")).ToHaveTextAsync("11");
 
         // Bulk-assign Alice to the answers.
         await Row("pa1").Locator("input[type=checkbox]").CheckAsync();

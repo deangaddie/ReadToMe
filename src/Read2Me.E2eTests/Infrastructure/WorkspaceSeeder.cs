@@ -179,22 +179,31 @@ public static class WorkspaceSeeder
                     "“Only me,” came the reply.", characterId: null)));
 
     /// <summary>
-    /// Creates a project whose chapter is a trial transcript: four unquoted <c>Q:</c>/<c>A:</c>
-    /// paragraphs the quote scan stamped as narration ("q1", "a1", "q2", "a2"), then one quoted
+    /// Creates a project whose chapter is a trial transcript: ten unquoted <c>Q:</c>/<c>A:</c>
+    /// paragraphs the quote scan stamped as narration ("pq1"…"pq5" with items "q1"…"q5", "pa1"…"pa5"
+    /// with "a1"…"a5"), one plain narration paragraph ("pplain", item "plain"), then one quoted
     /// paragraph whose speech tag ("tag") is narration beside an unattributed line ("quote").
-    /// Release narration frees the four and leaves the tag alone.
+    /// A Chapter release frees the ten — each marker repeats five times — and leaves the plain
+    /// narration and the tag alone.
     /// </summary>
     public static Task<BookHierarchyBuilder> SeedTranscriptProjectAsync(
         IServiceProvider services, string workspaceDir, string folderName,
         string title, string author, string characterName = "Alice") =>
-        SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c => c
-            .AddParagraph("pq1", p => p.AddNarration("q1", "Q: Your name?"))
-            .AddParagraph("pa1", p => p.AddNarration("a1", "A: Hari Seldon."))
-            .AddParagraph("pq2", p => p.AddNarration("q2", "Q: Your occupation?"))
-            .AddParagraph("pa2", p => p.AddNarration("a2", "A: Psychohistorian."))
-            .AddParagraph("pquoted", p => p
+        SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c =>
+        {
+            string[] questions = ["Your name?", "Your occupation?", "Your age?", "Your home?", "Your purpose?"];
+            string[] answers = ["Hari Seldon.", "Psychohistorian.", "Forty.", "Trantor.", "To save it."];
+            for (var n = 1; n <= 5; n++)
+            {
+                var i = n;
+                c.AddParagraph($"pq{i}", p => p.AddNarration($"q{i}", $"Q: {questions[i - 1]}"))
+                 .AddParagraph($"pa{i}", p => p.AddNarration($"a{i}", $"A: {answers[i - 1]}"));
+            }
+            c.AddParagraph("pplain", p => p.AddNarration("plain", "The court fell silent."))
+             .AddParagraph("pquoted", p => p
                 .AddRawItem("quote", ParagraphItemType.Speech, "“Order,”", characterId: null)
-                .AddNarration("tag", "the Commissioner said.")));
+                .AddNarration("tag", "the Commissioner said."));
+        });
 
     /// One volume, one chapter named "ch1", one known character; the caller fills the chapter.
     private static async Task<BookHierarchyBuilder> SeedBookAsync(

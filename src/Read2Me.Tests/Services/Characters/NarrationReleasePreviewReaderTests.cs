@@ -7,6 +7,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.Characters;
 using Read2Me.Services.Commands.Handlers;
 using Read2Me.Services.IO;
 using Read2Me.Services.Mutations;
@@ -49,9 +50,10 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         /// <summary>
-        /// ch1: q (narration, audio), a (two narration items, one with audio), tagged (dialog +
-        /// narration tag with audio), pause. ch2 (same part): one narration-only paragraph with audio.
-        /// part2/ch3: one narration-only paragraph.
+        /// ch1: q1–q5 (<c>Q.</c>, q1 with audio), a1–a4 (<c>A.</c>), a5 (<c>A.</c> then a second
+        /// narration item with audio), tagged (dialog + narration tag with audio), pause, and plain
+        /// narration with audio. ch2 (same part): four <c>Q.</c> paragraphs, one short of the gate,
+        /// q1 with audio. part2/ch3: one plain narration paragraph.
         /// </summary>
         private async Task<BookHierarchyBuilder> SeedAsync()
         {
@@ -59,36 +61,41 @@ namespace Read2Me.Tests.Services.Characters
             b.WithCharacter("alice", new Character { Id = AliceId, Name = "Alice" });
             await b.AddVolume("vol", v => v
                 .AddPart("part1", p => p
-                    .AddChapter("ch1", c => c
-                        .AddParagraph("q", p => p.AddNarration("q-item", "Q: Who are you?"))
-                        .AddParagraph("a", p => p
-                            .AddNarration("a-item-1", "A: Hari Seldon.")
-                            .AddNarration("a-item-2", "A mathematician."))
-                        .AddParagraph("tagged", p => p
-                            .AddRawItem("tagged-dialog", ParagraphItemType.Speech, "\"Hi,\"", AliceId)
-                            .AddNarration("tagged-tag", "he said."))
-                        .AddParagraph("pause", p => p.AddPause("pause-item")))
-                    .AddChapter("ch2", c => c
-                        .AddParagraph("ch2-p", p => p.AddNarration("ch2-item", "Elsewhere."))))
+                    .AddChapter("ch1", c =>
+                    {
+                        c.AddTranscript("q", "Q.", 5);
+                        c.AddTranscript("a", "A.", 4);
+                        c.AddParagraph("a5", p => p
+                                .AddNarration("a5-item-1", "A. Hari Seldon.")
+                                .AddNarration("a5-item-2", "A mathematician."))
+                            .AddParagraph("tagged", p => p
+                                .AddRawItem("tagged-dialog", ParagraphItemType.Speech, "\"Hi,\"", AliceId)
+                                .AddNarration("tagged-tag", "he said."))
+                            .AddParagraph("pause", p => p.AddPause("pause-item"))
+                            .AddParagraph("plain", p => p.AddNarration("plain-item", "Silence fell."));
+                    })
+                    .AddChapter("ch2", c => c.AddTranscript("ch2-q", "Q.", 4)))
                 .AddPart("part2", p => p
                     .AddChapter("ch3", c => c
                         .AddParagraph("ch3-p", p => p.AddNarration("ch3-item", "Later.")))))
                 .BuildAsync();
 
             await using var db = await OpenDbAsync();
-            foreach (var name in new[] { "q-item", "a-item-2", "tagged-tag", "ch2-item" })
+            foreach (var name in new[] { "q1-item", "a5-item-2", "tagged-tag", "plain-item", "ch2-q1-item" })
                 (await db.ParagraphItems.FindAsync(b.ItemId(name)))!.AudioFileName = $"audio/{name}.wav";
             await db.SaveChangesAsync();
             return b;
         }
 
         [Theory]
-        [InlineData(NarrationReleaseScope.Chapter, "ch1", 2, 2)]
-        [InlineData(NarrationReleaseScope.Part, "part1", 3, 3)]
-        [InlineData(NarrationReleaseScope.Paragraph, "a", 1, 1)]
+        [InlineData(NarrationReleaseScope.Chapter, "ch1", 10, 2)]
+        [InlineData(NarrationReleaseScope.Part, "part1", 10, 2)]   // ch2's four Q. are short of the gate
+        [InlineData(NarrationReleaseScope.Chapter, "ch2", 0, 0)]
+        [InlineData(NarrationReleaseScope.Paragraph, "a5", 1, 1)]
+        [InlineData(NarrationReleaseScope.Paragraph, "plain", 1, 1)] // a Paragraph release is unfiltered
         [InlineData(NarrationReleaseScope.Paragraph, "tagged", 0, 0)]
         [InlineData(NarrationReleaseScope.Paragraph, "pause", 0, 0)]
-        public async Task Preview_CountsNarrationOnlyParagraphsAndTheirItemsWithAudio(
+        public async Task Preview_CountsSpeechMarkedParagraphsAndTheirItemsWithAudio(
             NarrationReleaseScope scope, string node, int paragraphs, int itemsWithAudio)
         {
             var b = await SeedAsync();
@@ -113,7 +120,7 @@ namespace Read2Me.Tests.Services.Characters
         [Theory]
         [InlineData(NarrationReleaseScope.Chapter, "ch1")]
         [InlineData(NarrationReleaseScope.Part, "part1")]
-        [InlineData(NarrationReleaseScope.Paragraph, "q")]
+        [InlineData(NarrationReleaseScope.Paragraph, "plain")]
         public async Task Preview_AgreesWithWhatTheCommandWrites(NarrationReleaseScope scope, string node)
         {
             var b = await SeedAsync();
@@ -136,6 +143,35 @@ namespace Read2Me.Tests.Services.Characters
             // And afterwards nothing is left to release.
             Assert.Equal(new NarrationReleasePreview(0, 0),
                 await _reader.GetNarrationReleasePreviewAsync(_folder, scope, nodeId));
+        }
+
+        [Fact]
+        public async Task Selection_PassingMarkersAreSummedAcrossThePartsChapters()
+        {
+            // chA: Q. ×5, A. ×6; chB: Q. ×5, A. ×4 — chB's A. is short of its own chapter's gate.
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v
+                .AddPart("part", p => p
+                    .AddChapter("chA", c =>
+                    {
+                        c.AddTranscript("aq", "Q.", 5);
+                        c.AddTranscript("aa", "A.", 6);
+                    })
+                    .AddChapter("chB", c =>
+                    {
+                        c.AddTranscript("bq", "Q.", 5);
+                        c.AddTranscript("ba", "A.", 4);
+                    })))
+                .BuildAsync();
+            await using var db = await OpenDbAsync();
+
+            var part = await NarrationRelease.SelectAsync(db, NarrationReleaseScope.Part, b.PartId("part"));
+            var paragraph = await NarrationRelease.SelectAsync(db, NarrationReleaseScope.Paragraph, b.ParagraphId("aq1"));
+
+            Assert.Equal([new SpeechMarkerCount("Q.", 10), new SpeechMarkerCount("A.", 6)], part.Markers);
+            Assert.Equal(16, part.Paragraphs.Count);
+            Assert.Single(paragraph.Paragraphs);
+            Assert.Empty(paragraph.Markers);
         }
 
         private static Guid NodeId(BookHierarchyBuilder b, NarrationReleaseScope scope, string node) => scope switch

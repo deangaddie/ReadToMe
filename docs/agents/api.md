@@ -248,25 +248,36 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/bulk-assi
 # → { "paragraphsWithCharacterItems": 1, "characterItems": 2 }
 ```
 
-A book that marks speech without quote marks (a transcript's `Q: …` / `A: …` paragraphs) imports
+A book that marks speech without quote marks (a transcript's `Q. …` / `A. …` paragraphs) imports
 as narration, which attribution skips and bulk assign never writes. `ReleaseNarration` clears the
-narrator stamp, and the audio, from every item of a scope's **narration-only paragraphs** (no dialog
-item at all), leaving them unattributed dialog. Speech tags inside quoted paragraphs stay narration.
-`scope` is `Part`, `Chapter` or `Paragraph` — there is no whole-book scope. Preview it first with the
-same `{ scope, nodeId }`:
+narrator stamp, and the audio, from every item of a scope's released paragraphs, leaving them
+unattributed dialog. `scope` is `Part`, `Chapter` or `Paragraph` — there is no whole-book scope.
+
+- **`Part` / `Chapter`** release only the **narration-only paragraphs** (no dialog item at all) that
+  carry a **speech marker** repeated in at least 5 narration-only paragraphs of their own chapter:
+  an initial prefix (`Q.`, `A:`), a name prefix naming a Character or alias of the book
+  (`Seldon:`), or em-dash speech (`—What is it?— she asked.`). The real narration around a
+  transcript keeps the narrator. Each chapter of a Part is judged by its own markers. The
+  thresholds are fixed; there is no unfiltered Chapter/Part release (ADR 0015).
+- **`Paragraph`** is unfiltered: it releases that narration-only paragraph whatever its text says —
+  the escape hatch for a line the filter misses.
+
+Speech tags inside quoted paragraphs stay narration at every scope. Preview it first with the same
+`{ scope, nodeId }`:
 
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/narration/release-preview \
   -H 'content-type: application/json' -d '{ "scope": "Chapter", "nodeId": "<chapterId>" }'
-# → { "paragraphs": 41, "itemsWithAudio": 12 }   paragraphs it would release, audio it would discard
+# → { "paragraphs": 72, "itemsWithAudio": 12 }   paragraphs it would release, audio it would discard
 curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
   -H 'content-type: application/json' -d '{ "type": "ReleaseNarration", "scope": "Chapter", "nodeId": "<chapterId>" }'
 ```
 
 Released paragraphs are Character paragraphs from then on: `paragraph-ids` lists them,
 `SetParagraphsCharacter` stamps them, and `attribution/enqueue` (which the release never calls)
-sends them to the LLM, which may answer `narrator` back. Nothing to release is a no-op with no
-revision, so a second release is harmless. `SetParagraphsCharacter` with the narrator's id undoes it.
+sends them to the LLM. Nothing to release — including a Chapter or Part where nothing passes the
+filter — is a no-op with no revision, so a second release is harmless. `SetParagraphsCharacter`
+with the narrator's id undoes it.
 
 ## 3. Voices
 
