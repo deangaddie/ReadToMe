@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<UpdatePartTitleCommand>, UpdatePartTitleHandler>();
         services.AddScoped<ICommandHandler<UpdateChapterTitleCommand>, UpdateChapterTitleHandler>();
         services.AddScoped<ICommandHandler<UpdateParagraphItemTextCommand>, UpdateParagraphItemTextHandler>();
+        services.AddScoped<ICommandHandler<SetItemDeliveryCueCommand>, SetItemDeliveryCueHandler>();
 
         // Split
         services.AddScoped<ICommandHandler<SplitAtPartCommand>, SplitAtPartHandler>();
@@ -304,6 +305,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.UpdateParagraphItemTextMutation>,
             Mutations.Implementations.UpdateParagraphItemTextMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetItemDeliveryCueMutation>,
+            Mutations.Implementations.SetItemDeliveryCueMutationImplementation>();
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.ApplyBookEditsMutation>,
             Mutations.Implementations.ApplyBookEditsMutationImplementation>();

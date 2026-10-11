@@ -38,6 +38,16 @@ public sealed class UpdateParagraphItemTextHandler(BookMutations mutations) : IC
 }
 
 /// <summary>
+/// Sets one item's delivery cue by hand, discarding its audio as a text edit does. Strict: an
+/// unknown item, a Pause or an over-long cue answers 422 rather than a success-shaped null.
+/// </summary>
+public sealed class SetItemDeliveryCueHandler(BookMutations mutations) : ICommandHandler<SetItemDeliveryCueCommand>
+{
+    public Task<BookCommandResult> HandleAsync(SetItemDeliveryCueCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandStrictAsync(new SetItemDeliveryCueMutation(c.FolderId, c.ItemId, c.Cue), ct);
+}
+
+/// <summary>
 /// Points an item at an audio file, migrated to <see cref="BookMutations"/> (ADR 0007). The Audio
 /// Queue does not come through here — it records the take and its verdict together — so this serves
 /// only <c>POST /api/projects/{folder}/commands</c>, whose response shape is unchanged: an unknown

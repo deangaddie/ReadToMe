@@ -420,6 +420,22 @@ Unlike its siblings it rejects rather than no-ops: a `characterId` naming no cha
 in this project, or the seed Narrator row itself (a self-link *is* the unlinked state),
 comes back **422** with the reason.
 
+`SetItemDeliveryCue` adds, edits or removes one speech item's **delivery cue** (the
+volume-and-manner hint TTS reads, stored as `voiceInstructions`) — narration and
+dialog alike:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' \
+  -d '{ "type": "SetItemDeliveryCue", "itemId": "<id>", "cue": "whispered, urgent" }'   # null or "" removes
+```
+
+The cue is trimmed; blank means none. A real change discards the item's audio and any
+audio review, as a text edit does, so it is Generatable again; re-sending the stored
+cue writes nothing and keeps the audio. Like `SetNarratorCharacter` it rejects rather
+than no-ops: an unknown item, a Pause item, or a cue over 200 characters is **422**.
+Attribution still overwrites a hand-written cue (and keeps the audio when it does).
+
 ### Edit with AI
 
 Say what to change in plain language and let the LLM write the edits. Four steps: plan (what the

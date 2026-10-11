@@ -78,6 +78,12 @@ export interface UpdateParagraphItemText {
   itemId: Guid;
   text: string;
 }
+/** A hand-written delivery cue; null or blank removes it. A real change discards the item's audio. */
+export interface SetItemDeliveryCue {
+  type: 'SetItemDeliveryCue';
+  itemId: Guid;
+  cue: string | null;
+}
 
 // ---- Split -----------------------------------------------------------------------------------------
 export interface SplitAtPart {
@@ -338,6 +344,7 @@ export type BookCommand =
   | UpdatePartTitle
   | UpdateChapterTitle
   | UpdateParagraphItemText
+  | SetItemDeliveryCue
   | SplitAtPart
   | SplitAtChapter
   | SplitAtParagraph
@@ -425,6 +432,7 @@ export const BOOK_COMMAND_TYPES = [
   'RenameCharacter',
   'SetAudioReview',
   'SetItemCharacter',
+  'SetItemDeliveryCue',
   'SetNarratorCharacter',
   'SetParagraphCharacter',
   'SetParagraphItemAudio',

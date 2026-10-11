@@ -112,12 +112,24 @@ internal static class BookEditEffects
     {
         if (item.Text == newText) return BookFacets.None;
 
-        // Reported only where there was something to lose: the facets say what this write actually
-        // did, and an item with no audio gives a reader no audio state to reread.
-        var facets = BookFacets.ItemText;
-        if (item.AudioFileName is not null) facets |= BookFacets.Audio;
-
         item.Text = newText;
+        return BookFacets.ItemText | await DiscardAudioAsync(db, item, ct);
+    }
+
+    /// <summary>
+    /// Clears <paramref name="item"/>'s WAV and deletes any verdict on it — the half of
+    /// <see cref="RewriteAsync"/> that a hand-edited delivery cue shares, for the same reasons.
+    /// </summary>
+    /// <returns>
+    /// <see cref="BookFacets.Audio"/> and <see cref="BookFacets.Reviews"/>, each only where there
+    /// was something to lose: the facets say what this write actually did, and an item with no
+    /// audio gives a reader no audio state to reread.
+    /// </returns>
+    public static async Task<BookFacets> DiscardAudioAsync(
+        ProjectDbContext db, ParagraphItem item, CancellationToken ct)
+    {
+        var facets = BookFacets.None;
+        if (item.AudioFileName is not null) facets |= BookFacets.Audio;
         item.AudioFileName = null;
 
         var reviews = await db.AudioReviews
@@ -180,6 +192,55 @@ public sealed class UpdateParagraphItemTextMutationImplementation
 
         var facets = await BookEditEffects.RewriteAsync(db, item, mutation.Text, ct);
         if (facets == BookFacets.None) return BookMutationEffects.Nothing;
+
+        return new BookMutationEffects
+        {
+            Scope = BookMutationScope.Exact,
+            Facets = facets,
+            ParagraphIds = [item.ParagraphId],
+            ParagraphItemIds = [item.Id],
+        };
+    }
+}
+
+/// <summary>
+/// Sets one speech item's delivery cue by hand. A cue is how the item is spoken, so a changed one
+/// makes the WAV as wrong as changed words would, and it goes the same way —
+/// <see cref="BookEditEffects.DiscardAudioAsync"/>. Attribution writes cues through
+/// <see cref="AttributeParagraphItemsMutationImplementation"/> instead and keeps the audio — the
+/// queue-path gap ADR-0006 records and leaves open, which this deliberately does not touch.
+/// <para>
+/// The cue is reported as <see cref="BookFacets.Attribution"/>, the facet attribution's own cue
+/// writes carry, so a reader rereads the item's row exactly as it does after an attribution answer.
+/// </para>
+/// </summary>
+public sealed class SetItemDeliveryCueMutationImplementation
+    : IBookMutationImplementation<SetItemDeliveryCueMutation>
+{
+    /// <summary>
+    /// The longest hand-written cue. Attribution's cues stay far shorter (40); this only bounds what
+    /// a TTS instruction can sensibly hold, well inside the column's 3000.
+    /// </summary>
+    public const int MaxLength = 200;
+
+    public async Task<BookMutationEffects> ApplyAsync(
+        SetItemDeliveryCueMutation mutation, ProjectDbContext db, CancellationToken ct)
+    {
+        var cue = string.IsNullOrWhiteSpace(mutation.Cue) ? null : mutation.Cue.Trim();
+        if (cue?.Length > MaxLength)
+            throw new BookMutationRejectedException(BookMutationRejection.Validation,
+                $"A delivery cue is at most {MaxLength} characters; this one has {cue.Length}.");
+
+        var item = await db.ParagraphItems.FirstOrDefaultAsync(i => i.Id == mutation.ItemId, ct)
+            ?? throw BookEditEffects.NotFound("paragraph item", mutation.ItemId);
+        if (ParagraphItemKinds.IsPause(item.ItemType))
+            throw new BookMutationRejectedException(BookMutationRejection.Validation,
+                $"Item {item.Id} is a pause; only a speech item has a delivery cue.");
+
+        if (item.VoiceInstructions == cue) return BookMutationEffects.Nothing;
+
+        item.VoiceInstructions = cue;
+        var facets = BookFacets.Attribution | await BookEditEffects.DiscardAudioAsync(db, item, ct);
 
         return new BookMutationEffects
         {
