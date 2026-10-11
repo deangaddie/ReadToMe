@@ -1,10 +1,10 @@
-import { Injectable, OnDestroy, computed, inject, signal } from '@angular/core';
-import { Subscription } from 'rxjs';
 import { AssemblyApi, AttributionApi, AudioApi, VoicesApi, toApiError } from '@app/api';
-import { QueueMessage } from '@app/live/live-messages';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import type { QueueMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
-import { JobView } from '@app/ui/job-pill/job';
-import { ToastService } from '@app/ui/toast/toast.service';
+import type { JobView } from '@app/ui/job';
+import { ToastService } from '@app/ui/toast';
 import {
   ASSEMBLY_JOB_ID,
   ATTRIBUTION_JOB_ID,
@@ -31,18 +31,17 @@ interface LocalJob {
  * snapshot-shaped signals, the drawer's open/tab state, cancel and dismiss, and toasts for jobs that
  * finish while the user is looking elsewhere. Elapsed and ETA tick client-side between queue pushes
  * from the moment the last one arrived. Feature code registers jobs the hub does not know about
- * (the single voice-prompt run) with {@link registerLocalJob}.
+ * (the single voice-prompt run) with {@link registerLocalJob}. App-wide: created once by `use()`
+ * and never disposed, like the Angular root service.
  */
-@Injectable({ providedIn: 'root' })
-export class ActivityStore implements OnDestroy {
-  private readonly live = inject(LiveService);
-  private readonly toast = inject(ToastService);
-  private readonly attributionApi = inject(AttributionApi);
-  private readonly audioApi = inject(AudioApi);
-  private readonly voicesApi = inject(VoicesApi);
-  private readonly assemblyApi = inject(AssemblyApi);
+export class ActivityStore {
+  private readonly live = use(LiveService);
+  private readonly toast = use(ToastService);
+  private readonly attributionApi = use(AttributionApi);
+  private readonly audioApi = use(AudioApi);
+  private readonly voicesApi = use(VoicesApi);
+  private readonly assemblyApi = use(AssemblyApi);
 
-  private readonly subscriptions = new Subscription();
   private ticker: ReturnType<typeof setInterval> | null = null;
 
   private readonly _now = signal(Date.now());
@@ -90,43 +89,30 @@ export class ActivityStore implements OnDestroy {
 
   constructor() {
     if (this.live.queue()) this.stampQueue(this.live.queue());
-    this.subscriptions.add(this.live.on('queue').subscribe((m) => this.stampQueue(m)));
-    this.subscriptions.add(this.live.resynced$.subscribe(() => this.stampQueue(this.live.queue())));
-    this.subscriptions.add(
-      this.live.on('assembly').subscribe((m) => {
-        if (m.kind === 'phaseStarted') this.undismiss(ASSEMBLY_JOB_ID);
-        if (m.kind === 'completed') this.toast.success('Assembly finished');
-        if (m.kind === 'failed') this.toast.error(`Assembly failed: ${firstLine(m.reason)}`);
-        if (m.kind === 'cancelled') this.toast.info('Assembly cancelled');
-      }),
-    );
-    this.subscriptions.add(
-      this.live.on('voiceBatch').subscribe((m) => {
-        if (m.kind === 'started') this.undismiss(VOICE_BATCH_JOB_ID);
-        if (m.kind === 'completed') {
-          this.toast.success(
-            `Voice batch complete: ${m.processed ?? 0} done, ${m.failed ?? 0} failed`,
-          );
-        }
-        if (m.kind === 'cancelled') this.toast.info('Voice batch cancelled');
-      }),
-    );
-    this.subscriptions.add(
-      this.live.on('watchdog').subscribe((m) => {
-        if (m.kind === 'recoveryStarted') this.undismiss(`${WATCHDOG_JOB_PREFIX}${m.service}`);
-        if (m.kind === 'serviceDown') this.toast.error(`${m.service} is down`);
-      }),
-    );
-    this.subscriptions.add(
-      this.live.on('throughput').subscribe((t) => {
-        if (t.isRunActive) this._throughputDismissed.set(false);
-      }),
-    );
-  }
-
-  ngOnDestroy(): void {
-    this.subscriptions.unsubscribe();
-    this.stopTicker();
+    this.live.on('queue', (m) => this.stampQueue(m));
+    this.live.resynced(() => this.stampQueue(this.live.queue()));
+    this.live.on('assembly', (m) => {
+      if (m.kind === 'phaseStarted') this.undismiss(ASSEMBLY_JOB_ID);
+      if (m.kind === 'completed') this.toast.success('Assembly finished');
+      if (m.kind === 'failed') this.toast.error(`Assembly failed: ${firstLine(m.reason)}`);
+      if (m.kind === 'cancelled') this.toast.info('Assembly cancelled');
+    });
+    this.live.on('voiceBatch', (m) => {
+      if (m.kind === 'started') this.undismiss(VOICE_BATCH_JOB_ID);
+      if (m.kind === 'completed') {
+        this.toast.success(
+          `Voice batch complete: ${m.processed ?? 0} done, ${m.failed ?? 0} failed`,
+        );
+      }
+      if (m.kind === 'cancelled') this.toast.info('Voice batch cancelled');
+    });
+    this.live.on('watchdog', (m) => {
+      if (m.kind === 'recoveryStarted') this.undismiss(`${WATCHDOG_JOB_PREFIX}${m.service}`);
+      if (m.kind === 'serviceDown') this.toast.error(`${m.service} is down`);
+    });
+    this.live.on('throughput', (t) => {
+      if (t.isRunActive) this._throughputDismissed.set(false);
+    });
   }
 
   // ---- drawer ------------------------------------------------------------------------------------

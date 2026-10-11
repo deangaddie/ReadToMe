@@ -1,4 +1,5 @@
-import { ApiError, DiscoveryOutcomeDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import { ApiError, type DiscoveryOutcomeDto } from '@app/api';
 import {
   applyRows,
   discoveryErrorMessage,
@@ -22,7 +23,12 @@ const outcome: DiscoveryOutcomeDto = {
 describe('discovery rows', () => {
   it('starts every row included and remembers what it resolves onto', () => {
     expect(toDiscoveryRows(outcome)).toEqual([
-      { name: 'Elizabeth Bennet', aliases: ['Lizzy'], included: true, existingCharacterId: 'eliza' },
+      {
+        name: 'Elizabeth Bennet',
+        aliases: ['Lizzy'],
+        included: true,
+        existingCharacterId: 'eliza',
+      },
       { name: 'Jane Bennet', aliases: ['Miss Bennet'], included: true, existingCharacterId: null },
     ]);
   });

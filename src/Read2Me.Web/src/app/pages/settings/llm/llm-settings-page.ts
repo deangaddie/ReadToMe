@@ -1,144 +1,49 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  signal,
-  untracked,
-  viewChild,
-} from '@angular/core';
-import { LlmServerConfig, toApiError } from '@app/api';
+import { html, nothing } from 'lit-html';
+import { type LlmServerConfig, toApiError } from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import type { HasUnsavedChanges } from '@app/core/router';
+import { provide, use } from '@app/core/services';
+import { computed, signal, untracked } from '@app/core/signals';
+import { adoptStyles } from '@app/core/styles';
 import { duplicateName } from '@app/shared/config-form';
-import { HasUnsavedChanges, confirmDiscard } from '@app/shared/unsaved-changes.guard';
-import { ConfigList, ConfigListItem } from '@app/ui/config-list/config-list';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { EmptyState } from '@app/ui/empty-state/empty-state';
-import { PageHeader } from '@app/ui/page-header/page-header';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { LlmChainCard } from './chain-card';
-import { LlmConfigEditor, LlmEditTarget } from './llm-config-editor';
-import {
-  API_TYPE_LABELS,
-  EMPTY_LLM_FORM,
-  sameLlmForm,
-  toLlmForm,
-} from './llm-config-form';
+import { confirmDiscard } from '@app/shared/unsaved-changes';
+import type { ConfigListItem } from '@app/ui/config-list';
+import { ConfirmService } from '@app/ui/dialogs';
+import { emptyState, statusChip } from '@app/ui/partials';
+import { ToastService } from '@app/ui/toast';
+import { type LlmConfigEditor, type LlmEditTarget } from './llm-config-editor';
+import { API_TYPE_LABELS, EMPTY_LLM_FORM, sameLlmForm, toLlmForm } from './llm-config-form';
 import { LlmSettingsStore } from './llm-settings-store';
-import { LlmTestConsole } from './llm-test-console';
+import css from './llm-settings-page.css' with { type: 'text' };
+import '@app/ui/config-list';
+import './llm-config-editor';
+import './chain-card';
+import './llm-test-console';
+
+adoptStyles(css);
 
 /**
  * `/settings/llm` (ticket 21): the settings master–detail template over LLM configs — list with
  * Make default / Duplicate / Delete on the left, the in-place editor on the right — then the
- * attribution escalation chain and the test console for the default config.
+ * attribution escalation chain and the test console for the default config. Provides the
+ * {@link LlmSettingsStore} to its children; the router's `guardUnsaved` asks
+ * {@link hasUnsavedChanges} before leaving.
  */
-@Component({
-  selector: 'app-llm-settings-page',
-  imports: [
-    PageHeader,
-    EmptyState,
-    StatusChip,
-    ConfigList,
-    LlmConfigEditor,
-    LlmChainCard,
-    LlmTestConsole,
-  ],
-  providers: [LlmSettingsStore],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <r2m-page-header
-      title="LLM"
-      subtitle="Servers for attribution, voice prompts, AI book edits and character discovery."
-    />
-
-    @if (store.error(); as error) {
-      <r2m-status-chip status="error" [label]="'LLM settings could not be loaded: ' + error" />
-    }
-
-    @if (store.configs(); as configs) {
-      <div class="llm__master-detail">
-        <r2m-config-list
-          class="llm__list"
-          activeLabel="Default"
-          [items]="items()"
-          [selectedId]="selectedId()"
-          [busy]="busy()"
-          (select)="select(+$event)"
-          (create)="create()"
-          (makeActive)="makeDefault(+$event)"
-          (duplicate)="duplicate(+$event)"
-          (delete)="delete(+$event)"
-        />
-        @if (target(); as target) {
-          <app-llm-config-editor class="llm__editor" [target]="target" (saved)="onSaved($event)" />
-        } @else {
-          <r2m-empty-state
-            class="llm__editor"
-            icon="smart_toy"
-            [headline]="configs.length ? 'Select a configuration' : 'No LLM configurations yet'"
-            [hint]="configs.length ? 'Or create a new one.' : 'Create one to get started.'"
-          />
-        }
-      </div>
-
-      @if (configs.length) {
-        <p class="llm__note">
-          The <b>default</b> configuration is used for voice prompts, AI book edits and character
-          discovery. Character attribution uses the attribution chain below instead.
-        </p>
-        <app-llm-chain-card />
-      }
-
-      @if (store.active(); as active) {
-        <app-llm-test-console [config]="active" />
-      }
-    }
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-4);
-    }
-    .llm__master-detail {
-      display: grid;
-      grid-template-columns: 320px minmax(0, 1fr);
-      gap: var(--r2m-space-4);
-      align-items: start;
-    }
-    .llm__list {
-      max-height: 70vh;
-    }
-    .llm__note {
-      margin: 0;
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    @media (max-width: 900px) {
-      .llm__master-detail {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-  `,
-})
-export class LlmSettingsPage implements HasUnsavedChanges {
-  protected readonly store = inject(LlmSettingsStore);
-  private readonly confirm = inject(ConfirmService);
-  private readonly toast = inject(ToastService);
-
-  private readonly editor = viewChild(LlmConfigEditor);
+export class LlmSettingsPage extends R2mElement implements HasUnsavedChanges {
+  readonly store = provide(this, LlmSettingsStore, new LlmSettingsStore());
+  private readonly confirm = use(ConfirmService);
+  private readonly toast = use(ToastService);
 
   /** Set on select / new / duplicate / save — never recomputed under an edit in progress. */
-  protected readonly target = signal<LlmEditTarget | null>(null);
-  protected readonly busy = signal(false);
+  readonly target = signal<LlmEditTarget | null>(null);
+  readonly busy = signal(false);
 
-  protected readonly selectedId = computed(() => {
+  readonly selectedId = computed(() => {
     const id = this.target()?.id;
     return id ? String(id) : null;
   });
 
-  protected readonly items = computed<ConfigListItem[]>(() =>
+  readonly items = computed<ConfigListItem[]>(() =>
     (this.store.configs() ?? []).map((c) => ({
       id: String(c.id),
       name: c.name,
@@ -147,19 +52,99 @@ export class LlmSettingsPage implements HasUnsavedChanges {
     })),
   );
 
-  constructor() {
-    void this.store.load();
+  protected override connected(): void {
+    this.classList.add('llm');
+    void this.store.open();
     // Keeps the editor on a config that still exists and, while it holds no edits, on its latest
     // saved state — a reload may carry a change made in another tab or over the API.
-    effect(() => {
+    this.effect(() => {
       const configs = this.store.configs();
       if (!configs) return;
       untracked(() => this.reconcile(configs));
     });
+    this.onDisconnect(() => this.store.close());
   }
 
   hasUnsavedChanges(): boolean {
     return this.editor()?.dirty() ?? false;
+  }
+
+  private editor(): LlmConfigEditor | null {
+    return this.querySelector<LlmConfigEditor>('r2m-llm-config-editor');
+  }
+
+  protected template() {
+    const error = this.store.error();
+    const configs = this.store.configs();
+    const target = this.target();
+    const active = this.store.active();
+    return html`
+      <header class="r2m-page-header">
+        <h1 class="r2m-page-header__title">LLM</h1>
+        <p class="r2m-page-header__subtitle">
+          Servers for attribution, voice prompts, AI book edits and character discovery.
+        </p>
+      </header>
+
+      ${
+        error
+          ? statusChip({ status: 'error', label: `LLM settings could not be loaded: ${error}` })
+          : nothing
+      }
+      ${
+        configs
+          ? html`
+              <div class="r2m-master-detail">
+                <r2m-config-list
+                  class="llm__list"
+                  .items=${this.items()}
+                  .selectedId=${this.selectedId()}
+                  .busy=${this.busy()}
+                  .activeLabel=${'Default'}
+                  @pick=${(e: CustomEvent<string>) => void this.select(+e.detail)}
+                  @create=${() => void this.create()}
+                  @make-active=${(e: CustomEvent<string>) => void this.makeDefault(+e.detail)}
+                  @duplicate=${(e: CustomEvent<string>) => void this.duplicate(+e.detail)}
+                  @delete=${(e: CustomEvent<string>) => void this.delete(+e.detail)}
+                ></r2m-config-list>
+                ${
+                  target
+                    ? html`<r2m-llm-config-editor
+                        class="llm__editor"
+                        .target=${target}
+                        @saved=${(e: CustomEvent<LlmServerConfig>) => this.onSaved(e.detail)}
+                      ></r2m-llm-config-editor>`
+                    : html`<div class="llm__editor">
+                        ${emptyState({
+                          icon: 'smart_toy',
+                          headline: configs.length
+                            ? 'Select a configuration'
+                            : 'No LLM configurations yet',
+                          hint: configs.length
+                            ? 'Or create a new one.'
+                            : 'Create one to get started.',
+                        })}
+                      </div>`
+                }
+              </div>
+
+              ${
+                configs.length
+                  ? html`
+                      <p class="llm__note">
+                        The <b>default</b> configuration is used for voice prompts, AI book edits
+                        and character discovery. Character attribution uses the attribution chain
+                        below instead.
+                      </p>
+                      <r2m-llm-chain-card></r2m-llm-chain-card>
+                    `
+                  : nothing
+              }
+              ${active ? html`<r2m-llm-test-console .config=${active}></r2m-llm-test-console>` : nothing}
+            `
+          : nothing
+      }
+    `;
   }
 
   private reconcile(configs: LlmServerConfig[]): void {
@@ -189,19 +174,19 @@ export class LlmSettingsPage implements HasUnsavedChanges {
     return !this.hasUnsavedChanges() || confirmDiscard(this.confirm);
   }
 
-  protected async select(id: number): Promise<void> {
+  private async select(id: number): Promise<void> {
     const config = this.find(id);
     if (!config || id === this.target()?.id || !(await this.mayLeaveEditor())) return;
     this.open(config);
   }
 
-  protected async create(): Promise<void> {
+  private async create(): Promise<void> {
     if (!(await this.mayLeaveEditor())) return;
     this.target.set({ id: 0, baseline: EMPTY_LLM_FORM, draft: EMPTY_LLM_FORM });
   }
 
   /** Opens an unsaved copy in the editor: nothing is stored until Save. */
-  protected async duplicate(id: number): Promise<void> {
+  private async duplicate(id: number): Promise<void> {
     const config = this.find(id);
     if (!config || !(await this.mayLeaveEditor())) return;
     const names = (this.store.configs() ?? []).map((c) => c.name);
@@ -209,15 +194,15 @@ export class LlmSettingsPage implements HasUnsavedChanges {
     this.target.set({ id: 0, baseline: EMPTY_LLM_FORM, draft });
   }
 
-  protected onSaved(config: LlmServerConfig): void {
+  private onSaved(config: LlmServerConfig): void {
     this.open(config);
   }
 
-  protected makeDefault(id: number): Promise<void> {
+  private makeDefault(id: number): Promise<void> {
     return this.run(() => this.store.makeDefault(id), 'Default configuration changed');
   }
 
-  protected async delete(id: number): Promise<void> {
+  private async delete(id: number): Promise<void> {
     const config = this.find(id);
     if (!config) return;
     const inChain = this.store.steps().some((s) => s.configId === id);
@@ -247,3 +232,4 @@ export class LlmSettingsPage implements HasUnsavedChanges {
     }
   }
 }
+define('r2m-llm-settings-page', LlmSettingsPage);

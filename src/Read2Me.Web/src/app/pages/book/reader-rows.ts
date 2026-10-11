@@ -1,4 +1,4 @@
-import {
+import type {
   AudioReviewDto,
   ItemVoiceDto,
   NarratorDto,
@@ -6,16 +6,17 @@ import {
   ParagraphItemDto,
   ParagraphItemType,
 } from '@app/api';
-import {
+import type {
   AudioReviewInfo,
   ItemStatusEntry,
   OutcomeEntry,
   ParagraphStatusEntry,
 } from '@app/live/live-messages';
-import { SpeakerChipState } from '@app/ui/speaker-chip/speaker-chip';
-import { SpeakerRosterEntry } from '@app/ui/speaker-menu/speaker-menu';
-import { StatusKind } from '@app/ui/status-chip/status-chip';
-import { ChapterParents } from './book-tree';
+import type { IconName } from '@app/ui/icons';
+import type { StatusKind } from '@app/ui/partials';
+import type { SpeakerChipState } from '@app/ui/speaker-chip';
+import type { SpeakerRosterEntry } from '@app/ui/speaker-menu';
+import type { ChapterParents } from './book-tree';
 
 /**
  * What the reader rows show (design §6.3), as pure functions of the loaded data. Components bind
@@ -103,7 +104,7 @@ export function voiceLine(voice: ItemVoiceDto | undefined): string {
 export interface ChipView {
   status: StatusKind;
   label: string;
-  icon?: string;
+  icon?: IconName;
   tooltip?: string | undefined;
 }
 
@@ -175,6 +176,10 @@ export interface RowContext {
   ancestry: Readonly<Record<string, ChapterParents>>;
   /** What the speaker menus offer; empty until the roster is known. */
   roster: readonly SpeakerRosterEntry[];
+  /** The editor is locked (stale view or a write in flight): every row menu is off (design §8). */
+  locked: boolean;
+  /** An audio preflight or enqueue is in flight (ticket 13): the row's Retry waits for it. */
+  generating: boolean;
 }
 
 /** Queued or processing: the server rejects edits, so the row shows a lock (design §8). */

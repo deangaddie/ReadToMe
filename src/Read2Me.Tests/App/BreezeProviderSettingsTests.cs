@@ -9,7 +9,7 @@ using Xunit;
 namespace Read2Me.Tests.App
 {
     /// <summary>
-    /// The Breeze provider's settings surface: the schema the Angular editor renders from, the
+    /// The Breeze provider's settings surface: the schema the web editor renders from, the
     /// canonical blob a write stores, and the base URL pre-flight reads.
     /// </summary>
     public class BreezeProviderSettingsTests

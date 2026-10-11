@@ -9,7 +9,7 @@ using Xunit;
 namespace Read2Me.Tests.App
 {
     /// <summary>
-    /// The Breeze voice-design settings surface: the schema the Angular editor renders from, the
+    /// The Breeze voice-design settings surface: the schema the web editor renders from, the
     /// canonical blob a write stores, the base URL pre-flight reads, and the per-voice diff.
     /// </summary>
     public class BreezeVoiceDesignSettingsTests

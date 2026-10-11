@@ -1,12 +1,12 @@
-import { ProjectStatusDto } from '@app/api';
-import { NodeStatusSummary } from '@app/live/live-messages';
-import { PipelineAction, PipelineStepView } from '@app/ui/pipeline/pipeline';
-import { StatusKind } from '@app/ui/status-chip/status-chip';
+import type { ProjectStatusDto } from '@app/api';
+import type { NodeStatusSummary } from '@app/live/live-messages';
+import type { StatusKind } from '@app/ui/partials';
+import type { PipelineAction, PipelineStepView } from '@app/ui/pipeline';
 
 /**
  * The six-step production pipeline on the project overview (design §6.2), derived from the
  * `/status` bootstrap plus what the hub has said since. Pure, so the stepper's rules live in one
- * table-tested function and the component only renders.
+ * table-tested function and the page only renders.
  */
 
 export type StepId = 'import' | 'cast' | 'attribute' | 'voices' | 'audio' | 'export';

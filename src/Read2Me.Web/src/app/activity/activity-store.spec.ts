@@ -1,9 +1,10 @@
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { AssemblyApi, AttributionApi, AudioApi, VoicesApi } from '@app/api';
+import { Emitter } from '@app/core/emitter';
+import { override, resetServices, use } from '@app/core/services';
+import { signal } from '@app/core/signals';
 import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
-import {
+import type {
   AssemblyMessage,
   AssemblyState,
   LiveSnapshot,
@@ -15,9 +16,11 @@ import {
   WatchdogState,
 } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { ToastService } from '@app/ui/toast';
+import { FakeTimers } from '../../testing/fake-timers';
 import { ActivityStore, ELAPSED_TICK_MS } from './activity-store';
 
+/** Ported from the Angular TestBed spec, case for case: Subjects became Emitters. */
 class FakeLive {
   readonly queue = signal<QueueMessage | null>(null);
   readonly assembly = signal<AssemblyState>(IDLE_ASSEMBLY);
@@ -25,51 +28,53 @@ class FakeLive {
   readonly watchdog = signal<WatchdogState>({});
   readonly throughput = signal<ThroughputSnapshot | null>(null);
 
-  readonly queue$ = new Subject<QueueMessage>();
-  readonly assembly$ = new Subject<AssemblyMessage>();
-  readonly voiceBatch$ = new Subject<VoiceBatchMessage>();
-  readonly watchdog$ = new Subject<WatchdogMessage>();
-  readonly throughput$ = new Subject<ThroughputSnapshot>();
-  readonly resynced = new Subject<LiveSnapshot>();
-  readonly resynced$ = this.resynced.asObservable();
+  readonly queue$ = new Emitter<QueueMessage>();
+  readonly assembly$ = new Emitter<AssemblyMessage>();
+  readonly voiceBatch$ = new Emitter<VoiceBatchMessage>();
+  readonly watchdog$ = new Emitter<WatchdogMessage>();
+  readonly throughput$ = new Emitter<ThroughputSnapshot>();
+  readonly resyncedSubject = new Emitter<LiveSnapshot>();
 
-  on(family: string) {
+  on(family: string, listener: (m: unknown) => void) {
     switch (family) {
       case 'queue':
-        return this.queue$.asObservable();
+        return this.queue$.subscribe(listener as (m: QueueMessage) => void);
       case 'assembly':
-        return this.assembly$.asObservable();
+        return this.assembly$.subscribe(listener as (m: AssemblyMessage) => void);
       case 'voiceBatch':
-        return this.voiceBatch$.asObservable();
+        return this.voiceBatch$.subscribe(listener as (m: VoiceBatchMessage) => void);
       case 'watchdog':
-        return this.watchdog$.asObservable();
+        return this.watchdog$.subscribe(listener as (m: WatchdogMessage) => void);
       case 'throughput':
-        return this.throughput$.asObservable();
+        return this.throughput$.subscribe(listener as (m: ThroughputSnapshot) => void);
       default:
         throw new Error(`unexpected family ${family}`);
     }
+  }
+  resynced(listener: (s: LiveSnapshot) => void) {
+    return this.resyncedSubject.subscribe(listener);
   }
 
   /** Mirrors LiveService: fold into the signal, then fan out. */
   pushQueue(m: QueueMessage): void {
     this.queue.set(m);
-    this.queue$.next(m);
+    this.queue$.emit(m);
   }
   pushAssembly(state: AssemblyState, m: AssemblyMessage): void {
     this.assembly.set(state);
-    this.assembly$.next(m);
+    this.assembly$.emit(m);
   }
   pushVoiceBatch(state: VoiceBatchState, m: VoiceBatchMessage): void {
     this.voiceBatch.set(state);
-    this.voiceBatch$.next(m);
+    this.voiceBatch$.emit(m);
   }
   pushWatchdog(m: WatchdogMessage): void {
     this.watchdog.update((w) => ({ ...w, [m.service]: m.kind }));
-    this.watchdog$.next(m);
+    this.watchdog$.emit(m);
   }
   pushThroughput(t: ThroughputSnapshot): void {
     this.throughput.set(t);
-    this.throughput$.next(t);
+    this.throughput$.emit(t);
   }
 }
 
@@ -117,41 +122,38 @@ function throughput(overrides: Partial<ThroughputSnapshot> = {}): ThroughputSnap
   };
 }
 
+let timers: FakeTimers | null = null;
+
 function setup() {
+  resetServices();
   const live = new FakeLive();
   const toast = {
-    success: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    problem: vi.fn(),
+    success: mock(),
+    info: mock(),
+    warn: mock(),
+    error: mock(),
+    problem: mock(),
   };
-  const attribution = {
-    cancel: vi.fn(async () => undefined),
-    dismiss: vi.fn(async () => undefined),
-  };
-  const audio = { cancel: vi.fn(async () => undefined) };
-  const voices = { cancelBatch: vi.fn(async () => undefined) };
-  const assembly = { cancel: vi.fn(async () => undefined) };
-  TestBed.configureTestingModule({
-    providers: [
-      { provide: LiveService, useValue: live },
-      { provide: ToastService, useValue: toast },
-      { provide: AttributionApi, useValue: attribution },
-      { provide: AudioApi, useValue: audio },
-      { provide: VoicesApi, useValue: voices },
-      { provide: AssemblyApi, useValue: assembly },
-    ],
-  });
-  const store = TestBed.inject(ActivityStore);
+  const attribution = { cancel: mock(async () => undefined), dismiss: mock(async () => undefined) };
+  const audio = { cancel: mock(async () => undefined) };
+  const voices = { cancelBatch: mock(async () => undefined) };
+  const assembly = { cancel: mock(async () => undefined) };
+  override(LiveService, live as unknown as LiveService);
+  override(ToastService, toast as unknown as ToastService);
+  override(AttributionApi, attribution as unknown as AttributionApi);
+  override(AudioApi, audio as unknown as AudioApi);
+  override(VoicesApi, voices as unknown as VoicesApi);
+  override(AssemblyApi, assembly as unknown as AssemblyApi);
+  const store = use(ActivityStore);
   return { live, toast, attribution, audio, voices, assembly, store };
 }
 
-describe('ActivityStore', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+beforeEach(() => {
+  timers = null;
+});
+afterEach(() => timers?.restore());
 
+describe('ActivityStore', () => {
   it('derives jobs from the live signals and splits active from all', () => {
     const { live, store } = setup();
     expect(store.jobs()).toEqual([]);
@@ -164,35 +166,35 @@ describe('ActivityStore', () => {
     expect(store.hasActive()).toBe(true);
   });
 
-  it('ticks elapsed and ETA once a second while a queue is busy and stops when idle', () => {
-    vi.useFakeTimers();
+  it('ticks elapsed and ETA once a second while a queue is busy and stops when idle', async () => {
+    timers = new FakeTimers().install();
     const { live, store } = setup();
     live.pushQueue(busyQueue());
     expect(store.jobs()[0]?.elapsedSeconds).toBe(2);
     expect(store.jobs()[0]?.etaSeconds).toBe(10);
 
-    vi.advanceTimersByTime(ELAPSED_TICK_MS * 3);
+    await timers.advance(ELAPSED_TICK_MS * 3);
     expect(store.jobs()[0]?.elapsedSeconds).toBe(5);
     expect(store.jobs()[0]?.etaSeconds).toBe(7);
 
     // A fresh queue message resets the client-side offset.
     live.pushQueue(busyQueue({ currentItemElapsedSeconds: 1, estimatedSecondsRemaining: 20 }));
     expect(store.jobs()[0]?.elapsedSeconds).toBe(1);
-    vi.advanceTimersByTime(ELAPSED_TICK_MS);
+    await timers.advance(ELAPSED_TICK_MS);
     expect(store.jobs()[0]?.elapsedSeconds).toBe(2);
     expect(store.jobs()[0]?.etaSeconds).toBe(19);
 
     live.pushQueue(IDLE_QUEUE);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(timers.pending).toBe(0);
     expect(store.jobs()).toEqual([]);
   });
 
-  it('stamps the queue on resync as well as on a push', () => {
-    vi.useFakeTimers();
+  it('stamps the queue on resync as well as on a push', async () => {
+    timers = new FakeTimers().install();
     const { live, store } = setup();
     live.queue.set(busyQueue());
-    live.resynced.next({} as LiveSnapshot);
-    vi.advanceTimersByTime(ELAPSED_TICK_MS * 2);
+    live.resyncedSubject.emit({} as LiveSnapshot);
+    await timers.advance(ELAPSED_TICK_MS * 2);
     expect(store.jobs()[0]?.elapsedSeconds).toBe(4);
   });
 
@@ -202,10 +204,10 @@ describe('ActivityStore', () => {
     await store.cancel('audio');
     await store.cancel('voiceBatch');
     await store.cancel('assembly');
-    expect(attribution.cancel).toHaveBeenCalledOnce();
-    expect(audio.cancel).toHaveBeenCalledOnce();
-    expect(voices.cancelBatch).toHaveBeenCalledOnce();
-    expect(assembly.cancel).toHaveBeenCalledOnce();
+    expect(attribution.cancel).toHaveBeenCalledTimes(1);
+    expect(audio.cancel).toHaveBeenCalledTimes(1);
+    expect(voices.cancelBatch).toHaveBeenCalledTimes(1);
+    expect(assembly.cancel).toHaveBeenCalledTimes(1);
   });
 
   it('dismisses a failed job locally until the job starts again', () => {
@@ -245,7 +247,7 @@ describe('ActivityStore', () => {
     live.pushThroughput(throughput({ isRunActive: false }));
 
     await store.dismissThroughput();
-    expect(attribution.dismiss).toHaveBeenCalledOnce();
+    expect(attribution.dismiss).toHaveBeenCalledTimes(1);
     expect(store.showThroughput()).toBe(false);
 
     live.pushThroughput(throughput({ isRunActive: true }));
@@ -278,7 +280,7 @@ describe('ActivityStore', () => {
 
   it('registers local jobs with their own cancel and unregisters them', async () => {
     const { store } = setup();
-    const cancel = vi.fn();
+    const cancel = mock();
     const unregister = store.registerLocalJob(
       { id: 'voicePrompt:c1', kind: 'voicePrompt', label: 'Voice prompt', state: 'running' },
       cancel,
@@ -287,7 +289,7 @@ describe('ActivityStore', () => {
     expect(store.jobs()[0]?.cancellable).toBe(true);
 
     await store.cancel('voicePrompt:c1');
-    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledTimes(1);
 
     unregister();
     expect(store.jobs()).toEqual([]);

@@ -1,5 +1,32 @@
-import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
-import { App } from './app/app';
+import { ApiError } from '@app/api';
+import { routes } from '@app/app.routes';
+import { Router } from '@app/core/router';
+import { use } from '@app/core/services';
+import { LiveService } from '@app/live/live.service';
+import { confirmDiscard } from '@app/shared/unsaved-changes';
+import { ThemeService } from '@app/theme/theme.service';
+import { ConfirmService } from '@app/ui/dialogs';
+import { ToastService } from '@app/ui/toast';
+import { installTooltips } from '@app/ui/tooltip';
 
-bootstrapApplication(App, appConfig).catch((err) => console.error(err));
+// The Angular ErrorHandler that toasts uncaught ApiErrors.
+const toast = use(ToastService);
+addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
+  if (e.reason instanceof ApiError) {
+    e.preventDefault();
+    toast.problem(e.reason.toProblem());
+  }
+});
+
+// Apply the shared theme before first paint (the Angular app initializer); an unreachable host
+// keeps the compiled defaults. The shell registers only after, so nothing renders unthemed.
+await use(ThemeService).load();
+await import('@app/shell/shell');
+
+// The same discard prompt the settings pages ask before switching their editor to another item.
+const confirm = use(ConfirmService);
+use(Router).start(routes, () => confirmDiscard(confirm));
+installTooltips();
+
+// Open the live hub once for the app's lifetime; it reconnects on its own.
+use(LiveService).start();

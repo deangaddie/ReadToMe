@@ -2,7 +2,7 @@
 // the shelf's cards (cover or initials, author, progress), the New project dialog opening and
 // closing, then one project's overview with its six pipeline steps and the details panel.
 // Read-only: nothing is created or changed.
-//   R2M_APP=/app2 R2M_WEB=http://localhost:5000 bun native-projects-verify.mjs <folder> > native-projects-verify.log 2>&1
+//   R2M_WEB=http://localhost:5000 bun native-projects-verify.mjs <folder> > native-projects-verify.log 2>&1
 import { launch, openWeb } from './browse.mjs';
 
 const folder = process.argv[2] ?? 'foundation';
@@ -22,7 +22,7 @@ try {
   );
   console.log('shelf cards:', summary.length);
   for (const c of summary) console.log(' ', JSON.stringify(c));
-  console.log('placeholder on shelf:', (await page.locator('r2m-placeholder-page').count()) ? 'yes' : 'no');
+  console.log('not-found on shelf:', (await page.locator('r2m-not-found-page').count()) ? 'yes' : 'no');
 
   // The card menu opens as a popover under its trigger.
   const first = cards.first();

@@ -1,5 +1,5 @@
-import { BOOK_ACCEPT, BOOK_MAX_BYTES, CreateProjectRequest } from '@app/api';
-import { RejectedFile } from '@app/ui/file-drop/file-drop';
+import { BOOK_ACCEPT, BOOK_MAX_BYTES, type CreateProjectRequest } from '@app/api';
+import type { RejectedFile } from '@app/ui/file-drop';
 
 /**
  * The New project dialog's state as plain data, so the auto-fill rule and validation are unit

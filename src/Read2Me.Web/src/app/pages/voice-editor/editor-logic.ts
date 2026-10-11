@@ -1,13 +1,13 @@
 import {
-  PreviewStageDto,
-  PreviewStepRequest,
-  StepCatalogEntryDto,
-  VoiceDto,
+  type PreviewStageDto,
+  type PreviewStepRequest,
+  type StepCatalogEntryDto,
+  type VoiceDto,
   voiceOriginalUrl,
   workspaceUrl,
 } from '@app/api';
 import { toFormField } from '@app/shared/settings-schema';
-import { SettingsSchema, SettingsValues } from '@app/ui/settings-form/settings-form';
+import type { SettingsSchema, SettingsValues } from '@app/ui/settings-form';
 
 /** Which steps are ticked, by step id. */
 export type Ticks = Record<string, boolean>;

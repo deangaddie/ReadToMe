@@ -1,7 +1,8 @@
-import { AudioPostProcessStepConfig } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { AudioPostProcessStepConfig } from '@app/api';
 import {
   ADYNEQ_PRESETS,
-  ConsonantSoftenForm,
+  type ConsonantSoftenForm,
   DEESSER_PRESETS,
   DEFAULT_HIGHPASS_HZ,
   buildConsonantSoftenConfig,

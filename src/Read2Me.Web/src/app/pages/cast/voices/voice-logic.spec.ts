@@ -1,4 +1,5 @@
-import { CharacterVoicesDto, VoiceDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { CharacterVoicesDto, VoiceDto } from '@app/api';
 import {
   EDITED_OVERWRITE_MESSAGE,
   applyVoiceUpdated,
@@ -169,7 +170,10 @@ describe('batch hub events', () => {
       referenceSeconds: 16.4,
       referenceWarning: 'over 15 s again',
     });
-    expect(long.voices[0]).toMatchObject({ referenceSeconds: 16.4, referenceWarning: 'over 15 s again' });
+    expect(long.voices[0]).toMatchObject({
+      referenceSeconds: 16.4,
+      referenceWarning: 'over 15 s again',
+    });
 
     // A message without the figures (unreadable header) leaves nothing stale behind.
     const unmeasured = applyVoiceUpdated(list, {
@@ -184,7 +188,10 @@ describe('batch hub events', () => {
       voiceId: 'v1',
       designPrompt: 'a warm alto',
     });
-    expect(promptOnly.voices[0]).toMatchObject({ referenceSeconds: 18.2, referenceWarning: 'over 15 s' });
+    expect(promptOnly.voices[0]).toMatchObject({
+      referenceSeconds: 18.2,
+      referenceWarning: 'over 15 s',
+    });
   });
 
   it('voiceUpdated for an unknown voice answers the same list (reload instead)', () => {

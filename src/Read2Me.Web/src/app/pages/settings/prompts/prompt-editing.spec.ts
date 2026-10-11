@@ -1,4 +1,5 @@
-import { PromptCatalogEntry } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { PromptCatalogEntry } from '@app/api';
 import { canReset, insertToken, isDirty, tokenLiteral } from './prompt-editing';
 
 function entry(overrides: Partial<PromptCatalogEntry> = {}): PromptCatalogEntry {

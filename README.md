@@ -22,19 +22,19 @@ dotnet run --project src/Read2Me.App
 
 ### Web app
 
-The host serves the Angular web app at `/app` once it has been built; `/` redirects there. It is a thin
+The host serves the web app (custom elements on Bun, ADR 0014) at `/app` once it has been built; `/` redirects there. It is a thin
 client over the agent API and the live hub, so a change made in one tab, or by an agent, shows in every other.
 
 ```bash
-pwsh scripts/build-web.ps1                 # npm ci + npm run build → src/Read2Me.App/wwwroot/app (git-ignored)
+pwsh scripts/build-web.ps1                 # bun install + bun run build → src/Read2Me.App/wwwroot/app (git-ignored)
 dotnet run --project src/Read2Me.App       # web app at http://localhost:5000/app/
 ```
 
-For web development with live reload run the host as above and, in a second terminal, `npm start` in
-`src/Read2Me.Web` (Node 24 / npm 11): the dev server on <http://localhost:4200/app/> proxies the API and hub to
+For web development with live reload run the host as above and, in a second terminal, `bun run dev` in
+`src/Read2Me.Web` (Bun 1.4.2, pinned by `packageManager`; no Node): the dev server on <http://localhost:4300/app/> proxies the API and hub to
 `:5000`. Until a bundle exists, `/app` answers with a page that says how to build one. Structure, conventions
 and how to add a page: [docs/agents/web.md](docs/agents/web.md); the web project's own
-[README](src/Read2Me.Web/README.md) lists every npm script.
+[README](src/Read2Me.Web/README.md) lists every script.
 
 ## Infrastructure services
 

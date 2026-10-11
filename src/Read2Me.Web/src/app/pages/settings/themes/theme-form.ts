@@ -1,4 +1,4 @@
-import { AppTheme } from '@app/api';
+import type { AppTheme } from '@app/api';
 import { isHexColour, normalizeHex } from '@app/theme/theme-css';
 
 /** Editable copy of a theme; optional colours are '' while blank so inputs stay controlled. */

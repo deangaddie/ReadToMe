@@ -1,4 +1,5 @@
-import { AppTheme } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { AppTheme } from '@app/api';
 import { DEFAULT_DRAFT, fromDraft, isDraftValid, toDraft, validateDraft } from './theme-form';
 
 describe('theme form', () => {

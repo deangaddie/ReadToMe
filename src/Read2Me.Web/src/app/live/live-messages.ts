@@ -331,7 +331,13 @@ export type ServiceStatusState = Record<string, AiServiceStatus>;
 // ---- preflight (one connection) -----------------------------------------------------------------
 
 export type PreflightStage =
-  'waitingToStop' | 'stopping' | 'stopped' | 'waitingToStart' | 'starting' | 'ready' | 'failed';
+  | 'waitingToStop'
+  | 'stopping'
+  | 'stopped'
+  | 'waitingToStart'
+  | 'starting'
+  | 'ready'
+  | 'failed';
 
 /**
  * One pre-flight run (`POST /api/preflight/{taskKind}/run`), sent only to the connection that

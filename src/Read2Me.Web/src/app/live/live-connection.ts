@@ -1,4 +1,4 @@
-import { InjectionToken } from '@angular/core';
+import { token } from '@app/core/services';
 import {
   HubConnectionBuilder,
   HubConnectionState,
@@ -7,7 +7,7 @@ import {
   RetryContext,
 } from '@microsoft/signalr';
 
-/** Root-relative so it reaches the host through the dev proxy and from under `/app/`. */
+/** Root-relative so it reaches the host through the dev proxy and from under the app's base path. */
 export const LIVE_HUB_URL = '/hubs/live';
 
 /**
@@ -65,7 +65,7 @@ export const defaultLiveConnectionFactory: LiveConnectionFactory = ({ url, onRet
     .build();
 
 /** Swap in a fake connection in unit tests; the default builds a real `HubConnection`. */
-export const LIVE_CONNECTION_FACTORY = new InjectionToken<LiveConnectionFactory>(
+export const LIVE_CONNECTION_FACTORY = token<LiveConnectionFactory>(
   'LIVE_CONNECTION_FACTORY',
-  { providedIn: 'root', factory: () => defaultLiveConnectionFactory },
+  () => defaultLiveConnectionFactory,
 );

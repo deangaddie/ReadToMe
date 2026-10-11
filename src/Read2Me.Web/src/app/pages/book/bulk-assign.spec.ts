@@ -1,8 +1,14 @@
+import { describe, expect, it } from 'bun:test';
 import { bulkConfirm, bulkDoneMessage } from './bulk-assign';
 
+/** Copied verbatim from the Angular spec. */
 describe('bulkConfirm', () => {
   it('quotes the character and the preview figures, pluralised', () => {
-    const options = bulkConfirm('Hardin', { paragraphsWithCharacterItems: 3, characterItems: 5 }, 3);
+    const options = bulkConfirm(
+      'Hardin',
+      { paragraphsWithCharacterItems: 3, characterItems: 5 },
+      3,
+    );
     expect(options).toEqual({
       title: 'Assign Hardin to selection',
       message:
@@ -13,14 +19,22 @@ describe('bulkConfirm', () => {
   });
 
   it('singular forms for one line in one paragraph', () => {
-    const options = bulkConfirm('Hardin', { paragraphsWithCharacterItems: 1, characterItems: 1 }, 1);
+    const options = bulkConfirm(
+      'Hardin',
+      { paragraphsWithCharacterItems: 1, characterItems: 1 },
+      1,
+    );
     expect(options?.message).toBe(
       'Hardin becomes the speaker for 1 dialog line in 1 paragraph. Existing speakers are replaced.',
     );
   });
 
   it('names the selected paragraphs the write will skip', () => {
-    const options = bulkConfirm('Hardin', { paragraphsWithCharacterItems: 2, characterItems: 2 }, 5);
+    const options = bulkConfirm(
+      'Hardin',
+      { paragraphsWithCharacterItems: 2, characterItems: 2 },
+      5,
+    );
     expect(options?.message).toContain('3 selected paragraphs have no dialog and stay unchanged.');
     const one = bulkConfirm('Hardin', { paragraphsWithCharacterItems: 2, characterItems: 2 }, 3);
     expect(one?.message).toContain('1 selected paragraph have no dialog');
@@ -37,7 +51,9 @@ describe('bulkConfirm', () => {
   });
 
   it('is null when the selection holds no dialog', () => {
-    expect(bulkConfirm('Hardin', { paragraphsWithCharacterItems: 0, characterItems: 0 }, 4)).toBeNull();
+    expect(
+      bulkConfirm('Hardin', { paragraphsWithCharacterItems: 0, characterItems: 0 }, 4),
+    ).toBeNull();
   });
 });
 

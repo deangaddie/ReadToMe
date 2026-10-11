@@ -1,12 +1,11 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type { AssemblyOutputDto, AssemblyStatusDto, StartedResponse } from './dtos';
 import { projectUrl } from './projects-api';
 
 /** `AssemblyEndpoints.cs`: m4b assembly start, progress and cancel (one global run), and outputs. */
-@Injectable({ providedIn: 'root' })
 export class AssemblyApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   /**
    * 202 when started. 409 either because a run is active or because items still lack audio and

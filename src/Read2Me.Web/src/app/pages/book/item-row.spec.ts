@@ -1,11 +1,11 @@
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { ParagraphItemDto } from '@app/api';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { render } from 'lit-html';
+import type { ParagraphItemDto } from '@app/api';
+import { provide } from '@app/core/services';
 import { AudioGenerator } from './audio-generator';
-import { AudioSelectionStore } from './audio-selection-store';
-import { BookEditor } from './book-editor';
-import { ItemRow } from './item-row';
-import { RowContext } from './reader-rows';
+import { itemRow } from './item-row';
+import type { RowContext } from './reader-rows';
+import { AudioSelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 
 const NARRATOR_ID = '00000000-0000-0000-0000-000000000001';
@@ -28,6 +28,11 @@ const NARRATION = item('n', { itemType: 'Narration', characterId: NARRATOR_ID })
 const DIALOG = item('d', { characterId: 'h', audioFileName: 'audio/d.wav' });
 const UNATTRIBUTED = item('u');
 
+const ROSTER = [
+  { id: NARRATOR_ID, name: 'Narrator', isNarrator: true },
+  { id: 'h', name: 'Hardin' },
+];
+
 function ctx(overrides: Partial<RowContext> = {}): RowContext {
   return {
     folder: 'dune',
@@ -46,128 +51,247 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     selectedItems: new Set(),
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
+    locked: false,
+    generating: false,
     roster: [],
     ...overrides,
   };
 }
 
-function render(context: RowContext, row: ParagraphItemDto) {
-  const fixture = TestBed.createComponent(ItemRow);
-  fixture.componentRef.setInput('item', row);
-  fixture.componentRef.setInput('paragraphId', 'p1');
-  fixture.componentRef.setInput('chapterId', 'c1');
-  fixture.componentRef.setInput('ctx', context);
-  fixture.detectChanges();
-  return fixture.nativeElement as HTMLElement;
+/** The shell's page-scoped collaborators, reached by the row through DOM ancestry. */
+let selection: AudioSelectionStore;
+let assigner: { assign: ReturnType<typeof mock>; createAndAssign: ReturnType<typeof mock> };
+let generator: { retry: ReturnType<typeof mock>; dismissReview: ReturnType<typeof mock> };
+
+async function mount(context: RowContext, row: ParagraphItemDto) {
+  const host = document.createElement('div');
+  provide(host, AudioSelectionStore, selection);
+  provide(host, SpeakerAssigner, assigner as unknown as SpeakerAssigner);
+  provide(host, AudioGenerator, generator as unknown as AudioGenerator);
+  document.body.append(host);
+  render(
+    itemRow(row, { paragraphId: 'p1', chapterId: 'c1' }, context, { isFirst: true, isLast: true }),
+    host,
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+  return host.firstElementChild as HTMLElement;
 }
 
 const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-const box = (el: HTMLElement) => el.querySelector<HTMLInputElement>('input[type=checkbox]');
+const box = (el: Element) => el.querySelector<HTMLInputElement>('input[type=checkbox]');
 
-describe('ItemRow (audio, ticket 13)', () => {
-  let generator: {
-    retry: ReturnType<typeof vi.fn>;
-    dismissReview: ReturnType<typeof vi.fn>;
-    working: ReturnType<typeof signal<boolean>>;
-  };
+// happy-dom has no popover: the chip's menu opens on the `toggle` event the browser would fire.
+const proto = HTMLElement.prototype as unknown as Record<string, () => void>;
+beforeEach(() => {
+  selection = new AudioSelectionStore();
+  assigner = { assign: mock(async () => undefined), createAndAssign: mock(async () => undefined) };
+  generator = { retry: mock(async () => true), dismissReview: mock(async () => true) };
+  proto['hidePopover'] = () => undefined;
+});
+afterEach(() => {
+  delete proto['hidePopover'];
+  document.body.replaceChildren();
+});
 
-  beforeEach(() => {
-    generator = {
-      retry: vi.fn().mockResolvedValue(true),
-      dismissReview: vi.fn().mockResolvedValue(true),
-      working: signal(false),
-    };
-    TestBed.configureTestingModule({
-      imports: [ItemRow],
-      providers: [
-        AudioSelectionStore,
-        { provide: AudioGenerator, useValue: generator },
-        { provide: BookEditor, useValue: { locked: signal(false), run: vi.fn() } },
-        { provide: SpeakerAssigner, useValue: { assign: vi.fn(), createAndAssign: vi.fn() } },
-      ],
-    });
-  });
+async function openChipMenu(el: Element) {
+  const chip = el.querySelector('r2m-speaker-chip')!;
+  chip.querySelector<HTMLButtonElement>('button')!.click();
+  chip
+    .querySelector('.r2m-speaker-chip__menu')!
+    .dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open' }));
+  await chip.rendered();
+  await chip.querySelector('r2m-speaker-menu')!.rendered();
+  return Array.from(chip.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__row'));
+}
 
-  describe('checkbox enablement', () => {
-    it('narration and attributed lines can be selected; an unattributed line cannot', () => {
-      expect(box(render(ctx(), NARRATION))!.disabled).toBe(false);
-      expect(box(render(ctx(), DIALOG))!.disabled).toBe(false);
-      expect(box(render(ctx(), UNATTRIBUTED))!.disabled).toBe(true);
-    });
-
-    it('narrator-only mode lets an unattributed line be selected', () => {
-      expect(box(render(ctx({ narratorOnlyMode: true }), UNATTRIBUTED))!.disabled).toBe(false);
+describe('itemRow (speakers)', () => {
+  describe('checkbox enablement (ticket 13)', () => {
+    it('narration and attributed lines can be selected; an unattributed line cannot', async () => {
+      expect(box(await mount(ctx(), NARRATION))!.disabled).toBe(false);
+      expect(box(await mount(ctx(), DIALOG))!.disabled).toBe(false);
+      expect(box(await mount(ctx(), UNATTRIBUTED))!.disabled).toBe(true);
     });
 
-    it('there is no checkbox outside the item selection, and none on a pause', () => {
-      expect(box(render(ctx({ mode: 'speakers', itemSelectable: false }), NARRATION))).toBeNull();
-      expect(box(render(ctx(), item('z', { itemType: 'Pause', isPause: true })))).toBeNull();
+    it('narrator-only mode lets an unattributed line be selected', async () => {
+      expect(box(await mount(ctx({ narratorOnlyMode: true }), UNATTRIBUTED))!.disabled).toBe(false);
     });
 
-    it('ticking toggles the store with the chapter ancestry; a selected row is tinted', () => {
-      const el = render(ctx(), NARRATION);
+    it('there is no checkbox outside the item selection, and none on a pause', async () => {
+      expect(
+        box(await mount(ctx({ mode: 'speakers', itemSelectable: false }), NARRATION)),
+      ).toBeNull();
+      expect(box(await mount(ctx(), item('z', { itemType: 'Pause', isPause: true })))).toBeNull();
+    });
+
+    it('ticking toggles the store with the chapter ancestry; a selected row is tinted', async () => {
+      const el = await mount(ctx(), NARRATION);
       const input = box(el)!;
       input.checked = true;
       input.dispatchEvent(new Event('change'));
-      const store = TestBed.inject(AudioSelectionStore);
-      expect(store.selection()).toEqual({ n: { chapterId: 'c1', partId: 'pt1', volumeId: 'v1' } });
+      expect(selection.selection()).toEqual({
+        n: { chapterId: 'c1', partId: 'pt1', volumeId: 'v1' },
+      });
 
-      const selected = render(ctx({ selectedItems: new Set(['n']) }), NARRATION);
+      const selected = await mount(ctx({ selectedItems: new Set(['n']) }), NARRATION);
       expect(box(selected)!.checked).toBe(true);
       expect(selected.classList.contains('r2m-item--selected')).toBe(true);
     });
   });
 
-  describe('retry flow', () => {
-    it('a settled failure shows its reason and a Retry that re-queues just this item', () => {
-      const el = render(
+  describe('speaker menu (ticket 12)', () => {
+    const speakers = (overrides: Partial<RowContext> = {}) =>
+      ctx({ mode: 'speakers', itemSelectable: false, roster: ROSTER, ...overrides });
+
+    it('the chip opens the roster and a pick assigns this item', async () => {
+      const el = await mount(speakers(), UNATTRIBUTED);
+      const rows = await openChipMenu(el);
+      expect(rows.map((r) => text(r.querySelector('.r2m-speaker-menu__name')))).toEqual([
+        'Narrator',
+        'Hardin',
+      ]);
+      rows[1]!.click();
+      expect(assigner.assign).toHaveBeenCalledWith(
+        { kind: 'item', itemId: 'u', paragraphId: 'p1' },
+        'h',
+      );
+    });
+
+    it('Clear speaker and New character go through the assigner too', async () => {
+      const el = await mount(speakers(), DIALOG);
+      await openChipMenu(el);
+      const actions = el.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__action');
+      actions[0]!.click();
+      expect(assigner.assign).toHaveBeenCalledWith(
+        { kind: 'item', itemId: 'd', paragraphId: 'p1' },
+        null,
+      );
+      actions[1]!.click();
+      expect(assigner.createAndAssign).toHaveBeenCalledWith(
+        { kind: 'item', itemId: 'd', paragraphId: 'p1' },
+        '',
+      );
+    });
+
+    it('the chip is inert in Audio mode, while the paragraph or item is queued, and without a roster', async () => {
+      const button = (el: Element) => el.querySelector('r2m-speaker-chip button');
+      expect(button(await mount(ctx({ roster: ROSTER }), DIALOG))).toBeNull();
+      expect(button(await mount(speakers(), DIALOG))).not.toBeNull();
+      expect(button(await mount(speakers({ roster: [] }), DIALOG))).toBeNull();
+      const host = document.createElement('div');
+      provide(host, SpeakerAssigner, assigner as unknown as SpeakerAssigner);
+      document.body.append(host);
+      render(
+        itemRow(
+          DIALOG,
+          { paragraphId: 'p1', chapterId: 'c1' },
+          speakers(),
+          { isFirst: true, isLast: true },
+          true,
+        ),
+        host,
+      );
+      await Promise.resolve();
+      expect(button(host)).toBeNull();
+    });
+  });
+});
+
+describe('itemRow (audio)', () => {
+  describe('retry flow (ticket 13)', () => {
+    it('a settled failure shows its reason and a Retry that re-queues just this item', async () => {
+      const el = await mount(
         ctx({ itemStatus: { n: { outcome: { kind: 'Failed', reason: 'No default voice' } } } }),
         NARRATION,
       );
-      expect(text(el.querySelector('r2m-status-chip'))).toContain('Failed');
-      expect(el.querySelector('r2m-status-chip')?.getAttribute('title')).toBeNull();
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Failed');
       const retry = el.querySelector<HTMLButtonElement>('[data-action=retry-audio]')!;
       expect(retry.disabled).toBe(false);
       retry.click();
       expect(generator.retry).toHaveBeenCalledWith('n');
     });
 
-    it('an unfinished take can be retried too; a queued or clean item offers no Retry', () => {
-      const unfinished = render(
+    it('an unfinished take can be retried too; a queued or clean item offers no Retry', async () => {
+      const unfinished = await mount(
         ctx({ itemStatus: { n: { outcome: { kind: 'Unfinished', reason: 'cancelled' } } } }),
         NARRATION,
       );
-      expect(text(unfinished.querySelector('r2m-status-chip'))).toContain('Unfinished');
+      expect(text(unfinished.querySelector('.r2m-status-chip'))).toContain('Unfinished');
       expect(unfinished.querySelector('[data-action=retry-audio]')).not.toBeNull();
 
-      const queued = render(
+      const queued = await mount(
         ctx({ itemStatus: { n: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
         NARRATION,
       );
-      expect(text(queued.querySelector('r2m-status-chip'))).toContain('Queued');
       expect(queued.querySelector('[data-action=retry-audio]')).toBeNull();
-      expect(queued.querySelector('.r2m-item__lock')).not.toBeNull();
-
-      expect(render(ctx(), NARRATION).querySelector('[data-action=retry-audio]')).toBeNull();
+      expect((await mount(ctx(), NARRATION)).querySelector('[data-action=retry-audio]')).toBeNull();
     });
 
-    it('a failed line nobody can read yet offers no Retry', () => {
-      const el = render(
-        ctx({ itemStatus: { u: { outcome: { kind: 'Failed', reason: 'No character assigned' } } } }),
-        UNATTRIBUTED,
+    it('a line nobody can read yet has no Retry; a generating or locked page disables it', async () => {
+      const failed = { outcome: { kind: 'Failed' as const } };
+      const unvoiced = await mount(ctx({ itemStatus: { u: failed } }), UNATTRIBUTED);
+      expect(text(unvoiced.querySelector('.r2m-status-chip'))).toContain('Failed');
+      expect(unvoiced.querySelector('[data-action=retry-audio]')).toBeNull();
+      const busy = await mount(ctx({ itemStatus: { n: failed }, generating: true }), NARRATION);
+      expect(busy.querySelector<HTMLButtonElement>('[data-action=retry-audio]')!.disabled).toBe(
+        true,
       );
-      expect(text(el.querySelector('r2m-status-chip'))).toContain('Failed');
-      expect(el.querySelector('[data-action=retry-audio]')).toBeNull();
-    });
-
-    it('Retry waits while another request is in flight', () => {
-      generator.working.set(true);
-      const el = render(
-        ctx({ itemStatus: { n: { outcome: { kind: 'Failed' } } } }),
-        NARRATION,
+      const locked = await mount(ctx({ itemStatus: { n: failed }, locked: true }), NARRATION);
+      expect(locked.querySelector<HTMLButtonElement>('[data-action=retry-audio]')!.disabled).toBe(
+        true,
       );
-      expect(el.querySelector<HTMLButtonElement>('[data-action=retry-audio]')!.disabled).toBe(true);
     });
+  });
+
+  it('offers a player only for items with audio, busting the cache with audioVersion', async () => {
+    const el = await mount(ctx({ itemStatus: { d: { audioVersion: 3 } } }), DIALOG);
+    const player = el.querySelector('r2m-audio-player')!;
+    await player.rendered();
+    expect(player.querySelector('audio')?.getAttribute('src')).toBe(
+      '/workspace/dune/audio/d.wav?v=3',
+    );
+    expect((await mount(ctx(), NARRATION)).querySelector('r2m-audio-player')).toBeNull();
+    expect(
+      (await mount(ctx({ mode: 'speakers', itemSelectable: false }), DIALOG)).querySelector(
+        'r2m-audio-player',
+      ),
+    ).toBeNull();
+  });
+
+  it('carries the item id and tints a selected row', async () => {
+    const el = await mount(ctx(), NARRATION);
+    expect(el.dataset['itemId']).toBe('n');
+    expect(el.classList.contains('r2m-item--selected')).toBe(false);
+    const selected = await mount(ctx({ selectedItems: new Set(['n']) }), NARRATION);
+    expect(selected.classList.contains('r2m-item--selected')).toBe(true);
+  });
+
+  it('a settled failure shows its reason as a tooltip; a queued item shows Queued and a lock', async () => {
+    const el = await mount(
+      ctx({ itemStatus: { n: { outcome: { kind: 'Failed', reason: 'No default voice' } } } }),
+      NARRATION,
+    );
+    const chip = el.querySelector('.r2m-status-chip')!;
+    expect(text(chip)).toContain('Failed');
+    expect(chip.getAttribute('data-tooltip')).toBe('No default voice');
+    expect(el.querySelector('.r2m-item__lock')).toBeNull();
+
+    const queued = await mount(
+      ctx({ itemStatus: { n: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+      NARRATION,
+    );
+    expect(text(queued.querySelector('.r2m-status-chip'))).toContain('Queued');
+    expect(queued.querySelector('.r2m-item__lock')).not.toBeNull();
+  });
+
+  it('outside Audio mode the item queue state is not shown', async () => {
+    const el = await mount(
+      ctx({ mode: 'speakers', itemSelectable: false, itemStatus: { n: { status: 'Queued' } } }),
+      NARRATION,
+    );
+    expect(el.querySelector('.r2m-status-chip')).toBeNull();
+    expect(el.querySelector('.r2m-item__lock')).toBeNull();
+    expect(el.querySelector('[data-testid=voice-line]')).toBeNull();
   });
 
   describe('review chip states', () => {
@@ -182,38 +306,53 @@ describe('ItemRow (audio, ticket 13)', () => {
       originalTextSnapshot: null,
     };
 
-    it('a verify failure is a warn chip with a Dismiss that posts the command', () => {
-      const el = render(ctx({ reviews: { d: review } }), DIALOG);
-      const chip = el.querySelector('r2m-status-chip')!;
+    it('a verify failure is a warn chip', async () => {
+      const el = await mount(ctx({ reviews: { d: review } }), DIALOG);
+      const chip = el.querySelector('.r2m-status-chip')!;
       expect(text(chip)).toContain('Verify failed');
       expect(chip.classList.contains('r2m-status-chip--warn')).toBe(true);
-      el.querySelector<HTMLButtonElement>('[data-action=dismiss-review]')!.click();
-      expect(generator.dismissReview).toHaveBeenCalledWith('d');
+      expect(chip.getAttribute('data-tooltip')).toBe('WER 30% — transcript drifted');
     });
 
-    it('a normalize failure is an error chip', () => {
-      const el = render(
+    it('a normalize failure is an error chip', async () => {
+      const el = await mount(
         ctx({ reviews: { d: { ...review, normalizeOk: false, normalizeReason: 'clipped' } } }),
         DIALOG,
       );
-      expect(text(el.querySelector('r2m-status-chip'))).toContain('Normalize failed');
-      expect(el.querySelector('r2m-status-chip')!.classList.contains('r2m-status-chip--error')).toBe(true);
+      const chip = el.querySelector('.r2m-status-chip')!;
+      expect(text(chip)).toContain('Normalize failed');
+      expect(chip.classList.contains('r2m-status-chip--error')).toBe(true);
     });
 
-    it('a dismissed review is a faded icon with no chip and no Dismiss', () => {
-      const el = render(ctx({ reviews: { d: { ...review, state: 'Dismissed' } } }), DIALOG);
-      expect(el.querySelector('r2m-status-chip')).toBeNull();
-      expect(el.querySelector('[data-action=dismiss-review]')).toBeNull();
+    it('a dismissed review is a faded icon with no chip', async () => {
+      const el = await mount(ctx({ reviews: { d: { ...review, state: 'Dismissed' } } }), DIALOG);
+      expect(el.querySelector('.r2m-status-chip')).toBeNull();
       expect(el.querySelector('[data-testid=review-dismissed]')).not.toBeNull();
     });
 
-    it('the hub review wins over the REST map: a null hub review clears the chip', () => {
-      const el = render(
+    it('a verify failure carries a Dismiss that posts through the generator; a dismissed review has none', async () => {
+      const el = await mount(ctx({ reviews: { d: review } }), DIALOG);
+      el.querySelector<HTMLButtonElement>('[data-action=dismiss-review]')!.click();
+      expect(generator.dismissReview).toHaveBeenCalledWith('d');
+
+      const dismissed = await mount(
+        ctx({ reviews: { d: { ...review, state: 'Dismissed' } } }),
+        DIALOG,
+      );
+      expect(dismissed.querySelector('[data-action=dismiss-review]')).toBeNull();
+
+      const locked = await mount(ctx({ reviews: { d: review }, locked: true }), DIALOG);
+      expect(
+        locked.querySelector<HTMLButtonElement>('[data-action=dismiss-review]')!.disabled,
+      ).toBe(true);
+    });
+
+    it('the hub review wins over the REST map: a null hub review clears the chip', async () => {
+      const el = await mount(
         ctx({ reviews: { d: review }, itemStatus: { d: { audioVersion: 2, review: null } } }),
         DIALOG,
       );
-      expect(el.querySelector('r2m-status-chip')).toBeNull();
-      expect(el.querySelector('audio')?.getAttribute('src')).toBe('/workspace/dune/audio/d.wav?v=2');
+      expect(el.querySelector('.r2m-status-chip')).toBeNull();
     });
   });
 });

@@ -1,135 +1,247 @@
-import { BreakpointObserver } from '@angular/cdk/layout';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatListModule } from '@angular/material/list';
-import { MatMenuModule } from '@angular/material/menu';
-import { MatSidenavModule } from '@angular/material/sidenav';
-import { MatToolbarModule } from '@angular/material/toolbar';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import {
-  ActivatedRoute,
-  NavigationEnd,
-  Router,
-  RouterLink,
-  RouterLinkActive,
-  RouterOutlet,
-} from '@angular/router';
-import { filter, map, startWith } from 'rxjs';
-import { LiveService } from '@app/live/live.service';
-import { RouteMeta } from '@app/route-meta';
-import { ActivityBar } from '@app/activity/activity-bar';
-import { ActivityDrawer } from '@app/activity/activity-drawer';
+import { html, nothing } from 'lit-html';
 import { ActivityStore } from '@app/activity/activity-store';
-import { ProjectTitles } from './project-titles';
+import { R2mElement, define } from '@app/core/element';
+import { Router, fill, titleOf } from '@app/core/router';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import { adoptStyles } from '@app/core/styles';
+import { LiveService } from '@app/live/live.service';
+import { shellContext } from '@app/route-meta';
+import { type SchemePreference, ThemeService } from '@app/theme/theme.service';
+import type { IconName } from '@app/ui/icons';
+import { icon } from '@app/ui/partials';
 import { RailState } from './rail-state';
-import { SchemePreference, ThemeService } from '@app/theme/theme.service';
-import {
-  GLOBAL_NAV_ITEMS,
-  ShellContext,
-  breadcrumb,
-  contextNavItems,
-  toShellContext,
-} from './shell-nav';
+import { GLOBAL_NAV_ITEMS, type NavItem, contextNavItems, isActive } from './shell-nav';
+import '@app/core/outlet';
+import '@app/activity/activity-bar';
+import '@app/activity/activity-drawer';
+import shellCss from './shell.css' with { type: 'text' };
+
+adoptStyles(shellCss);
 
 const NARROW_QUERY = '(max-width: 899.98px)';
+const THEME_MENU_ID = 'r2m-theme-menu';
+
+const SCHEME_ICONS: Record<SchemePreference, IconName> = {
+  light: 'light_mode',
+  dark: 'dark_mode',
+  system: 'brightness_auto',
+};
+
+interface Crumb {
+  title: string;
+  href: string;
+}
 
 /**
- * Application shell (design §5): app bar, nav rail, main outlet, activity bar and activity drawer
- * (ticket 14: both read {@link ActivityStore}). Below 900 px the rail becomes a modal drawer and
- * the activity bar collapses to one summary pill.
+ * Application shell (design §5): app bar with breadcrumbs from the matched route chain, the live
+ * connection dot and the theme quick menu; the nav rail with the context group for "here" and the
+ * global group; the main outlet; the activity bar below and the activity drawer beside the content
+ * (both read {@link ActivityStore}). Below 900 px the rail becomes a modal drawer and the activity
+ * bar collapses to one summary pill.
  */
-@Component({
-  selector: 'app-shell',
-  imports: [
-    RouterOutlet,
-    RouterLink,
-    RouterLinkActive,
-    MatToolbarModule,
-    MatSidenavModule,
-    MatListModule,
-    MatIconModule,
-    MatButtonModule,
-    MatMenuModule,
-    MatTooltipModule,
-    ActivityBar,
-    ActivityDrawer,
-  ],
-  templateUrl: './shell.html',
-  styleUrl: './shell.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'app-shell' },
-})
-export class Shell {
-  private readonly router = inject(Router);
-  private readonly rootRoute = inject(ActivatedRoute);
-  private readonly breakpoints = inject(BreakpointObserver);
-  private readonly rail = inject(RailState);
-  private readonly theme = inject(ThemeService);
-  private readonly live = inject(LiveService);
-  private readonly projectTitles = inject(ProjectTitles);
-  private readonly activity = inject(ActivityStore);
+export class AppShell extends R2mElement {
+  private readonly router = use(Router);
+  private readonly rail = use(RailState);
+  private readonly theme = use(ThemeService);
+  private readonly live = use(LiveService);
+  private readonly activity = use(ActivityStore);
 
-  /** Deepest activated route's data + params, refreshed on every navigation. */
-  private readonly context = toSignal(
-    this.router.events.pipe(
-      filter((e) => e instanceof NavigationEnd),
-      startWith(null),
-      map(() => this.readContext()),
-    ),
-    { initialValue: this.readContext() },
-  );
-
-  readonly narrow = toSignal(
-    this.breakpoints.observe(NARROW_QUERY).pipe(map((state) => state.matches)),
-    { initialValue: this.breakpoints.isMatched(NARROW_QUERY) },
-  );
-
-  readonly railExpanded = this.rail.expanded;
-  /** Modal rail visibility on narrow screens; ignored when the rail is docked. */
-  readonly railOpen = signal(false);
-  /** The activity drawer (ticket 14); pills and the ▲ open it through the store. */
+  /** The activity drawer (design §5); pills and the ▲ open it through the store. */
   readonly drawerOpen = this.activity.drawerOpen;
 
-  readonly contextItems = computed(() => contextNavItems(this.context()));
-  readonly globalItems = GLOBAL_NAV_ITEMS;
-  /** The project crumb reads the title the project shell loaded, the folder name until then. */
-  readonly crumbs = computed(() => {
-    const ctx = this.context();
-    return breadcrumb(ctx, ctx.folder ? this.projectTitles.titles()[ctx.folder] : undefined);
+  private readonly context = computed(() => shellContext(this.router.match()));
+  private readonly contextItems = computed(() => contextNavItems(this.context()));
+
+  /**
+   * One crumb per titled route, linking all but the last. An index child (`path: ''`) shares its
+   * parent's path, so its title names the page (tab title, placeholder) but adds no crumb.
+   */
+  private readonly crumbs = computed<Crumb[]>(() => {
+    const match = this.router.match();
+    if (!match) return [];
+    const segments: string[] = [];
+    const crumbs: Crumb[] = [];
+    for (const route of match.chain) {
+      if (route.path) segments.push(fill(route.path, match.params));
+      const title = titleOf(route, match.params);
+      if (title && route.path) crumbs.push({ title, href: segments.join('/') || './' });
+    }
+    return crumbs;
   });
-  readonly schemePreference = this.theme.preference;
 
-  /** Live hub connection dot (ticket 07): green connected, amber (re)connecting, red disconnected. */
-  readonly connection = this.live.state;
-  readonly connectionLabel = this.live.statusLabel;
+  private readonly narrow = signal(false);
+  /** Modal rail visibility on narrow screens; ignored when the rail is docked. */
+  private readonly railOpen = signal(false);
 
-  toggleRail(): void {
+  protected override connected(): void {
+    if (typeof matchMedia === 'function') {
+      const query = matchMedia(NARROW_QUERY);
+      this.narrow.set(query.matches);
+      const onChange = (e: MediaQueryListEvent) => this.narrow.set(e.matches);
+      query.addEventListener('change', onChange);
+      this.onDisconnect(() => query.removeEventListener('change', onChange));
+    }
+  }
+
+  private readonly toggleRail = (): void => {
     if (this.narrow()) this.railOpen.update((open) => !open);
     else this.rail.toggle();
-  }
+  };
 
-  closeModalRail(): void {
+  private readonly closeModalRail = (): void => {
     if (this.narrow()) this.railOpen.set(false);
-  }
-
-  toggleDrawer(): void {
-    this.activity.toggleDrawer();
-  }
+  };
 
   /** Theme quick menu (design §5): writes the shared selection through the API. */
-  setScheme(preference: SchemePreference): void {
+  private setScheme(preference: SchemePreference): void {
+    this.querySelector<HTMLElement>(`#${THEME_MENU_ID}`)?.hidePopover();
     void this.theme.setPreference(preference);
   }
 
-  private readContext(): ShellContext {
-    let route = this.rootRoute.snapshot;
-    while (route.firstChild) route = route.firstChild;
-    const meta = route.data as Partial<RouteMeta>;
-    return toShellContext(
-      { section: meta.section ?? 'projects', title: meta.title ?? '' },
-      route.params as Record<string, string | undefined>,
-    );
+  protected template() {
+    const crumbs = this.crumbs();
+    const narrow = this.narrow();
+    const expanded = narrow || this.rail.expanded();
+    const connection = this.live.state();
+    const connectionLabel = this.live.statusLabel();
+    const preference = this.theme.preference();
+    return html`
+      <header class="shell__appbar">
+        <button
+          type="button"
+          class="r2m-icon-button shell__menu"
+          @click=${this.toggleRail}
+          aria-label="Toggle navigation"
+          data-tooltip="Toggle navigation"
+        >
+          ${icon('menu')}
+        </button>
+        <a class="shell__brand" href="projects">Read2Me</a>
+
+        <nav class="shell__crumbs" aria-label="Breadcrumb">
+          ${crumbs.map((crumb, i) => {
+            const last = i === crumbs.length - 1;
+            return html`${
+              last
+                ? html`<span class="shell__crumb shell__crumb--current" aria-current="page"
+                    >${crumb.title}</span
+                  >`
+                : html`<a class="shell__crumb" href=${crumb.href}>${crumb.title}</a>`
+            }${last ? nothing : html`<span class="shell__crumb-sep" aria-hidden="true">›</span>`}`;
+          })}
+        </nav>
+
+        <span class="shell__spacer"></span>
+
+        <span
+          class="shell__conn shell__conn--${connection}"
+          role="status"
+          aria-label=${connectionLabel}
+          data-tooltip=${connectionLabel}
+        >
+          <span class="shell__conn-dot" aria-hidden="true"></span>
+          <span class="shell__conn-text">live</span>
+        </span>
+
+        <button
+          type="button"
+          class="r2m-icon-button shell__theme"
+          popovertarget=${THEME_MENU_ID}
+          aria-label="Theme"
+          data-tooltip="Theme"
+        >
+          ${icon(SCHEME_ICONS[preference])}
+        </button>
+        <div id=${THEME_MENU_ID} popover class="r2m-menu shell__theme-menu">
+          ${this.schemeItem('light', 'Light')} ${this.schemeItem('dark', 'Dark')}
+          ${this.schemeItem('system', 'Follow system')}
+        </div>
+
+        <a
+          class="r2m-icon-button shell__settings"
+          href="settings"
+          aria-label="Settings"
+          data-tooltip="Settings"
+          >${icon('settings')}</a
+        >
+      </header>
+
+      <div class="shell__body">
+        ${
+          narrow && this.railOpen()
+            ? html`<div class="shell__scrim" @click=${this.closeModalRail}></div>`
+            : nothing
+        }
+        <aside
+          class="shell__rail ${expanded ? 'shell__rail--expanded' : ''} ${
+            narrow ? (this.railOpen() ? 'shell__rail--open' : 'shell__rail--closed') : ''
+          }"
+        >
+          <nav class="shell__nav" aria-label="Sections">
+            ${
+              this.contextItems().length
+                ? html`<ul class="shell__nav-group shell__nav-group--context">
+                    ${this.contextItems().map((item) => this.navItem(item, expanded))}
+                  </ul>`
+                : nothing
+            }
+            <span class="shell__nav-spacer"></span>
+            <ul class="shell__nav-group shell__nav-group--global">
+              ${GLOBAL_NAV_ITEMS.map((item) => this.navItem(item, expanded))}
+            </ul>
+          </nav>
+        </aside>
+        <main class="shell__main"><r2m-outlet></r2m-outlet></main>
+        ${
+          this.drawerOpen()
+            ? html`<aside class="shell__drawer" aria-label="Activity">
+                <!-- Mounted only while open so a stream tab's hub group is left when the drawer closes. -->
+                <r2m-activity-drawer></r2m-activity-drawer>
+              </aside>`
+            : nothing
+        }
+      </div>
+
+      <footer class="shell__activity" aria-label="Background activity">
+        <r2m-activity-bar .narrow=${narrow}></r2m-activity-bar>
+      </footer>
+    `;
+  }
+
+  private schemeItem(preference: SchemePreference, label: string) {
+    const current = this.theme.preference() === preference;
+    return html`<button
+      type="button"
+      class="r2m-menu__item"
+      role="menuitemradio"
+      aria-checked=${current}
+      data-scheme=${preference}
+      @click=${() => this.setScheme(preference)}
+    >
+      ${icon(SCHEME_ICONS[preference])}<span>${label}</span>
+    </button>`;
+  }
+
+  private navItem(item: NavItem, expanded: boolean) {
+    const active = isActive(item, this.router.path());
+    return html`<li>
+      <a
+        class="shell__nav-item ${active ? 'shell__nav-item--active' : ''}"
+        href=${item.link}
+        aria-current=${active ? 'page' : nothing}
+        data-tooltip=${expanded ? nothing : item.label}
+        @click=${this.closeModalRail}
+      >
+        ${icon(item.icon)}<span class="shell__nav-label">${item.label}</span>
+      </a>
+    </li>`;
+  }
+}
+define('app-root', AppShell);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'app-root': AppShell;
   }
 }

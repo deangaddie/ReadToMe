@@ -1,4 +1,5 @@
-import { CharacterSummaryDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { CharacterSummaryDto } from '@app/api';
 import {
   initialMergeForm,
   lostVoicesWarning,
@@ -45,7 +46,9 @@ describe('merge dialog rules', () => {
     expect(validateMerge({ survivorId: 'narrator', addNameAsAlias: true }, candidates, 'bob')).toBe(
       'Select a character to merge into.',
     );
-    expect(validateMerge({ survivorId: 'carol', addNameAsAlias: false }, candidates, 'bob')).toBeNull();
+    expect(
+      validateMerge({ survivorId: 'carol', addNameAsAlias: false }, candidates, 'bob'),
+    ).toBeNull();
   });
 
   it('warns about lost voices by name, sorted', () => {

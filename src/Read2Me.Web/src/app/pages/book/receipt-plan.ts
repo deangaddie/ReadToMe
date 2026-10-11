@@ -1,4 +1,4 @@
-import { BookFacet, Receipt, hasFacet } from '@app/live/live-messages';
+import { type BookFacet, type Receipt, hasFacet } from '@app/live/live-messages';
 
 /** What the reader holds for one loaded chapter, as far as matching a receipt goes. */
 export interface LoadedChapter {
@@ -82,7 +82,11 @@ export function planReceipt(receipt: Receipt, context: ReceiptContext): ReceiptP
         // A structural change whose ids name nothing loaded is usually a node that did not exist
         // when this chapter was read (an inserted pause paragraph names only itself). The reader
         // cannot place it, so it rereads what is on screen rather than miss it.
-        if (affected.length === 0 && hasFacet(effects.facets, 'Structure') && context.visibleChapterId) {
+        if (
+          affected.length === 0 &&
+          hasFacet(effects.facets, 'Structure') &&
+          context.visibleChapterId
+        ) {
           reload.add(context.visibleChapterId);
         }
       }

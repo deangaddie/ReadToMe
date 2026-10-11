@@ -511,7 +511,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
 only computed for folders `NodeStatusService` has seeded — call `GET /api/projects/{folder}/status`
-after joining (the Angular project shell does) to seed it. Example with the .NET client:
+after joining (the web project shell does) to seed it. Example with the .NET client:
 
 ```csharp
 var conn = new HubConnectionBuilder().WithUrl("http://localhost:5000/hubs/live").Build();

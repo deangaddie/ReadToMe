@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import { AudioGenEvent, LlmStreamEvent } from '@app/live/hub-events';
 import { AudioGenMessage, LlmMessage } from '@app/live/live-messages';
 import {

@@ -83,8 +83,8 @@ public class OneConsistencyModelTests : ProjectDbTestBase
             .Order()
             .ToList();
 
-        // BookMutations is the publisher. LiveRelay derives no Book state from a receipt: the
-        // Angular client reloads what each receipt names (ADR 0007, spec D6).
+        // BookMutations is the publisher. LiveRelay derives no Book state from a receipt: the web
+        // client reloads what each receipt names (ADR 0007, spec D6).
         Assert.Equal([nameof(BookMutations), nameof(LiveRelay)], consumers);
     }
 

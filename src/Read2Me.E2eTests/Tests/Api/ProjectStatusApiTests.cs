@@ -7,7 +7,7 @@ using Read2Me.E2eTests.Infrastructure;
 namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
-/// The roll-ups behind the Angular pipeline stepper and reader tree badges (ticket 09):
+/// The roll-ups behind the web pipeline stepper and reader tree badges (ticket 09):
 /// <c>GET /api/projects/{folder}/status</c> and the per-node summary.
 /// </summary>
 [Collection(E2eCollection.Name)]

@@ -1,4 +1,4 @@
-import { AttributionPromptStyle, LlmApiType, LlmServerConfig } from '@app/api';
+import { AttributionPromptStyle, LlmApiType, type LlmServerConfig } from '@app/api';
 import { isAbsoluteUrl } from '@app/shared/config-form';
 
 /**

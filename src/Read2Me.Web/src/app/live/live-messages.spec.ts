@@ -12,7 +12,7 @@ import {
  * Pins the TypeScript contract to the C# it mirrors. The C# side has no shared constants — the
  * family names are `[HubMethodName]` attributes and the `kind` strings are literals in the mapper —
  * so the test reads those sources (the web workspace is a sibling of Read2Me.App) and fails when
- * either side moves. Vitest runs under Node even with the jsdom environment, so `node:fs` is fine.
+ * either side moves.
  */
 const LIVE_DIR = resolve(process.cwd(), '../Read2Me.App/Live');
 

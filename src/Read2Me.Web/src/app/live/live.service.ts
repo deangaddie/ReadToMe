@@ -1,7 +1,8 @@
-import { Injectable, OnDestroy, computed, inject, signal, untracked } from '@angular/core';
-import { Observable, Subject, filter, map } from 'rxjs';
+import { computed, signal, untracked } from '@app/core/signals';
+import { use } from '@app/core/services';
+import { Emitter } from '@app/core/emitter';
 import { ORIGIN_ID } from '@app/api';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { ToastService } from '@app/ui/toast';
 import {
   LIVE_CONNECTION_FACTORY,
   LIVE_HUB_URL,
@@ -40,7 +41,10 @@ export type LiveConnectionState = 'connecting' | 'connected' | 'reconnecting' | 
 /** How long the hub may be unreachable before the user is told (spec "Error handling"). */
 export const DISCONNECT_TOAST_AFTER_MS = 5000;
 
-type FamilySubjects = { [K in LiveFamily]: Subject<LiveMessageMap[K]> };
+type FamilySubjects = { [K in LiveFamily]: Emitter<LiveMessageMap[K]> };
+
+/** Unsubscribe function returned by every stream (the RxJS `Subscription` stand-in). */
+export type Unsubscribe = () => void;
 
 interface ProjectRef {
   /** Folder as first joined; the hub compares folders case-insensitively. */
@@ -55,10 +59,9 @@ interface ProjectRef {
  * can re-join exactly what is still wanted. Started once from the app config; the shell reads
  * {@link state} for its connection dot.
  */
-@Injectable({ providedIn: 'root' })
-export class LiveService implements OnDestroy {
-  private readonly toast = inject(ToastService);
-  private readonly createConnection = inject(LIVE_CONNECTION_FACTORY);
+export class LiveService {
+  private readonly toast = use(ToastService);
+  private readonly createConnection = use(LIVE_CONNECTION_FACTORY);
 
   private connection: LiveConnection | null = null;
   private stopped = false;
@@ -67,9 +70,9 @@ export class LiveService implements OnDestroy {
   private disconnectToasted = false;
 
   private readonly subjects = Object.fromEntries(
-    LIVE_FAMILIES.map((family) => [family, new Subject()]),
+    LIVE_FAMILIES.map((family) => [family, new Emitter()]),
   ) as unknown as FamilySubjects;
-  private readonly resyncedSubject = new Subject<LiveSnapshot>();
+  private readonly resyncedSubject = new Emitter<LiveSnapshot>();
 
   private readonly projectRefs = new Map<string, ProjectRef>();
   private readonly streamRefs = new Map<StreamKind, number>();
@@ -124,7 +127,9 @@ export class LiveService implements OnDestroy {
    * Fires after every (re)connect once groups are re-joined and `GetSnapshot` has been applied;
    * a view compares the snapshot's project revision with the last one it rendered.
    */
-  readonly resynced$: Observable<LiveSnapshot> = this.resyncedSubject.asObservable();
+  resynced(listener: (snapshot: LiveSnapshot) => void): Unsubscribe {
+    return this.resyncedSubject.subscribe(listener);
+  }
 
   /**
    * This tab's hub connection id, or null while disconnected. An endpoint that pushes back to one
@@ -136,17 +141,16 @@ export class LiveService implements OnDestroy {
   }
 
   /** Typed stream of one family's messages. */
-  on<K extends LiveFamily>(family: K): Observable<LiveMessageMap[K]> {
-    return this.subjects[family].asObservable();
+  on<K extends LiveFamily>(family: K, listener: (message: LiveMessageMap[K]) => void): Unsubscribe {
+    return this.subjects[family].subscribe(listener);
   }
 
   /** Receipts for one project with `isOwn` set when this tab's `X-Origin-Id` produced the write. */
-  receipts$(folder: string): Observable<Receipt> {
+  receipts(folder: string, listener: (receipt: Receipt) => void): Unsubscribe {
     const key = folderKey(folder);
-    return this.on('receipt').pipe(
-      filter((r) => folderKey(r.folder) === key),
-      map((r) => ({ ...r, isOwn: r.originId === ORIGIN_ID })),
-    );
+    return this.on('receipt', (r) => {
+      if (folderKey(r.folder) === key) listener({ ...r, isOwn: r.originId === ORIGIN_ID });
+    });
   }
 
   /** Opens the connection and keeps it open until {@link stop}. Idempotent. */
@@ -183,10 +187,6 @@ export class LiveService implements OnDestroy {
         // Already closed.
       }
     }
-  }
-
-  ngOnDestroy(): void {
-    void this.stop();
   }
 
   // ---- groups ----------------------------------------------------------------------------------
@@ -340,7 +340,7 @@ export class LiveService implements OnDestroy {
     for (const [folder, project] of Object.entries(snapshot.projects ?? {})) {
       this.setProject(folder, project);
     }
-    this.resyncedSubject.next(snapshot);
+    this.resyncedSubject.emit(snapshot);
   }
 
   /** Invokes when connected; a failure (connection dropped mid-call) is left to the next resync. */
@@ -368,7 +368,7 @@ export class LiveService implements OnDestroy {
   private receive<K extends LiveFamily>(family: K, message: LiveMessageMap[K]): void {
     this._latest.update((all) => ({ ...all, [family]: message }));
     this.fold(family, message);
-    (this.subjects[family] as Subject<LiveMessageMap[K]>).next(message);
+    (this.subjects[family] as Emitter<LiveMessageMap[K]>).emit(message);
   }
 
   private fold<K extends LiveFamily>(family: K, message: LiveMessageMap[K]): void {

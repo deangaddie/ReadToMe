@@ -1,327 +1,401 @@
-import { CdkTree, CdkTreeModule } from '@angular/cdk/tree';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  Injector,
-  afterNextRender,
-  effect,
-  inject,
-  input,
-  output,
-  untracked,
-  viewChild,
-} from '@angular/core';
-import { MatIconModule } from '@angular/material/icon';
-import { NodeStatusSummary } from '@app/live/live-messages';
-import { CountBadge } from '@app/ui/count-badge/count-badge';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { TreeNode } from './book-tree';
-import { NodeMenu } from './node-menu';
-import { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
-import { TriState } from './selection';
+import { html, nothing } from 'lit-html';
+import { repeat } from 'lit-html/directives/repeat.js';
+import { R2mElement, define } from '@app/core/element';
+import { computed, signal } from '@app/core/signals';
+import { adoptStyles } from '@app/core/styles';
+import type { NodeStatusSummary } from '@app/live/live-messages';
+import { countBadge, icon, statusChip } from '@app/ui/partials';
+import { TypeAhead, typeAheadTarget } from '@app/ui/roving';
+import type { TreeNode } from './book-tree';
+import { NODE_MENU_OPEN, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
+import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
+import type { TriState } from './selection';
+import structureTreeCss from './structure-tree.css' with { type: 'text' };
+
+adoptStyles(structureTreeCss);
+
+/** One visible row of the tree: the node plus what its `aria-*` attributes say about it. */
+export interface TreeRow {
+  node: TreeNode;
+  /** 0 for a root; `aria-level` is depth + 1. */
+  depth: number;
+  /** `aria-setsize`: the number of siblings, this node included. */
+  setSize: number;
+  /** `aria-posinset`: 1-based position among the siblings. */
+  position: number;
+  parent: TreeNode | null;
+}
+
+/** The rows a tree shows, in order: every root, then the children of each expanded node, recursively. */
+export function flattenTree(nodes: readonly TreeNode[], expanded: ReadonlySet<string>): TreeRow[] {
+  const rows: TreeRow[] = [];
+  const walk = (siblings: readonly TreeNode[], depth: number, parent: TreeNode | null) => {
+    siblings.forEach((node, index) => {
+      rows.push({ node, depth, setSize: siblings.length, position: index + 1, parent });
+      if (node.expandable && expanded.has(node.id)) walk(node.children, depth + 1, node);
+    });
+  };
+  walk(nodes, 0, null);
+  return rows;
+}
 
 /**
  * The reader's navigation (design §6.3): volumes / parts / chapters with roll-up badges from the
  * project's node status map. Expanding a node asks for its children; clicking a chapter asks the
  * reader to show it. Expansion is owned by the caller (`expandedIds`), so a re-created tree reopens
- * the nodes the reader left open. Each node carries its menu (ticket 11); a node whose
- * attribution is queued or processing has it disabled. With a `selection` kind every node has a
- * tri-state checkbox — over its Character paragraphs (ticket 12) or its generatable items (ticket
- * 13) — and the menu offers that selection's shortcuts; the tree only reports the gesture, the
- * page does the read.
+ * the nodes the reader left open. Each node carries a trigger for the shared `r2m-node-menu`
+ * (ticket 11); a node whose attribution is queued or processing has it disabled.
+ *
+ * A flat ARIA tree written by hand (spec §2.3 point 8): one `role=treeitem` per visible row with
+ * `aria-level`, `aria-setsize`, `aria-posinset` and `aria-expanded`, a roving tabindex, and the CDK
+ * `TreeKeyManager` keys — arrows, Home/End, Enter/Space (a chapter opens; a parent is toggled by
+ * its chevron or Left/Right, as in Angular), `*`, type-ahead over the titles, and Shift+F10 /
+ * ContextMenu for the node menu, since the trigger inside a row is not a tab stop. With a
+ * `selection` kind every node has a tri-state checkbox — over its Character paragraphs (ticket
+ * 12) or its generatable items (ticket 13) — and the menu offers that selection's shortcuts; the
+ * tree only reports the gesture, the page reads the node and decides.
+ *
+ * Events: `expanded-change` ({ node, expanded }), `select-chapter` (chapter id),
+ * `toggle-node` ({ node, on }), `node-action` ({ node, action }).
  */
-@Component({
-  selector: 'app-structure-tree',
-  imports: [CdkTreeModule, MatIconModule, CountBadge, StatusChip, NodeMenu],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <cdk-tree
-      class="tree"
-      [dataSource]="nodes()"
-      [childrenAccessor]="childrenOf"
-      [expansionKey]="keyOf"
-      aria-label="Book structure"
-    >
-      <cdk-tree-node
-        *cdkTreeNodeDef="let node"
-        cdkTreeNodePadding
-        [cdkTreeNodePaddingIndent]="14"
-        [isExpandable]="node.expandable"
-        class="tree__node"
-        [class.tree__node--current]="node.id === currentChapterId()"
-        [attr.data-node-id]="node.id"
-        (expandedChange)="onExpanded(node, $event)"
-        (activation)="onActivate(node)"
-      >
-        @if (node.expandable) {
-          <button
-            type="button"
-            class="tree__toggle"
-            cdkTreeNodeToggle
-            tabindex="-1"
-            [attr.aria-label]="'Toggle ' + node.title"
-          >
-            <mat-icon aria-hidden="true">{{
-              expandedIds().has(node.id) ? 'expand_more' : 'chevron_right'
-            }}</mat-icon>
-          </button>
-        } @else {
-          <span class="tree__toggle" aria-hidden="true"></span>
-        }
+export class StructureTree extends R2mElement {
+  #nodes = signal<readonly TreeNode[]>([]);
+  get nodes() {
+    return this.#nodes();
+  }
+  set nodes(value: readonly TreeNode[]) {
+    this.#nodes.set(value);
+  }
 
-        @if (selection(); as kind) {
-          <input
-            type="checkbox"
-            class="tree__select"
-            [attr.aria-label]="'Select ' + kind + ' of ' + node.title"
-            [checked]="stateOf(node) === 'checked'"
-            [indeterminate]="stateOf(node) === 'indeterminate'"
-            (click)="$event.stopPropagation()"
-            (change)="onToggle(node, $event)"
-          />
-        }
+  #statuses = signal<Readonly<Record<string, NodeStatusSummary | null | undefined>>>({});
+  get statuses() {
+    return this.#statuses();
+  }
+  set statuses(value: Readonly<Record<string, NodeStatusSummary | null | undefined>>) {
+    this.#statuses.set(value);
+  }
 
-        <button
-          type="button"
-          class="tree__title"
-          tabindex="-1"
-          [attr.aria-current]="node.id === currentChapterId() ? 'true' : null"
-          (click)="onActivate(node)"
-        >
-          {{ node.title }}
-        </button>
-
-        @if (node.expandable && expandedIds().has(node.id) && !node.loaded) {
-          <span class="tree__loading" aria-busy="true" aria-label="Loading"></span>
-        }
-
-        @if (statuses()[node.id]; as s) {
-          <span class="tree__badges">
-            @if (s.attributionProcessing) {
-              <r2m-status-chip compact status="busy" label="Processing" />
-            } @else if (s.attributionQueued > 0) {
-              <r2m-status-chip
-                compact
-                status="info"
-                icon="schedule"
-                [label]="s.attributionQueued + ' queued'"
-              />
-            }
-            <r2m-count-badge
-              kind="attribution"
-              [count]="s.attributionRemaining"
-              title="Paragraphs needing attribution"
-            />
-            <r2m-count-badge
-              kind="audio"
-              [count]="s.audioRemaining"
-              title="Paragraphs needing audio"
-            />
-            <r2m-count-badge
-              kind="review"
-              [count]="s.review"
-              title="Paragraphs with audio to review"
-            />
-            @if (s.isDone) {
-              <mat-icon class="tree__done" aria-label="Done">check_circle</mat-icon>
-            }
-          </span>
-        }
-
-        <r2m-node-menu
-          class="tree__menu"
-          [target]="targetOf(node)"
-          [disabled]="isBusy(node)"
-          (action)="onAction(node, $event)"
-          (click)="$event.stopPropagation()"
-        />
-      </cdk-tree-node>
-    </cdk-tree>
-  `,
-  styles: `
-    :host {
-      display: block;
-      font-size: var(--r2m-text-md);
-    }
-    .tree__node {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-1);
-      min-height: 32px;
-      padding-right: var(--r2m-space-2);
-      border-radius: var(--r2m-radius-sm);
-      outline: none;
-    }
-    .tree__node:focus-visible {
-      box-shadow: inset 0 0 0 2px var(--r2m-accent);
-    }
-    .tree__node--current {
-      background: var(--r2m-nav-active-bg);
-      color: var(--r2m-nav-active-fg);
-    }
-    .tree__toggle {
-      flex: 0 0 24px;
-      width: 24px;
-      height: 24px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      border: none;
-      background: transparent;
-      color: inherit;
-      cursor: pointer;
-    }
-    .tree__select {
-      flex: 0 0 auto;
-      margin: 0 2px 0 0;
-      width: 13px;
-      height: 13px;
-      accent-color: var(--r2m-accent);
-    }
-    .tree__title {
-      flex: 1 1 auto;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      text-align: left;
-      padding: 0;
-      border: none;
-      background: transparent;
-      color: inherit;
-      font: inherit;
-      cursor: pointer;
-    }
-    .tree__badges {
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
-      flex: 0 0 auto;
-    }
-    .tree__loading {
-      flex: 0 0 auto;
-      width: var(--r2m-space-8);
-      height: var(--r2m-space-2);
-      border-radius: var(--r2m-radius-pill);
-      background: color-mix(in srgb, var(--r2m-text-muted) 20%, transparent);
-    }
-    .tree__done {
-      font-size: 16px;
-      width: 16px;
-      height: 16px;
-      color: var(--r2m-status-ok);
-    }
-    .tree__menu {
-      flex: 0 0 auto;
-      opacity: 0;
-      transition: opacity 120ms;
-    }
-    .tree__node:hover .tree__menu,
-    .tree__node:focus-within .tree__menu,
-    .tree__node--current .tree__menu {
-      opacity: 1;
-    }
-  `,
-})
-export class StructureTree {
-  readonly nodes = input.required<TreeNode[]>();
-  readonly statuses = input<Readonly<Record<string, NodeStatusSummary | null>>>({});
-  readonly currentChapterId = input<string | null>(null);
+  #currentChapterId = signal<string | null>(null);
+  get currentChapterId() {
+    return this.#currentChapterId();
+  }
+  set currentChapterId(value: string | null) {
+    this.#currentChapterId.set(value);
+  }
 
   /** Ids of the nodes to show expanded. */
-  readonly expandedIds = input<ReadonlySet<string>>(new Set());
+  #expandedIds = signal<ReadonlySet<string>>(new Set());
+  get expandedIds() {
+    return this.#expandedIds();
+  }
+  set expandedIds(value: ReadonlySet<string>) {
+    this.#expandedIds.set(value);
+  }
 
   /** Which selection is on (checkboxes per node and that selection's menu entries); null for none. */
-  readonly selection = input<SelectionKind | null>(null);
+  #selection = signal<SelectionKind | null>(null);
+  get selection() {
+    return this.#selection();
+  }
+  set selection(value: SelectionKind | null) {
+    this.#selection.set(value);
+  }
+
   /** Each node's roll-up over the current selection; absent reads as unchecked. */
-  readonly nodeStates = input<Readonly<Record<string, TriState>>>({});
+  #nodeStates = signal<Readonly<Record<string, TriState>>>({});
+  get nodeStates() {
+    return this.#nodeStates();
+  }
+  set nodeStates(value: Readonly<Record<string, TriState>>) {
+    this.#nodeStates.set(value);
+  }
 
-  /** The user expanded or collapsed a node. */
-  readonly expandedChange = output<{ node: TreeNode; expanded: boolean }>();
-  readonly selectChapter = output<string>();
-  /** The node's checkbox: select (`on`) or deselect everything the selection holds under it. */
-  readonly toggleNode = output<{ node: TreeNode; on: boolean }>();
-  /** "Select unprocessed": add the node's still-unattributed paragraphs to the selection. */
-  readonly selectUnprocessed = output<TreeNode>();
-  /** "Attribute unprocessed": queue the node's still-unattributed paragraphs. */
-  readonly attributeNode = output<TreeNode>();
-  /** "Select needs audio": add the node's generatable items still missing audio to the selection. */
-  readonly selectNeedsAudio = output<TreeNode>();
-  /** "Generate audio for this node": queue the node's items still missing audio. */
-  readonly generateAudioNode = output<TreeNode>();
+  /** The editor is locked (stale view or a write in flight): every node menu is off. */
+  #locked = signal(false);
+  get locked() {
+    return this.#locked();
+  }
+  set locked(value: boolean) {
+    this.#locked.set(value);
+  }
 
-  private readonly tree = viewChild(CdkTree<TreeNode, string>);
-  private readonly injector = inject(Injector);
+  /** The row holding the roving tab stop; null until the user moves it (the current chapter then). */
+  readonly #active = signal<string | null>(null);
+  readonly #rows = computed(() => flattenTree(this.#nodes(), this.#expandedIds()));
+  /** The tab stop: the row last focused, else the current chapter, else the first row. */
+  readonly #tabStop = computed(() => {
+    const rows = this.#rows();
+    const has = (id: string | null) => id !== null && rows.some((r) => r.node.id === id);
+    const active = this.#active();
+    if (has(active)) return active;
+    const current = this.#currentChapterId();
+    return has(current) ? current : (rows[0]?.node.id ?? null);
+  });
+  readonly #typeAhead = new TypeAhead((query) => this.#jumpTo(query));
 
-  protected readonly childrenOf = (node: TreeNode) => node.children;
-  protected readonly keyOf = (node: TreeNode) => node.id;
-
-  constructor() {
-    // The CDK tree's own expansion model starts empty; open what the caller says is expanded.
-    effect(() => {
-      const nodes = this.nodes();
-      const ids = this.expandedIds();
-      untracked(() =>
-        afterNextRender(() => this.restoreExpansion(nodes, ids), { injector: this.injector }),
-      );
+  protected override connected(): void {
+    this.addEventListener('keydown', this.#onKeydown);
+    this.addEventListener('focusin', this.#onFocusIn);
+    this.addEventListener(NODE_MENU_OPEN, this.#onMenuOpen);
+    this.onDisconnect(() => {
+      this.removeEventListener('keydown', this.#onKeydown);
+      this.removeEventListener('focusin', this.#onFocusIn);
+      this.removeEventListener(NODE_MENU_OPEN, this.#onMenuOpen);
+      this.#typeAhead.cancel();
     });
   }
 
-  protected onExpanded(node: TreeNode, expanded: boolean): void {
-    this.expandedChange.emit({ node, expanded });
+  protected template() {
+    const rows = this.#rows();
+    const tabStop = this.#tabStop();
+    const current = this.#currentChapterId();
+    const expanded = this.#expandedIds();
+    const statuses = this.#statuses();
+    const selection = this.#selection();
+    const nodeStates = this.#nodeStates();
+    const locked = this.#locked();
+    return html`<div class="tree" role="tree" aria-label="Book structure">
+      ${repeat(
+        rows,
+        (row) => row.node.id,
+        (row) => {
+          const { node } = row;
+          const isOpen = node.expandable && expanded.has(node.id);
+          const isCurrent = node.id === current;
+          const status = statuses[node.id] ?? null;
+          const busy = !!status && (status.attributionProcessing || status.attributionQueued > 0);
+          return html`<div
+            role="treeitem"
+            class="tree__node ${isCurrent ? 'tree__node--current' : ''}"
+            tabindex=${node.id === tabStop ? '0' : '-1'}
+            aria-level=${row.depth + 1}
+            aria-setsize=${row.setSize}
+            aria-posinset=${row.position}
+            aria-expanded=${node.expandable ? (isOpen ? 'true' : 'false') : nothing}
+            aria-current=${isCurrent ? 'true' : nothing}
+            data-node-id=${node.id}
+            style="--tree-depth: ${row.depth}"
+            @click=${() => this.#onNodeClick(node)}
+          >
+            ${
+              node.expandable
+                ? html`<button
+                    type="button"
+                    class="tree__toggle"
+                    tabindex="-1"
+                    aria-label="Toggle ${node.title}"
+                    @click=${(e: Event) => {
+                      e.stopPropagation();
+                      this.#focusRow(node.id);
+                      this.#setExpanded(node, !isOpen);
+                    }}
+                  >
+                    ${icon(isOpen ? 'expand_more' : 'chevron_right')}
+                  </button>`
+                : html`<span class="tree__toggle" aria-hidden="true"></span>`
+            }
+            ${
+              selection
+                ? html`<input
+                    type="checkbox"
+                    class="tree__select"
+                    tabindex="-1"
+                    aria-label="Select ${selection} of ${node.title}"
+                    .checked=${(nodeStates[node.id] ?? 'unchecked') === 'checked'}
+                    .indeterminate=${(nodeStates[node.id] ?? 'unchecked') === 'indeterminate'}
+                    @click=${(e: Event) => e.stopPropagation()}
+                    @change=${(e: Event) =>
+                      this.emit('toggle-node', {
+                        node,
+                        on: (e.target as HTMLInputElement).checked,
+                      })}
+                  />`
+                : nothing
+            }
+            <span class="tree__title">${node.title}</span>
+            ${
+              isOpen && !node.loaded
+                ? html`<span class="tree__loading" aria-busy="true" aria-label="Loading"></span>`
+                : nothing
+            }
+            ${status ? badges(status) : nothing}
+            <span class="tree__menu">
+              ${nodeMenuTrigger(targetOf(node, selection), { disabled: busy || locked, tabIndex: -1 })}
+            </span>
+          </div>`;
+        },
+      )}
+    </div>`;
   }
 
-  private restoreExpansion(nodes: readonly TreeNode[], ids: ReadonlySet<string>): void {
-    const tree = this.tree();
-    if (!tree) return;
-    for (const node of nodes) {
-      if (!ids.has(node.id)) continue;
-      if (!tree.isExpanded(node)) tree.expand(node);
-      this.restoreExpansion(node.children, ids);
-    }
+  // ---- pointer ----------------------------------------------------------------------------------
+
+  /** A click focuses the row and, on a chapter, opens it; a parent's chevron is its toggle. */
+  #onNodeClick(node: TreeNode): void {
+    this.#focusRow(node.id);
+    if (node.level === 'chapter') this.emit('select-chapter', node.id);
   }
 
-  protected onActivate(node: TreeNode): void {
-    if (node.level === 'chapter') this.selectChapter.emit(node.id);
-  }
+  /** Focus that arrived by any route (a click, a tab, a script) makes that row the tab stop. */
 
-  protected stateOf(node: TreeNode): TriState {
-    return this.nodeStates()[node.id] ?? 'unchecked';
-  }
+  // ---- keys (CDK TreeKeyManager) ----------------------------------------------------------------
 
-  protected onToggle(node: TreeNode, event: Event): void {
-    this.toggleNode.emit({ node, on: (event.target as HTMLInputElement).checked });
-  }
+  readonly #onKeydown = (event: KeyboardEvent): void => {
+    const target = event.target as HTMLElement;
+    // Keys from a control inside a row (the menu trigger) are that control's own.
+    if (target.getAttribute('role') !== 'treeitem') return;
+    const rows = this.#rows();
+    const index = rows.findIndex((r) => r.node.id === target.dataset['nodeId']);
+    const row = rows[index];
+    if (!row) return;
+    const { node } = row;
 
-  protected onAction(node: TreeNode, action: ActionEntryId): void {
-    switch (action) {
-      case 'select-unprocessed':
-        return this.selectUnprocessed.emit(node);
-      case 'attribute-node':
-        return this.attributeNode.emit(node);
-      case 'select-needs-audio':
-        return this.selectNeedsAudio.emit(node);
-      case 'generate-audio-node':
-        return this.generateAudioNode.emit(node);
-    }
-  }
-
-  protected targetOf(node: TreeNode): NodeMenuTarget {
-    const target: NodeMenuTarget = {
-      kind: node.level,
-      id: node.id,
-      text: node.rawTitle,
-      isFirst: node.isFirst,
-      isLast: node.isLast,
+    const move = (to: number) => {
+      event.preventDefault();
+      const next = rows[Math.max(0, Math.min(rows.length - 1, to))];
+      if (next) this.#focusRow(next.node.id);
     };
-    const selection = this.selection();
-    return selection ? { ...target, selection } : target;
+
+    switch (event.key) {
+      case 'ArrowDown':
+        return move(index + 1);
+      case 'ArrowUp':
+        return move(index - 1);
+      case 'Home':
+        return move(0);
+      case 'End':
+        return move(rows.length - 1);
+      case 'ArrowRight': {
+        event.preventDefault();
+        if (!node.expandable) return;
+        if (!this.#expandedIds().has(node.id)) return this.#setExpanded(node, true);
+        const [first] = node.children;
+        if (first && node.loaded) this.#focusRow(first.id);
+        return;
+      }
+      case 'ArrowLeft': {
+        event.preventDefault();
+        if (node.expandable && this.#expandedIds().has(node.id)) {
+          return this.#setExpanded(node, false);
+        }
+        if (row.parent) this.#focusRow(row.parent.id);
+        return;
+      }
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        if (node.level === 'chapter') this.emit('select-chapter', node.id);
+        return;
+      case '*': {
+        event.preventDefault();
+        const siblings = row.parent ? row.parent.children : this.#nodes();
+        for (const sibling of siblings) {
+          if (sibling.expandable && !this.#expandedIds().has(sibling.id)) {
+            this.#setExpanded(sibling, true);
+          }
+        }
+        return;
+      }
+      case 'ContextMenu':
+      case 'F10':
+        if (event.key === 'F10' && !event.shiftKey) return;
+        event.preventDefault();
+        target.querySelector<HTMLElement>('.r2m-node-menu__trigger')?.click();
+        return;
+      default:
+        this.#typeAhead.keydown(event);
+    }
+  };
+
+  #jumpTo(query: string): void {
+    const rows = this.#rows();
+    const current = rows.findIndex((r) => r.node.id === this.#tabStop());
+    const index = typeAheadTarget(
+      query,
+      rows.map((r) => r.node.title),
+      current,
+    );
+    if (index !== null) this.#focusRow(rows[index]!.node.id);
   }
 
-  /** A node with attribution queued or running under it: its structure is about to change. */
-  protected isBusy(node: TreeNode): boolean {
-    const s = this.statuses()[node.id];
-    return !!s && (s.attributionProcessing || s.attributionQueued > 0);
+  readonly #onFocusIn = (event: FocusEvent): void => {
+    const id = (event.target as HTMLElement).closest<HTMLElement>('[role="treeitem"]')?.dataset[
+      'nodeId'
+    ];
+    if (id !== undefined) this.#active.set(id);
+  };
+
+  /** Moves the tab stop and focus to a row (the roving tabindex). */
+  #focusRow(id: string): void {
+    this.#active.set(id);
+    const item = this.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(id)}"]`);
+    if (!item) return;
+    for (const other of this.querySelectorAll<HTMLElement>('[role="treeitem"]')) {
+      other.tabIndex = other === item ? 0 : -1;
+    }
+    item.focus();
+  }
+
+  #setExpanded(node: TreeNode, expanded: boolean): void {
+    this.emit('expanded-change', { node, expanded });
+  }
+
+  // ---- node menu --------------------------------------------------------------------------------
+
+  /** The open request passes through on its way to the shared menu: name the row and take the actions. */
+  readonly #onMenuOpen = (event: Event): void => {
+    const request = (event as CustomEvent<NodeMenuRequest>).detail;
+    const item = request.anchor.closest<HTMLElement>('[role="treeitem"]');
+    const node = this.#rows().find((r) => r.node.id === item?.dataset['nodeId'])?.node;
+    if (!item || !node) return;
+    request.returnTo = item;
+    request.onAction = (action: ActionEntryId) => this.emit('node-action', { node, action });
+  };
+}
+
+function targetOf(node: TreeNode, selection: SelectionKind | null): NodeMenuTarget {
+  const target: NodeMenuTarget = {
+    kind: node.level,
+    id: node.id,
+    text: node.rawTitle,
+    isFirst: node.isFirst,
+    isLast: node.isLast,
+  };
+  // (A TreeNode is not a RowPosition, so the two flags are named rather than spread.)
+  return selection ? { ...target, selection } : target;
+}
+
+function badges(s: NodeStatusSummary) {
+  return html`<span class="tree__badges">
+    ${
+      s.attributionProcessing
+        ? statusChip({ status: 'busy', label: 'Processing', compact: true })
+        : s.attributionQueued > 0
+          ? statusChip({
+              status: 'info',
+              icon: 'schedule',
+              label: `${s.attributionQueued} queued`,
+              compact: true,
+            })
+          : nothing
+    }
+    ${countBadge('attribution', s.attributionRemaining, 'Paragraphs needing attribution')}
+    ${countBadge('audio', s.audioRemaining, 'Paragraphs needing audio')}
+    ${countBadge('review', s.review, 'Paragraphs with audio to review')}
+    ${
+      s.isDone
+        ? html`<span class="material-symbols-rounded r2m-icon tree__done" aria-label="Done"
+            >check_circle</span
+          >`
+        : nothing
+    }
+  </span>`;
+}
+
+define('r2m-structure-tree', StructureTree);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-structure-tree': StructureTree;
   }
 }

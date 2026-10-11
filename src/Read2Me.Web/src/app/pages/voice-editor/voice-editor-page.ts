@@ -1,38 +1,33 @@
+import { html, nothing } from 'lit-html';
+import { repeat } from 'lit-html/directives/repeat.js';
 import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  untracked,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatIconModule } from '@angular/material/icon';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterLink } from '@angular/router';
-import {
-  PreviewResponse,
-  PreviewStepRequest,
-  StepCatalogEntryDto,
-  VoiceDto,
+  type PreviewResponse,
+  type PreviewStepRequest,
+  type StepCatalogEntryDto,
   VoiceEditorApi,
+  type VoiceDto,
   VoicesApi,
   toApiError,
 } from '@app/api';
-import { AudioPlayer } from '@app/ui/audio-player/audio-player';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { EmptyState } from '@app/ui/empty-state/empty-state';
-import { PageHeader } from '@app/ui/page-header/page-header';
-import { SettingsForm, SettingsValues } from '@app/ui/settings-form/settings-form';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
+import { R2mElement, define } from '@app/core/element';
+import { Router } from '@app/core/router';
+import { use } from '@app/core/services';
 import {
-  StepValues,
-  Ticks,
+  type ReadonlySignal,
+  type WritableSignal,
+  computed,
+  signal,
+  untracked,
+} from '@app/core/signals';
+import { adoptStyles } from '@app/core/styles';
+import { ConfirmService } from '@app/ui/dialogs';
+import { emptyState, icon, spinner, statusChip } from '@app/ui/partials';
+import type { SettingsValues } from '@app/ui/settings-form';
+import { castPath } from '../cast/cast-path';
+import { ProjectStore } from '../project/project-store';
+import {
+  type StepValues,
+  type Ticks,
   applyBlockedReason,
   buildPreviewSteps,
   hissRedundant,
@@ -42,6 +37,11 @@ import {
   stageFor,
   toStepSchema,
 } from './editor-logic';
+import '@app/ui/audio-player';
+import '@app/ui/settings-form';
+import voiceEditorCss from './voice-editor-page.css' with { type: 'text' };
+
+adoptStyles(voiceEditorCss);
 
 /** The last render: what was asked for and what came back. */
 interface Render {
@@ -53,363 +53,316 @@ interface Render {
  * `/projects/{folder}/voices/{voiceId}/editor` (ticket 18, design §6.4): the step checklist on the
  * left with the selected step's dials on the right, an Original player plus one "After <step>"
  * player per rendered stage, and Apply gated on a render that matches the current ticks and dials.
- * The host re-checks that gate through `previewId`; this page only explains it.
+ * The host re-checks that gate through `previewId`; this page only explains it. Reads the folder
+ * from the project shell's {@link ProjectStore} and the voice id from the route.
  */
-@Component({
-  selector: 'app-voice-editor-page',
-  imports: [
-    RouterLink,
-    MatButtonModule,
-    MatCheckboxModule,
-    MatIconModule,
-    MatProgressBarModule,
-    MatProgressSpinnerModule,
-    MatTooltipModule,
-    AudioPlayer,
-    EmptyState,
-    PageHeader,
-    SettingsForm,
-    StatusChip,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'voice-editor' },
-  template: `
-    <r2m-page-header title="Edit voice audio" [subtitle]="voice()?.name">
-      <ng-container actions>
-        <a mat-button data-action="back" [routerLink]="backLink()">
-          <mat-icon>arrow_back</mat-icon> Back
-        </a>
-      </ng-container>
-    </r2m-page-header>
+export class VoiceEditorPage extends R2mElement {
+  private readonly voices = use(VoicesApi);
+  private readonly editor = use(VoiceEditorApi);
+  private readonly confirm = use(ConfirmService);
+  private readonly router = use(Router);
+  private project!: ProjectStore;
 
-    @if (loading()) {
-      <mat-progress-bar mode="indeterminate" aria-label="Loading voice" />
-    } @else if (loadError(); as error) {
-      <r2m-empty-state icon="voice_over_off" headline="Cannot edit this voice" [hint]="error">
-        <a mat-button action data-action="back-empty" [routerLink]="backLink()">Back to the cast</a>
-      </r2m-empty-state>
-    } @else if (voice(); as voice) {
+  readonly loading = signal(true);
+  readonly loadError = signal<string | null>(null);
+  readonly actionError = signal<string | null>(null);
+  /** The last apply/restore outcome, shown inline (design §8: own-action outcomes are not toasts). */
+  readonly actionNote = signal<string | null>(null);
+  readonly voice = signal<VoiceDto | null>(null);
+  readonly catalog = signal<StepCatalogEntryDto[]>([]);
+
+  readonly ticks = signal<Ticks>({});
+  readonly values = signal<StepValues>({});
+  readonly selectedStepId = signal<string | null>(null);
+  readonly lastRender = signal<Render | null>(null);
+  readonly rendering = signal(false);
+  readonly writing = signal(false);
+  /** Bumped whenever the voice's files change under the same names, so the players refetch. */
+  readonly audioVersion = signal(0);
+
+  readonly busy = computed(() => this.rendering() || this.writing());
+  readonly anyTicked = computed(() => Object.values(this.ticks()).some(Boolean));
+  readonly currentRequest = computed(() =>
+    buildPreviewSteps(this.catalog(), this.ticks(), this.values()),
+  );
+  readonly stale = computed(() => {
+    const last = this.lastRender();
+    return last !== null && !sameRender(last.request, this.currentRequest());
+  });
+  readonly applyBlocked = computed(() =>
+    applyBlockedReason({
+      anyTicked: this.anyTicked(),
+      hasRender: this.lastRender() !== null,
+      stale: this.stale(),
+      busy: this.busy(),
+    }),
+  );
+  readonly hissRedundant = computed(() => hissRedundant(this.ticks()));
+  readonly stages = computed(() => this.lastRender()?.response.stages ?? []);
+  readonly selected = computed(
+    () => this.catalog().find((e) => e.stepId === this.selectedStepId()) ?? null,
+  );
+
+  /** Route param. */
+  private readonly voiceId = computed(() => this.router.params()['voiceId'] ?? '');
+  /** Built in `connected()`, once the shell's store is reachable through the DOM. */
+  private folder!: ReadonlySignal<string>;
+
+  protected override connected(): void {
+    this.classList.add('voice-editor');
+    this.project = use(ProjectStore, this);
+    this.folder = computed(() => this.project.folder() ?? '');
+
+    this.effect(() => {
+      const folder = this.folder();
+      const voiceId = this.voiceId();
+      if (!folder || !voiceId) return;
+      untracked(() => void this.load(folder, voiceId));
+    });
+  }
+
+  protected template() {
+    const voice = this.voice();
+    const loadError = this.loadError();
+    const backHref = castPath(this.folder(), voice?.characterId);
+    return html`
+      <header class="r2m-page-header">
+        <h1 class="r2m-page-header__title">Edit voice audio</h1>
+        ${voice ? html`<p class="r2m-page-header__subtitle">${voice.name}</p>` : nothing}
+        <a class="r2m-button voice-editor__back" data-action="back" href=${backHref}>
+          ${icon('arrow_back')} Back
+        </a>
+      </header>
+
+      ${
+        this.loading()
+          ? html`<progress max="1" aria-label="Loading voice"></progress>`
+          : loadError !== null
+            ? emptyState(
+                { icon: 'voice_over_off', headline: 'Cannot edit this voice', hint: loadError },
+                html`<a class="r2m-button" data-action="back-empty" href=${backHref}
+                  >Back to the cast</a
+                >`,
+              )
+            : voice
+              ? this.editorTemplate(voice)
+              : nothing
+      }
+    `;
+  }
+
+  private editorTemplate(voice: VoiceDto) {
+    const busy = this.busy();
+    const applyBlocked = this.applyBlocked();
+    const actionError = this.actionError();
+    const actionNote = this.actionNote();
+    return html`
       <div class="voice-editor__toolbar">
         <button
-          mat-flat-button
           type="button"
+          class="r2m-button r2m-button--filled"
           data-action="preview"
-          [disabled]="!anyTicked() || busy()"
-          (click)="preview()"
+          ?disabled=${!this.anyTicked() || busy}
+          @click=${() => void this.preview()}
         >
-          @if (rendering()) {
-            <mat-spinner diameter="18" />
-          } @else {
-            <mat-icon>play_circle</mat-icon>
-          }
-          Preview
+          ${this.rendering() ? spinner(18) : icon('play_circle')} Preview
         </button>
-        <span [matTooltip]="applyBlocked() ?? ''" matTooltipPosition="above">
+        <span data-tooltip=${applyBlocked ?? nothing}>
           <button
-            mat-stroked-button
             type="button"
+            class="r2m-button r2m-button--stroked"
             data-action="apply"
-            [disabled]="applyBlocked() !== null"
-            (click)="apply()"
+            ?disabled=${applyBlocked !== null}
+            @click=${() => void this.apply()}
           >
-            <mat-icon>check</mat-icon> Apply
+            ${icon('check')} Apply
           </button>
         </span>
-        @if (voice.referenceWarning; as warning) {
-          <r2m-status-chip
-            status="warn"
-            [label]="voice.referenceSeconds + ' s'"
-            icon="timer"
-            compact
-            [tooltip]="warning"
-            data-testid="voice-reference-warning"
-          />
+        ${
+          voice.referenceWarning
+            ? html`<span data-testid="voice-reference-warning"
+                >${statusChip({
+                  status: 'warn',
+                  label: `${voice.referenceSeconds} s`,
+                  icon: 'timer',
+                  compact: true,
+                  tooltip: voice.referenceWarning,
+                })}</span
+              >`
+            : nothing
         }
-        @if (voice.isEdited) {
-          <r2m-status-chip status="warn" label="Edited" icon="tune" compact data-testid="edited-chip" />
-          <button
-            mat-button
-            type="button"
-            class="voice-editor__danger"
-            data-action="restore"
-            [disabled]="busy()"
-            (click)="restore()"
-          >
-            <mat-icon>history</mat-icon> Restore original
-          </button>
+        ${
+          voice.isEdited
+            ? html`<span data-testid="edited-chip"
+                  >${statusChip({ status: 'warn', label: 'Edited', icon: 'tune', compact: true })}</span
+                >
+                <button
+                  type="button"
+                  class="r2m-button voice-editor__danger"
+                  data-action="restore"
+                  ?disabled=${busy}
+                  @click=${() => void this.restore()}
+                >
+                  ${icon('history')} Restore original
+                </button>`
+            : nothing
         }
-        @if (actionError(); as error) {
-          <r2m-status-chip status="error" [label]="error" data-testid="action-error" />
-        } @else if (actionNote(); as note) {
-          <r2m-status-chip status="ok" icon="check" compact [label]="note" data-testid="action-note" />
+        ${
+          actionError !== null
+            ? html`<span data-testid="action-error"
+                >${statusChip({ status: 'error', label: actionError })}</span
+              >`
+            : actionNote !== null
+              ? html`<span data-testid="action-note"
+                  >${statusChip({ status: 'ok', icon: 'check', compact: true, label: actionNote })}</span
+                >`
+              : nothing
         }
       </div>
 
       <div class="voice-editor__body">
         <section class="voice-editor__steps" aria-label="Steps">
-          @for (entry of catalog(); track entry.stepId) {
-            <div
-              class="voice-editor__step"
-              [class.voice-editor__step--selected]="entry.stepId === selectedStepId()"
-              [attr.data-step]="entry.stepId"
-              (click)="selectedStepId.set(entry.stepId)"
-              (keydown.enter)="selectedStepId.set(entry.stepId)"
-              tabindex="0"
-              role="button"
-            >
-              <mat-checkbox
-                [checked]="!!ticks()[entry.stepId]"
-                [disabled]="busy()"
-                (change)="tick(entry.stepId, $event.checked)"
-                (click)="$event.stopPropagation()"
-                [attr.data-tick]="entry.stepId"
-              >
-                {{ entry.label }}
-              </mat-checkbox>
-              <p class="voice-editor__blurb">{{ entry.blurb }}</p>
-              @if (stageFor(entry.stepId); as stage) {
-                @if (!stage.applied) {
-                  <r2m-status-chip
-                    status="warn"
-                    icon="skip_next"
-                    compact
-                    [label]="'Skipped — ' + (stage.reason ?? 'no reason given')"
-                    data-testid="skipped-chip"
-                  />
-                }
-              }
-              @if (entry.stepId === 'hiss-reduce' && hissRedundant()) {
-                <p class="voice-editor__hint" data-testid="hiss-hint">
-                  Denoise already handles most hiss; try one without the other first.
-                </p>
-              }
-            </div>
-          }
+          ${repeat(
+            this.catalog(),
+            (entry) => entry.stepId,
+            (entry) => this.stepTemplate(entry, busy),
+          )}
         </section>
 
         <section class="voice-editor__dials" aria-label="Dials">
-          @if (selected(); as entry) {
-            <h3>{{ entry.label }}</h3>
-            @if (entry.dials.length === 0) {
-              <p class="voice-editor__blurb">This step has nothing to adjust.</p>
-            } @else {
-              <r2m-settings-form
-                mode="defaults"
-                [schema]="selectedSchema()!"
-                [values]="values()[entry.stepId] ?? {}"
-                [disabled]="busy()"
-                (valuesChange)="setValues(entry.stepId, $event)"
-              />
-            }
-          } @else {
-            <p class="voice-editor__blurb">Select a step to adjust its dials.</p>
-          }
+          ${this.dialsTemplate(busy)}
         </section>
       </div>
 
       <section class="voice-editor__players" aria-label="Players">
-        <r2m-audio-player
-          [src]="originalSrc()"
-          [cacheKey]="audioVersion()"
-          [label]="voice.isEdited ? 'Original (before edits)' : 'Original'"
-          data-testid="original-player"
-        />
-        @for (stage of stages(); track stage.stepId) {
+        <span data-testid="original-player">
           <r2m-audio-player
-            [src]="stage.url"
-            [label]="'After ' + labelFor(stage.stepId)"
-            [attr.data-stage]="stage.stepId"
-          />
-        }
-        @if (stale()) {
-          <p class="voice-editor__hint" data-testid="stale-hint">
-            Ticks or dials changed since this render — preview again before applying.
-          </p>
+            .src=${originalAudioUrl(this.folder(), voice)}
+            .cacheKey=${this.audioVersion()}
+            .label=${voice.isEdited ? 'Original (before edits)' : 'Original'}
+          ></r2m-audio-player>
+        </span>
+        ${repeat(
+          this.stages(),
+          (stage) => stage.stepId,
+          (stage) =>
+            html`<r2m-audio-player
+              data-stage=${stage.stepId}
+              .src=${stage.url}
+              .label=${`After ${this.labelFor(stage.stepId)}`}
+            ></r2m-audio-player>`,
+        )}
+        ${
+          this.stale()
+            ? html`<p class="voice-editor__hint" data-testid="stale-hint">
+                Ticks or dials changed since this render — preview again before applying.
+              </p>`
+            : nothing
         }
       </section>
-    }
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-4);
-    }
-    .voice-editor__toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--r2m-space-2);
-    }
-    .voice-editor__danger {
-      color: var(--r2m-status-error);
-    }
-    .voice-editor__body {
-      display: grid;
-      grid-template-columns: minmax(280px, 360px) 1fr;
-      gap: var(--r2m-space-4);
-    }
-    @media (max-width: 720px) {
-      .voice-editor__body {
-        grid-template-columns: 1fr;
+    `;
+  }
+
+  private stepTemplate(entry: StepCatalogEntryDto, busy: boolean) {
+    const stage = stageFor(this.stages(), entry.stepId);
+    const select = () => this.selectedStepId.set(entry.stepId);
+    return html`<div
+      class="voice-editor__step ${entry.stepId === this.selectedStepId() ? 'voice-editor__step--selected' : ''}"
+      data-step=${entry.stepId}
+      role="button"
+      tabindex="0"
+      @click=${select}
+      @keydown=${(e: KeyboardEvent) => {
+        if (e.key === 'Enter') select();
+      }}
+    >
+      <label class="voice-editor__tick" @click=${(e: Event) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          class="r2m-checkbox"
+          data-tick=${entry.stepId}
+          .checked=${!!this.ticks()[entry.stepId]}
+          ?disabled=${busy}
+          @change=${(e: Event) => this.tick(entry.stepId, (e.target as HTMLInputElement).checked)}
+        />
+        ${entry.label}
+      </label>
+      <p class="voice-editor__blurb">${entry.blurb}</p>
+      ${
+        stage && !stage.applied
+          ? html`<span data-testid="skipped-chip"
+              >${statusChip({
+                status: 'warn',
+                icon: 'skip_next',
+                compact: true,
+                label: `Skipped — ${stage.reason ?? 'no reason given'}`,
+              })}</span
+            >`
+          : nothing
       }
-    }
-    .voice-editor__steps {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-2);
-    }
-    .voice-editor__step {
-      padding: var(--r2m-space-2) var(--r2m-space-3);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-md);
-      cursor: pointer;
-    }
-    .voice-editor__step--selected {
-      border-color: var(--r2m-accent);
-    }
-    .voice-editor__blurb,
-    .voice-editor__hint {
-      margin: 0;
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .voice-editor__hint {
-      margin-top: var(--r2m-space-1);
-    }
-    .voice-editor__dials h3 {
-      margin: 0 0 var(--r2m-space-2);
-    }
-    .voice-editor__players {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-2);
-    }
-  `,
-})
-export class VoiceEditorPage {
-  private readonly voices = inject(VoicesApi);
-  private readonly editor = inject(VoiceEditorApi);
-  private readonly confirm = inject(ConfirmService);
+      ${
+        entry.stepId === 'hiss-reduce' && this.hissRedundant()
+          ? html`<p class="voice-editor__hint" data-testid="hiss-hint">
+              Denoise already handles most hiss; try one without the other first.
+            </p>`
+          : nothing
+      }
+    </div>`;
+  }
 
-  readonly folder = input.required<string>();
-  readonly voiceId = input.required<string>();
-
-  protected readonly loading = signal(true);
-  protected readonly loadError = signal<string | null>(null);
-  protected readonly actionError = signal<string | null>(null);
-  /** The last apply/restore outcome, shown inline (design §8: own-action outcomes are not toasts). */
-  protected readonly actionNote = signal<string | null>(null);
-  protected readonly voice = signal<VoiceDto | null>(null);
-  protected readonly catalog = signal<StepCatalogEntryDto[]>([]);
-
-  protected readonly ticks = signal<Ticks>({});
-  protected readonly values = signal<StepValues>({});
-  protected readonly selectedStepId = signal<string | null>(null);
-  protected readonly render = signal<Render | null>(null);
-  protected readonly rendering = signal(false);
-  protected readonly writing = signal(false);
-  /** Bumped whenever the voice's files change under the same names, so the players refetch. */
-  protected readonly audioVersion = signal(0);
-
-  protected readonly busy = computed(() => this.rendering() || this.writing());
-  protected readonly anyTicked = computed(() => Object.values(this.ticks()).some(Boolean));
-  protected readonly currentRequest = computed(() =>
-    buildPreviewSteps(this.catalog(), this.ticks(), this.values()),
-  );
-  protected readonly stale = computed(() => {
-    const render = this.render();
-    return render !== null && !sameRender(render.request, this.currentRequest());
-  });
-  protected readonly applyBlocked = computed(() =>
-    applyBlockedReason({
-      anyTicked: this.anyTicked(),
-      hasRender: this.render() !== null,
-      stale: this.stale(),
-      busy: this.busy(),
-    }),
-  );
-  protected readonly hissRedundant = computed(() => hissRedundant(this.ticks()));
-  protected readonly stages = computed(() => this.render()?.response.stages ?? []);
-  protected readonly selected = computed(
-    () => this.catalog().find((e) => e.stepId === this.selectedStepId()) ?? null,
-  );
-  protected readonly selectedSchema = computed(() => {
+  private dialsTemplate(busy: boolean) {
     const entry = this.selected();
-    return entry ? toStepSchema(entry) : null;
-  });
-  protected readonly originalSrc = computed(() => {
-    const voice = this.voice();
-    return voice ? originalAudioUrl(this.folder(), voice) : null;
-  });
-  protected readonly backLink = computed(() => {
-    const characterId = this.voice()?.characterId;
-    return characterId
-      ? ['/projects', this.folder(), 'cast', characterId]
-      : ['/projects', this.folder(), 'cast'];
-  });
-
-  constructor() {
-    effect(() => {
-      const folder = this.folder();
-      const voiceId = this.voiceId();
-      untracked(() => void this.load(folder, voiceId));
-    });
+    if (!entry) return html`<p class="voice-editor__blurb">Select a step to adjust its dials.</p>`;
+    return html`<h3>${entry.label}</h3>
+      ${
+        entry.dials.length === 0
+          ? html`<p class="voice-editor__blurb">This step has nothing to adjust.</p>`
+          : html`<r2m-settings-form
+              mode="defaults"
+              .schema=${toStepSchema(entry)}
+              .values=${this.values()[entry.stepId] ?? {}}
+              .disabled=${busy}
+              @values-change=${(e: CustomEvent<SettingsValues>) =>
+                this.setValues(entry.stepId, e.detail)}
+            ></r2m-settings-form>`
+      }`;
   }
 
-  protected stageFor(stepId: string) {
-    return stageFor(this.render()?.response.stages ?? null, stepId);
-  }
-
-  protected labelFor(stepId: string): string {
+  labelFor(stepId: string): string {
     return this.catalog().find((e) => e.stepId === stepId)?.label ?? stepId;
   }
 
-  protected tick(stepId: string, checked: boolean): void {
-    this.ticks.update((t) => ({ ...t, [stepId]: checked }));
+  tick(stepId: string, checked: boolean): void {
+    this.ticks.set({ ...this.ticks(), [stepId]: checked });
     this.selectedStepId.set(stepId);
   }
 
-  protected setValues(stepId: string, values: SettingsValues): void {
-    this.values.update((v) => ({ ...v, [stepId]: values }));
+  setValues(stepId: string, values: SettingsValues): void {
+    this.values.set({ ...this.values(), [stepId]: values });
   }
 
-  protected async preview(): Promise<void> {
+  async preview(): Promise<void> {
     const voice = this.voice();
     if (!voice || !this.anyTicked() || this.busy()) return;
     const request = this.currentRequest();
-    this.rendering.set(true);
-    this.actionError.set(null);
-    this.actionNote.set(null);
-    try {
+    await this.run(this.rendering, async () => {
       const response = await this.editor.preview(this.folder(), voice.id, request);
-      this.render.set({ request, response });
-    } catch (e) {
-      this.actionError.set(toApiError(e).message);
-    } finally {
-      this.rendering.set(false);
-    }
+      this.lastRender.set({ request, response });
+    });
   }
 
-  protected async apply(): Promise<void> {
+  async apply(): Promise<void> {
     const voice = this.voice();
-    const render = this.render();
-    if (!voice || !render || this.applyBlocked() !== null) return;
-    this.writing.set(true);
-    this.actionError.set(null);
-    this.actionNote.set(null);
-    try {
-      this.voice.set(await this.editor.apply(this.folder(), voice.id, render.response.previewId));
+    const last = this.lastRender();
+    if (!voice || !last || this.applyBlocked() !== null) return;
+    await this.run(this.writing, async () => {
+      this.voice.set(await this.editor.apply(this.folder(), voice.id, last.response.previewId));
       this.audioVersion.update((v) => v + 1);
       this.actionNote.set('Voice audio updated.');
-    } catch (e) {
-      this.actionError.set(toApiError(e).message);
-    } finally {
-      this.writing.set(false);
-    }
+    });
   }
 
-  protected async restore(): Promise<void> {
+  async restore(): Promise<void> {
     const voice = this.voice();
     if (!voice || this.busy()) return;
     const ok = await this.confirm.confirm({
@@ -419,32 +372,39 @@ export class VoiceEditorPage {
       destructive: true,
     });
     if (!ok) return;
-    this.writing.set(true);
-    this.actionError.set(null);
-    this.actionNote.set(null);
-    try {
+    await this.run(this.writing, async () => {
       this.voice.set(await this.editor.restore(this.folder(), voice.id));
       this.resetChain();
       this.audioVersion.update((v) => v + 1);
       this.actionNote.set('Original audio restored.');
+    });
+  }
+
+  /** One request frame: raise `flag` while it runs, clear the last outcome, keep a failure inline. */
+  private async run(flag: WritableSignal<boolean>, work: () => Promise<void>): Promise<void> {
+    flag.set(true);
+    this.actionError.set(null);
+    this.actionNote.set(null);
+    try {
+      await work();
     } catch (e) {
       this.actionError.set(toApiError(e).message);
     } finally {
-      this.writing.set(false);
+      flag.set(false);
     }
   }
 
   private resetChain(): void {
     this.ticks.set({});
     this.values.set(seedValues(this.catalog()));
-    this.render.set(null);
+    this.lastRender.set(null);
   }
 
   private async load(folder: string, voiceId: string): Promise<void> {
     this.loading.set(true);
     this.loadError.set(null);
     this.voice.set(null);
-    this.render.set(null);
+    this.lastRender.set(null);
     try {
       const [voice, catalog] = await Promise.all([
         this.voices.get(folder, voiceId),
@@ -464,5 +424,12 @@ export class VoiceEditorPage {
     } finally {
       this.loading.set(false);
     }
+  }
+}
+define('r2m-voice-editor-page', VoiceEditorPage);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-voice-editor-page': VoiceEditorPage;
   }
 }

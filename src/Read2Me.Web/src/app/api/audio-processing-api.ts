@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   AudioPostProcessStepConfig,
@@ -16,11 +16,10 @@ import type {
 /**
  * `AudioProcessingEndpoints.cs`: the single audio post-processing row — scalars, assembler pauses,
  * the paragraph step configs — plus the ffmpeg probe, the recent-sample picker and the one-step
- * A/B preview (ticket 24).
+ * A/B preview (ticket 24). The export page reads the scalar row for its readiness card.
  */
-@Injectable({ providedIn: 'root' })
 export class AudioProcessingApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
   private readonly base = '/api/settings/audio-processing';
 
   get(): Promise<AudioProcessingSettings> {

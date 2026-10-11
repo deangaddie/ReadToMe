@@ -1,4 +1,5 @@
-import { ProviderSettingsSchema } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { ProviderSettingsSchema } from '@app/api';
 import { toFormSchema } from './provider-schemas';
 
 const WIRE: ProviderSettingsSchema = {

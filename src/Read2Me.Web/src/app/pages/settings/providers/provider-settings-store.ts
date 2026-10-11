@@ -1,23 +1,21 @@
-import { DestroyRef, Injectable, Injector, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { toApiError } from '@app/api';
-import { LiveService } from '@app/live/live.service';
-import { ProviderArea, ProviderAreaApi } from './provider-area';
-import { ProviderConfig } from './provider-form';
+import { type ProviderSettingsSchema, toApiError } from '@app/api';
+import { use } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import { LiveService, type Unsubscribe } from '@app/live/live.service';
+import type { ProviderArea, ProviderAreaApi } from './provider-area';
+import type { ProviderConfig } from './provider-form';
 
 /**
- * State behind one provider settings page (ticket 22), provided by the page, which names its area
- * with `init`. Every write goes to the host and the store reloads from it; the hub's
- * `settingsChanged` for the area reloads it too, so an edit made in another tab or over the
- * agent API shows up here. Reloads are sequenced: a slow answer never overwrites a newer one.
+ * State behind one provider settings page (native-web 35), provided by the page for its area. Every
+ * write goes to the host and the store reloads from it; the hub's `settingsChanged` for the area
+ * reloads it too, so an edit made in another tab or over the agent API shows up here. Reloads are
+ * sequenced: a slow answer never overwrites a newer one. The page calls {@link open} on connect
+ * and {@link close} on disconnect.
  */
-@Injectable()
 export class ProviderSettingsStore {
-  private readonly injector = inject(Injector);
-  private readonly live = inject(LiveService);
-
-  private area: ProviderArea | null = null;
-  private api!: ProviderAreaApi;
+  private readonly api: ProviderAreaApi;
+  private readonly live = use(LiveService);
+  private subscription: Unsubscribe | null = null;
 
   private readonly _configs = signal<ProviderConfig[] | null>(null);
   private readonly _activeId = signal<number | null>(null);
@@ -29,19 +27,27 @@ export class ProviderSettingsStore {
   readonly activeId = this._activeId.asReadonly();
   readonly error = this._error.asReadonly();
 
-  constructor() {
-    this.live
-      .on('settingsChanged')
-      .pipe(takeUntilDestroyed(inject(DestroyRef)))
-      .subscribe((m) => {
-        if (m.area === this.area?.key) void this.load();
-      });
+  constructor(readonly area: ProviderArea) {
+    this.api = use(area.api);
   }
 
-  init(area: ProviderArea): void {
-    this.area = area;
-    this.api = this.injector.get(area.api);
-    void this.load();
+  /**
+   * Follows the hub's `settingsChanged` for the area and loads. The page calls it on every
+   * connect, so a page the router re-attaches listens again after {@link close}.
+   */
+  open(): Promise<void> {
+    this.subscription?.();
+    this.subscription = this.live.on('settingsChanged', (m) => {
+      if (m.area === this.area.key) void this.load();
+    });
+    return this.load();
+  }
+
+  /** Drops the hub subscription and any load still in flight. */
+  close(): void {
+    this.subscription?.();
+    this.subscription = null;
+    this.loadSeq++;
   }
 
   async load(): Promise<void> {
@@ -56,6 +62,11 @@ export class ProviderSettingsStore {
       if (seq !== this.loadSeq) return;
       this._error.set(toApiError(e).message);
     }
+  }
+
+  /** The provider type's tuning fields with ranges and defaults. */
+  schema(type: number): Promise<ProviderSettingsSchema> {
+    return this.api.schema(type);
   }
 
   async create(config: ProviderConfig): Promise<ProviderConfig> {

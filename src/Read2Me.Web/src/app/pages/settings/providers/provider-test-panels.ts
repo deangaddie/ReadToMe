@@ -1,74 +1,33 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  Directive,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  untracked,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { html, nothing } from 'lit-html';
 import {
   SemanticSimilaritySettingsApi,
-  SimilarityTestResponse,
+  type SimilarityTestResponse,
   TranscriptionSettingsApi,
   VoiceDesignSettingsApi,
   toApiError,
 } from '@app/api';
-import { AudioPlayer } from '@app/ui/audio-player/audio-player';
-import { FileDrop, RejectedFile } from '@app/ui/file-drop/file-drop';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { ProviderConfig } from './provider-form';
-
-/** The card every test panel sits in, and the run state they share. */
-const PANEL_STYLES = `
-  :host {
-    display: flex;
-    flex-direction: column;
-    gap: var(--r2m-space-3);
-    padding: var(--r2m-space-4);
-    border: 1px solid var(--r2m-outline);
-    border-radius: var(--r2m-radius-lg);
-    background: var(--r2m-surface);
-  }
-  .test__title {
-    margin: 0;
-    font-size: var(--r2m-text-lg);
-    font-weight: 600;
-  }
-  .test__note {
-    margin: 0;
-    color: var(--r2m-text-muted);
-    font-size: var(--r2m-text-sm);
-  }
-  .test__row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--r2m-space-3);
-    align-items: center;
-  }
-  .test__grow {
-    flex: 1 1 240px;
-  }
-  .test__result {
-    margin: 0;
-    white-space: pre-wrap;
-  }
-`;
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal, untracked } from '@app/core/signals';
+import { controlValue, field } from '@app/ui/field';
+import type { RejectedFile } from '@app/ui/file-drop';
+import { icon, statusChip } from '@app/ui/partials';
+import type { ProviderConfig } from './provider-form';
+import '@app/ui/audio-player';
+import '@app/ui/file-drop';
 
 /**
  * One Test action against a *saved* config. `run` reports a failure — a 422 carries the provider's
- * own reason — and drops the answer of a run whose config has since changed.
+ * own reason — and drops the answer of a run whose config has since changed. Set `config`.
  */
-@Directive()
-abstract class TestPanel<TResult> {
-  readonly config = input.required<ProviderConfig>();
+abstract class TestPanel<TResult> extends R2mElement {
+  readonly #config = signal<ProviderConfig | null>(null);
+  get config() {
+    return this.#config();
+  }
+  set config(value: ProviderConfig | null) {
+    this.#config.set(value);
+  }
 
   protected readonly running = signal(false);
   protected readonly result = signal<TResult | null>(null);
@@ -76,10 +35,10 @@ abstract class TestPanel<TResult> {
 
   private generation = 0;
 
-  constructor() {
+  protected override connected(): void {
     // Another config is another test: whatever ran, or is still running, belongs to the last one.
-    const configId = computed(() => this.config().id);
-    effect(() => {
+    const configId = computed(() => this.#config()?.id ?? null);
+    this.effect(() => {
       configId();
       untracked(() => {
         this.generation++;
@@ -90,13 +49,30 @@ abstract class TestPanel<TResult> {
     });
   }
 
+  protected heading() {
+    return html`<h2 class="test__title">Test "${this.#config()?.name ?? ''}"</h2>`;
+  }
+
+  protected progress() {
+    return this.running()
+      ? html`<progress class="test__progress" aria-label="Testing"></progress>`
+      : nothing;
+  }
+
+  protected failureChip() {
+    const failure = this.failure();
+    return failure ? statusChip({ status: 'error', label: failure }) : nothing;
+  }
+
   protected async run(action: (configId: number) => Promise<TResult>): Promise<void> {
+    const config = this.#config();
+    if (!config) return;
     const generation = this.generation;
     this.running.set(true);
     this.result.set(null);
     this.failure.set(null);
     try {
-      const result = await action(this.config().id);
+      const result = await action(config.id);
       if (generation === this.generation) this.result.set(result);
     } catch (e) {
       if (generation === this.generation) this.failure.set(`Test failed: ${toApiError(e).message}`);
@@ -107,64 +83,62 @@ abstract class TestPanel<TResult> {
 }
 
 /** Voice design: a prompt in, the designed voice speaking the sample text out. */
-@Component({
-  selector: 'app-voice-design-test',
-  imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatIconModule,
-    MatInputModule,
-    MatProgressBarModule,
-    AudioPlayer,
-    StatusChip,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h2 class="test__title">Test "{{ config().name }}"</h2>
-    <p class="test__note">Designs a voice with the saved configuration; it can take up to a minute.</p>
-    <div class="test__row">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="test__grow">
-        <mat-label>Test prompt</mat-label>
-        <input
-          matInput
-          autocomplete="off"
-          data-field="prompt"
-          placeholder="A warm, gravelly old man"
-          [disabled]="running()"
-          [value]="prompt()"
-          (input)="prompt.set($any($event.target).value)"
-        />
-      </mat-form-field>
-      <button
-        mat-flat-button
-        type="button"
-        data-action="test"
-        [disabled]="running() || !prompt().trim()"
-        (click)="test()"
-      >
-        <mat-icon>graphic_eq</mat-icon> Test design
-      </button>
-    </div>
-    @if (running()) {
-      <mat-progress-bar mode="indeterminate" />
-    }
-    @if (audioSrc(); as src) {
-      <r2m-audio-player compact label="Designed voice" [src]="src" />
-    }
-    @if (failure(); as failure) {
-      <r2m-status-chip status="error" [label]="failure" />
-    }
-  `,
-  styles: PANEL_STYLES,
-})
 export class VoiceDesignTest extends TestPanel<string> {
-  private readonly api = inject(VoiceDesignSettingsApi);
+  private readonly api = use(VoiceDesignSettingsApi);
 
-  protected readonly prompt = signal('');
-  /** The answer as a data URI the player can take. */
-  protected readonly audioSrc = this.result;
+  readonly prompt = signal('');
 
-  protected test(): Promise<void> {
+  protected template() {
+    const running = this.running();
+    /** The answer as a data URI the player can take. */
+    const audioSrc = this.result();
+    return html`
+      ${this.heading()}
+      <p class="test__note">
+        Designs a voice with the saved configuration; it can take up to a minute.
+      </p>
+      <div class="test__row">
+        ${field(
+          { id: 'voice-design-test-prompt', label: 'Test prompt', cls: 'test__grow' },
+          (a) =>
+            html`<input
+              id=${a.id}
+              aria-describedby=${a.describedBy}
+              aria-invalid=${a.invalid}
+              type="text"
+              autocomplete="off"
+              data-field="prompt"
+              placeholder="A warm, gravelly old man"
+              ?disabled=${running}
+              .value=${this.prompt()}
+              @input=${(e: Event) => this.prompt.set(controlValue(e))}
+            />`,
+        )}
+        <button
+          type="button"
+          class="r2m-button r2m-button--filled"
+          data-action="test"
+          ?disabled=${running || !this.prompt().trim()}
+          @click=${() => void this.test()}
+        >
+          ${icon('graphic_eq')} Test design
+        </button>
+      </div>
+      ${this.progress()}
+      ${
+        audioSrc
+          ? html`<r2m-audio-player
+              .compact=${true}
+              .label=${'Designed voice'}
+              .src=${audioSrc}
+            ></r2m-audio-player>`
+          : nothing
+      }
+      ${this.failureChip()}
+    `;
+  }
+
+  private test(): Promise<void> {
     const prompt = this.prompt().trim();
     return this.run(async (id) => {
       const audio = await this.api.test(id, prompt);
@@ -172,51 +146,46 @@ export class VoiceDesignTest extends TestPanel<string> {
     });
   }
 }
+define('r2m-voice-design-test', VoiceDesignTest);
 
 const MAX_TEST_AUDIO_BYTES = 50 * 1024 * 1024;
 
 /** Transcription: an audio file in, its transcript out. */
-@Component({
-  selector: 'app-transcription-test',
-  imports: [MatProgressBarModule, FileDrop, StatusChip],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h2 class="test__title">Test "{{ config().name }}"</h2>
-    <p class="test__note">Transcribes an audio file with the saved configuration.</p>
-    <r2m-file-drop
-      accept=".wav,.mp3,.aac"
-      label="Drop an audio file here"
-      hint="WAV, MP3 or AAC, up to 50 MB"
-      [maxBytes]="maxBytes"
-      (files)="test($event)"
-      (rejected)="reject($event)"
-    />
-    @if (running()) {
-      <mat-progress-bar mode="indeterminate" />
-    }
-    @if (result() !== null) {
-      <div role="status" data-role="transcript">
-        <p class="test__note">Transcript</p>
-        <p class="test__result">{{ result() || '(empty)' }}</p>
-      </div>
-    }
-    @if (failure(); as failure) {
-      <r2m-status-chip status="error" [label]="failure" />
-    }
-  `,
-  styles: PANEL_STYLES,
-})
 export class TranscriptionTest extends TestPanel<string> {
-  private readonly api = inject(TranscriptionSettingsApi);
+  private readonly api = use(TranscriptionSettingsApi);
 
-  protected readonly maxBytes = MAX_TEST_AUDIO_BYTES;
+  protected template() {
+    const result = this.result();
+    return html`
+      ${this.heading()}
+      <p class="test__note">Transcribes an audio file with the saved configuration.</p>
+      <r2m-file-drop
+        .accept=${'.wav,.mp3,.aac'}
+        .label=${'Drop an audio file here'}
+        .hint=${'WAV, MP3 or AAC, up to 50 MB'}
+        .maxBytes=${MAX_TEST_AUDIO_BYTES}
+        @files=${(e: CustomEvent<File[]>) => this.test(e.detail)}
+        @rejected=${(e: CustomEvent<RejectedFile[]>) => this.reject(e.detail)}
+      ></r2m-file-drop>
+      ${this.progress()}
+      ${
+        result !== null
+          ? html`<div role="status" data-role="transcript">
+              <p class="test__note">Transcript</p>
+              <p class="test__result">${result || '(empty)'}</p>
+            </div>`
+          : nothing
+      }
+      ${this.failureChip()}
+    `;
+  }
 
-  protected test(files: File[]): void {
+  private test(files: File[]): void {
     const [audio] = files;
     if (audio && !this.running()) void this.run((id) => this.api.test(id, audio));
   }
 
-  protected reject(rejected: RejectedFile[]): void {
+  private reject(rejected: RejectedFile[]): void {
     this.result.set(null);
     this.failure.set(
       rejected[0]?.reason === 'size'
@@ -225,88 +194,79 @@ export class TranscriptionTest extends TestPanel<string> {
     );
   }
 }
+define('r2m-transcription-test', TranscriptionTest);
 
 /** Similarity: two texts in, the score against the config's pass threshold out. */
-@Component({
-  selector: 'app-similarity-test',
-  imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatIconModule,
-    MatInputModule,
-    MatProgressBarModule,
-    StatusChip,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h2 class="test__title">Test "{{ config().name }}"</h2>
-    <p class="test__note">Compares two texts with the saved configuration.</p>
-    <div class="test__row">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="test__grow">
-        <mat-label>Text 1</mat-label>
-        <input
-          matInput
-          autocomplete="off"
-          data-field="text1"
-          [value]="text1()"
-          (input)="text1.set($any($event.target).value)"
-        />
-      </mat-form-field>
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="test__grow">
-        <mat-label>Text 2</mat-label>
-        <input
-          matInput
-          autocomplete="off"
-          data-field="text2"
-          [value]="text2()"
-          (input)="text2.set($any($event.target).value)"
-        />
-      </mat-form-field>
-      <button
-        mat-flat-button
-        type="button"
-        data-action="test"
-        [disabled]="!canCompare()"
-        (click)="test()"
-      >
-        <mat-icon>compare_arrows</mat-icon> Compare
-      </button>
-    </div>
-    @if (running()) {
-      <mat-progress-bar mode="indeterminate" />
-    }
-    @if (result(); as result) {
-      <r2m-status-chip
-        data-role="score"
-        [status]="result.pass ? 'ok' : 'warn'"
-        [label]="
-          'Score ' +
-          result.score.toFixed(3) +
-          ' — ' +
-          (result.pass ? 'PASS' : 'FAIL') +
-          ' (threshold ' +
-          result.threshold.toFixed(2) +
-          ')'
-        "
-      />
-    }
-    @if (failure(); as failure) {
-      <r2m-status-chip status="error" [label]="failure" />
-    }
-  `,
-  styles: PANEL_STYLES,
-})
 export class SimilarityTest extends TestPanel<SimilarityTestResponse> {
-  private readonly api = inject(SemanticSimilaritySettingsApi);
+  private readonly api = use(SemanticSimilaritySettingsApi);
 
-  protected readonly text1 = signal('');
-  protected readonly text2 = signal('');
-  protected readonly canCompare = computed(
+  readonly text1 = signal('');
+  readonly text2 = signal('');
+  readonly canCompare = computed(
     () => !this.running() && !!this.text1().trim() && !!this.text2().trim(),
   );
 
-  protected test(): Promise<void> {
+  protected template() {
+    const result = this.result();
+    return html`
+      ${this.heading()}
+      <p class="test__note">Compares two texts with the saved configuration.</p>
+      <div class="test__row">
+        ${this.textField('text1', 'Text 1', this.text1)}
+        ${this.textField('text2', 'Text 2', this.text2)}
+        <button
+          type="button"
+          class="r2m-button r2m-button--filled"
+          data-action="test"
+          ?disabled=${!this.canCompare()}
+          @click=${() => void this.test()}
+        >
+          ${icon('compare_arrows')} Compare
+        </button>
+      </div>
+      ${this.progress()}
+      ${
+        result
+          ? html`<span data-role="score"
+              >${statusChip({
+                status: result.pass ? 'ok' : 'warn',
+                label: `Score ${result.score.toFixed(3)} — ${result.pass ? 'PASS' : 'FAIL'} (threshold ${result.threshold.toFixed(2)})`,
+              })}</span
+            >`
+          : nothing
+      }
+      ${this.failureChip()}
+    `;
+  }
+
+  private textField(key: 'text1' | 'text2', label: string, value: typeof this.text1) {
+    return field(
+      { id: `similarity-test-${key}`, label, cls: 'test__grow' },
+      (a) =>
+        html`<input
+          id=${a.id}
+          aria-describedby=${a.describedBy}
+          aria-invalid=${a.invalid}
+          type="text"
+          autocomplete="off"
+          data-field=${key}
+          .value=${value()}
+          @input=${(e: Event) => value.set(controlValue(e))}
+        />`,
+    );
+  }
+
+  private test(): Promise<void> {
     const [text1, text2] = [this.text1().trim(), this.text2().trim()];
     return this.run((id) => this.api.test(id, text1, text2));
+  }
+}
+define('r2m-similarity-test', SimilarityTest);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-voice-design-test': VoiceDesignTest;
+    'r2m-transcription-test': TranscriptionTest;
+    'r2m-similarity-test': SimilarityTest;
   }
 }

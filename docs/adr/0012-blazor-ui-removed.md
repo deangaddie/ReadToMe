@@ -6,6 +6,8 @@ accepted (2026-10-01). Decided in the Blazor removal spec (`.scratch/completed/b
 Amends [ADR 0007](0007-book-mutations-reconcile-book-view-projections.md); supersedes the "Blazor stays" parts of
 [ADR 0008](0008-second-front-end-angular-beside-blazor.md) and [ADR 0009](0009-angular-is-the-default-ui.md).
 Amended by [ADR 0014](0014-native-web-front-end-replaces-angular.md): Angular stays the only UI until the native front end takes over `/app`.
+The Angular parts of this ADR no longer hold: since the cutover (2026-10-11) the UI at `/app` is the native web app
+in `src/Read2Me.Web` (ADR 0014). The host is still API + hub + one web app.
 
 ## Context
 

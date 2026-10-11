@@ -1,14 +1,14 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
-import { CreateProjectRequest, ProjectSummary, ProjectsApi } from '@app/api';
+import { type CreateProjectRequest, type ProjectSummary, ProjectsApi } from '@app/api';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
 
 /**
- * The shelf's list (ticket 08). Deliberately simple: it refreshes when the page loads and after
+ * The shelf's list (design §6.1). Deliberately simple: it refreshes when the page loads and after
  * its own create/delete; there is no hub subscription, because the list only changes through this
  * UI or an agent, and either way the next visit to `/projects` reloads it.
  */
-@Injectable({ providedIn: 'root' })
 export class ProjectsStore {
-  private readonly api = inject(ProjectsApi);
+  private readonly api = use(ProjectsApi);
 
   private readonly _projects = signal<ProjectSummary[]>([]);
   private readonly _loading = signal(false);

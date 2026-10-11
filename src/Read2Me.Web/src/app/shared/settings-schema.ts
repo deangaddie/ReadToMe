@@ -1,5 +1,5 @@
-import { ProviderSettingsField } from '@app/api';
-import { SettingsField } from '@app/ui/settings-form/settings-form';
+import type { ProviderSettingsField } from '@app/api';
+import type { SettingsField } from '@app/ui/settings-form';
 
 /**
  * A wire settings field (provider schema, step catalog dial) as the form component's field: wire

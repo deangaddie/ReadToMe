@@ -1,6 +1,12 @@
-import { CharacterVoicesDto, Guid, VoiceDto, VoiceSource, workspaceUrl } from '@app/api';
-import { VoiceBatchMessage } from '@app/live/live-messages';
-import { SettingsValues } from '@app/ui/settings-form/settings-form';
+import {
+  type CharacterVoicesDto,
+  type Guid,
+  type VoiceDto,
+  type VoiceSource,
+  workspaceUrl,
+} from '@app/api';
+import type { VoiceBatchMessage } from '@app/live/live-messages';
+import type { SettingsValues } from '@app/ui/settings-form';
 
 /**
  * The voice cards' decision rules (ticket 16), kept out of the components so they are unit-testable:

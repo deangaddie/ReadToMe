@@ -1,4 +1,4 @@
-import { ManualImportRequest, SplitRuleMode, SplitRuleRequest } from '@app/api';
+import type { ManualImportRequest, SplitRuleMode, SplitRuleRequest } from '@app/api';
 
 /**
  * The manual reread dialog's form (research §3 ManualRereadDialog), validated the way the host

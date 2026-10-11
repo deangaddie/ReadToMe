@@ -1,10 +1,12 @@
-import { Component, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
-import { AiServiceDto, AiServicesApi } from '@app/api';
-import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { ManagedServiceStatus } from './managed-service-status';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { AiServiceDto } from '@app/api';
+import { override, resetServices } from '@app/core/services';
+import { ToastService } from '@app/ui/toast';
+import { FakeApi, problem } from '../../../../testing/fake-api';
+import { FakeLive } from '../../../../testing/fake-live';
+import { FakeTimers, settleMicrotasks } from '../../../../testing/fake-timers';
+import { type ManagedServiceStatus, RESOLVE_DEBOUNCE_MS } from './managed-service-status';
+import './managed-service-status';
 
 const LLAMA: AiServiceDto = {
   name: 'llama',
@@ -13,75 +15,78 @@ const LLAMA: AiServiceDto = {
   usesGpu: true,
 };
 
-@Component({
-  imports: [ManagedServiceStatus],
-  template: `<app-managed-service-status [baseUrl]="baseUrl()" />`,
-})
-class HostCmp {
-  readonly baseUrl = signal('http://localhost:8080');
+let api: FakeApi;
+let live: FakeLive;
+let timers: FakeTimers;
+
+beforeEach(() => {
+  resetServices();
+  api = new FakeApi();
+  api.install();
+  live = new FakeLive().install();
+  timers = new FakeTimers().install();
+  override(ToastService, {
+    success: () => undefined,
+    error: () => undefined,
+    warn: () => undefined,
+    problem: () => undefined,
+  } as unknown as ToastService);
+  api.on('GET', '/api/ai-services/resolve', LLAMA);
+  api.on('GET', '/api/ai-services/llama/status', { name: 'llama', status: 'Ready' });
+  api.on('POST', '/api/ai-services/llama/restart', undefined);
+});
+afterEach(() => {
+  timers.restore();
+  document.body.replaceChildren();
+});
+
+/** Mounts the element and runs past the resolve debounce. */
+async function mount(baseUrl = 'http://localhost:8080') {
+  const el = document.createElement('r2m-managed-service-status') as ManagedServiceStatus;
+  el.baseUrl = baseUrl;
+  document.body.append(el);
+  await el.rendered();
+  await timers.advance(RESOLVE_DEBOUNCE_MS);
+  await settleMicrotasks();
+  await el.rendered();
+  return el;
 }
 
-describe('app-managed-service-status', () => {
-  const live = {
-    serviceStatus: signal<Record<string, 'Ready' | 'Stopped' | 'Unknown'>>({}),
-    on: () => new Subject<never>().asObservable(),
-  };
-  let api: Record<
-    'resolve' | 'status' | 'restart' | 'start' | 'shutdown',
-    ReturnType<typeof vi.fn>
-  >;
-
-  async function mount() {
-    await TestBed.configureTestingModule({
-      imports: [HostCmp],
-      providers: [
-        { provide: LiveService, useValue: live },
-        { provide: AiServicesApi, useValue: api },
-        {
-          provide: ToastService,
-          useValue: { success: vi.fn(), error: vi.fn(), warn: vi.fn(), problem: vi.fn() },
-        },
-      ],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(HostCmp);
-    fixture.detectChanges();
-    // Past the 400 ms resolve debounce.
-    await new Promise((resolve) => setTimeout(resolve, 450));
-    await fixture.whenStable();
-    return fixture;
-  }
-
-  beforeEach(() => {
-    live.serviceStatus.set({});
-    api = {
-      resolve: vi.fn().mockResolvedValue(LLAMA),
-      status: vi.fn().mockResolvedValue({ name: 'llama', status: 'Ready' }),
-      restart: vi.fn().mockResolvedValue(undefined),
-      start: vi.fn().mockResolvedValue(undefined),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    };
-  });
-
+describe('r2m-managed-service-status', () => {
   it('resolves the draft URL, probes an unobserved service once and shows the hub-fed chip with controls', async () => {
-    const fixture = await mount();
-    const el = fixture.nativeElement as HTMLElement;
-    expect(api.resolve).toHaveBeenCalledWith('http://localhost:8080');
-    expect(api.status).toHaveBeenCalledWith('llama');
+    const el = await mount();
+    expect(api.calls('GET', '/api/ai-services/resolve').length).toBe(1);
+    expect(api.calls('GET', '/api/ai-services/llama/status').length).toBe(1);
 
     live.serviceStatus.set({ llama: 'Ready' });
-    await fixture.whenStable();
-    expect(el.querySelector('r2m-status-chip')?.textContent).toContain('Ready');
+    await el.rendered();
+    expect(el.querySelector('.r2m-status-chip')?.textContent).toContain('Ready');
     expect(el.textContent).toContain('read2me-llama');
 
-    (el.querySelector('button[aria-label="Restart"]') as HTMLButtonElement).click();
-    await fixture.whenStable();
-    expect(api.restart).toHaveBeenCalledWith('llama');
+    el.querySelector<HTMLButtonElement>('button[aria-label="Restart"]')!.click();
+    await settleMicrotasks();
+    expect(api.calls('POST', '/api/ai-services/llama/restart').length).toBe(1);
   });
 
   it('renders nothing for a URL the watchdog does not manage', async () => {
-    api.resolve.mockResolvedValue(null);
-    const fixture = await mount();
-    expect((fixture.nativeElement as HTMLElement).querySelector('r2m-docker-controls')).toBeNull();
-    expect(api.status).not.toHaveBeenCalled();
+    api.on('GET', '/api/ai-services/resolve', problem(404, 'not managed'));
+    const el = await mount();
+    expect(el.querySelector('.r2m-docker-controls')).toBeNull();
+    expect(api.calls('GET', '/api/ai-services/llama/status').length).toBe(0);
+  });
+
+  it('asks once per settled URL, and not at all for one that is not absolute', async () => {
+    const el = await mount();
+    el.baseUrl = 'http://local';
+    el.baseUrl = 'http://localhost:9';
+    await el.rendered();
+    expect(el.querySelector('.r2m-docker-controls')).toBeNull();
+    await timers.advance(RESOLVE_DEBOUNCE_MS);
+    await settleMicrotasks();
+    expect(api.calls('GET', '/api/ai-services/resolve').length).toBe(2);
+
+    el.baseUrl = 'nowhere';
+    await timers.advance(RESOLVE_DEBOUNCE_MS);
+    expect(api.calls('GET', '/api/ai-services/resolve').length).toBe(2);
   });
 });

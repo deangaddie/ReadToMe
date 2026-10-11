@@ -7,9 +7,9 @@ import {
   VoiceBatchState,
   WatchdogState,
 } from '@app/live/live-messages';
-import { JobState, JobView } from '@app/ui/job-pill/job';
-import { StatusKind } from '@app/ui/status-chip/status-chip';
-import { escalationBanner } from '@app/ui/stream-llm/llm-turns';
+import { JobState, JobView } from '@app/ui/job';
+import { StatusKind } from '@app/ui/partials';
+import { escalationBanner } from '@app/ui/llm-turns';
 
 /**
  * Everything the job list is derived from (ticket 14): the hub's snapshot-shaped state plus the

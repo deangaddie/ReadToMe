@@ -1,44 +1,69 @@
-# Read2Me web (Angular)
+# Read2Me web
 
-Angular 22 front end for ReadToMe. It is a sibling of the .NET projects and is **not** part of
-`Read2Me.slnx`; `dotnet build` never touches it. In production it is built into
-`src/Read2Me.App/wwwroot/app/` and served by the .NET host under `/app/`.
+The ReadToMe UI: custom elements on Bun, with no framework (ADR 0014). The host serves the
+production bundle at `/app`. It is **not** part of `Read2Me.slnx`; `dotnet build` never touches it.
 
 ## Prerequisites
 
-- Node `>=24.18 <25` and npm `>=11.16 <12` (same pins as `Infra/ContainerHealth`).
+- Bun 1.4.2, pinned by `packageManager` in `package.json`. No Node is needed.
 - A running ReadToMe host on `http://localhost:5000` for anything that talks to the API
-  (`dotnet run --project src/Read2Me.App` from the repo root). In the Development environment the
-  host does not redirect HTTP to HTTPS, so the proxy, `npm run api:types` and the host-backed unit
-  tests can talk plain HTTP.
+  (`dotnet run --project src/Read2Me.App` from the repo root).
 
 ## Commands
 
 ```bash
-npm ci               # install exactly what package-lock.json says
-npm start            # ng serve → http://localhost:4200/app/ (proxies /api, /hubs, /workspace, /openapi to :5000)
-npm run build        # production build → ../Read2Me.App/wwwroot/app/ (git-ignored)
-npm run check        # lint + typecheck + api:check + unit tests + build — must be green before a PR
-npm run lint         # ESLint (angular-eslint)
-npm run typecheck    # tsc --noEmit against tsconfig.app.json
-npm test             # Vitest, single run, jsdom
-npm run format       # Prettier
-npm run api:types    # regenerate src/app/api/schema.d.ts from the host's /openapi/v1.json
-npm run api:check    # fail if schema.d.ts is stale against the running host (skips with a warning when the host is down)
+bun install --frozen-lockfile   # install exactly what bun.lock says
+bun run dev          # dev server with HMR → http://localhost:4300/app/ (proxies /api, /hubs, /workspace, /openapi, /audio-preview, /preview-source to :5000)
+bun run build        # production build → ../Read2Me.App/wwwroot/app/ (git-ignored)
+bun run check        # lint + typecheck + api:check + icons:check + tests + build — must be green before a PR
+bun run lint         # oxlint, type-aware, with eslint-plugin-lit
+bun run typecheck    # tsc --noEmit
+bun test             # bun test over happy-dom; `bun test src/app/core/router.spec.ts` for one file
+bun run format       # oxfmt
+bun run api:types    # regenerate src/app/api/schema.d.ts from the host's /openapi/v1.json
+bun run api:check    # fail if schema.d.ts is stale against the running host (skips with a warning when the host is down)
+bun run icons        # rebuild the subset icon font and icons.manifest.json from the IconName union (needs the network)
+bun run icons:check  # offline: fail if icons.manifest.json differs from the IconName union
 ```
+
+Restart `bun run dev` after adding a file that is reached through the `@app/*` alias: the dev
+bundler does not see it until then.
 
 ## Layout
 
-- `src/app/` — application code (path alias `@app/*`).
-- `src/app/ui/` — the `r2m-*` component library (import from `@app/ui`); every component has a story on `/app/styleguide`, which is the place to check a new component in both colour schemes.
-- `src/styles/_tokens.scss` — design tokens; component SCSS consumes these and never hard-codes colours.
-- `src/app/api/schema.d.ts` — generated OpenAPI types, checked in; regenerate with `npm run api:types`.
-- `src/app/live/` — the `/hubs/live` client (`LiveService`, wire shapes in `live-messages.ts`); `live-messages.spec.ts` reads the C# hub sources and fails when a family or `kind` string drifts.
-- `src/assets/fonts/` — self-hosted Inter (variable) and Material Symbols Rounded. No CDN fonts.
-- `proxy.conf.json` — dev proxy so the browser stays same-origin (no CORS).
+- `base.ts` — `BASE`, the path the app is served under. `build.ts` and `dev.ts` both read it, and
+  `base.spec.ts` holds `index.html`'s `<base href>` to it.
+- `src/app/core/` — the "framework": the signals adapter, the `R2mElement` base class and
+  `define()`, `use`/`provide`/`token` services, the Navigation-API router and `<r2m-outlet>`,
+  `openDialog`, `adoptStyles`, `Emitter`.
+- `src/app/ui/` — shared elements and partials: the measured list, speaker chip and menu, dialogs,
+  toast, tooltip, `icon()`, `statusChip()`, `emptyState()`, `countBadge()`. `icons.ts` holds the
+  `IconName` union: `icon()` takes nothing else, and the committed icon font
+  (`src/assets/fonts/MaterialSymbolsRounded.woff2`) is a subset holding only those names. To use a
+  new icon, add its name to the union, run `bun run icons`, and commit the font and
+  `icons.manifest.json` with it.
+- `src/app/api/` — `ApiClient` (the only place that calls `fetch`), the wire shapes in `dtos.ts`,
+  the `BookCommand` union and the generated `schema.d.ts` (checked in).
+- `src/app/live/` — the `/hubs/live` client. `live-messages.spec.ts` reads the C# hub sources and
+  fails when a family or `kind` string drifts.
+- `src/app/shell/`, `src/app/pages/` — the shell frame and the screens; an unknown path renders
+  `pages/not-found-page.ts`.
+- `src/styles/global.css` — design tokens, fonts and the global primitive CSS.
+- `src/testing/` — test helpers (a fake Navigation API for router-backed specs).
 
 ## Conventions
 
-- Standalone components, signals, zoneless change detection, `OnPush` everywhere.
-- TypeScript `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`.
-- Unit tests sit next to the code as `*.spec.ts`. End-to-end tests live in `src/Read2Me.E2eTests/Tests/Web/` on `E2eTestBase`, which stages the bundle from `npm run build` into the in-proc host and skips when it is absent (and under Firefox: Angular tests are Chromium-only). For ad-hoc driving of a running host see `tools/browse/README.md`.
+ADR 0014 (`docs/adr/0014-native-web-front-end-replaces-angular.md`) records the decision. The
+conventions that bite first:
+
+- Light DOM. Component CSS is `@scope (tag) to (child-tag) { … }`, imported as text and passed to
+  `adoptStyles()`. A plain `import './x.css'` breaks in production lazy chunks.
+- Every element extends `R2mElement` and is registered with `define()`. Import element modules for
+  their side effect; a type-only import never registers the element.
+- Inputs are getter/setter pairs over a private signal. Outputs are DOM events from `emit()`, which
+  bubble only when asked to.
+- Links and `Router.navigate()` take app-relative paths (`projects/x/book`), resolved against the
+  `<base href>`.
+- Don't name an element member after an `HTMLElement` member (`remove`, `focus`, `hidden`, `title`).
+- A spec that needs a real browser (dialog focus, popover, anchor positioning, layout) belongs in
+  E2E; happy-dom has no `showPopover` and `showModal` only flips `open`.

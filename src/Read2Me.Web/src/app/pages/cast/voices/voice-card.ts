@@ -1,31 +1,20 @@
-import { TextFieldModule } from '@angular/cdk/text-field';
+import { html, nothing } from 'lit-html';
+import { live } from 'lit-html/directives/live.js';
 import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  untracked,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { MatDialog } from '@angular/material/dialog';
-import { MatExpansionModule } from '@angular/material/expansion';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterLink } from '@angular/router';
-import { MAX_VOICE_AUDIO_BYTES, VoiceDto, VoiceSource, VoicesApi, toApiError } from '@app/api';
+  MAX_VOICE_AUDIO_BYTES,
+  type VoiceDto,
+  type VoiceSource,
+  VoicesApi,
+  toApiError,
+} from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { type ReadonlySignal, computed, signal, untracked } from '@app/core/signals';
 import { Preflight } from '@app/shared/preflight';
-import { AudioPlayer } from '@app/ui/audio-player/audio-player';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { FileDrop, RejectedFile } from '@app/ui/file-drop/file-drop';
-import { InlineEdit } from '@app/ui/inline-edit/inline-edit';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { ConfirmService } from '@app/ui/dialogs';
+import type { RejectedFile } from '@app/ui/file-drop';
+import { icon, statusChip } from '@app/ui/partials';
+import { ToastService } from '@app/ui/toast';
 import { CastStore } from '../cast-store';
 import { openGeneratePromptDialog } from './generate-prompt-dialog';
 import {
@@ -34,444 +23,108 @@ import {
   sourceSwitchWarning,
   voiceAudioUrl,
 } from './voice-logic';
-import { OverrideSave, VoiceOverrides } from './voice-overrides';
+import { type OverrideSave, type OverrideTab, voiceOverrides } from './voice-overrides';
+import '@app/ui/audio-player';
+import '@app/ui/file-drop';
+import '@app/ui/inline-edit';
+
+const valueOf = (event: Event): string => (event.target as HTMLTextAreaElement).value;
 
 /**
  * One voice card (research §4 "Voices"): default star, inline rename, description, source chip,
  * Edited chip, Edit audio link, Delete; the Reference ⟷ Prompt toggle; the reference player and
  * upload, or the prompt editor with Regenerate with AI and Generate audio; the Advanced override
  * tabs; and the transcript with Send to AI. Drafts are per field and dirty-gate their Save;
- * a reload never clobbers a draft.
+ * a reload never clobbers a draft. The card and its two sub-sections are `<details>` panels.
  */
-@Component({
-  selector: 'app-voice-card',
-  imports: [
-    MatExpansionModule,
-    MatButtonModule,
-    MatButtonToggleModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatIconModule,
-    MatTooltipModule,
-    TextFieldModule,
-    RouterLink,
-    AudioPlayer,
-    FileDrop,
-    InlineEdit,
-    StatusChip,
-    VoiceOverrides,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'voice-card', '[attr.data-voice-id]': 'voice().id' },
-  template: `
-    <mat-expansion-panel class="voice-card__panel">
-      <mat-expansion-panel-header class="voice-card__header">
-        <mat-panel-title class="voice-card__title">
-          @if (isDefault()) {
-            <mat-icon class="voice-card__star voice-card__star--on" matTooltip="Default voice">
-              star
-            </mat-icon>
-          } @else {
-            <button
-              mat-icon-button
-              type="button"
-              class="voice-card__star"
-              data-action="set-default"
-              matTooltip="Set as default"
-              aria-label="Set as default voice"
-              [disabled]="store.busy()"
-              (click)="stop($event); setDefault()"
-            >
-              <mat-icon>star_border</mat-icon>
-            </button>
-          }
-          <span
-            class="voice-card__name"
-            role="group"
-            tabindex="-1"
-            (click)="stop($event)"
-            (keydown)="stop($event)"
-          >
-            <r2m-inline-edit
-              [value]="voice().name"
-              placeholder="Voice name"
-              required
-              (save)="rename($event)"
-            />
-            @if (voice().description) {
-              <span class="voice-card__description">{{ voice().description }}</span>
-            }
-          </span>
-        </mat-panel-title>
-        <mat-panel-description class="voice-card__meta">
-          <r2m-status-chip
-            [status]="voice().source === 'Uploaded' ? 'info' : 'neutral'"
-            [label]="voice().source === 'Uploaded' ? 'Reference' : 'Prompt'"
-            compact
-          />
-          @if (voice().isEdited) {
-            <r2m-status-chip
-              status="warn"
-              label="Edited"
-              icon="tune"
-              compact
-              data-testid="voice-edited-chip"
-            />
-          }
-          @if (voice().referenceWarning; as warning) {
-            <r2m-status-chip
-              status="warn"
-              [label]="voice().referenceSeconds + ' s'"
-              icon="timer"
-              compact
-              [tooltip]="warning"
-              data-testid="voice-reference-warning"
-            />
-          }
-          @if (voice().audioFileName) {
-            <a
-              mat-icon-button
-              matTooltip="Edit audio"
-              aria-label="Edit audio"
-              data-action="edit-audio"
-              [routerLink]="['/projects', folder(), 'voices', voice().id, 'editor']"
-              (click)="stop($event)"
-            >
-              <mat-icon>graphic_eq</mat-icon>
-            </a>
-          }
-          <button
-            mat-icon-button
-            type="button"
-            class="voice-card__delete"
-            matTooltip="Delete voice"
-            aria-label="Delete voice"
-            data-action="delete-voice"
-            [disabled]="store.busy()"
-            (click)="stop($event); remove()"
-          >
-            <mat-icon>delete</mat-icon>
-          </button>
-        </mat-panel-description>
-      </mat-expansion-panel-header>
+export class VoiceCard extends R2mElement {
+  private readonly voices = use(VoicesApi);
+  private readonly confirm = use(ConfirmService);
+  private readonly preflight = use(Preflight);
+  private readonly toast = use(ToastService);
+  private store!: CastStore;
 
-      <div class="voice-card__body">
-        <section class="voice-card__block">
-          <mat-form-field appearance="outline" class="voice-card__wide" subscriptSizing="dynamic">
-            <mat-label>Voice description (where in the book this voice applies)</mat-label>
-            <textarea
-              matInput
-              cdkTextareaAutosize
-              cdkAutosizeMinRows="2"
-              aria-label="Voice description"
-              [value]="description()"
-              (input)="descriptionDraft.set($any($event.target).value)"
-            ></textarea>
-          </mat-form-field>
-          <button
-            mat-stroked-button
-            type="button"
-            data-action="save-description"
-            [disabled]="store.busy() || !descriptionDirty()"
-            (click)="saveDescription()"
-          >
-            <mat-icon>save</mat-icon> Save description
-          </button>
-        </section>
+  readonly #voice = signal<VoiceDto | null>(null);
+  get voice() {
+    return this.#voice();
+  }
+  set voice(value: VoiceDto | null) {
+    this.#voice.set(value);
+  }
 
-        <mat-button-toggle-group
-          class="voice-card__source"
-          aria-label="Voice source"
-          [value]="voice().source"
-          [disabled]="store.busy()"
-          (change)="switchSource($event.value)"
-        >
-          <mat-button-toggle value="Uploaded" data-source="Uploaded"
-            >Reference audio</mat-button-toggle
-          >
-          <mat-button-toggle value="Generated" data-source="Generated">Prompt</mat-button-toggle>
-        </mat-button-toggle-group>
+  readonly #characterName = signal('');
+  get characterName() {
+    return this.#characterName();
+  }
+  set characterName(value: string) {
+    this.#characterName.set(value);
+  }
 
-        @if (voice().source === 'Uploaded') {
-          <section class="voice-card__block" data-mode="reference">
-            @if (audioUrl(); as src) {
-              <r2m-audio-player [src]="src" [cacheKey]="audioVersion()" label="Reference audio" />
-            } @else {
-              <p class="voice-card__hint">No audio uploaded yet.</p>
-            }
-            @if (uploading()) {
-              <p class="voice-card__hint" role="status">Uploading and normalising…</p>
-            } @else {
-              <r2m-file-drop
-                accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aac,.opus,.webm"
-                [maxBytes]="maxAudioBytes"
-                [label]="voice().audioFileName ? 'Replace audio' : 'Upload audio'"
-                hint="Audio file (WAV, MP3, FLAC, OGG, M4A…), 200 MB max. The reference must be 30 s or shorter; 15 s or shorter clones best. The recording is normalised on upload."
-                (files)="upload($event)"
-                (rejected)="rejected($event)"
-              />
-            }
-          </section>
-        } @else {
-          <section class="voice-card__block" data-mode="prompt">
-            <mat-form-field appearance="outline" class="voice-card__wide" subscriptSizing="dynamic">
-              <mat-label>Voice description prompt</mat-label>
-              <textarea
-                matInput
-                cdkTextareaAutosize
-                cdkAutosizeMinRows="4"
-                aria-label="Voice description prompt"
-                [value]="prompt()"
-                (input)="promptDraft.set($any($event.target).value)"
-              ></textarea>
-            </mat-form-field>
-            <div class="voice-card__actions">
-              <button
-                mat-stroked-button
-                type="button"
-                data-action="save-prompt"
-                [disabled]="store.busy() || !promptDirty()"
-                (click)="savePrompt()"
-              >
-                <mat-icon>save</mat-icon> Save prompt
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                data-action="regenerate-prompt"
-                [disabled]="store.busy() || regeneratingPrompt()"
-                (click)="regeneratePrompt()"
-              >
-                <mat-icon>auto_fix_high</mat-icon>
-                {{ regeneratingPrompt() ? 'Generating…' : 'Regenerate with AI' }}
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                class="voice-card__generate"
-                [class.voice-card__generate--primary]="!voice().audioFileName"
-                data-action="generate-audio"
-                [disabled]="store.busy() || generatingAudio() || !canGenerate()"
-                (click)="generateAudio()"
-              >
-                <mat-icon>volume_up</mat-icon>
-                {{
-                  generatingAudio()
-                    ? 'Generating…'
-                    : voice().audioFileName
-                      ? 'Regenerate audio'
-                      : 'Generate audio'
-                }}
-              </button>
-            </div>
-            @if (audioUrl(); as src) {
-              <r2m-audio-player [src]="src" [cacheKey]="audioVersion()" label="Generated audio" />
-            }
-          </section>
-        }
-
-        <mat-expansion-panel class="voice-card__sub" data-section="advanced">
-          <mat-expansion-panel-header>
-            <mat-panel-title>Advanced settings</mat-panel-title>
-          </mat-expansion-panel-header>
-          <ng-template matExpansionPanelContent>
-            <app-voice-overrides
-              [voice]="voice()"
-              [disabled]="store.busy()"
-              (save)="saveOverride($event)"
-            />
-          </ng-template>
-        </mat-expansion-panel>
-
-        <mat-expansion-panel class="voice-card__sub" data-section="transcript">
-          <mat-expansion-panel-header>
-            <mat-panel-title>Transcript</mat-panel-title>
-          </mat-expansion-panel-header>
-          <section class="voice-card__block">
-            <mat-form-field appearance="outline" class="voice-card__wide" subscriptSizing="dynamic">
-              <mat-label>Transcript</mat-label>
-              <textarea
-                matInput
-                cdkTextareaAutosize
-                cdkAutosizeMinRows="3"
-                aria-label="Transcript"
-                [value]="transcript()"
-                (input)="transcriptDraft.set($any($event.target).value)"
-              ></textarea>
-            </mat-form-field>
-            <div class="voice-card__actions">
-              <button
-                mat-stroked-button
-                type="button"
-                data-action="save-transcript"
-                [disabled]="store.busy() || !transcriptDirty()"
-                (click)="saveTranscript()"
-              >
-                <mat-icon>save</mat-icon> Save
-              </button>
-              @if (voice().audioFileName) {
-                <button
-                  mat-stroked-button
-                  type="button"
-                  data-action="transcribe"
-                  [disabled]="store.busy() || transcribing()"
-                  (click)="transcribe()"
-                >
-                  <mat-icon>record_voice_over</mat-icon>
-                  {{ transcribing() ? 'Transcribing…' : 'Send to AI' }}
-                </button>
-              }
-            </div>
-          </section>
-        </mat-expansion-panel>
-      </div>
-    </mat-expansion-panel>
-  `,
-  styles: `
-    :host {
-      display: block;
-    }
-    .voice-card__title {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-1);
-      min-width: 0;
-      flex: 1 1 auto;
-    }
-    .voice-card__star {
-      --mdc-icon-button-state-layer-size: 32px;
-      width: 32px;
-      height: 32px;
-      padding: 4px;
-      flex: none;
-    }
-    .voice-card__star--on {
-      color: var(--r2m-status-warn);
-    }
-    .voice-card__name {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      gap: 2px;
-    }
-    .voice-card__description {
-      font-size: var(--r2m-text-xs);
-      color: var(--r2m-text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .voice-card__meta {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: var(--r2m-space-1);
-      flex: 0 0 auto;
-      margin-right: 0;
-    }
-    .voice-card__delete {
-      color: var(--r2m-status-error);
-    }
-    .voice-card__body {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-3);
-      padding-top: var(--r2m-space-2);
-    }
-    .voice-card__block {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-2);
-    }
-    .voice-card__block > button {
-      align-self: flex-start;
-    }
-    .voice-card__wide {
-      width: 100%;
-    }
-    .voice-card__actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--r2m-space-2);
-    }
-    .voice-card__source {
-      align-self: flex-start;
-    }
-    .voice-card__generate--primary {
-      color: var(--r2m-accent);
-      border-color: var(--r2m-accent);
-    }
-    .voice-card__hint {
-      margin: 0;
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .voice-card__sub {
-      box-shadow: none;
-      border: 1px solid var(--r2m-outline);
-    }
-  `,
-})
-export class VoiceCard {
-  protected readonly store = inject(CastStore);
-  private readonly voices = inject(VoicesApi);
-  private readonly confirm = inject(ConfirmService);
-  private readonly dialog = inject(MatDialog);
-  private readonly preflight = inject(Preflight);
-  private readonly toast = inject(ToastService);
-
-  readonly voice = input.required<VoiceDto>();
-  readonly characterName = input.required<string>();
-  readonly isDefault = input(false);
-
-  protected readonly maxAudioBytes = MAX_VOICE_AUDIO_BYTES;
-  protected readonly folder = computed(() => this.store.folder() ?? '');
-  protected readonly audioVersion = computed(
-    () => this.store.audioVersions()[this.voice().id] ?? 0,
-  );
-  protected readonly audioUrl = computed(() =>
-    voiceAudioUrl(this.folder(), this.voice(), this.store.audioVersions()),
-  );
+  readonly #isDefault = signal(false);
+  get isDefault() {
+    return this.#isDefault();
+  }
+  set isDefault(value: boolean) {
+    this.#isDefault.set(value);
+  }
 
   // Drafts: null = untouched (shows the stored value); a string = what the user typed.
-  protected readonly descriptionDraft = signal<string | null>(null);
-  protected readonly promptDraft = signal<string | null>(null);
-  protected readonly transcriptDraft = signal<string | null>(null);
+  readonly descriptionDraft = signal<string | null>(null);
+  readonly promptDraft = signal<string | null>(null);
+  readonly transcriptDraft = signal<string | null>(null);
 
-  protected readonly description = computed(
-    () => this.descriptionDraft() ?? this.voice().description ?? '',
+  readonly description = computed(
+    () => this.descriptionDraft() ?? this.#voice()?.description ?? '',
   );
-  protected readonly prompt = computed(() => this.promptDraft() ?? this.voice().designPrompt ?? '');
-  protected readonly transcript = computed(
-    () => this.transcriptDraft() ?? this.voice().transcript ?? '',
-  );
-  protected readonly descriptionDirty = computed(
+  readonly prompt = computed(() => this.promptDraft() ?? this.#voice()?.designPrompt ?? '');
+  readonly transcript = computed(() => this.transcriptDraft() ?? this.#voice()?.transcript ?? '');
+  readonly descriptionDirty = computed(
     () =>
-      this.descriptionDraft() !== null && this.description() !== (this.voice().description ?? ''),
+      this.descriptionDraft() !== null && this.description() !== (this.#voice()?.description ?? ''),
   );
-  protected readonly promptDirty = computed(
-    () => this.promptDraft() !== null && this.prompt() !== (this.voice().designPrompt ?? ''),
+  readonly promptDirty = computed(
+    () => this.promptDraft() !== null && this.prompt() !== (this.#voice()?.designPrompt ?? ''),
   );
-  protected readonly transcriptDirty = computed(
-    () => this.transcriptDraft() !== null && this.transcript() !== (this.voice().transcript ?? ''),
+  readonly transcriptDirty = computed(
+    () =>
+      this.transcriptDraft() !== null && this.transcript() !== (this.#voice()?.transcript ?? ''),
   );
-  protected readonly canGenerate = computed(() => canGenerateAudio(this.prompt()));
+  readonly canGenerate = computed(() => canGenerateAudio(this.prompt()));
 
-  protected readonly uploading = signal(false);
-  protected readonly regeneratingPrompt = signal(false);
-  protected readonly generatingAudio = signal(false);
-  protected readonly transcribing = signal(false);
+  readonly uploading = signal(false);
+  readonly regeneratingPrompt = signal(false);
+  readonly generatingAudio = signal(false);
+  readonly transcribing = signal(false);
+  /** Which Advanced tab is open. */
+  readonly overrideTab = signal<OverrideTab>('voice-design');
 
-  constructor() {
+  /** Built in `connected()`, once the page's store is reachable through the DOM. */
+  private folder!: ReadonlySignal<string>;
+  private audioVersion!: ReadonlySignal<number>;
+  private audioUrl!: ReadonlySignal<string | null>;
+  private draftsFor: string | null = null;
+
+  protected override connected(): void {
+    this.classList.add('voice-card');
+    this.store = use(CastStore, this);
+    this.folder = computed(() => this.store.folder() ?? '');
+    this.audioVersion = computed(() => {
+      const id = this.#voice()?.id;
+      return id ? (this.store.audioVersions()[id] ?? 0) : 0;
+    });
+    this.audioUrl = computed(() => {
+      const voice = this.#voice();
+      return voice ? voiceAudioUrl(this.folder(), voice, this.store.audioVersions()) : null;
+    });
     // A different voice in this slot (the list re-sorted) starts with clean drafts.
-    effect(() => {
-      const id = this.voice().id;
+    this.effect(() => {
+      const id = this.#voice()?.id ?? null;
       untracked(() => this.resetDrafts(id));
     });
   }
 
   /** Drafts belong to one voice; a different voice in this slot starts clean. */
-  private resetDrafts(voiceId: string): void {
+  private resetDrafts(voiceId: string | null): void {
     if (this.draftsFor === voiceId) return;
     this.draftsFor = voiceId;
     this.descriptionDraft.set(null);
@@ -479,20 +132,327 @@ export class VoiceCard {
     this.transcriptDraft.set(null);
   }
 
-  private draftsFor: string | null = null;
+  protected template() {
+    const voice = this.#voice();
+    if (!voice) return nothing;
+    this.setAttribute('data-voice-id', voice.id);
+    const busy = this.store.busy();
+    // A write is in flight: every Save is off until the reload lands.
+    if (busy) this.setAttribute('aria-busy', 'true');
+    else this.removeAttribute('aria-busy');
+    return html`
+      <details class="r2m-expansion voice-card__panel">
+        <summary class="voice-card__header">
+          <span class="voice-card__title">
+            ${
+              this.#isDefault()
+                ? html`<span
+                    class="voice-card__star voice-card__star--on"
+                    data-tooltip="Default voice"
+                  >
+                    ${icon('star', 'r2m-icon--filled')}
+                  </span>`
+                : html`<button
+                    type="button"
+                    class="r2m-icon-button voice-card__star"
+                    data-action="set-default"
+                    data-tooltip="Set as default"
+                    aria-label="Set as default voice"
+                    ?disabled=${busy}
+                    @click=${(e: Event) => {
+                      this.stop(e);
+                      void this.setDefault();
+                    }}
+                  >
+                    ${icon('star')}
+                  </button>`
+            }
+            <span
+              class="voice-card__name"
+              role="group"
+              tabindex="-1"
+              @click=${this.stop}
+              @keydown=${this.stop}
+            >
+              <r2m-inline-edit
+                .value=${voice.name}
+                .placeholder=${'Voice name'}
+                .required=${true}
+                @save=${(e: Event) => void this.rename((e as CustomEvent<string>).detail)}
+              ></r2m-inline-edit>
+              ${
+                voice.description
+                  ? html`<span class="voice-card__description">${voice.description}</span>`
+                  : nothing
+              }
+            </span>
+          </span>
+          <span class="voice-card__meta" @click=${this.stop} @keydown=${this.stop}>
+            ${statusChip({
+              status: voice.source === 'Uploaded' ? 'info' : 'neutral',
+              label: voice.source === 'Uploaded' ? 'Reference' : 'Prompt',
+              compact: true,
+            })}
+            ${
+              voice.isEdited
+                ? html`<span data-testid="voice-edited-chip"
+                    >${statusChip({ status: 'warn', label: 'Edited', icon: 'tune', compact: true })}</span
+                  >`
+                : nothing
+            }
+            ${
+              voice.referenceWarning
+                ? html`<span data-testid="voice-reference-warning"
+                    >${statusChip({
+                      status: 'warn',
+                      label: `${voice.referenceSeconds} s`,
+                      icon: 'timer',
+                      compact: true,
+                      tooltip: voice.referenceWarning,
+                    })}</span
+                  >`
+                : nothing
+            }
+            ${
+              voice.audioFileName
+                ? html`<a
+                    class="r2m-icon-button"
+                    data-tooltip="Edit audio"
+                    aria-label="Edit audio"
+                    data-action="edit-audio"
+                    href=${`projects/${encodeURIComponent(this.folder())}/voices/${voice.id}/editor`}
+                  >
+                    ${icon('graphic_eq')}
+                  </a>`
+                : nothing
+            }
+            <button
+              type="button"
+              class="r2m-icon-button voice-card__delete"
+              data-tooltip="Delete voice"
+              aria-label="Delete voice"
+              data-action="delete-voice"
+              ?disabled=${busy}
+              @click=${() => void this.deleteVoice()}
+            >
+              ${icon('delete')}
+            </button>
+          </span>
+        </summary>
 
-  /** Clicks and keys inside the header controls must not toggle the panel (Space/Enter do on the header). */
-  protected stop(event: Event): void {
+        <div class="r2m-expansion__body voice-card__body">
+          <section class="voice-card__block">
+            <label class="r2m-field voice-card__wide">
+              <span class="r2m-field__label"
+                >Voice description (where in the book this voice applies)</span
+              >
+              <textarea
+                aria-label="Voice description"
+                rows="2"
+                .value=${this.description()}
+                @input=${(e: Event) => this.descriptionDraft.set(valueOf(e))}
+              ></textarea>
+            </label>
+            <button
+              type="button"
+              class="r2m-button r2m-button--stroked"
+              data-action="save-description"
+              ?disabled=${busy || !this.descriptionDirty()}
+              @click=${() => void this.saveDescription()}
+            >
+              ${icon('save')} Save description
+            </button>
+          </section>
+
+          <fieldset
+            class="r2m-segmented voice-card__source"
+            role="radiogroup"
+            aria-label="Voice source"
+          >
+            <label data-source="Uploaded">
+              <input
+                type="radio"
+                name=${`source-${voice.id}`}
+                value="Uploaded"
+                .checked=${live(voice.source === 'Uploaded')}
+                ?disabled=${busy}
+                @change=${() => void this.switchSource('Uploaded')}
+              />
+              Reference audio
+            </label>
+            <label data-source="Generated">
+              <input
+                type="radio"
+                name=${`source-${voice.id}`}
+                value="Generated"
+                .checked=${live(voice.source === 'Generated')}
+                ?disabled=${busy}
+                @change=${() => void this.switchSource('Generated')}
+              />
+              Prompt
+            </label>
+          </fieldset>
+
+          ${voice.source === 'Uploaded' ? this.reference(voice) : this.promptSection(voice, busy)}
+
+          <details class="r2m-expansion voice-card__sub" data-section="advanced">
+            <summary><span class="r2m-expansion__title">Advanced settings</span></summary>
+            <div class="r2m-expansion__body">
+              ${voiceOverrides({
+                voice,
+                disabled: busy,
+                selected: this.overrideTab(),
+                onSelect: (tab) => this.overrideTab.set(tab),
+                onSave: (save) => void this.saveOverride(save),
+              })}
+            </div>
+          </details>
+
+          <details class="r2m-expansion voice-card__sub" data-section="transcript">
+            <summary><span class="r2m-expansion__title">Transcript</span></summary>
+            <section class="r2m-expansion__body voice-card__block">
+              <label class="r2m-field voice-card__wide">
+                <span class="r2m-field__label">Transcript</span>
+                <textarea
+                  aria-label="Transcript"
+                  rows="3"
+                  .value=${this.transcript()}
+                  @input=${(e: Event) => this.transcriptDraft.set(valueOf(e))}
+                ></textarea>
+              </label>
+              <div class="voice-card__actions">
+                <button
+                  type="button"
+                  class="r2m-button r2m-button--stroked"
+                  data-action="save-transcript"
+                  ?disabled=${busy || !this.transcriptDirty()}
+                  @click=${() => void this.saveTranscript()}
+                >
+                  ${icon('save')} Save
+                </button>
+                ${
+                  voice.audioFileName
+                    ? html`<button
+                        type="button"
+                        class="r2m-button r2m-button--stroked"
+                        data-action="transcribe"
+                        ?disabled=${busy || this.transcribing()}
+                        @click=${() => void this.transcribe()}
+                      >
+                        ${icon('record_voice_over')}
+                        ${this.transcribing() ? 'Transcribing…' : 'Send to AI'}
+                      </button>`
+                    : nothing
+                }
+              </div>
+            </section>
+          </details>
+        </div>
+      </details>
+    `;
+  }
+
+  private reference(voice: VoiceDto) {
+    const src = this.audioUrl();
+    return html`<section class="voice-card__block" data-mode="reference">
+      ${
+        src
+          ? html`<r2m-audio-player
+              .src=${src}
+              .cacheKey=${this.audioVersion()}
+              .label=${'Reference audio'}
+            ></r2m-audio-player>`
+          : html`<p class="voice-card__hint">No audio uploaded yet.</p>`
+      }
+      ${
+        this.uploading()
+          ? html`<p class="voice-card__hint" role="status">Uploading and normalising…</p>`
+          : html`<r2m-file-drop
+              .accept=${'audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aac,.opus,.webm'}
+              .maxBytes=${MAX_VOICE_AUDIO_BYTES}
+              .label=${voice.audioFileName ? 'Replace audio' : 'Upload audio'}
+              .hint=${'Audio file (WAV, MP3, FLAC, OGG, M4A…), 200 MB max. The reference must be 30 s or shorter; 15 s or shorter clones best. The recording is normalised on upload.'}
+              @files=${(e: Event) => void this.upload((e as CustomEvent<File[]>).detail)}
+              @rejected=${(e: Event) => this.rejected((e as CustomEvent<RejectedFile[]>).detail)}
+            ></r2m-file-drop>`
+      }
+    </section>`;
+  }
+
+  private promptSection(voice: VoiceDto, busy: boolean) {
+    const src = this.audioUrl();
+    const generating = this.generatingAudio();
+    return html`<section class="voice-card__block" data-mode="prompt">
+      <label class="r2m-field voice-card__wide">
+        <span class="r2m-field__label">Voice description prompt</span>
+        <textarea
+          aria-label="Voice description prompt"
+          rows="4"
+          .value=${this.prompt()}
+          @input=${(e: Event) => this.promptDraft.set(valueOf(e))}
+        ></textarea>
+      </label>
+      <div class="voice-card__actions">
+        <button
+          type="button"
+          class="r2m-button r2m-button--stroked"
+          data-action="save-prompt"
+          ?disabled=${busy || !this.promptDirty()}
+          @click=${() => void this.savePrompt()}
+        >
+          ${icon('save')} Save prompt
+        </button>
+        <button
+          type="button"
+          class="r2m-button r2m-button--stroked"
+          data-action="regenerate-prompt"
+          ?disabled=${busy || this.regeneratingPrompt()}
+          @click=${() => void this.regeneratePrompt()}
+        >
+          ${icon('auto_fix_high')}
+          ${this.regeneratingPrompt() ? 'Generating…' : 'Regenerate with AI'}
+        </button>
+        <button
+          type="button"
+          class="r2m-button r2m-button--stroked voice-card__generate ${
+            voice.audioFileName ? '' : 'voice-card__generate--primary'
+          }"
+          data-action="generate-audio"
+          ?disabled=${busy || generating || !this.canGenerate()}
+          @click=${() => void this.generateAudio()}
+        >
+          ${icon('volume_up')}
+          ${generating ? 'Generating…' : voice.audioFileName ? 'Regenerate audio' : 'Generate audio'}
+        </button>
+      </div>
+      ${
+        src
+          ? html`<r2m-audio-player
+              .src=${src}
+              .cacheKey=${this.audioVersion()}
+              .label=${'Generated audio'}
+            ></r2m-audio-player>`
+          : nothing
+      }
+    </section>`;
+  }
+
+  /** Clicks and keys inside the header controls must not toggle the panel (Space/Enter do on the summary). */
+  private readonly stop = (event: Event): void => {
     event.stopPropagation();
+    // A click on a control inside <summary> would also toggle the panel; a link keeps its
+    // navigation (Edit audio), since stopping the bubble is enough for it.
+    if (event.type === 'click' && !(event.target as Element).closest('a')) event.preventDefault();
+  };
+
+  async setDefault(): Promise<void> {
+    const voice = this.#voice();
+    if (voice) await this.store.run({ type: 'SetVoiceDefault', voiceId: voice.id });
   }
 
-  protected async setDefault(): Promise<void> {
-    await this.store.run({ type: 'SetVoiceDefault', voiceId: this.voice().id });
-  }
-
-  protected async rename(name: string): Promise<void> {
-    const voice = this.voice();
-    if (name === voice.name) return;
+  async rename(name: string): Promise<void> {
+    const voice = this.#voice();
+    if (!voice || name === voice.name) return;
     await this.store.run({
       type: 'UpdateVoice',
       voiceId: voice.id,
@@ -501,8 +461,9 @@ export class VoiceCard {
     });
   }
 
-  protected async saveDescription(): Promise<void> {
-    const voice = this.voice();
+  async saveDescription(): Promise<void> {
+    const voice = this.#voice();
+    if (!voice) return;
     const description = this.description().trim() || null;
     const response = await this.store.run({
       type: 'UpdateVoice',
@@ -513,8 +474,9 @@ export class VoiceCard {
     if (response) this.descriptionDraft.set(null);
   }
 
-  protected async remove(): Promise<void> {
-    const voice = this.voice();
+  async deleteVoice(): Promise<void> {
+    const voice = this.#voice();
+    if (!voice) return;
     const ok = await this.confirm.confirm({
       title: 'Delete voice',
       message: `Delete the voice "${voice.name}"? Its audio and any rules pointing at it are removed.`,
@@ -525,9 +487,9 @@ export class VoiceCard {
     await this.store.run({ type: 'DeleteVoice', voiceId: voice.id });
   }
 
-  protected async switchSource(target: VoiceSource): Promise<void> {
-    const voice = this.voice();
-    if (target === voice.source) return;
+  async switchSource(target: VoiceSource): Promise<void> {
+    const voice = this.#voice();
+    if (!voice || target === voice.source) return;
     const warning = sourceSwitchWarning(voice, target);
     if (warning) {
       const ok = await this.confirm.confirm({
@@ -536,7 +498,11 @@ export class VoiceCard {
         confirmLabel: 'Switch',
         destructive: true,
       });
-      if (!ok) return;
+      if (!ok) {
+        // The radio moved on its own; put it back on the stored source.
+        this.#voice.set({ ...voice });
+        return;
+      }
     }
     await this.store.run({
       type: 'SetVoiceSource',
@@ -547,10 +513,10 @@ export class VoiceCard {
 
   // ---- reference audio ---------------------------------------------------------------------------
 
-  protected async upload(files: File[]): Promise<void> {
+  async upload(files: File[]): Promise<void> {
     const file = files[0];
-    if (!file) return;
-    const voice = this.voice();
+    const voice = this.#voice();
+    if (!file || !voice) return;
     if (!(await this.confirmOverwriteEdit(voice))) return;
     this.uploading.set(true);
     try {
@@ -567,7 +533,7 @@ export class VoiceCard {
     }
   }
 
-  protected rejected(files: RejectedFile[]): void {
+  rejected(files: RejectedFile[]): void {
     const first = files[0];
     if (!first) return;
     this.toast.warn(
@@ -579,23 +545,27 @@ export class VoiceCard {
 
   // ---- prompt --------------------------------------------------------------------------------------
 
-  protected async savePrompt(): Promise<void> {
+  async savePrompt(): Promise<void> {
+    const voice = this.#voice();
+    if (!voice) return;
     const response = await this.store.run({
       type: 'SetVoiceDesignPrompt',
-      voiceId: this.voice().id,
+      voiceId: voice.id,
       prompt: this.prompt(),
     });
     if (response) this.promptDraft.set(null);
   }
 
-  protected async regeneratePrompt(): Promise<void> {
+  async regeneratePrompt(): Promise<void> {
+    const voice = this.#voice();
+    if (!voice) return;
     if (!(await this.preflight.ensureReady('voicePrompt'))) return;
     this.regeneratingPrompt.set(true);
     try {
-      const result = await openGeneratePromptDialog(this.dialog, {
+      const result = await openGeneratePromptDialog({
         folder: this.folder(),
-        characterId: this.voice().characterId,
-        characterName: this.characterName(),
+        characterId: voice.characterId,
+        characterName: this.#characterName(),
       });
       // The answer is a draft: only Save prompt persists it.
       if (result) this.promptDraft.set(result.designPrompt);
@@ -604,9 +574,9 @@ export class VoiceCard {
     }
   }
 
-  protected async generateAudio(): Promise<void> {
-    const voice = this.voice();
-    if (!this.canGenerate()) return;
+  async generateAudio(): Promise<void> {
+    const voice = this.#voice();
+    if (!voice || !this.canGenerate()) return;
     if (!(await this.confirmOverwriteEdit(voice))) return;
     if (!(await this.preflight.ensureReady('voiceDesign'))) return;
     this.generatingAudio.set(true);
@@ -635,8 +605,10 @@ export class VoiceCard {
 
   // ---- overrides -----------------------------------------------------------------------------------
 
-  protected async saveOverride(save: OverrideSave): Promise<void> {
-    const voiceId = this.voice().id;
+  async saveOverride(save: OverrideSave): Promise<void> {
+    const voice = this.#voice();
+    if (!voice) return;
+    const voiceId = voice.id;
     await this.store.run(
       save.area === 'paragraph-tts'
         ? { type: 'SetVoiceTtsSettingsOverride', voiceId, json: save.json }
@@ -646,18 +618,20 @@ export class VoiceCard {
 
   // ---- transcript ----------------------------------------------------------------------------------
 
-  protected async saveTranscript(): Promise<void> {
+  async saveTranscript(): Promise<void> {
+    const voice = this.#voice();
+    if (!voice) return;
     const response = await this.store.run({
       type: 'SetVoiceTranscript',
-      voiceId: this.voice().id,
+      voiceId: voice.id,
       transcript: this.transcript(),
     });
     if (response) this.transcriptDraft.set(null);
   }
 
-  protected async transcribe(): Promise<void> {
-    const voice = this.voice();
-    if (!voice.audioFileName) return;
+  async transcribe(): Promise<void> {
+    const voice = this.#voice();
+    if (!voice?.audioFileName) return;
     if (!(await this.preflight.ensureReady('transcription'))) return;
     this.transcribing.set(true);
     try {
@@ -682,5 +656,12 @@ export class VoiceCard {
       confirmLabel: 'Replace',
       destructive: true,
     });
+  }
+}
+define('r2m-voice-card', VoiceCard);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-voice-card': VoiceCard;
   }
 }

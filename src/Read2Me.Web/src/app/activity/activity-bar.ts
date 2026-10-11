@@ -1,17 +1,13 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  booleanAttribute,
-  computed,
-  inject,
-  input,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { JobView } from '@app/ui/job-pill/job';
-import { JobPill } from '@app/ui/job-pill/job-pill';
+import { html } from 'lit-html';
+import { repeat } from 'lit-html/directives/repeat.js';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import type { JobView } from '@app/ui/job';
+import { jobPill } from '@app/ui/job-pill';
+import { icon } from '@app/ui/partials';
 import { ActivityStore } from './activity-store';
+import './styles';
 
 /** The narrow-screen summary pill (design §5): one pill standing in for every active job. */
 export function summaryJob(jobs: readonly JobView[]): JobView {
@@ -28,83 +24,72 @@ export function summaryJob(jobs: readonly JobView[]): JobView {
 }
 
 /**
- * The activity bar (design §5): one `r2m-job-pill` per active job with cancel ×, "No background
- * work" when idle, and the ▲ that opens the drawer. Any pill opens the drawer on the Jobs tab.
+ * The activity bar (design §5): one job pill per active job with cancel ×, "No background work"
+ * when idle, and the ▲ that opens the drawer. Any pill opens the drawer on the Jobs tab.
  */
-@Component({
-  selector: 'app-activity-bar',
-  imports: [MatButtonModule, MatIconModule, MatTooltipModule, JobPill],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'activity-bar' },
-  template: `
-    @if (pills().length === 0) {
-      <span class="activity-bar__idle">
-        <mat-icon aria-hidden="true">hourglass_empty</mat-icon>
-        <span>No background work</span>
-      </span>
-    } @else {
-      <div class="activity-bar__pills">
-        @for (job of pills(); track job.id) {
-          <r2m-job-pill
-            [job]="job"
-            [tooltip]="job.detail ?? ''"
-            (open)="store.openDrawer('jobs')"
-            (cancel)="store.cancel($event)"
-          />
-        }
-      </div>
-    }
-    <span class="activity-bar__spacer"></span>
-    <button
-      mat-icon-button
-      type="button"
-      (click)="store.toggleDrawer()"
-      [attr.aria-expanded]="store.drawerOpen()"
-      aria-label="Toggle activity drawer"
-      matTooltip="Activity"
-    >
-      <mat-icon>{{ store.drawerOpen() ? 'expand_more' : 'expand_less' }}</mat-icon>
-    </button>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-2);
-      width: 100%;
-      min-width: 0;
-    }
-    .activity-bar__idle {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--r2m-space-1);
-    }
-    .activity-bar__idle mat-icon {
-      font-size: 18px;
-      width: 18px;
-      height: 18px;
-    }
-    .activity-bar__pills {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-2);
-      min-width: 0;
-      overflow-x: auto;
-      scrollbar-width: none;
-    }
-    .activity-bar__spacer {
-      flex: 1 1 auto;
-    }
-  `,
-})
-export class ActivityBar {
-  protected readonly store = inject(ActivityStore);
-  /** Below 900 px the bar collapses to a single summary pill. */
-  readonly narrow = input(false, { transform: booleanAttribute });
+export class ActivityBar extends R2mElement {
+  private readonly store = use(ActivityStore);
 
-  protected readonly pills = computed<JobView[]>(() => {
+  #narrow = signal(false);
+  /** Below 900 px the bar collapses to a single summary pill. */
+  get narrow() {
+    return this.#narrow();
+  }
+  set narrow(value: boolean) {
+    this.#narrow.set(value);
+  }
+
+  private readonly pills = computed<JobView[]>(() => {
     const jobs = this.store.activeJobs();
     if (jobs.length === 0) return [];
-    return this.narrow() ? [summaryJob(jobs)] : jobs;
+    return this.#narrow() ? [summaryJob(jobs)] : jobs;
   });
+
+  protected override connected(): void {
+    this.classList.add('activity-bar');
+  }
+
+  protected template() {
+    const pills = this.pills();
+    const open = this.store.drawerOpen();
+    return html`
+      ${
+        pills.length === 0
+          ? html`<span class="activity-bar__idle"
+              >${icon('hourglass_empty')}<span>No background work</span></span
+            >`
+          : html`<div class="activity-bar__pills">
+              ${repeat(
+                pills,
+                (job) => job.id,
+                (job) =>
+                  jobPill({
+                    job,
+                    tooltip: job.detail ?? '',
+                    onOpen: () => this.store.openDrawer('jobs'),
+                    onCancel: (id) => void this.store.cancel(id),
+                  }),
+              )}
+            </div>`
+      }
+      <span class="activity-bar__spacer"></span>
+      <button
+        type="button"
+        class="r2m-icon-button activity-bar__toggle"
+        aria-expanded=${open ? 'true' : 'false'}
+        aria-label="Toggle activity drawer"
+        data-tooltip="Activity"
+        @click=${() => this.store.toggleDrawer()}
+      >
+        ${icon(open ? 'expand_more' : 'expand_less')}
+      </button>
+    `;
+  }
+}
+define('r2m-activity-bar', ActivityBar);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-activity-bar': ActivityBar;
+  }
 }

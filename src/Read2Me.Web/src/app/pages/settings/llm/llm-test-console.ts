@@ -1,171 +1,143 @@
-import { TextFieldModule } from '@angular/cdk/text-field';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  OnDestroy,
-  computed,
-  inject,
-  input,
-  signal,
-} from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { LlmServerConfig, LlmSettingsApi, toApiError } from '@app/api';
+import { html, nothing } from 'lit-html';
+import { type LlmServerConfig, LlmSettingsApi, toApiError } from '@app/api';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
 import { LiveService } from '@app/live/live.service';
-import { StreamLlm } from '@app/ui/stream-llm/stream-llm';
-import { Throughput } from '@app/ui/throughput/throughput';
+import { field } from '@app/ui/field';
+import { icon } from '@app/ui/partials';
+import { throughput } from '@app/ui/throughput';
+import '@app/ui/stream-llm';
 
 /**
- * Test console for the default config (ticket 21): prompt, Send / Stop, the
- * LLM stream inline and the run's throughput. The host runs the send in the background; tokens
- * arrive on `stream:llm` and the ending as one `llmTest` message to this connection. A reconnect
- * may have swallowed that message, so the run state is read back on every resync.
+ * Test console for the default config (ticket 21): prompt, Send / Stop, the LLM stream inline
+ * and the run's throughput. The host runs the send in the background; tokens arrive on
+ * `stream:llm` and the ending as one `llmTest` message to this connection. A reconnect may have
+ * swallowed that message, so the run state is read back on a resync after the hub was lost, or
+ * while a run shows: before the first connect an ending has no connection to reach. An idle
+ * console's first connect is covered by the opening read. The feed is held
+ * while the console is connected, so the stream group is joined exactly while it is on screen.
  */
-@Component({
-  selector: 'app-llm-test-console',
-  imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatIconModule,
-    MatInputModule,
-    TextFieldModule,
-    StreamLlm,
-    Throughput,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h2 class="console__title">Test "{{ config().name }}"</h2>
-    <mat-form-field appearance="outline" class="console__prompt" subscriptSizing="dynamic">
-      <mat-label>Prompt</mat-label>
-      <textarea
-        matInput
-        cdkTextareaAutosize
-        cdkAutosizeMinRows="3"
-        cdkAutosizeMaxRows="10"
-        data-field="prompt"
-        [disabled]="streaming()"
-        [value]="prompt()"
-        (input)="prompt.set($any($event.target).value)"
-      ></textarea>
-    </mat-form-field>
-    <div class="console__actions">
-      <button
-        mat-flat-button
-        type="button"
-        data-action="send"
-        [disabled]="!canSend()"
-        (click)="send()"
-      >
-        <mat-icon>send</mat-icon> Send
-      </button>
-      @if (streaming()) {
-        <button mat-stroked-button type="button" data-action="stop" (click)="stop()">
-          <mat-icon>stop</mat-icon> Stop
-        </button>
-      }
-    </div>
-    @if (error()) {
-      <p class="console__error" role="alert">{{ error() }}</p>
-    }
-
-    @if (live.throughput(); as t) {
-      @if (t.hasRun) {
-        <r2m-throughput class="console__throughput" [snapshot]="t" />
-      }
-    }
-
-    <div class="console__stream">
-      <r2m-stream-llm [events]="feed.events()" [maxTurns]="feed.maxUnits" />
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      padding: var(--r2m-space-4);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-lg);
-      background: var(--r2m-surface);
-    }
-    .console__title {
-      margin: 0 0 var(--r2m-space-3);
-      font-size: var(--r2m-text-lg);
-      font-weight: 600;
-    }
-    .console__prompt {
-      width: 100%;
-    }
-    .console__actions {
-      display: flex;
-      gap: var(--r2m-space-2);
-      margin: var(--r2m-space-3) 0;
-    }
-    .console__error {
-      margin: 0 0 var(--r2m-space-3);
-      color: var(--r2m-status-error);
-    }
-    .console__throughput {
-      margin-bottom: var(--r2m-space-3);
-    }
-    .console__stream {
-      height: 40vh;
-      border-top: 1px solid var(--r2m-outline);
-    }
-  `,
-})
-export class LlmTestConsole implements OnDestroy {
-  private readonly api = inject(LlmSettingsApi);
-  protected readonly live = inject(LiveService);
-  protected readonly feed = inject(LlmStreamFeed);
+export class LlmTestConsole extends R2mElement {
+  private readonly api = use(LlmSettingsApi);
+  private readonly live = use(LiveService);
+  private readonly feed = use(LlmStreamFeed);
 
   /** The default config — the one a test send goes to. */
-  readonly config = input.required<LlmServerConfig>();
+  readonly #config = signal<LlmServerConfig | null>(null);
+  get config() {
+    return this.#config();
+  }
+  set config(value: LlmServerConfig | null) {
+    this.#config.set(value);
+  }
 
-  protected readonly prompt = signal('');
-  protected readonly streaming = signal(false);
-  protected readonly error = signal<string | null>(null);
-  protected readonly canSend = computed(() => !this.streaming() && !!this.prompt().trim());
+  readonly prompt = signal('');
+  readonly streaming = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly canSend = computed(() => !this.streaming() && !!this.prompt().trim());
 
   /** Bumped by every send and read-back, so a read-back that started earlier cannot undo them. */
   private stateSeq = 0;
+  /** The hub dropped since the last read-back, so the next resync may hide an unseen ending. */
+  private hubLost = false;
 
-  constructor() {
+  protected override connected(): void {
+    this.classList.add('console');
     this.feed.acquire();
-    const destroyRef = inject(DestroyRef);
-    this.live
-      .on('llmTest')
-      .pipe(takeUntilDestroyed(destroyRef))
-      .subscribe((m) => {
+    this.onDisconnect(() => this.feed.release());
+    this.onDisconnect(
+      this.live.on('llmTest', (m) => {
         this.stateSeq++;
         this.streaming.set(false);
         if (m.kind === 'failed') this.error.set(`Request failed: ${m.reason ?? 'unknown error'}`);
-      });
+      }),
+    );
     // A send this connection did not start (another tab) ends without an llmTest message here.
-    this.live
-      .on('llm')
-      .pipe(takeUntilDestroyed(destroyRef))
-      .subscribe((m) => {
+    this.onDisconnect(
+      this.live.on('llm', (m) => {
         if (m.kind === 'runEnded' && this.streaming()) void this.readBack();
-      });
-    this.live.resynced$.pipe(takeUntilDestroyed(destroyRef)).subscribe(() => void this.readBack());
+      }),
+    );
+    this.hubLost = false;
+    this.effect(() => {
+      const state = this.live.state();
+      if (state === 'reconnecting' || state === 'disconnected') this.hubLost = true;
+    });
+    this.onDisconnect(
+      this.live.resynced(() => {
+        if (!this.hubLost && !this.streaming()) return;
+        this.hubLost = false;
+        void this.readBack();
+      }),
+    );
     void this.readBack();
   }
 
-  ngOnDestroy(): void {
-    this.feed.release();
+  protected template() {
+    const config = this.#config();
+    if (!config) return nothing;
+    const streaming = this.streaming();
+    const error = this.error();
+    const t = this.live.throughput();
+    return html`
+      <h2 class="console__title">Test "${config.name}"</h2>
+      ${field(
+        { id: 'llm-test-prompt', label: 'Prompt', cls: 'console__prompt' },
+        (a) =>
+          html`<textarea
+            id=${a.id}
+            aria-describedby=${a.describedBy}
+            aria-invalid=${a.invalid}
+            data-field="prompt"
+            ?disabled=${streaming}
+            .value=${this.prompt()}
+            @input=${(e: Event) => this.prompt.set((e.target as HTMLTextAreaElement).value)}
+          ></textarea>`,
+      )}
+      <div class="console__actions">
+        <button
+          type="button"
+          class="r2m-button r2m-button--filled"
+          data-action="send"
+          ?disabled=${!this.canSend()}
+          @click=${() => void this.send()}
+        >
+          ${icon('send')} Send
+        </button>
+        ${
+          streaming
+            ? html`<button
+                type="button"
+                class="r2m-button r2m-button--stroked"
+                data-action="stop"
+                @click=${() => void this.stop()}
+              >
+                ${icon('stop')} Stop
+              </button>`
+            : nothing
+        }
+      </div>
+      ${error ? html`<p class="console__error" role="alert">${error}</p>` : nothing}
+      ${t?.hasRun ? html`<div class="console__throughput">${throughput(t)}</div>` : nothing}
+      <div class="console__stream">
+        <r2m-stream-llm
+          .events=${this.feed.events()}
+          .maxTurns=${this.feed.maxUnits}
+        ></r2m-stream-llm>
+      </div>
+    `;
   }
 
-  protected async send(): Promise<void> {
-    if (!this.canSend()) return;
+  private async send(): Promise<void> {
+    const config = this.#config();
+    if (!config || !this.canSend()) return;
     this.error.set(null);
     this.stateSeq++;
     this.streaming.set(true);
     try {
-      await this.api.startTest(this.config().id, {
+      await this.api.startTest(config.id, {
         prompt: this.prompt(),
         connectionId: this.live.connectionId(),
       });
@@ -178,9 +150,11 @@ export class LlmTestConsole implements OnDestroy {
     }
   }
 
-  protected async stop(): Promise<void> {
+  private async stop(): Promise<void> {
+    const config = this.#config();
+    if (!config) return;
     try {
-      await this.api.cancelTest(this.config().id);
+      await this.api.cancelTest(config.id);
     } catch (e) {
       this.error.set(toApiError(e).message);
     }
@@ -196,3 +170,4 @@ export class LlmTestConsole implements OnDestroy {
     }
   }
 }
+define('r2m-llm-test-console', LlmTestConsole);

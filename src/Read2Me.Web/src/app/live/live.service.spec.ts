@@ -1,17 +1,18 @@
-import { EnvironmentInjector, effect, runInInjectionContext } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { HubConnectionState } from '@microsoft/signalr';
-import { firstValueFrom, take, toArray } from 'rxjs';
 import { ORIGIN_ID } from '@app/api';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { override, resetServices } from '@app/core/services';
+import { effect } from '@app/core/signals';
+import { ToastService } from '@app/ui/toast';
+import { FakeTimers, settleMicrotasks as settle } from '../../testing/fake-timers';
 import {
   LIVE_CONNECTION_FACTORY,
-  LiveConnection,
-  LiveConnectionOptions,
+  type LiveConnection,
+  type LiveConnectionOptions,
   RECONNECT_DELAYS_MS,
   reconnectDelayMs,
 } from './live-connection';
-import { LiveSnapshot, ProjectSnapshot, ReceiptMessage } from './live-messages';
+import type { LiveSnapshot, ProjectSnapshot, Receipt, ReceiptMessage } from './live-messages';
 import { DISCONNECT_TOAST_AFTER_MS, LiveService } from './live.service';
 
 // ---- fake HubConnection --------------------------------------------------------------------------
@@ -179,11 +180,6 @@ function receipt(folder: string, originId: string): ReceiptMessage {
   };
 }
 
-/** Let the service's awaited invocations settle (each `await` is a microtask hop). */
-async function settle(): Promise<void> {
-  for (let i = 0; i < 10; i++) await Promise.resolve();
-}
-
 // ---- tests ---------------------------------------------------------------------------------------
 
 describe('reconnectDelayMs', () => {
@@ -196,41 +192,36 @@ describe('reconnectDelayMs', () => {
 });
 
 describe('LiveService', () => {
+  let timers: FakeTimers;
   let connections: FakeConnection[];
   /** Applied to the next connection the factory builds. */
   let startFailures = 0;
-  let toast: { warn: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn> };
+  let toast: { warn: ReturnType<typeof mock>; success: ReturnType<typeof mock> };
   let service: LiveService;
 
   const current = () => connections[connections.length - 1]!;
 
   beforeEach(() => {
-    vi.useFakeTimers();
+    resetServices();
+    timers = new FakeTimers().install();
     connections = [];
     startFailures = 0;
-    toast = { warn: vi.fn(), success: vi.fn() };
-    TestBed.configureTestingModule({
-      providers: [
-        {
-          provide: LIVE_CONNECTION_FACTORY,
-          useValue: (options: LiveConnectionOptions) => {
-            const c = new FakeConnection(options);
-            c.startFailures = startFailures;
-            c.results.set('GetSnapshot', () => snapshot());
-            c.results.set('JoinProject', (folder) => project(String(folder)));
-            connections.push(c);
-            return c;
-          },
-        },
-        { provide: ToastService, useValue: toast },
-      ],
+    toast = { warn: mock(), success: mock() };
+    override(LIVE_CONNECTION_FACTORY, (options: LiveConnectionOptions) => {
+      const c = new FakeConnection(options);
+      c.startFailures = startFailures;
+      c.results.set('GetSnapshot', () => snapshot());
+      c.results.set('JoinProject', (folder) => project(String(folder)));
+      connections.push(c);
+      return c;
     });
-    service = TestBed.inject(LiveService);
+    override(ToastService, toast as unknown as ToastService);
+    service = new LiveService();
   });
 
   afterEach(async () => {
     await service.stop();
-    vi.useRealTimers();
+    timers.restore();
   });
 
   it('starts disconnected, connects, and applies the snapshot', async () => {
@@ -297,12 +288,12 @@ describe('LiveService', () => {
     expect(service.state()).toBe('disconnected');
     expect(service.statusLabel()).toBe('Disconnected — retrying');
 
-    await vi.advanceTimersByTimeAsync(reconnectDelayMs(0));
+    await timers.advance(reconnectDelayMs(0));
     await settle();
     expect(current().startCalls).toBe(2);
     expect(service.state()).toBe('disconnected');
 
-    await vi.advanceTimersByTimeAsync(reconnectDelayMs(1));
+    await timers.advance(reconnectDelayMs(1));
     await settle();
     expect(current().startCalls).toBe(3);
     expect(service.state()).toBe('connected');
@@ -326,7 +317,7 @@ describe('LiveService', () => {
     await service.joinProject('foundation');
     await service.joinStream('llm');
     const resynced: LiveSnapshot[] = [];
-    service.resynced$.subscribe((s) => resynced.push(s));
+    service.resynced((s) => resynced.push(s));
     expect(current().calls('JoinProject')).toEqual([['foundation']]);
     expect(current().calls('JoinStream')).toEqual([['llm']]);
     expect(current().calls('GetSnapshot')).toHaveLength(1);
@@ -391,13 +382,13 @@ describe('LiveService', () => {
   it('filters receipts by folder and flags this tab’s own writes', async () => {
     service.start();
     await settle();
-    const received = firstValueFrom(service.receipts$('foundation').pipe(take(2), toArray()));
+    const receipts: Receipt[] = [];
+    service.receipts('foundation', (r) => receipts.push(r));
 
     current().emit('receipt', receipt('other', ORIGIN_ID));
     current().emit('receipt', receipt('Foundation', ORIGIN_ID));
     current().emit('receipt', receipt('foundation', 'someone-else'));
 
-    const receipts = await received;
     expect(receipts.map((r) => [r.folder, r.isOwn])).toEqual([
       ['Foundation', true],
       ['foundation', false],
@@ -409,7 +400,7 @@ describe('LiveService', () => {
     await settle();
     await service.joinProject('foundation');
     const assemblies: string[] = [];
-    service.on('assembly').subscribe((m) => assemblies.push(m.kind));
+    service.on('assembly', (m) => assemblies.push(m.kind));
 
     current().emit('assembly', { kind: 'phaseStarted', phase: 'Encode' });
     current().emit('assembly', { kind: 'progress', fraction: 0.42 });
@@ -493,9 +484,9 @@ describe('LiveService', () => {
     service.start();
     await settle();
     current().drop();
-    await vi.advanceTimersByTimeAsync(DISCONNECT_TOAST_AFTER_MS - 1);
+    await timers.advance(DISCONNECT_TOAST_AFTER_MS - 1);
     expect(toast.warn).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
+    await timers.advance(1);
     expect(toast.warn).toHaveBeenCalledWith('Live updates disconnected — retrying');
 
     current().recover();
@@ -508,10 +499,10 @@ describe('LiveService', () => {
     service.start();
     await settle();
     current().drop();
-    await vi.advanceTimersByTimeAsync(2000);
+    await timers.advance(2000);
     current().recover();
     await settle();
-    await vi.advanceTimersByTimeAsync(DISCONNECT_TOAST_AFTER_MS);
+    await timers.advance(DISCONNECT_TOAST_AFTER_MS);
     expect(toast.warn).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
   });
@@ -522,55 +513,28 @@ describe('LiveService', () => {
     await service.stop();
     expect(service.state()).toBe('disconnected');
     const calls = current().startCalls;
-    await vi.advanceTimersByTimeAsync(60000);
+    await timers.advance(60000);
     expect(current().startCalls).toBe(calls);
     expect(connections).toHaveLength(1);
   });
-});
 
-describe('LiveService inside an effect', () => {
   it('does not re-run a joining effect when the connection state changes', async () => {
-    vi.useFakeTimers();
-    const connections: FakeConnection[] = [];
-    TestBed.configureTestingModule({
-      providers: [
-        {
-          provide: LIVE_CONNECTION_FACTORY,
-          useValue: (options: LiveConnectionOptions) => {
-            const c = new FakeConnection(options);
-            c.results.set('GetSnapshot', () => snapshot());
-            c.results.set('JoinProject', (folder) => project(String(folder)));
-            connections.push(c);
-            return c;
-          },
-        },
-        { provide: ToastService, useValue: { warn: vi.fn(), success: vi.fn() } },
-      ],
-    });
-    const service = TestBed.inject(LiveService);
-    const injector = TestBed.inject(EnvironmentInjector);
     let runs = 0;
-    runInInjectionContext(injector, () =>
-      effect((onCleanup) => {
-        runs++;
-        void service.joinProject('foundation');
-        onCleanup(() => void service.leaveProject('foundation'));
-      }),
-    );
-    TestBed.tick();
+    const dispose = effect((onCleanup) => {
+      runs++;
+      void service.joinProject('foundation');
+      onCleanup(() => void service.leaveProject('foundation'));
+    });
     service.start();
     await settle();
     const c = connections[0]!;
     c.drop();
-    TestBed.tick();
     c.recover();
     await settle();
-    TestBed.tick();
 
     expect(runs).toBe(1);
     expect(c.calls('LeaveProject')).toEqual([]);
     expect(c.calls('JoinProject')).toEqual([['foundation'], ['foundation']]);
-    await service.stop();
-    vi.useRealTimers();
+    dispose();
   });
 });

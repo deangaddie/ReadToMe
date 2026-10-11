@@ -1,5 +1,6 @@
+import { describe, expect, it } from 'bun:test';
 import { ParagraphTtsServiceType } from '@app/api';
-import { SettingsField } from '@app/ui/settings-form/settings-form';
+import { SettingsField } from '@app/ui/settings-form';
 import {
   ProviderConfig,
   ProviderForm,
@@ -97,7 +98,10 @@ describe('provider form', () => {
     });
 
     it('merges what the settings form emits back without losing hidden keys', () => {
-      const merged = mergeFieldValues({ carriermaxtargetchars: 30 }, { cfg_value: 4, Normalize: true });
+      const merged = mergeFieldValues(
+        { carriermaxtargetchars: 30 },
+        { cfg_value: 4, Normalize: true },
+      );
       expect(merged).toEqual({ carriermaxtargetchars: 30, cfg_value: 4, normalize: true });
     });
   });
@@ -150,7 +154,11 @@ describe('provider form', () => {
 
   describe('buildProviderConfig', () => {
     it('writes the base URL and every field’s effective value into settingsJson', () => {
-      const built = buildProviderConfig(form({ name: ' Vox ', baseUrl: ' http://tts:8003 ' }), 4, FIELDS);
+      const built = buildProviderConfig(
+        form({ name: ' Vox ', baseUrl: ' http://tts:8003 ' }),
+        4,
+        FIELDS,
+      );
       expect(built.name).toBe('Vox');
       expect(JSON.parse(built.settingsJson)).toEqual({
         baseUrl: 'http://tts:8003',

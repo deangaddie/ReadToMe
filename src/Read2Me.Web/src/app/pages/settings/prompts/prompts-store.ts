@@ -1,18 +1,19 @@
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { PromptCatalogEntry, PromptKind, PromptsApi, toApiError } from '@app/api';
-import { LiveService } from '@app/live/live.service';
+import { type PromptCatalogEntry, type PromptKind, PromptsApi, toApiError } from '@app/api';
+import { use } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import { LiveService, type Unsubscribe } from '@app/live/live.service';
 
 /**
  * State behind the prompts page (ticket 23), provided by the page. Every write goes to the host
  * and the store reloads the catalog from it; the hub's `settingsChanged { area: 'prompts' }`
  * reloads it too, so a save made in another tab or over the agent API shows up here. Reloads are
- * sequenced: a slow answer never overwrites a newer one.
+ * sequenced: a slow answer never overwrites a newer one. The page calls {@link open} on connect
+ * and {@link close} on disconnect.
  */
-@Injectable()
 export class PromptsStore {
-  private readonly api = inject(PromptsApi);
-  private readonly live = inject(LiveService);
+  private readonly api = use(PromptsApi);
+  private readonly live = use(LiveService);
+  private subscription: Unsubscribe | null = null;
 
   private readonly _catalog = signal<PromptCatalogEntry[] | null>(null);
   private readonly _error = signal<string | null>(null);
@@ -22,14 +23,23 @@ export class PromptsStore {
   readonly catalog = this._catalog.asReadonly();
   readonly error = this._error.asReadonly();
 
-  constructor() {
-    this.live
-      .on('settingsChanged')
-      .pipe(takeUntilDestroyed(inject(DestroyRef)))
-      .subscribe((m) => {
-        if (m.area === 'prompts') void this.load();
-      });
-    void this.load();
+  /**
+   * Follows the hub's `settingsChanged { area: 'prompts' }` and loads. The page calls it on every
+   * connect, so a page the router re-attaches listens again after {@link close}.
+   */
+  open(): Promise<void> {
+    this.subscription?.();
+    this.subscription = this.live.on('settingsChanged', (m) => {
+      if (m.area === 'prompts') void this.load();
+    });
+    return this.load();
+  }
+
+  /** Drops the hub subscription and any load still in flight. */
+  close(): void {
+    this.subscription?.();
+    this.subscription = null;
+    this.loadSeq++;
   }
 
   async load(): Promise<void> {

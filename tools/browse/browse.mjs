@@ -1,4 +1,4 @@
-// Helpers for driving a running ReadToMe host from a throwaway script (Bun or Node). See README.md.
+// Helpers for driving a running ReadToMe host from a throwaway Bun script. See README.md.
 //
 // playwright-core is pinned to the Microsoft.Playwright version the E2E project uses, so the
 // Chromium the .NET tests already installed under %LOCALAPPDATA%\ms-playwright is the one this
@@ -7,19 +7,17 @@ import { chromium } from 'playwright-core';
 
 export const HOST = process.env.R2M_HOST ?? 'http://localhost:5000';
 
+/** The app's prefix on the host and on the dev server. */
+export const APP = '/app';
+
 /**
- * Which app a script drives and where it is served. `R2M_APP` is the app's prefix: `/app` (Angular,
- * the default) or `/app2` (native, while the migration runs). `R2M_WEB` is the origin serving it;
- * unset, it is that app's dev server (`npm start` → :4200 for `/app`, `bun run dev` → :4300 for
- * `/app2`), both proxying /api and /hubs to HOST. `R2M_WEB=http://localhost:5000` drives the host's
- * own bundle instead.
+ * The origin serving the app. Unset, it is the dev server (`bun run dev` → :4300), which proxies
+ * /api and /hubs to HOST. `R2M_WEB=http://localhost:5000` drives the host's own bundle instead.
  */
-export function resolveApp(env = process.env) {
-  const app = `/${(env.R2M_APP ?? '/app').replace(/^\/+|\/+$/g, '')}`;
-  const web = env.R2M_WEB ?? (app === '/app2' ? 'http://localhost:4300' : 'http://localhost:4200');
-  return { app, web };
+export function resolveWeb(env = process.env) {
+  return (env.R2M_WEB ?? 'http://localhost:4300').replace(/\/+$/, '');
 }
-export const { app: APP, web: WEB } = resolveApp();
+export const WEB = resolveWeb();
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const stamp = () => new Date().toISOString().slice(11, 19);
@@ -52,8 +50,7 @@ export async function launch({ headless = true, watchdogMs = 240_000 } = {}) {
   page.on('pageerror', (e) => page.errors.push(`pageerror: ${e.message}`));
   const toastWatch = setInterval(async () => {
     try {
-      // Angular toasts are `.r2m-toast-panel`; the native app's are `.r2m-toast`.
-      for (const t of await page.$$eval('.r2m-toast-panel, .r2m-toast', (els) => els.map((e) => e.textContent.trim())))
+      for (const t of await page.$$eval('.r2m-toast', (els) => els.map((e) => e.textContent.trim())))
         if (!page.toasts.includes(t)) page.toasts.push(t);
     } catch {
       /* page navigating */
@@ -78,7 +75,7 @@ export async function waitFor(fn, label, timeoutMs = 8000) {
   }
 }
 
-/** Resolves once `url` answers 2xx — e.g. wait for `ng serve` or the host to come up. */
+/** Resolves once `url` answers 2xx — e.g. wait for `bun run dev` or the host to come up. */
 export function waitForServer(url, timeoutMs = 120_000) {
   return waitFor(
     async () => {
@@ -122,7 +119,7 @@ export async function throwawayProject(text, { title = `browse-${Date.now().toSt
   };
 }
 
-// ---- The web app (APP: /app or /app2) --------------------------------------------------------
+// ---- The web app (APP) ---------------------------------------------------------------------
 
 /** Opens an app route (`/projects/x/book`) under APP and waits for the shell to render. */
 export async function openWeb(page, path) {
@@ -135,11 +132,11 @@ export async function openNodeMenu(page, host) {
   const menu = typeof host === 'string' ? page.locator(host) : host;
   await menu.hover({ timeout: 10_000 });
   await menu.locator('button').first().click({ timeout: 10_000 });
-  await page.waitForSelector('.mat-mdc-menu-panel', { state: 'visible' });
-  return page.$$eval('.mat-mdc-menu-panel [data-entry]', (els) => els.map((e) => e.dataset.entry));
+  await page.waitForSelector('#r2m-node-menu-panel', { state: 'visible' });
+  return page.$$eval('#r2m-node-menu-panel [data-entry]', (els) => els.map((e) => e.dataset.entry));
 }
 export const chooseEntry = (page, entry) =>
-  page.click(`.mat-mdc-menu-panel [data-entry="${entry}"]`, { timeout: 10_000 });
+  page.click(`[role="menu"] [data-entry="${entry}"]`, { timeout: 10_000 });
 
 /** Answers the `r2m-text-prompt-dialog` and waits for it to close. */
 export async function answerPrompt(page, text) {

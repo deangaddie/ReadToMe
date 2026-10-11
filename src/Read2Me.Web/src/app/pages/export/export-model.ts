@@ -1,6 +1,6 @@
-import { ApiError, AssemblyPhase } from '@app/api';
-import { ConfirmOptions } from '@app/ui/confirm-dialog/confirm-dialog';
-import { StatusKind } from '@app/ui/status-chip/status-chip';
+import { ApiError, type AssemblyPhase } from '@app/api';
+import type { ConfirmOptions } from '@app/ui/dialogs';
+import type { StatusKind } from '@app/ui/partials';
 
 /**
  * The export page's rules (ticket 20), kept pure so they are table-tested and the component only

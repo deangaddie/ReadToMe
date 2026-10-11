@@ -1,4 +1,4 @@
-import { NodeDto, NodeLevel } from '@app/api';
+import type { NodeDto, NodeLevel } from '@app/api';
 
 /** Loaded children per parent id: volume id → parts, part id → chapters. Absent = not loaded yet. */
 export type ChildrenMap = Readonly<Record<string, readonly NodeDto[] | undefined>>;
@@ -64,7 +64,12 @@ function identity(node: NodeDto, level: NodeLevel, index: number, count: number)
   };
 }
 
-function volumeNode(volume: NodeDto, index: number, count: number, children: ChildrenMap): TreeNode {
+function volumeNode(
+  volume: NodeDto,
+  index: number,
+  count: number,
+  children: ChildrenMap,
+): TreeNode {
   const parts = children[volume.id];
   const base = { ...identity(volume, 'volume', index, count), expandable: true };
   if (!parts) {

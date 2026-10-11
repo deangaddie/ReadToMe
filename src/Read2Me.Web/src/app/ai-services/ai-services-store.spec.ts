@@ -1,12 +1,14 @@
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
-import { AiServiceDto, AiServicesApi, ApiError } from '@app/api';
-import { LiveFamily, LiveMessageMap } from '@app/live/live-messages';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { type AiServiceDto, AiServicesApi, ApiError } from '@app/api';
+import { Emitter } from '@app/core/emitter';
+import { override, resetServices, use } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import type { LiveFamily, LiveMessageMap } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { ToastService } from '@app/ui/toast';
 import { AiServicesStore, WATCHDOG_LOG_LIMIT, watchdogLogEntry } from './ai-services-store';
 
+/** Ported from the Angular TestBed spec, case for case. */
 const CATALOG: AiServiceDto[] = [
   {
     name: 'llama',
@@ -24,56 +26,51 @@ const CATALOG: AiServiceDto[] = [
 
 class FakeLive {
   readonly serviceStatus = signal<Record<string, 'Ready' | 'Stopped' | 'Unknown'>>({});
-  readonly subjects = new Map<LiveFamily, Subject<unknown>>();
-  on<K extends LiveFamily>(family: K) {
+  readonly subjects = new Map<LiveFamily, Emitter<unknown>>();
+  on<K extends LiveFamily>(family: K, listener: (m: LiveMessageMap[K]) => void) {
     let s = this.subjects.get(family);
-    if (!s) this.subjects.set(family, (s = new Subject()));
-    return s.asObservable();
+    if (!s) this.subjects.set(family, (s = new Emitter()));
+    return s.subscribe(listener as (m: unknown) => void);
   }
   emit<K extends LiveFamily>(family: K, message: LiveMessageMap[K]) {
-    this.subjects.get(family)?.next(message);
+    this.subjects.get(family)?.emit(message);
   }
 }
 
 describe('AiServicesStore', () => {
   let live: FakeLive;
   let api: {
-    list: ReturnType<typeof vi.fn>;
-    statusAll: ReturnType<typeof vi.fn>;
-    status: ReturnType<typeof vi.fn>;
-    start: ReturnType<typeof vi.fn>;
-    restart: ReturnType<typeof vi.fn>;
-    shutdown: ReturnType<typeof vi.fn>;
+    list: ReturnType<typeof mock>;
+    statusAll: ReturnType<typeof mock>;
+    status: ReturnType<typeof mock>;
+    start: ReturnType<typeof mock>;
+    restart: ReturnType<typeof mock>;
+    shutdown: ReturnType<typeof mock>;
   };
   let toast: {
-    success: ReturnType<typeof vi.fn>;
-    error: ReturnType<typeof vi.fn>;
-    warn: ReturnType<typeof vi.fn>;
-    problem: ReturnType<typeof vi.fn>;
+    success: ReturnType<typeof mock>;
+    error: ReturnType<typeof mock>;
+    warn: ReturnType<typeof mock>;
+    problem: ReturnType<typeof mock>;
   };
 
-  function store(): AiServicesStore {
-    return TestBed.inject(AiServicesStore);
-  }
+  const store = (): AiServicesStore => use(AiServicesStore);
 
   beforeEach(() => {
+    resetServices();
     live = new FakeLive();
     api = {
-      list: vi.fn().mockResolvedValue(CATALOG),
-      statusAll: vi.fn().mockResolvedValue([]),
-      status: vi.fn().mockResolvedValue({ name: 'llama', status: 'Ready' }),
-      start: vi.fn().mockResolvedValue(undefined),
-      restart: vi.fn().mockResolvedValue(undefined),
-      shutdown: vi.fn().mockResolvedValue(undefined),
+      list: mock(async () => CATALOG),
+      statusAll: mock(async () => []),
+      status: mock(async () => ({ name: 'llama', status: 'Ready' })),
+      start: mock(async () => undefined),
+      restart: mock(async () => undefined),
+      shutdown: mock(async () => undefined),
     };
-    toast = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), problem: vi.fn() };
-    TestBed.configureTestingModule({
-      providers: [
-        { provide: LiveService, useValue: live },
-        { provide: AiServicesApi, useValue: api },
-        { provide: ToastService, useValue: toast },
-      ],
-    });
+    toast = { success: mock(), error: mock(), warn: mock(), problem: mock() };
+    override(LiveService, live as unknown as LiveService);
+    override(AiServicesApi, api as unknown as AiServicesApi);
+    override(ToastService, toast as unknown as ToastService);
   });
 
   it('loads the catalog once and probes everything through the one status call', async () => {

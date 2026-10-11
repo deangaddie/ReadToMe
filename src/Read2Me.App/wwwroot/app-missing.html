@@ -16,13 +16,11 @@
 </head>
 <body>
   <main>
-    <h1>The Angular front end has not been built</h1>
-    <p>This host serves the Angular app from <code>wwwroot/app/</code>, and that folder has no <code>index.html</code>.</p>
+    <h1>The web front end has not been built</h1>
+    <p>This host serves the web app from <code>wwwroot/app/</code>, and that folder has no <code>index.html</code>.</p>
     <p>Build it once from the repo root, then reload this page:</p>
-<pre><code>cd src/Read2Me.Web
-npm ci
-npm run build</code></pre>
-    <p>For development with live reload, run <code>npm start</code> instead and open <a href="http://localhost:4200/app/">http://localhost:4200/app/</a>. It proxies API calls to this host.</p>
+<pre><code>pwsh scripts/build-web.ps1</code></pre>
+    <p>For development with live reload, run <code>bun run dev</code> in <code>src/Read2Me.Web</code> instead and open <a href="http://localhost:4300/app/">http://localhost:4300/app/</a>. It proxies API calls to this host.</p>
   </main>
 </body>
 </html>

@@ -1,24 +1,29 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
 import {
   BookApi,
-  BookCommand,
-  CharacterLineDto,
-  CharacterSummaryDto,
-  CharacterVoicesDto,
-  ChapterVoicePreviewDto,
+  type BookCommand,
+  type ChapterVoicePreviewDto,
+  type CharacterLineDto,
+  type CharacterSummaryDto,
+  type CharacterVoicesDto,
   CharactersApi,
-  CommandResponse,
-  Guid,
-  VoiceRuleDto,
+  type CommandResponse,
+  type Guid,
+  type VoiceRuleDto,
   VoicesApi,
   toApiError,
 } from '@app/api';
-import { BookFacet, Receipt, VoiceBatchMessage, hasFacet } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { Subscription } from 'rxjs';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import {
+  type BookFacet,
+  type Receipt,
+  type VoiceBatchMessage,
+  hasFacet,
+} from '@app/live/live-messages';
+import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { Debounced } from '@app/shared/debounced';
-import { AliasOwner } from './alias-collisions';
+import { ToastService } from '@app/ui/toast';
+import type { AliasOwner } from './alias-collisions';
 import { applyVoiceUpdated } from './voices/voice-logic';
 
 /**
@@ -44,15 +49,14 @@ const NO_VOICES: CharacterVoicesDto = { defaultVoiceId: null, voices: [] };
  * place from `voiceBatch.voiceUpdated` and reloads on `completed`. Provided by the cast page, so it
  * lives as long as the page does.
  */
-@Injectable()
 export class CastStore {
-  private readonly characters = inject(CharactersApi);
-  private readonly voicesApi = inject(VoicesApi);
-  private readonly book = inject(BookApi);
-  private readonly live = inject(LiveService);
-  private readonly toast = inject(ToastService);
+  private readonly characters = use(CharactersApi);
+  private readonly voicesApi = use(VoicesApi);
+  private readonly book = use(BookApi);
+  private readonly live = use(LiveService);
+  private readonly toast = use(ToastService);
 
-  private subscription: Subscription | null = null;
+  private subscriptions: Unsubscribe[] = [];
   private readonly refetch = new Debounced(() => this.refresh());
 
   private readonly _folder = signal<string | null>(null);
@@ -112,9 +116,10 @@ export class CastStore {
     this._folder.set(folder);
     this._rows.set([]);
     this._error.set(null);
-    this.subscription = new Subscription();
-    this.subscription.add(this.live.receipts$(folder).subscribe((r) => this.onReceipt(r)));
-    this.subscription.add(this.live.on('voiceBatch').subscribe((m) => this.onVoiceBatch(m)));
+    this.subscriptions = [
+      this.live.receipts(folder, (r) => this.onReceipt(r)),
+      this.live.on('voiceBatch', (m) => this.onVoiceBatch(m)),
+    ];
 
     this._loading.set(true);
     try {
@@ -128,8 +133,8 @@ export class CastStore {
   }
 
   close(): void {
-    this.subscription?.unsubscribe();
-    this.subscription = null;
+    for (const unsubscribe of this.subscriptions) unsubscribe();
+    this.subscriptions = [];
     this.refetch.cancel();
     this._folder.set(null);
     this._selectedId.set(null);
@@ -139,7 +144,7 @@ export class CastStore {
     this._voiceRulePreview.set([]);
   }
 
-  /** Selects a character and loads its lines and voices; null clears the detail. */
+  /** Selects a character and loads its lines, voices and voice rules; null clears the detail. */
   async select(id: Guid | null): Promise<void> {
     this._selectedId.set(id);
     this._lines.set([]);
@@ -150,7 +155,7 @@ export class CastStore {
     await Promise.all([this.loadLines(id), this.loadVoices(id), this.loadVoiceRules(id)]);
   }
 
-  /** Reloads the roster and, when one is selected, its lines and voices. */
+  /** Reloads the roster and, when one is selected, its lines, voices and voice rules. */
   async refresh(): Promise<void> {
     const folder = this._folder();
     if (!folder) return;

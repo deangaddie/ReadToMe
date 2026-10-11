@@ -1,6 +1,7 @@
-import { NodeDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { NodeDto } from '@app/api';
 import {
-  TreeNode,
+  type TreeNode,
   buildTree,
   chapterAncestry,
   chapterSequence,
@@ -134,7 +135,12 @@ describe('firstUnloaded', () => {
 describe('chapterAncestry', () => {
   it('maps every loaded chapter to its part and volume', () => {
     const volumes = [node('v1'), node('v2')];
-    const children = { v1: [node('p1'), node('p2')], p1: [node('c1')], p2: [node('c2')], v2: [node('p3')] };
+    const children = {
+      v1: [node('p1'), node('p2')],
+      p1: [node('c1')],
+      p2: [node('c2')],
+      v2: [node('p3')],
+    };
     expect(chapterAncestry(volumes, children)).toEqual({
       c1: { partId: 'p1', volumeId: 'v1' },
       c2: { partId: 'p2', volumeId: 'v1' },

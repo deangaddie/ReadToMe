@@ -1,27 +1,32 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { AudioApi, Guid, NodeLevel, toApiError } from '@app/api';
+import { AudioApi, type Guid, type NodeLevel, toApiError } from '@app/api';
+import { use } from '@app/core/services';
+import { signal } from '@app/core/signals';
 import { Preflight } from '@app/shared/preflight';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { BookEditor } from './book-editor';
-import { BookStore } from './book-store';
+import { ToastService } from '@app/ui/toast';
+import type { BookEditor } from './book-editor';
+import type { BookStore } from './book-store';
 
 /**
  * Every audio-generation request the reader makes (ticket 13, design §6.3): a selection, a whole
  * node, or one item to retry, each behind the audio preflight, plus dismissing an item's review
  * flag. The queue answers by receipt and hub status, so nothing here patches a row; the toast
  * says how many were queued. A 409 (no paragraph TTS service) surfaces as a problem toast.
+ * Page-scoped like the editor: the project shell provides one per project, and the item rows
+ * reach it through DOM ancestry.
  */
-@Injectable()
 export class AudioGenerator {
-  private readonly audio = inject(AudioApi);
-  private readonly editor = inject(BookEditor);
-  private readonly store = inject(BookStore);
-  private readonly preflight = inject(Preflight);
-  private readonly toast = inject(ToastService);
+  private readonly audio = use(AudioApi);
+  private readonly preflight = use(Preflight);
+  private readonly toast = use(ToastService);
 
   private readonly _working = signal(false);
   /** A preflight or enqueue is in flight: the action bar waits for it. */
   readonly working = this._working.asReadonly();
+
+  constructor(
+    private readonly editor: BookEditor,
+    private readonly store: BookStore,
+  ) {}
 
   /** The action bar's Generate audio. True when something was queued. */
   enqueueItems(itemIds: readonly Guid[]): Promise<boolean> {
@@ -46,7 +51,9 @@ export class AudioGenerator {
     return this.editor.run({ type: 'DismissAudioReview', paragraphItemId: itemId });
   }
 
-  private async enqueue(request: (folder: string) => Promise<{ enqueued: number }>): Promise<boolean> {
+  private async enqueue(
+    request: (folder: string) => Promise<{ enqueued: number }>,
+  ): Promise<boolean> {
     const folder = this.store.folder();
     if (!folder || this._working()) return false;
     this._working.set(true);

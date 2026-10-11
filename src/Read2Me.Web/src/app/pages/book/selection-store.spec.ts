@@ -1,5 +1,7 @@
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { SelectionStore } from './selection-store';
 
+/** Copied verbatim from the Angular spec: the store ports with only its imports changed. */
 const A = { chapterId: 'c1', partId: 'pt1', volumeId: 'v1' };
 
 describe('SelectionStore', () => {

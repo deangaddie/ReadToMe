@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   CoverImageResponse,
@@ -26,9 +26,8 @@ export const BOOK_MAX_BYTES = 100 * 1024 * 1024;
  * `ProjectEndpoints.cs`: the project catalog, create-from-upload, delete, import, metadata,
  * narrator-only policy and cover image.
  */
-@Injectable({ providedIn: 'root' })
 export class ProjectsApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   list(): Promise<ProjectSummary[]> {
     return this.api.get<ProjectSummary[]>('/api/projects');

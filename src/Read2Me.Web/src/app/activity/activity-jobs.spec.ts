@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
 import { AttributionQueueState, AudioQueueState, QueueMessage } from '@app/live/live-messages';
 import { ActivityInputs, deriveJobs, isActiveJob } from './activity-jobs';

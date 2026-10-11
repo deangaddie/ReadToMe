@@ -1,4 +1,5 @@
-import { CharacterSummaryDto } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { CharacterSummaryDto } from '@app/api';
 import { displayName, filterRows, hasBookIcon, readinessChip, sortRows } from './cast-rows';
 
 function row(overrides: Partial<CharacterSummaryDto> & { name: string }): CharacterSummaryDto {

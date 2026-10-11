@@ -1,4 +1,5 @@
-import { AppTheme } from '@app/api';
+import { describe, expect, it } from 'bun:test';
+import type { AppTheme } from '@app/api';
 import {
   buildThemeStylesheet,
   contrastText,
@@ -54,42 +55,49 @@ describe('theme-css helpers', () => {
   });
 });
 
-describe('themeCssVars (design §3.2 mapping table)', () => {
-  it('maps Primary and Secondary to the Material system tokens plus the accent', () => {
+describe('themeCssVars (spec §5.1 token mapping)', () => {
+  it('maps Primary and Secondary to the accent and secondary tokens', () => {
     const vars = themeCssVars(light);
-    expect(vars['--mat-sys-primary']).toBe('#594ae2');
-    expect(vars['--mat-sys-on-primary']).toBe('#ffffff');
-    expect(vars['--mat-sys-primary-container']).toContain('color-mix(in srgb, #594ae2 20%');
-    expect(vars['--mat-sys-secondary']).toBe('#ff4081');
     expect(vars['--r2m-accent']).toBe('#594ae2');
+    expect(vars['--r2m-on-accent']).toBe('#ffffff');
+    expect(vars['--r2m-accent-container']).toContain('color-mix(in srgb, #594ae2 20%');
+    expect(vars['--r2m-secondary']).toBe('#ff4081');
+    expect(vars['--r2m-on-secondary']).toBe('#ffffff');
+  });
+
+  it('writes only --r2m-* variables, never Material system tokens', () => {
+    for (const theme of [light, sunset, custom]) {
+      expect(Object.keys(themeCssVars(theme)).every((k) => k.startsWith('--r2m-'))).toBe(true);
+    }
   });
 
   it('omits surface tokens when the theme leaves them to the compiled palette', () => {
     const vars = themeCssVars(light);
-    expect(vars['--mat-sys-background']).toBeUndefined();
-    expect(vars['--mat-sys-surface-container']).toBeUndefined();
+    expect(vars['--r2m-surface']).toBeUndefined();
+    expect(vars['--r2m-surface-container']).toBeUndefined();
     expect(vars['--r2m-appbar-bg']).toBeUndefined();
-    expect(vars['--mat-sys-on-surface']).toBeUndefined();
+    expect(vars['--r2m-text']).toBeUndefined();
   });
 
   it('maps every optional colour when present', () => {
     const vars = themeCssVars(sunset);
-    expect(vars['--mat-sys-background']).toBe('#fff5f2');
-    expect(vars['--mat-sys-surface']).toBe('#fff5f2');
-    expect(vars['--mat-sys-surface-container']).toBe('#ffffff');
-    expect(vars['--mat-sys-surface-container-low']).toContain('#ffffff 50%');
+    expect(vars['--r2m-surface']).toBe('#fff5f2');
+    expect(vars['--r2m-surface-container']).toBe('#ffffff');
+    expect(vars['--r2m-surface-low']).toContain('#ffffff 50%');
+    expect(vars['--r2m-surface-high']).toContain('#ffffff 90%');
+    expect(vars['--r2m-surface-highest']).toContain('#ffffff 82%');
     expect(vars['--r2m-appbar-bg']).toBe('#ff6f61');
     expect(vars['--r2m-appbar-fg']).toBe('#ffffff'); // coral is below the luminance cut-off
-    expect(vars['--mat-sys-on-surface']).toBe('#4a4a4a');
-    expect(vars['--mat-sys-on-background']).toBe('#4a4a4a');
+    expect(vars['--r2m-text']).toBe('#4a4a4a');
   });
 
   it('derives nav colours from the drawer background and honours text-secondary', () => {
     const vars = themeCssVars(custom);
     expect(vars['--r2m-nav-bg']).toBe('#101010');
     expect(vars['--r2m-nav-active-fg']).toBe('#ffffff');
-    expect(vars['--mat-sys-on-surface-variant']).toBe('#bbbbbb');
-    expect(vars['--mat-sys-primary-container']).toContain('#ff9900 32%'); // dark: stronger tint
+    expect(vars['--r2m-nav-active-bg']).toContain('#ff9900 28%');
+    expect(vars['--r2m-text-muted']).toBe('#bbbbbb');
+    expect(vars['--r2m-accent-container']).toContain('#ff9900 32%'); // dark: stronger tint
   });
 
   it('never emits status tokens', () => {
@@ -98,14 +106,13 @@ describe('themeCssVars (design §3.2 mapping table)', () => {
 });
 
 describe('buildThemeStylesheet', () => {
-  it('emits a :root block and an accent-only block for pinned-scheme panels', () => {
+  it('emits one :root block and no pinned-scheme block', () => {
     const css = buildThemeStylesheet(sunset);
+    expect(css).toContain('/* Sunset (light) */');
     expect(css).toContain(':root {');
     expect(css).toContain('--r2m-appbar-bg: #ff6f61;');
-    const panels = css.slice(css.indexOf("[data-scheme='light'], [data-scheme='dark'] {"));
-    expect(panels).toContain('--mat-sys-primary: #ff6f61;');
-    expect(panels).not.toContain('--r2m-appbar-bg');
-    expect(panels).not.toContain('--mat-sys-background');
+    expect(css).not.toContain('data-scheme');
+    expect(css.match(/\{/g)).toHaveLength(1);
   });
 });
 

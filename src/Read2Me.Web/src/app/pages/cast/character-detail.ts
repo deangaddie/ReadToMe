@@ -1,28 +1,18 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  afterRenderEffect,
-  computed,
-  inject,
-  input,
-  signal,
-  viewChild,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
-import { MatIconModule } from '@angular/material/icon';
-import { Router } from '@angular/router';
-import { CharacterLineDto, CharacterSummaryDto, NarratorDto } from '@app/api';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { InlineEdit } from '@app/ui/inline-edit/inline-edit';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { ProjectStore } from '../project/project-store';
+import { html, nothing } from 'lit-html';
+import type { CharacterLineDto, CharacterSummaryDto } from '@app/api';
+import { R2mElement, define } from '@app/core/element';
+import { Router } from '@app/core/router';
+import { use } from '@app/core/services';
+import { type ReadonlySignal, computed, signal } from '@app/core/signals';
+import { ConfirmService } from '@app/ui/dialogs';
+import { icon, statusChip } from '@app/ui/partials';
+import { castPath } from './cast-path';
 import { CastStore } from './cast-store';
-import { CharacterLines } from './character-lines';
 import { openMergeDialog } from './merge-dialog';
-import { VoiceRulesSection } from './voice-rules/voice-rules-section';
-import { VoicesSection } from './voices/voices-section';
+import '@app/ui/inline-edit';
+import './character-lines';
+import './voices/voices-section';
+import './voice-rules/voice-rules-section';
 
 /** The extra note on Delete when the character narrates the book (research §4). */
 export function linkedNarratorDeleteMessage(name: string): string {
@@ -32,246 +22,197 @@ export function linkedNarratorDeleteMessage(name: string): string {
 /**
  * The right-hand panel (research §4 "Detail header", "Aliases", "Lines"): rename, Merge and
  * Delete — all hidden on the seed Narrator — the alias chips, and the lines list. Every write
- * goes through the {@link CastStore}; the panel re-renders from the roster it reloads.
+ * goes through the {@link CastStore} the page provides; the panel re-renders from the roster it
+ * reloads. The Voices (16) and Voice rules (17) sections sit between the aliases and the lines.
  */
-@Component({
-  selector: 'app-character-detail',
-  imports: [
-    MatButtonModule,
-    MatIconModule,
-    InlineEdit,
-    StatusChip,
-    CharacterLines,
-    VoicesSection,
-    VoiceRulesSection,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'character-detail' },
-  template: `
-    <header class="character-detail__header">
-      @if (character().isNarrator) {
-        <h2 class="character-detail__name">{{ character().name }}</h2>
-      } @else {
-        <r2m-inline-edit
-          class="character-detail__name"
-          [value]="character().name"
-          placeholder="Character name"
-          required
-          (save)="rename($event)"
-        />
-        <button
-          mat-stroked-button
-          type="button"
-          data-action="merge"
-          [disabled]="store.busy() || mergeTargets() === 0"
-          (click)="merge()"
-        >
-          <mat-icon>merge</mat-icon> Merge
-        </button>
-        <button
-          mat-stroked-button
-          type="button"
-          class="character-detail__delete"
-          data-action="delete"
-          [disabled]="store.busy()"
-          (click)="remove()"
-        >
-          <mat-icon>delete</mat-icon> Delete
-        </button>
+export class CharacterDetail extends R2mElement {
+  private readonly confirm = use(ConfirmService);
+  private readonly router = use(Router);
+  private store!: CastStore;
+
+  readonly #character = signal<CharacterSummaryDto | null>(null);
+  get character() {
+    return this.#character();
+  }
+  set character(value: CharacterSummaryDto | null) {
+    this.#character.set(value);
+  }
+
+  readonly addingAlias = signal(false);
+  /** The alias input was just opened: focus it after that render. */
+  #focusAliasPending = false;
+
+  /** Built in `connected()`, once the page's store is reachable through the DOM. */
+  private mergeTargets!: ReadonlySignal<number>;
+  private folder!: ReadonlySignal<string>;
+
+  protected override connected(): void {
+    this.classList.add('character-detail');
+    this.store = use(CastStore, this);
+    this.folder = computed(() => this.store.folder() ?? '');
+    this.mergeTargets = computed(
+      () => this.store.rows().filter((r) => !r.isNarrator && r.id !== this.#character()?.id).length,
+    );
+  }
+
+  protected override updated(): void {
+    if (!this.#focusAliasPending) return;
+    this.#focusAliasPending = false;
+    this.querySelector<HTMLInputElement>('.character-detail__alias-input')?.focus();
+  }
+
+  protected template() {
+    const character = this.#character();
+    if (!character) return nothing;
+    const busy = this.store.busy();
+    return html`
+      <header class="character-detail__header">
+        ${
+          character.isNarrator
+            ? html`<h2 class="character-detail__name">${character.name}</h2>`
+            : html`<r2m-inline-edit
+                  class="character-detail__name"
+                  .value=${character.name}
+                  .placeholder=${'Character name'}
+                  .required=${true}
+                  @save=${(e: Event) => void this.rename((e as CustomEvent<string>).detail)}
+                ></r2m-inline-edit>
+                <button
+                  type="button"
+                  class="r2m-button r2m-button--stroked"
+                  data-action="merge"
+                  ?disabled=${busy || this.mergeTargets() === 0}
+                  @click=${() => void this.merge()}
+                >
+                  ${icon('merge')} Merge
+                </button>
+                <button
+                  type="button"
+                  class="r2m-button r2m-button--stroked character-detail__delete"
+                  data-action="delete"
+                  ?disabled=${busy}
+                  @click=${() => void this.deleteCharacter()}
+                >
+                  ${icon('delete')} Delete
+                </button>`
+        }
+      </header>
+
+      ${
+        character.narratesBook
+          ? statusChip({
+              status: 'info',
+              icon: 'menu_book',
+              label: 'Narrates this book',
+              compact: true,
+            })
+          : nothing
       }
-    </header>
+      ${character.isNarrator ? nothing : this.aliases(character, busy)}
 
-    @if (character().narratesBook) {
-      <r2m-status-chip status="info" icon="menu_book" label="Narrates this book" compact />
-    }
+      <section class="character-detail__section" aria-label="Voices">
+        <r2m-voices-section .character=${character}></r2m-voices-section>
+      </section>
+      <section class="character-detail__section" aria-label="Voice rules">
+        <r2m-voice-rules-section .character=${character}></r2m-voice-rules-section>
+      </section>
 
-    @if (!character().isNarrator) {
-      <section class="character-detail__section" aria-label="Aliases">
-        <h3 class="character-detail__heading">Aliases</h3>
-        <div class="character-detail__aliases">
-          @for (alias of character().aliases; track alias.id) {
-            <span class="character-detail__alias" [attr.data-alias]="alias.name">
-              {{ alias.name }}
+      <section class="character-detail__section" aria-label="Lines">
+        <h3 class="character-detail__heading">
+          Lines <span class="character-detail__count">${character.lineCount}</span>
+        </h3>
+        <r2m-character-lines
+          .folder=${this.folder()}
+          .lines=${this.store.lines()}
+          .loading=${this.store.linesLoading()}
+          @open=${(e: Event) => this.openInReader((e as CustomEvent<CharacterLineDto>).detail)}
+        ></r2m-character-lines>
+      </section>
+    `;
+  }
+
+  private aliases(character: CharacterSummaryDto, busy: boolean) {
+    return html`<section class="character-detail__section" aria-label="Aliases">
+      <h3 class="character-detail__heading">Aliases</h3>
+      <div class="character-detail__aliases">
+        ${character.aliases.map(
+          (alias) =>
+            html`<span class="character-detail__alias" data-alias=${alias.name}>
+              ${alias.name}
               <button
                 type="button"
                 class="character-detail__alias-remove"
-                [attr.aria-label]="'Remove alias ' + alias.name"
-                [disabled]="store.busy()"
-                (click)="removeAlias(alias.id)"
+                aria-label=${`Remove alias ${alias.name}`}
+                ?disabled=${busy}
+                @click=${() => void this.removeAlias(alias.id)}
               >
-                <mat-icon>close</mat-icon>
+                ${icon('close')}
               </button>
-            </span>
-          }
-          @if (addingAlias()) {
-            <input
-              class="character-detail__alias-input"
-              type="text"
-              placeholder="Alias name"
-              aria-label="New alias"
-              #aliasField
-              (keydown.enter)="commitAlias($event)"
-              (keydown.escape)="addingAlias.set(false)"
-              (blur)="commitAlias($event)"
-            />
-          } @else {
-            <button
-              mat-button
-              type="button"
-              data-action="add-alias"
-              [disabled]="store.busy()"
-              (click)="addingAlias.set(true)"
-            >
-              <mat-icon>add</mat-icon> Add alias
-            </button>
-          }
-        </div>
-      </section>
-    }
-
-    <section class="character-detail__section" aria-label="Voices">
-      <app-voices-section [character]="character()" />
-    </section>
-
-    <section class="character-detail__section" aria-label="Voice rules">
-      <app-voice-rules-section [character]="character()" />
-    </section>
-
-    <section class="character-detail__section" aria-label="Lines">
-      <h3 class="character-detail__heading">
-        Lines
-        <span class="character-detail__count">{{ character().lineCount }}</span>
-      </h3>
-      <app-character-lines
-        [folder]="folder()"
-        [lines]="store.lines()"
-        [loading]="store.linesLoading()"
-        (open)="openInReader($event)"
-      />
-    </section>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-4);
-    }
-    .character-detail__header {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-2);
-      flex-wrap: wrap;
-    }
-    .character-detail__name {
-      flex: 1 1 auto;
-      min-width: 0;
-      margin: 0;
-      font-size: var(--r2m-text-xl);
-      font-weight: 500;
-    }
-    .character-detail__delete {
-      color: var(--r2m-status-error);
-    }
-    .character-detail__section {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-2);
-    }
-    .character-detail__heading {
-      margin: 0;
-      font-size: var(--r2m-text-md);
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-2);
-    }
-    .character-detail__count {
-      color: var(--r2m-text-muted);
-      font-weight: 400;
-    }
-    .character-detail__aliases {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--r2m-space-1);
-    }
-    .character-detail__alias {
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
-      padding: 2px var(--r2m-space-1) 2px var(--r2m-space-2);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-pill);
-      font-size: var(--r2m-text-sm);
-    }
-    .character-detail__alias-remove {
-      display: inline-flex;
-      border: 0;
-      background: none;
-      padding: 0;
-      cursor: pointer;
-      color: inherit;
-    }
-    .character-detail__alias-remove mat-icon {
-      font-size: 16px;
-      width: 16px;
-      height: 16px;
-    }
-    .character-detail__alias-input {
-      font: inherit;
-      padding: var(--r2m-space-1) var(--r2m-space-2);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-sm);
-      background: var(--r2m-surface);
-      color: var(--r2m-text);
-      max-width: 160px;
-    }
-  `,
-})
-export class CharacterDetail {
-  protected readonly store = inject(CastStore);
-  private readonly project = inject(ProjectStore);
-  private readonly confirm = inject(ConfirmService);
-  private readonly dialog = inject(MatDialog);
-  private readonly router = inject(Router);
-
-  readonly character = input.required<CharacterSummaryDto>();
-
-  protected readonly addingAlias = signal(false);
-  private readonly aliasField = viewChild<ElementRef<HTMLInputElement>>('aliasField');
-  protected readonly folder = computed(() => this.store.folder() ?? '');
-  protected readonly narrator = computed<NarratorDto | null>(
-    () => this.project.detail()?.narrator ?? null,
-  );
-  protected readonly mergeTargets = computed(
-    () => this.store.rows().filter((r) => !r.isNarrator && r.id !== this.character().id).length,
-  );
-
-  constructor() {
-    afterRenderEffect(() => {
-      if (this.addingAlias()) this.aliasField()?.nativeElement.focus();
-    });
+            </span>`,
+        )}
+        ${
+          this.addingAlias()
+            ? html`<input
+                class="character-detail__alias-input"
+                type="text"
+                placeholder="Alias name"
+                aria-label="New alias"
+                @keydown=${this.#onAliasKeydown}
+                @blur=${(e: Event) => void this.commitAlias(e)}
+              />`
+            : html`<button
+                type="button"
+                class="r2m-button"
+                data-action="add-alias"
+                ?disabled=${busy}
+                @click=${() => this.beginAlias()}
+              >
+                ${icon('add')} Add alias
+              </button>`
+        }
+      </div>
+    </section>`;
   }
 
-  protected async rename(name: string): Promise<void> {
-    if (name === this.character().name) return;
-    await this.store.run({ type: 'RenameCharacter', characterId: this.character().id, name });
+  readonly #onAliasKeydown = (e: KeyboardEvent): void => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      void this.commitAlias(e);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      this.addingAlias.set(false);
+    }
+  };
+
+  beginAlias(): void {
+    this.#focusAliasPending = true;
+    this.addingAlias.set(true);
   }
 
-  protected async removeAlias(aliasId: string): Promise<void> {
+  async rename(name: string): Promise<void> {
+    const character = this.#character();
+    if (!character || name === character.name) return;
+    await this.store.run({ type: 'RenameCharacter', characterId: character.id, name });
+  }
+
+  async removeAlias(aliasId: string): Promise<void> {
     await this.store.run({ type: 'RemoveCharacterAlias', aliasId });
   }
 
-  protected async commitAlias(event: Event): Promise<void> {
+  /** Enter and blur both land here; the first one closes the input, so the other is a no-op. */
+  async commitAlias(event: Event): Promise<void> {
+    if (!this.addingAlias()) return;
+    const character = this.#character();
     const name = (event.target as HTMLInputElement).value.trim();
     this.addingAlias.set(false);
-    if (!name) return;
-    await this.store.run({ type: 'AddCharacterAlias', characterId: this.character().id, name });
+    if (!name || !character) return;
+    await this.store.run({ type: 'AddCharacterAlias', characterId: character.id, name });
   }
 
-  protected async merge(): Promise<void> {
-    const merged = this.character();
-    const choice = await openMergeDialog(this.dialog, {
+  async merge(): Promise<void> {
+    const merged = this.#character();
+    if (!merged) return;
+    const choice = await openMergeDialog({
       folder: this.folder(),
       merged,
       rows: this.store.rows(),
@@ -283,11 +224,12 @@ export class CharacterDetail {
       mergedId: merged.id,
       addNameAsAlias: choice.addNameAsAlias,
     });
-    if (response) await this.goTo(choice.survivorId);
+    if (response) this.goTo(choice.survivorId);
   }
 
-  protected async remove(): Promise<void> {
-    const character = this.character();
+  async deleteCharacter(): Promise<void> {
+    const character = this.#character();
+    if (!character) return;
     const note = character.narratesBook ? ` ${linkedNarratorDeleteMessage(character.name)}` : '';
     const ok = await this.confirm.confirm({
       title: 'Delete character',
@@ -299,18 +241,24 @@ export class CharacterDetail {
     });
     if (!ok) return;
     const response = await this.store.run({ type: 'DeleteCharacter', characterId: character.id });
-    if (response) await this.goTo(null);
+    if (response) this.goTo(null);
   }
 
   /** Open the reader at the line's chapter in Speakers mode. */
-  protected openInReader(line: CharacterLineDto): void {
-    void this.router.navigate(['/projects', this.folder(), 'book'], {
-      queryParams: { mode: 'speakers', chapter: line.chapterId },
+  openInReader(line: CharacterLineDto): void {
+    this.router.navigate(`projects/${encodeURIComponent(this.folder())}/book`, {
+      query: { mode: 'speakers', chapter: line.chapterId },
     });
   }
 
-  private goTo(id: string | null): Promise<boolean> {
-    const base = ['/projects', this.folder(), 'cast'];
-    return this.router.navigate(id ? [...base, id] : base);
+  private goTo(id: string | null): void {
+    this.router.navigate(castPath(this.folder(), id));
+  }
+}
+define('r2m-character-detail', CharacterDetail);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-character-detail': CharacterDetail;
   }
 }

@@ -1,8 +1,8 @@
 /**
  * Compile-time pins between the hand-written shapes in `dtos.ts` and the generated OpenAPI schema.
  * Each entry asserts the hand-written type is assignable to the generated one, so a field the host
- * renames or drops fails `npm run typecheck` as soon as `npm run api:types` is re-run (and
- * `npm run api:check` fails `npm run check` while the checked-in schema is stale).
+ * renames or drops fails `bun run typecheck` as soon as `bun run api:types` is re-run (and
+ * `bun run api:check` fails `bun run check` while the checked-in schema is stale).
  *
  * Only shapes the host's document actually declares can be pinned: request bodies and the settings
  * entities. Response DTOs have no OpenAPI counterpart (see `dtos.ts`).
@@ -20,6 +20,7 @@ import type {
   LlmServerConfig,
   LlmTestRequest,
   ManualImportRequest,
+  NarrationReleasePreviewRequest,
   NarratorOnlyModeRequest,
   ParagraphTtsServiceConfig,
   ParagraphsEnqueueRequest,
@@ -71,6 +72,7 @@ export type SchemaPins = [
   Pin<SplitRuleRequest, Schema['SplitRuleRequest']>,
   Pin<ParagraphsEnqueueRequest, Schema['ParagraphsEnqueueRequest']>,
   Pin<BulkAssignPreviewRequest, Schema['BulkAssignPreviewRequest']>,
+  Pin<NarrationReleasePreviewRequest, Schema['NarrationReleasePreviewRequest']>,
   Pin<ItemsEnqueueRequest, Schema['ItemsEnqueueRequest']>,
   Pin<GenerateDesignPromptRequest, Schema['GenerateDesignPromptRequest']>,
   Pin<PreviewRequest, Schema['PreviewRequest']>,

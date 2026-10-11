@@ -1,41 +1,28 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  output,
-  signal,
-  untracked,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatExpansionModule } from '@angular/material/expansion';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSelectModule } from '@angular/material/select';
+import { html, nothing } from 'lit-html';
 import {
   AttributionPromptStyle,
   LlmApiType,
-  LlmServerConfig,
+  type LlmServerConfig,
   LlmSettingsApi,
   toApiError,
 } from '@app/api';
-import { ConfigEditorFrame } from '@app/ui/config-editor-frame/config-editor-frame';
-import { ToastService } from '@app/ui/toast/toast.service';
-import { ManagedServiceStatus } from '../shared/managed-service-status';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal, untracked } from '@app/core/signals';
+import { configEditorFrame } from '@app/ui/config-editor-frame';
+import { type FieldControlAttrs, field } from '@app/ui/field';
+import { icon, spinner } from '@app/ui/partials';
+import { ToastService } from '@app/ui/toast';
 import {
   API_TYPE_LABELS,
   EMPTY_LLM_FORM,
-  LlmConfigForm,
+  type LlmConfigForm,
   buildLlmConfig,
   sameLlmForm,
   validateLlmForm,
 } from './llm-config-form';
 import { LlmSettingsStore } from './llm-settings-store';
+import '../shared/managed-service-status';
 
 /** What the editor is editing: a saved config (`id` > 0) or a new one, which may start pre-filled. */
 export interface LlmEditTarget {
@@ -54,281 +41,75 @@ const NUMERIC_FIELDS = [
   { key: 'presencePenalty', label: 'Presence penalty' },
 ] as const;
 
+const API_TYPES = Object.values(LlmApiType).map((value) => ({
+  value,
+  label: API_TYPE_LABELS[value],
+}));
+const PROMPT_STYLES = [
+  { value: AttributionPromptStyle.Full, label: 'Full' },
+  { value: AttributionPromptStyle.Simple, label: 'Simple' },
+  { value: AttributionPromptStyle.Chapter, label: 'Chapter' },
+];
+
+/** The form fields typed as free text (everything but the API type, style and switch). */
+type TextKey = {
+  [K in keyof LlmConfigForm]: LlmConfigForm[K] extends string ? K : never;
+}[keyof LlmConfigForm];
+
+const valueOf = (e: Event) =>
+  (e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
+
 /**
- * The in-place typed editor for one LLM config (ticket 21): the config's fields
- * and validation messages inside the settings editor frame, plus the managed-container status for
- * the config's base URL.
+ * The in-place typed editor for one LLM config (ticket 21): the config's fields and validation
+ * message inside the settings editor frame, plus the managed-container status for the draft's
+ * base URL. Set `target`; `dirty()` tells the page whether edits would be lost; `saved` carries
+ * the stored config after a successful create or update.
  */
-@Component({
-  selector: 'app-llm-config-editor',
-  imports: [
-    MatButtonModule,
-    MatCheckboxModule,
-    MatExpansionModule,
-    MatFormFieldModule,
-    MatIconModule,
-    MatInputModule,
-    MatProgressSpinnerModule,
-    MatSelectModule,
-    ConfigEditorFrame,
-    ManagedServiceStatus,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <r2m-config-editor-frame
-      [title]="target().id ? target().baseline.name : 'New configuration'"
-      [subtitle]="target().id ? undefined : 'Saved configurations appear in the list.'"
-      [dirty]="dirty()"
-      [saving]="saving()"
-      (save)="save()"
-      (cancel)="reset()"
-    >
-      <div class="llm-editor">
-        <!-- Follows the draft, not the saved config: a duplicate or a retyped URL shows its container. -->
-        <app-managed-service-status [baseUrl]="form().baseUrl" />
+export class LlmConfigEditor extends R2mElement {
+  private readonly api = use(LlmSettingsApi);
+  private readonly toast = use(ToastService);
+  private store!: LlmSettingsStore;
 
-        <mat-form-field appearance="outline">
-          <mat-label>Name</mat-label>
-          <input
-            matInput
-            required
-            autocomplete="off"
-            data-field="name"
-            [value]="form().name"
-            (input)="set('name', $any($event.target).value)"
-          />
-        </mat-form-field>
+  readonly #target = signal<LlmEditTarget | null>(null);
+  get target() {
+    return this.#target();
+  }
+  set target(value: LlmEditTarget | null) {
+    this.#target.set(value);
+  }
 
-        <mat-form-field appearance="outline">
-          <mat-label>API type</mat-label>
-          <mat-select [value]="form().apiType" (valueChange)="set('apiType', $event)">
-            @for (type of apiTypes; track type.value) {
-              <mat-option [value]="type.value">{{ type.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+  readonly form = signal<LlmConfigForm>(EMPTY_LLM_FORM);
+  readonly error = signal<string | null>(null);
+  readonly saving = signal(false);
+  readonly paramsOpen = signal(false);
 
-        <mat-form-field appearance="outline">
-          <mat-label>Base URL</mat-label>
-          <input
-            matInput
-            required
-            autocomplete="off"
-            placeholder="http://localhost:8080"
-            data-field="baseUrl"
-            [value]="form().baseUrl"
-            (input)="set('baseUrl', $any($event.target).value)"
-          />
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>API key (optional)</mat-label>
-          <input
-            matInput
-            type="password"
-            autocomplete="new-password"
-            [value]="form().apiKey"
-            (input)="set('apiKey', $any($event.target).value)"
-          />
-        </mat-form-field>
-
-        <div class="llm-editor__models">
-          <button
-            mat-stroked-button
-            type="button"
-            data-action="get-models"
-            [disabled]="loadingModels()"
-            (click)="getModels()"
-          >
-            @if (loadingModels()) {
-              <mat-progress-spinner mode="indeterminate" diameter="16" />
-            } @else {
-              <mat-icon>download</mat-icon>
-            }
-            Get models
-          </button>
-        </div>
-
-        @if (modelChoices(); as choices) {
-          <mat-form-field appearance="outline">
-            <mat-label>Model (optional)</mat-label>
-            <mat-select
-              data-field="model"
-              [value]="form().model"
-              (valueChange)="set('model', $event)"
-            >
-              <mat-option value="">None</mat-option>
-              @for (model of choices; track model) {
-                <mat-option [value]="model">{{ model }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        } @else {
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Model (optional)</mat-label>
-            <input
-              matInput
-              autocomplete="off"
-              data-field="model"
-              [value]="form().model"
-              (input)="set('model', $any($event.target).value)"
-            />
-            @if (modelsHint()) {
-              <mat-hint data-role="models-hint">{{ modelsHint() }}</mat-hint>
-            }
-          </mat-form-field>
-        }
-
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Paragraphs per request</mat-label>
-          <input
-            matInput
-            inputmode="numeric"
-            data-field="attributionBatchSize"
-            [value]="form().attributionBatchSize"
-            (input)="set('attributionBatchSize', $any($event.target).value)"
-          />
-          <mat-hint>
-            Character paragraphs attributed per LLM request. 1 = one at a time; higher values batch
-            consecutive paragraphs into a single prompt.
-          </mat-hint>
-        </mat-form-field>
-
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Attribution prompt style</mat-label>
-          <mat-select [value]="form().promptStyle" (valueChange)="set('promptStyle', $event)">
-            @for (style of promptStyles; track style.value) {
-              <mat-option [value]="style.value">{{ style.label }}</mat-option>
-            }
-          </mat-select>
-          <mat-hint>
-            Simple: only assigns a speaker when the text explicitly says who speaks ("said X");
-            otherwise returns unknown so escalation passes the paragraph to a larger model. Full:
-            uses inference heuristics. Chapter: whole chapter, roster-only answers, rules pre-tag
-            and rules-discover. Fast on gemma-12b; the model never creates characters —
-            rules-discover does. Thinking is always off.
-          </mat-hint>
-        </mat-form-field>
-
-        <div>
-          <mat-checkbox
-            [checked]="form().supportsModelSwitch"
-            (change)="set('supportsModelSwitch', $event.checked)"
-          >
-            Supports model switch
-          </mat-checkbox>
-          <p class="llm-editor__note">
-            This endpoint (e.g. the local llama.cpp server) can load the configured model on demand.
-          </p>
-        </div>
-
-        <mat-expansion-panel class="llm-editor__params" [expanded]="paramsOpen()">
-          <mat-expansion-panel-header>
-            <mat-panel-title>Request parameters (optional)</mat-panel-title>
-          </mat-expansion-panel-header>
-          <p class="llm-editor__note">Leave blank to use the server default.</p>
-          <div class="llm-editor__param-grid">
-            @for (field of numericFields; track field.key) {
-              <mat-form-field appearance="outline">
-                <mat-label>{{ field.label }}</mat-label>
-                <input
-                  matInput
-                  inputmode="decimal"
-                  [attr.data-field]="field.key"
-                  [value]="form()[field.key]"
-                  (input)="set(field.key, $any($event.target).value)"
-                />
-              </mat-form-field>
-            }
-          </div>
-        </mat-expansion-panel>
-
-        @if (error()) {
-          <p class="llm-editor__error" role="alert">{{ error() }}</p>
-        }
-      </div>
-    </r2m-config-editor-frame>
-  `,
-  styles: `
-    :host {
-      display: block;
-    }
-    .llm-editor {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-2);
-      max-width: 640px;
-    }
-    .llm-editor__models mat-progress-spinner {
-      display: inline-block;
-      margin-right: var(--r2m-space-2);
-      vertical-align: middle;
-    }
-    .llm-editor__note {
-      margin: 0 0 var(--r2m-space-2);
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .llm-editor__params {
-      box-shadow: none;
-      border: 1px solid var(--r2m-outline);
-    }
-    .llm-editor__param-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 0 var(--r2m-space-3);
-    }
-    .llm-editor__error {
-      margin: 0;
-      color: var(--r2m-status-error);
-    }
-  `,
-})
-export class LlmConfigEditor {
-  private readonly store = inject(LlmSettingsStore);
-  private readonly api = inject(LlmSettingsApi);
-  private readonly toast = inject(ToastService);
-
-  readonly target = input.required<LlmEditTarget>();
-  /** The stored config after a successful create or update. */
-  readonly saved = output<LlmServerConfig>();
-
-  protected readonly apiTypes = Object.values(LlmApiType).map((value) => ({
-    value,
-    label: API_TYPE_LABELS[value],
-  }));
-  protected readonly promptStyles = [
-    { value: AttributionPromptStyle.Full, label: 'Full' },
-    { value: AttributionPromptStyle.Simple, label: 'Simple' },
-    { value: AttributionPromptStyle.Chapter, label: 'Chapter' },
-  ];
-  protected readonly numericFields = NUMERIC_FIELDS;
-
-  protected readonly form = signal<LlmConfigForm>(EMPTY_LLM_FORM);
-  protected readonly error = signal<string | null>(null);
-  protected readonly saving = signal(false);
-  protected readonly paramsOpen = signal(false);
-
-  protected readonly models = signal<string[] | null>(null);
-  protected readonly modelsHint = signal<string | null>(null);
-  protected readonly loadingModels = signal(false);
+  readonly models = signal<string[] | null>(null);
+  readonly modelsHint = signal<string | null>(null);
+  readonly loadingModels = signal(false);
   /** The fetched list plus the current model when the server did not list it; null = free text. */
-  protected readonly modelChoices = computed(() => {
+  readonly modelChoices = computed(() => {
     const models = this.models();
     if (!models) return null;
     const current = this.form().model.trim();
     return current && !models.includes(current) ? [current, ...models] : models;
   });
 
-  readonly dirty = computed(() => !sameLlmForm(this.form(), this.target().baseline));
+  readonly dirty = computed(() => {
+    const target = this.#target();
+    return !!target && !sameLlmForm(this.form(), target.baseline);
+  });
 
   /** Which target the async answers belong to; one for an earlier target is dropped. */
   private generation = 0;
 
-  constructor() {
-    effect(() => {
-      const target = this.target();
-      untracked(() => this.open(target));
+  protected override connected(): void {
+    this.classList.add('llm-editor-host');
+    this.store = use(LlmSettingsStore, this);
+    this.effect(() => {
+      const target = this.#target();
+      untracked(() => {
+        if (target) this.open(target);
+      });
     });
   }
 
@@ -345,23 +126,215 @@ export class LlmConfigEditor {
     );
   }
 
-  protected set<K extends keyof LlmConfigForm>(key: K, value: LlmConfigForm[K]): void {
+  private set<K extends keyof LlmConfigForm>(key: K, value: LlmConfigForm[K]): void {
     this.form.update((f) => ({ ...f, [key]: value }));
   }
 
   /** Cancel: back to the saved state (an empty form for a new config). */
-  protected reset(): void {
-    this.form.set(this.target().baseline);
+  private reset(): void {
+    const target = this.#target();
+    if (target) this.form.set(target.baseline);
     this.error.set(null);
   }
 
-  protected async getModels(): Promise<void> {
+  protected template() {
+    const target = this.#target();
+    if (!target) return nothing;
+    return configEditorFrame(
+      {
+        title: target.id ? target.baseline.name : 'New configuration',
+        subtitle: target.id ? null : 'Saved configurations appear in the list.',
+        dirty: this.dirty(),
+        saving: this.saving(),
+        onSave: () => void this.save(),
+        onCancel: () => this.reset(),
+      },
+      this.body(),
+    );
+  }
+
+  private body() {
+    const form = this.form();
+    const error = this.error();
+    const choices = this.modelChoices();
+    const hint = this.modelsHint();
+    return html`<div class="llm-editor">
+      <!-- Follows the draft, not the saved config: a duplicate or a retyped URL shows its container. -->
+      <r2m-managed-service-status .baseUrl=${form.baseUrl}></r2m-managed-service-status>
+
+      ${field({ id: 'llm-name', label: 'Name' }, (a) =>
+        this.textInput(a, 'name', form.name, { required: true }),
+      )}
+      ${field({ id: 'llm-api-type', label: 'API type' }, (a) =>
+        this.selectInput(a, String(form.apiType), API_TYPES, (v) =>
+          this.set('apiType', Number(v) as LlmApiType),
+        ),
+      )}
+      ${field({ id: 'llm-base-url', label: 'Base URL' }, (a) =>
+        this.textInput(a, 'baseUrl', form.baseUrl, {
+          required: true,
+          placeholder: 'http://localhost:8080',
+        }),
+      )}
+      ${field(
+        { id: 'llm-api-key', label: 'API key (optional)' },
+        (a) =>
+          html`<input
+            id=${a.id}
+            aria-describedby=${a.describedBy}
+            aria-invalid=${a.invalid}
+            type="password"
+            autocomplete="new-password"
+            .value=${form.apiKey}
+            @input=${(e: Event) => this.set('apiKey', valueOf(e))}
+          />`,
+      )}
+
+      <div class="llm-editor__models">
+        <button
+          type="button"
+          class="r2m-button r2m-button--stroked"
+          data-action="get-models"
+          ?disabled=${this.loadingModels()}
+          @click=${() => void this.getModels()}
+        >
+          ${this.loadingModels() ? spinner(16) : icon('download')} Get models
+        </button>
+      </div>
+
+      ${
+        choices
+          ? field({ id: 'llm-model', label: 'Model (optional)' }, (a) =>
+              this.selectInput(
+                a,
+                form.model,
+                [{ value: '', label: 'None' }, ...choices.map((m) => ({ value: m, label: m }))],
+                (v) => this.set('model', v),
+                'model',
+              ),
+            )
+          : field(
+              {
+                id: 'llm-model',
+                label: 'Model (optional)',
+                hint: hint ? html`<span data-role="models-hint">${hint}</span>` : null,
+              },
+              (a) => this.textInput(a, 'model', form.model),
+            )
+      }
+      ${field(
+        {
+          id: 'llm-batch-size',
+          label: 'Paragraphs per request',
+          hint: 'Character paragraphs attributed per LLM request. 1 = one at a time; higher values batch consecutive paragraphs into a single prompt.',
+        },
+        (a) =>
+          this.textInput(a, 'attributionBatchSize', form.attributionBatchSize, {
+            inputmode: 'numeric',
+          }),
+      )}
+      ${field(
+        {
+          id: 'llm-prompt-style',
+          label: 'Attribution prompt style',
+          hint: 'Simple: only assigns a speaker when the text explicitly says who speaks ("said X"); otherwise returns unknown so escalation passes the paragraph to a larger model. Full: uses inference heuristics. Chapter: whole chapter, roster-only answers, rules pre-tag and rules-discover. Fast on gemma-12b; the model never creates characters — rules-discover does. Thinking is always off.',
+        },
+        (a) =>
+          this.selectInput(a, String(form.promptStyle), PROMPT_STYLES, (v) =>
+            this.set('promptStyle', Number(v) as AttributionPromptStyle),
+          ),
+      )}
+
+      <div>
+        <label class="r2m-checkbox">
+          <input
+            type="checkbox"
+            .checked=${form.supportsModelSwitch}
+            @change=${(e: Event) =>
+              this.set('supportsModelSwitch', (e.target as HTMLInputElement).checked)}
+          />
+          Supports model switch
+        </label>
+        <p class="llm-editor__note">
+          This endpoint (e.g. the local llama.cpp server) can load the configured model on demand.
+        </p>
+      </div>
+
+      <details
+        class="r2m-expansion llm-editor__params"
+        ?open=${this.paramsOpen()}
+        @toggle=${(e: Event) => this.paramsOpen.set((e.target as HTMLDetailsElement).open)}
+      >
+        <summary><span class="r2m-expansion__title">Request parameters (optional)</span></summary>
+        <div class="r2m-expansion__body">
+          <p class="llm-editor__note">Leave blank to use the server default.</p>
+          <div class="llm-editor__param-grid">
+            ${NUMERIC_FIELDS.map((f) =>
+              field({ id: `llm-${f.key}`, label: f.label }, (a) =>
+                this.textInput(a, f.key, form[f.key], { inputmode: 'decimal' }),
+              ),
+            )}
+          </div>
+        </div>
+      </details>
+
+      ${error ? html`<p class="llm-editor__error" role="alert">${error}</p>` : nothing}
+    </div>`;
+  }
+
+  private textInput(
+    a: FieldControlAttrs,
+    key: TextKey,
+    value: string,
+    o: { required?: boolean; placeholder?: string; inputmode?: string } = {},
+  ) {
+    return html`<input
+      id=${a.id}
+      aria-describedby=${a.describedBy}
+      aria-invalid=${a.invalid}
+      type="text"
+      autocomplete="off"
+      ?required=${o.required ?? false}
+      placeholder=${o.placeholder ?? nothing}
+      inputmode=${o.inputmode ?? nothing}
+      data-field=${key}
+      .value=${value}
+      @input=${(e: Event) => this.set(key, valueOf(e))}
+    />`;
+  }
+
+  /** A native `<select>`; `?selected` too, so the right option shows before `.value` lands. */
+  private selectInput(
+    a: FieldControlAttrs,
+    value: string,
+    options: readonly { value: string | number; label: string }[],
+    onChange: (value: string) => void,
+    dataField?: string,
+  ) {
+    return html`<select
+      id=${a.id}
+      aria-describedby=${a.describedBy}
+      aria-invalid=${a.invalid}
+      data-field=${dataField ?? nothing}
+      .value=${value}
+      @change=${(e: Event) => onChange(valueOf(e))}
+    >
+      ${options.map(
+        (o) =>
+          html`<option value=${o.value} ?selected=${String(o.value) === value}>${o.label}</option>`,
+      )}
+    </select>`;
+  }
+
+  private async getModels(): Promise<void> {
+    const target = this.#target();
+    if (!target) return;
     const generation = this.generation;
     this.error.set(null);
     this.modelsHint.set(null);
     this.loadingModels.set(true);
     try {
-      const models = await this.api.models(buildLlmConfig(this.form(), this.target().id));
+      const models = await this.api.models(buildLlmConfig(this.form(), target.id));
       if (generation !== this.generation) return;
       this.models.set(models.length ? models : null);
       if (!models.length) this.modelsHint.set('Server returned no models — type one manually.');
@@ -374,22 +347,24 @@ export class LlmConfigEditor {
     }
   }
 
-  protected async save(): Promise<void> {
+  private async save(): Promise<void> {
+    const target = this.#target();
+    if (!target) return;
     const problem = validateLlmForm(this.form());
     this.error.set(problem);
     if (problem) return;
 
-    const config = buildLlmConfig(this.form(), this.target().id);
+    const config = buildLlmConfig(this.form(), target.id);
     this.saving.set(true);
     try {
       if (config.id) {
         await this.store.update(config);
         this.toast.success('Configuration updated');
-        this.saved.emit(config);
+        this.emit<LlmServerConfig>('saved', config);
       } else {
         const created = await this.store.create(config);
         this.toast.success('Configuration created');
-        this.saved.emit(created);
+        this.emit<LlmServerConfig>('saved', created);
       }
     } catch (e) {
       this.error.set(toApiError(e).message);
@@ -398,3 +373,4 @@ export class LlmConfigEditor {
     }
   }
 }
+define('r2m-llm-config-editor', LlmConfigEditor);

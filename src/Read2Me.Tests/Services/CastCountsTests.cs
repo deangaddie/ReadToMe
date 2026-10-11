@@ -13,7 +13,7 @@ using Xunit;
 namespace Read2Me.Tests.Services
 {
     /// <summary>
-    /// The Voices step of the Angular pipeline stepper: how many characters exist, how many speak,
+    /// The Voices step of the web pipeline stepper: how many characters exist, how many speak,
     /// and how many of the speakers already have a voice with audio.
     /// </summary>
     public class CastCountsTests : ProjectDbTestBase

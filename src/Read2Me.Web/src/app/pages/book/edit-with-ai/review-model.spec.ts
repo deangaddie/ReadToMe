@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import type { BookEditRow, ProposalStatus } from '@app/api';
 import { ReviewSelection, effectiveValue, isUserEdited, rowState } from './review-model';
 

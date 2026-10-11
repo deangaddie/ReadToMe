@@ -1,28 +1,14 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  OnDestroy,
-  afterRenderEffect,
-  computed,
-  inject,
-  signal,
-  viewChild,
-} from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
-import { MatIconModule } from '@angular/material/icon';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { DiscoveryApi, toApiError } from '@app/api';
+import { html, nothing } from 'lit-html';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
-import { StatusChip } from '@app/ui/status-chip/status-chip';
-import { StreamLlm } from '@app/ui/stream-llm/stream-llm';
-import { firstValueFrom } from 'rxjs';
-import { AliasOwner, collides } from './alias-collisions';
+import { DiscoveryApi, toApiError } from '@app/api';
+import { openDialog } from '@app/core/dialog';
+import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import { icon, statusChip } from '@app/ui/partials';
+import { type AliasOwner, collides } from './alias-collisions';
 import {
-  DiscoveryRow,
+  type DiscoveryRow,
   applyRows,
   discoveryErrorMessage,
   discoveryFailureMessage,
@@ -31,6 +17,7 @@ import {
   withAlias,
   withoutAlias,
 } from './discovery-rows';
+import { streamDisclosure } from '@app/ui/stream-disclosure';
 
 export interface DiscoveryDialogData {
   folder: string;
@@ -52,74 +39,161 @@ export type DiscoveryPhase = 'discovering' | 'review' | 'failed';
  * lifetime (design §9). Cancel while discovering closes the dialog; the host finishes the call
  * on its own and its answer is dropped.
  */
-@Component({
-  selector: 'app-discovery-dialog',
-  imports: [
-    MatDialogModule,
-    MatButtonModule,
-    MatCheckboxModule,
-    MatIconModule,
-    MatProgressBarModule,
-    MatSlideToggleModule,
-    StatusChip,
-    StreamLlm,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h2 mat-dialog-title>Discover characters</h2>
-    <mat-dialog-content class="discover" [attr.data-phase]="phase()">
-      @if (error(); as error) {
-        <p class="discover__error" role="alert">{{ error }}</p>
-      }
+export class DiscoveryDialog extends R2mElement {
+  private readonly feed = use(LlmStreamFeed);
+  private readonly discovery = use(DiscoveryApi);
 
-      <div class="discover__controls">
-        <mat-slide-toggle
-          [checked]="thinking()"
-          [disabled]="phase() === 'discovering'"
-          (change)="thinking.set($event.checked)"
-        >
-          Enable thinking
-        </mat-slide-toggle>
-        <span class="discover__hint">Slower, better recall</span>
-        <span class="discover__spacer"></span>
-        <button
-          mat-stroked-button
-          type="button"
-          data-action="rerun"
-          [disabled]="phase() === 'discovering'"
-          (click)="discover()"
-        >
-          <mat-icon>refresh</mat-icon> Re-run
-        </button>
-      </div>
+  data!: DiscoveryDialogData;
 
-      @if (phase() === 'discovering') {
-        <mat-progress-bar mode="indeterminate" aria-label="Discovering" />
-        <p class="discover__hint">Asking the LLM for the book's characters…</p>
-      } @else if (phase() === 'review') {
-        @if (collisions().length > 0) {
-          <p class="discover__warning" role="alert" data-testid="collision-warning">
-            Shared by more than one character: {{ collisionList() }}. Attribution resolves a name
-            to a single character, so a shared one always picks the same character and never the
-            others. Remove it from all but one row.
-          </p>
-        }
-        <div class="discover__select">
-          <button mat-button type="button" (click)="setAll(true)">Select all</button>
-          <button mat-button type="button" (click)="setAll(false)">Select none</button>
+  readonly phase = signal<DiscoveryPhase>('discovering');
+  readonly thinking = signal(false);
+  readonly showStream = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly rows = signal<DiscoveryRow[]>([]);
+  readonly addingAliasFor = signal<number | null>(null);
+  readonly applying = signal(false);
+  /** The alias input was just opened: focus it after that render. */
+  #focusAliasPending = false;
+
+  readonly includedCount = computed(() => this.rows().filter((r) => r.included).length);
+  readonly collisions = computed(() => rowCollisions(this.rows(), this.data.roster));
+  readonly collisionList = computed(() =>
+    [...this.collisions()].sort((a, b) => a.localeCompare(b)).join(', '),
+  );
+
+  /** Which discovery call is current; an answer from an earlier one is dropped. */
+  private run = 0;
+
+  protected override connected(): void {
+    this.classList.add('discovery-dialog');
+    this.feed.acquire();
+    this.onDisconnect(() => {
+      this.feed.release();
+      this.run++;
+    });
+    void this.discover();
+  }
+
+  protected override updated(): void {
+    if (!this.#focusAliasPending) return;
+    this.#focusAliasPending = false;
+    this.querySelector<HTMLInputElement>('.discover__input--alias')?.focus();
+  }
+
+  protected template() {
+    const phase = this.phase();
+    const error = this.error();
+    const showStream = this.showStream();
+    const discovering = phase === 'discovering';
+    return html`
+      <h2 class="r2m-dialog__title">Discover characters</h2>
+      <div class="r2m-dialog__content discover" data-phase=${phase}>
+        ${error ? html`<p class="discover__error" role="alert">${error}</p>` : nothing}
+
+        <div class="discover__controls">
+          <label class="r2m-switch">
+            <input
+              type="checkbox"
+              role="switch"
+              .checked=${this.thinking()}
+              ?disabled=${discovering}
+              @change=${(e: Event) => this.thinking.set((e.target as HTMLInputElement).checked)}
+            />
+            Enable thinking
+          </label>
+          <span class="discover__hint">Slower, better recall</span>
           <span class="discover__spacer"></span>
-          <span class="discover__hint">{{ includedCount() }} of {{ rows().length }} selected</span>
+          <button
+            type="button"
+            class="r2m-button r2m-button--stroked"
+            data-action="rerun"
+            ?disabled=${discovering}
+            @click=${() => void this.discover()}
+          >
+            ${icon('refresh')} Re-run
+          </button>
         </div>
-        <div class="discover__rows">
-          @if (rows().length === 0) {
-            <p class="discover__hint">No characters found.</p>
-          }
-          @for (row of rows(); track $index; let i = $index) {
-            <div class="discover__row" [attr.data-row]="i">
-              <mat-checkbox
-                [checked]="row.included"
-                [aria-label]="'Include ' + row.name"
-                (change)="patch(i, { included: $event.checked })"
+
+        ${
+          discovering
+            ? html`<progress max="1" aria-label="Discovering"></progress>
+                <p class="discover__hint">Asking the LLM for the book's characters…</p>`
+            : phase === 'review'
+              ? this.review()
+              : nothing
+        }
+        ${streamDisclosure({
+          feed: this.feed,
+          open: showStream,
+          onToggle: () => this.showStream.set(!showStream),
+        })}
+      </div>
+      <div class="r2m-dialog__actions">
+        ${
+          discovering
+            ? html`<button
+                type="button"
+                class="r2m-button discover__cancel"
+                @click=${() => this.emit('r2m-close', null)}
+              >
+                Cancel
+              </button>`
+            : html`<button
+                  type="button"
+                  class="r2m-button"
+                  @click=${() => this.emit('r2m-close', null)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  class="r2m-button r2m-button--filled"
+                  data-action="apply"
+                  ?disabled=${this.includedCount() === 0 || this.applying()}
+                  @click=${() => void this.apply()}
+                >
+                  Add ${this.includedCount()} selected
+                </button>`
+        }
+      </div>
+    `;
+  }
+
+  private review() {
+    const rows = this.rows();
+    const collisions = this.collisions();
+    const adding = this.addingAliasFor();
+    return html`
+      ${
+        collisions.length > 0
+          ? html`<p class="discover__warning" role="alert" data-testid="collision-warning">
+              Shared by more than one character: ${this.collisionList()}. Attribution resolves a
+              name to a single character, so a shared one always picks the same character and never
+              the others. Remove it from all but one row.
+            </p>`
+          : nothing
+      }
+      <div class="discover__select">
+        <button type="button" class="r2m-button" @click=${() => this.setAll(true)}>
+          Select all
+        </button>
+        <button type="button" class="r2m-button" @click=${() => this.setAll(false)}>
+          Select none
+        </button>
+        <span class="discover__spacer"></span>
+        <span class="discover__hint">${this.includedCount()} of ${rows.length} selected</span>
+      </div>
+      <div class="discover__rows">
+        ${rows.length === 0 ? html`<p class="discover__hint">No characters found.</p>` : nothing}
+        ${rows.map(
+          (row, i) =>
+            html`<div class="discover__row" data-row=${i}>
+              <input
+                type="checkbox"
+                class="r2m-checkbox discover__include"
+                aria-label=${`Include ${row.name}`}
+                .checked=${row.included}
+                @change=${(e: Event) => this.patch(i, { included: (e.target as HTMLInputElement).checked })}
               />
               <div class="discover__body">
                 <div class="discover__name">
@@ -127,251 +201,60 @@ export type DiscoveryPhase = 'discovering' | 'review' | 'failed';
                     class="discover__input"
                     type="text"
                     aria-label="Character name"
-                    [value]="row.name"
-                    [attr.aria-invalid]="collides(collisions(), row.name)"
-                    (input)="patch(i, { name: nameOf($event) })"
+                    .value=${row.name}
+                    aria-invalid=${collides(collisions, row.name) ? 'true' : 'false'}
+                    @input=${(e: Event) => this.patch(i, { name: (e.target as HTMLInputElement).value })}
                   />
-                  @if (row.existingCharacterId) {
-                    <r2m-status-chip status="info" label="Already exists" compact />
+                  ${
+                    row.existingCharacterId
+                      ? statusChip({ status: 'info', label: 'Already exists', compact: true })
+                      : nothing
                   }
                 </div>
                 <div class="discover__aliases">
-                  @for (alias of row.aliases; track alias) {
-                    <span
-                      class="discover__alias"
-                      [class.discover__alias--collides]="collides(collisions(), alias)"
-                    >
-                      {{ alias }}
-                      <button
-                        type="button"
-                        class="discover__alias-remove"
-                        [attr.aria-label]="'Remove alias ' + alias"
-                        (click)="removeAlias(i, alias)"
+                  ${row.aliases.map(
+                    (alias) =>
+                      html`<span
+                        class="discover__alias ${collides(collisions, alias) ? 'discover__alias--collides' : ''}"
                       >
-                        <mat-icon>close</mat-icon>
-                      </button>
-                    </span>
-                  }
-                  @if (addingAliasFor() === i) {
-                    <input
-                      class="discover__input discover__input--alias"
-                      type="text"
-                      placeholder="Alias name"
-                      aria-label="New alias"
-                      #aliasField
-                      (keydown.enter)="commitAlias(i, $event)"
-                      (keydown.escape)="addingAliasFor.set(null)"
-                      (blur)="commitAlias(i, $event)"
-                    />
-                  } @else {
-                    <button
-                      mat-button
-                      type="button"
-                      class="discover__add-alias"
-                      (click)="addingAliasFor.set(i)"
-                    >
-                      <mat-icon>add</mat-icon> Add alias
-                    </button>
+                        ${alias}
+                        <button
+                          type="button"
+                          class="discover__alias-remove"
+                          aria-label=${`Remove alias ${alias}`}
+                          @click=${() => this.removeAlias(i, alias)}
+                        >
+                          ${icon('close')}
+                        </button>
+                      </span>`,
+                  )}
+                  ${
+                    adding === i
+                      ? html`<input
+                          class="discover__input discover__input--alias"
+                          type="text"
+                          placeholder="Alias name"
+                          aria-label="New alias"
+                          @keydown=${(e: KeyboardEvent) => this.onAliasKeydown(i, e)}
+                          @blur=${(e: Event) => this.commitAlias(i, e)}
+                        />`
+                      : html`<button
+                          type="button"
+                          class="r2m-button discover__add-alias"
+                          @click=${() => this.beginAlias(i)}
+                        >
+                          ${icon('add')} Add alias
+                        </button>`
                   }
                 </div>
               </div>
-            </div>
-          }
-        </div>
-      }
-
-      <div class="discover__stream">
-        <button mat-button type="button" (click)="showStream.set(!showStream())">
-          <mat-icon>{{ showStream() ? 'keyboard_arrow_down' : 'keyboard_arrow_up' }}</mat-icon>
-          {{ showStream() ? 'Hide AI activity' : 'Show AI activity' }}
-        </button>
-        <div class="discover__stream-body" [class.discover__stream-body--open]="showStream()">
-          <r2m-stream-llm [events]="feed.events()" [maxTurns]="feed.maxUnits" />
-        </div>
+            </div>`,
+        )}
       </div>
-    </mat-dialog-content>
-    <mat-dialog-actions align="end">
-      @if (phase() === 'discovering') {
-        <button mat-button type="button" class="discover__cancel" (click)="ref.close()">Cancel</button>
-      } @else {
-        <button mat-button type="button" (click)="ref.close()">Close</button>
-        <button
-          mat-flat-button
-          type="button"
-          data-action="apply"
-          [disabled]="includedCount() === 0 || applying()"
-          (click)="apply()"
-        >
-          Add {{ includedCount() }} selected
-        </button>
-      }
-    </mat-dialog-actions>
-  `,
-  styles: `
-    .discover {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-3);
-      width: min(720px, 90vw);
-    }
-    .discover p {
-      margin: 0;
-    }
-    .discover__controls,
-    .discover__select {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-2);
-    }
-    .discover__spacer {
-      flex: 1 1 auto;
-    }
-    .discover__hint {
-      color: var(--r2m-text-muted);
-      font-size: var(--r2m-text-sm);
-    }
-    .discover__error,
-    .discover__warning {
-      padding: var(--r2m-space-2) var(--r2m-space-3);
-      border-radius: var(--r2m-radius-md);
-      font-size: var(--r2m-text-sm);
-      border: 1px solid var(--r2m-status-warn);
-      background: var(--r2m-status-warn-soft);
-    }
-    .discover__error {
-      border-color: var(--r2m-status-error);
-      background: var(--r2m-status-error-soft);
-    }
-    .discover__rows {
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-2);
-      max-height: 50vh;
-      overflow-y: auto;
-    }
-    .discover__row {
-      display: flex;
-      align-items: flex-start;
-      gap: var(--r2m-space-2);
-      padding: var(--r2m-space-2);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-md);
-    }
-    .discover__body {
-      flex: 1 1 auto;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--r2m-space-1);
-    }
-    .discover__name {
-      display: flex;
-      align-items: center;
-      gap: var(--r2m-space-2);
-    }
-    .discover__input {
-      font: inherit;
-      padding: var(--r2m-space-1) var(--r2m-space-2);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-sm);
-      background: var(--r2m-surface);
-      color: var(--r2m-text);
-      max-width: 260px;
-    }
-    .discover__input[aria-invalid='true'] {
-      border-color: var(--r2m-status-error);
-    }
-    .discover__input--alias {
-      max-width: 160px;
-    }
-    .discover__aliases {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--r2m-space-1);
-    }
-    .discover__alias {
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
-      padding: 0 var(--r2m-space-1) 0 var(--r2m-space-2);
-      border: 1px solid var(--r2m-outline);
-      border-radius: var(--r2m-radius-pill);
-      font-size: var(--r2m-text-sm);
-    }
-    .discover__alias--collides {
-      border-color: var(--r2m-status-warn);
-      background: var(--r2m-status-warn-soft);
-    }
-    .discover__alias-remove {
-      display: inline-flex;
-      border: 0;
-      background: none;
-      padding: 0;
-      cursor: pointer;
-      color: inherit;
-    }
-    .discover__alias-remove mat-icon {
-      font-size: 16px;
-      width: 16px;
-      height: 16px;
-    }
-    .discover__stream {
-      border-top: 1px solid var(--r2m-outline);
-      padding-top: var(--r2m-space-1);
-    }
-    .discover__stream-body {
-      height: 0;
-      overflow: hidden;
-      transition: height 0.15s ease;
-    }
-    .discover__stream-body--open {
-      height: 32vh;
-    }
-    .discover__cancel {
-      color: var(--r2m-status-error);
-    }
-  `,
-})
-export class DiscoveryDialog implements OnDestroy {
-  protected readonly data = inject<DiscoveryDialogData>(MAT_DIALOG_DATA);
-  protected readonly ref = inject<MatDialogRef<DiscoveryDialog, DiscoveryDialogResult>>(MatDialogRef);
-  protected readonly feed = inject(LlmStreamFeed);
-  private readonly discovery = inject(DiscoveryApi);
-
-  protected readonly phase = signal<DiscoveryPhase>('discovering');
-  protected readonly thinking = signal(false);
-  protected readonly showStream = signal(false);
-  protected readonly error = signal<string | null>(null);
-  protected readonly rows = signal<DiscoveryRow[]>([]);
-  protected readonly addingAliasFor = signal<number | null>(null);
-  protected readonly applying = signal(false);
-  private readonly aliasField = viewChild<ElementRef<HTMLInputElement>>('aliasField');
-
-  protected readonly includedCount = computed(() => this.rows().filter((r) => r.included).length);
-  protected readonly collisions = computed(() => rowCollisions(this.rows(), this.data.roster));
-  protected readonly collisionList = computed(() =>
-    [...this.collisions()].sort((a, b) => a.localeCompare(b)).join(', '),
-  );
-  protected readonly collides = collides;
-
-  /** Which discovery call is current; an answer from an earlier one is dropped. */
-  private run = 0;
-
-  constructor() {
-    this.feed.acquire();
-    void this.discover();
-    afterRenderEffect(() => {
-      if (this.addingAliasFor() !== null) this.aliasField()?.nativeElement.focus();
-    });
+    `;
   }
 
-  ngOnDestroy(): void {
-    this.feed.release();
-    this.run++;
-  }
-
-  protected async discover(): Promise<void> {
+  async discover(): Promise<void> {
     const run = ++this.run;
     this.error.set(null);
     this.phase.set('discovering');
@@ -395,36 +278,50 @@ export class DiscoveryDialog implements OnDestroy {
     }
   }
 
-  protected patch(index: number, change: Partial<DiscoveryRow>): void {
+  patch(index: number, change: Partial<DiscoveryRow>): void {
     this.rows.update((rows) => rows.map((r, i) => (i === index ? { ...r, ...change } : r)));
   }
 
-  protected setAll(included: boolean): void {
+  setAll(included: boolean): void {
     this.rows.update((rows) => rows.map((r) => ({ ...r, included })));
   }
 
-  protected removeAlias(index: number, alias: string): void {
+  removeAlias(index: number, alias: string): void {
     this.rows.update((rows) => rows.map((r, i) => (i === index ? withoutAlias(r, alias) : r)));
   }
 
-  protected commitAlias(index: number, event: Event): void {
-    const field = event.target as HTMLInputElement;
-    const alias = field.value;
+  beginAlias(index: number): void {
+    this.#focusAliasPending = true;
+    this.addingAliasFor.set(index);
+  }
+
+  private onAliasKeydown(index: number, e: KeyboardEvent): void {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      this.commitAlias(index, e);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.addingAliasFor.set(null);
+    }
+  }
+
+  /** Enter and blur both land here; the first one closes the input, so the other is a no-op. */
+  commitAlias(index: number, event: Event): void {
+    if (this.addingAliasFor() !== index) return;
+    const alias = (event.target as HTMLInputElement).value;
     this.rows.update((rows) => rows.map((r, i) => (i === index ? withAlias(r, alias) : r)));
     this.addingAliasFor.set(null);
   }
 
-  protected nameOf(event: Event): string {
-    return (event.target as HTMLInputElement).value;
-  }
-
-  protected async apply(): Promise<void> {
+  async apply(): Promise<void> {
     const rows = applyRows(this.rows());
     if (rows.length === 0) return;
     this.applying.set(true);
     try {
       const response = await this.discovery.apply(this.data.folder, rows);
-      this.ref.close({ applied: response.applied });
+      const result: DiscoveryDialogResult = { applied: response.applied };
+      this.emit('r2m-close', result);
     } catch (e) {
       this.error.set(toApiError(e).message);
     } finally {
@@ -432,15 +329,19 @@ export class DiscoveryDialog implements OnDestroy {
     }
   }
 }
+define('r2m-discovery-dialog', DiscoveryDialog);
 
 /** Opens the discovery dialog; resolves how many rows were applied, or null when closed without applying. */
 export async function openDiscoveryDialog(
-  dialog: MatDialog,
   data: DiscoveryDialogData,
 ): Promise<DiscoveryDialogResult | null> {
-  const ref = dialog.open<DiscoveryDialog, DiscoveryDialogData, DiscoveryDialogResult>(
-    DiscoveryDialog,
-    { data, autoFocus: 'dialog', restoreFocus: true },
-  );
-  return (await firstValueFrom(ref.afterClosed())) ?? null;
+  const dialog = document.createElement('r2m-discovery-dialog');
+  dialog.data = data;
+  return (await openDialog<DiscoveryDialogResult | null>(dialog)) ?? null;
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'r2m-discovery-dialog': DiscoveryDialog;
+  }
 }

@@ -1,6 +1,6 @@
-import { NodeLevel, ParagraphDto, ParagraphItemDto } from '@app/api';
-import { ChapterParents } from './book-tree';
-import { LoadedChapterView } from './reader-rows';
+import type { NodeLevel, ParagraphDto, ParagraphItemDto } from '@app/api';
+import type { ChapterParents } from './book-tree';
+import type { LoadedChapterView } from './reader-rows';
 
 /**
  * The reader selections' pure rules (design §6.3): which paragraphs (ticket 12) and which items
@@ -39,6 +39,16 @@ export function isDialogParagraph(paragraph: ParagraphDto): boolean {
 }
 
 /**
+ * A narration-only paragraph (CONTEXT.md "Release narration"): it speaks, and every spoken item
+ * is narration. The paragraph menu offers Release narration on it, which makes it a Character
+ * paragraph. Reads `itemType` as {@link isDialogParagraph} does.
+ */
+export function isNarrationOnlyParagraph(paragraph: ParagraphDto): boolean {
+  const spoken = paragraph.items.filter((i) => !i.isPause);
+  return spoken.length > 0 && spoken.every((i) => i.itemType === 'Narration');
+}
+
+/**
  * A voiced item (CONTEXT.md "Voiced item", the host's `voicedOnly` rule): a spoken item with
  * somebody to read it — any speaker at all (narration carries the narrator, ADR-0006), or any
  * line in narrator-only mode. Existing audio is no obstacle: a take can be regenerated. What the
@@ -61,8 +71,7 @@ export function ancestryFor(
 export function selectedUnder(selection: SelectionMap, level: NodeLevel, nodeId: string): number {
   let n = 0;
   for (const a of Object.values(selection)) {
-    const under =
-      level === 'volume' ? a.volumeId : level === 'part' ? a.partId : a.chapterId;
+    const under = level === 'volume' ? a.volumeId : level === 'part' ? a.partId : a.chapterId;
     if (under === nodeId) n++;
   }
   return n;
@@ -85,7 +94,9 @@ export function nodeState(
 }
 
 /** How many Character paragraphs each loaded chapter holds — the chapter totals the tree can know without a read. */
-export function chapterDialogTotals(chapters: readonly LoadedChapterView[]): Record<string, number> {
+export function chapterDialogTotals(
+  chapters: readonly LoadedChapterView[],
+): Record<string, number> {
   const totals: Record<string, number> = {};
   for (const chapter of chapters) {
     totals[chapter.id] = chapter.paragraphs.filter(isDialogParagraph).length;

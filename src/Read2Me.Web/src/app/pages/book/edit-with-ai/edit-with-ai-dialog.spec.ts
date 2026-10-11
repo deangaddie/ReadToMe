@@ -1,18 +1,25 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { signal } from '@angular/core';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { provideRouter } from '@angular/router';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
-import { ApiError, BookEditRow, BookEditRunDto, PlanBookEditResponse } from '@app/api';
-import { LiveService } from '@app/live';
+import {
+  ApiError,
+  type BookEditRow,
+  type BookEditRunDto,
+  type PlanBookEditResponse,
+} from '@app/api';
+import { Emitter } from '@app/core/emitter';
+import { override, resetServices } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import type { BookEditMessage } from '@app/live/live-messages';
+import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
-import { ConfirmService } from '@app/ui/confirm-dialog/confirm-dialog';
-import { Subject } from 'rxjs';
-import { BookEditor } from '../book-editor';
-import { EditWithAiDialog } from './edit-with-ai-dialog';
-import type { BookEditMessage } from '@app/live';
+import { ConfirmService } from '@app/ui/dialogs';
+import { FakeApi, problem } from '../../../../testing/fake-api';
+import type { BookEditor } from '../book-editor';
+import { type EditWithAiDialog, openEditWithAiDialog } from './edit-with-ai-dialog';
+import './edit-with-ai-dialog';
+
+/** Ported from the Angular TestBed spec, case for case. */
+const BASE = '/api/projects/dune/book-edits';
 
 const PLAN: PlanBookEditResponse = {
   status: 'Ok',
@@ -41,114 +48,118 @@ const ROWS = [row('c1', 'chapter one', 'Chapter One'), row('c2', 'chapter two', 
 
 const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
-describe('EditWithAiDialog', () => {
-  let http: HttpTestingController;
-  let fixture: ComponentFixture<EditWithAiDialog>;
-  let messages: Subject<BookEditMessage>;
-  let closed: unknown;
+/** Every request the dialog may make; anything else is a bug the teardown catches. */
+const ROUTED = new Set([
+  `POST ${BASE}/plan`,
+  `POST ${BASE}/prog-1/propose`,
+  `GET ${BASE}/prog-1`,
+  `POST ${BASE}/prog-1/propose-one`,
+  `POST ${BASE}/prog-1/cancel`,
+  `DELETE ${BASE}/prog-1`,
+]);
+
+describe('r2m-edit-with-ai-dialog', () => {
+  let api: FakeApi;
+  let dialog: EditWithAiDialog;
+  let result: Promise<{ applied: number } | null>;
+  let messages: Emitter<BookEditMessage>;
   let connectionId: string | null;
   let confirmed: boolean;
   let applyError: ApiError | null;
   let applied: unknown[];
+  let plan: PlanBookEditResponse;
 
-  const el = (): HTMLElement => fixture.nativeElement as HTMLElement;
   const button = (action: string) =>
-    el().querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
+    dialog.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
   const text = (testId: string) =>
-    el().querySelector<HTMLElement>(`[data-testid="${testId}"]`)?.textContent?.trim() ?? null;
-  const phase = () => el().querySelector('.edit')?.getAttribute('data-phase');
-  const rows = () => Array.from(el().querySelectorAll<HTMLElement>('[data-row]'));
-
-  async function render(): Promise<void> {
-    fixture.detectChanges();
-    await fixture.whenStable();
-  }
+    dialog
+      .querySelector<HTMLElement>(`[data-testid="${testId}"]`)
+      ?.textContent?.replace(/\s+/g, ' ')
+      .trim() ?? null;
+  const phase = () => dialog.querySelector('.edit')?.getAttribute('data-phase');
+  const rows = () => Array.from(dialog.querySelectorAll<HTMLElement>('[data-row]'));
+  const type = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+    field.value = value;
+    field.dispatchEvent(new Event('input'));
+  };
+  const toggle = (testId: string) => {
+    const box = dialog.querySelector<HTMLInputElement>(`[data-testid="${testId}"] input`)!;
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event('change'));
+  };
 
   beforeEach(async () => {
-    messages = new Subject<BookEditMessage>();
-    closed = undefined;
+    resetServices();
+    api = new FakeApi();
+    api.install();
+    messages = new Emitter<BookEditMessage>();
     connectionId = 'conn-1';
     confirmed = true;
     applyError = null;
     applied = [];
+    plan = PLAN;
+    override(LiveService, {
+      connectionId: () => connectionId,
+      on: (_family: string, listener: (m: BookEditMessage) => void) => messages.subscribe(listener),
+    } as unknown as LiveService);
+    // The stream group is the activity centre's business; here it only has to be joinable.
+    override(LlmStreamFeed, {
+      events: signal([]),
+      acquire: () => undefined,
+      release: () => undefined,
+    } as unknown as LlmStreamFeed);
+    override(ConfirmService, { confirm: async () => confirmed } as unknown as ConfirmService);
+    override(Preflight, { ensureReady: async () => true } as unknown as Preflight);
+    api
+      .on('POST', `${BASE}/plan`, () => plan)
+      .on('POST', `${BASE}/prog-1/propose`, () => Response.json({ started: true }, { status: 202 }))
+      .on('POST', `${BASE}/prog-1/cancel`, undefined)
+      .on('DELETE', `${BASE}/prog-1`, undefined);
 
-    await TestBed.configureTestingModule({
-      imports: [EditWithAiDialog],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-        { provide: MAT_DIALOG_DATA, useValue: { folder: 'dune' } },
-        {
-          provide: MatDialogRef,
-          useValue: { close: (result?: unknown) => (closed = result ?? null) },
-        },
-        {
-          provide: LiveService,
-          useValue: { connectionId: () => connectionId, on: () => messages.asObservable() },
-        },
-        {
-          provide: LlmStreamFeed,
-          // The stream group is the activity centre's business; here it only has to be joinable.
-          useValue: { events: signal([]), acquire: () => undefined, release: () => undefined },
-        },
-        {
-          provide: BookEditor,
-          useValue: {
-            tryExecute: (command: unknown) => {
-              applied.push(command);
-              return Promise.resolve(applyError);
-            },
-          },
-        },
-        { provide: ConfirmService, useValue: { confirm: () => Promise.resolve(confirmed) } },
-        { provide: Preflight, useValue: { ensureReady: () => Promise.resolve(true) } },
-      ],
-    }).compileComponents();
-
-    http = TestBed.inject(HttpTestingController);
-    fixture = TestBed.createComponent(EditWithAiDialog);
+    const editor = {
+      tryExecute: (command: unknown) => {
+        applied.push(command);
+        return Promise.resolve(applyError);
+      },
+    } as unknown as BookEditor;
+    result = openEditWithAiDialog('dune', editor);
+    await Promise.resolve();
+    dialog = document.querySelector<EditWithAiDialog>('r2m-edit-with-ai-dialog')!;
+    await dialog.rendered();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Closing the dialog tells the host it is done with the plan; every test ends that way.
-    fixture.destroy();
-    expectSessionDropped();
-    http.verify();
-    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
+    document.body.replaceChildren();
+    await settle();
+    const granted = api.calls('POST', `${BASE}/plan`).length > 0 && plan.program !== null;
+    expect(api.calls('DELETE', `${BASE}/prog-1`).length > 0).toBe(granted);
+    // Nothing the dialog sent went unanswered (HttpTestingController's verify).
+    const unrouted = api.requests.filter((r) => !ROUTED.has(`${r.method} ${r.path}`));
+    expect(unrouted).toEqual([]);
   });
 
   async function instruct(instruction = 'capitalise chapter titles'): Promise<void> {
-    await render();
-    const field = el().querySelector<HTMLTextAreaElement>('[data-testid="instruction"]')!;
-    field.value = instruction;
-    field.dispatchEvent(new Event('input'));
-    await render();
+    type(dialog.querySelector<HTMLTextAreaElement>('[data-testid="instruction"]')!, instruction);
+    await dialog.rendered();
   }
 
-  async function analyze(plan: PlanBookEditResponse = PLAN): Promise<void> {
+  async function analyze(): Promise<void> {
     button('analyze').click();
     await settle();
-    http.expectOne('/api/projects/dune/book-edits/plan').flush(plan);
-    await settle();
-    await render();
+    await dialog.rendered();
   }
 
   async function generate(): Promise<void> {
     button('generate').click();
     await settle();
-    http.expectOne('/api/projects/dune/book-edits/prog-1/propose').flush(
-      { started: true },
-      { status: 202, statusText: 'Accepted' },
-    );
-    await settle();
-    await render();
+    await dialog.rendered();
   }
 
   async function push(message: BookEditMessage): Promise<void> {
-    messages.next(message);
+    messages.emit(message);
     await settle();
-    await render();
+    await dialog.rendered();
   }
 
   /** Drives instruct → plan → proposing → review with the two rows landed. */
@@ -156,20 +167,24 @@ describe('EditWithAiDialog', () => {
     await instruct();
     await analyze();
     await generate();
-    await push({ kind: 'done', program: 'prog-1', done: 2, total: 2, cancelled: false, rows: ROWS });
+    await push({
+      kind: 'done',
+      program: 'prog-1',
+      done: 2,
+      total: 2,
+      cancelled: false,
+      rows: ROWS,
+    });
   }
 
-  /** The dialog drops its session on teardown once a plan exists. */
-  function expectSessionDropped(): void {
-    const drops = http.match(
-      (r) => r.method === 'DELETE' && r.url === '/api/projects/dune/book-edits/prog-1',
-    );
-    drops.forEach((d) => d.flush(null, { status: 204, statusText: 'No Content' }));
+  async function openRow(index: number): Promise<void> {
+    rows()[index]!.querySelector<HTMLButtonElement>('[data-action="open-row"]')!.click();
+    await dialog.rendered();
   }
+
+  const proposed = () => dialog.querySelector<HTMLTextAreaElement>('[data-testid="proposed"]')!;
 
   it('starts on Instruct with Analyze disabled until an instruction is typed', async () => {
-    await render();
-
     expect(phase()).toBe('instruct');
     expect(button('analyze').disabled).toBe(true);
 
@@ -178,27 +193,35 @@ describe('EditWithAiDialog', () => {
   });
 
   it('keeps a refused plan on Instruct and explains the status', async () => {
+    plan = { ...PLAN, status: 'NoLlmConfigured', reason: 'none', program: null };
     await instruct();
 
-    await analyze({ ...PLAN, status: 'NoLlmConfigured', reason: 'none', program: null });
+    await analyze();
 
     expect(phase()).toBe('instruct');
     expect(text('edit-error')).toContain('No LLM server is configured');
   });
 
   it('explains a plan that matched nothing', async () => {
+    plan = { ...PLAN, status: 'NoTargets', reason: null, program: null, targetCount: 0 };
     await instruct();
 
-    await analyze({ ...PLAN, status: 'NoTargets', reason: null, program: null, targetCount: 0 });
+    await analyze();
 
     expect(phase()).toBe('instruct');
     expect(text('edit-error')).toContain('No items in the book match');
   });
 
   it('shows what the host understood, and its warnings, on Plan', async () => {
+    plan = {
+      ...PLAN,
+      targetCount: 400,
+      requestCount: 50,
+      warnings: ['This is a large AI job (400 items).'],
+    };
     await instruct();
 
-    await analyze({ ...PLAN, targetCount: 400, requestCount: 50, warnings: ['This is a large AI job (400 items).'] });
+    await analyze();
 
     expect(phase()).toBe('plan');
     expect(text('plan-summary')).toContain('Edit chapter titles');
@@ -209,26 +232,22 @@ describe('EditWithAiDialog', () => {
 
   it('sends the instruction and the thinking flags it was given', async () => {
     await instruct('rename the chapters');
-    el().querySelector<HTMLElement>('[data-testid="plan-thinking"] button')!.click();
-    await render();
+    toggle('plan-thinking');
+    await dialog.rendered();
 
-    button('analyze').click();
-    await settle();
-    const plan = http.expectOne('/api/projects/dune/book-edits/plan');
-    expect(plan.request.body).toEqual({ instruction: 'rename the chapters', thinking: true });
-    plan.flush(PLAN);
-    await settle();
-    await render();
+    await analyze();
+    expect(api.calls('POST', `${BASE}/plan`)[0]?.body).toEqual({
+      instruction: 'rename the chapters',
+      thinking: true,
+    });
 
-    el().querySelector<HTMLElement>('[data-testid="fix-thinking"] button')!.click();
-    await render();
-    button('generate').click();
-    await settle();
-    const propose = http.expectOne('/api/projects/dune/book-edits/prog-1/propose');
-    expect(propose.request.body).toEqual({ thinking: true, connectionId: 'conn-1' });
-    propose.flush({ started: true }, { status: 202, statusText: 'Accepted' });
-    await settle();
-
+    toggle('fix-thinking');
+    await dialog.rendered();
+    await generate();
+    expect(api.calls('POST', `${BASE}/prog-1/propose`)[0]?.body).toEqual({
+      thinking: true,
+      connectionId: 'conn-1',
+    });
   });
 
   it('follows the run on the hub and lands every appliable row ticked', async () => {
@@ -240,12 +259,18 @@ describe('EditWithAiDialog', () => {
     await push({ kind: 'progress', program: 'prog-1', done: 1, total: 2 });
     expect(text('progress')).toContain('1 of 2');
 
-    await push({ kind: 'done', program: 'prog-1', done: 2, total: 2, cancelled: false, rows: ROWS });
+    await push({
+      kind: 'done',
+      program: 'prog-1',
+      done: 2,
+      total: 2,
+      cancelled: false,
+      rows: ROWS,
+    });
 
     expect(phase()).toBe('review');
     expect(rows()).toHaveLength(2);
     expect(text('selected-count')).toBe('2 of 2 selected');
-
   });
 
   it('ignores a run that belongs to another plan', async () => {
@@ -265,7 +290,7 @@ describe('EditWithAiDialog', () => {
 
     button('cancel-proposing').click();
     await settle();
-    http.expectOne('/api/projects/dune/book-edits/prog-1/cancel').flush(null);
+    expect(api.calls('POST', `${BASE}/prog-1/cancel`)).toHaveLength(1);
     await push({
       kind: 'done',
       program: 'prog-1',
@@ -278,7 +303,6 @@ describe('EditWithAiDialog', () => {
     expect(phase()).toBe('review');
     expect(rows()).toHaveLength(1);
     expect(text('selected-count')).toBe('1 of 1 selected');
-
   });
 
   it('reports a failed run and goes back to the plan', async () => {
@@ -294,27 +318,36 @@ describe('EditWithAiDialog', () => {
 
   it('polls the run when there is no hub connection to push to', async () => {
     connectionId = null;
+    const running: BookEditRunDto = {
+      status: 'Running',
+      done: 1,
+      total: 2,
+      rows: [],
+      reason: null,
+    };
+    const done: BookEditRunDto = {
+      status: 'Completed',
+      done: 2,
+      total: 2,
+      rows: ROWS,
+      reason: null,
+    };
+    let reads = 0;
+    api.on('GET', `${BASE}/prog-1`, () => (reads++ === 0 ? running : done));
     await instruct();
     await analyze();
 
-    button('generate').click();
-    await settle();
-    const propose = http.expectOne('/api/projects/dune/book-edits/prog-1/propose');
-    expect(propose.request.body).toEqual({ thinking: false, connectionId: null });
-    propose.flush({ started: true }, { status: 202, statusText: 'Accepted' });
+    await generate();
+    expect(api.calls('POST', `${BASE}/prog-1/propose`)[0]?.body).toEqual({
+      thinking: false,
+      connectionId: null,
+    });
     await settle(500);
-
-    const running: BookEditRunDto = { status: 'Running', done: 1, total: 2, rows: [], reason: null };
-    http.expectOne('/api/projects/dune/book-edits/prog-1').flush(running);
-    await settle(500);
-    await render();
+    await dialog.rendered();
     expect(text('progress')).toContain('1 of 2');
 
-    const done: BookEditRunDto = { status: 'Completed', done: 2, total: 2, rows: ROWS, reason: null };
-    http.expectOne('/api/projects/dune/book-edits/prog-1').flush(done);
-    await settle();
-    await render();
-
+    await settle(500);
+    await dialog.rendered();
     expect(phase()).toBe('review');
     expect(rows()).toHaveLength(2);
   });
@@ -323,14 +356,11 @@ describe('EditWithAiDialog', () => {
     await reachReview();
 
     // Untick the second row, then hand-edit the first.
-    rows()[1]!.querySelector<HTMLElement>('input[type=checkbox]')!.click();
-    await render();
-    rows()[0]!.querySelector<HTMLButtonElement>('[data-action="open-row"]')!.click();
-    await render();
-    const proposed = el().querySelector<HTMLTextAreaElement>('[data-testid="proposed"]')!;
-    proposed.value = 'Chapter I';
-    proposed.dispatchEvent(new Event('input'));
-    await render();
+    rows()[1]!.querySelector<HTMLInputElement>('input[type=checkbox]')!.click();
+    await dialog.rendered();
+    await openRow(0);
+    type(proposed(), 'Chapter I');
+    await dialog.rendered();
 
     expect(text('selected-count')).toBe('1 of 2 selected');
     expect(button('apply').textContent).toContain('Apply 1 selected');
@@ -339,9 +369,31 @@ describe('EditWithAiDialog', () => {
     await settle();
 
     expect(applied).toEqual([
-      { type: 'ApplyBookEdits', edits: [{ kind: 'ChapterTitle', id: 'c1', newValue: 'Chapter I' }] },
+      {
+        type: 'ApplyBookEdits',
+        edits: [{ kind: 'ChapterTitle', id: 'c1', newValue: 'Chapter I' }],
+      },
     ]);
-    expect(closed).toEqual({ applied: 1 });
+    expect(await result).toEqual({ applied: 1 });
+    // Closing the dialog tells the host it is done with the plan.
+    await settle();
+    expect(api.calls('DELETE', `${BASE}/prog-1`)).toHaveLength(1);
+  });
+
+  it('keeps the hand edit in the model, not the row: a re-render shows it again', async () => {
+    // Spec §7 risk 1: the draft lives in the review selection, so a row rendered afresh (here by
+    // closing and reopening its detail) still carries it.
+    await reachReview();
+    await openRow(0);
+    type(proposed(), 'Chapter I');
+    await dialog.rendered();
+
+    await openRow(0);
+    expect(dialog.querySelector('[data-testid="proposed"]')).toBeNull();
+    await openRow(0);
+
+    expect(proposed().value).toBe('Chapter I');
+    expect(rows()[0]!.querySelector('.r2m-status-chip')?.textContent).toContain('Edited');
   });
 
   it('keeps the dialog open with the reviewed rows when applying is refused', async () => {
@@ -350,90 +402,74 @@ describe('EditWithAiDialog', () => {
 
     button('apply').click();
     await settle();
-    await render();
+    await dialog.rendered();
 
-    expect(closed).toBeUndefined();
+    expect(document.querySelector('r2m-edit-with-ai-dialog')).toBe(dialog);
     expect(phase()).toBe('review');
     expect(rows()).toHaveLength(2);
     expect(text('edit-error')).toContain('the book moved on');
   });
 
   it('re-asks the AI for one row with the sticky hint and takes the answer onto it', async () => {
+    api.on('POST', `${BASE}/prog-1/propose-one`, row('c1', 'chapter one', 'Chapter 1'));
     await reachReview();
-    rows()[0]!.querySelector<HTMLButtonElement>('[data-action="open-row"]')!.click();
-    await render();
-    const hint = el().querySelector<HTMLInputElement>('[data-testid="hint"]')!;
-    hint.value = 'spell the number out';
-    hint.dispatchEvent(new Event('input'));
-    await render();
+    await openRow(0);
+    type(dialog.querySelector<HTMLInputElement>('[data-testid="hint"]')!, 'spell the number out');
+    await dialog.rendered();
 
     button('retry-row').click();
     await settle();
-    const retry = http.expectOne('/api/projects/dune/book-edits/prog-1/propose-one');
-    expect(retry.request.body).toEqual({
+    await dialog.rendered();
+
+    expect(api.calls('POST', `${BASE}/prog-1/propose-one`)[0]?.body).toEqual({
       targetId: 'c1',
       hint: 'spell the number out',
       thinking: false,
     });
-    retry.flush(row('c1', 'chapter one', 'Chapter 1'));
-    await settle();
-    await render();
-
     expect(rows()[0]!.textContent).toContain('Chapter 1');
     expect(text('selected-count')).toBe('2 of 2 selected');
   });
 
   it('keeps the row as it was when a retry never gets an answer', async () => {
+    api.on('POST', `${BASE}/prog-1/propose-one`, () => problem(502, 'Bad Gateway'));
     await reachReview();
-    rows()[0]!.querySelector<HTMLButtonElement>('[data-action="open-row"]')!.click();
-    await render();
-    const proposed = el().querySelector<HTMLTextAreaElement>('[data-testid="proposed"]')!;
-    proposed.value = 'Chapter I';
-    proposed.dispatchEvent(new Event('input'));
-    await render();
+    await openRow(0);
+    type(proposed(), 'Chapter I');
+    await dialog.rendered();
 
     button('retry-row').click();
     await settle();
-    http
-      .expectOne('/api/projects/dune/book-edits/prog-1/propose-one')
-      .flush({ title: 'Bad Gateway' }, { status: 502, statusText: 'Bad Gateway' });
-    await settle();
-    await render();
+    await dialog.rendered();
 
     // The hand edit and the AI's own proposal both survive; the failure sits on the row.
     expect(text('retry-error')).toContain('Asking the AI again failed');
-    expect(el().querySelector<HTMLTextAreaElement>('[data-testid="proposed"]')!.value).toBe(
-      'Chapter I',
-    );
+    expect(proposed().value).toBe('Chapter I');
     expect(text('selected-count')).toBe('2 of 2 selected');
   });
 
   it('confirms before throwing hand edits away, and drops the session on Start over', async () => {
     await reachReview();
-    rows()[0]!.querySelector<HTMLButtonElement>('[data-action="open-row"]')!.click();
-    await render();
-    const proposed = el().querySelector<HTMLTextAreaElement>('[data-testid="proposed"]')!;
-    proposed.value = 'Chapter I';
-    proposed.dispatchEvent(new Event('input'));
-    await render();
+    await openRow(0);
+    type(proposed(), 'Chapter I');
+    await dialog.rendered();
 
     confirmed = false;
     button('start-over').click();
     await settle();
-    await render();
+    await dialog.rendered();
     expect(phase()).toBe('review');
 
     confirmed = true;
     button('start-over').click();
     await settle();
-    http
-      .expectOne(
-        (r) => r.method === 'DELETE' && r.url === '/api/projects/dune/book-edits/prog-1',
-      )
-      .flush(null, { status: 204, statusText: 'No Content' });
-    await settle();
-    await render();
+    await dialog.rendered();
 
     expect(phase()).toBe('instruct');
+    expect(api.calls('DELETE', `${BASE}/prog-1`)).toHaveLength(1);
+  });
+
+  it('Cancel closes with nothing', async () => {
+    button('cancel').click();
+    expect(await result).toBeNull();
   });
 });

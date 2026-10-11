@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   ChapterVoicePreviewDto,
@@ -14,9 +14,8 @@ import { projectUrl } from './projects-api';
 export const MAX_CONTEXT_WINDOW = 10;
 
 /** `CharacterEndpoints.cs` (tickets 15, 17): the cast page's reads. Writes go through `BookApi.execute`. */
-@Injectable({ providedIn: 'root' })
 export class CharactersApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   /** Every character as a roster row, narrator first then by name. */
   summary(folder: string): Promise<CharacterSummaryDto[]> {

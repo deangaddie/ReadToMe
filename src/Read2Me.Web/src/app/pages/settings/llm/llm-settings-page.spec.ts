@@ -1,19 +1,23 @@
-import { provideHttpClient } from '@angular/common/http';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
-  HttpTestingController,
-  TestRequest,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import {
-  AttributionChainResponse,
+  type AttributionChainResponse,
   AttributionPromptStyle,
   LlmApiType,
-  LlmServerConfig,
+  type LlmServerConfig,
 } from '@app/api';
-import { LlmSettingsPage } from './llm-settings-page';
+import { override, resetServices } from '@app/core/services';
+import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
+import { ToastService } from '@app/ui/toast';
+import { FakeApi, problem } from '../../../../testing/fake-api';
+import { FakeLive } from '../../../../testing/fake-live';
+import { settle } from '../../../../testing/fake-navigation';
+import type { LlmSettingsPage } from './llm-settings-page';
+import './llm-settings-page';
 
+/**
+ * Ported from the Angular TestBed spec, case for case: the page is created, appended, and its
+ * HTTP goes through `FakeApi`; the hub is `FakeLive`; the discard prompt is a recorded stub.
+ */
 function config(id: number, name: string, baseUrl = `http://llm-${id}:8080`): LlmServerConfig {
   return {
     id,
@@ -40,137 +44,149 @@ function chain(overrides: Partial<AttributionChainResponse> = {}): AttributionCh
   return { steps: [], selfConsistency: false, resolved: [], available: [SMALL, BIG], ...overrides };
 }
 
-describe('LlmSettingsPage', () => {
-  let http: HttpTestingController;
+const LIST = '/api/settings/llm';
+const ACTIVE = '/api/settings/llm/active';
+const CHAIN = '/api/settings/llm/attribution-chain';
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [LlmSettingsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
-    }).compileComponents();
-    http = TestBed.inject(HttpTestingController);
-  });
+let api: FakeApi;
+let live: FakeLive;
+let confirms: ConfirmOptions[];
+let confirmAnswer: boolean;
+let toasts: string[];
 
-  afterEach(() => {
-    http.verify();
-    document.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
-  });
+beforeEach(() => {
+  resetServices();
+  api = new FakeApi();
+  api.install();
+  live = new FakeLive().install();
+  confirms = [];
+  confirmAnswer = true;
+  toasts = [];
+  override(ConfirmService, {
+    confirm: async (o: ConfirmOptions) => {
+      confirms.push(o);
+      return confirmAnswer;
+    },
+  } as unknown as ConfirmService);
+  override(ToastService, {
+    success: (m: string) => toasts.push(m),
+    error: (m: string) => toasts.push(`error: ${m}`),
+    warn: () => undefined,
+    info: () => undefined,
+    problem: (p: { detail?: string }) => toasts.push(`problem: ${p.detail}`),
+  } as unknown as ToastService);
+});
+afterEach(() => document.body.replaceChildren());
 
-  const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+/** Routes one store load; the editor's managed-service resolve and the console's read-back 404 harmlessly. */
+function routeLoad(configs: LlmServerConfig[], active: LlmServerConfig | null, c = chain()) {
+  api.on('GET', LIST, configs);
+  api.on('GET', ACTIVE, active ?? problem(404, 'none'));
+  api.on('GET', CHAIN, c);
+}
 
-  async function eventually(method: string, url: string): Promise<TestRequest> {
-    for (let i = 0; i < 100; i++) {
-      const [match] = http.match((r) => r.method === method && r.urlWithParams === url);
-      if (match) return match;
-      await settle(10);
-    }
-    throw new Error(`No ${method} ${url}`);
-  }
+async function flush(page: LlmSettingsPage) {
+  for (let i = 0; i < 4; i++) await settle();
+  await page.rendered();
+  await page.rendered();
+}
 
-  /** Answers one store load. */
-  async function flushLoad(
-    configs: LlmServerConfig[],
-    active: LlmServerConfig | null,
-    c = chain(),
-  ) {
-    (await eventually('GET', '/api/settings/llm')).flush(configs);
-    const activeReq = await eventually('GET', '/api/settings/llm/active');
-    if (active) activeReq.flush(active);
-    else activeReq.flush({ title: 'Not Found' }, { status: 404, statusText: 'Not Found' });
-    (await eventually('GET', '/api/settings/llm/attribution-chain')).flush(c);
-  }
+async function render(c = chain()) {
+  routeLoad([SMALL, BIG], SMALL, c);
+  api.on('GET', '/api/settings/llm/test', { running: false, configId: null });
+  const page = document.createElement('r2m-llm-settings-page') as LlmSettingsPage;
+  document.body.append(page);
+  await flush(page);
+  return page;
+}
 
-  /** The editor resolves its base URL to a managed service on open; none of these are managed. */
-  async function flushResolve(baseUrl: string) {
-    (await eventually('GET', `/api/ai-services/resolve?baseUrl=${baseUrl}`)).flush(
-      { title: 'Not Found' },
-      { status: 404, statusText: 'Not Found' },
-    );
-  }
+async function type(page: LlmSettingsPage, field: string, value: string) {
+  const input = page.querySelector<HTMLInputElement>(`[data-field="${field}"]`)!;
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+  await page.rendered();
+}
 
-  async function render(c = chain()) {
-    const fixture = TestBed.createComponent(LlmSettingsPage);
-    await flushLoad([SMALL, BIG], SMALL, c);
-    await flushResolve(SMALL.baseUrl);
-    (await eventually('GET', '/api/settings/llm/test')).flush({ running: false, configId: null });
-    await stable(fixture);
-    return { fixture, el: fixture.nativeElement as HTMLElement };
-  }
+const button = (el: Element, label: string) =>
+  Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === label)!;
 
-  async function stable(fixture: ComponentFixture<unknown>) {
-    await settle();
-    await fixture.whenStable();
-  }
+const rows = (page: Element) => Array.from(page.querySelectorAll('.r2m-config-list__row'));
 
-  function type(el: HTMLElement, field: string, value: string) {
-    const input = el.querySelector<HTMLInputElement>(`[data-field="${field}"]`)!;
-    input.value = value;
-    input.dispatchEvent(new Event('input'));
-  }
-
-  const button = (el: HTMLElement, label: string) =>
-    Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === label)!;
-
+describe('r2m-llm-settings-page', () => {
   it('lists the configs, marks the default and opens it in the editor', async () => {
-    const { el } = await render();
+    const page = await render();
 
-    const rows = Array.from(el.querySelectorAll('.r2m-config-list__row'));
-    expect(rows.map((r) => r.querySelector('.r2m-config-list__name')?.textContent)).toEqual([
+    const r = rows(page);
+    expect(r.map((row) => row.querySelector('.r2m-config-list__name')?.textContent)).toEqual([
       'small',
       'big',
     ]);
-    expect(rows[0]!.textContent).toContain('Default');
-    expect(rows[1]!.textContent).not.toContain('Default');
-    expect(el.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe('small');
-    expect(el.querySelector<HTMLInputElement>('[data-field="baseUrl"]')?.value).toBe(SMALL.baseUrl);
-    expect(el.querySelector('app-llm-test-console')?.textContent).toContain('Test "small"');
+    expect(r[0]!.textContent).toContain('Default');
+    expect(r[1]!.textContent).not.toContain('Default');
+    expect(page.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe('small');
+    expect(page.querySelector<HTMLInputElement>('[data-field="baseUrl"]')?.value).toBe(
+      SMALL.baseUrl,
+    );
+    expect(page.querySelector('r2m-llm-test-console')?.textContent).toContain('Test "small"');
   });
 
   it('Save shows the validation message and sends nothing until the form is valid', async () => {
-    const { fixture, el } = await render();
+    const page = await render();
 
-    type(el, 'baseUrl', 'not a url');
-    await stable(fixture);
-    button(el, 'Save').click();
-    await stable(fixture);
-    expect(el.querySelector('.llm-editor__error')?.textContent).toBe(
+    await type(page, 'baseUrl', 'not a url');
+    button(page, 'Save').click();
+    await page.rendered();
+    expect(page.querySelector('.llm-editor__error')?.textContent?.trim()).toBe(
       'Base URL must be a valid absolute URL (e.g. http://localhost:8080).',
     );
+    expect(api.calls('PUT', `${LIST}/1`).length).toBe(0);
 
-    type(el, 'baseUrl', 'http://llm-1:9090');
-    type(el, 'temperature', '0.4');
-    await stable(fixture);
-    button(el, 'Save').click();
-    const put = await eventually('PUT', '/api/settings/llm/1');
-    expect(put.request.body).toMatchObject({
+    await type(page, 'baseUrl', 'http://llm-1:9090');
+    await type(page, 'temperature', '0.4');
+    const saved = { ...SMALL, baseUrl: 'http://llm-1:9090', temperature: 0.4 };
+    api.on('PUT', `${LIST}/1`, saved);
+    routeLoad([saved, BIG], saved);
+    button(page, 'Save').click();
+    await flush(page);
+
+    expect(api.calls('PUT', `${LIST}/1`)[0]?.body).toMatchObject({
       id: 1,
       baseUrl: 'http://llm-1:9090',
       temperature: 0.4,
     });
-    const saved = { ...SMALL, baseUrl: 'http://llm-1:9090', temperature: 0.4 };
-    put.flush(saved);
-    await flushLoad([saved, BIG], saved);
-    await flushResolve('http://llm-1:9090');
-    await stable(fixture);
-
-    expect(el.querySelector('.llm-editor__error')).toBeNull();
-    expect(el.querySelector('.r2m-config-editor-frame__dirty')).toBeNull();
+    expect(page.querySelector('.llm-editor__error')).toBeNull();
+    expect(page.querySelector('.r2m-config-editor-frame__dirty')).toBeNull();
+    expect(toasts).toEqual(['Configuration updated']);
   });
 
   it('Get models failure leaves free text with the hint', async () => {
-    const { fixture, el } = await render();
+    const page = await render();
+    api.on('POST', `${LIST}/models`, problem(422, 'Connection refused'));
 
-    el.querySelector<HTMLButtonElement>('[data-action="get-models"]')!.click();
-    (await eventually('POST', '/api/settings/llm/models')).flush(
-      { title: 'Unprocessable', detail: 'Connection refused' },
-      { status: 422, statusText: 'Unprocessable Entity' },
-    );
-    await stable(fixture);
+    page.querySelector<HTMLButtonElement>('[data-action="get-models"]')!.click();
+    await flush(page);
 
-    expect(el.querySelector('[data-role="models-hint"]')?.textContent).toBe(
+    expect(page.querySelector('[data-role="models-hint"]')?.textContent).toBe(
       'Could not fetch models (Connection refused) — type one manually.',
     );
-    expect(el.querySelector('input[data-field="model"]')).not.toBeNull();
+    expect(page.querySelector('input[data-field="model"]')).not.toBeNull();
+  });
+
+  it('Get models success offers the list in a select, keeping the current model', async () => {
+    const page = await render();
+    api.on('POST', `${LIST}/models`, { models: ['qwen-28b', 'gemma-12b'] });
+
+    page.querySelector<HTMLButtonElement>('[data-action="get-models"]')!.click();
+    await flush(page);
+
+    const select = page.querySelector<HTMLSelectElement>('select[data-field="model"]')!;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([
+      '',
+      'small-model',
+      'qwen-28b',
+      'gemma-12b',
+    ]);
+    expect(select.value).toBe('small-model');
   });
 
   it('moving a chain step down PUTs the reordered chain', async () => {
@@ -178,19 +194,22 @@ describe('LlmSettingsPage', () => {
       { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Simple },
       { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
     ];
-    const { fixture, el } = await render(chain({ steps }));
+    const page = await render(chain({ steps }));
 
     expect(
-      Array.from(el.querySelectorAll('.chain__step')).map((s) => s.textContent?.includes('Simple')),
+      Array.from(page.querySelectorAll('.chain__step')).map((s) =>
+        s.textContent?.includes('Simple'),
+      ),
     ).toEqual([true, false]);
-    el.querySelector<HTMLButtonElement>('[aria-label="Move small down"]')!.click();
+    api.on('PUT', CHAIN, chain({ steps: [steps[1]!, steps[0]!] }));
+    page.querySelector<HTMLButtonElement>('[aria-label="Move small down"]')!.click();
+    await flush(page);
 
-    const put = await eventually('PUT', '/api/settings/llm/attribution-chain');
-    expect(put.request.body).toEqual({ steps: [steps[1], steps[0]], selfConsistency: false });
-    put.flush(chain({ steps: [steps[1]!, steps[0]!] }));
-    await stable(fixture);
-
-    expect(Array.from(el.querySelectorAll('.chain__name')).map((n) => n.textContent)).toEqual([
+    expect(api.calls('PUT', CHAIN)[0]?.body).toEqual({
+      steps: [steps[1], steps[0]],
+      selfConsistency: false,
+    });
+    expect(Array.from(page.querySelectorAll('.chain__name')).map((n) => n.textContent)).toEqual([
       'big',
       'small',
     ]);
@@ -201,37 +220,49 @@ describe('LlmSettingsPage', () => {
       { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Chapter },
       { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
     ];
-    const { el } = await render(chain({ steps }));
+    const page = await render(chain({ steps }));
 
     expect(
-      Array.from(el.querySelectorAll('.chain__step')).map((s) =>
+      Array.from(page.querySelectorAll('.chain__step')).map((s) =>
         Array.from(s.querySelectorAll('.r2m-status-chip__label')).map((c) => c.textContent?.trim()),
       ),
     ).toEqual([['Chapter'], ['Thinking']]);
   });
 
   it('names the fallback when the chain is empty', async () => {
-    const { el } = await render(
+    const page = await render(
       chain({ resolved: [{ config: SMALL, thinking: false, promptStyle: SMALL.promptStyle }] }),
     );
 
-    expect(el.querySelector('.chain__alert--info')?.textContent).toContain('small');
+    expect(page.querySelector('.chain__alert--info')?.textContent).toContain('small');
   });
 
   it('switching config with unsaved edits asks before discarding them', async () => {
-    const { fixture, el } = await render();
-    type(el, 'name', 'renamed');
-    await stable(fixture);
-    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(true);
+    const page = await render();
+    await type(page, 'name', 'renamed');
+    expect(page.hasUnsavedChanges()).toBe(true);
 
-    Array.from(el.querySelectorAll<HTMLButtonElement>('.r2m-config-list__main'))[1]!.click();
-    await stable(fixture);
-    const dialog = document.querySelector('r2m-confirm-dialog')!;
-    expect(dialog.textContent).toContain('unsaved changes');
-    button(dialog as HTMLElement, 'Cancel').click();
-    await settle(300);
-    await stable(fixture);
+    confirmAnswer = false;
+    Array.from(page.querySelectorAll<HTMLButtonElement>('.r2m-config-list__main'))[1]!.click();
+    await flush(page);
+    expect(confirms[0]?.message).toContain('unsaved changes');
 
-    expect(el.querySelector<HTMLInputElement>('[data-field="name"]')?.value).toBe('renamed');
+    expect(page.querySelector<HTMLInputElement>('[data-field="name"]')?.value).toBe('renamed');
+    expect(page.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe('small');
+  });
+
+  it('reloads on settingsChanged for llm and follows a config edited elsewhere', async () => {
+    const page = await render();
+    routeLoad([{ ...SMALL, model: 'elsewhere' }, BIG], SMALL);
+
+    live.emit('settingsChanged', { area: 'prompts' });
+    await flush(page);
+    expect(api.calls('GET', LIST).length).toBe(1);
+
+    live.emit('settingsChanged', { area: 'llm' });
+    await flush(page);
+    expect(api.calls('GET', LIST).length).toBe(2);
+    expect(page.querySelector<HTMLInputElement>('[data-field="model"]')?.value).toBe('elsewhere');
+    expect(page.querySelector('.r2m-config-editor-frame__dirty')).toBeNull();
   });
 });

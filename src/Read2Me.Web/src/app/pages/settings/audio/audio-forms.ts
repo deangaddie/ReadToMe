@@ -1,13 +1,13 @@
 import {
   AUDIO_STEP_IDS,
-  AdynEqParams,
-  AudioPostProcessStepConfig,
-  ConsonantSoftenEngine,
-  ConsonantSoftenPreset,
-  ConsonantSoftenSettings,
-  DeesserParams,
-  PauseDurations,
-  SilenceTrimSettings,
+  type AdynEqParams,
+  type AudioPostProcessStepConfig,
+  type ConsonantSoftenEngine,
+  type ConsonantSoftenPreset,
+  type ConsonantSoftenSettings,
+  type DeesserParams,
+  type PauseDurations,
+  type SilenceTrimSettings,
 } from '@app/api';
 
 /**
@@ -36,7 +36,7 @@ const SILENCE_TRIM_DEFAULTS: Required<SilenceTrimSettings> = {
 function trimSettings(
   config: AudioPostProcessStepConfig | undefined,
 ): Required<SilenceTrimSettings> {
-  return { ...SILENCE_TRIM_DEFAULTS, ...((config?.settings as SilenceTrimSettings | null) ?? {}) };
+  return { ...SILENCE_TRIM_DEFAULTS, ...(config?.settings as SilenceTrimSettings | null) };
 }
 
 export function toSilenceTrimForm(config: AudioPostProcessStepConfig | undefined): SilenceTrimForm {

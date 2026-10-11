@@ -1,8 +1,9 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
-import { AiServiceDto, AiServiceStatus, AiServicesApi, toApiError } from '@app/api';
-import { ServiceOp, WatchdogKind, WatchdogMessage } from '@app/live/live-messages';
+import { type AiServiceDto, type AiServiceStatus, AiServicesApi, toApiError } from '@app/api';
+import { use } from '@app/core/services';
+import { computed, signal } from '@app/core/signals';
+import type { ServiceOp, WatchdogKind, WatchdogMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { ToastService } from '@app/ui/toast';
 
 /** What this tab is waiting on for a service: a lifecycle op it started, or a probe. */
 export type ServiceBusy = ServiceOp | 'refresh';
@@ -48,11 +49,10 @@ export function watchdogLogEntry(m: WatchdogMessage, at = new Date()): WatchdogL
  * answer 202; the outcome arrives as a `serviceStatus` message carrying the op, which is when the
  * busy state clears and the toast shows. Created at app start so the log misses nothing.
  */
-@Injectable({ providedIn: 'root' })
 export class AiServicesStore {
-  private readonly api = inject(AiServicesApi);
-  private readonly live = inject(LiveService);
-  private readonly toast = inject(ToastService);
+  private readonly api = use(AiServicesApi);
+  private readonly live = use(LiveService);
+  private readonly toast = use(ToastService);
 
   private readonly _services = signal<AiServiceDto[] | null>(null);
   private readonly _error = signal<string | null>(null);
@@ -74,8 +74,8 @@ export class AiServicesStore {
   readonly gpuServices = computed(() => (this._services() ?? []).filter((s) => s.usesGpu));
 
   constructor() {
-    this.live.on('watchdog').subscribe((m) => this.logWatchdog(m));
-    this.live.on('serviceStatus').subscribe((m) => {
+    this.live.on('watchdog', (m) => this.logWatchdog(m));
+    this.live.on('serviceStatus', (m) => {
       if (!m.op) return;
       const waiting = this._busy()[m.name];
       if (waiting !== m.op) return;

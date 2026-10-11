@@ -1,10 +1,12 @@
-import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { ApiError, BookApi, ProjectsApi } from '@app/api';
-import { ToastService } from '@app/ui/toast/toast.service';
+import { override, resetServices } from '@app/core/services';
+import { signal } from '@app/core/signals';
+import { ToastService } from '@app/ui/toast';
 import { BookEditor } from './book-editor';
-import { BookStore } from './book-store';
+import type { BookStore } from './book-store';
 
+/** Ported from the Angular TestBed spec, case for case; the fakes go in through `override()`. */
 class FakeStore {
   readonly folder = signal<string | null>('dune');
   readonly stale = signal<string | null>(null);
@@ -27,78 +29,104 @@ class FakeStore {
   }
 }
 
+/** A recording stand-in for one API method: scripted answers, calls kept. */
+function fn<R>(answer: () => Promise<R>) {
+  const calls: unknown[][] = [];
+  let next: (() => Promise<R>) | null = null;
+  const call = (...args: unknown[]) => {
+    calls.push(args);
+    const run = next ?? answer;
+    next = null;
+    return run();
+  };
+  return { call, calls, once: (run: () => Promise<R>) => (next = run) };
+}
+
 describe('BookEditor', () => {
   let store: FakeStore;
   let editor: BookEditor;
-  let execute: ReturnType<typeof vi.fn>;
-  let importFile: ReturnType<typeof vi.fn>;
-  let importManually: ReturnType<typeof vi.fn>;
+  let execute: ReturnType<typeof fn<{ newEntityId: string | null }>>;
+  let importFile: ReturnType<typeof fn<void>>;
+  let importManually: ReturnType<typeof fn<void>>;
   let problems: unknown[];
 
   const flush = () => new Promise((r) => setTimeout(r, 0));
 
   beforeEach(() => {
+    resetServices();
     store = new FakeStore();
-    execute = vi.fn().mockResolvedValue({ newEntityId: null });
-    importFile = vi.fn().mockResolvedValue(undefined);
-    importManually = vi.fn().mockResolvedValue(undefined);
+    execute = fn<{ newEntityId: string | null }>(async () => ({ newEntityId: null }));
+    importFile = fn<void>(async () => {});
+    importManually = fn<void>(async () => {});
     problems = [];
-    TestBed.configureTestingModule({
-      providers: [
-        BookEditor,
-        { provide: BookStore, useValue: store },
-        { provide: BookApi, useValue: { execute } },
-        { provide: ProjectsApi, useValue: { import: importFile, importManually } },
-        { provide: ToastService, useValue: { problem: (p: unknown) => problems.push(p) } },
-      ],
-    });
-    editor = TestBed.inject(BookEditor);
+    override(BookApi, { execute: execute.call } as unknown as BookApi);
+    override(ProjectsApi, {
+      import: importFile.call,
+      importManually: importManually.call,
+    } as unknown as ProjectsApi);
+    override(ToastService, { problem: (p: unknown) => problems.push(p) } as unknown as ToastService);
+    editor = new BookEditor(store as unknown as BookStore);
   });
 
   it('posts the command and is done once its own receipt arrives, without reloading', async () => {
     const run = editor.run({ type: 'AddPauses' });
     await flush();
-    expect(execute).toHaveBeenCalledWith('dune', { type: 'AddPauses' });
+    expect(execute.calls).toEqual([['dune', { type: 'AddPauses' }]]);
     expect(editor.busy()).toBe(true);
     expect(editor.locked()).toBe(true);
 
     store.settle(true);
-    await expect(run).resolves.toBe(true);
+    expect(await run).toBe(true);
     expect(store.refreshed).toBe(0);
     expect(editor.busy()).toBe(false);
     expect(problems).toEqual([]);
   });
 
   it('execute answers with the host response, so a create can use the id it resolved', async () => {
-    execute.mockResolvedValueOnce({ newEntityId: 'c-new' });
+    execute.once(async () => ({ newEntityId: 'c-new' }));
     const created = editor.execute({ type: 'CreateCharacter', name: 'Gaal' });
     await flush();
     store.settle(true);
-    await expect(created).resolves.toEqual({ newEntityId: 'c-new' });
+    expect(await created).toEqual({ newEntityId: 'c-new' });
 
     // The import writes answer nothing, and a reread still reports plain success.
-    importFile.mockResolvedValueOnce(undefined);
     const reread = editor.reread();
     await flush();
     store.settle(true);
-    await expect(reread).resolves.toBe(true);
+    expect(await reread).toBe(true);
   });
 
   it('reloads by hand when no own receipt comes back in time', async () => {
     const run = editor.run({ type: 'AddPauses' });
     await flush();
     store.settle(false);
-    await expect(run).resolves.toBe(true);
+    expect(await run).toBe(true);
     expect(store.refreshed).toBe(1);
   });
 
   it('a refusal becomes a toast with the detail, cancels the wait and reloads nothing', async () => {
-    execute.mockRejectedValueOnce(new ApiError(422, 'Unprocessable', 'Paragraph is queued.'));
-    await expect(editor.run({ type: 'AddPauses' })).resolves.toBe(false);
-    expect(problems).toEqual([expect.objectContaining({ status: 422, detail: 'Paragraph is queued.' })]);
+    execute.once(() => Promise.reject(new ApiError(422, 'Unprocessable', 'Paragraph is queued.')));
+    expect(await editor.run({ type: 'AddPauses' })).toBe(false);
+    expect(problems).toEqual([
+      expect.objectContaining({ status: 422, detail: 'Paragraph is queued.' }),
+    ]);
     expect(store.cancelled).toBe(1);
     expect(store.refreshed).toBe(0);
     expect(editor.busy()).toBe(false);
+  });
+
+  it('tryExecute hands the refusal back instead of toasting, and explains a declined write', async () => {
+    execute.once(() => Promise.reject(new ApiError(422, 'Unprocessable', 'Paragraph is queued.')));
+    const refused = await editor.tryExecute({ type: 'AddPauses' });
+    expect(refused?.detail).toBe('Paragraph is queued.');
+    expect(problems).toEqual([]);
+
+    const first = editor.run({ type: 'AddPauses' });
+    await flush();
+    const declined = await editor.tryExecute({ type: 'AddBookTitle' });
+    expect(declined?.message).toBe('Another change is still being saved.');
+    store.settle(true);
+    await first;
   });
 
   it('is locked while stale even when idle, and refuses to overlap writes', async () => {
@@ -108,8 +136,8 @@ describe('BookEditor', () => {
 
     const first = editor.run({ type: 'AddPauses' });
     await flush();
-    await expect(editor.run({ type: 'AddBookTitle' })).resolves.toBe(false);
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(await editor.run({ type: 'AddBookTitle' })).toBe(false);
+    expect(execute.calls.length).toBe(1);
     store.settle(true);
     await first;
   });
@@ -117,9 +145,9 @@ describe('BookEditor', () => {
   it('reread and manual reread go through the same wait', async () => {
     const reread = editor.reread();
     await flush();
-    expect(importFile).toHaveBeenCalledWith('dune', true);
+    expect(importFile.calls).toEqual([['dune', true]]);
     store.settle(true);
-    await expect(reread).resolves.toBe(true);
+    expect(await reread).toBe(true);
 
     const request = {
       hasMultipleVolumes: false,
@@ -130,9 +158,9 @@ describe('BookEditor', () => {
     };
     const manual = editor.rereadManually(request);
     await flush();
-    expect(importManually).toHaveBeenCalledWith('dune', request);
+    expect(importManually.calls).toEqual([['dune', request]]);
     store.settle(false);
-    await expect(manual).resolves.toBe(true);
+    expect(await manual).toBe(true);
     expect(store.refreshed).toBe(1);
   });
 });

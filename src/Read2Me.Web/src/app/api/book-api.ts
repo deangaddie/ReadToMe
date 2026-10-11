@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type { BookCommand } from './book-commands';
 import type {
@@ -10,6 +10,9 @@ import type {
   CharacterDto,
   CommandResponse,
   Guid,
+  NarrationReleasePreviewDto,
+  NarrationReleasePreviewRequest,
+  NarrationReleaseScope,
   NodeChildrenDto,
   NodeLevel,
   ParagraphRefDto,
@@ -22,9 +25,8 @@ import { projectUrl } from './projects-api';
  * receipt the live hub echoes (ticket 07). 400 = unknown command type, 422 = the command was
  * rejected (the verbatim reason is in `ApiError.detail`).
  */
-@Injectable({ providedIn: 'root' })
 export class BookApi {
-  private readonly api = inject(ApiClient);
+  private readonly api = use(ApiClient);
 
   overview(folder: string): Promise<BookOverviewDto> {
     return this.api.get<BookOverviewDto>(`${projectUrl(folder)}/book`);
@@ -70,8 +72,8 @@ export class BookApi {
     options: { needsAudioOnly?: boolean; narratorOnlyMode?: boolean } = {},
   ): Promise<AudioItemRefDto[]> {
     const params: Record<string, boolean> = {};
-    if (options.needsAudioOnly) params["needsAudioOnly"] = true;
-    if (options.narratorOnlyMode) params["narratorOnlyMode"] = true;
+    if (options.needsAudioOnly) params['needsAudioOnly'] = true;
+    if (options.narratorOnlyMode) params['narratorOnlyMode'] = true;
     return this.api.get<AudioItemRefDto[]>(
       `${projectUrl(folder)}/nodes/${level}/${id}/item-ids`,
       Object.keys(params).length > 0 ? params : undefined,
@@ -87,6 +89,19 @@ export class BookApi {
     const request: BulkAssignPreviewRequest = { paragraphIds };
     return this.api.post<BulkAssignPreviewDto>(
       `${projectUrl(folder)}/characters/bulk-assign-preview`,
+      request,
+    );
+  }
+
+  /** What a ReleaseNarration over the node would write (the confirm quotes it). */
+  releaseNarrationPreview(
+    folder: string,
+    scope: NarrationReleaseScope,
+    nodeId: Guid,
+  ): Promise<NarrationReleasePreviewDto> {
+    const request: NarrationReleasePreviewRequest = { scope, nodeId };
+    return this.api.post<NarrationReleasePreviewDto>(
+      `${projectUrl(folder)}/narration/release-preview`,
       request,
     );
   }
