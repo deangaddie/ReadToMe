@@ -318,7 +318,8 @@ namespace Read2Me.Services
             var db = await _session.OpenAsync(folderId);
             var selection = await NarrationRelease.SelectAsync(db, scope, nodeId, ct);
 
-            return new NarrationReleasePreview(selection.Paragraphs.Count, selection.Items.Count(i => i.HasAudio));
+            return new NarrationReleasePreview(
+                selection.Paragraphs.Count, selection.Items.Count(i => i.HasAudio), selection.Markers);
         }
 
         public async Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default)

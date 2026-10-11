@@ -3,6 +3,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Characters;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Voice;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
@@ -278,8 +279,13 @@ namespace Read2Me.Services
     /// </summary>
     public sealed record BulkAssignPreview(int ParagraphsWithCharacterItems, int CharacterItems);
 
-    /// <summary>The two figures behind the Release narration confirm.</summary>
-    public sealed record NarrationReleasePreview(int Paragraphs, int ItemsWithAudio);
+    /// <summary>
+    /// The figures behind the Release narration confirm. <see cref="SpeechMarkers"/> names what a
+    /// Chapter or Part release detected (count descending, then marker); empty for a Paragraph
+    /// release and when nothing passes.
+    /// </summary>
+    public sealed record NarrationReleasePreview(
+        int Paragraphs, int ItemsWithAudio, IReadOnlyList<SpeechMarkerCount> SpeechMarkers);
 
     /// <summary>A generated paragraph item offered as an audio sample: its text and who speaks it.</summary>
     public sealed record AudioSampleInfo(

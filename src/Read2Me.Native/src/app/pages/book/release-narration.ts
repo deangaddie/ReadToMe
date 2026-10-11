@@ -3,8 +3,10 @@ import type { ConfirmOptions } from '@app/ui/dialogs';
 
 /**
  * Release narration's wording, beside the bulk assign's (`bulk-assign.ts`): the confirm says how
- * many narration-only paragraphs become dialog and how much audio goes with them. The figures come
- * from the preview read, never from the loaded rows: a part spans chapters that were never opened.
+ * many narration-only paragraphs become dialog, which speech markers picked them (Chapter and Part
+ * only: those releases take only speech-marked paragraphs, ADR 0015) and how much audio goes with
+ * them. The figures come from the preview read, never from the loaded rows: a part spans chapters
+ * that were never opened.
  */
 
 function plural(n: number): string {
@@ -28,7 +30,7 @@ export function releaseConfirm(
   nodeTitle: string,
   preview: NarrationReleasePreviewDto,
 ): ConfirmOptions | null {
-  const { paragraphs, itemsWithAudio } = preview;
+  const { paragraphs, itemsWithAudio, speechMarkers } = preview;
   if (paragraphs === 0) return null;
 
   // A paragraph's "title" is its text: the row it was opened from already shows it.
@@ -36,6 +38,9 @@ export function releaseConfirm(
     scope === 'Paragraph'
       ? 'Release this narration paragraph?'
       : `Release ${paragraphs} narration paragraph${plural(paragraphs)} in ${nodeTitle}?`;
+  if (speechMarkers.length > 0) {
+    message += ` Speech markers: ${speechMarkers.map((m) => `${m.marker} ×${m.paragraphs}`).join(', ')}.`;
+  }
   if (itemsWithAudio > 0) {
     const subject =
       scope === 'Paragraph'
@@ -60,4 +65,13 @@ export function releaseDoneMessage(preview: NarrationReleasePreviewDto): string 
     : `Released ${n} paragraphs. Assign their speakers or attribute them.`;
 }
 
-export const NOTHING_TO_RELEASE = 'No narration-only paragraphs here — nothing to release.';
+/**
+ * The notice when the preview finds nothing. A Chapter or Part may hold narration-only paragraphs
+ * that carry no repeated speech marker, so it says nothing looked like speech; the paragraph menu
+ * is only offered on narration-only paragraphs, so its wording stays as it was.
+ */
+export function releaseNothingMessage(scope: NarrationReleaseScope): string {
+  return scope === 'Paragraph'
+    ? 'No narration-only paragraphs here — nothing to release.'
+    : 'No speech-like paragraphs here — nothing to release.';
+}

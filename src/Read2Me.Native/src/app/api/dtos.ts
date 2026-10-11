@@ -267,10 +267,21 @@ export interface NarrationReleasePreviewRequest {
   nodeId: Guid;
 }
 
-/** What a ReleaseNarration would write: paragraphs it releases, items whose audio it discards. */
+/**
+ * What a ReleaseNarration would write: paragraphs it releases, items whose audio it discards, and
+ * for a Chapter or Part the speech markers that passed (count descending, then marker; empty for a
+ * Paragraph and when nothing passes).
+ */
 export interface NarrationReleasePreviewDto {
   paragraphs: number;
   itemsWithAudio: number;
+  speechMarkers: SpeechMarkerCountDto[];
+}
+
+/** A speech marker as written (`Q.`, `Seldon:`, `—…—`) and how many paragraphs it releases. */
+export interface SpeechMarkerCountDto {
+  marker: string;
+  paragraphs: number;
 }
 
 export interface CharacterAliasDto {

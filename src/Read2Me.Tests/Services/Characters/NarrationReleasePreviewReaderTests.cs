@@ -114,7 +114,25 @@ namespace Read2Me.Tests.Services.Characters
             var preview = await _reader.GetNarrationReleasePreviewAsync(
                 _folder, NarrationReleaseScope.Chapter, Guid.NewGuid());
 
-            Assert.Equal(new NarrationReleasePreview(0, 0), preview);
+            Assert.Equal(0, preview.Paragraphs);
+            Assert.Equal(0, preview.ItemsWithAudio);
+            Assert.Empty(preview.SpeechMarkers);
+        }
+
+        [Theory]
+        [InlineData(NarrationReleaseScope.Chapter, "ch1", "A.=5,Q.=5")]   // count descending, then marker
+        [InlineData(NarrationReleaseScope.Part, "part1", "A.=5,Q.=5")]    // ch2's four Q. pass nothing
+        [InlineData(NarrationReleaseScope.Chapter, "ch2", "")]
+        [InlineData(NarrationReleaseScope.Chapter, "ch3", "")]
+        [InlineData(NarrationReleaseScope.Paragraph, "q1", "")]           // a Paragraph release names no markers
+        [InlineData(NarrationReleaseScope.Paragraph, "plain", "")]
+        public async Task Preview_NamesThePassingSpeechMarkers(NarrationReleaseScope scope, string node, string expected)
+        {
+            var b = await SeedAsync();
+
+            var preview = await _reader.GetNarrationReleasePreviewAsync(_folder, scope, NodeId(b, scope, node));
+
+            Assert.Equal(expected, string.Join(',', preview.SpeechMarkers.Select(m => $"{m.Marker}={m.Paragraphs}")));
         }
 
         [Theory]
@@ -139,10 +157,47 @@ namespace Read2Me.Tests.Services.Characters
             var released = effects.ParagraphItemIds.ToHashSet();
             Assert.Equal(preview.Paragraphs, effects.ParagraphIds.Count);
             Assert.Equal(preview.ItemsWithAudio, before.Count(i => released.Contains(i.Id) && i.HadAudio));
+            if (scope == NarrationReleaseScope.Paragraph)
+                Assert.Empty(preview.SpeechMarkers);
+            else
+                Assert.Equal(effects.ParagraphIds.Count, preview.SpeechMarkers.Sum(m => m.Paragraphs));
 
             // And afterwards nothing is left to release.
-            Assert.Equal(new NarrationReleasePreview(0, 0),
-                await _reader.GetNarrationReleasePreviewAsync(_folder, scope, nodeId));
+            var after = await _reader.GetNarrationReleasePreviewAsync(_folder, scope, nodeId);
+            Assert.Equal(0, after.Paragraphs);
+            Assert.Empty(after.SpeechMarkers);
+        }
+
+        [Fact]
+        public async Task Preview_PartMarkersAreSummedAcrossItsChaptersAndAgreeWithTheWrite()
+        {
+            // chA: Q. ×5, A. ×6; chB: Q. ×5, A. ×4 — chB's A. is short of its own chapter's gate.
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v
+                .AddPart("part", p => p
+                    .AddChapter("chA", c =>
+                    {
+                        c.AddTranscript("aq", "Q.", 5);
+                        c.AddTranscript("aa", "A.", 6);
+                    })
+                    .AddChapter("chB", c =>
+                    {
+                        c.AddTranscript("bq", "Q.", 5);
+                        c.AddTranscript("ba", "A.", 4);
+                    })))
+                .BuildAsync();
+            var partId = b.PartId("part");
+
+            var preview = await _reader.GetNarrationReleasePreviewAsync(_folder, NarrationReleaseScope.Part, partId);
+
+            Assert.Equal([new SpeechMarkerCount("Q.", 10), new SpeechMarkerCount("A.", 6)], preview.SpeechMarkers);
+
+            var handler = new ReleaseNarrationHandler(_root.GetRequiredService<BookMutations>());
+            var result = await handler.HandleAsync(
+                new ReleaseNarrationCommand(_folder, NarrationReleaseScope.Part, partId), CancellationToken.None);
+            var effects = Assert.IsType<BookMutationOutcome.Committed>(result.Outcome).Receipt.Effects;
+            Assert.Equal(16, effects.ParagraphIds.Count);
+            Assert.Equal(preview.Paragraphs, effects.ParagraphIds.Count);
         }
 
         [Fact]

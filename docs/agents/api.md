@@ -268,10 +268,17 @@ Speech tags inside quoted paragraphs stay narration at every scope. Preview it f
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/narration/release-preview \
   -H 'content-type: application/json' -d '{ "scope": "Chapter", "nodeId": "<chapterId>" }'
-# → { "paragraphs": 72, "itemsWithAudio": 12 }   paragraphs it would release, audio it would discard
+# → { "paragraphs": 72, "itemsWithAudio": 12,
+#     "speechMarkers": [ { "marker": "A.", "paragraphs": 36 }, { "marker": "Q.", "paragraphs": 36 } ] }
 curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
   -H 'content-type: application/json' -d '{ "type": "ReleaseNarration", "scope": "Chapter", "nodeId": "<chapterId>" }'
 ```
+
+`paragraphs` is what the release would write and `itemsWithAudio` the audio it would discard.
+`speechMarkers` names the markers that passed, keyed as written (`Q.` and `Q:` are separate;
+em-dash speech is `—…—`), each with the released paragraphs it covers summed across a Part's
+chapters, ordered by count descending, then marker. It is empty for a `Paragraph` scope and when
+nothing passes.
 
 Released paragraphs are Character paragraphs from then on: `paragraph-ids` lists them,
 `SetParagraphsCharacter` stamps them, and `attribution/enqueue` (which the release never calls)

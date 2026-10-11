@@ -120,6 +120,8 @@ public class SelectionApiTests(E2eAppFixture app)
         var preview = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal(10, preview.GetProperty("paragraphs").GetInt32());
         Assert.Equal(0, preview.GetProperty("itemsWithAudio").GetInt32());
+        Assert.Equal(["A:=5", "Q:=5"], preview.GetProperty("speechMarkers").EnumerateArray()
+            .Select(m => $"{m.GetProperty("marker").GetString()}={m.GetProperty("paragraphs").GetInt32()}"));
 
         var release = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
             new { type = "ReleaseNarration", scope = "Chapter", nodeId = chapter });
@@ -136,6 +138,7 @@ public class SelectionApiTests(E2eAppFixture app)
             new { scope = "Paragraph", nodeId = book.ParagraphId("pplain") });
         var onePreview = JsonDocument.Parse(await one.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal(1, onePreview.GetProperty("paragraphs").GetInt32());
+        Assert.Equal(0, onePreview.GetProperty("speechMarkers").GetArrayLength());
 
         // A whole-book release is not a scope.
         var volume = await Http.PostAsJsonAsync(

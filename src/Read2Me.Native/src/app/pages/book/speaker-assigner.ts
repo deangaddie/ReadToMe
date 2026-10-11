@@ -13,10 +13,10 @@ import type { BookEditor } from './book-editor';
 import type { BookStore } from './book-store';
 import { NOTHING_TO_ASSIGN, bulkConfirm, bulkDoneMessage } from './bulk-assign';
 import {
-  NOTHING_TO_RELEASE,
   releaseConfirm,
   releaseDoneMessage,
   releaseNeedsConfirm,
+  releaseNothingMessage,
 } from './release-narration';
 
 /** What a speaker menu pick lands on: one item, one paragraph, or the whole selection. */
@@ -170,7 +170,7 @@ export class SpeakerAssigner {
 
     const options = releaseConfirm(scope, nodeTitle, preview);
     if (!options) {
-      this.toast.info(NOTHING_TO_RELEASE);
+      this.toast.info(releaseNothingMessage(scope));
       return false;
     }
     if (releaseNeedsConfirm(scope, preview) && !(await this.confirm.confirm(options))) return false;

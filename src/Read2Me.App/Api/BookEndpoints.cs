@@ -49,7 +49,9 @@ namespace Read2Me.App.Api
         [property: JsonConverter(typeof(JsonStringEnumConverter<NarrationReleaseScope>))] NarrationReleaseScope Scope,
         Guid NodeId);
     /// <summary><see cref="NarrationReleasePreview"/> on the wire: what a Release narration over the scope would write.</summary>
-    public sealed record NarrationReleasePreviewDto(int Paragraphs, int ItemsWithAudio);
+    public sealed record NarrationReleasePreviewDto(int Paragraphs, int ItemsWithAudio, IReadOnlyList<SpeechMarkerCountDto> SpeechMarkers);
+    /// <summary>A speech marker a Chapter or Part release detected, and how many paragraphs it would release.</summary>
+    public sealed record SpeechMarkerCountDto(string Marker, int Paragraphs);
     public sealed record CharacterAliasDto(Guid Id, string Name);
     public sealed record CharacterDto(Guid Id, string Name, IReadOnlyList<CharacterAliasDto> Aliases);
     /// <summary><see cref="Revision"/>: the book revision the read ran against, a reader's baseline for receipts.</summary>
@@ -80,7 +82,7 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/projects/{folder}/characters/bulk-assign-preview", BulkAssignPreviewAsync)
                 .WithSummary("What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither.");
             endpoints.MapPost("/api/projects/{folder}/narration/release-preview", NarrationReleasePreviewAsync)
-                .WithSummary("What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), and how many of their items have audio it would discard.");
+                .WithSummary("What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), how many of their items have audio it would discard, and for Part and Chapter the speechMarkers that passed with the paragraphs each covers (count descending, then marker; empty for a Paragraph and when nothing passes).");
         }
 
         private static async Task<IResult> GetOverviewAsync(
@@ -203,7 +205,10 @@ namespace Read2Me.App.Api
                     statusCode: StatusCodes.Status400BadRequest);
 
             var preview = await reader.GetNarrationReleasePreviewAsync(folderId, request.Scope, request.NodeId, ct);
-            return Results.Ok(new NarrationReleasePreviewDto(preview.Paragraphs, preview.ItemsWithAudio));
+            return Results.Ok(new NarrationReleasePreviewDto(
+                preview.Paragraphs,
+                preview.ItemsWithAudio,
+                [.. preview.SpeechMarkers.Select(m => new SpeechMarkerCountDto(m.Marker, m.Paragraphs))]));
         }
 
         private static CharacterDto ToCharacterDto(Character c) => new(

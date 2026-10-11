@@ -111,12 +111,13 @@ public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E
         var node = Page.Locator($"[data-node-id='{chapter}']");
         await Expect(node.Locator(".r2m-count-badge--attribution .r2m-count-badge__count")).ToHaveTextAsync("1");
 
-        // Release the chapter from its menu; the confirm quotes the preview.
+        // Release the chapter from its menu; the confirm quotes the preview and names the markers.
         await node.HoverAsync();
         await node.Locator(".r2m-node-menu__trigger").ClickAsync();
         await Page.Locator("[role=menu] [data-entry='release-narration']").ClickAsync();
         var confirm = Page.Locator("r2m-confirm-dialog");
         await Expect(confirm).ToContainTextAsync("Release 10 narration paragraphs in");
+        await Expect(confirm).ToContainTextAsync("Speech markers: A: ×5, Q: ×5.");
         await Expect(confirm).Not.ToContainTextAsync("discarded");
         await confirm.Locator(".r2m-confirm-dialog__confirm").ClickAsync();
 

@@ -33,7 +33,14 @@ describe('SpeakerAssigner', () => {
     execute = mock(async () => ({ newEntityId: 'c-new' }));
     clearOutcome = mock(async () => undefined);
     bulkAssignPreview = mock(async () => ({ paragraphsWithCharacterItems: 2, characterItems: 3 }));
-    releaseNarrationPreview = mock(async () => ({ paragraphs: 41, itemsWithAudio: 12 }));
+    releaseNarrationPreview = mock(async () => ({
+      paragraphs: 41,
+      itemsWithAudio: 12,
+      speechMarkers: [
+        { marker: 'Q.', paragraphs: 21 },
+        { marker: 'A.', paragraphs: 20 },
+      ],
+    }));
     characters = mock(async () => []);
     confirm = mock(async () => true);
     promptText = mock(async () => null);
@@ -177,7 +184,7 @@ describe('SpeakerAssigner', () => {
     ]);
   });
 
-  it('release: previews the scope, confirms with the count and audio, then writes once', async () => {
+  it('release: previews the scope, confirms with the count, markers and audio, then writes once', async () => {
     const released = await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6');
 
     expect(released).toBe(true);
@@ -185,27 +192,41 @@ describe('SpeakerAssigner', () => {
     expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({
         message:
-          'Release 41 narration paragraphs in Chapter 6? 12 have audio, which will be discarded.',
+          'Release 41 narration paragraphs in Chapter 6? Speech markers: Q. ×21, A. ×20. ' +
+          '12 have audio, which will be discarded.',
       }),
     );
-    expect(run.mock.calls).toEqual([[{ type: 'ReleaseNarration', scope: 'Chapter', nodeId: 'c6' }]]);
+    expect(run.mock.calls).toEqual([
+      [{ type: 'ReleaseNarration', scope: 'Chapter', nodeId: 'c6' }],
+    ]);
     expect(toasts).toEqual([
-      { kind: 'success', message: 'Released 41 paragraphs. Assign their speakers or attribute them.' },
+      {
+        kind: 'success',
+        message: 'Released 41 paragraphs. Assign their speakers or attribute them.',
+      },
     ]);
   });
 
-  it('release: nothing to release is a notice and sends no command', async () => {
-    releaseNarrationPreview.mockResolvedValueOnce({ paragraphs: 0, itemsWithAudio: 0 });
+  it('release: a part with nothing speech-like is a notice and sends no command', async () => {
+    releaseNarrationPreview.mockResolvedValueOnce({
+      paragraphs: 0,
+      itemsWithAudio: 0,
+      speechMarkers: [],
+    });
     expect(await assigner.releaseNarration('Part', 'p1', 'Part 1')).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
     expect(run).not.toHaveBeenCalled();
     expect(toasts).toEqual([
-      { kind: 'info', message: 'No narration-only paragraphs here — nothing to release.' },
+      { kind: 'info', message: 'No speech-like paragraphs here — nothing to release.' },
     ]);
   });
 
   it('release: one paragraph without audio is written with no confirm', async () => {
-    releaseNarrationPreview.mockResolvedValueOnce({ paragraphs: 1, itemsWithAudio: 0 });
+    releaseNarrationPreview.mockResolvedValueOnce({
+      paragraphs: 1,
+      itemsWithAudio: 0,
+      speechMarkers: [],
+    });
     expect(await assigner.releaseNarration('Paragraph', 'p7', 'Q: Your name?')).toBe(true);
     expect(releaseNarrationPreview).toHaveBeenCalledWith('dune', 'Paragraph', 'p7');
     expect(confirm).not.toHaveBeenCalled();
@@ -215,7 +236,11 @@ describe('SpeakerAssigner', () => {
   });
 
   it('release: one paragraph with audio confirms first, naming the audio', async () => {
-    releaseNarrationPreview.mockResolvedValueOnce({ paragraphs: 1, itemsWithAudio: 1 });
+    releaseNarrationPreview.mockResolvedValueOnce({
+      paragraphs: 1,
+      itemsWithAudio: 1,
+      speechMarkers: [],
+    });
     confirm.mockResolvedValueOnce(false);
     expect(await assigner.releaseNarration('Paragraph', 'p7', 'Q: Your name?')).toBe(false);
     expect(confirm).toHaveBeenCalledWith(

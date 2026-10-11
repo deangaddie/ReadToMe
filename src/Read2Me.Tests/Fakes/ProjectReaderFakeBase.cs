@@ -50,7 +50,7 @@ namespace Read2Me.Tests.Fakes
             Task.FromResult(new BulkAssignPreview(0, 0));
         public virtual Task<NarrationReleasePreview> GetNarrationReleasePreviewAsync(
             ProjectFolderId folderId, NarrationReleaseScope scope, Guid nodeId, CancellationToken ct = default) =>
-            Task.FromResult(new NarrationReleasePreview(0, 0));
+            Task.FromResult(new NarrationReleasePreview(0, 0, []));
         public virtual Task<CastCounts> GetCastCountsAsync(ProjectFolderId folderId, CancellationToken ct = default) =>
             Task.FromResult(new CastCounts(0, 0, 0));
         public virtual Task<List<(Guid ParagraphId, string Preview)>> GetOrderedParagraphsAsync(ProjectFolderId folderId, IEnumerable<Guid> paragraphIds) =>
