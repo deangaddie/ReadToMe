@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
 import type { ParagraphItemDto } from '@app/api';
 import { provide } from '@app/core/services';
+import { PromptService, type TextPromptOptions } from '@app/ui/dialogs';
 import { AudioGenerator } from './audio-generator';
+import { BookEditor } from './book-editor';
 import { itemRow } from './item-row';
+import { NODE_MENU_OPEN, type NodeMenuRequest } from './node-menu';
 import type { RowContext } from './reader-rows';
 import { AudioSelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
@@ -62,12 +65,16 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
 let selection: AudioSelectionStore;
 let assigner: { assign: ReturnType<typeof mock>; createAndAssign: ReturnType<typeof mock> };
 let generator: { retry: ReturnType<typeof mock>; dismissReview: ReturnType<typeof mock> };
+let editor: { locked: () => boolean; run: ReturnType<typeof mock> };
+let prompt: { text: ReturnType<typeof mock>; answer: string | null };
 
 async function mount(context: RowContext, row: ParagraphItemDto) {
   const host = document.createElement('div');
   provide(host, AudioSelectionStore, selection);
   provide(host, SpeakerAssigner, assigner as unknown as SpeakerAssigner);
   provide(host, AudioGenerator, generator as unknown as AudioGenerator);
+  provide(host, BookEditor, editor as unknown as BookEditor);
+  provide(host, PromptService, prompt as unknown as PromptService);
   document.body.append(host);
   render(
     itemRow(row, { paragraphId: 'p1', chapterId: 'c1' }, context, { isFirst: true, isLast: true }),
@@ -87,6 +94,11 @@ beforeEach(() => {
   selection = new AudioSelectionStore();
   assigner = { assign: mock(async () => undefined), createAndAssign: mock(async () => undefined) };
   generator = { retry: mock(async () => true), dismissReview: mock(async () => true) };
+  editor = { locked: () => false, run: mock(async () => true) };
+  prompt = {
+    answer: 'shouting',
+    text: mock(async (_options: TextPromptOptions) => prompt.answer),
+  };
   proto['hidePopover'] = () => undefined;
 });
 afterEach(() => {
@@ -226,6 +238,56 @@ describe('itemRow (speakers)', () => {
       const cues = el.querySelectorAll('[data-testid=delivery-cue]');
       expect(cues).toHaveLength(1);
       expect(cues[0]!.closest('.r2m-item__audio')).not.toBeNull();
+    });
+  });
+
+  describe('editing the delivery cue (delivery-cue-editing 03)', () => {
+    const cueCtx = (overrides: Partial<RowContext> = {}) =>
+      ctx({ mode: 'speakers', itemSelectable: false, ...overrides });
+    const cued = item('c', { characterId: 'h', voiceInstructions: 'whispered' });
+    const cueButton = (el: Element) =>
+      el.querySelector<HTMLButtonElement>('button[data-testid=delivery-cue]');
+
+    it.each(['speakers', 'audio'] as const)(
+      'clicking the cue in %s mode opens the edit dialog and posts the new cue',
+      async (mode) => {
+        const el = await mount(cueCtx({ mode }), cued);
+        const cue = cueButton(el)!;
+        expect(cue.getAttribute('aria-label')).toBe('Edit delivery cue: whispered');
+        cue.click();
+        await Bun.sleep(0);
+        expect(prompt.text.mock.calls[0]![0]).toMatchObject({
+          title: 'Edit delivery cue',
+          initial: 'whispered',
+        });
+        expect(editor.run.mock.calls).toEqual([
+          [{ type: 'SetItemDeliveryCue', itemId: 'c', cue: 'shouting' }],
+        ]);
+      },
+    );
+
+    it('a cancelled dialog sends nothing', async () => {
+      prompt.answer = null;
+      const el = await mount(cueCtx(), cued);
+      cueButton(el)!.click();
+      await Bun.sleep(0);
+      expect(prompt.text).toHaveBeenCalledTimes(1);
+      expect(editor.run).not.toHaveBeenCalled();
+    });
+
+    it('the cue is not clickable while the editor is locked', async () => {
+      const el = await mount(cueCtx({ locked: true }), cued);
+      expect(cueButton(el)!.disabled).toBe(true);
+    });
+
+    it('the item menu knows the cue, so it offers Edit/Remove rather than Add', async () => {
+      const opened: NodeMenuRequest[] = [];
+      const el = await mount(cueCtx(), cued);
+      el.parentElement!.addEventListener(NODE_MENU_OPEN, (e) =>
+        opened.push((e as CustomEvent<NodeMenuRequest>).detail),
+      );
+      el.querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!.click();
+      expect(opened[0]!.target).toMatchObject({ kind: 'item', id: 'c', cue: 'whispered' });
     });
   });
 });

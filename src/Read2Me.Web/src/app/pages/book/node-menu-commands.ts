@@ -26,6 +26,9 @@ const WORD: Record<NodeMenuKind, string> = {
 
 const NAME_LIMIT = 60;
 
+/** Which TTS models act on a delivery cue (spec story 16); static, not tied to the active provider. */
+export const CUE_HINT = 'Followed by Breeze; VoxCPM2 only loosely; ignored by Chatterbox and Qwen3.';
+
 /**
  * Turns a chosen menu entry into the command to post, asking whatever the entry needs first
  * (ticket 11, research §3). Null means nothing to send: the dialog was cancelled, or the answer
@@ -61,6 +64,23 @@ export async function commandFor(
       if (text === null || text === (target.text ?? '').trim()) return null;
       return { type: 'UpdateParagraphItemText', itemId: id, text };
     }
+
+    case 'add-cue':
+    case 'edit-cue': {
+      const current = target.cue?.trim() ?? '';
+      const cue = await dialogs.text({
+        title: entry === 'add-cue' ? 'Add delivery cue' : 'Edit delivery cue',
+        label: 'Delivery cue',
+        initial: current,
+        hint: CUE_HINT,
+      });
+      // Saving empty removes the cue; an unchanged cue is not sent (it would keep the audio anyway).
+      if (cue === null || cue === current) return null;
+      return { type: 'SetItemDeliveryCue', itemId: id, cue: cue || null };
+    }
+
+    case 'remove-cue':
+      return { type: 'SetItemDeliveryCue', itemId: id, cue: null };
 
     case 'split':
       return splitCommand(target, dialogs);

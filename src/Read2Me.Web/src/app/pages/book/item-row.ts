@@ -1,8 +1,8 @@
-import { html, nothing } from 'lit-html';
+import { type TemplateResult, html, nothing } from 'lit-html';
 import { type ParagraphItemDto, workspaceUrl } from '@app/api';
 import { use } from '@app/core/services';
 import { icon, statusChip } from '@app/ui/partials';
-import { nodeMenuTrigger } from './node-menu';
+import { nodeMenuTrigger, runMenuEntry } from './node-menu';
 import type { NodeMenuTarget } from './node-menu-entries';
 import {
   type ChipView,
@@ -63,8 +63,11 @@ export function itemRow(
     kind: 'item',
     id: item.id,
     text: item.text,
+    cue: item.voiceInstructions,
     ...position,
   };
+  const editingBlocked = busy || paragraphBusy || ctx.locked;
+  const cue = deliveryCue(menuTarget, editingBlocked);
   // Somebody can read the line, so it may be picked for generation (ticket 13).
   const voiced = isVoicedItem(item, ctx.narratorOnlyMode);
   const selected = ctx.itemSelectable && ctx.selectedItems.has(item.id);
@@ -115,14 +118,14 @@ export function itemRow(
       <span class="r2m-item__text">${item.text}</span>
       ${busy ? icon('lock', 'r2m-item__lock') : nothing}
       <span class="r2m-item__menu"
-        >${nodeMenuTrigger(menuTarget, { disabled: busy || paragraphBusy || ctx.locked })}</span
+        >${nodeMenuTrigger(menuTarget, { disabled: editingBlocked })}</span
       >
     </div>
     ${
       ctx.mode === 'audio'
-        ? audioLine(item, ctx, voiced)
+        ? audioLine(item, ctx, voiced, cue)
         : item.voiceInstructions
-          ? html`<div class="r2m-item__cue">${deliveryCue(item)}</div>`
+          ? html`<div class="r2m-item__cue">${cue}</div>`
           : nothing
     }
   </div>`;
@@ -160,7 +163,7 @@ export const chipOf = (view: ChipView) =>
  * busts the browser cache). Retry and Dismiss reach the {@link AudioGenerator} through DOM
  * ancestry.
  */
-function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean) {
+function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean, cue: DeliveryCueView) {
   const review = reviewOf(ctx, item.id);
   const reviewView = reviewChip(review);
   const status = ctx.itemStatus[item.id];
@@ -171,7 +174,7 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean) {
   const generator = (e: Event) => use(AudioGenerator, e.currentTarget as Element);
   return html`<div class="r2m-item__audio">
     <span class="r2m-item__voice" data-testid="voice-line">${voiceLine(ctx.voices[item.id])}</span>
-    ${deliveryCue(item)}
+    ${cue}
     <span class="r2m-item__chips">
       ${
         reviewView
@@ -222,15 +225,25 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean) {
   </div>`;
 }
 
+type DeliveryCueView = TemplateResult | typeof nothing;
+
 /**
  * An item's delivery cue (the `voiceInstructions` TTS reads the line with), one element in both
- * Speakers and Audio modes so ticket 03 can make it clickable; nothing for an item without one.
- * Read mode shows no item rows, so no cue.
+ * Speakers and Audio modes; nothing for an item without one. Read mode shows no item rows, so no
+ * cue. Clicking it runs the menu's Edit delivery cue… (delivery-cue-editing 03), so it is off
+ * whenever the item's menu is.
  */
-function deliveryCue(item: ParagraphItemDto) {
-  return item.voiceInstructions
-    ? html`<span class="r2m-item__instructions" data-testid="delivery-cue"
-        >${item.voiceInstructions}</span
-      >`
-    : nothing;
+function deliveryCue(target: NodeMenuTarget, disabled: boolean): DeliveryCueView {
+  const cue = target.cue;
+  if (!cue) return nothing;
+  return html`<button
+    type="button"
+    class="r2m-item__instructions"
+    data-testid="delivery-cue"
+    aria-label=${`Edit delivery cue: ${cue}`}
+    ?disabled=${disabled}
+    @click=${(e: Event) => void runMenuEntry('edit-cue', target, e.currentTarget as Element)}
+  >
+    ${cue}
+  </button>`;
 }

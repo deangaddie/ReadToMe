@@ -59,10 +59,11 @@ describe('menuEntries matrix', () => {
     expect(entries[0]!.label).toBe('Split chapter');
   });
 
-  it('item: edit text, split paragraph, merges, insert item before/after, five pauses each way, delete', () => {
+  it('item: edit text, add cue, split paragraph, merges, insert item before/after, five pauses each way, delete', () => {
     const entries = menuEntries(target('item'));
     expect(entries.map((e) => e.id)).toEqual([
       'edit-text',
+      'add-cue',
       'split',
       'merge-previous',
       'merge-next',
@@ -72,7 +73,7 @@ describe('menuEntries matrix', () => {
       ...pauseIds('after'),
       'delete',
     ]);
-    expect(entries[1]!.label).toBe('Split paragraph');
+    expect(entries[2]!.label).toBe('Split paragraph');
     expect(entries.filter((e) => e.group === 'pause-before').map((e) => e.label)).toEqual([
       'Pause',
       'Paragraph pause',
@@ -87,6 +88,31 @@ describe('menuEntries matrix', () => {
     expect(list).not.toContain('insert-before');
     expect(list).not.toContain('insert-after');
     expect(list).toEqual(expect.arrayContaining(pauseIds('before')));
+  });
+
+  it('item without a cue offers Add delivery cue…', () => {
+    const entries = menuEntries(target('item', { cue: null }));
+    expect(entries.filter((e) => e.id.endsWith('-cue')).map((e) => [e.id, e.label, e.group])).toEqual([
+      ['add-cue', 'Add delivery cue…', 'edit'],
+    ]);
+  });
+
+  it('item with a cue offers Edit delivery cue… and Remove delivery cue instead', () => {
+    const entries = menuEntries(target('item', { cue: 'whispered' }));
+    expect(entries.filter((e) => e.group === 'edit').map((e) => [e.id, e.label])).toEqual([
+      ['edit-text', 'Edit text'],
+      ['edit-cue', 'Edit delivery cue…'],
+      ['remove-cue', 'Remove delivery cue'],
+    ]);
+  });
+
+  it('pause item and every other kind: no cue entries', () => {
+    const cueIds = (t: NodeMenuTarget) => ids(t).filter((id) => id.endsWith('-cue'));
+    expect(cueIds(target('item', { isPause: true }))).toEqual([]);
+    expect(cueIds(target('item', { isPause: true, cue: 'whispered' }))).toEqual([]);
+    for (const kind of ['volume', 'part', 'chapter', 'paragraph', 'pause-paragraph'] as const) {
+      expect(cueIds(target(kind, { cue: 'x' }))).toEqual([]);
+    }
   });
 
   it('pause paragraph: delete pause only', () => {
