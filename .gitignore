@@ -106,6 +106,9 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
+# E2E failure artifacts kept by scripts/check.ps1 (the rule above does not match the dotted name)
+.artifacts/
+
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 
