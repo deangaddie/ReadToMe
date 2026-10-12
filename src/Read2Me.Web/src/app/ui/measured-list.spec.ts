@@ -309,3 +309,65 @@ describe('r2m-measured-list anchor lifetime', () => {
     expect(list.scrollTop).toBeGreaterThanOrEqual(30 * ESTIMATE_PX);
   });
 });
+
+describe('r2m-measured-list reader scrolls', () => {
+  /** Counts `r2m-reader-scroll`, the list's word that the reader, not the list, moved it. */
+  const readerScrolls = (list: Element) => {
+    const seen: number[] = [];
+    list.addEventListener('r2m-reader-scroll', () => seen.push(seen.length));
+    return seen;
+  };
+
+  /** Emulates the browser stopping `scrollTop` at the end of the content. */
+  const clampAt = (list: MeasuredList<Row>, max: number) => {
+    let stored = 0;
+    Object.defineProperty(list, 'scrollTop', {
+      get: () => stored,
+      set: (v: number) => {
+        stored = Math.min(v, max);
+      },
+    });
+  };
+
+  it('reports a scroll the reader made', async () => {
+    const { list, scrollTo } = await mount(rows(100));
+    const seen = readerScrolls(list);
+    list.scrollToIndex(10);
+    await scrollTo(30 * ESTIMATE_PX);
+    expect(seen).toHaveLength(1);
+  });
+
+  it('does not report the scrolls it makes itself', async () => {
+    const { list } = await mount(rows(100));
+    const seen = readerScrolls(list);
+    list.scrollToIndex(10);
+    list.dispatchEvent(new Event('scroll'));
+    list.scrollToOffset(1234);
+    list.dispatchEvent(new Event('scroll'));
+    await list.rendered();
+    expect(seen).toEqual([]);
+  });
+
+  it('does not take a scroll the browser stopped at the end for the reader', async () => {
+    const { list } = await mount(rows(100));
+    const max = 100 * ESTIMATE_PX - VIEWPORT_PX;
+    clampAt(list, max);
+    const seen = readerScrolls(list);
+    list.scrollToIndex(98);
+    list.dispatchEvent(new Event('scroll'));
+    await list.rendered();
+    expect(list.scrollTop).toBe(max);
+    expect(seen).toEqual([]);
+  });
+
+  it('reports the top row before it reports the reader scroll', async () => {
+    const { list, scrollTo } = await mount(rows(100));
+    const order: string[] = [];
+    list.addEventListener('r2m-top-row', () => order.push('top-row'));
+    list.addEventListener('r2m-reader-scroll', () => order.push('reader-scroll'));
+    list.scrollToIndex(10);
+    await scrollTo(30 * ESTIMATE_PX);
+    expect(order.slice(-2)).toEqual(['top-row', 'reader-scroll']);
+    expect(list.topIndex).toBe(30);
+  });
+});
