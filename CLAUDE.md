@@ -39,11 +39,11 @@ bun run icons                           # rebuild the subset icon font from the 
 
 # E2E tests: src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
 dotnet test src/Read2Me.E2eTests         # browser tests (Tests/Web) skip unless wwwroot/app holds a built bundle
-R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # same suite in Firefox (default chromium)
-dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web"   # only the browser suite
+R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # whole suite in Firefox (default chromium); the gate runs only Tests.Web. there
+dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web."   # only the browser suite (the trailing dot excludes WebHostingTests)
 # Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 
-# PR gate: every CI stage in order, stopping at the first failure (web check and build, dotnet build, unit, E2E Chromium, E2E Firefox)
+# PR gate: every CI stage in order, stopping at the first failure (web check and build, dotnet build, unit, E2E Chromium, E2E Firefox browser tests only)
 pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use
 ```
 

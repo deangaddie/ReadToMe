@@ -8,8 +8,9 @@ Stages, in order (each one is a separate named step in .github/workflows/ci.yml)
   1. build-web.ps1 -Check      lint + typecheck + api:check + icons:check + bun tests + build into wwwroot/app
   2. dotnet build              the whole solution
   3. unit tests                src/Read2Me.Tests
-  4. E2E in Chromium           src/Read2Me.E2eTests with R2M_E2E_BROWSER=chromium
-  5. E2E in Firefox            src/Read2Me.E2eTests with R2M_E2E_BROWSER=firefox
+  4. E2E in Chromium           src/Read2Me.E2eTests with R2M_E2E_BROWSER=chromium, the whole suite
+  5. E2E in Firefox            the browser tests only (Tests/Web) with R2M_E2E_BROWSER=firefox; the API and
+                               host tests never open a browser, so Chromium's pass already covers them
 
 Before the E2E stages it installs any Playwright browser the driver wants that is not in the Playwright cache
 yet (Firefox on first use; Chromium too on a fresh machine). The cache is PLAYWRIGHT_BROWSERS_PATH when set,
@@ -130,14 +131,16 @@ function Save-E2eArtifacts {
         Sort-Object Name -Descending | Select-Object -Skip $keptRunLimit | Remove-Item -Recurse -Force
 }
 
+# Runs the E2E suite in one browser; with -Filter (dotnet test --filter syntax), only the tests it selects.
 function Invoke-E2e {
-    param([string]$Browser)
+    param([string]$Browser, [string]$Filter)
     $previous = $env:R2M_E2E_BROWSER
     $started = Get-Date
     $exitCode = 0
     try {
         $env:R2M_E2E_BROWSER = $Browser
-        dotnet test $e2eTests --configuration $Configuration --no-build
+        $filterArgs = if ($Filter) { @('--filter', $Filter) } else { @() }
+        dotnet test $e2eTests --configuration $Configuration --no-build @filterArgs
         $exitCode = $LASTEXITCODE
     }
     finally {
@@ -168,7 +171,8 @@ try {
         Install-MissingPlaywrightBrowsers -Browsers @('chromium', 'firefox')
     }
     Invoke-Stage 'E2E tests (Chromium)' { Invoke-E2e 'chromium' }
-    Invoke-Stage 'E2E tests (Firefox)' { Invoke-E2e 'firefox' }
+    # The trailing dot keeps Tests.WebHostingTests (no browser) out of the filter.
+    Invoke-Stage 'E2E browser tests (Firefox)' { Invoke-E2e 'firefox' -Filter 'FullyQualifiedName~Tests.Web.' }
 }
 catch {
     Write-Host ''
