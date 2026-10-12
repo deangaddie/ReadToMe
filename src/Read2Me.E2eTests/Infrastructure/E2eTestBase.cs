@@ -91,8 +91,10 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
 
     /// <summary>
     /// Stages the built bundle and navigates to an app-relative path (<c>"projects/x/book"</c>),
-    /// returning once the live hub socket has opened and the shell has rendered, the point after
-    /// which receipts drive the screen. Skips the test when the app has no built bundle.
+    /// returning once the shell reports the live hub connected (<c>data-live-state</c>) and has
+    /// rendered, the point after which receipts drive the screen. It waits on the app's own state,
+    /// not a WebSocket event, so a transport fallback or a retried start still counts. Skips the
+    /// test when the app has no built bundle.
     /// </summary>
     protected async Task GotoAppAsync(string path)
     {
@@ -103,9 +105,8 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
         StageBundle(bundle, Path.Combine(App.WebRootDir, BundleFolder));
 
         // The app opens the live hub on boot; receipts drive the screen from then on.
-        var hub = Page.WaitForWebSocketAsync(new PageWaitForWebSocketOptions { Timeout = 15_000 });
         await Page.GotoAsync(AppPath(path));
-        Assert.Contains("/hubs/live", (await hub).Url);
+        await Expect(Page.Locator("app-root[data-live-state='connected']")).ToBeAttachedAsync(new() { Timeout = 15_000 });
         await Expect(Page.Locator("app-root *").First).ToBeVisibleAsync();
     }
 
