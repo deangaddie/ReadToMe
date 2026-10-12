@@ -11,8 +11,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// the text-processing step catalog, the voice-design sample text, the three Test actions, the
 /// transcription / similarity schemas and the canonical <c>settingsJson</c> every write stores.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class ProviderSettingsApiTests(E2eAppFixture app)
+public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

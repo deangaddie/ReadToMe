@@ -13,8 +13,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// cue on one speech item. A real change discards the item's audio and its review, as a text edit
 /// does; an unchanged cue keeps both.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class DeliveryCueApiTests(E2eAppFixture app)
+public class DeliveryCueApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

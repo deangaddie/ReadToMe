@@ -10,7 +10,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// from receipts without a reload, then assign, bulk-assign and clear speakers by hand. Runs in
 /// Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ReaderAttributionTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]

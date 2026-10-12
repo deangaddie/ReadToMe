@@ -12,8 +12,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// Filters are ffmpeg-gated and may skip in this fixture; a skipped stage still answers its input, so
 /// the round trip holds either way and <c>applied</c> is deliberately not asserted.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class VoiceEditorApiTests(E2eAppFixture app)
+public class VoiceEditorApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

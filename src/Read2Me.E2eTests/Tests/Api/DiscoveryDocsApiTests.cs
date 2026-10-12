@@ -7,8 +7,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <summary>
 /// Agent discovery surface: the OpenAPI document and the AI-services catalog.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class DiscoveryDocsApiTests(E2eAppFixture app)
+public class DiscoveryDocsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

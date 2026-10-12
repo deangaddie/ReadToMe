@@ -8,7 +8,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// the banner's picker links a character, the seed row and the audio-mode voice preview read the
 /// link back, and Unlink (confirmed) restores the unlinked strings. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class NarratorLinkTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const string Folder = "web-narrator-link";

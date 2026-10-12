@@ -12,7 +12,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// second open reader. An item without audio is edited straight away; one with audio asks first,
 /// and confirming discards its take (ticket 04). Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class DeliveryCueTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const string Hint = "Followed by Breeze; VoxCPM2 only loosely; ignored by Chatterbox and Qwen3.";

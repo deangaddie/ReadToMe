@@ -12,7 +12,7 @@ namespace Read2Me.E2eTests.Infrastructure;
 /// differ scripts <see cref="StatusByName"/> (registry names such as <c>chatterbox</c>, or a base
 /// URL for a resolved config). URLs in <see cref="GpuUrls"/> resolve to GPU services, which makes
 /// pre-flight sweep the registry's GPU containers for conflicts. Every op lands in
-/// <see cref="OpLog"/> as <c>start:name</c>. The fixture is shared, so a test resets what it set.
+/// <see cref="OpLog"/> as <c>start:name</c>. The class's tests share it, so a test resets what it set.
 /// </para>
 /// </summary>
 public sealed class FakeAiServiceControl : IAiServiceControl

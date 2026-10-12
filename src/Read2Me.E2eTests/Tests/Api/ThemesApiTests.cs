@@ -9,8 +9,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// Themes over HTTP: list, custom CRUD, built-in protection, and the shared selection
 /// (selected theme + follow-system flag) every client reads.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class ThemesApiTests(E2eAppFixture app)
+public class ThemesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

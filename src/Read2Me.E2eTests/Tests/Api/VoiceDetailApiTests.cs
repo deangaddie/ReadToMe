@@ -14,8 +14,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// The per-voice endpoints Angular ticket 16 added: one voice by id, audio upload, transcription,
 /// and the design-prompt render / generate pair.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class VoiceDetailApiTests(E2eAppFixture app)
+public class VoiceDetailApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

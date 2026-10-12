@@ -13,7 +13,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// streaming and stopping, and the attribution chain reordered and read back over the API. Runs in
 /// Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class LlmSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();

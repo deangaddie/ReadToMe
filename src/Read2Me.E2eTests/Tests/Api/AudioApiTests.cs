@@ -16,8 +16,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// Audio generation over HTTP: enqueue narration items for a chapter, poll the
 /// queue, confirm the wav landed and the item endpoint reflects completion.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class AudioApiTests(E2eAppFixture app)
+public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

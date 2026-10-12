@@ -13,8 +13,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// call, and Start / Restart / Shutdown as 202s whose outcome arrives as <c>serviceStatus</c> on
 /// <c>/hubs/live</c> — with the fake container controller, so no docker.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class AiServicesApiTests(E2eAppFixture app)
+public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 
@@ -50,7 +49,7 @@ public class AiServicesApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var pushed = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("serviceStatus", pushed.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             var shutdown = await Http.PostAsync(Url("/llama/shutdown"), null);
             Assert.Equal(HttpStatusCode.Accepted, shutdown.StatusCode);
@@ -87,7 +86,7 @@ public class AiServicesApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var pushed = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("serviceStatus", pushed.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             var restart = await Http.PostAsync(Url("/whisper/restart"), null);
             Assert.Equal(HttpStatusCode.Accepted, restart.StatusCode);
@@ -121,7 +120,7 @@ public class AiServicesApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var pushed = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("serviceStatus", pushed.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             var probe = JsonDocument.Parse(await Http.GetStringAsync(Url("/minilm-l6/status"))).RootElement;
             Assert.Equal("Starting", probe.GetProperty("status").GetString());

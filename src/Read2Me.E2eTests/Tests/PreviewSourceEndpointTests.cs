@@ -11,8 +11,7 @@ namespace Read2Me.E2eTests.Tests;
 /// Preview Source — the audio before any Audio Post-Process Step — which lives in a dot-prefixed dir
 /// the static-file provider will not serve, and so needs a route of its own.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class PreviewSourceEndpointTests(E2eAppFixture app)
+public class PreviewSourceEndpointTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly ProjectFolderId Folder = new("preview-source-book");
 

@@ -9,8 +9,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// Assembly over HTTP: blocked start reports the missing-audio count, status has the
 /// polling shape, cancel is safe when idle. The full encode path needs real ffmpeg.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class AssemblyApiTests(E2eAppFixture app)
+public class AssemblyApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

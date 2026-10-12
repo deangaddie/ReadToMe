@@ -14,8 +14,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// The AI book-edit flow over HTTP (Angular ticket 19): plan, propose with hub progress, retry one
 /// row, apply through the ordinary command endpoint, cancel and drop.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class BookEditApiTests(E2eAppFixture app)
+public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 
@@ -98,7 +97,7 @@ public class BookEditApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var messages = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("bookEdit", messages.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             var propose = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"),
                 new { thinking = false, connectionId = hub.ConnectionId });
@@ -178,12 +177,12 @@ public class BookEditApiTests(E2eAppFixture app)
         try
         {
             var program = (await PlanAsync(folder, "capitalise chapter titles")).GetProperty("program").GetString()!;
-            app.FakeAi.LlmDelay = TimeSpan.FromMilliseconds(400);
+            app.FakeAi.HoldLlmAfter(1); // the first batch of 8 lands, the second is held until cancelled
 
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var messages = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("bookEdit", messages.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             var propose = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"),
                 new { thinking = false, connectionId = hub.ConnectionId });
@@ -201,7 +200,7 @@ public class BookEditApiTests(E2eAppFixture app)
             var done = messages.Single(m => m.GetProperty("kind").GetString() == "done");
             Assert.True(done.GetProperty("cancelled").GetBoolean());
             var landed = done.GetProperty("rows").GetArrayLength();
-            Assert.InRange(landed, 8, 16); // one or two of the three batches
+            Assert.Equal(8, landed);
             Assert.Equal(landed, done.GetProperty("done").GetInt32());
 
             var run = await GetRunAsync(folder, program);

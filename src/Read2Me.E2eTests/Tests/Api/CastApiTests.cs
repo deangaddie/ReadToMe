@@ -9,8 +9,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// The reads behind the web cast page (Angular ticket 15): the roster summary, a character's
 /// lines and a line's surrounding paragraphs.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class CastApiTests(E2eAppFixture app)
+public class CastApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

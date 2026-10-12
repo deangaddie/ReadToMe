@@ -11,7 +11,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// reorder and delete rules, and see a rule whose chapter was deleted flagged as dangling. Every
 /// step is also asserted against the host's own reads. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class VoiceRulesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();

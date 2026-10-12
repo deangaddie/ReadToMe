@@ -13,7 +13,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// holds more than five; and the current chapter follows the row at the top. The tree-key tests
 /// join this class with the structure tree (native-web 23). Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const double TolerancePx = 1.0;
@@ -170,15 +169,16 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
             ],
             window.Take(5));
 
-        // Scrolling the second chapter's header to the top makes it the current chapter. (A header
-        // further down cannot reach the top until enough content sits below it; that is the deep
-        // link's job, below.)
+        // The reader scrolling the second chapter's header to the top makes it the current chapter.
+        // (A header further down cannot reach the top until enough content sits below it; that is
+        // the deep link's job, below.) It scrolls as the reader does, from outside the list: the
+        // list's own scrollToIndex keeps the opened chapter current.
         var second = book.ChapterId("vol1-part1-ch2");
         await Page.EvaluateAsync("""
             (id) => {
               const list = document.querySelector('r2m-measured-list');
               const index = list.items.findIndex((r) => r.key === `chapter:${id}`);
-              list.scrollToIndex(index);
+              list.scrollTop = list.offsetOf(index);
             }
             """, second.ToString());
         await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", second.ToString());
@@ -205,6 +205,19 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
     /// <summary>The node id of the tree item that has focus (or holds the focused control), or null.</summary>
     private const string FocusedNode = """
         () => document.activeElement?.closest('[role="treeitem"]')?.dataset.nodeId ?? null
+        """;
+
+    /// <summary>
+    /// Presses the letters on the focused element in one go inside the page, as a quick typist would.
+    /// Type-ahead takes letters that arrive within its window as one query; Keyboard.TypeAsync waits
+    /// a browser round trip per key, which a loaded Firefox stretches past that window.
+    /// </summary>
+    private const string TypeTogether = """
+        (text) => {
+          for (const key of text)
+            document.activeElement.dispatchEvent(
+              new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
+        }
         """;
 
     [Fact]
@@ -288,9 +301,9 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         // Type-ahead: letters typed together jump to the next title that starts with them, wrapping.
         await Page.Keyboard.PressAsync("Home");
         Assert.Equal(vol1.ToString(), await Focused());
-        await Page.Keyboard.TypeAsync("vol2-part2");
+        await Page.EvaluateAsync(TypeTogether, "vol2-part2");
         await Page.WaitForFunctionAsync($"(id) => ({FocusedNode})() === id", part2.ToString());
-        await Page.Keyboard.TypeAsync("vol1");
+        await Page.EvaluateAsync(TypeTogether, "vol1");
         await Page.WaitForFunctionAsync($"(id) => ({FocusedNode})() === id", vol1.ToString());
     }
 }

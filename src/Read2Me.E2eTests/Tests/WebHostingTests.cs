@@ -9,8 +9,7 @@ namespace Read2Me.E2eTests.Tests;
 /// that prefix falls back to it. The fixture's web root is a throwaway directory, so each test
 /// stages exactly the files it needs.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class WebHostingTests(E2eAppFixture app)
+public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private const string IndexMarker = "<!-- web-stub-index -->";
     // Bun's content hashes are lowercase.

@@ -12,7 +12,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// live hub connected with the open project's group joined, and the not-found page for an unknown
 /// path, which links back to the projects shelf. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
@@ -166,7 +165,7 @@ public class ShellTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(a
         }
         finally
         {
-            // The selection is host state shared by every test in the collection: put Light back.
+            // The selection is host state shared by every test in this class: put Light back.
             await Page.APIRequest.PutAsync($"{App.BaseUrl}/api/settings/themes/selection", new()
             {
                 DataObject = new { selectedThemeId = await ThemeIdAsync("Light"), followSystemPreference = false },

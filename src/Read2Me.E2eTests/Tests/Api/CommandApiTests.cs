@@ -8,8 +8,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <summary>
 /// The generic commands endpoint: one POST drives any BookCommand by discriminator.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class CommandApiTests(E2eAppFixture app)
+public class CommandApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

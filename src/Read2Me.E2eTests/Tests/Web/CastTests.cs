@@ -10,7 +10,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// discovery on the fake-AI host — review, edit a row, apply, the roster updates, a re-run marks
 /// the row "Already exists", and a failure stays open with its reason. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class CastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();

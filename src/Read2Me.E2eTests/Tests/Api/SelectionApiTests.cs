@@ -11,8 +11,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// a tree node selects, an enqueue by explicit ids, the bulk-assign preview and clearing a
 /// paragraph's remembered outcome.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class SelectionApiTests(E2eAppFixture app)
+public class SelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

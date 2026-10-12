@@ -10,7 +10,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// choice survives a reload because the host stores it, and it is the one selection every client
 /// reads. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ThemesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
@@ -39,7 +38,7 @@ public class ThemesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         }
         finally
         {
-            // The selection is host state shared by every test in the collection: put Light back.
+            // The selection is host state shared by every test in this class: put Light back.
             var themes = await Page.APIRequest.GetAsync($"{App.BaseUrl}/api/settings/themes");
             using var doc = JsonDocument.Parse(await themes.TextAsync());
             var light = doc.RootElement.EnumerateArray().First(t => t.GetProperty("name").GetString() == "Light").GetProperty("id").GetInt32();

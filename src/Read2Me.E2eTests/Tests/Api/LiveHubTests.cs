@@ -15,8 +15,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <c>/hubs/live</c> end to end over the real host: group membership, snapshots, receipt routing
 /// per project and late-joiner stream replay (Angular ticket 06).
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class LiveHubTests(E2eAppFixture app)
+public class LiveHubTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

@@ -9,7 +9,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// the <b>files</b> — <c>{voiceId}.orig.wav</c> exists ⟺ the voice has been edited. The filters
 /// are ffmpeg-gated and may skip on this host, so the live bytes are not asserted to differ. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class VoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();

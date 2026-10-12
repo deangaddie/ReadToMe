@@ -36,6 +36,54 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     public TimeSpan LlmDelay { get; set; } = TimeSpan.Zero;
 
     /// <summary>
+    /// Completions still answered before the fake starts holding them, or <c>null</c> for no hold.
+    /// See <see cref="HoldLlmAfter"/>.
+    /// </summary>
+    private int? _llmAnswersBeforeHold;
+
+    private readonly Lock _llmHoldLock = new();
+
+    /// <summary>Completes when held completions may go on; see <see cref="ReleaseLlm"/>.</summary>
+    private TaskCompletionSource _llmHoldReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Per-test hook: answer the next <paramref name="answers"/> completions, then hold every later one
+    /// until its request is cancelled or <see cref="ReleaseLlm"/> is called. A test then knows the run
+    /// is still going, and exactly where, however slowly the browser drives it, where a delay only
+    /// makes that likely.
+    /// </summary>
+    public void HoldLlmAfter(int answers)
+    {
+        lock (_llmHoldLock) _llmAnswersBeforeHold = answers;
+    }
+
+    /// <summary>Ends a <see cref="HoldLlmAfter"/> hold: held completions answer, and later ones at once.</summary>
+    public void ReleaseLlm()
+    {
+        lock (_llmHoldLock)
+        {
+            _llmAnswersBeforeHold = null;
+            _llmHoldReleased.TrySetResult();
+            _llmHoldReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
+    /// <summary>
+    /// Spends one answer of a <see cref="HoldLlmAfter"/> hold, or returns the task this completion must
+    /// wait on once the answers are spent. <c>null</c> means answer now.
+    /// </summary>
+    private Task? TakeLlmAnswerOrHold()
+    {
+        lock (_llmHoldLock)
+        {
+            if (_llmAnswersBeforeHold is not { } left) return null;
+            if (left == 0) return _llmHoldReleased.Task;
+            _llmAnswersBeforeHold = left - 1;
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Per-test hook: how long each fake-audiocpp take is, so a test can drive a designed voice past
     /// the Reference Limit. 100 ms by default.
     /// </summary>
@@ -56,7 +104,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     private volatile string? _audioCppLoaded;
 
     /// <summary>
-    /// Restores per-test defaults. The handler is shared across the collection, so anything a
+    /// Restores per-test defaults. The handler is shared by the tests of one class, so anything a
     /// test sets (LlmReply) or the pipeline records (_lastTtsText, prompts) would otherwise
     /// leak into the next test.
     /// </summary>
@@ -64,6 +112,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     {
         LlmReply = p => FakeAiResponses.AttributionReply(p, "Narrator");
         LlmDelay = TimeSpan.Zero;
+        ReleaseLlm();
         AudioCppTakeMs = 100;
         LlmModels = FakeLlmModelStore.AllLoaded(DefaultModel);
         _lastTtsText = "";
@@ -107,6 +156,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             lock (LlmBodiesSeen) LlmBodiesSeen.Add(JsonNode.Parse(body)!.AsObject());
             lock (LlmPromptsSeen) LlmPromptsSeen.Add(prompt);
             if (LlmDelay > TimeSpan.Zero) await Task.Delay(LlmDelay, ct);
+            if (TakeLlmAnswerOrHold() is { } released) await released.WaitAsync(ct);
             var sse = FakeAiResponses.OpenAiSse(LlmReply(prompt));
             var response = new HttpResponseMessage(HttpStatusCode.OK)
             {

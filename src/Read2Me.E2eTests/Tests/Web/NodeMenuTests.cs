@@ -10,7 +10,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// and the anchor survives a live receipt re-rendering the tree under the open menu. Runs in
 /// Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const string FocusedNode = """

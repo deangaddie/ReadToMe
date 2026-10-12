@@ -9,7 +9,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// card renders, a project is created from the dialog with a text upload and lands on the shelf,
 /// and delete removes it from the host. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ProjectsShelfTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
