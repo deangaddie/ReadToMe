@@ -21,6 +21,8 @@ export interface NodeMenuTarget {
   isPause?: boolean;
   /** Items only: the item's delivery cue, which decides Add versus Edit/Remove; null when none. */
   cue?: string | null;
+  /** Items only: the item has audio, which a cue edit discards, so the edit asks first. */
+  hasAudio?: boolean;
   /**
    * Tree nodes only: which selection the reader is in, so the shortcuts on offer are the
    * paragraph ones (ticket 12: select unprocessed, attribute) or the item ones (ticket 13: select

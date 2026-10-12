@@ -76,11 +76,11 @@ export async function commandFor(
       });
       // Saving empty removes the cue; an unchanged cue is not sent (it would keep the audio anyway).
       if (cue === null || cue === current) return null;
-      return { type: 'SetItemDeliveryCue', itemId: id, cue: cue || null };
+      return cueCommand(target, cue || null, dialogs);
     }
 
     case 'remove-cue':
-      return { type: 'SetItemDeliveryCue', itemId: id, cue: null };
+      return cueCommand(target, null, dialogs);
 
     case 'split':
       return splitCommand(target, dialogs);
@@ -125,6 +125,33 @@ export async function commandFor(
       return null;
     }
   }
+}
+
+/**
+ * Sets or removes an item's cue. A real change discards the item's audio, so an item that has
+ * audio asks first (delivery-cue-editing 04); text edits deliberately do not (spec, Further Notes).
+ */
+async function cueCommand(
+  target: NodeMenuTarget,
+  cue: string | null,
+  dialogs: MenuDialogs,
+): Promise<BookCommand | null> {
+  if (target.hasAudio) {
+    const [verb, lead] =
+      cue === null
+        ? ['Remove', 'Removing the delivery cue']
+        : target.cue
+          ? ['Change', 'Changing the delivery cue']
+          : ['Add', 'Adding a delivery cue'];
+    const ok = await dialogs.confirm({
+      title: `${verb} delivery cue`,
+      message: `${lead} discards this item's audio.`,
+      confirmLabel: verb,
+      destructive: true,
+    });
+    if (!ok) return null;
+  }
+  return { type: 'SetItemDeliveryCue', itemId: target.id, cue };
 }
 
 async function splitCommand(
