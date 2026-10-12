@@ -12,8 +12,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <see cref="FrozenItemBoundaryTests"/> — are untouched; what changes is that flipping an item's
 /// speaker flips the word with it, in both directions.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class DerivedItemTypeTests(E2eAppFixture app)
+public class DerivedItemTypeTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

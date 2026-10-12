@@ -11,8 +11,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// Attribution over HTTP: enqueue a chapter, poll the queue, read the per-paragraph
 /// resolution — the same flow the UI drives, minus the UI.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class AttributionApiTests(E2eAppFixture app)
+public class AttributionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

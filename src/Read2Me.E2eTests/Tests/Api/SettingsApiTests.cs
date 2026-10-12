@@ -9,8 +9,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// Settings over HTTP: config-area CRUD + active selection, prompt templates,
 /// audio-processing scalars.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class SettingsApiTests(E2eAppFixture app)
+public class SettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

@@ -11,7 +11,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// override and its compatibility warning survive a reload, then reset to the built-in default.
 /// Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class PromptSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();

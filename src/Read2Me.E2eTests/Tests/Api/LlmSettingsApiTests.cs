@@ -13,8 +13,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// The LLM settings page's own endpoints (Angular ticket 21): model list for an unsaved config,
 /// the test console run, the attribution chain, and base URL → managed service resolution.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class LlmSettingsApiTests(E2eAppFixture app)
+public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 
@@ -70,7 +69,7 @@ public class LlmSettingsApiTests(E2eAppFixture app)
             var test = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("llm", llm.Enqueue);
             hub.On<JsonElement>("llmTest", test.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
             await hub.InvokeAsync("JoinStream", "llm");
 
             var send = await Http.PostAsJsonAsync(Url($"/{id}/test"),
@@ -106,7 +105,7 @@ public class LlmSettingsApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var test = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("llmTest", test.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             var send = await Http.PostAsJsonAsync(Url($"/{id}/test"),
                 new { prompt = "slow", connectionId = hub.ConnectionId });

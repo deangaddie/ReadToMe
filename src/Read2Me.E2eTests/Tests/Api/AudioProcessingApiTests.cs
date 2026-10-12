@@ -16,8 +16,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// pauses, step configs), the per-card writes, the ffmpeg probe, the recent-sample picker and the
 /// one-step A/B preview render.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class AudioProcessingApiTests(E2eAppFixture app)
+public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
     private string Base => $"{app.BaseUrl}/api/settings/audio-processing";

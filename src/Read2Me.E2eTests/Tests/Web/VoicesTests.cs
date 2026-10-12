@@ -12,7 +12,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// reference, upload, transcribe), a TTS settings override round trip, and the prompt batch landing
 /// on the cards from hub events. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();

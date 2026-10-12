@@ -7,8 +7,7 @@ namespace Read2Me.E2eTests.Tests;
 /// fixture (Kestrel, workspace, migrations, seeding, routing) cheaply
 /// before the Playwright tests run.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class HostSmokeTests(E2eAppFixture app)
+public class HostSmokeTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     [Fact]
     public async Task Seeded_project_is_listed_by_the_api()

@@ -15,7 +15,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// the A/B preview, save it, and read the new value back on a fresh load. Runs in Chromium and
 /// Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class AudioProcessingSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();

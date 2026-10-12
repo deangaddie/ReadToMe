@@ -13,8 +13,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// The reads behind the web reader (ticket 10): the enriched chapter children, resolved voice
 /// names per chapter and the sparse audio review map.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class ReaderApiTests(E2eAppFixture app)
+public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

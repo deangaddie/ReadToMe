@@ -10,8 +10,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// The roll-ups behind the web pipeline stepper and reader tree badges (ticket 09):
 /// <c>GET /api/projects/{folder}/status</c> and the per-node summary.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class ProjectStatusApiTests(E2eAppFixture app)
+public class ProjectStatusApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

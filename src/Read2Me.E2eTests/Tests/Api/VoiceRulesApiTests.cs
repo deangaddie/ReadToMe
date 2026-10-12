@@ -9,8 +9,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// The Voice rules reads behind the cast page (Angular ticket 17): a character's rule list and the
 /// per-chapter resolved-voice preview, driven through the existing rule commands.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class VoiceRulesApiTests(E2eAppFixture app)
+public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

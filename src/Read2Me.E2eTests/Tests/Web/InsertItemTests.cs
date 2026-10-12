@@ -13,7 +13,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// checkbox and its player, so "unattributed" and "the take still plays" are read off the rows
 /// (native-web 26) as well as the host. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class InsertItemTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]

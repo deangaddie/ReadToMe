@@ -12,8 +12,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// Voices over HTTP: list, batch prompt generation with status polling, and
 /// single-voice audio generation against the fake voice-design service.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class VoiceApiTests(E2eAppFixture app)
+public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

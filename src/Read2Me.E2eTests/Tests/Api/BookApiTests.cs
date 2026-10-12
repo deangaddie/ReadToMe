@@ -7,8 +7,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <summary>
 /// Book structure reads: overview, node children walk, characters with aliases.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class BookApiTests(E2eAppFixture app)
+public class BookApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

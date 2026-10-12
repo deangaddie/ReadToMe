@@ -10,7 +10,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// action queues the whole book through the fake LLM, and the step turns done from hub roll-ups
 /// without a reload. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class OverviewTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]

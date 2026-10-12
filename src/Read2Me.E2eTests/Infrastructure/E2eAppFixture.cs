@@ -17,7 +17,8 @@ namespace Read2Me.E2eTests.Infrastructure;
 /// <summary>
 /// Boots the real app (Startup, Kestrel, random port) against a throwaway temp
 /// workspace, with all external AI HTTP traffic routed into <see cref="FakeAi"/>.
-/// Shared per test collection.
+/// One host per test class (<c>IClassFixture</c>): its workspace, app.db, web root, fakes and
+/// queues belong to that class alone, so classes run in parallel while a class's tests run in order.
 /// </summary>
 public sealed class E2eAppFixture : IAsyncLifetime
 {
@@ -30,6 +31,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
     public IServiceProvider Services => _host!.Services;
 
     private IHost? _host;
+    private string? _appDbConnectionString;
 
     /// <summary>The preview store's clock; advance it to expire voice-editor previews.</summary>
     public TestUtils.ManualTimeProvider Clock { get; } = new(DateTimeOffset.UtcNow);
@@ -72,6 +74,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
             await db.Database.MigrateAsync();
+            _appDbConnectionString = db.Database.GetConnectionString();
         }
 
         await _host.StartAsync();
@@ -135,8 +138,9 @@ public sealed class E2eAppFixture : IAsyncLifetime
 
     /// <summary>
     /// Polls a queue-status endpoint (e.g. <c>/api/attribution/queue</c>) until nothing is queued or
-    /// processing. The app is shared across the collection, so a test that enqueues work must leave
-    /// with it drained — an in-flight paragraph would otherwise run against the next test's fake AI.
+    /// processing. The host is shared by the tests of one class, so a test that enqueues work must
+    /// leave with it drained — an in-flight paragraph would otherwise run against the class's next
+    /// test's fake AI.
     /// </summary>
     public async Task WaitForQueueDrainAsync(string queuePath, int timeoutSeconds = 30)
     {
@@ -161,7 +165,12 @@ public sealed class E2eAppFixture : IAsyncLifetime
             _host.Dispose();
         }
 
-        SqliteConnection.ClearAllPools();
+        // Only this host's app.db pool: other classes' hosts are still running.
+        if (_appDbConnectionString != null)
+        {
+            using var connection = new SqliteConnection(_appDbConnectionString);
+            SqliteConnection.ClearPool(connection);
+        }
         for (var attempt = 0; attempt < 5; attempt++)
         {
             try

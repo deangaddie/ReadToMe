@@ -10,7 +10,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// the host's item type, and whether audio mode lets the item be picked for generation. Native-web
 /// 25, from the Angular class of the same name. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class NarratorPickerTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const string Folder = "native-narrator-picker";

@@ -8,7 +8,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// seam: phases and encode progress arrive over the hub, the finished file lands in Outputs and
 /// downloads, missing audio offers a partial build, and Cancel mid-encode shows Cancelled. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ExportTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private ILocator Phase(string phase) => Page.Locator($"r2m-export-page [data-phase='{phase}']");

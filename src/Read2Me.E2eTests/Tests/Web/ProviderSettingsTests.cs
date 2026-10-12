@@ -16,7 +16,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// that form, and a stored canonical config survives a native save with its <c>settingsJson</c>
 /// unchanged.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();

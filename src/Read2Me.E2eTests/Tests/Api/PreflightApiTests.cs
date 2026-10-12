@@ -14,8 +14,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// plan for a cold service, the run's per-service stages on the caller's hub connection, the GPU
 /// conflict swept and stopped first, and a failed start reported as such.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class PreflightApiTests(E2eAppFixture app)
+public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 
@@ -50,7 +49,7 @@ public class PreflightApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var messages = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("preflight", messages.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             var response = await Http.PostAsJsonAsync(Url("CharacterAttribution", "run"), new { connectionId = hub.ConnectionId });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
@@ -92,7 +91,7 @@ public class PreflightApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var messages = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("preflight", messages.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             var response = await Http.PostAsJsonAsync(Url("CharacterAttribution", "run"), new { connectionId = hub.ConnectionId });
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
@@ -137,7 +136,7 @@ public class PreflightApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var messages = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("preflight", messages.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             await Http.PostAsJsonAsync(Url("AudioGeneration", "run"), new { connectionId = hub.ConnectionId });
             await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));
@@ -162,7 +161,7 @@ public class PreflightApiTests(E2eAppFixture app)
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var messages = new ConcurrentQueue<JsonElement>();
             hub.On<JsonElement>("preflight", messages.Enqueue);
-            await hub.StartAsync();
+            await hub.StartJoinedAsync();
 
             await Http.PostAsJsonAsync(Url("BookEdit", "run"), new { connectionId = hub.ConnectionId });
             await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));

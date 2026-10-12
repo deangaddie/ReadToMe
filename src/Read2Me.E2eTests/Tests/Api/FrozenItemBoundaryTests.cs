@@ -12,8 +12,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// re-slice, add, drop or reword one. The answer here is the awkward one on purpose: `unknown`
 /// on the two-speaker item, a real name on the clean one, and a name on an index no item has.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class FrozenItemBoundaryTests(E2eAppFixture app)
+public class FrozenItemBoundaryTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 
@@ -64,7 +63,7 @@ public class FrozenItemBoundaryTests(E2eAppFixture app)
         Assert.Equal(builder.CharacterId("Alice"), items[2].CharacterId);
 
         // Partly attributed: still unprocessed, so the user can re-queue it after fixing the split.
-        // The re-queued run is drained again — the app is shared, and an in-flight paragraph would
+        // The re-queued run is drained again — the class shares the host, and an in-flight paragraph would
         // otherwise run against the next test's fake AI.
         Assert.Equal(1, await EnqueueChapterAsync(folder, chapterId));
         await app.WaitForQueueDrainAsync("/api/attribution/queue");

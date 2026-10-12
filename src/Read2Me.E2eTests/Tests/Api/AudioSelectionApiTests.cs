@@ -9,8 +9,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// The reads and writes behind the web reader's audio selection (Angular ticket 13): the item refs
 /// a tree node selects, and an enqueue by explicit item ids (a selection, or one item to retry).
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class AudioSelectionApiTests(E2eAppFixture app)
+public class AudioSelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

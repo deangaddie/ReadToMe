@@ -9,7 +9,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// Processing → playable from hub status and receipts without a reload, retry a failed item, and
 /// dismiss a review flag that stays dismissed. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ReaderAudioTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static ILocator ItemRow(IPage page, Guid itemId) => page.Locator($".r2m-item[data-item-id='{itemId}']");

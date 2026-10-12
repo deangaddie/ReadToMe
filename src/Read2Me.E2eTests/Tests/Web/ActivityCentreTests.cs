@@ -13,7 +13,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// The run is queued from the reader's own "Attribute" action (native-web 25); the assertions are
 /// the Angular class's. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private LiveConnectionRegistry Registry => App.Services.GetRequiredService<LiveConnectionRegistry>();
@@ -23,7 +22,9 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
     {
         await App.SeedThreeDialogParagraphProjectAsync("native-activity", "Native Activity Book", "A. Author", characterName: "Alice");
         App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
-        App.FakeAi.LlmDelay = TimeSpan.FromSeconds(2);
+        // The first paragraph is answered (so the pill can time it), the rest are held until the
+        // test has looked at the run in flight.
+        App.FakeAi.HoldLlmAfter(1);
 
         await GotoAppAsync("projects/native-activity/book");
         await Expect(Page.Locator("r2m-activity-bar")).ToContainTextAsync("No background work");
@@ -48,6 +49,7 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         // Closing the drawer leaves the stream group (server member count drops).
         await Page.GetByLabel("Close activity drawer").ClickAsync();
         await WaitForMembersAsync(LiveGroups.StreamLlm, 0);
+        App.FakeAi.ReleaseLlm();
 
         // After the run: pill gone, per-config throughput table in the Jobs tab, Dismiss clears it.
         await App.WaitForQueueDrainAsync("/api/attribution/queue");
@@ -67,7 +69,8 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
     {
         await App.SeedThreeDialogParagraphProjectAsync("native-activity-cancel", "Native Cancel Book", "A. Author", characterName: "Alice");
         App.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
-        App.FakeAi.LlmDelay = TimeSpan.FromSeconds(3);
+        // Every paragraph is held, so the queue is certainly still busy when Cancel lands.
+        App.FakeAi.HoldLlmAfter(0);
 
         await GotoAppAsync("projects/native-activity-cancel/book?mode=speakers");
         await AttributeChapterAsync();
@@ -78,6 +81,7 @@ public class ActivityCentreTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
 
         // Queued work is dropped; only the paragraph already in flight can still resolve.
         await Expect(pill).ToHaveCountAsync(0, new() { Timeout = 10_000 });
+        App.FakeAi.ReleaseLlm();
         await App.WaitForQueueDrainAsync("/api/attribution/queue");
         var unknown = await Page.Locator(".r2m-item .r2m-speaker-chip--unknown").CountAsync();
         Assert.True(unknown >= 2, $"expected at least 2 paragraphs left unattributed after cancel, got {unknown}");

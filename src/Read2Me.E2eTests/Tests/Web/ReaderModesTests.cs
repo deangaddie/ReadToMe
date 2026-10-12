@@ -11,7 +11,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// from the tree's node menu (native-web 23) lands in the host and comes back through the reader's
 /// own receipt. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ReaderModesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]

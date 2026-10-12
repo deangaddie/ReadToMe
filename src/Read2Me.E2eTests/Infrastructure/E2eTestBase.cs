@@ -5,13 +5,15 @@ namespace Read2Me.E2eTests.Infrastructure;
 
 /// <summary>
 /// Base for tests that drive the web app on the in-proc host: a fresh browser context and page per
-/// test, over the collection's shared fixture, fakes and seeders. <see cref="GotoAppAsync"/> takes
-/// paths relative to the app's prefix, <c>/app</c>.
+/// test, over the class's own host (<see cref="E2eAppFixture"/> as a class fixture), fakes and
+/// seeders. Classes run in parallel, each on its own host; the tests inside a class run in order
+/// and share it. <see cref="GotoAppAsync"/> takes paths relative to the app's prefix, <c>/app</c>.
 /// <para>
 /// The host's web root is a throwaway directory, so the bundle the web build emitted into
-/// <c>src/Read2Me.App/wwwroot/app</c> is copied in before every test (other tests in the
-/// collection stage and remove stub bundles there). Without a built bundle the test is skipped with
-/// the command that produces one, never failed: the .NET build does not touch the front end.
+/// <c>src/Read2Me.App/wwwroot/app</c> is copied in before every navigation. Each host has its own
+/// web root, so no other class can disturb it; the copy is kept as a cheap guarantee. Without a
+/// built bundle the test is skipped with the command that produces one, never failed: the .NET
+/// build does not touch the front end.
 /// </para>
 /// <para>
 /// The browser comes from <see cref="PlaywrightFixture"/> (<c>R2M_E2E_BROWSER</c>); every class
@@ -23,7 +25,7 @@ namespace Read2Me.E2eTests.Infrastructure;
 /// Passing tests keep nothing. Open a trace with: npx playwright show-trace &lt;path&gt;
 /// </para>
 /// </summary>
-public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAsyncLifetime
+public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IClassFixture<E2eAppFixture>, IAsyncLifetime
 {
     /// <summary>The host prefix the web app is served under, and its bundle folder in the web root.</summary>
     private const string AppPrefix = "/app";
@@ -36,10 +38,10 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
 
     public async ValueTask InitializeAsync()
     {
-        // The app fixture is collection-shared and tests mutate its fakes (e.g. shutting the fake
-        // service down makes the AI pre-flight sheet block every later queue click, and leaves the
-        // shutdown in the op log a later test asserts on). Restore defaults so test order can't
-        // leak state.
+        // The host is shared by every test in this class and tests mutate its fakes (e.g. shutting
+        // the fake service down makes the AI pre-flight sheet block every later queue click, and
+        // leaves the shutdown in the op log a later test asserts on). Restore defaults so test
+        // order inside the class can't leak state.
         app.FakeControl.Reset();
         app.FakeAi.Reset();
 

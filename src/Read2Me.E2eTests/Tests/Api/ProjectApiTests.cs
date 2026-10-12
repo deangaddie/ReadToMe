@@ -10,8 +10,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// Vertical slice of the agent-facing API: project list/create/detail/delete,
 /// import, and the queue status polls an agent uses to track long-running work.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class ProjectApiTests(E2eAppFixture app)
+public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

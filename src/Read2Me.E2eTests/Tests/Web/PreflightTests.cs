@@ -12,7 +12,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// stages over the hub, closes the sheet and lets the action proceed — the paragraphs queue and
 /// resolve from the fake AI. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class PreflightTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]

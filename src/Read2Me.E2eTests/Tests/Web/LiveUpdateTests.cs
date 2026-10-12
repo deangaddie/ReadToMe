@@ -11,7 +11,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// The split is made the way a user makes it, from the second context's row menu (native-web 24);
 /// the reader on both sides reacts to the receipt alone. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
@@ -29,6 +28,11 @@ public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         var paragraphs = otherPage.Locator(".r2m-paragraph");
         await Expect(paragraphs).ToHaveCountAsync(3);
 
+        // The first browser's toast lives 3 s and can come and go while the second is still being
+        // checked, so watch for it from before the split.
+        var toast = Page.Locator(".r2m-toast--info", new() { HasText = "Book updated elsewhere" })
+            .WaitForAsync(new() { Timeout = 30_000 });
+
         // The split, sent from the second context's row menu.
         var menu = paragraphs.Nth(1).Locator(".r2m-paragraph__menu");
         await menu.HoverAsync();
@@ -41,7 +45,7 @@ public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
 
         // The first browser did nothing and sees the new chapter from the receipt alone.
         await Expect(Page.Locator(".book__chapter")).ToHaveTextAsync(["ch1", "From elsewhere"], new() { Timeout = 2_000 });
-        await Expect(Page.Locator(".r2m-toast--info")).ToHaveTextAsync("Book updated elsewhere");
+        await toast;
     }
 
     [Fact]

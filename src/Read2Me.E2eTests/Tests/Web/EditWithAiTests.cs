@@ -10,7 +10,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// retry, then one apply that the reader picks up from its own receipt and a fresh load confirms.
 /// Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     /// <summary>An LLM plan that hands every chapter title to the model to rewrite.</summary>
@@ -117,8 +116,9 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         var dialog = Page.Locator("r2m-edit-with-ai-dialog");
         await Expect(dialog.Locator(".edit")).ToHaveAttributeAsync("data-phase", "plan");
 
-        // Slow the batches down so the run is still going when Cancel is clicked.
-        App.FakeAi.LlmDelay = TimeSpan.FromMilliseconds(600);
+        // The first batch of 8 is answered and the second is held, so the run is still going, at a
+        // known point, when Cancel is clicked.
+        App.FakeAi.HoldLlmAfter(1);
         await dialog.Locator("[data-action='generate']").ClickAsync();
         await Expect(dialog.Locator("[data-testid='progress']")).ToContainTextAsync("8 of 24",
             new() { Timeout = 30_000 });
@@ -127,9 +127,8 @@ public class EditWithAiTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestB
         // The partial rows stay reviewable, and Apply is live for them.
         await Expect(dialog.Locator(".edit")).ToHaveAttributeAsync("data-phase", "review",
             new() { Timeout = 30_000 });
-        var rows = await dialog.Locator("[data-row]").CountAsync();
-        Assert.InRange(rows, 8, 16);
+        await Expect(dialog.Locator("[data-row]")).ToHaveCountAsync(8);
         await Expect(dialog.Locator("[data-action='apply']")).ToBeEnabledAsync();
-        await Expect(dialog.Locator("[data-action='apply']")).ToContainTextAsync($"Apply {rows} selected");
+        await Expect(dialog.Locator("[data-action='apply']")).ToContainTextAsync("Apply 8 selected");
     }
 }

@@ -11,7 +11,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// linked character, and deleting that character warns that narration goes back to the Narrator
 /// voice — a warning no other character's delete carries. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class NarratorCastTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private const string Folder = "web-narrator-cast";

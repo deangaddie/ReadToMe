@@ -11,7 +11,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// over the hub. The preflight sheet test lives in <c>PreflightTests</c>. Runs in Chromium and
 /// Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class AiServicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private ILocator Card(string name) => Page.Locator($"r2m-ai-services-page .services-page__card[data-service='{name}']");

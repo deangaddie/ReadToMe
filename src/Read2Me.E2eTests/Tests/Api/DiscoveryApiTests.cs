@@ -8,8 +8,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <summary>
 /// Character discovery over HTTP: one LLM call returns the cast, apply persists it.
 /// </summary>
-[Collection(E2eCollection.Name)]
-public class DiscoveryApiTests(E2eAppFixture app)
+public class DiscoveryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 

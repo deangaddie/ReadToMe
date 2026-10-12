@@ -9,7 +9,6 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// its own receipt. Splitting a chapter is the gesture that touches all of it — the tree, the
 /// chapter headers and the rows. Runs in Chromium and Firefox.
 /// </summary>
-[Collection(E2eCollection.Name)]
 public class ReaderEditingTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     [Fact]
