@@ -104,6 +104,8 @@ export class AppShell extends R2mElement {
     const narrow = this.narrow();
     const expanded = narrow || this.rail.expanded();
     const connection = this.live.state();
+    // Browser tests wait on this rather than on a transport detail like the WebSocket.
+    this.setAttribute('data-live-state', connection);
     const connectionLabel = this.live.statusLabel();
     const preference = this.theme.preference();
     return html`

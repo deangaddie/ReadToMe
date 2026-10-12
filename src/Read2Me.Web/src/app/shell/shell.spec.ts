@@ -203,6 +203,14 @@ describe('app-root', () => {
     expect(conn?.getAttribute('aria-label')).toBe('Lost');
   });
 
+  it('exposes the live connection state on its host for tests to wait on', async () => {
+    const { shell } = await mount('projects');
+    expect(shell.getAttribute('data-live-state')).toBe('connected');
+    live.state.set('reconnecting');
+    await settle();
+    expect(shell.getAttribute('data-live-state')).toBe('reconnecting');
+  });
+
   it('starts with the activity drawer closed and mounts it only while open', async () => {
     const { shell } = await mount('projects');
     expect(shell.drawerOpen()).toBe(false);
