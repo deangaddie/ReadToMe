@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { ConfirmOptions, TextPromptOptions } from '@app/ui/dialogs';
-import { type MenuDialogs, commandFor, displayName } from './node-menu-commands';
+import { CUE_HINT, type MenuDialogs, commandFor, displayName } from './node-menu-commands';
 import type { NodeMenuKind, NodeMenuTarget } from './node-menu-entries';
 
 function target(kind: NodeMenuKind, overrides: Partial<NodeMenuTarget> = {}): NodeMenuTarget {
@@ -52,6 +52,53 @@ describe('commandFor', () => {
 
     it('sends nothing when unchanged', async () => {
       expect<unknown>(await commandFor('edit-text', target('item'), dialogs({ text: 'Old' }).fake)).toBeNull();
+    });
+  });
+
+  describe('delivery cue (delivery-cue-editing 03)', () => {
+    it('add opens a single-line, optional prompt with the hint and posts the typed cue', async () => {
+      const { fake, asked } = dialogs({ text: 'whispered' });
+      const command = await commandFor('add-cue', target('item', { cue: null }), fake);
+      expect(asked.text[0]).toMatchObject({ title: 'Add delivery cue', initial: '', hint: CUE_HINT });
+      expect(asked.text[0]!.multiline).toBeFalsy();
+      expect(asked.text[0]!.required).toBeFalsy();
+      expect<unknown>(command).toEqual({ type: 'SetItemDeliveryCue', itemId: 'n1', cue: 'whispered' });
+    });
+
+    it('edit is pre-filled with the current cue and posts the new one', async () => {
+      const { fake, asked } = dialogs({ text: 'shouting' });
+      const command = await commandFor('edit-cue', target('item', { cue: 'whispered' }), fake);
+      expect(asked.text[0]).toMatchObject({ title: 'Edit delivery cue', initial: 'whispered', hint: CUE_HINT });
+      expect(asked.text[0]!.required).toBeFalsy();
+      expect<unknown>(command).toEqual({ type: 'SetItemDeliveryCue', itemId: 'n1', cue: 'shouting' });
+    });
+
+    it('saving empty removes the cue', async () => {
+      const cued = target('item', { cue: 'whispered' });
+      expect<unknown>(await commandFor('edit-cue', cued, dialogs({ text: '' }).fake)).toEqual({
+        type: 'SetItemDeliveryCue',
+        itemId: 'n1',
+        cue: null,
+      });
+    });
+
+    it('sends nothing when cancelled, unchanged, or an add is saved empty', async () => {
+      const cued = target('item', { cue: 'whispered' });
+      expect<unknown>(await commandFor('edit-cue', cued, dialogs({ text: null }).fake)).toBeNull();
+      expect<unknown>(await commandFor('edit-cue', cued, dialogs({ text: 'whispered' }).fake)).toBeNull();
+      expect<unknown>(await commandFor('add-cue', target('item'), dialogs({ text: null }).fake)).toBeNull();
+      expect<unknown>(await commandFor('add-cue', target('item'), dialogs({ text: '' }).fake)).toBeNull();
+    });
+
+    it('remove posts no cue without asking', async () => {
+      const { fake, asked } = dialogs();
+      expect<unknown>(await commandFor('remove-cue', target('item', { cue: 'whispered' }), fake)).toEqual({
+        type: 'SetItemDeliveryCue',
+        itemId: 'n1',
+        cue: null,
+      });
+      expect(asked.text).toEqual([]);
+      expect(asked.confirm).toEqual([]);
     });
   });
 

@@ -106,6 +106,7 @@ describe('r2m-node-menu', () => {
     await open(trigger);
     expect(entries()).toEqual([
       'edit-text',
+      'add-cue',
       'split',
       'merge-previous',
       'insert-before',

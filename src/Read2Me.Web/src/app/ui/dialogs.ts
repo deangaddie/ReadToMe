@@ -61,7 +61,11 @@ export interface TextPromptOptions {
   required?: boolean;
   placeholder?: string;
   confirmLabel?: string;
+  /** Static guidance shown under the field, which also describes the control. */
+  hint?: string;
 }
+
+const PROMPT_HINT_ID = 'r2m-text-prompt-hint';
 
 /** One-field text prompt; resolves the trimmed text, or null on Cancel. */
 export class TextPromptDialog extends R2mElement {
@@ -76,6 +80,7 @@ export class TextPromptDialog extends R2mElement {
   protected template() {
     const d = this.data;
     const onInput = (e: Event) => this.#value.set((e.target as HTMLInputElement).value);
+    const describedBy = d.hint ? PROMPT_HINT_ID : nothing;
     return html`
       <h2 class="r2m-dialog__title">${d.title}</h2>
       <div class="r2m-dialog__content">
@@ -87,6 +92,7 @@ export class TextPromptDialog extends R2mElement {
                   autofocus
                   class="r2m-text-prompt-dialog__input"
                   rows="3"
+                  aria-describedby=${describedBy}
                   placeholder=${d.placeholder ?? ''}
                   .value=${this.#value()}
                   @input=${onInput}
@@ -95,6 +101,7 @@ export class TextPromptDialog extends R2mElement {
                   autofocus
                   type="text"
                   class="r2m-text-prompt-dialog__input"
+                  aria-describedby=${describedBy}
                   placeholder=${d.placeholder ?? ''}
                   .value=${this.#value()}
                   @input=${onInput}
@@ -102,6 +109,7 @@ export class TextPromptDialog extends R2mElement {
                 />`
           }
         </label>
+        ${d.hint ? html`<p class="r2m-field__hint" id=${PROMPT_HINT_ID}>${d.hint}</p>` : nothing}
       </div>
       <div class="r2m-dialog__actions">
         <button

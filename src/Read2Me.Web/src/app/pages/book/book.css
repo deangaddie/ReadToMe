@@ -280,8 +280,22 @@
     font-size: var(--r2m-text-sm);
     color: var(--r2m-text-muted);
   }
+  /* The cue is a button: clicking it edits it (delivery-cue-editing 03). */
   .r2m-item__instructions {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
     font-style: italic;
+    text-align: start;
+    cursor: pointer;
+  }
+  .r2m-item__instructions:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  .r2m-item__instructions:disabled {
+    cursor: default;
   }
   .r2m-item__chips {
     display: inline-flex;

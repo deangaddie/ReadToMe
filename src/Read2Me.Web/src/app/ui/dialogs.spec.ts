@@ -130,6 +130,19 @@ describe('PromptService', () => {
     expect(confirm.disabled).toBe(false);
   });
 
+  it('a hint shows under the field and describes the input', async () => {
+    const { input } = await openPrompt({ title: 'Cue', hint: 'Followed by Breeze.' });
+    const hint = document.querySelector('.r2m-field__hint')!;
+    expect(hint.textContent).toBe('Followed by Breeze.');
+    expect(input.getAttribute('aria-describedby')).toBe(hint.id);
+  });
+
+  it('no hint, no hint element', async () => {
+    const { input } = await openPrompt({ title: 'Rename' });
+    expect(document.querySelector('.r2m-field__hint')).toBeNull();
+    expect(input.hasAttribute('aria-describedby')).toBe(false);
+  });
+
   it('a multiline prompt uses a textarea with the placeholder and confirm label', async () => {
     const { input, confirm } = await openPrompt({
       title: 'Hint',

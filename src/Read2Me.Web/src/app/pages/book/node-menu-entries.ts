@@ -17,8 +17,10 @@ export interface NodeMenuTarget {
   /** Position among siblings: merge entries hide at the ends. */
   isFirst: boolean;
   isLast: boolean;
-  /** Items only: a pause item anchors no item insert. */
+  /** Items only: a pause item anchors no item insert and has no delivery cue. */
   isPause?: boolean;
+  /** Items only: the item's delivery cue, which decides Add versus Edit/Remove; null when none. */
+  cue?: string | null;
   /**
    * Tree nodes only: which selection the reader is in, so the shortcuts on offer are the
    * paragraph ones (ticket 12: select unprocessed, attribute) or the item ones (ticket 13: select
@@ -49,6 +51,9 @@ export type MenuEntryId =
   | ActionEntryId
   | 'edit-title'
   | 'edit-text'
+  | 'add-cue'
+  | 'edit-cue'
+  | 'remove-cue'
   | 'split'
   | 'merge-previous'
   | 'merge-next'
@@ -143,6 +148,7 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
     entries.push({ id: 'edit-title', label: 'Edit title', icon: 'edit', group: 'edit' });
   } else if (kind === 'item') {
     entries.push({ id: 'edit-text', label: 'Edit text', icon: 'edit', group: 'edit' });
+    if (!target.isPause) entries.push(...cueEntries(target.cue));
   } else if (kind === 'paragraph' && target.narrationOnly) {
     // One unquoted line inside an otherwise quoted chapter.
     entries.push(RELEASE_ENTRY);
@@ -193,6 +199,16 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
     destructive: true,
   });
   return entries;
+}
+
+/** Add on an item without a delivery cue; Edit and Remove on one with a cue. */
+function cueEntries(cue: string | null | undefined): MenuEntry[] {
+  return cue
+    ? [
+        { id: 'edit-cue', label: 'Edit delivery cue…', icon: 'record_voice_over', group: 'edit' },
+        { id: 'remove-cue', label: 'Remove delivery cue', icon: 'backspace', group: 'edit' },
+      ]
+    : [{ id: 'add-cue', label: 'Add delivery cue…', icon: 'record_voice_over', group: 'edit' }];
 }
 
 /** The merge direction an entry names, or null for any other entry. */

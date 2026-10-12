@@ -75,6 +75,28 @@ export function menuLabel(target: NodeMenuTarget): string {
 }
 
 /**
+ * Runs one command entry for `target` as the menu would: asks what the entry needs through the
+ * shared dialogs, then posts the command through the {@link BookEditor} above `from`. Also how a
+ * row runs an entry without the menu (clicking a delivery cue edits it). Nothing while the editor
+ * is locked.
+ */
+export async function runMenuEntry(
+  entry: MenuEntryId,
+  target: NodeMenuTarget,
+  from: Element,
+): Promise<void> {
+  const editor = use(BookEditor, from);
+  if (editor.locked()) return;
+  const prompt = use(PromptService, from);
+  const confirm = use(ConfirmService, from);
+  const command = await commandFor(entry, target, {
+    text: (o) => prompt.text(o),
+    confirm: (o) => confirm.confirm(o),
+  });
+  if (command) await editor.run(command);
+}
+
+/**
  * The node menu (ticket 11, design §6.3): one element for every level of the book, the entry set
  * decided by {@link menuEntries} from the target's kind and position. A chosen entry runs its
  * dialog flow and posts the command through {@link BookEditor}; nothing here patches the rows.
@@ -88,8 +110,6 @@ export function menuLabel(target: NodeMenuTarget): string {
  */
 export class NodeMenu extends R2mElement {
   private editor!: BookEditor;
-  private readonly prompt = use(PromptService);
-  private readonly confirm = use(ConfirmService);
 
   readonly #request = signal<NodeMenuRequest | null>(null);
   readonly #sub = signal<PauseSide | null>(null);
@@ -255,11 +275,7 @@ export class NodeMenu extends R2mElement {
       request.onAction?.(id);
       return;
     }
-    const command = await commandFor(id, request.target, {
-      text: (o) => this.prompt.text(o),
-      confirm: (o) => this.confirm.confirm(o),
-    });
-    if (command) await this.editor.run(command);
+    await runMenuEntry(id, request.target, this);
   }
 
   #openSub(side: PauseSide, trigger: HTMLElement): void {
