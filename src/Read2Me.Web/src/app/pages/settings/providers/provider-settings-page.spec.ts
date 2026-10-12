@@ -429,6 +429,31 @@ describe('r2m-provider-settings-page', () => {
       expect(save.disabled).toBe(false);
     });
 
+    it('is busy while a save is in flight and settles when it lands', async () => {
+      const { page } = await render('voice-design', 0);
+      const card = page.querySelector('r2m-voice-design-sample-text')!;
+      expect(card.hasAttribute('aria-busy')).toBe(false);
+
+      await type(page, '[data-field="sampleText"]', 'My own sentence.');
+      let land!: () => void;
+      api.on(
+        'PUT',
+        '/api/settings/voice-design/sample-text',
+        () =>
+          new Promise((resolve) => {
+            land = () =>
+              resolve({ text: 'My own sentence.', default: 'The default sentence.', maxLength: 40 });
+          }),
+      );
+      page.querySelector<HTMLButtonElement>('[data-action="save-sample-text"]')!.click();
+      await flush(page);
+      expect(card.getAttribute('aria-busy')).toBe('true');
+
+      land();
+      await flush(page);
+      expect(card.hasAttribute('aria-busy')).toBe(false);
+    });
+
     it('counts the draft against the host’s cap and will not save past it', async () => {
       const { page } = await render('voice-design', 0);
       const save = page.querySelector<HTMLButtonElement>('[data-action="save-sample-text"]')!;

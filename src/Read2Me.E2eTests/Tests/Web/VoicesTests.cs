@@ -126,8 +126,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         await Expect(gen).ToHaveCountAsync(0, new() { Timeout = 15_000 });
         var promptField = card.Locator("textarea[aria-label='Voice description prompt']");
         await Expect(promptField).ToHaveValueAsync("A warm, unhurried alto with a faint Scottish lilt.");
-        await card.Locator("[data-action='save-prompt']").ClickAsync();
-        await Expect(card.Locator("[data-action='save-prompt']")).ToBeDisabledAsync();
+        await SaveAndSettleAsync(card, card.Locator("[data-action='save-prompt']"));
         Assert.Equal("A warm, unhurried alto with a faint Scottish lilt.",
             (await VoiceAsync("web-voices-life", voiceId)).GetProperty("designPrompt").GetString());
 
@@ -174,8 +173,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         var transcriptField = card.Locator("textarea[aria-label='Transcript']");
         await Expect(card.Locator("[data-action='save-transcript']")).ToBeDisabledAsync();
         await transcriptField.FillAsync("hand-written transcript");
-        await card.Locator("[data-action='save-transcript']").ClickAsync();
-        await Expect(card.Locator("[data-action='save-transcript']")).ToBeDisabledAsync();
+        await SaveAndSettleAsync(card, card.Locator("[data-action='save-transcript']"));
         Assert.Equal("hand-written transcript", (await VoiceAsync("web-voices-life", voiceId)).GetProperty("transcript").GetString());
 
         await card.Locator("[data-action='transcribe']").ClickAsync();
@@ -207,9 +205,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
 
         await cfg.Locator(".r2m-settings-form__number").FillAsync("3.5");
         await Expect(cfg.Locator(".r2m-settings-form__dot--on")).ToHaveCountAsync(1);
-        await tts.Locator("[data-action='save-override']").ClickAsync();
-        await Expect(tts.Locator("[data-action='save-override']")).ToBeDisabledAsync();
-        await Expect(card).Not.ToHaveAttributeAsync("aria-busy", "true");
+        await SaveAndSettleAsync(card, tts.Locator("[data-action='save-override']"));
         Assert.Equal("{\"cfg_value\":3.5}",
             (await VoiceAsync("web-voices-override", voiceId.ToString())).GetProperty("ttsSettingsOverrideJson").GetString());
 
@@ -227,9 +223,7 @@ public class VoicesTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(
         await cfg.Locator(".r2m-settings-form__reset").ClickAsync();
         await Expect(cfg.Locator(".r2m-settings-form__dot--on")).ToHaveCountAsync(0);
         await Expect(cfg.Locator(".r2m-settings-form__number")).ToHaveValueAsync("2");
-        await tts.Locator("[data-action='save-override']").ClickAsync();
-        await Expect(tts.Locator("[data-action='save-override']")).ToBeDisabledAsync();
-        await Expect(card).Not.ToHaveAttributeAsync("aria-busy", "true");
+        await SaveAndSettleAsync(card, tts.Locator("[data-action='save-override']"));
         Assert.Equal(JsonValueKind.Null,
             (await VoiceAsync("web-voices-override", voiceId.ToString())).GetProperty("ttsSettingsOverrideJson").ValueKind);
     }

@@ -51,6 +51,9 @@ export class VoiceDesignSampleTextCard extends R2mElement {
     const saving = this.saving();
     const error = this.error();
     const over = this.overLimit();
+    // A save is in flight: Save is off until it lands.
+    if (saving) this.setAttribute('aria-busy', 'true');
+    else this.removeAttribute('aria-busy');
     return html`
       <h2 class="sample__title">Sample text</h2>
       <p class="sample__note">The sentence every designed voice speaks.</p>
