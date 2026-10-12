@@ -21,7 +21,7 @@ Pass -Configuration Release to match CI exactly.
 
 Pass -SkipInstall to skip `bun install` when node_modules is already current (local loops).
 
-When an E2E stage fails, the traces, screenshots and videos its failing tests left under the test bin's
+When an E2E stage fails, the traces and screenshots its failing tests left under the test bin's
 artifacts/ folder are copied to .artifacts/e2e/<yyyyMMdd-HHmmss>-<browser>/ at the repo root (git-ignored), and
 the path is printed. The copies outlive later test runs and builds; only the newest 10 run folders are kept.
 
@@ -110,7 +110,8 @@ function Install-MissingPlaywrightBrowsers {
 
 # Copies the artifact files a failed E2E run wrote to a timestamped run folder under .artifacts/e2e, keeping each
 # test's folder name, then prunes to the newest $keptRunLimit run folders. Only files written since the run started
-# go: a test that fails again reuses its folder, and an earlier failure's video (random name) is still in it.
+# go: only a passing test deletes its folder, so one that failed in an earlier run and didn't run this time (the
+# Firefox stage runs only the browser tests) still has its old trace and screenshot there.
 function Save-E2eArtifacts {
     param([string]$Browser, [datetime]$Since)
     $runFiles = @(Get-ChildItem $e2eBinArtifacts -File -Recurse -ErrorAction SilentlyContinue |
@@ -125,7 +126,7 @@ function Save-E2eArtifacts {
         New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
         Copy-Item $file.FullName $target -Force
     }
-    Write-Host "E2E failure artifacts (trace/screenshot/video) kept in: $run" -ForegroundColor Yellow
+    Write-Host "E2E failure artifacts (trace/screenshot) kept in: $run" -ForegroundColor Yellow
     # Run folders are named by start time, so name order is age order. Anything else in there is left alone.
     Get-ChildItem $keptE2eRuns -Directory | Where-Object Name -match '^\d{8}-\d{6}-' |
         Sort-Object Name -Descending | Select-Object -Skip $keptRunLimit | Remove-Item -Recurse -Force

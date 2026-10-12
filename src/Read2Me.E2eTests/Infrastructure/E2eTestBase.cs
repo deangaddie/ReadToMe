@@ -18,7 +18,7 @@ namespace Read2Me.E2eTests.Infrastructure;
 /// runs in Chromium and Firefox.
 /// </para>
 /// <para>
-/// On failure, saves a Playwright trace (.zip), a final screenshot, and the session video under
+/// On failure, saves a Playwright trace (.zip) and a final screenshot under
 /// artifacts/&lt;test-name&gt;/ (gitignored — see repo .gitignore's generic "artifacts/" rule).
 /// Passing tests keep nothing. Open a trace with: npx playwright show-trace &lt;path&gt;
 /// </para>
@@ -52,8 +52,6 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
         {
             ViewportSize = new ViewportSize { Width = 1440, Height = 900 },
             BaseURL = app.BaseUrl,
-            RecordVideoDir = _artifactsDir,
-            RecordVideoSize = new RecordVideoSize { Width = 1440, Height = 900 },
         });
         await _context.Tracing.StartAsync(new TracingStartOptions
         {
@@ -78,13 +76,13 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : IAs
             {
                 Path = Path.Combine(_artifactsDir, "trace.zip"),
             });
-            await _context.CloseAsync(); // flushes the video file to RecordVideoDir
-            Console.WriteLine($"E2E artifacts (trace/screenshot/video) saved to: {_artifactsDir}");
+            await _context.CloseAsync();
+            Console.WriteLine($"E2E artifacts (trace/screenshot) saved to: {_artifactsDir}");
         }
         else
         {
             await _context.Tracing.StopAsync(); // no Path => discarded
-            await _context.CloseAsync(); // finalizes (and discards) the video file
+            await _context.CloseAsync();
             Directory.Delete(_artifactsDir, recursive: true);
         }
     }
