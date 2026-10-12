@@ -20,6 +20,10 @@ Pass -Configuration Release to match CI exactly.
 
 Pass -SkipInstall to skip `bun install` when node_modules is already current (local loops).
 
+When an E2E stage fails, the traces, screenshots and videos its failing tests left under the test bin's
+artifacts/ folder are copied to .artifacts/e2e/<yyyyMMdd-HHmmss>-<browser>/ at the repo root (git-ignored), and
+the path is printed. The copies outlive later test runs and builds; only the newest 10 run folders are kept.
+
 .EXAMPLE
 pwsh scripts/check.ps1                 # before opening a PR
 
@@ -42,6 +46,9 @@ $e2eTests = Join-Path $repoRoot 'src/Read2Me.E2eTests'
 $e2eBin = Join-Path $e2eTests "bin/$Configuration/net10.0"
 $playwrightDriver = Join-Path $e2eBin 'playwright.ps1'
 $browsersManifest = Join-Path $e2eBin '.playwright/package/browsers.json'
+$e2eBinArtifacts = Join-Path $e2eBin 'artifacts'
+$keptE2eRuns = Join-Path $repoRoot '.artifacts/e2e'
+$keptRunLimit = 10
 
 $stages = @()
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -100,15 +107,47 @@ function Install-MissingPlaywrightBrowsers {
     if ($LASTEXITCODE -ne 0) { throw "playwright install $($missing -join ' ') failed ($LASTEXITCODE)" }
 }
 
+# Copies the artifact files a failed E2E run wrote to a timestamped run folder under .artifacts/e2e, keeping each
+# test's folder name, then prunes to the newest $keptRunLimit run folders. Only files written since the run started
+# go: a test that fails again reuses its folder, and an earlier failure's video (random name) is still in it.
+function Save-E2eArtifacts {
+    param([string]$Browser, [datetime]$Since)
+    $runFiles = @(Get-ChildItem $e2eBinArtifacts -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object LastWriteTime -ge $Since)
+    if ($runFiles.Count -eq 0) {
+        Write-Host "No E2E artifacts to keep: nothing under $e2eBinArtifacts from this run." -ForegroundColor Yellow
+        return
+    }
+    $run = Join-Path $keptE2eRuns "$($Since.ToString('yyyyMMdd-HHmmss'))-$Browser"
+    foreach ($file in $runFiles) {
+        $target = Join-Path $run ([System.IO.Path]::GetRelativePath($e2eBinArtifacts, $file.FullName))
+        New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+        Copy-Item $file.FullName $target -Force
+    }
+    Write-Host "E2E failure artifacts (trace/screenshot/video) kept in: $run" -ForegroundColor Yellow
+    # Run folders are named by start time, so name order is age order. Anything else in there is left alone.
+    Get-ChildItem $keptE2eRuns -Directory | Where-Object Name -match '^\d{8}-\d{6}-' |
+        Sort-Object Name -Descending | Select-Object -Skip $keptRunLimit | Remove-Item -Recurse -Force
+}
+
 function Invoke-E2e {
     param([string]$Browser)
     $previous = $env:R2M_E2E_BROWSER
+    $started = Get-Date
+    $exitCode = 0
     try {
         $env:R2M_E2E_BROWSER = $Browser
         dotnet test $e2eTests --configuration $Configuration --no-build
+        $exitCode = $LASTEXITCODE
     }
     finally {
         $env:R2M_E2E_BROWSER = $previous
+    }
+    if ($exitCode -ne 0) {
+        # A failed save only warns, so the stage still fails on the test exit code, not on the copy.
+        try { Save-E2eArtifacts -Browser $Browser -Since $started }
+        catch { Write-Host "Could not keep the E2E artifacts: $($_.Exception.Message)" -ForegroundColor Yellow }
+        $global:LASTEXITCODE = $exitCode
     }
 }
 
