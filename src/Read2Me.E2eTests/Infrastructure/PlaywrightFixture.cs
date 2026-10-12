@@ -6,8 +6,8 @@ namespace Read2Me.E2eTests.Infrastructure;
 
 /// <summary>
 /// One Playwright + browser instance for the whole test assembly. <c>R2M_E2E_BROWSER</c> picks
-/// <c>chromium</c> (the default) or <c>firefox</c>; the suite runs once per browser, so a PR gate
-/// invokes <c>dotnet test</c> twice.
+/// <c>chromium</c> (the default) or <c>firefox</c>; a PR gate invokes <c>dotnet test</c> once per browser:
+/// the whole suite in Chromium, then only the browser tests (<c>Tests/Web</c>) in Firefox.
 /// </summary>
 public sealed class PlaywrightFixture : IAsyncLifetime
 {
