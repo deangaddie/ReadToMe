@@ -248,6 +248,28 @@ describe('r2m-book-page', () => {
     expect(ids()).toEqual(['v1', 'v2', 'c3']);
   });
 
+  it('an opened chapter stays current while the list moves on its own, until the reader scrolls', async () => {
+    const { page } = await start('projects/dune/book?chapter=c2');
+    const list = page.querySelector('r2m-measured-list')!;
+    const top = (type: string, index: number) =>
+      list.dispatchEvent(new CustomEvent(type, { detail: index, bubbles: true }));
+    await page.rendered();
+    expect(page.getAttribute('data-current-chapter')).toBe('c2');
+
+    // c1 prepended above c2, and the short c2 cannot reach the top: c1's header is on top.
+    top('r2m-top-row', 0);
+    await page.rendered();
+    expect(page.getAttribute('data-current-chapter')).toBe('c2');
+
+    top('r2m-reader-scroll', 0);
+    await page.rendered();
+    expect(page.getAttribute('data-current-chapter')).toBe('c1');
+    // From then on the top row leads again.
+    top('r2m-top-row', 3);
+    await page.rendered();
+    expect(page.getAttribute('data-current-chapter')).toBe('c2');
+  });
+
   it('?chapter= opens at that chapter instead of the first', async () => {
     const { page, store } = await start('projects/dune/book?chapter=c2');
     expect(store.window()).toContain('c2');

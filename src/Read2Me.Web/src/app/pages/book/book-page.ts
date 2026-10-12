@@ -151,6 +151,13 @@ export class BookPage extends R2mElement {
 
   /** The chapter last opened from a link or the tree, until the viewport has scrolled it to the top. */
   private scrollTarget: string | null = null;
+  /**
+   * The chapter last opened from a link or the tree, held current until the reader scrolls: the
+   * loads and anchoring that follow an open move the top row on their own, and when the chapters
+   * after a short one cannot fill the viewport, the top row is never that chapter at all. Outlives
+   * {@link scrollTarget}, which clears once the scroll has landed.
+   */
+  private openedChapter: string | null = null;
   private rows = computed<ReaderRow[]>(() => []);
   private ctx = computed<RowContext>(() => EMPTY_CONTEXT);
   private noContent = computed(() => false);
@@ -376,6 +383,7 @@ export class BookPage extends R2mElement {
                   .row=${this.renderRow}
                   .items=${rows}
                   @r2m-top-row=${this.onTopRow}
+                  @r2m-reader-scroll=${this.onReaderScroll}
                 ></r2m-measured-list>
               </section>
             </div>`
@@ -572,8 +580,15 @@ export class BookPage extends R2mElement {
   }
 
   private readonly onTopRow = (e: Event): void => {
+    if (this.openedChapter) return;
     const row = this.rows()[(e as CustomEvent<number>).detail];
     if (row) this.store.setCurrentChapter(row.chapterId);
+  };
+
+  /** The reader took over from an open: the chapter at the top is current again. */
+  private readonly onReaderScroll = (e: Event): void => {
+    this.openedChapter = null;
+    this.onTopRow(e);
   };
 
   private readonly refresh = (): void => {
@@ -802,6 +817,7 @@ export class BookPage extends R2mElement {
   }
 
   private async start(folder: string): Promise<void> {
+    this.openedChapter = null; // another project's chapter
     await this.store.open(folder);
     if (this.noContent()) return;
     // `?chapter=` wins over whatever the window holds: a reload may have opened the first chapter
@@ -817,6 +833,7 @@ export class BookPage extends R2mElement {
       const list = this.list();
       if (index < 0 || !list) return;
       this.scrollTarget = chapterId;
+      this.openedChapter = chapterId;
       list.scrollToIndex(index);
       // The chapter before is needed to scroll up from the top of this one; the edge check loads
       // it once that can keep this chapter in place.

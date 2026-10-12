@@ -57,7 +57,9 @@ interface Range {
  * by row key and estimated for the rest. Whatever changes — rows prepended, rows above the fold
  * re-measured — the row at the top of the viewport stays where the reader sees it.
  *
- * Set `key` and `row` before `items`. Emits `r2m-top-row` (detail: index) when the top row changes.
+ * Set `key` and `row` before `items`. Emits `r2m-top-row` (detail: index) when the top row changes,
+ * and then `r2m-reader-scroll` (detail: the top row's index) when the reader scrolled it, as opposed
+ * to the list scrolling itself to keep a row in place or to reach one.
  */
 export class MeasuredList<T = unknown> extends R2mElement {
   key: (item: T) => string = String;
@@ -97,12 +99,15 @@ export class MeasuredList<T = unknown> extends R2mElement {
 
   protected override connected(): void {
     const onScroll = () => {
-      if (this.intendedTop !== null && Math.abs(this.intendedTop - this.scrollTop) >= 1) {
+      const byReader =
+        this.intendedTop !== null && Math.abs(this.intendedTop - this.scrollTop) >= 1;
+      if (byReader) {
         // The reader scrolled: neither the intended offset nor a pending anchor describes where they are.
         this.intendedTop = null;
         this.pendingAnchor = null;
       }
       this.update();
+      if (byReader) this.emit('r2m-reader-scroll', this.lastTop);
     };
     this.addEventListener('scroll', onScroll, { passive: true });
     this.resize = new ResizeObserver(() => this.measure());
@@ -210,8 +215,22 @@ export class MeasuredList<T = unknown> extends R2mElement {
   scrollToOffset(top: number, behavior: ScrollBehavior = 'auto'): void {
     this.pendingAnchor = null;
     this.applyTotalSize();
-    this.intendedTop = top;
+    this.intendedTop = this.reachable(top);
     this.scrollTo({ top, behavior });
+  }
+
+  /** The row at the top of the viewport, -1 while the list is empty. */
+  get topIndex(): number {
+    return this.lastTop;
+  }
+
+  /**
+   * Where a scroll to `top` stops: the browser holds `scrollTop` at the end of the content, and a
+   * scroll the list made must not read as the reader's when it stopped short. The spacer is the
+   * only content in flow, so the end is the sized total.
+   */
+  private reachable(top: number): number {
+    return Math.max(0, Math.min(top, this.index.total() - this.clientHeight));
   }
 
   /**
@@ -256,7 +275,7 @@ export class MeasuredList<T = unknown> extends R2mElement {
     const target = this.index.offsetOf(i) + anchor.delta;
     if (Math.abs(target - this.scrollOffsetIntended()) < 0.5) return;
     this.applyTotalSize();
-    this.intendedTop = target;
+    this.intendedTop = this.reachable(target);
     this.scrollTop = target;
   }
 
