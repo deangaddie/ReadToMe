@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
 import type { ParagraphItemDto } from '@app/api';
 import { provide } from '@app/core/services';
-import { PromptService, type TextPromptOptions } from '@app/ui/dialogs';
+import { type ConfirmOptions, ConfirmService, PromptService, type TextPromptOptions } from '@app/ui/dialogs';
 import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
 import { itemRow } from './item-row';
@@ -67,6 +67,7 @@ let assigner: { assign: ReturnType<typeof mock>; createAndAssign: ReturnType<typ
 let generator: { retry: ReturnType<typeof mock>; dismissReview: ReturnType<typeof mock> };
 let editor: { locked: () => boolean; run: ReturnType<typeof mock> };
 let prompt: { text: ReturnType<typeof mock>; answer: string | null };
+let confirm: { confirm: ReturnType<typeof mock> };
 
 async function mount(context: RowContext, row: ParagraphItemDto) {
   const host = document.createElement('div');
@@ -75,6 +76,7 @@ async function mount(context: RowContext, row: ParagraphItemDto) {
   provide(host, AudioGenerator, generator as unknown as AudioGenerator);
   provide(host, BookEditor, editor as unknown as BookEditor);
   provide(host, PromptService, prompt as unknown as PromptService);
+  provide(host, ConfirmService, confirm as unknown as ConfirmService);
   document.body.append(host);
   render(
     itemRow(row, { paragraphId: 'p1', chapterId: 'c1' }, context, { isFirst: true, isLast: true }),
@@ -95,6 +97,7 @@ beforeEach(() => {
   assigner = { assign: mock(async () => undefined), createAndAssign: mock(async () => undefined) };
   generator = { retry: mock(async () => true), dismissReview: mock(async () => true) };
   editor = { locked: () => false, run: mock(async () => true) };
+  confirm = { confirm: mock(async (_options: ConfirmOptions) => false) };
   prompt = {
     answer: 'shouting',
     text: mock(async (_options: TextPromptOptions) => prompt.answer),
@@ -287,7 +290,22 @@ describe('itemRow (speakers)', () => {
         opened.push((e as CustomEvent<NodeMenuRequest>).detail),
       );
       el.querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!.click();
-      expect(opened[0]!.target).toMatchObject({ kind: 'item', id: 'c', cue: 'whispered' });
+      expect(opened[0]!.target).toMatchObject({ kind: 'item', id: 'c', cue: 'whispered', hasAudio: false });
+    });
+
+    it('clicking the cue of an item with audio asks before discarding it (delivery-cue-editing 04)', async () => {
+      const el = await mount(cueCtx(), { ...cued, audioFileName: 'audio/c.wav' });
+      cueButton(el)!.click();
+      await Bun.sleep(0);
+      expect(confirm.confirm).toHaveBeenCalledTimes(1);
+      expect(editor.run).not.toHaveBeenCalled();
+
+      confirm.confirm.mockImplementation(async () => true);
+      cueButton(el)!.click();
+      await Bun.sleep(0);
+      expect(editor.run.mock.calls).toEqual([
+        [{ type: 'SetItemDeliveryCue', itemId: 'c', cue: 'shouting' }],
+      ]);
     });
   });
 });

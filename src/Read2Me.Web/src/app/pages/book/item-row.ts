@@ -64,6 +64,7 @@ export function itemRow(
     id: item.id,
     text: item.text,
     cue: item.voiceInstructions,
+    hasAudio: !!item.audioFileName,
     ...position,
   };
   const editingBlocked = busy || paragraphBusy || ctx.locked;

@@ -102,6 +102,51 @@ describe('commandFor', () => {
     });
   });
 
+  describe('delivery cue on an item with audio (delivery-cue-editing 04)', () => {
+    const voiced = (cue: string | null) => target('item', { cue, hasAudio: true });
+
+    it.each([
+      ['add-cue', null, 'whispered', 'Add delivery cue', 'Adding a delivery cue', 'Add'],
+      ['edit-cue', 'whispered', 'shouting', 'Change delivery cue', 'Changing the delivery cue', 'Change'],
+      ['edit-cue', 'whispered', '', 'Remove delivery cue', 'Removing the delivery cue', 'Remove'],
+      ['remove-cue', 'whispered', null, 'Remove delivery cue', 'Removing the delivery cue', 'Remove'],
+    ] as const)('%s (%p → %p) asks first and posts on confirm', async (entry, cue, typed, title, lead, label) => {
+      const { fake, asked } = dialogs({ text: typed, confirm: true });
+      const command = await commandFor(entry, voiced(cue), fake);
+      expect(asked.confirm).toEqual([
+        {
+          title,
+          message: `${lead} discards this item's audio.`,
+          confirmLabel: label,
+          destructive: true,
+        },
+      ]);
+      expect<unknown>(command).toEqual({ type: 'SetItemDeliveryCue', itemId: 'n1', cue: typed || null });
+    });
+
+    it('cancelling the confirm sends nothing', async () => {
+      expect<unknown>(await commandFor('remove-cue', voiced('whispered'), dialogs().fake)).toBeNull();
+      expect<unknown>(
+        await commandFor('edit-cue', voiced('whispered'), dialogs({ text: 'shouting', confirm: false }).fake),
+      ).toBeNull();
+    });
+
+    it('an unchanged or cancelled edit does not ask', async () => {
+      for (const text of ['whispered', null]) {
+        const { fake, asked } = dialogs({ text, confirm: true });
+        expect<unknown>(await commandFor('edit-cue', voiced('whispered'), fake)).toBeNull();
+        expect(asked.confirm).toEqual([]);
+      }
+    });
+
+    it('an item without audio is not asked', async () => {
+      const { fake, asked } = dialogs({ text: 'shouting' });
+      const command = await commandFor('edit-cue', target('item', { cue: 'whispered', hasAudio: false }), fake);
+      expect<unknown>(command).toEqual({ type: 'SetItemDeliveryCue', itemId: 'n1', cue: 'shouting' });
+      expect(asked.confirm).toEqual([]);
+    });
+  });
+
   describe('split', () => {
     it.each([
       ['part', 'SplitAtPart', 'partId', 'newVolumeTitle', 'volume'],
