@@ -187,15 +187,13 @@ public class ProviderSettingsTests(E2eAppFixture app, PlaywrightFixture pw) : E2
             await Expect(saveSample).ToBeDisabledAsync();
 
             await sample.Locator("[data-field='sampleText']").FillAsync("A sentence of my own.");
-            await saveSample.ClickAsync();
-            await Expect(saveSample).ToBeDisabledAsync();
+            await SaveAndSettleAsync(sample, saveSample);
             var stored = JsonDocument.Parse(await Http.GetStringAsync($"{App.BaseUrl}/api/settings/voice-design/sample-text")).RootElement;
             Assert.Equal("A sentence of my own.", stored.GetProperty("text").GetString());
 
             await sample.Locator("[data-action='reset-sample-text']").ClickAsync();
             await Expect(sample.Locator("[data-field='sampleText']")).ToHaveValueAsync(stored.GetProperty("default").GetString()!);
-            await saveSample.ClickAsync();
-            await Expect(saveSample).ToBeDisabledAsync();
+            await SaveAndSettleAsync(sample, saveSample);
 
             var test = Page.Locator("r2m-voice-design-test");
             await Expect(test).ToContainTextAsync("Test \"fake\"");
