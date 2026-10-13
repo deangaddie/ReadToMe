@@ -226,11 +226,13 @@ export class MeasuredList<T = unknown> extends R2mElement {
 
   /**
    * Where a scroll to `top` stops: the browser holds `scrollTop` at the end of the content, and a
-   * scroll the list made must not read as the reader's when it stopped short. The spacer is the
-   * only content in flow, so the end is the sized total.
+   * scroll the list made must not read as the reader's when it stopped short. The end is the
+   * sized total, or further: the rows are placed absolutely, and rows that outgrew their measured
+   * heights reach past the spacer.
    */
   private reachable(top: number): number {
-    return Math.max(0, Math.min(top, this.index.total() - this.clientHeight));
+    const end = Math.max(this.index.total(), this.scrollHeight);
+    return Math.max(0, Math.min(top, end - this.clientHeight));
   }
 
   /**

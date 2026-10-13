@@ -360,6 +360,21 @@ describe('r2m-measured-list reader scrolls', () => {
     expect(seen).toEqual([]);
   });
 
+  it('does not take a scroll that ends past the sized total for the reader', async () => {
+    // The rows are placed absolutely, so rows longer than their measured heights reach past the
+    // spacer, and the browser stops the scroll there rather than at the sized total.
+    const { list } = await mount(rows(100));
+    const height = 100 * ESTIMATE_PX + 7;
+    Object.defineProperty(list, 'scrollHeight', { value: height });
+    clampAt(list, height - VIEWPORT_PX);
+    const seen = readerScrolls(list);
+    list.scrollToIndex(98);
+    list.dispatchEvent(new Event('scroll'));
+    await list.rendered();
+    expect(list.scrollTop).toBe(height - VIEWPORT_PX);
+    expect(seen).toEqual([]);
+  });
+
   it('reports the top row before it reports the reader scroll', async () => {
     const { list, scrollTo } = await mount(rows(100));
     const order: string[] = [];
