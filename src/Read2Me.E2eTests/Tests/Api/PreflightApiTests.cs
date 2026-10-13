@@ -11,8 +11,8 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// <c>/api/preflight/{taskKind}</c> (Angular ticket 25) with the fake container controller: the
-/// plan for a cold service, the run's per-service stages on the caller's hub connection, the GPU
-/// conflict swept and stopped first, and a failed start reported as such.
+/// plan for a cold service or a GPU rival, and the run's per-service stages on the caller's hub
+/// connection. The conflict sweep and a failed start are PreflightRunCoordinatorTests.
 /// </summary>
 public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -24,13 +24,32 @@ public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     private string Url(string taskKind, string rest) => $"{app.BaseUrl}/api/preflight/{taskKind}/{rest}";
 
     [Fact]
-    public async Task Plan_is_ready_when_everything_required_answers()
+    public async Task Plan_is_ready_when_everything_required_answers_and_names_a_running_gpu_rival()
     {
         var plan = await PlanAsync("CharacterAttribution");
 
         Assert.True(plan.GetProperty("ready").GetBoolean());
         Assert.Empty(plan.GetProperty("toStart").EnumerateArray());
         Assert.Empty(plan.GetProperty("conflicts").EnumerateArray());
+
+        // The LLM is a GPU service while audiocpp (GPU, unrelated) still holds VRAM. The run that
+        // sweeps it is PreflightRunCoordinatorTests; the planner's rules are AiPreflightPlannerTests.
+        app.FakeControl.Status = AiServiceStatus.Stopped;
+        app.FakeControl.GpuUrls.Add(Llm);
+        app.FakeControl.StatusByName[Llm] = AiServiceStatus.Ready;
+        app.FakeControl.StatusByName["audiocpp"] = AiServiceStatus.Ready;
+        try
+        {
+            var conflicted = await PlanAsync("CharacterAttribution");
+            Assert.False(conflicted.GetProperty("ready").GetBoolean());
+            var conflict = Assert.Single(conflicted.GetProperty("conflicts").EnumerateArray());
+            Assert.Equal("audiocpp", conflict.GetProperty("name").GetString());
+            Assert.Equal("GPU: one model at a time", conflict.GetProperty("reason").GetString());
+        }
+        finally
+        {
+            app.FakeControl.Reset();
+        }
     }
 
     [Fact]
@@ -66,111 +85,6 @@ public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Assert.True(done.GetProperty("ok").GetBoolean());
             Assert.Contains($"start:{Llm}", app.FakeControl.OpLog);
             Assert.Equal(AiServiceStatus.Ready, app.FakeControl.StatusByName[Llm]);
-        }
-        finally
-        {
-            app.FakeControl.Reset();
-        }
-    }
-
-    [Fact]
-    public async Task Gpu_conflict_is_planned_and_stopped_before_the_required_service_starts()
-    {
-        // The LLM is a GPU service that is cold, while audiocpp (GPU, unrelated) still holds VRAM.
-        app.FakeControl.Status = AiServiceStatus.Stopped;
-        app.FakeControl.GpuUrls.Add(Llm);
-        app.FakeControl.StatusByName[Llm] = AiServiceStatus.Stopped;
-        app.FakeControl.StatusByName["audiocpp"] = AiServiceStatus.Ready;
-        try
-        {
-            var plan = await PlanAsync("CharacterAttribution");
-            var conflict = Assert.Single(plan.GetProperty("conflicts").EnumerateArray());
-            Assert.Equal("audiocpp", conflict.GetProperty("name").GetString());
-            Assert.Equal("GPU: one model at a time", conflict.GetProperty("reason").GetString());
-
-            await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
-            var messages = new ConcurrentQueue<JsonElement>();
-            hub.On<JsonElement>("preflight", messages.Enqueue);
-            await hub.StartJoinedAsync();
-
-            var response = await Http.PostAsJsonAsync(Url("CharacterAttribution", "run"), new { connectionId = hub.ConnectionId });
-            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));
-
-            var stages = messages.Where(m => m.GetProperty("kind").GetString() == "stage")
-                .Select(m => $"{m.GetProperty("name").GetString()}:{m.GetProperty("stage").GetString()}").ToList();
-            Assert.Equal(
-            [
-                "audiocpp:waitingToStop", $"{Llm}:waitingToStart",
-                "audiocpp:stopping", "audiocpp:stopped",
-                $"{Llm}:starting", $"{Llm}:ready",
-            ], stages);
-            Assert.Equal(["shutdown:audiocpp", $"start:{Llm}"], app.FakeControl.OpLog.ToArray());
-        }
-        finally
-        {
-            app.FakeControl.Reset();
-        }
-    }
-
-    [Fact]
-    public async Task Audio_generation_on_a_gpu_tts_sweeps_a_running_llama_even_when_the_tts_is_ready()
-    {
-        // Acceptance: starting a TTS task while llama runs shows the GPU conflict and stops llama
-        // first — even though the TTS server already answers, since llama still holds the VRAM.
-        const string tts = "http://fake-audiocpp";
-        app.FakeControl.Status = AiServiceStatus.Stopped;
-        app.FakeControl.GpuUrls.Add(tts);
-        app.FakeControl.StatusByName[tts] = AiServiceStatus.Ready;
-        app.FakeControl.StatusByName["http://fake-whisper"] = AiServiceStatus.Ready;
-        app.FakeControl.StatusByName["http://fake-similarity"] = AiServiceStatus.Ready;
-        app.FakeControl.StatusByName["llama"] = AiServiceStatus.Ready;
-        try
-        {
-            var plan = await PlanAsync("AudioGeneration");
-            Assert.False(plan.GetProperty("ready").GetBoolean());
-            Assert.Empty(plan.GetProperty("toStart").EnumerateArray());
-            var conflict = Assert.Single(plan.GetProperty("conflicts").EnumerateArray());
-            Assert.Equal("llama", conflict.GetProperty("name").GetString());
-
-            await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
-            var messages = new ConcurrentQueue<JsonElement>();
-            hub.On<JsonElement>("preflight", messages.Enqueue);
-            await hub.StartJoinedAsync();
-
-            await Http.PostAsJsonAsync(Url("AudioGeneration", "run"), new { connectionId = hub.ConnectionId });
-            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));
-
-            Assert.True(messages.Last().GetProperty("ok").GetBoolean());
-            Assert.Equal(["shutdown:llama"], app.FakeControl.OpLog.ToArray());
-            Assert.Equal(AiServiceStatus.Stopped, app.FakeControl.StatusByName["llama"]);
-        }
-        finally
-        {
-            app.FakeControl.Reset();
-        }
-    }
-
-    [Fact]
-    public async Task A_failed_start_ends_the_run_with_the_reason()
-    {
-        app.FakeControl.StatusByName[Llm] = AiServiceStatus.Stopped;
-        app.FakeControl.StartFailures[Llm] = "health check timed out";
-        try
-        {
-            await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
-            var messages = new ConcurrentQueue<JsonElement>();
-            hub.On<JsonElement>("preflight", messages.Enqueue);
-            await hub.StartJoinedAsync();
-
-            await Http.PostAsJsonAsync(Url("BookEdit", "run"), new { connectionId = hub.ConnectionId });
-            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));
-
-            var failed = messages.Single(m => m.TryGetProperty("stage", out var s) && s.GetString() == "failed");
-            Assert.Equal("health check timed out", failed.GetProperty("error").GetString());
-            var done = messages.Last();
-            Assert.False(done.GetProperty("ok").GetBoolean());
-            Assert.Contains("health check timed out", done.GetProperty("reason").GetString());
         }
         finally
         {

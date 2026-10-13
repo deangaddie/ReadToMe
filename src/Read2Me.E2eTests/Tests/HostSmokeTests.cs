@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text.Json;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests;
@@ -27,7 +29,21 @@ public class HostSmokeTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
         var response = await http.GetAsync(app.BaseUrl + "/");
 
-        Assert.Equal(System.Net.HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/app/", response.Headers.Location?.OriginalString);
+    }
+
+    [Fact]
+    public async Task Openapi_document_lists_agent_endpoints()
+    {
+        using var http = new HttpClient();
+        var response = await http.GetAsync(app.BaseUrl + "/openapi/v1.json");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var paths = doc.RootElement.GetProperty("paths");
+        Assert.True(paths.TryGetProperty("/api/projects", out _));
+        Assert.True(paths.TryGetProperty("/api/projects/{folder}/commands", out _));
+        Assert.True(paths.TryGetProperty("/api/settings/llm", out _));
     }
 }

@@ -22,6 +22,7 @@ namespace Read2Me.Tests.Services.Voice;
 public class VoiceRulePreviewTests : ProjectDbTestBase
 {
     private readonly VoiceRulePreview _preview;
+    private readonly ProjectReader _reader;
     private readonly ProjectFolderId _folder;
 
     public VoiceRulePreviewTests()
@@ -29,6 +30,7 @@ public class VoiceRulePreviewTests : ProjectDbTestBase
         var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
         var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
         _preview = new VoiceRulePreview(session);
+        _reader = new ProjectReader(session, NullLogger<ProjectReader>.Instance);
         _folder = new ProjectFolderId(FolderName);
     }
 
@@ -153,6 +155,37 @@ public class VoiceRulePreviewTests : ProjectDbTestBase
         var rows = await _preview.PreviewChaptersAsync(_folder, charId);
 
         Assert.Equal(["Voice A", "Voice A", "Voice A"], rows.Select(r => r.VoiceName));
+    }
+
+    /// <summary>
+    /// The rule list beside the preview: a rule whose chapter the book no longer has reads as
+    /// dangling on both ends, keeps its anchor id and level, and has no title to show.
+    /// </summary>
+    [Fact]
+    public async Task Rule_list_marks_a_rule_anchored_to_a_missing_chapter_dangling_with_no_title()
+    {
+        var (b, charId, voiceA, voiceB) = await SeedBaseAsync();
+        var gone = Guid.NewGuid();
+        var ch2 = b.ChapterId("ch2");
+        await SeedRuleAsync(charId, voiceA, FloorRank, isDefault: true);
+        await SeedRuleAsync(charId, voiceB, OrderKeyGenerateAfter(FloorRank),
+            fromLevel: VoiceAnchorLevel.Chapter, fromNodeId: gone, toLevel: VoiceAnchorLevel.Chapter, toNodeId: gone);
+        await SeedRuleAsync(charId, voiceB, OrderKeyGenerateAfter(OrderKeyGenerateAfter(FloorRank)),
+            fromLevel: VoiceAnchorLevel.Chapter, fromNodeId: ch2, toLevel: VoiceAnchorLevel.Chapter, toNodeId: ch2);
+
+        var rules = await _reader.GetCharacterVoiceRulesAsync(_folder, charId);
+
+        Assert.Equal(3, rules.Count);
+        var dangling = rules[1];
+        Assert.True(dangling.FromDangling);
+        Assert.True(dangling.ToDangling);
+        Assert.Null(dangling.FromDisplayName);
+        Assert.Equal(gone, dangling.FromNodeId);
+        Assert.Equal(VoiceAnchorLevel.Chapter, dangling.FromLevel);
+        var live = rules[2];
+        Assert.False(live.FromDangling);
+        Assert.False(live.ToDangling);
+        Assert.NotNull(live.FromDisplayName);
     }
 
     [Fact]

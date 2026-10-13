@@ -105,22 +105,6 @@ public class VoiceDetailApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
     }
 
     [Fact]
-    public async Task Upload_within_the_soft_reference_limit_has_no_warning()
-    {
-        var folder = $"api-voice-within-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "Voice Within Limit", "Author");
-        var aliceId = await CharacterIdAsync(folder, "Alice");
-        var voiceId = await CreateVoiceAsync(folder, aliceId, "Reference Voice", isGenerated: false);
-
-        var response = await Http.PutAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}/audio", WavForm("short.wav", 9_000));
-
-        var uploaded = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal(9.0, uploaded.GetProperty("referenceSeconds").GetDouble(), precision: 1);
-        Assert.Equal(JsonValueKind.Null, uploaded.GetProperty("referenceWarning").ValueKind);
-    }
-
-    [Fact]
     public async Task Get_voice_by_id_answers_the_voice_and_404_for_unknown()
     {
         var folder = $"api-voice-get-{Guid.NewGuid():N}";

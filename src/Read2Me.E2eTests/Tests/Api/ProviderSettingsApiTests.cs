@@ -127,6 +127,10 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
         """{"baseUrl":"http://x","modelId":"voxcpm2","cfg_value":2,"inference_timesteps":20,"min_len":2,"max_len":4096,"retry_badcase":true,"retry_badcase_max_times":3,"retry_badcase_ratio_threshold":6,"seed":null}""")]
     [InlineData("voice-design", 1, """{"baseUrl":"http://x","modelId":"qwen3-design-bf16","topK":40,"seed":9}""",
         """{"BaseUrl":"http://x","ModelId":"qwen3-design-bf16","Language":"auto","Temperature":null,"TopP":null,"TopK":40,"RepetitionPenalty":null,"MaxNewTokens":null,"Seed":9}""")]
+    // A stored Qwen3 design config as the web settings form re-sends it on a rename: base URL first,
+    // then every schema field under its schema key, the unset knobs as explicit nulls.
+    [InlineData("voice-design", 1, """{"baseUrl":"http://example-qwen:8004","modelId":"qwen3-design-bf16","language":"en","temperature":null,"topP":null,"topK":40,"repetitionPenalty":null,"maxNewTokens":null,"seed":null}""",
+        """{"BaseUrl":"http://example-qwen:8004","ModelId":"qwen3-design-bf16","Language":"en","Temperature":null,"TopP":null,"TopK":40,"RepetitionPenalty":null,"MaxNewTokens":null,"Seed":null}""")]
     [InlineData("transcription", 0, """{"baseUrl":"http://x"}""",
         """{"BaseUrl":"http://x"}""")]
     [InlineData("semantic-similarity", 0, """{"baseUrl":"http://x","passThreshold":0.7}""",

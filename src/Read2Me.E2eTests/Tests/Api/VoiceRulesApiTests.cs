@@ -7,7 +7,8 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// The Voice rules reads behind the cast page (Angular ticket 17): a character's rule list and the
-/// per-chapter resolved-voice preview, driven through the existing rule commands.
+/// per-chapter resolved-voice preview, driven through the existing rule commands. Dangling rules
+/// and an unknown character are VoiceRulePreviewTests.
 /// </summary>
 public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -43,7 +44,7 @@ public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
         preview.Select(r => r.GetProperty("voiceName").GetString() ?? "").ToArray();
 
     [Fact]
-    public async Task Rules_and_preview_follow_create_move_delete()
+    public async Task Rules_and_preview_follow_create_move_delete_and_an_unknown_project_is_404()
     {
         var folder = $"api-voice-rules-{Guid.NewGuid():N}";
         var book = await app.SeedMultiChapterProjectAsync(folder, "Rules Book", "Author");
@@ -112,50 +113,11 @@ public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
         rules = await RulesAsync(folder, alice);
         Assert.Equal(2, rules.Count);
         Assert.Equal(["Voice A", "Voice A", "Voice A", "Voice A", "Voice A"], VoiceNames(await PreviewAsync(folder, alice)));
-    }
 
-    [Fact]
-    public async Task Rule_anchored_to_a_deleted_chapter_is_dangling_and_skipped()
-    {
-        var folder = $"api-voice-rules-dangling-{Guid.NewGuid():N}";
-        var book = await app.SeedMultiChapterProjectAsync(folder, "Dangling Book", "Author", chapters: 3);
-        var alice = book.CharacterId("Alice");
-        var voiceA = await RunAsync(folder, new { type = "CreateVoice", characterId = alice, name = "Voice A", isGenerated = true });
-        var voiceB = await RunAsync(folder, new { type = "CreateVoice", characterId = alice, name = "Voice B", isGenerated = true });
-        var chapter2 = book.ChapterId("Chapter 2");
-        await RunAsync(folder, new
-        {
-            type = "CreateVoiceRule", characterId = alice, voiceId = voiceB,
-            fromLevel = "Chapter", fromNodeId = chapter2, toLevel = "Chapter", toNodeId = chapter2,
-        });
-        Assert.Equal(["Voice A", "Voice B", "Voice A"], VoiceNames(await PreviewAsync(folder, alice)));
-
-        await RunAsync(folder, new { type = "DeleteChapter", chapterId = chapter2 });
-
-        var rule = (await RulesAsync(folder, alice)).Single(r => !r.GetProperty("isDefault").GetBoolean());
-        Assert.True(rule.GetProperty("fromDangling").GetBoolean());
-        Assert.True(rule.GetProperty("toDangling").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, rule.GetProperty("fromTitle").ValueKind);
-        Assert.Equal(chapter2, rule.GetProperty("fromNodeId").GetGuid());
-        Assert.Equal("Chapter", rule.GetProperty("fromLevel").GetString());
-        Assert.Equal(["Voice A", "Voice A"], VoiceNames(await PreviewAsync(folder, alice)));
-        Assert.Equal(voiceA, (await RulesAsync(folder, alice))[0].GetProperty("voiceId").GetGuid());
-    }
-
-    [Fact]
-    public async Task Unknown_project_is_404_and_unknown_character_is_empty()
-    {
-        var folder = $"api-voice-rules-404-{Guid.NewGuid():N}";
-        await app.SeedMultiChapterProjectAsync(folder, "Missing Book", "Author", chapters: 2);
-
-        var missingProject = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-{Guid.NewGuid():N}/characters/{Guid.NewGuid()}/voice-rules");
+        // An unknown project is a 404 on both reads.
+        var missingProject = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-{Guid.NewGuid():N}/characters/{alice}/voice-rules");
         Assert.Equal(HttpStatusCode.NotFound, missingProject.StatusCode);
-        var missingPreview = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-{Guid.NewGuid():N}/characters/{Guid.NewGuid()}/voice-rules/preview");
+        var missingPreview = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-{Guid.NewGuid():N}/characters/{alice}/voice-rules/preview");
         Assert.Equal(HttpStatusCode.NotFound, missingPreview.StatusCode);
-
-        Assert.Empty(await RulesAsync(folder, Guid.NewGuid()));
-        var preview = await PreviewAsync(folder, Guid.NewGuid());
-        Assert.Equal(2, preview.Count);
-        Assert.All(preview, r => Assert.Equal(JsonValueKind.Null, r.GetProperty("voiceName").ValueKind));
     }
 }

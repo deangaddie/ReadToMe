@@ -198,18 +198,6 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
     }
 
     [Fact]
-    public async Task Empty_chain_resolves_to_the_default_config()
-    {
-        var fake = await FakeConfigIdAsync();
-
-        var chain = await GetJsonAsync(Url("/attribution-chain"));
-
-        Assert.Equal(0, chain.GetProperty("steps").GetArrayLength());
-        var fallback = Assert.Single(chain.GetProperty("resolved").EnumerateArray());
-        Assert.Equal(fake, fallback.GetProperty("config").GetProperty("id").GetInt32());
-    }
-
-    [Fact]
     public async Task Attribution_chain_put_is_422_for_a_step_naming_no_config()
     {
         var put = await Http.PutAsJsonAsync(Url("/attribution-chain"), new

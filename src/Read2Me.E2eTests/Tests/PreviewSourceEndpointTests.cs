@@ -23,10 +23,11 @@ public class PreviewSourceEndpointTests(E2eAppFixture app) : IClassFixture<E2eAp
     }
 
     [Fact]
-    public async Task Cached_preview_source_is_served_as_a_wav()
+    public async Task Regenerated_item_serves_the_newest_preview_source_as_a_wav()
     {
         var itemId = Guid.NewGuid();
-        byte[] wav = [1, 2, 3, 4];
+        await SaveAsync(itemId, [1, 1]);
+        byte[] wav = [2, 2, 2];
         await SaveAsync(itemId, wav);
 
         using var http = new HttpClient();
@@ -38,19 +39,6 @@ public class PreviewSourceEndpointTests(E2eAppFixture app) : IClassFixture<E2eAp
         // duration — no total time and no scrub bar on the Original player.
         Assert.Equal(wav.Length, response.Content.Headers.ContentLength);
         Assert.Equal(wav, await response.Content.ReadAsByteArrayAsync());
-    }
-
-    [Fact]
-    public async Task Regenerated_item_serves_the_newest_preview_source()
-    {
-        var itemId = Guid.NewGuid();
-        await SaveAsync(itemId, [1, 1]);
-        await SaveAsync(itemId, [2, 2]);
-
-        using var http = new HttpClient();
-        var response = await http.GetAsync($"{app.BaseUrl}/preview-source/{Folder.Value}/{itemId:D}");
-
-        Assert.Equal<byte[]>([2, 2], await response.Content.ReadAsByteArrayAsync());
     }
 
     [Fact]

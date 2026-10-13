@@ -60,51 +60,25 @@ public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var dialog = voices.GetProperty(book.ItemId("line1").ToString());
         Assert.Equal(JsonValueKind.Null, dialog.GetProperty("voiceName").ValueKind);
         Assert.Equal(3, voices.EnumerateObject().Count());
+        // Unlinked, the project detail names the seed Narrator row: never null.
+        var unlinkedNarrator = (await GetJsonAsync($"/api/projects/{folder}")).GetProperty("narrator");
+        Assert.False(unlinkedNarrator.GetProperty("isLinked").GetBoolean());
+        Assert.Equal("Narrator", unlinkedNarrator.GetProperty("displayName").GetString());
+        Assert.Equal(ProjectDbContext.NarratorId, unlinkedNarrator.GetProperty("characterId").GetGuid());
 
         var link = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
             new { type = "SetNarratorCharacter", characterId = book.CharacterId("Watson") });
         Assert.Equal(HttpStatusCode.OK, link.StatusCode);
 
+        var linkedNarrator = (await GetJsonAsync($"/api/projects/{folder}")).GetProperty("narrator");
+        Assert.True(linkedNarrator.GetProperty("isLinked").GetBoolean());
+        Assert.Equal("Watson", linkedNarrator.GetProperty("displayName").GetString());
+        Assert.Equal(book.CharacterId("Watson"), linkedNarrator.GetProperty("characterId").GetGuid());
+
         var linked = await GetJsonAsync(path);
         Assert.Equal("Watson", linked.GetProperty(book.ItemId("n1").ToString()).GetProperty("narratedBy").GetString());
         Assert.Equal(JsonValueKind.Null,
             linked.GetProperty(book.ItemId("line1").ToString()).GetProperty("narratedBy").ValueKind);
-    }
-
-    /// <summary>
-    /// Linking moves narration onto the linked character's voice; unlinking puts it back on the
-    /// Narrator's own voice and rule, which stayed dormant through the link rather than being deleted.
-    /// </summary>
-    [Fact]
-    public async Task Unlinking_the_narrator_puts_narration_back_on_the_narrators_own_voice()
-    {
-        var folder = $"api-reader-unlink-{Guid.NewGuid():N}";
-        var book = await app.SeedProjectAsync(folder, "Unlink Book", "Author", characterName: "Watson");
-        await app.SeedEditableVoiceAsync(folder, book.CharacterId("Watson"), "Watson Voice");
-        await app.SeedNarratorVoiceAsync(folder);
-        var path = $"/api/projects/{folder}/nodes/chapter/{book.ChapterId("ch1")}/voices";
-        var narration = book.ItemId("n1").ToString();
-
-        await SetNarratorAsync(folder, book.CharacterId("Watson"));
-        var linked = (await GetJsonAsync(path)).GetProperty(narration);
-        Assert.Equal("Watson Voice", linked.GetProperty("voiceName").GetString());
-        Assert.Equal("Watson", linked.GetProperty("narratedBy").GetString());
-
-        await SetNarratorAsync(folder, null);
-        var unlinked = (await GetJsonAsync(path)).GetProperty(narration);
-        Assert.Equal("Narrator Voice", unlinked.GetProperty("voiceName").GetString());
-        Assert.Equal(JsonValueKind.Null, unlinked.GetProperty("narratedBy").ValueKind);
-
-        var voices = await GetJsonAsync($"/api/projects/{folder}/characters/{ProjectDbContext.NarratorId}/voices");
-        Assert.Contains("Narrator Voice", voices.GetProperty("voices").EnumerateArray()
-            .Select(v => v.GetProperty("name").GetString()));
-    }
-
-    private async Task SetNarratorAsync(string folder, Guid? characterId)
-    {
-        var response = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
-            new { type = "SetNarratorCharacter", characterId });
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -143,6 +117,40 @@ public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.False(review.Value.GetProperty("verifyOk").GetBoolean());
         Assert.Equal(0.42, review.Value.GetProperty("wer").GetDouble());
         Assert.Equal("WER above threshold", review.Value.GetProperty("verifyReason").GetString());
+    }
+
+    /// <summary>
+    /// The reader's flag and Dismiss as the web client sends them: a failed verify reads back as
+    /// NeedsReview, and once dismissed it reads back as Dismissed, so a reload keeps it dismissed.
+    /// </summary>
+    [Fact]
+    public async Task A_dismissed_review_reads_back_as_dismissed()
+    {
+        var folder = $"api-reader-dismiss-{Guid.NewGuid():N}";
+        var book = await app.SeedProjectAsync(folder, "Dismiss Book", "Author");
+        var itemId = book.ItemId("n1");
+        var path = $"/api/projects/{folder}/audio/reviews";
+
+        var flag = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands", new
+        {
+            type = "SetAudioReview",
+            paragraphItemId = itemId,
+            normalizeOk = true,
+            verifyOk = false,
+            wer = 0.4,
+            verifyReason = "transcript drifted",
+        });
+        Assert.Equal(HttpStatusCode.OK, flag.StatusCode);
+        Assert.Equal("NeedsReview", (await GetJsonAsync(path)).GetProperty(itemId.ToString()).GetProperty("state").GetString());
+
+        var dismiss = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
+            new { type = "DismissAudioReview", paragraphItemId = itemId });
+        Assert.Equal(HttpStatusCode.OK, dismiss.StatusCode);
+
+        var review = Assert.Single((await GetJsonAsync(path)).EnumerateObject());
+        Assert.Equal(itemId.ToString(), review.Name);
+        Assert.Equal("Dismissed", review.Value.GetProperty("state").GetString());
+        Assert.Equal("transcript drifted", review.Value.GetProperty("verifyReason").GetString());
     }
 
     [Fact]

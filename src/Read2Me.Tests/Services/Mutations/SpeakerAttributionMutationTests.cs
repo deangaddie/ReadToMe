@@ -421,6 +421,33 @@ namespace Read2Me.Tests.Services.Mutations
             Assert.Equal(BobId, items[1].CharacterId);
         }
 
+        /// <summary>
+        /// Whether an item is narration is computed from its speaker, not stored (ADR-0006), so the
+        /// by-hand flip flips it in both directions and leaves the stored kind alone. The API's
+        /// itemType word is <see cref="NarrationRule.IsNarration(ParagraphItem)"/> read off the row.
+        /// </summary>
+        [Fact]
+        public async Task Stamping_by_hand_flips_whether_an_item_is_narration_in_both_directions()
+        {
+            var b = Builder();
+            await b.AddVolume("v", v => v.AddChapter(configure: c => c.AddParagraph("p", p => p
+                .AddNarration("n1", "The door swung open.")
+                .AddRawItem("d1", ParagraphItemType.Speech, "“Only me,” came the reply.")))).BuildAsync();
+            var before = await ItemsAsync(b.ParagraphId("p"));
+            Assert.True(NarrationRule.IsNarration(before[0]));
+            Assert.False(NarrationRule.IsNarration(before[1]));   // unattributed still reads as dialog
+
+            await CommittedAsync(new SetItemSpeakerMutation(_folder, b.ItemId("n1"), AliceId));
+            await CommittedAsync(new SetItemSpeakerMutation(_folder, b.ItemId("d1"), ProjectDbContext.NarratorId));
+
+            var after = await ItemsAsync(b.ParagraphId("p"));
+            Assert.False(NarrationRule.IsNarration(after[0]));
+            Assert.Equal(AliceId, after[0].CharacterId);
+            Assert.True(NarrationRule.IsNarration(after[1]));
+            Assert.Equal(ProjectDbContext.NarratorId, after[1].CharacterId);
+            Assert.Equal([before[0].ItemType, before[1].ItemType], after.Select(i => i.ItemType));
+        }
+
         [Fact]
         public async Task Stamping_an_item_that_had_no_audio_does_not_claim_the_audio_facet()
         {

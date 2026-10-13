@@ -28,8 +28,8 @@ public class LiveHubTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     {
         var folderA = $"hub-a-{Guid.NewGuid():N}";
         var folderB = $"hub-b-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folderA, "Hub A", "Author");
-        await app.SeedProjectAsync(folderB, "Hub B", "Author");
+        var bookA = await app.SeedProjectAsync(folderA, "Hub A", "Author");
+        var bookB = await app.SeedProjectAsync(folderB, "Hub B", "Author");
 
         await using var a = Connect();
         await using var b = Connect();
@@ -50,15 +50,21 @@ public class LiveHubTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             new StringContent("""{ "type": "CreateCharacter", "name": "Hub Character" }""", Encoding.UTF8, "application/json"));
         response.EnsureSuccessStatusCode();
 
-        await WaitForAsync(() => receiptsA.Count >= 1);
-        await Task.Delay(300);
+        // Sentinels: one more write to each project. The relay sends receipts in commit order, so
+        // once each connection has its sentinel, anything A's write sent it has already arrived.
+        await RetitleAsync(folderB, bookB.ChapterId("ch1"), "Sentinel B");
+        await RetitleAsync(folderA, bookA.ChapterId("ch1"), "Sentinel A");
+        await WaitForAsync(() => receiptsA.Count >= 2 && !receiptsB.IsEmpty);
 
-        var receipt = Assert.Single(receiptsA);
+        var inA = receiptsA.ToList();
+        Assert.Equal(["CreateCharacterMutation", "UpdateChapterTitleMutation"],
+            inA.Select(r => r.GetProperty("mutationName").GetString())); // verbatim mutation names, once each
+        var receipt = inA[0];
         Assert.Equal(folderA, receipt.GetProperty("folder").GetString());
-        Assert.Equal("CreateCharacterMutation", receipt.GetProperty("mutationName").GetString()); // verbatim mutation name
         Assert.True(receipt.GetProperty("revision").GetInt64() >= 1);
         Assert.Contains("Characters", receipt.GetProperty("effects").GetProperty("facets").GetString());
-        Assert.Empty(receiptsB);
+        // B saw only its own sentinel, never A's receipt.
+        Assert.Equal(folderB, Assert.Single(receiptsB).GetProperty("folder").GetString());
 
         var live = await a.InvokeAsync<JsonElement>("GetSnapshot");
         Assert.True(live.GetProperty("projects").TryGetProperty(folderA, out var project));
@@ -155,9 +161,26 @@ public class LiveHubTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
         await member.InvokeAsync("LeaveStream", "llm");
         var countAfterLeave = received.Count;
-        llm.Publish(new RequestStarted("after-leave", "p", 1, "cfg"));
-        await Task.Delay(300);
+
+        // Sentinel: the bystander joins in the member's place and must see the next turn start.
+        // Once it has, and a round trip on the member's own connection has come back after it,
+        // anything the group sent the member would already be here.
+        await bystander.InvokeAsync("JoinStream", "llm");
+        var afterLeave = $"after-leave-{Guid.NewGuid():N}";
+        llm.Publish(new RequestStarted(afterLeave, "p", 1, "cfg"));
+        await WaitForAsync(() => strayed.Any(m =>
+            m.TryGetProperty("paragraphPreview", out var p) && p.GetString() == afterLeave));
+        await member.InvokeAsync<JsonElement>("GetSnapshot");
         Assert.Equal(countAfterLeave, received.Count);
+    }
+
+    private async Task RetitleAsync(string folder, Guid chapterId, string title)
+    {
+        var response = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
+            new StringContent(
+                $$"""{ "type": "UpdateChapterTitle", "chapterId": "{{chapterId}}", "title": "{{title}}" }""",
+                Encoding.UTF8, "application/json"));
+        response.EnsureSuccessStatusCode();
     }
 
     private static async Task WaitForAsync(Func<bool> condition, int timeoutMs = 5000)
