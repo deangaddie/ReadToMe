@@ -666,6 +666,19 @@ describe('r2m-book-page', () => {
       ]);
     });
 
+    it('stay shut until the overview has loaded, so the entries cannot move under the pointer', async () => {
+      const overview = Promise.withResolvers<BookOverviewDto>();
+      api.on('GET', `${BASE}/book`, () => overview.promise);
+      const { page } = await start('projects/dune/book');
+      const button = page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
+      expect(button.disabled).toBe(true);
+
+      overview.resolve(OVERVIEW);
+      for (let i = 0; i < 4; i++) await settle();
+      await page.rendered();
+      expect(button.disabled).toBe(false);
+    });
+
     it('Add pauses posts its command through the editor', async () => {
       api.on('POST', `${BASE}/commands`, { newEntityId: null });
       const { page } = await open1();
