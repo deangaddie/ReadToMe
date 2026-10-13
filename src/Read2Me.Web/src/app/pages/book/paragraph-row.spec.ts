@@ -139,6 +139,19 @@ describe('paragraphRow', () => {
       expect(el.querySelectorAll('.r2m-item').length).toBe(0);
     });
 
+    it('shows no delivery cue, which Speakers mode puts under the cued item only', async () => {
+      const read = await mount(ctx());
+      expect(read.querySelector('[data-testid=delivery-cue]')).toBeNull();
+      expect(read.textContent).not.toContain('dry');
+
+      document.body.replaceChildren();
+      const speakers = await mount(ctx({ mode: 'speakers' }));
+      const cues = speakers.querySelectorAll('[data-testid=delivery-cue]');
+      expect(cues).toHaveLength(1);
+      expect(text(cues[0]!)).toBe('dry');
+      expect(cues[0]!.closest('[data-item-id]')?.getAttribute('data-item-id')).toBe('d');
+    });
+
     it('shows the attribution queue chip and a lock while queued', async () => {
       const el = await mount(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');

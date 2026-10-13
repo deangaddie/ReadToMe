@@ -126,10 +126,6 @@ public sealed class E2eAppFixture : IAsyncLifetime
     public Task SeedDeliveryCueAsync(string folderName, Guid itemId, string cue) =>
         WorkspaceSeeder.SeedDeliveryCueAsync(Services, WorkspaceDir, folderName, itemId, cue);
 
-    /// <summary>Gives every speech item audio, so the project assembles without a partial prompt.</summary>
-    public Task SeedAllItemAudioAsync(string folderName) =>
-        WorkspaceSeeder.SeedAllItemAudioAsync(Services, WorkspaceDir, folderName);
-
     public Task<Guid> SeedEditableVoiceAsync(string folderName, Guid characterId, string voiceName = "Alice Voice") =>
         WorkspaceSeeder.SeedEditableVoiceAsync(Services, WorkspaceDir, folderName, characterId, voiceName);
 

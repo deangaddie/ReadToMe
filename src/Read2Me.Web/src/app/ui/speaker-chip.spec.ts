@@ -121,6 +121,34 @@ describe('r2m-speaker-chip', () => {
     expect(chip.querySelector('r2m-speaker-menu')).toBeNull();
   });
 
+  it('opening with a fine pointer puts the focus in the search box; a touch open leaves it', async () => {
+    const real = window.matchMedia;
+    let fine = true;
+    window.matchMedia = ((query: string) =>
+      ({ matches: query === '(pointer: fine)' && fine }) as MediaQueryList) as typeof matchMedia;
+    try {
+      const chip = await mount({ name: 'Hardin', roster: ROSTER });
+      await open(chip);
+      const menu = chip.querySelector('r2m-speaker-menu')!;
+      await menu.rendered();
+      await menu.rendered();
+      expect(document.activeElement).toBe(menu.querySelector('.r2m-speaker-menu__input'));
+
+      (document.activeElement as HTMLElement).blur();
+      chip
+        .querySelector('.r2m-speaker-chip__menu')!
+        .dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed' }));
+      await chip.rendered();
+      fine = false;
+      await open(chip);
+      const touchMenu = chip.querySelector('r2m-speaker-menu')!;
+      await touchMenu.rendered();
+      expect(document.activeElement).not.toBe(touchMenu.querySelector('.r2m-speaker-menu__input'));
+    } finally {
+      window.matchMedia = real;
+    }
+  });
+
   it("re-exposes the menu's pick, clear and create events and closes the menu", async () => {
     const chip = await mount({ name: 'Hardin', roster: ROSTER });
     const seen: string[] = [];

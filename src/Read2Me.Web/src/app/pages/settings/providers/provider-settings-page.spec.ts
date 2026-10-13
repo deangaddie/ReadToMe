@@ -309,6 +309,150 @@ describe('r2m-provider-settings-page', () => {
     });
   });
 
+  describe('config list', () => {
+    const SIM = '/api/settings/semantic-similarity';
+    const other = config(
+      2,
+      'other',
+      0,
+      JSON.stringify({ BaseUrl: 'http://svc:2', PassThreshold: 0.8 }),
+    );
+
+    /** Similarity with two saved configs, `main` active and open. */
+    async function renderTwo() {
+      const main = config(
+        1,
+        'main',
+        0,
+        JSON.stringify({ BaseUrl: 'http://svc:1', PassThreshold: 0.85 }),
+      );
+      routeLoad('semantic-similarity', [main, other], main);
+      routeSchemas('semantic-similarity');
+      const page = document.createElement(
+        PROVIDER_PAGE_TAGS['semantic-similarity'],
+      ) as ProviderSettingsPage;
+      document.body.append(page);
+      await flush(page);
+      return { page, main };
+    }
+
+    const rowAction = (page: Element, name: string, action: string) =>
+      Array.from(
+        page.querySelectorAll<HTMLButtonElement>(
+          `[role="menu"][aria-label="Actions for ${name}"] [role="menuitem"]`,
+        ),
+      ).find((b) => b.textContent?.trim().endsWith(action))!;
+
+    const names = (page: Element) =>
+      Array.from(page.querySelectorAll('.r2m-config-list__name'), (n) => n.textContent);
+
+    it('New → Save POSTs the built config and selects it', async () => {
+      const { page, main } = await renderTwo();
+      page.querySelector<HTMLButtonElement>('.r2m-config-list__head .r2m-button--filled')!.click();
+      await flush(page);
+      expect(page.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe(
+        'New configuration',
+      );
+
+      await type(page, '[data-field="name"]', 'fresh');
+      await type(page, '[data-field="baseUrl"]', 'http://fresh:8200');
+      await type(page, '[data-key="PassThreshold"] input[type=number]', '0.7');
+      const fresh = config(3, 'fresh', 0, '{"BaseUrl":"http://fresh:8200","PassThreshold":0.7}');
+      api.on('POST', SIM, fresh);
+      routeLoad('semantic-similarity', [main, other, fresh], main);
+      button(page, 'Save').click();
+      await flush(page);
+
+      const body = api.calls('POST', SIM)[0]!.body as ProviderConfig;
+      expect(body).toMatchObject({ id: 0, name: 'fresh', type: 0 });
+      expect(JSON.parse(body.settingsJson)).toEqual({
+        baseUrl: 'http://fresh:8200',
+        PassThreshold: 0.7,
+      });
+      expect(page.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe('fresh');
+      const selected = page.querySelector('.r2m-config-list__row--selected');
+      expect(selected?.querySelector('.r2m-config-list__name')?.textContent).toBe('fresh');
+      expect(selected?.textContent).toContain('threshold 0.70');
+      expect(toasts).toEqual(['Configuration created']);
+    });
+
+    it('Make active PUTs /active and moves the Active marker', async () => {
+      const { page, main } = await renderTwo();
+      api.on('PUT', `${SIM}/active`, undefined);
+      routeLoad('semantic-similarity', [main, other], other);
+
+      rowAction(page, 'other', 'Make active').click();
+      await flush(page);
+
+      expect(api.calls('PUT', `${SIM}/active`).map((c) => c.body)).toEqual([{ id: 2 }]);
+      const rows = Array.from(page.querySelectorAll('.r2m-config-list__row'));
+      expect(rows[0]!.textContent).not.toContain('Active');
+      expect(rows[1]!.textContent).toContain('Active');
+    });
+
+    it('Delete asks a destructive confirm, then DELETEs and drops the row', async () => {
+      const { page, main } = await renderTwo();
+      api.on('DELETE', `${SIM}/2`, undefined);
+
+      confirmAnswer = false;
+      rowAction(page, 'other', 'Delete').click();
+      await flush(page);
+      expect(confirms[0]).toMatchObject({ title: 'Delete other?', destructive: true });
+      expect(api.calls('DELETE', `${SIM}/2`)).toHaveLength(0);
+
+      confirmAnswer = true;
+      routeLoad('semantic-similarity', [main], main);
+      rowAction(page, 'other', 'Delete').click();
+      await flush(page);
+
+      expect(api.calls('DELETE', `${SIM}/2`)).toHaveLength(1);
+      expect(names(page)).toEqual(['main']);
+      expect(toasts).toEqual(['Deleted other']);
+    });
+  });
+
+  describe('stored settings', () => {
+    it('renaming a stored config PUTs every key it holds, edited or not', async () => {
+      const stored = {
+        BaseUrl: 'http://example-qwen:8004',
+        ModelId: 'qwen3-design-bf16',
+        Language: 'en',
+        Temperature: null,
+        TopP: null,
+        TopK: 40,
+        RepetitionPenalty: null,
+        MaxNewTokens: null,
+        Seed: null,
+      };
+      api.on('GET', '/api/settings/voice-design/sample-text', {
+        text: null,
+        default: 'The default sentence.',
+        maxLength: 40,
+      });
+      routeLoad('voice-design', [config(1, 'stored', 1, JSON.stringify(stored))]);
+      routeSchemas('voice-design');
+      const page = document.createElement(
+        PROVIDER_PAGE_TAGS['voice-design'],
+      ) as ProviderSettingsPage;
+      document.body.append(page);
+      await flush(page);
+      expect(page.querySelector<HTMLInputElement>('[data-key="topK"] input')?.value).toBe('40');
+
+      await type(page, '[data-field="name"]', 'renamed');
+      api.on('PUT', '/api/settings/voice-design/1', (body: unknown) => body);
+      // The sample-text card has a Save of its own; this is the editor's.
+      button(page.querySelector('r2m-provider-config-editor')!, 'Save').click();
+      await flush(page);
+
+      const body = api.calls('PUT', '/api/settings/voice-design/1')[0]!.body as ProviderConfig;
+      expect(body).toMatchObject({ id: 1, name: 'renamed', type: 1 });
+      // The host rewrites key case; every stored key and value must reach it.
+      const lowered = (o: object) =>
+        Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase(), v]));
+      expect(lowered(JSON.parse(body.settingsJson))).toEqual(lowered(stored));
+    });
+  });
+
   describe('validation', () => {
     it('every page asks for a name and an absolute base URL before it sends anything', async () => {
       const { page } = await render('transcription', 0);
@@ -391,6 +535,24 @@ describe('r2m-provider-settings-page', () => {
       await flush(page);
 
       expect(page.querySelector('r2m-voice-design-test r2m-audio-player')).not.toBeNull();
+    });
+
+    it('transcription POSTs a dropped file as FormData and shows the transcript', async () => {
+      const { page } = await render('transcription', 0);
+      api.on('POST', '/api/settings/transcription/1/test', { transcript: 'Hello there.' });
+      const clip = new File([new Uint8Array([1, 2, 3, 4])], 'clip.wav', { type: 'audio/wav' });
+
+      page
+        .querySelector('r2m-transcription-test r2m-file-drop')!
+        .dispatchEvent(new CustomEvent('files', { detail: [clip] }));
+      await flush(page);
+
+      const form = api.calls('POST', '/api/settings/transcription/1/test')[0]?.body as FormData;
+      expect(form).toBeInstanceOf(FormData);
+      expect((form.get('file') as File).name).toBe('clip.wav');
+      const transcript = page.querySelector('r2m-transcription-test [data-role="transcript"]');
+      expect(transcript?.textContent).toContain('Transcript');
+      expect(transcript?.textContent).toContain('Hello there.');
     });
 
     it('TTS has no test action', async () => {

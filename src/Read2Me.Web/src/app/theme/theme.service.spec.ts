@@ -132,6 +132,22 @@ describe('ThemeService', () => {
     expect(document.documentElement.dataset['theme']).toBe('light');
   });
 
+  it('setPreference("dark") selects the built-in Dark row and applies it', async () => {
+    const service = await boot({ selectedThemeId: light.id, followSystemPreference: false });
+    api.on('PUT', SELECTION, (body) => body);
+
+    await service.setPreference('dark');
+
+    expect(api.calls('PUT', SELECTION)[0]?.body).toEqual({
+      selectedThemeId: dark.id,
+      followSystemPreference: false,
+    });
+    expect(service.effective()?.name).toBe('Dark');
+    expect(service.preference()).toBe('dark');
+    expect(document.documentElement.dataset['theme']).toBe('dark');
+    expect(styleText()).toContain('--r2m-accent: #7c5cbf;');
+  });
+
   it('setPreference("system") flips the follow flag', async () => {
     const service = await boot({ selectedThemeId: orange.id, followSystemPreference: false });
     api.on('PUT', SELECTION, (body) => ({ selectedThemeId: orange.id, ...(body as object) }));
