@@ -143,6 +143,11 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
             Assert.Equal("fake ffmpeg", result.GetProperty("message").GetString());
 
             Assert.Equal(@"C:\tools\ffmpeg.exe", (await FullAsync()).GetProperty("ffmpegPath").GetString());
+
+            // The scalar PUT persists what it is sent.
+            var restore = await Http.PutAsJsonAsync(Base, new { ffmpegPath = original ?? "" });
+            Assert.Equal(HttpStatusCode.OK, restore.StatusCode);
+            Assert.Equal(original ?? "", (await FullAsync()).GetProperty("ffmpegPath").GetString() ?? "");
         }
         finally
         {

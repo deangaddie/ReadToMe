@@ -31,6 +31,7 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
             var catalog = JsonDocument.Parse(await Http.GetStringAsync(Url())).RootElement.EnumerateArray()
                 .Select(s => s.GetProperty("name").GetString()!).ToList();
             Assert.Equal(catalog.OrderBy(n => n), all.Keys.OrderBy(n => n));
+            Assert.DoesNotContain("whisper-cpu", catalog);
             Assert.Equal("Stopped", all["whisper"]);
             Assert.Equal("Ready", all["llama"]);
         }
@@ -105,10 +106,13 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
     }
 
     [Fact]
-    public async Task Ops_on_an_unknown_service_are_404()
+    public async Task Ops_and_probes_on_an_unknown_service_are_404()
     {
         var response = await Http.PostAsync(Url("/no-such-service/restart"), null);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+
+        var probe = await Http.GetAsync(Url("/no-such-service/status"));
+        Assert.Equal(HttpStatusCode.NotFound, probe.StatusCode);
     }
 
     [Fact]

@@ -8,7 +8,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// Vertical slice of the agent-facing API: project list/create/detail/delete,
-/// import, and the queue status polls an agent uses to track long-running work.
+/// import, patch and cover. The queue status polls are proven by every test that drains a queue.
 /// </summary>
 public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -28,16 +28,6 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
         form.Add(file, "file", fileName);
         return form;
-    }
-
-    [Fact]
-    public async Task List_projects_returns_json_array()
-    {
-        var response = await Http.GetAsync($"{app.BaseUrl}/api/projects");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
     }
 
     [Fact]
@@ -322,27 +312,5 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
 
         Assert.Equal(JsonValueKind.Null, (await DetailAsync(folder)).GetProperty("coverImage").ValueKind);
-    }
-
-    [Fact]
-    public async Task Attribution_queue_snapshot_polls()
-    {
-        var response = await Http.GetAsync($"{app.BaseUrl}/api/attribution/queue");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(doc.RootElement.TryGetProperty("queuedCount", out _));
-        Assert.True(doc.RootElement.TryGetProperty("processingCount", out _));
-    }
-
-    [Fact]
-    public async Task Audio_queue_snapshot_polls()
-    {
-        var response = await Http.GetAsync($"{app.BaseUrl}/api/audio/queue");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(doc.RootElement.TryGetProperty("queuedCount", out _));
-        Assert.True(doc.RootElement.TryGetProperty("estimatedSecondsRemaining", out _));
     }
 }

@@ -225,8 +225,7 @@ namespace Read2Me.App.Api
         /// The word an API client sees for an item's kind. Storage no longer distinguishes narration
         /// from dialog — the speaker does (ADR-0006) — so the word is computed: narration when the
         /// speaker is the narrator sentinel, dialog otherwise (an unattributed item included), pause
-        /// kinds by name. The spelling is the one the API has always emitted, so no client changes
-        /// and <c>FrozenItemBoundaryTests</c> passes unmodified.
+        /// kinds by name. The spelling is the one the API has always emitted, so no client changes.
         /// </summary>
         private static string ItemTypeWord(ParagraphItem item) =>
             ParagraphItemKinds.IsPause(item.ItemType) ? item.ItemType.ToString()

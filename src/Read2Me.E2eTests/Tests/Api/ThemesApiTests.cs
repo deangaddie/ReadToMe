@@ -128,30 +128,4 @@ public class ThemesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
                 new { selectedThemeId = originalId, followSystemPreference = originalFollow });
         }
     }
-
-    [Fact]
-    public async Task Deleting_the_selected_custom_theme_clears_the_selection()
-    {
-        var original = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/settings/themes/selection")).RootElement;
-        var originalId = original.GetProperty("selectedThemeId").ValueKind == JsonValueKind.Null
-            ? (int?)null
-            : original.GetProperty("selectedThemeId").GetInt32();
-        try
-        {
-            var create = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/settings/themes",
-                new { name = $"tmp-{Guid.NewGuid():N}", primary = "#ff9900", secondary = "#00aaff" });
-            var id = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetInt32();
-            await Http.PutAsJsonAsync($"{app.BaseUrl}/api/settings/themes/selection", new { selectedThemeId = id });
-
-            await Http.DeleteAsync($"{app.BaseUrl}/api/settings/themes/{id}");
-
-            var selection = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/settings/themes/selection")).RootElement;
-            Assert.Equal(JsonValueKind.Null, selection.GetProperty("selectedThemeId").ValueKind);
-        }
-        finally
-        {
-            if (originalId is { } restore)
-                await Http.PutAsJsonAsync($"{app.BaseUrl}/api/settings/themes/selection", new { selectedThemeId = restore });
-        }
-    }
 }

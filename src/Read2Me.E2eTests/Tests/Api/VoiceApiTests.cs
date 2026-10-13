@@ -83,34 +83,19 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     /// <summary>
-    /// Breeze voice design: with the Breeze config active, generating a voice's audio sends its
-    /// design prompt to fake-audiocpp as the instruction on a no-reference <c>breeze-design</c>
-    /// request, and the take lands.
+    /// The wiring for a design provider other than the default: with the Qwen3 config active,
+    /// generating a voice's audio sends its design prompt to fake-audiocpp as the instruction on a
+    /// no-reference <c>qwen3-design</c> request. Every design provider's client and body are unit
+    /// tests (ProviderClientRegistrationTests and each *VoiceDesignClientTests class), so one
+    /// provider stands for the rest here.
     /// </summary>
     [Fact]
-    public async Task A_Breeze_voice_design_config_designs_through_audiocpp()
-    {
-        var body = await DesignOneVoiceAsync(WorkspaceSeeder.BreezeDesignConfigName);
-
-        Assert.Equal("breeze-design", body["model"]!.GetValue<string>());
-        Assert.Equal("A clear adult voice.", body["options"]!["instruction"]!.GetValue<string>());
-        Assert.False(body.ContainsKey("voice_ref"));
-    }
-
-    /// <summary>
-    /// Qwen3 voice design: with the Qwen3 config active, generating a voice's audio sends its design
-    /// prompt to fake-audiocpp as the instruction on a no-reference <c>qwen3-design</c> request, the
-    /// language top-level, and only the instruction and a seed in options while the knobs are unset.
-    /// </summary>
-    [Fact]
-    public async Task A_Qwen3_voice_design_config_designs_through_audiocpp()
+    public async Task An_active_design_provider_config_designs_through_its_own_audiocpp_client()
     {
         var body = await DesignOneVoiceAsync(WorkspaceSeeder.Qwen3DesignConfigName);
 
         Assert.Equal("qwen3-design", body["model"]!.GetValue<string>());
         Assert.Equal("A clear adult voice.", body["options"]!["instruction"]!.GetValue<string>());
-        Assert.Equal(["instruction", "seed"], body["options"]!.AsObject().Select(o => o.Key).Order());
-        Assert.Equal("auto", body["language"]!.GetValue<string>());
         Assert.False(body.ContainsKey("voice_ref"));
         Assert.False(body.ContainsKey("reference_text"));
     }

@@ -6,8 +6,8 @@ using Read2Me.E2eTests.Infrastructure;
 namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
-/// Settings over HTTP: config-area CRUD + active selection, prompt templates,
-/// audio-processing scalars.
+/// Settings over HTTP: config-area CRUD + active selection and prompt templates. Audio
+/// processing has its own class, AudioProcessingApiTests.
 /// </summary>
 public class SettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -154,20 +154,6 @@ public class SettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     private async Task<JsonElement> CatalogEntryAsync(string kind) =>
         JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/settings/prompts/catalog"))
             .RootElement.EnumerateArray().Single(k => k.GetProperty("kind").GetString() == kind);
-
-    [Fact]
-    public async Task Audio_processing_get_and_put()
-    {
-        var get = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/settings/audio-processing"));
-        Assert.True(get.RootElement.TryGetProperty("werThreshold", out _));
-
-        var put = await Http.PutAsJsonAsync($"{app.BaseUrl}/api/settings/audio-processing",
-            new { werThreshold = 0.25 });
-        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
-
-        var updated = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/settings/audio-processing"));
-        Assert.Equal(0.25, updated.RootElement.GetProperty("werThreshold").GetDouble());
-    }
 
     [Fact]
     public async Task Unknown_settings_area_is_404()

@@ -9,15 +9,15 @@ public class ProviderSchemaApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
 {
     private static readonly HttpClient Http = new();
 
-    [Theory]
-    [InlineData("paragraph-tts", "VoxCpm2", "cfg_value")]
-    [InlineData("paragraph-tts", "Chatterbox", "exaggeration")]
-    [InlineData("paragraph-tts", "Qwen3Base", "language")]
-    [InlineData("voice-design", "VoxCpm2", "cfg_value")]
-    [InlineData("voice-design", "Qwen3", "language")]
-    public async Task Schema_describes_every_provider_type(string area, string type, string expectedKey)
+    /// <summary>
+    /// The endpoint's wire shape, on one provider. Every provider's fields keep the same rules in
+    /// ProviderSettingsSchemaTests, and each one's field list in its *ProviderSettingsTests class.
+    /// </summary>
+    [Fact]
+    public async Task Schema_describes_a_provider_type()
     {
-        var response = await Http.GetAsync($"{app.BaseUrl}/api/settings/{area}/schema?type={type}");
+        const string type = "VoxCpm2";
+        var response = await Http.GetAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema?type={type}");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var schema = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
@@ -25,7 +25,7 @@ public class ProviderSchemaApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         var fields = schema.GetProperty("fields").EnumerateArray().ToList();
         Assert.NotEmpty(fields);
         var keys = fields.Select(f => f.GetProperty("key").GetString()).ToList();
-        Assert.Contains(expectedKey, keys);
+        Assert.Contains("cfg_value", keys);
         foreach (var field in fields)
         {
             Assert.False(string.IsNullOrEmpty(field.GetProperty("label").GetString()));

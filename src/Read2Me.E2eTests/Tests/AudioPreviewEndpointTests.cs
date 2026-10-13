@@ -23,11 +23,16 @@ public class AudioPreviewEndpointTests(E2eAppFixture app) : IClassFixture<E2eApp
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    /// <summary>
+    /// The token is the voice editor's per-step shape, "{pageId}-{stepId}", not a bare GUID: a
+    /// GUID-only guard here 404s every per-step player on the page.
+    /// </summary>
     [Fact]
-    public async Task Rendered_token_serves_the_preview_wav()
+    public async Task Re_rendered_token_serves_the_newest_wav()
     {
-        var token = Guid.NewGuid().ToString("N");
-        byte[] wav = [1, 2, 3, 4];
+        var token = $"{Guid.NewGuid():N}-{AudioPostProcessStepIds.DePlosive}";
+        await Store.SaveAsync(token, [1, 1]);
+        byte[] wav = [2, 2, 2];
         await Store.SaveAsync(token, wav);
 
         using var http = new HttpClient();
@@ -38,35 +43,6 @@ public class AudioPreviewEndpointTests(E2eAppFixture app) : IClassFixture<E2eApp
         // Without a length the response chunks, and the <audio> element reports an infinite
         // duration — no total time and no scrub bar on the Filtered player.
         Assert.Equal(wav.Length, response.Content.Headers.ContentLength);
-        Assert.Equal(wav, await response.Content.ReadAsByteArrayAsync());
-    }
-
-    [Fact]
-    public async Task Re_rendered_token_serves_the_newest_wav()
-    {
-        var token = Guid.NewGuid().ToString("N");
-        await Store.SaveAsync(token, [1, 1]);
-        await Store.SaveAsync(token, [2, 2]);
-
-        using var http = new HttpClient();
-        var response = await http.GetAsync($"{app.BaseUrl}/audio-preview/{token}");
-
-        Assert.Equal<byte[]>([2, 2], await response.Content.ReadAsByteArrayAsync());
-    }
-
-    /// The voice editor mints one token per step as "{pageId}-{stepId}", not a bare GUID — a
-    /// GUID-only guard here 404s every per-step player on the page.
-    [Fact]
-    public async Task Voice_editor_step_token_serves_the_preview_wav()
-    {
-        var token = $"{Guid.NewGuid():N}-{AudioPostProcessStepIds.DePlosive}";
-        byte[] wav = [5, 6, 7];
-        await Store.SaveAsync(token, wav);
-
-        using var http = new HttpClient();
-        var response = await http.GetAsync($"{app.BaseUrl}/audio-preview/{token}");
-
-        Assert.True(response.IsSuccessStatusCode, $"{response.StatusCode}");
         Assert.Equal(wav, await response.Content.ReadAsByteArrayAsync());
     }
 

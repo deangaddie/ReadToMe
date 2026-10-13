@@ -1,11 +1,13 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
-/// Book structure reads: overview, node children walk, characters with aliases.
+/// Book structure reads: overview, node children walk, characters with aliases, and the project
+/// and node status roll-ups.
 /// </summary>
 public class BookApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -44,18 +46,81 @@ public class BookApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.False(string.IsNullOrEmpty(firstItems[0].GetProperty("text").GetString()));
     }
 
+    /// <summary>
+    /// The roll-ups behind the web pipeline stepper and reader tree badges (ticket 09):
+    /// <c>GET /api/projects/{folder}/status</c> and the per-node summary, read at the same revision
+    /// as the overview. How a node rolls up is NodeStatusServiceTests; this is the endpoint's
+    /// composition of it with the item and cast counts.
+    /// </summary>
     [Fact]
-    public async Task Overview_carries_the_project_revision()
+    public async Task Status_rolls_up_items_and_volume_nodes_at_the_overview_revision()
     {
         var folder = $"api-book-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "Book Revision", "Author A");
+        await app.SeedProjectAsync(folder, "Book Status", "Author A");
 
-        var overview = await GetJsonAsync($"/api/projects/{folder}/book");
-        var status = await GetJsonAsync($"/api/projects/{folder}/status");
+        var overview = (await GetJsonAsync($"/api/projects/{folder}/book")).RootElement;
+        var status = (await GetJsonAsync($"/api/projects/{folder}/status")).RootElement;
 
-        Assert.Equal(
-            status.RootElement.GetProperty("revision").GetInt64(),
-            overview.RootElement.GetProperty("revision").GetInt64());
+        Assert.Equal(status.GetProperty("revision").GetInt64(), overview.GetProperty("revision").GetInt64());
+        Assert.True(status.GetProperty("hasContent").GetBoolean());
+        var items = status.GetProperty("items");
+        Assert.True(items.GetProperty("total").GetInt32() > 0);
+        Assert.Equal(0, items.GetProperty("withAudio").GetInt32());
+        Assert.True(items.GetProperty("unattributed").GetInt32() >= 1);
+
+        var attributionRemaining = status.GetProperty("attribution").GetProperty("remaining").GetInt32();
+        Assert.True(attributionRemaining >= 1);
+        Assert.False(status.GetProperty("attribution").GetProperty("processing").GetBoolean());
+        Assert.Equal(0, status.GetProperty("attribution").GetProperty("queued").GetInt32());
+        Assert.True(status.GetProperty("audio").GetProperty("remaining").GetInt32() >= 1);
+        // Narration is spoken by the seed narrator, so the book has at least one speaker.
+        Assert.True(status.GetProperty("charactersWithLines").GetInt32() >= 1);
+
+        var volumeId = Assert.Single(status.GetProperty("volumeIds").EnumerateArray()).GetString()!;
+        var volume = status.GetProperty("nodes").GetProperty(volumeId);
+        Assert.Equal(attributionRemaining, volume.GetProperty("attributionRemaining").GetInt32());
+        Assert.Equal(status.GetProperty("audio").GetProperty("remaining").GetInt32(),
+            volume.GetProperty("audioRemaining").GetInt32());
+
+        var summary = (await GetJsonAsync($"/api/projects/{folder}/nodes/volume/{volumeId}/status")).RootElement;
+        Assert.Equal(attributionRemaining, summary.GetProperty("attributionRemaining").GetInt32());
+        Assert.False(summary.GetProperty("isDone").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Status_of_a_project_with_no_book_has_no_content_and_zero_counts()
+    {
+        var form = new MultipartFormDataContent
+        {
+            { new StringContent($"api-status-fresh-{Guid.NewGuid():N}"), "title" },
+            { new StringContent("A Book"), "bookTitle" },
+            { new StringContent("An Author"), "author" },
+        };
+        var file = new ByteArrayContent(Encoding.UTF8.GetBytes("Chapter 1\n\nIt was a dark and stormy night."));
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+        form.Add(file, "file", "book.txt");
+        var create = await Http.PostAsync($"{app.BaseUrl}/api/projects", form);
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var folder = JsonDocument.Parse(await create.Content.ReadAsStringAsync())
+            .RootElement.GetProperty("folderName").GetString()!;
+
+        var status = (await GetJsonAsync($"/api/projects/{folder}/status")).RootElement;
+
+        Assert.False(status.GetProperty("hasContent").GetBoolean());
+        Assert.Equal(0, status.GetProperty("characters").GetInt32());
+        Assert.Equal(0, status.GetProperty("charactersWithLines").GetInt32());
+        Assert.Equal(0, status.GetProperty("readyVoices").GetInt32());
+        Assert.Equal(0, status.GetProperty("items").GetProperty("total").GetInt32());
+        Assert.Equal(0, status.GetProperty("attribution").GetProperty("remaining").GetInt32());
+        Assert.Equal(0, status.GetProperty("audio").GetProperty("remaining").GetInt32());
+        Assert.Equal(0, status.GetProperty("review").GetInt32());
+        Assert.Empty(status.GetProperty("volumeIds").EnumerateArray());
+        Assert.Empty(status.GetProperty("nodes").EnumerateObject());
+        Assert.True(status.GetProperty("revision").GetInt64() >= 0);
+
+        var badLevel = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/nodes/paragraph/{Guid.NewGuid()}/status");
+        Assert.Equal(HttpStatusCode.BadRequest, badLevel.StatusCode);
+        Assert.Equal("application/problem+json", badLevel.Content.Headers.ContentType?.MediaType);
     }
 
     [Fact]
@@ -84,10 +149,15 @@ public class BookApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task Unknown_folder_book_is_404()
+    public async Task Unknown_folder_book_and_status_are_404()
     {
         var response = await Http.GetAsync($"{app.BaseUrl}/api/projects/nope-xyz/book");
-
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+
+        var status = await Http.GetAsync($"{app.BaseUrl}/api/projects/nope-xyz/status");
+        Assert.Equal(HttpStatusCode.NotFound, status.StatusCode);
+
+        var node = await Http.GetAsync($"{app.BaseUrl}/api/projects/nope-xyz/nodes/chapter/{Guid.NewGuid()}/status");
+        Assert.Equal(HttpStatusCode.NotFound, node.StatusCode);
     }
 }

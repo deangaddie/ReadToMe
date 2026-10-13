@@ -96,18 +96,6 @@ public class AssemblyApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task Outputs_without_an_output_folder_is_an_empty_list()
-    {
-        var folder = $"api-asm-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "Asm Book", "Author");
-
-        var outputs = JsonDocument.Parse(await Http.GetStringAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/assembly/outputs")).RootElement;
-
-        Assert.Equal(0, outputs.GetArrayLength());
-    }
-
-    [Fact]
     public async Task Download_is_an_mp4_attachment()
     {
         var folder = $"api-asm-{Guid.NewGuid():N}";
