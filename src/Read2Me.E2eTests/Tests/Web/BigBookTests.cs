@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
@@ -71,9 +72,11 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         await Page.WaitForSelectorAsync($"[data-row-key='{header}']", new() { State = WaitForSelectorState.Attached });
 
         // scrollToIndex lands within a pixel, and the current chapter is the one at the top.
-        await Page.WaitForFunctionAsync($"(key) => {{ const t = ({RowTop})(key); return t !== null && Math.abs(t) <= {TolerancePx}; }}", header);
-        var landed = await Page.EvaluateAsync<double>(RowTop, header);
-        Assert.InRange(landed, -TolerancePx, TolerancePx);
+        // The landed offset is the one the wait saw: a read after it can catch rows that have grown
+        // as their speaker chips render, before the row observer puts the list back on the next frame.
+        var landed = (await (await Page.WaitForFunctionAsync(
+            $"(key) => {{ const t = ({RowTop})(key); return t !== null && Math.abs(t) <= {TolerancePx} ? {{ t }} : null; }}",
+            header)).JsonValueAsync<JsonElement>()).GetProperty("t").GetDouble();
         await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", target.ToString());
 
         // The edge check prepends the chapter before: the anchored header does not move.

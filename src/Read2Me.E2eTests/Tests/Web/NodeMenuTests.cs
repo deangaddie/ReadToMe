@@ -123,6 +123,16 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         // Deep in the book the measured list's rendered window starts thousands of pixels down.
         await GotoAppAsync($"projects/native-menu-deep/book?chapter={target}");
         await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", target.ToString());
+        // The edge check then prepends Chapter 5. Its rows render short and grow as their speaker
+        // chips render; the row observer puts the list back on the next frame. A hover in between
+        // finds its trigger pushed below the viewport and scrolls it back into view, which the list
+        // takes for the reader's scroll. So wait for the prepend, then two frames: the observer runs
+        // in the first, and the second starts after its correction.
+        await Page.WaitForFunctionAsync("""
+            (id) => (document.querySelector('r2m-measured-list')?.items ?? [])
+              .some((r) => r.kind === 'chapter' && r.chapterId === id)
+            """, book.ChapterId("Chapter 5").ToString());
+        await Page.EvaluateAsync("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
         var key = await Page.EvaluateAsync<string>("""
             () => {
               const list = document.querySelector('r2m-measured-list');
