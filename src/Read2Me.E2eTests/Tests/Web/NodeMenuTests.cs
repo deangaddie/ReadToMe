@@ -4,11 +4,10 @@ using Read2Me.E2eTests.Infrastructure;
 namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
-/// The structure tree's per-node menu (native-web 23, spec §7 named risk 2): one shared popover
-/// anchored to the trigger of each open. Its keys stay inside the menu rather than moving the
-/// tree's roving focus, focus returns to the tree item after Escape and after choosing an entry,
-/// and the anchor survives a live receipt re-rendering the tree under the open menu. Runs in
-/// Chromium and Firefox.
+/// The structure tree's per-node menu (spec §7 named risk 2): one shared popover in the real top
+/// layer, anchored to the trigger of each open. The anchor survives a live receipt re-rendering the
+/// tree under the open menu, and focus returns to the tree item after Escape and after choosing an
+/// entry (Delete, then Cancel in the real confirm dialog). Runs in Chromium and Firefox.
 /// </summary>
 public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
@@ -21,61 +20,7 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         """;
 
     [Fact]
-    public async Task Menu_keys_stay_in_the_menu_and_focus_returns_to_the_tree_item()
-    {
-        var book = await App.SeedLongBookAsync("native-menu-keys", "Native Menu Keys", "A. Author", chapters: 3, paragraphs: 2);
-        var first = book.ChapterId("Chapter 1").ToString();
-
-        await GotoAppAsync("projects/native-menu-keys/book");
-        await Expect(Page.Locator(".tree__title")).ToHaveTextAsync(["Chapter 1", "Chapter 2", "Chapter 3"]);
-
-        // Once the reader has settled on the first chapter, Shift+F10 opens the focused node's menu
-        // with its first entry focused.
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", first);
-        var node = Page.Locator($"[data-node-id='{first}']");
-        await node.FocusAsync();
-        await Expect(node).ToBeFocusedAsync();
-        await Page.Keyboard.PressAsync("Shift+F10");
-        var menu = Page.GetByRole(AriaRole.Menu, new() { Name = "Actions for Chapter 1" });
-        await Expect(menu).ToBeVisibleAsync();
-        // Read mode selects paragraphs, so the selection shortcuts lead (native-web 25).
-        Assert.Equal("select-unprocessed", await Page.EvaluateAsync<string?>(FocusedEntry));
-
-        // Arrows move through the entries, wrapping; the tree's tab stop does not move with them.
-        await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal("attribute-node", await Page.EvaluateAsync<string?>(FocusedEntry));
-        await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal("release-narration", await Page.EvaluateAsync<string?>(FocusedEntry));
-        await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal("edit-title", await Page.EvaluateAsync<string?>(FocusedEntry));
-        await Page.Keyboard.PressAsync("End");
-        Assert.Equal("delete", await Page.EvaluateAsync<string?>(FocusedEntry));
-        await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal("select-unprocessed", await Page.EvaluateAsync<string?>(FocusedEntry));
-        await Expect(node).ToHaveAttributeAsync("tabindex", "0");
-
-        // Escape closes the menu and puts focus back on the tree item.
-        await Page.Keyboard.PressAsync("Escape");
-        await Expect(menu).ToBeHiddenAsync();
-        Assert.Equal(first, await Page.EvaluateAsync<string?>(FocusedNode));
-
-        // Choosing an entry (Delete, then Cancel in its confirm) also returns focus to the item.
-        await Page.Keyboard.PressAsync("Shift+F10");
-        await Expect(menu).ToBeVisibleAsync();
-        await Page.Keyboard.PressAsync("End");
-        await Page.Keyboard.PressAsync("Enter");
-        var confirm = Page.GetByRole(AriaRole.Dialog);
-        await Expect(confirm).ToBeVisibleAsync();
-        await Expect(confirm).ToContainTextAsync("Delete “Chapter 1”?");
-        await confirm.Locator(".r2m-confirm-dialog__cancel").ClickAsync();
-        await Expect(confirm).ToBeHiddenAsync();
-        await Expect(menu).ToBeHiddenAsync();
-        Assert.Equal(first, await Page.EvaluateAsync<string?>(FocusedNode));
-        await Expect(Page.Locator(".tree__title")).ToHaveCountAsync(3);
-    }
-
-    [Fact]
-    public async Task The_anchor_survives_a_receipt_re_rendering_the_tree_under_the_open_menu()
+    public async Task The_anchor_survives_a_receipt_re_rendering_the_tree_and_focus_returns_to_the_tree_item()
     {
         var book = await App.SeedLongBookAsync("native-menu-anchor", "Native Menu Anchor", "A. Author", chapters: 3, paragraphs: 2);
         var second = book.ChapterId("Chapter 2").ToString();
@@ -108,51 +53,30 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         Assert.InRange(after.Y, before.Y - 1, before.Y + 1);
         AssertAnchored((await trigger.BoundingBoxAsync())!, after);
 
-        // And it still belongs to its node: Escape returns focus there.
+        // And it still belongs to its node: Escape closes it and returns focus there.
         await Page.Keyboard.PressAsync("Escape");
         await Expect(menu).ToBeHiddenAsync();
         Assert.Equal(second, await Page.EvaluateAsync<string?>(FocusedNode));
-    }
 
-    [Fact]
-    public async Task A_paragraph_menu_deep_in_a_long_book_opens_on_its_trigger()
-    {
-        var book = await App.SeedLongBookAsync("native-menu-deep", "Native Menu Deep", "A. Author");
-        var target = book.ChapterId("Chapter 6");
-
-        // Deep in the book the measured list's rendered window starts thousands of pixels down.
-        await GotoAppAsync($"projects/native-menu-deep/book?chapter={target}");
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", target.ToString());
-        // The edge check then prepends Chapter 5. Its rows render short and grow as their speaker
-        // chips render; the row observer puts the list back on the next frame. A hover in between
-        // finds its trigger pushed below the viewport and scrolls it back into view, which the list
-        // takes for the reader's scroll. So wait for the prepend, then two frames: the observer runs
-        // in the first, and the second starts after its correction.
-        await Page.WaitForFunctionAsync("""
-            (id) => (document.querySelector('r2m-measured-list')?.items ?? [])
-              .some((r) => r.kind === 'chapter' && r.chapterId === id)
-            """, book.ChapterId("Chapter 5").ToString());
-        await Page.EvaluateAsync("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
-        var key = await Page.EvaluateAsync<string>("""
-            () => {
-              const list = document.querySelector('r2m-measured-list');
-              const top = list.getBoundingClientRect().top;
-              return [...list.querySelectorAll('[data-row-key^="paragraph:"]')]
-                .find((row) => row.getBoundingClientRect().top > top + 80).dataset.rowKey;
-            }
-            """);
-
-        var row = Page.Locator($"[data-row-key='{key}'] .r2m-paragraph__menu");
-        await row.HoverAsync();
-        var trigger = row.Locator("button");
-        await trigger.ClickAsync();
-        var menu = Page.Locator("#r2m-node-menu-panel");
+        // Choosing an entry also returns focus to the item: Shift+F10 reopens the menu, End reaches
+        // Delete, and Cancel in its confirm closes both.
+        await Page.Keyboard.PressAsync("Shift+F10");
         await Expect(menu).ToBeVisibleAsync();
-        AssertAnchored((await trigger.BoundingBoxAsync())!, (await menu.BoundingBoxAsync())!);
+        await Page.Keyboard.PressAsync("End");
+        Assert.Equal("delete", await Page.EvaluateAsync<string?>(FocusedEntry));
+        await Page.Keyboard.PressAsync("Enter");
+        var confirm = Page.GetByRole(AriaRole.Dialog);
+        await Expect(confirm).ToBeVisibleAsync();
+        await Expect(confirm).ToContainTextAsync("Delete “Chapter 2”?");
+        await confirm.Locator(".r2m-confirm-dialog__cancel").ClickAsync();
+        await Expect(confirm).ToBeHiddenAsync();
+        await Expect(menu).ToBeHiddenAsync();
+        Assert.Equal(second, await Page.EvaluateAsync<string?>(FocusedNode));
+        await Expect(Page.Locator(".tree__title")).ToHaveCountAsync(3);
     }
 
     /// <summary>The panel sits just below the trigger (block-end) and overlaps it horizontally.</summary>
-    private static void AssertAnchored(LocatorBoundingBoxResult anchor, LocatorBoundingBoxResult panel)
+    internal static void AssertAnchored(LocatorBoundingBoxResult anchor, LocatorBoundingBoxResult panel)
     {
         Assert.InRange(panel.Y - (anchor.Y + anchor.Height), 0, 12);
         Assert.True(panel.X < anchor.X + anchor.Width && panel.X + panel.Width > anchor.X,

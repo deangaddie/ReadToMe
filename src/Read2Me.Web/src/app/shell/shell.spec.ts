@@ -4,6 +4,7 @@ import { Router } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
 
 import { ProjectTitles } from '@app/shell/project-titles';
+import { ThemeService } from '@app/theme/theme.service';
 import { FakeApi } from '../../testing/fake-api';
 import { FakeLive } from '../../testing/fake-live';
 import { installNavigation, settle } from '../../testing/fake-navigation';
@@ -225,6 +226,42 @@ describe('app-root', () => {
     shell.querySelector<HTMLElement>('[aria-label="Close activity drawer"]')?.click();
     await settle();
     expect(shell.querySelector('r2m-activity-drawer')).toBeNull();
+  });
+
+  it.each([
+    { page: 'llm', tag: 'r2m-llm-settings-page', title: 'LLM' },
+    { page: 'prompts', tag: 'r2m-prompts-page', title: 'Prompts' },
+    { page: 'tts', tag: 'r2m-tts-settings-page', title: 'Paragraph TTS' },
+    { page: 'voice-design', tag: 'r2m-voice-design-settings-page', title: 'Voice design' },
+    { page: 'transcription', tag: 'r2m-transcription-settings-page', title: 'Transcription' },
+    { page: 'similarity', tag: 'r2m-similarity-settings-page', title: 'Similarity' },
+    { page: 'audio', tag: 'r2m-audio-settings-page', title: 'Audio processing' },
+    { page: 'services', tag: 'r2m-ai-services-page', title: 'AI services' },
+    { page: 'themes', tag: 'r2m-themes-page', title: 'Themes' },
+  ])('frames settings/$page as $tag with its crumbs and tab title', async (c) => {
+    const { shell } = await mount(`settings/${c.page}`);
+
+    expect(shell.querySelector('main > r2m-outlet')?.firstElementChild?.localName).toBe(c.tag);
+    expect(shell.querySelector('r2m-not-found-page')).toBeNull();
+    expect(texts(shell, '.shell__crumb')).toEqual(['Settings', c.title]);
+    expect(document.title).toBe(`Read2Me · Settings · ${c.title}`);
+  });
+
+  it('switches the scheme from the theme menu through ThemeService', async () => {
+    const { shell } = await mount('projects');
+    const chosen: string[] = [];
+    use(ThemeService).setPreference = async (preference) => {
+      chosen.push(preference);
+    };
+    // happy-dom has no popover API: record the hide the menu asks for.
+    let hidden = 0;
+    const menu = shell.querySelector<HTMLElement>('#r2m-theme-menu');
+    (menu as unknown as { hidePopover: () => void }).hidePopover = () => void hidden++;
+
+    menu?.querySelector<HTMLElement>('[data-scheme="dark"]')?.click();
+
+    expect(chosen).toEqual(['dark']);
+    expect(hidden).toBe(1);
   });
 
   it('offers the three scheme choices in the theme menu', async () => {

@@ -236,6 +236,62 @@ describe('BookStore', () => {
     expect(store.window()).toEqual(ids.slice(1));
   });
 
+  it('paging loadNext through a twelve-chapter book never holds more than five and ends on the last', async () => {
+    const ids = Array.from({ length: 12 }, (_, i) => `c${i + 1}`);
+    api.on('GET', `${BASE}/nodes/volume/v1/children`, { parts: [{ id: 'p1', title: 'One' }] });
+    api.on('GET', `${BASE}/nodes/part/p1/children`, chapterList(ids));
+    for (const id of ids)
+      api.on('GET', `${BASE}/nodes/chapter/${id}/children`, paragraphs(`${id}-p`));
+    await store.open('dune');
+    await store.openFirstChapter();
+
+    let max = store.window().length;
+    for (let i = 0; i < ids.length + 2 && !store.atEnd(); i++) {
+      await store.loadNext();
+      max = Math.max(max, store.window().length);
+    }
+    expect(max).toBe(WINDOW_CAP);
+    expect(store.window()).toEqual(ids.slice(-WINDOW_CAP));
+    expect(store.atEnd()).toBe(true);
+  });
+
+  it('loadNext crosses a volume boundary, filling the window to five', async () => {
+    // Two volumes of two parts of two chapters: v1 → p1 (a, b), p2 (c, d); v2 → p3 (e, f), p4 (g, h).
+    api.on('GET', `${BASE}/book`, {
+      ...OVERVIEW,
+      volumes: [
+        { id: 'v1', title: 'Vol 1' },
+        { id: 'v2', title: 'Vol 2' },
+      ],
+      totalParts: 4,
+      totalChapters: 8,
+    });
+    const parts: Record<string, string[]> = { v1: ['p1', 'p2'], v2: ['p3', 'p4'] };
+    const chapters: Record<string, string[]> = {
+      p1: ['a', 'b'],
+      p2: ['c', 'd'],
+      p3: ['e', 'f'],
+      p4: ['g', 'h'],
+    };
+    for (const [volume, ids] of Object.entries(parts))
+      api.on('GET', `${BASE}/nodes/volume/${volume}/children`, {
+        parts: ids.map((id) => ({ id, title: id })),
+      });
+    for (const [part, ids] of Object.entries(chapters)) {
+      api.on('GET', `${BASE}/nodes/part/${part}/children`, chapterList(ids));
+      for (const id of ids)
+        api.on('GET', `${BASE}/nodes/chapter/${id}/children`, paragraphs(`${id}-p`));
+    }
+    await store.open('dune');
+    await store.openFirstChapter();
+    expect(calls('/nodes/volume/v2/children')).toBe(0);
+
+    for (let i = 1; i < WINDOW_CAP; i++) await store.loadNext();
+    expect(calls('/nodes/volume/v2/children')).toBe(1);
+    expect(store.window()).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(store.chapters().map((c) => c.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
   it('audio mode loads the voice map for loaded chapters', async () => {
     api.on('GET', `${BASE}/nodes/chapter/c1/voices`, {
       'a-i': { voiceName: 'Deep', narratedBy: null },

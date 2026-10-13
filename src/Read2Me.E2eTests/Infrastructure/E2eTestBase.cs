@@ -124,19 +124,6 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : ICl
 
     protected static ILocatorAssertions Expect(ILocator locator) => Assertions.Expect(locator);
 
-    /// <summary>
-    /// Clicks a busy-gated Save and returns once the write has landed. The button disables on the
-    /// click, before the request is stored, so "disabled again" alone passes too early. The host's
-    /// <c>aria-busy</c> is set no later than the render that disables the button, so it clearing
-    /// after that means the save finished.
-    /// </summary>
-    protected static async Task SaveAndSettleAsync(ILocator host, ILocator save)
-    {
-        await save.ClickAsync();
-        await Expect(save).ToBeDisabledAsync();
-        await Expect(host).Not.ToHaveAttributeAsync("aria-busy", "true");
-    }
-
     private static void StageBundle(string source, string target)
     {
         if (Directory.Exists(target)) Directory.Delete(target, recursive: true);

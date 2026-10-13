@@ -30,7 +30,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     public FakeLlmModelStore LlmModels { get; set; } = FakeLlmModelStore.AllLoaded(DefaultModel);
 
     /// <summary>
-    /// Per-test hook: how long each LLM completion takes before answering, so a browser test can
+    /// Per-test hook: how long each LLM completion takes before answering, so a test can
     /// watch the queue while it is still busy. Zero by default.
     /// </summary>
     public TimeSpan LlmDelay { get; set; } = TimeSpan.Zero;

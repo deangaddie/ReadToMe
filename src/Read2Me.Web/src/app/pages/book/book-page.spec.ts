@@ -220,6 +220,26 @@ describe('r2m-book-page', () => {
     expect(new URL(last.url).searchParams.get('chapter')).toBe('c2');
   });
 
+  it('Enter on a focused tree chapter opens it, names it in the URL, marks it current and keeps the focus', async () => {
+    const { page, store } = await start('projects/dune/book');
+    const item = (id: string) =>
+      page.querySelector<HTMLElement>(`r2m-structure-tree [data-node-id=${id}]`)!;
+    item('c2').focus();
+    item('c2').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    for (let i = 0; i < 4; i++) await settle();
+    await page.rendered();
+
+    expect(store.currentChapterId()).toBe('c2');
+    expect(page.getAttribute('data-current-chapter')).toBe('c2');
+    expect(new URL(navigation.calls.at(-1)!.url).searchParams.get('chapter')).toBe('c2');
+    expect(item('c2').getAttribute('aria-current')).toBe('true');
+    expect(item('c1').hasAttribute('aria-current')).toBe(false);
+    // The query-only navigation must not re-render the page and drop the focus to the body.
+    expect(document.activeElement?.closest('[role=treeitem]')).toBe(item('c2'));
+  });
+
   it('expanding a tree node loads its children through the store', async () => {
     api
       .on('GET', `${BASE}/book`, {

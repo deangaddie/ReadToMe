@@ -112,6 +112,19 @@ const button = (el: Element, label: string) =>
 
 const rows = (page: Element) => Array.from(page.querySelectorAll('.r2m-config-list__row'));
 
+/** A row's popover menu entry (after its icon); happy-dom has no popover API, so it is clicked in place. */
+const rowAction = (page: Element, name: string, action: string) =>
+  Array.from(
+    page.querySelectorAll<HTMLButtonElement>(
+      `[role="menu"][aria-label="Actions for ${name}"] [role="menuitem"]`,
+    ),
+  ).find((b) => b.textContent?.trim().endsWith(action))!;
+
+const addStepItem = (page: Element, label: string) =>
+  Array.from(
+    page.querySelectorAll<HTMLButtonElement>('#r2m-llm-chain-add-menu [role="menuitem"]'),
+  ).find((b) => b.textContent?.trim() === label)!;
+
 describe('r2m-llm-settings-page', () => {
   it('lists the configs, marks the default and opens it in the editor', async () => {
     const page = await render();
@@ -235,6 +248,139 @@ describe('r2m-llm-settings-page', () => {
     );
 
     expect(page.querySelector('.chain__alert--info')?.textContent).toContain('small');
+  });
+
+  it('New → Save POSTs the config and selects the created one', async () => {
+    const page = await render();
+    page.querySelector<HTMLButtonElement>('.r2m-config-list__head .r2m-button--filled')!.click();
+    await flush(page);
+    expect(page.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe(
+      'New configuration',
+    );
+
+    await type(page, 'name', 'fresh');
+    await type(page, 'baseUrl', 'http://fresh:8080');
+    await type(page, 'model', 'fresh-model');
+    const FRESH = config(3, 'fresh', 'http://fresh:8080');
+    api.on('POST', LIST, FRESH);
+    routeLoad([SMALL, BIG, FRESH], SMALL);
+    button(page, 'Save').click();
+    await flush(page);
+
+    expect(api.calls('POST', LIST)[0]?.body).toMatchObject({
+      id: 0,
+      name: 'fresh',
+      baseUrl: 'http://fresh:8080',
+      model: 'fresh-model',
+    });
+    expect(page.querySelector('.r2m-config-editor-frame__title')?.textContent).toBe('fresh');
+    expect(
+      page.querySelector('.r2m-config-list__row--selected .r2m-config-list__name')?.textContent,
+    ).toBe('fresh');
+    expect(toasts).toEqual(['Configuration created']);
+  });
+
+  it('Make default PUTs /active and moves the Default marker', async () => {
+    const page = await render();
+    api.on('PUT', ACTIVE, undefined);
+    routeLoad([SMALL, BIG], BIG);
+
+    rowAction(page, 'big', 'Make default').click();
+    await flush(page);
+
+    expect(api.calls('PUT', ACTIVE).map((c) => c.body)).toEqual([{ id: 2 }]);
+    const r = rows(page);
+    expect(r[0]!.textContent).not.toContain('Default');
+    expect(r[1]!.textContent).toContain('Default');
+  });
+
+  it('Delete asks a destructive confirm, then DELETEs and drops the row', async () => {
+    const page = await render();
+    api.on('DELETE', `${LIST}/2`, undefined);
+
+    confirmAnswer = false;
+    rowAction(page, 'big', 'Delete').click();
+    await flush(page);
+    expect(confirms[0]).toMatchObject({ title: 'Delete big?', destructive: true });
+    expect(api.calls('DELETE', `${LIST}/2`)).toHaveLength(0);
+
+    confirmAnswer = true;
+    routeLoad([SMALL], SMALL);
+    rowAction(page, 'big', 'Delete').click();
+    await flush(page);
+
+    expect(api.calls('DELETE', `${LIST}/2`)).toHaveLength(1);
+    expect(
+      rows(page).map((row) => row.querySelector('.r2m-config-list__name')?.textContent),
+    ).toEqual(['small']);
+    expect(toasts).toEqual(['Deleted big']);
+  });
+
+  it.each([
+    {
+      label: 'small',
+      step: { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Full },
+    },
+    {
+      label: 'small (simple)',
+      step: { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Simple },
+    },
+    {
+      label: 'small (chapter)',
+      step: { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Chapter },
+    },
+    {
+      label: 'big (thinking)',
+      step: { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
+    },
+    {
+      label: 'big (simple, thinking)',
+      step: { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Simple },
+    },
+  ])('Add step "$label" PUTs the chain with that variant appended', async ({ label, step }) => {
+    const existing = { configId: 2, thinking: false, promptStyle: AttributionPromptStyle.Chapter };
+    const page = await render(chain({ steps: [existing] }));
+    api.on('PUT', CHAIN, (body) => chain(body as Partial<AttributionChainResponse>));
+
+    addStepItem(page, label).click();
+    await flush(page);
+
+    expect(api.calls('PUT', CHAIN).map((c) => c.body)).toEqual([
+      { steps: [existing, step], selfConsistency: false },
+    ]);
+    expect(page.querySelectorAll('.chain__step')).toHaveLength(2);
+  });
+
+  it('offers Chapter only with thinking off', async () => {
+    const page = await render();
+    const labels = Array.from(
+      page.querySelectorAll('#r2m-llm-chain-add-menu [role="menuitem"]'),
+      (b) => b.textContent?.trim(),
+    );
+    expect(labels).toContain('small (chapter)');
+    expect(labels.filter((l) => l?.includes('chapter, thinking'))).toEqual([]);
+  });
+
+  it('the self-consistency switch PUTs and stays disabled until the PUT answers', async () => {
+    const page = await render();
+    let answer!: (value: AttributionChainResponse) => void;
+    api.on('PUT', CHAIN, () => new Promise<AttributionChainResponse>((r) => (answer = r)));
+    const toggle = () => page.querySelector<HTMLInputElement>('.chain__self input[role="switch"]')!;
+    expect(toggle().checked).toBe(false);
+
+    toggle().checked = true;
+    toggle().dispatchEvent(new Event('change'));
+    await flush(page);
+
+    expect(api.calls('PUT', CHAIN).map((c) => c.body)).toEqual([
+      { steps: [], selfConsistency: true },
+    ]);
+    expect(toggle().disabled).toBe(true);
+
+    answer(chain({ selfConsistency: true }));
+    await flush(page);
+    expect(toggle().disabled).toBe(false);
+    expect(toggle().checked).toBe(true);
   });
 
   it('switching config with unsaved edits asks before discarding them', async () => {

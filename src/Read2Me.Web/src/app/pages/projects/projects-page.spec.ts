@@ -5,6 +5,7 @@ import { override, resetServices } from '@app/core/services';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
+import type { NewProjectDialog } from './new-project-dialog';
 import type { ProjectsPage } from './projects-page';
 import './projects-page';
 
@@ -101,6 +102,39 @@ describe('r2m-projects-page', () => {
     page.querySelector<HTMLButtonElement>('.r2m-project-card__cover')!.click();
 
     expect(navigation.calls.map((c) => c.url)).toEqual(['http://localhost/app/projects/dune']);
+  });
+
+  it('New project → Create opens the created folder’s overview', async () => {
+    const page = await render([dune]);
+    api
+      .on('POST', '/api/projects', { folderName: 'Shelf Upload' })
+      .on('GET', '/api/projects', [dune]);
+
+    page.querySelector<HTMLButtonElement>('.projects__new')!.click();
+    await settle();
+    const dialog = document.querySelector<NewProjectDialog>('r2m-new-project-dialog')!;
+    await dialog.rendered();
+    for (const [name, value] of [
+      ['bookTitle', 'Shelf Upload'],
+      ['author', 'U. Loader'],
+    ]) {
+      const input = dialog.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+      input.value = value!;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    dialog.onFiles([new File(['Chapter 1'], 'shelf-upload.txt')]);
+    await dialog.rendered();
+    dialog.querySelector<HTMLButtonElement>('.new-project__create')!.click();
+    await settle();
+    // happy-dom fires the dialog's close event on a later task.
+    await new Promise((r) => setTimeout(r, 0));
+    await settle();
+
+    expect(api.calls('POST', '/api/projects')).toHaveLength(1);
+    expect(navigation.calls.map((c) => c.url)).toEqual([
+      'http://localhost/app/projects/Shelf%20Upload',
+    ]);
+    expect(toasts).toEqual(['Project created']);
   });
 
   it('delete asks for confirmation, then DELETEs and drops the card', async () => {

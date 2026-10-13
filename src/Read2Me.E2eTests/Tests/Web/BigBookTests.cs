@@ -1,18 +1,15 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
-/// The native reader over big books (native-web 22, spec §8.2 "big-book tests"): the deterministic
-/// checks of the spike's scroll bench as tests, against two seeded books — one with many long
-/// chapters, one with nested volumes and parts. A deep link scrolls the chapter header to the top
-/// within a pixel; the top row holds within a pixel when the chapter before it is prepended and
-/// when the viewport is resized narrow and wide; the window loads chapters on scroll and never
-/// holds more than five; and the current chapter follows the row at the top. The tree-key tests
-/// join this class with the structure tree (native-web 23). Runs in Chromium and Firefox.
+/// The native reader's real layout over big books (spec §8.2 "big-book tests"), which happy-dom
+/// cannot measure. A deep link into a nested book scrolls the chapter header to the top within a
+/// pixel and holds it there while the three chapters before it are prepended, and a row menu opened
+/// deep in the list sits on its trigger; the top row of a long book holds within a pixel when the
+/// viewport is resized narrow and wide. Runs in Chromium and Firefox.
 /// </summary>
 public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
@@ -51,6 +48,32 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         }
         """;
 
+    /// <summary>
+    /// Resolves once the list has looked the same for five animation frames in a row: its scroll
+    /// offset, item count, top row and that row's offset. Rows grow as they render and the row
+    /// observer corrects the scroll on the next frame, so a read straight after a prepend, a scroll
+    /// or a resize can catch the list between the two; five quiet frames are past the correction.
+    /// </summary>
+    private const string Settle = $$"""
+        () => new Promise((resolve) => {
+          const rowTop = {{RowTop}};
+          const topRowKey = {{TopRowKey}};
+          let last = null, same = 0, frames = 0;
+          const tick = () => {
+            const list = document.querySelector('r2m-measured-list');
+            const key = topRowKey();
+            const now = JSON.stringify([list?.scrollTop, list?.items?.length, key, key && rowTop(key)]);
+            same = now === last ? same + 1 : 0;
+            last = now;
+            if (same >= 5 || ++frames > 600) resolve(same >= 5); else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        })
+        """;
+
+    private async Task SettleAsync() =>
+        Assert.True(await Page.EvaluateAsync<bool>(Settle), "the reader list never settled for five frames");
+
     private const string ScrollBy = """
         (px) => {
           const list = document.querySelector('r2m-measured-list');
@@ -61,31 +84,51 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         """;
 
     [Fact]
-    public async Task Deep_link_scrolls_the_chapter_header_to_the_top_and_holds_it_over_the_prepend()
+    public async Task Deep_link_holds_the_header_at_the_top_over_three_prepends_and_a_row_menu_opens_on_its_trigger()
     {
-        var book = await App.SeedLongBookAsync("native-big-long", "Native Long Book", "A. Author");
-        var target = book.ChapterId("Chapter 6");
-        var before = book.ChapterId("Chapter 5");
+        var book = await App.SeedNestedBookAsync("native-big-nested", "Native Nested Book", "A. Author");
 
-        await GotoAppAsync($"projects/native-big-long/book?chapter={target}");
-        var header = $"chapter:{target}";
-        await Page.WaitForSelectorAsync($"[data-row-key='{header}']", new() { State = WaitForSelectorState.Attached });
-
-        // scrollToIndex lands within a pixel, and the current chapter is the one at the top.
+        // A deep link into the last chapter of volume one: the chapters after it load until the
+        // header can sit at the top, and it lands within a pixel.
+        var deep = book.ChapterId("vol1-part2-ch2");
+        await GotoAppAsync($"projects/native-big-nested/book?chapter={deep}");
+        var header = $"chapter:{deep}";
         // The landed offset is the one the wait saw: a read after it can catch rows that have grown
-        // as their speaker chips render, before the row observer puts the list back on the next frame.
+        // as they render, before the row observer puts the list back on the next frame.
         var landed = (await (await Page.WaitForFunctionAsync(
             $"(key) => {{ const t = ({RowTop})(key); return t !== null && Math.abs(t) <= {TolerancePx} ? {{ t }} : null; }}",
             header)).JsonValueAsync<JsonElement>()).GetProperty("t").GetDouble();
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", target.ToString());
+        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", deep.ToString());
 
-        // The edge check prepends the chapter before: the anchored header does not move.
-        await Page.WaitForFunctionAsync($"(id) => ({WindowChapters})().includes(id)", before.ToString());
-        await Page.WaitForTimeoutAsync(500);
+        // The chapters are short, so the edge check prepends chapter 3, then 2, then 1, one after
+        // the other: a rounding error that compounded per prepend would show here.
+        var first = book.ChapterId("vol1-part1-ch1").ToString();
+        await Page.WaitForFunctionAsync($"(id) => ({WindowChapters})()[0] === id", first);
+        await SettleAsync();
         var afterPrepend = await Page.EvaluateAsync<double>(RowTop, header);
         Assert.InRange(afterPrepend, landed - TolerancePx, landed + TolerancePx);
-        Assert.Equal((await Page.EvaluateAsync<string[]>(WindowChapters))[0], before.ToString());
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", target.ToString());
+        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", deep.ToString());
+
+        // Below the anchored header the rendered window starts far down the list: a row menu opened
+        // there sits on its trigger, not where the row would be without the prepends.
+        var key = await Page.EvaluateAsync<string>("""
+            () => {
+              const list = document.querySelector('r2m-measured-list');
+              const box = list.getBoundingClientRect();
+              return [...list.querySelectorAll('[data-row-key^="paragraph:"]')]
+                .find((row) => {
+                  const r = row.getBoundingClientRect();
+                  return r.top > box.top + 80 && r.bottom < box.bottom - 80;
+                }).dataset.rowKey;
+            }
+            """);
+        var row = Page.Locator($"[data-row-key='{key}'] .r2m-paragraph__menu");
+        await row.HoverAsync();
+        var trigger = row.Locator("button");
+        await trigger.ClickAsync();
+        var menu = Page.Locator("#r2m-node-menu-panel");
+        await Expect(menu).ToBeVisibleAsync();
+        NodeMenuTests.AssertAnchored((await trigger.BoundingBoxAsync())!, (await menu.BoundingBoxAsync())!);
     }
 
     [Fact]
@@ -96,217 +139,25 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         await GotoAppAsync("projects/native-big-resize/book");
         await Page.WaitForSelectorAsync(".r2m-paragraph", new() { State = WaitForSelectorState.Attached });
         await Page.EvaluateAsync(ScrollBy, 1500);
-        await Page.WaitForTimeoutAsync(400);
+        await SettleAsync();
         var key = await Page.EvaluateAsync<string>(TopRowKey);
         Assert.NotNull(key);
         var offset = await Page.EvaluateAsync<double>(RowTop, key);
 
         // Narrow: every paragraph wraps to more lines, so every row above the top one grows.
         await Page.SetViewportSizeAsync(520, 700);
-        await Page.WaitForTimeoutAsync(600);
+        await Page.WaitForFunctionAsync("() => window.innerWidth === 520");
+        await SettleAsync();
         Assert.Equal(key, await Page.EvaluateAsync<string>(TopRowKey));
         var narrow = await Page.EvaluateAsync<double>(RowTop, key);
         Assert.InRange(narrow, offset - TolerancePx, offset + TolerancePx);
 
         // Wide again: rows shrink back, the top row still holds.
         await Page.SetViewportSizeAsync(1440, 900);
-        await Page.WaitForTimeoutAsync(600);
+        await Page.WaitForFunctionAsync("() => window.innerWidth === 1440");
+        await SettleAsync();
         Assert.Equal(key, await Page.EvaluateAsync<string>(TopRowKey));
         var wide = await Page.EvaluateAsync<double>(RowTop, key);
         Assert.InRange(wide, offset - TolerancePx, offset + TolerancePx);
-    }
-
-    [Fact]
-    public async Task Window_loads_chapters_on_scroll_caps_at_five_and_the_current_chapter_follows_the_top_row()
-    {
-        var book = await App.SeedLongBookAsync("native-big-window", "Native Window Book", "A. Author");
-
-        await GotoAppAsync("projects/native-big-window/book");
-        await Page.WaitForSelectorAsync(".r2m-paragraph", new() { State = WaitForSelectorState.Attached });
-        var first = book.ChapterId("Chapter 1").ToString();
-        var last = book.ChapterId("Chapter 12").ToString();
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", first);
-
-        // Page through the whole book; the window never holds more than five chapters.
-        var max = 0;
-        for (var i = 0; i < 80; i++)
-        {
-            await Page.EvaluateAsync(ScrollBy, 900);
-            await Page.WaitForTimeoutAsync(150);
-            var window = await Page.EvaluateAsync<string[]>(WindowChapters);
-            max = Math.Max(max, window.Length);
-            Assert.True(window.Length <= 5, $"window held {window.Length} chapters: {string.Join(", ", window)}");
-            if (window[^1] == last) break;
-        }
-        Assert.Equal(5, max);
-        var final = await Page.EvaluateAsync<string[]>(WindowChapters);
-        Assert.Equal(last, final[^1]);
-
-        // The current chapter is the chapter of the row at the top edge.
-        await Page.WaitForTimeoutAsync(300);
-        var topKey = await Page.EvaluateAsync<string>(TopRowKey);
-        var topChapter = await Page.EvaluateAsync<string>(
-            "(key) => document.querySelector('r2m-measured-list').items.find((r) => r.key === key)?.chapterId", topKey);
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", topChapter);
-    }
-
-    [Fact]
-    public async Task Nested_book_fills_its_window_across_parts_and_volumes_and_follows_the_top_row()
-    {
-        var book = await App.SeedNestedBookAsync("native-big-nested", "Native Nested Book", "A. Author");
-
-        // Chapters are a few lines each, so the window grows across part and volume ends until a
-        // screen of content sits below the viewport (a full window drops nothing still on screen).
-        await GotoAppAsync("projects/native-big-nested/book");
-        await Page.WaitForSelectorAsync(".r2m-paragraph", new() { State = WaitForSelectorState.Attached });
-        var fifth = book.ChapterId("vol2-part1-ch1").ToString();
-        await Page.WaitForFunctionAsync($"(id) => ({WindowChapters})().includes(id)", fifth);
-        var window = await Page.EvaluateAsync<string[]>(WindowChapters);
-        Assert.Equal(
-            [
-                book.ChapterId("vol1-part1-ch1").ToString(),
-                book.ChapterId("vol1-part1-ch2").ToString(),
-                book.ChapterId("vol1-part2-ch1").ToString(),
-                book.ChapterId("vol1-part2-ch2").ToString(),
-                fifth,
-            ],
-            window.Take(5));
-
-        // The reader scrolling the second chapter's header to the top makes it the current chapter.
-        // (A header further down cannot reach the top until enough content sits below it; that is
-        // the deep link's job, below.) It scrolls as the reader does, from outside the list: the
-        // list's own scrollToIndex keeps the opened chapter current.
-        var second = book.ChapterId("vol1-part1-ch2");
-        await Page.EvaluateAsync("""
-            (id) => {
-              const list = document.querySelector('r2m-measured-list');
-              const index = list.items.findIndex((r) => r.key === `chapter:${id}`);
-              list.scrollTop = list.offsetOf(index);
-            }
-            """, second.ToString());
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", second.ToString());
-        var top = await Page.EvaluateAsync<double>(RowTop, $"chapter:{second}");
-        Assert.InRange(top, -TolerancePx, TolerancePx);
-
-        // A deep link into the last chapter of volume one opens there: the chapters after it load
-        // until the header can sit at the top, and the chapter before it is prepended without
-        // moving the header.
-        var deep = book.ChapterId("vol1-part2-ch2");
-        await Page.GotoAsync(AppPath($"projects/native-big-nested/book?chapter={deep}"));
-        var header = $"chapter:{deep}";
-        await Page.WaitForFunctionAsync($"(key) => {{ const t = ({RowTop})(key); return t !== null && Math.abs(t) <= {TolerancePx}; }}", header);
-        // Short chapters: the reader prepends chapter 3, then 2, then 1, one after the other, so a
-        // rounding error that compounded per prepend would show here.
-        var first = book.ChapterId("vol1-part1-ch1").ToString();
-        await Page.WaitForFunctionAsync($"(id) => ({WindowChapters})()[0] === id", first);
-        await Page.WaitForTimeoutAsync(500);
-        var afterPrepend = await Page.EvaluateAsync<double>(RowTop, header);
-        Assert.InRange(afterPrepend, -TolerancePx, TolerancePx);
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", deep.ToString());
-    }
-
-    /// <summary>The node id of the tree item that has focus (or holds the focused control), or null.</summary>
-    private const string FocusedNode = """
-        () => document.activeElement?.closest('[role="treeitem"]')?.dataset.nodeId ?? null
-        """;
-
-    /// <summary>
-    /// Presses the letters on the focused element in one go inside the page, as a quick typist would.
-    /// Type-ahead takes letters that arrive within its window as one query; Keyboard.TypeAsync waits
-    /// a browser round trip per key, which a loaded Firefox stretches past that window.
-    /// </summary>
-    private const string TypeTogether = """
-        (text) => {
-          for (const key of text)
-            document.activeElement.dispatchEvent(
-              new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
-        }
-        """;
-
-    [Fact]
-    public async Task Tree_keys_move_expand_and_load_collapse_expand_all_and_type_ahead()
-    {
-        var book = await App.SeedNestedBookAsync("native-big-tree", "Native Tree Book", "A. Author");
-
-        await GotoAppAsync("projects/native-big-tree/book");
-        await Page.WaitForSelectorAsync(".r2m-paragraph", new() { State = WaitForSelectorState.Attached });
-
-        var tree = Page.GetByRole(AriaRole.Tree, new() { Name = "Book structure" });
-        ILocator Item(Guid id) => tree.Locator($"[data-node-id='{id}']");
-        async Task<string?> Focused() => await Page.EvaluateAsync<string?>(FocusedNode);
-        var vol1 = book.VolumeId("vol1");
-        var vol2 = book.VolumeId("vol2");
-        var part1 = book.PartId("vol2-part1");
-        var part2 = book.PartId("vol2-part2");
-        var ch1 = book.ChapterId("vol2-part1-ch1");
-        var ch2 = book.ChapterId("vol2-part1-ch2");
-
-        // Two collapsed volumes at the root; the first is the tab stop while no chapter is in view.
-        await Expect(tree.GetByRole(AriaRole.Treeitem)).ToHaveCountAsync(2);
-        await Expect(Item(vol1)).ToHaveAttributeAsync("tabindex", "0");
-        await Item(vol1).FocusAsync();
-
-        // Arrows and Home/End, without wrapping.
-        await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal(vol2.ToString(), await Focused());
-        await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal(vol2.ToString(), await Focused());
-        await Page.Keyboard.PressAsync("Home");
-        Assert.Equal(vol1.ToString(), await Focused());
-        await Page.Keyboard.PressAsync("End");
-        Assert.Equal(vol2.ToString(), await Focused());
-        await Expect(Item(vol2)).ToHaveAttributeAsync("tabindex", "0");
-        await Expect(Item(vol1)).ToHaveAttributeAsync("tabindex", "-1");
-
-        // Right on a collapsed, unloaded volume expands it and loads its parts; focus stays put.
-        await Page.Keyboard.PressAsync("ArrowRight");
-        await Expect(Item(vol2)).ToHaveAttributeAsync("aria-expanded", "true");
-        await Expect(Item(part1)).ToBeVisibleAsync();
-        await Expect(Item(part2)).ToHaveAttributeAsync("aria-level", "2");
-        await Expect(Item(part2)).ToHaveAttributeAsync("aria-posinset", "2");
-        await Expect(Item(part2)).ToHaveAttributeAsync("aria-setsize", "2");
-        Assert.Equal(vol2.ToString(), await Focused());
-
-        // Right again steps into the first child; Right on that expands and loads its chapters.
-        await Page.Keyboard.PressAsync("ArrowRight");
-        Assert.Equal(part1.ToString(), await Focused());
-        await Page.Keyboard.PressAsync("ArrowRight");
-        await Expect(Item(part1)).ToHaveAttributeAsync("aria-expanded", "true");
-        await Expect(Item(ch1)).ToBeVisibleAsync();
-        await Page.Keyboard.PressAsync("ArrowRight");
-        Assert.Equal(ch1.ToString(), await Focused());
-        await Expect(Item(ch1)).ToHaveAttributeAsync("aria-level", "3");
-        await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.Equal(ch2.ToString(), await Focused());
-
-        // Enter opens the chapter in the reader and names it in the URL; the tree marks it current
-        // and keeps the focus (the query-only navigation must not reset it to the body).
-        await Page.Keyboard.PressAsync("Enter");
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", ch2.ToString());
-        await Expect(Item(ch2)).ToHaveAttributeAsync("aria-current", "true");
-        await Assertions.Expect(Page).ToHaveURLAsync(new Regex($"chapter={ch2}"));
-        Assert.Equal(ch2.ToString(), await Focused());
-
-        // Left goes to the parent, then collapses it.
-        await Page.Keyboard.PressAsync("ArrowLeft");
-        Assert.Equal(part1.ToString(), await Focused());
-        await Page.Keyboard.PressAsync("ArrowLeft");
-        await Expect(Item(part1)).ToHaveAttributeAsync("aria-expanded", "false");
-        await Expect(Item(ch1)).ToHaveCountAsync(0);
-        Assert.Equal(part1.ToString(), await Focused());
-
-        // * expands every sibling at this level, loading the one not loaded yet.
-        await Page.Keyboard.PressAsync("*");
-        await Expect(Item(part1)).ToHaveAttributeAsync("aria-expanded", "true");
-        await Expect(Item(part2)).ToHaveAttributeAsync("aria-expanded", "true");
-        await Expect(Item(book.ChapterId("vol2-part2-ch1"))).ToBeVisibleAsync();
-
-        // Type-ahead: letters typed together jump to the next title that starts with them, wrapping.
-        await Page.Keyboard.PressAsync("Home");
-        Assert.Equal(vol1.ToString(), await Focused());
-        await Page.EvaluateAsync(TypeTogether, "vol2-part2");
-        await Page.WaitForFunctionAsync($"(id) => ({FocusedNode})() === id", part2.ToString());
-        await Page.EvaluateAsync(TypeTogether, "vol1");
-        await Page.WaitForFunctionAsync($"(id) => ({FocusedNode})() === id", vol1.ToString());
     }
 }

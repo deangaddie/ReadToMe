@@ -70,6 +70,7 @@ const ROUTES: RouteDef[] = [
 
 let api: FakeApi;
 let navigation: FakeNavigation;
+let live: FakeLive;
 let toasts: string[];
 let ensureReady: ReturnType<typeof mock>;
 
@@ -77,7 +78,7 @@ beforeEach(() => {
   resetServices();
   api = new FakeApi();
   api.install();
-  new FakeLive().install();
+  live = new FakeLive().install();
   toasts = [];
   ensureReady = mock(async () => true);
   override(Preflight, { ensureReady } as unknown as Preflight);
@@ -160,6 +161,34 @@ describe('r2m-overview-page', () => {
     ]);
     expect(api.calls('GET', `${BASE}/status`)).toHaveLength(2);
     expect(toasts).toEqual(['Queued 4 paragraphs']);
+  });
+
+  it('a nodeStatus delta taking attribution to 0 remaining marks Attribute done and makes Voices next', async () => {
+    const page = await render();
+    const step = (name: string) => page.querySelector<HTMLElement>(`[data-step="${name}"]`)!;
+    const chip = (name: string) => text(step(name).querySelector('.r2m-pipeline__chip'));
+    expect(step('attribute').getAttribute('aria-current')).toBe('step');
+    expect(chip('attribute')).toContain('3 remaining');
+
+    const attributed = {
+      attributionRemaining: 0,
+      audioRemaining: 2,
+      review: 0,
+      attributionProcessing: false,
+      attributionQueued: 0,
+      isDone: false,
+    };
+    live.emit('nodeStatus', {
+      folder: 'dune',
+      nodes: { v1: attributed, v2: attributed },
+      folderAudioRemaining: 4,
+    });
+    await page.rendered();
+
+    expect(chip('attribute')).toContain('Done');
+    expect(step('attribute').hasAttribute('aria-current')).toBe(false);
+    expect(button(page, 'attribute').disabled).toBe(true);
+    expect(step('voices').getAttribute('aria-current')).toBe('step');
   });
 
   it('a cancelled preflight queues nothing', async () => {

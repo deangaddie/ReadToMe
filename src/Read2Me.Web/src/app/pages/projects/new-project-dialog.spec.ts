@@ -47,6 +47,13 @@ describe('r2m-new-project-dialog', () => {
     expect(dialog.querySelector('.new-project__file')?.textContent).toContain('dune.epub');
   });
 
+  it('autofocuses the book title, and only it', async () => {
+    const { dialog } = await open();
+    expect(
+      Array.from(dialog.querySelectorAll('input[autofocus]'), (i) => i.getAttribute('name')),
+    ).toEqual(['bookTitle']);
+  });
+
   it('shows the rejection inline and keeps Create disabled', async () => {
     const { dialog, type, createButton } = await open();
     await type('bookTitle', 'Dune');
