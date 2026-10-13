@@ -27,6 +27,13 @@ const CATALOG: AiServiceDto[] = [
 class FakeLive {
   readonly serviceStatus = signal<Record<string, 'Ready' | 'Stopped' | 'Unknown'>>({});
   readonly subjects = new Map<LiveFamily, Emitter<unknown>>();
+  readonly #resynced = new Emitter<void>();
+  resynced(listener: () => void) {
+    return this.#resynced.subscribe(listener);
+  }
+  resync() {
+    this.#resynced.emit();
+  }
   on<K extends LiveFamily>(family: K, listener: (m: LiveMessageMap[K]) => void) {
     let s = this.subjects.get(family);
     if (!s) this.subjects.set(family, (s = new Emitter()));
@@ -80,6 +87,19 @@ describe('AiServicesStore', () => {
     expect(api.statusAll).toHaveBeenCalledTimes(1);
     expect(s.services()?.map((x) => x.name)).toEqual(['llama', 'whisper']);
     expect(s.gpuServices().map((x) => x.name)).toEqual(['llama']);
+  });
+
+  it('probes again after a live resync, once the catalog is loaded', async () => {
+    const s = store();
+    live.resync(); // before the catalog: nothing to probe yet, the load probes
+    expect(api.statusAll).not.toHaveBeenCalled();
+    await s.ensureLoaded();
+    expect(api.statusAll).toHaveBeenCalledTimes(1);
+
+    // A probe answered before this tab joined the hub's groups pushed its statuses to no one.
+    live.resync();
+    await Promise.resolve();
+    expect(api.statusAll).toHaveBeenCalledTimes(2);
   });
 
   it('reads statuses from the live map, Unknown until observed', () => {

@@ -74,6 +74,11 @@ export class AiServicesStore {
   readonly gpuServices = computed(() => (this._services() ?? []).filter((s) => s.usesGpu));
 
   constructor() {
+    // The probe's statuses arrive as hub pushes, which a probe answered before this tab joined the
+    // hub's groups (a page opened straight after load) never delivered: probe again once joined.
+    this.live.resynced(() => {
+      if (this._services()) void this.refreshAll();
+    });
     this.live.on('watchdog', (m) => this.logWatchdog(m));
     this.live.on('serviceStatus', (m) => {
       if (!m.op) return;
