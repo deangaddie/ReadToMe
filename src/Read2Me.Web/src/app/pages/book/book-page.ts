@@ -510,7 +510,7 @@ export class BookPage extends R2mElement {
         aria-haspopup="menu"
         data-testid="book-actions"
         popovertarget=${ACTIONS_MENU_ID}
-        ?disabled=${this.editor.locked()}
+        ?disabled=${this.editor.locked() || !this.store.overview()}
       >
         ${icon('more_vert')}
       </button>
