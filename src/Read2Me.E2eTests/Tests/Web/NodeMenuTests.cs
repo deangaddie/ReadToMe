@@ -74,12 +74,4 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         Assert.Equal(second, await Page.EvaluateAsync<string?>(FocusedNode));
         await Expect(Page.Locator(".tree__title")).ToHaveCountAsync(3);
     }
-
-    /// <summary>The panel sits just below the trigger (block-end) and overlaps it horizontally.</summary>
-    internal static void AssertAnchored(LocatorBoundingBoxResult anchor, LocatorBoundingBoxResult panel)
-    {
-        Assert.InRange(panel.Y - (anchor.Y + anchor.Height), 0, 12);
-        Assert.True(panel.X < anchor.X + anchor.Width && panel.X + panel.Width > anchor.X,
-            $"panel x {panel.X}..{panel.X + panel.Width} does not overlap trigger x {anchor.X}..{anchor.X + anchor.Width}");
-    }
 }

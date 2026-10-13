@@ -128,7 +128,7 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         await trigger.ClickAsync();
         var menu = Page.Locator("#r2m-node-menu-panel");
         await Expect(menu).ToBeVisibleAsync();
-        NodeMenuTests.AssertAnchored((await trigger.BoundingBoxAsync())!, (await menu.BoundingBoxAsync())!);
+        AssertAnchored((await trigger.BoundingBoxAsync())!, (await menu.BoundingBoxAsync())!);
     }
 
     [Fact]
