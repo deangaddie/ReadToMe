@@ -1,5 +1,7 @@
 {
   "$schema": "https://xunit.net/schema/current/xunit.runner.schema.json",
+  "$comment": "maxParallelThreads 12: the fastest cap that gave five green PR gates in a row on the 24-core dev box (measured 2026-10-13). CI's runner has 4 cores and uses the same cap of 12 threads. The default (one thread per core, 24 here) ran out of Windows socket buffers (ERR_NO_BUFFER_SPACE). Notes go in this key: a JSON comment makes xunit silently ignore the whole file.",
   "parallelizeTestCollections": true,
+  "maxParallelThreads": 12,
   "longRunningTestSeconds": 60
 }
