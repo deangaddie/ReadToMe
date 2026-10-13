@@ -124,6 +124,14 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : ICl
 
     protected static ILocatorAssertions Expect(ILocator locator) => Assertions.Expect(locator);
 
+    /// <summary>The panel sits just below the trigger (block-end) and overlaps it horizontally.</summary>
+    protected static void AssertAnchored(LocatorBoundingBoxResult anchor, LocatorBoundingBoxResult panel)
+    {
+        Assert.InRange(panel.Y - (anchor.Y + anchor.Height), 0, 12);
+        Assert.True(panel.X < anchor.X + anchor.Width && panel.X + panel.Width > anchor.X,
+            $"panel x {panel.X}..{panel.X + panel.Width} does not overlap trigger x {anchor.X}..{anchor.X + anchor.Width}");
+    }
+
     private static void StageBundle(string source, string target)
     {
         if (Directory.Exists(target)) Directory.Delete(target, recursive: true);

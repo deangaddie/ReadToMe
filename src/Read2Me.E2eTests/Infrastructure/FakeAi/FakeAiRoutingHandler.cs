@@ -30,12 +30,6 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     public FakeLlmModelStore LlmModels { get; set; } = FakeLlmModelStore.AllLoaded(DefaultModel);
 
     /// <summary>
-    /// Per-test hook: how long each LLM completion takes before answering, so a test can
-    /// watch the queue while it is still busy. Zero by default.
-    /// </summary>
-    public TimeSpan LlmDelay { get; set; } = TimeSpan.Zero;
-
-    /// <summary>
     /// Completions still answered before the fake starts holding them, or <c>null</c> for no hold.
     /// See <see cref="HoldLlmAfter"/>.
     /// </summary>
@@ -111,7 +105,6 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     public void Reset()
     {
         LlmReply = p => FakeAiResponses.AttributionReply(p, "Narrator");
-        LlmDelay = TimeSpan.Zero;
         ReleaseLlm();
         AudioCppTakeMs = 100;
         LlmModels = FakeLlmModelStore.AllLoaded(DefaultModel);
@@ -155,7 +148,6 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             var prompt = ExtractPrompt(body);
             lock (LlmBodiesSeen) LlmBodiesSeen.Add(JsonNode.Parse(body)!.AsObject());
             lock (LlmPromptsSeen) LlmPromptsSeen.Add(prompt);
-            if (LlmDelay > TimeSpan.Zero) await Task.Delay(LlmDelay, ct);
             if (TakeLlmAnswerOrHold() is { } released) await released.WaitAsync(ct);
             var sse = FakeAiResponses.OpenAiSse(LlmReply(prompt));
             var response = new HttpResponseMessage(HttpStatusCode.OK)

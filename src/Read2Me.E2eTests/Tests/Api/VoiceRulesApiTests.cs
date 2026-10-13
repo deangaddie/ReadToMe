@@ -8,7 +8,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <summary>
 /// The Voice rules reads behind the cast page (Angular ticket 17): a character's rule list and the
 /// per-chapter resolved-voice preview, driven through the existing rule commands. Dangling rules
-/// and an unknown character are VoiceRulePreviewTests.
+/// are VoiceRulePreviewTests.
 /// </summary>
 public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -114,7 +114,8 @@ public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
         Assert.Equal(2, rules.Count);
         Assert.Equal(["Voice A", "Voice A", "Voice A", "Voice A", "Voice A"], VoiceNames(await PreviewAsync(folder, alice)));
 
-        // An unknown project is a 404 on both reads.
+        // An unknown character has no rules; an unknown project is a 404 on both reads.
+        Assert.Empty(await RulesAsync(folder, Guid.NewGuid()));
         var missingProject = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-{Guid.NewGuid():N}/characters/{alice}/voice-rules");
         Assert.Equal(HttpStatusCode.NotFound, missingProject.StatusCode);
         var missingPreview = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-{Guid.NewGuid():N}/characters/{alice}/voice-rules/preview");

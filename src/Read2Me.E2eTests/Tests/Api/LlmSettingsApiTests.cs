@@ -99,7 +99,7 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
     public async Task Test_run_can_be_cancelled_and_a_second_send_while_running_is_409()
     {
         var id = await FakeConfigIdAsync();
-        app.FakeAi.LlmDelay = TimeSpan.FromSeconds(30);
+        app.FakeAi.HoldLlmAfter(0);
         try
         {
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
