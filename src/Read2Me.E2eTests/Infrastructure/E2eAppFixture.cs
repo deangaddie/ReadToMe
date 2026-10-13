@@ -140,17 +140,21 @@ public sealed class E2eAppFixture : IAsyncLifetime
     /// Polls a queue-status endpoint (e.g. <c>/api/attribution/queue</c>) until nothing is queued or
     /// processing. The host is shared by the tests of one class, so a test that enqueues work must
     /// leave with it drained — an in-flight paragraph would otherwise run against the class's next
-    /// test's fake AI.
+    /// test's fake AI. Throws when the queue has not drained by the timeout, naming what is still pending.
     /// </summary>
     public async Task WaitForQueueDrainAsync(string queuePath, int timeoutSeconds = 30)
     {
         var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-        while (DateTime.UtcNow < deadline)
+        while (true)
         {
-            var snapshot = JsonDocument.Parse(await _http.GetStringAsync($"{BaseUrl}{queuePath}"));
-            if (snapshot.RootElement.GetProperty("queuedCount").GetInt32() == 0 &&
-                snapshot.RootElement.GetProperty("processingCount").GetInt32() == 0)
+            using var snapshot = JsonDocument.Parse(await _http.GetStringAsync($"{BaseUrl}{queuePath}"));
+            var queued = snapshot.RootElement.GetProperty("queuedCount").GetInt32();
+            var processing = snapshot.RootElement.GetProperty("processingCount").GetInt32();
+            if (queued == 0 && processing == 0)
                 return;
+            if (DateTime.UtcNow >= deadline)
+                throw new TimeoutException(
+                    $"{queuePath} did not drain within {timeoutSeconds} s: {queued} queued, {processing} processing.");
             await Task.Delay(200);
         }
     }
