@@ -126,23 +126,24 @@ const EVERY_PLACEMENT: readonly Placement[] = ['Before', 'After', 'AtStart', 'At
 
 /**
  * The InsertNode placements each kind offers: a sibling before or after, and a first or last
- * child one level down — never two. A paragraph's own start and end are not offered yet, and an
- * item's inserts are the item insert entries.
+ * child one level down — never two. A paragraph's start and end take a speech item, a pause
+ * paragraph's take none, and an item's inserts are the item insert entries.
  */
 const NODE_INSERTS: Record<NodeMenuKind, readonly Placement[]> = {
   volume: EVERY_PLACEMENT,
   part: EVERY_PLACEMENT,
   chapter: EVERY_PLACEMENT,
-  paragraph: ['Before', 'After'],
+  paragraph: EVERY_PLACEMENT,
   item: [],
   'pause-paragraph': ['Before', 'After'],
 };
 
-/** The kind one level down from each container: what an at-start or at-end insert creates. */
+/** The kind one level down from each node: what an at-start or at-end insert creates. */
 const CHILD_KIND: Partial<Record<NodeMenuKind, NodeMenuKind>> = {
   volume: 'part',
   part: 'chapter',
   chapter: 'paragraph',
+  paragraph: 'item',
 };
 
 /** What an InsertNode from `kind` at `placement` creates: a sibling of its own kind, or its child. */

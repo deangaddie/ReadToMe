@@ -156,7 +156,8 @@ public record InsertParagraphItemCommand(ProjectFolderId FolderId, Guid AnchorIt
 /// <summary>
 /// Creates one node beside or inside the anchor; its kind follows from the anchor and the
 /// <see cref="Placement"/>. A new Paragraph is born holding <c>Text</c> as one unattributed Speech
-/// item — never empty, because an empty Paragraph reads as a pause. <c>Title</c> is for a new
+/// item — never empty, because an empty Paragraph reads as a pause. A new Speech item at a
+/// Paragraph's start or end holds <c>Text</c> too, born unattributed. <c>Title</c> is for a new
 /// Volume, Part or Chapter.
 /// </summary>
 public record InsertNodeCommand(

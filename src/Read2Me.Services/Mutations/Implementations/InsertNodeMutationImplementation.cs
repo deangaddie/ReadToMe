@@ -11,10 +11,11 @@ namespace Read2Me.Services.Mutations.Implementations;
 /// Stages one new node beside or inside an anchor and reports what it created.
 /// <para>
 /// The commands endpoint dispatches this with no dialog in front of it, so every request it can
-/// see is checked here: a combination that creates no node or one not yet supported, and blank
-/// paragraph text, are <see cref="BookMutationRejection.Validation"/>; an anchor the Book does not
-/// contain is <see cref="BookMutationRejection.NotFound"/>. A new Volume, Part, Chapter or
-/// Paragraph is accepted; a speech item at a paragraph's start or end is not yet.
+/// see is checked here: a combination that creates no node (any speech-item anchor), and blank
+/// paragraph or item text, and an item at a pause paragraph's start or end, are
+/// <see cref="BookMutationRejection.Validation"/>; an anchor the Book does not contain is
+/// <see cref="BookMutationRejection.NotFound"/>. A new Volume, Part, Chapter or Paragraph is
+/// accepted, and so is a speech item at a paragraph's start or end.
 /// </para>
 /// <para>
 /// Where the node lands and what it holds at birth stay in
@@ -32,15 +33,12 @@ public sealed class InsertNodeMutationImplementation : IBookMutationImplementati
             throw new BookMutationRejectedException(
                 BookMutationRejection.Validation,
                 "Nothing can be inserted against an item this way — use InsertParagraphItem beside it.");
-        if (kind == NodeKind.ParagraphItem)
+        if (kind is NodeKind.Paragraph or NodeKind.ParagraphItem && string.IsNullOrWhiteSpace(mutation.Text))
             throw new BookMutationRejectedException(
                 BookMutationRejection.Validation,
-                $"Inserting a {kind} ({mutation.Placement} a {mutation.AnchorKind}) is not supported yet.");
-
-        if (kind == NodeKind.Paragraph && string.IsNullOrWhiteSpace(mutation.Text))
-            throw new BookMutationRejectedException(
-                BookMutationRejection.Validation,
-                "A new paragraph needs text — an empty paragraph reads as a pause.");
+                kind == NodeKind.Paragraph
+                    ? "A new paragraph needs text — an empty paragraph reads as a pause."
+                    : "An inserted item needs text — whitespace alone is not an item.");
 
         var anchorExists = mutation.AnchorKind switch
         {
@@ -58,9 +56,30 @@ public sealed class InsertNodeMutationImplementation : IBookMutationImplementati
         var planned = hierarchy.PlanInsertNode(
             mutation.AnchorKind, mutation.AnchorId, mutation.Placement, mutation.Title, mutation.Text);
         if (planned is null)
+        {
+            // With text and a known paragraph, the only item the planner turns down is one at a
+            // pause paragraph's start or end: never valid there, so refused rather than a no-op.
+            if (kind == NodeKind.ParagraphItem)
+                throw new BookMutationRejectedException(
+                    BookMutationRejection.Validation,
+                    "A pause paragraph holds no speech — insert a paragraph before or after it.");
             return BookMutationEffects.Nothing;
+        }
 
         BookMutationApplier.StageMutation(db, planned);
+
+        if (planned.ToAdd[0] is ParagraphItem inserted)
+        {
+            // A speech item first or last in its paragraph: the same receipt as an item insert.
+            return new BookMutationEffects
+            {
+                Scope = BookMutationScope.Exact,
+                Facets = BookFacets.Structure,
+                CreatedId = inserted.Id,
+                ParagraphIds = [inserted.ParagraphId],
+                ParagraphItemIds = [inserted.Id],
+            };
+        }
 
         if (planned.ToAdd[0] is not Paragraph paragraph)
         {

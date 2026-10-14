@@ -237,6 +237,29 @@ describe('commandFor', () => {
       expect(asked.text[0]!.initial ?? '').toBe('');
     });
 
+    it.each([
+      ['insert-node:AtStart', 'AtStart', 'Insert item at start'],
+      ['insert-node:AtEnd', 'AtEnd', 'Insert item at end'],
+    ] as const)('paragraph %s asks for a required multiline item text and posts InsertNode', async (entry, placement, title) => {
+      const { fake, asked } = dialogs({ text: 'A new remark.' });
+      expect<unknown>(await commandFor(entry, target('paragraph'), fake)).toEqual({
+        type: 'InsertNode',
+        anchorKind: 'Paragraph',
+        anchorId: 'n1',
+        placement,
+        text: 'A new remark.',
+      });
+      expect(asked.text).toEqual([
+        expect.objectContaining({ title, label: 'Text', required: true, multiline: true }),
+      ]);
+    });
+
+    it('a cancelled item insert at a paragraph end sends nothing', async () => {
+      expect<unknown>(
+        await commandFor('insert-node:AtStart', target('paragraph'), dialogs({ text: null }).fake),
+      ).toBeNull();
+    });
+
     it('a cancelled paragraph insert sends nothing', async () => {
       expect<unknown>(
         await commandFor('insert-node:AtEnd', target('chapter'), dialogs({ text: null }).fake),

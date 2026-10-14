@@ -424,14 +424,18 @@ child one level down). The new node's kind follows from both:
 | `Volume` | Volume | Part |
 | `Part` | Part | Chapter |
 | `Chapter` | Chapter | Paragraph |
-| `Paragraph` (pause paragraphs too) | Paragraph | not yet supported |
+| `Paragraph` | Paragraph | Speech item |
+| `Paragraph` that is a pause paragraph | Paragraph | refused |
 
 A new **Volume, Part or Chapter** is born empty — fill it by inserting at its start or end, using
 the returned id as the next anchor. `title` is optional and trimmed; blank leaves it untitled
 (rename it later with `UpdateVolumeTitle` and friends). A new **Paragraph** is born holding `text` as
 one unattributed speech item — no speaker, no delivery cue, no audio — so it joins the
-attribution queue; `text` is required and trimmed. Unlike most commands it rejects rather than
-no-ops: blank paragraph text, a combination that makes no node (any `ParagraphItem` anchor
+attribution queue; `text` is required and trimmed. A **speech item** at a paragraph's start or
+end is born the same way, first or last inside it — ahead of a leading pause item or after a
+trailing one, which `InsertParagraphItem` cannot anchor on; it returns the new item's id. Unlike most
+commands it rejects rather than no-ops: blank paragraph or item text, an item at a pause
+paragraph's start or end, a combination that makes no node (any `ParagraphItem` anchor
 included — use `InsertParagraphItem`), or an unknown anchor is **422**.
 
 ```bash

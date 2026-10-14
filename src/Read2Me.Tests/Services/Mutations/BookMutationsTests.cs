@@ -364,10 +364,89 @@ public class BookMutationsTests : ProjectDbTestBase
     }
 
     [Theory]
+    [InlineData(Placement.AtStart)]
+    [InlineData(Placement.AtEnd)]
+    public async Task InsertNode_ItemAtAParagraphsEnd_PassesItsPause_AndTheReceiptNamesIt(Placement placement)
+    {
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+            .AddParagraph("para", p => p
+                .AddPause("lead")
+                .AddNarration("speech", "Between the pauses.")
+                .AddPause("trail", ParagraphItemType.ParagraphPause))))
+            .BuildAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, NodeKind.Paragraph, b.ParagraphId("para"), placement, null, "  A new remark.  "));
+
+        var receipt = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
+        var created = receipt.Effects.CreatedId!.Value;
+        Assert.Equal(BookFacets.Structure, receipt.Effects.Facets);
+        Assert.Equal(b.ParagraphId("para"), Assert.Single(receipt.Effects.ParagraphIds));
+        Assert.Equal(created, Assert.Single(receipt.Effects.ParagraphItemIds));
+
+        await using var verify = await OpenDbAsync();
+        var items = await verify.ParagraphItems
+            .Where(i => i.ParagraphId == b.ParagraphId("para"))
+            .OrderBy(i => i.Order)
+            .ToListAsync();
+        var existing = new[] { b.ItemId("lead"), b.ItemId("speech"), b.ItemId("trail") };
+        Assert.Equal(
+            placement == Placement.AtStart ? [created, .. existing] : [.. existing, created],
+            items.Select(i => i.Id));
+        var item = items.Single(i => i.Id == created);
+        Assert.Equal(ParagraphItemType.Speech, item.ItemType);
+        Assert.Equal("A new remark.", item.Text);
+        Assert.Null(item.CharacterId);
+        Assert.Null(item.VoiceInstructions);
+        Assert.Null(item.AudioFileName);
+
+        await using var scope = _root.CreateAsyncScope();
+        var counter = scope.ServiceProvider.GetRequiredService<IUnattributedItemCounter>();
+        Assert.Equal(1, await counter.CountUnattributedCharacterItemsAsync(_folder, b.ParagraphId("para")));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task InsertNode_ItemWithBlankText_IsRejectedAsValidation(string? text)
+    {
+        var b = await SeedOneItemAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, NodeKind.Paragraph, b.ParagraphId("para"), Placement.AtEnd, null, text));
+
+        Assert.Equal(BookMutationRejection.Validation,
+            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
+        await using var verify = await OpenDbAsync();
+        Assert.Equal(1, await verify.ParagraphItems.CountAsync());
+    }
+
+    [Fact]
+    public async Task InsertNode_ItemAtAPauseParagraphsEnd_IsRejectedAsValidation()
+    {
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+            .AddParagraph("pause", p => p.AddPause("only", ParagraphItemType.ParagraphPause))))
+            .BuildAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, NodeKind.Paragraph, b.ParagraphId("pause"), Placement.AtEnd, null, "Text."));
+
+        Assert.Equal(BookMutationRejection.Validation,
+            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
+        await using var verify = await OpenDbAsync();
+        Assert.Equal(1, await verify.ParagraphItems.CountAsync());
+    }
+
+    [Theory]
     [InlineData(NodeKind.ParagraphItem, Placement.After)]   // an item anchor creates nothing
+    [InlineData(NodeKind.ParagraphItem, Placement.Before)]  // item inserts stay on InsertParagraphItem
+    [InlineData(NodeKind.ParagraphItem, Placement.AtStart)]
     [InlineData(NodeKind.ParagraphItem, Placement.AtEnd)]
-    [InlineData(NodeKind.Paragraph, Placement.AtStart)]     // not yet supported
-    [InlineData(NodeKind.Paragraph, Placement.AtEnd)]
     public async Task InsertNode_ACombinationThatMakesNoNode_IsRejectedAsValidation(
         NodeKind anchorKind, Placement placement)
     {
@@ -390,6 +469,7 @@ public class BookMutationsTests : ProjectDbTestBase
 
     [Theory]
     [InlineData(NodeKind.Paragraph, Placement.Before)]
+    [InlineData(NodeKind.Paragraph, Placement.AtStart)]
     [InlineData(NodeKind.Chapter, Placement.AtEnd)]
     [InlineData(NodeKind.Chapter, Placement.Before)]
     [InlineData(NodeKind.Part, Placement.After)]

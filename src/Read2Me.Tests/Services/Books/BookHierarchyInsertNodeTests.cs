@@ -207,6 +207,94 @@ namespace Read2Me.Tests.Services.Books
             Assert.Null(b.H.PlanInsertNode(NodeKind.Chapter, b.First.Id, Placement.AtEnd, null, "New."));
         }
 
+        // ── a speech item at a paragraph's start or end ─────────────────────────
+
+        /// <summary>
+        /// The book's first paragraph, reshaped to open and close on a pause item with speech between:
+        /// neither end can anchor an item insert, so only the paragraph's own start and end reach them.
+        /// </summary>
+        private static (BookHierarchy H, Paragraph P, ParagraphItem Lead, ParagraphItem Trail) MakePausedParagraph()
+        {
+            var b = MakeBook();
+            var p = b.First;
+            var lead = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = p.Id, Order = Key(), ItemType = ParagraphItemType.Pause };
+            var speech = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = p.Id, Order = Key(lead.Order), ItemType = ParagraphItemType.Speech, Text = "Spoken." };
+            var trail = new ParagraphItem { Id = Guid.NewGuid(), ParagraphId = p.Id, Order = Key(speech.Order), ItemType = ParagraphItemType.ParagraphPause };
+            b.H.Items[p.Id] = [lead, speech, trail];
+            return (b.H, p, lead, trail);
+        }
+
+        [Fact]
+        public void ItemAtStart_LandsAheadOfALeadingPause()
+        {
+            var (h, p, lead, _) = MakePausedParagraph();
+
+            var item = AddedNode<ParagraphItem>(h.PlanInsertNode(NodeKind.Paragraph, p.Id, Placement.AtStart, null, "New."));
+
+            Assert.Equal(p.Id, item.ParagraphId);
+            Assert.True(Before(item.Order, lead.Order));
+        }
+
+        [Fact]
+        public void ItemAtEnd_LandsAfterATrailingPause()
+        {
+            var (h, p, _, trail) = MakePausedParagraph();
+
+            var item = AddedNode<ParagraphItem>(h.PlanInsertNode(NodeKind.Paragraph, p.Id, Placement.AtEnd, null, "New."));
+
+            Assert.Equal(p.Id, item.ParagraphId);
+            Assert.True(Before(trail.Order, item.Order));
+        }
+
+        [Theory]
+        [InlineData(Placement.AtStart)]
+        [InlineData(Placement.AtEnd)]
+        public void NewItem_IsAnUnattributedSpeechItem_WithTheTrimmedText(Placement placement)
+        {
+            var b = MakeBook();
+
+            var item = AddedNode<ParagraphItem>(b.H.PlanInsertNode(NodeKind.Paragraph, b.Last.Id, placement, null, "  Added.  "));
+
+            Assert.Equal(ParagraphItemType.Speech, item.ItemType);
+            Assert.Equal("Added.", item.Text);
+            Assert.Null(item.CharacterId);
+            Assert.Null(item.VoiceInstructions);
+            Assert.Null(item.AudioFileName);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void ItemAtAnEnd_WithBlankText_IsRefused(string? text)
+        {
+            var b = MakeBook();
+
+            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Last.Id, Placement.AtStart, null, text));
+            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Last.Id, Placement.AtEnd, null, text));
+        }
+
+        [Theory]
+        [InlineData(Placement.AtStart)]
+        [InlineData(Placement.AtEnd)]
+        public void APauseParagraph_TakesNoItem(Placement placement)
+        {
+            // Speech inside a pause paragraph is a structure the readers assume cannot exist; its
+            // inserts are Paragraph before/after.
+            var b = MakeBook();
+
+            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Pause.Id, placement, null, "New."));
+        }
+
+        [Fact]
+        public void ItemAtAnEnd_OfAnUnknownParagraph_IsRefused()
+        {
+            var b = MakeBook();
+
+            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, Guid.NewGuid(), Placement.AtEnd, null, "New."));
+            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Full.Id, Placement.AtStart, null, "New."));
+        }
+
         // ── volumes, parts and chapters ─────────────────────────────────────────
 
         private sealed record Shelf(

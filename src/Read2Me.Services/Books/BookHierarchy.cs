@@ -200,18 +200,7 @@ namespace Read2Me.Services.Books
                 nextOrder = idx < siblings.Count - 1 ? siblings[idx + 1].Order : null;
             }
 
-            var newItem = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                ParagraphId = paragraphId.Value,
-                ItemType = ParagraphItemType.Speech,
-                Text = trimmed,
-                CharacterId = null,
-                VoiceInstructions = null,
-                AudioFileName = null,
-                Order = OrderHelper.GetBetween(prevOrder, nextOrder),
-            };
-
+            var newItem = UnattributedSpeech(paragraphId.Value, OrderHelper.GetBetween(prevOrder, nextOrder), trimmed);
             return new HierarchyMutation(ToAdd: [newItem], ToDelete: [], ToUpdate: []);
         }
 
@@ -242,10 +231,12 @@ namespace Read2Me.Services.Books
         // A new Volume, Part or Chapter is born empty, its title optional: a
         // blank one leaves it untitled. A new Paragraph is born holding its
         // first Speech item, unattributed: an empty Paragraph reads as a pause,
-        // and a new item has no speaker yet.
+        // and a new item has no speaker yet. A Speech item at a paragraph's
+        // start or end is born the same way, first or last inside it; a pause
+        // paragraph takes none.
         //
         // Returns null for a combination it does not plan, an unknown anchor,
-        // or blank paragraph text.
+        // a pause paragraph's start or end, or blank paragraph or item text.
         // ---------------------------------------------------------------
         public HierarchyMutation? PlanInsertNode(
             NodeKind anchorKind, Guid anchorId, Placement placement, string? title, string? text)
@@ -260,46 +251,48 @@ namespace Read2Me.Services.Books
                 (NodeKind.Chapter, true) => SlotBeside(Chapters, anchorId, c => c.Id, c => c.Order, placement),
                 (NodeKind.Chapter, false) => SlotInside(Holds(Chapters, anchorId, c => c.Id), anchorId, Paragraphs, p => p.Order, placement),
                 (NodeKind.Paragraph, true) => SlotBeside(Paragraphs, anchorId, p => p.Id, p => p.Order, placement),
+                (NodeKind.Paragraph, false) => SlotInside(TakesSpeechAtEnds(anchorId), anchorId, Items, i => i.Order, placement),
                 _ => null,
             };
             if (slot is not var (parentId, prev, next)) return null;
 
             var order = OrderHelper.GetBetween(prev, next);
             var newTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
-            IBookEntity? created = InsertedKind(anchorKind, placement) switch
+            var trimmed = text?.Trim();
+            IBookEntity[]? added = InsertedKind(anchorKind, placement) switch
             {
-                NodeKind.Volume => new Volume { Id = Guid.NewGuid(), Title = newTitle ?? string.Empty, Order = order },
-                NodeKind.Part => new Part { Id = Guid.NewGuid(), VolumeId = parentId, Title = newTitle, Order = order },
-                NodeKind.Chapter => new Chapter { Id = Guid.NewGuid(), PartId = parentId, Title = newTitle, Order = order },
-                NodeKind.Paragraph => null,
+                NodeKind.Volume => [new Volume { Id = Guid.NewGuid(), Title = newTitle ?? string.Empty, Order = order }],
+                NodeKind.Part => [new Part { Id = Guid.NewGuid(), VolumeId = parentId, Title = newTitle, Order = order }],
+                NodeKind.Chapter => [new Chapter { Id = Guid.NewGuid(), PartId = parentId, Title = newTitle, Order = order }],
+                _ when string.IsNullOrEmpty(trimmed) => null,
+                NodeKind.Paragraph => NewParagraph(parentId, order, trimmed),
+                // The Item insertion rules, anchored on the paragraph rather than an item, so a
+                // leading or trailing pause item does not block it.
+                NodeKind.ParagraphItem => [UnattributedSpeech(parentId, order, trimmed)],
                 _ => throw new InvalidOperationException($"No slot is planned for {anchorKind} {placement}."),
             };
-            if (created is not null)
-                return new HierarchyMutation(ToAdd: [created], ToDelete: [], ToUpdate: []);
-
-            var trimmed = text?.Trim();
-            if (string.IsNullOrEmpty(trimmed)) return null;
-
-            var paragraph = new Paragraph
-            {
-                Id = Guid.NewGuid(),
-                ChapterId = parentId,
-                Order = order,
-            };
-            var item = new ParagraphItem
-            {
-                Id = Guid.NewGuid(),
-                ParagraphId = paragraph.Id,
-                ItemType = ParagraphItemType.Speech,
-                Text = trimmed,
-                CharacterId = null,
-                VoiceInstructions = null,
-                AudioFileName = null,
-                Order = OrderHelper.GetBetween(null, null),
-            };
-
-            return new HierarchyMutation(ToAdd: [paragraph, item], ToDelete: [], ToUpdate: []);
+            return added is null ? null : new HierarchyMutation(ToAdd: [.. added], ToDelete: [], ToUpdate: []);
         }
+
+        private static IBookEntity[] NewParagraph(Guid chapterId, string order, string text)
+        {
+            var paragraph = new Paragraph { Id = Guid.NewGuid(), ChapterId = chapterId, Order = order };
+            return [paragraph, UnattributedSpeech(paragraph.Id, OrderHelper.GetBetween(null, null), text)];
+        }
+
+        // A new Speech item with no speaker, delivery cue or audio, so it reaches the
+        // attribution queue rather than looking attributed (Item insertion).
+        private static ParagraphItem UnattributedSpeech(Guid paragraphId, string order, string text) => new()
+        {
+            Id = Guid.NewGuid(),
+            ParagraphId = paragraphId,
+            ItemType = ParagraphItemType.Speech,
+            Text = text,
+            CharacterId = null,
+            VoiceInstructions = null,
+            AudioFileName = null,
+            Order = order,
+        };
 
         // Insert slots: the parent a new node goes under and the order keys it
         // goes between. Null when the anchor is not where its kind says it is.
@@ -337,6 +330,15 @@ namespace Read2Me.Services.Books
             placement == Placement.Before
                 ? (idx > 0 ? getOrder(siblings[idx - 1]) : null, getOrder(siblings[idx]))
                 : (getOrder(siblings[idx]), idx < siblings.Count - 1 ? getOrder(siblings[idx + 1]) : null);
+
+        // A paragraph takes a speech item at its start or end unless it is a pause paragraph:
+        // Speech inside one is a structure the readers assume cannot exist.
+        private bool TakesSpeechAtEnds(Guid paragraphId)
+        {
+            var (_, siblings) = FindParentAndSiblings(Paragraphs, paragraphId, p => p.Id);
+            var paragraph = siblings.Find(p => p.Id == paragraphId);
+            return paragraph is not null && !IsPauseParagraph(paragraph);
+        }
 
         private static bool Holds<T>(Dictionary<Guid, List<T>> byParent, Guid childId, Func<T, Guid> getId) =>
             FindParentAndSiblings(byParent, childId, getId).parentId != null;

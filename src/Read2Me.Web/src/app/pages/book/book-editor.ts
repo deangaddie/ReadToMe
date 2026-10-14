@@ -51,7 +51,8 @@ export class BookEditor {
     if (response && command.type === 'InsertNode') {
       // The receipt names only the new paragraph, which no loaded chapter holds yet, so the store
       // is told where it went: an empty chapter is usually not open in the reader at all. A new
-      // volume, part or chapter is empty, so the receipt's tree reload is all it needs.
+      // volume, part or chapter is empty, so the receipt's tree reload is all it needs; an item at
+      // a paragraph's start or end is named with its paragraph, which the receipt rereads in place.
       const beside = command.placement === 'Before' || command.placement === 'After';
       if (command.anchorKind === 'Chapter' && !beside) {
         await this.store.revealInsertedParagraph({ kind: 'chapter', id: command.anchorId });

@@ -129,7 +129,7 @@ export async function commandFor(
       if (placement) {
         const created = insertedKind(kind, placement);
         const anchor = { type: 'InsertNode', anchorKind: ANCHOR_KIND[kind], anchorId: id, placement } as const;
-        if (created !== 'paragraph') {
+        if (created !== 'paragraph' && created !== 'item') {
           // A new volume, part or chapter is born empty; its title is optional, renamable later.
           const title = await dialogs.text({
             title: `Insert ${created} ${PLACEMENT_WORDS[placement]}`,
@@ -139,9 +139,10 @@ export async function commandFor(
           if (title === null) return null;
           return { ...anchor, title: title || null };
         }
-        // A new paragraph is never empty — an empty one reads as a pause — so its text is required.
+        // A new paragraph is never empty — an empty one reads as a pause — and nor is a speech
+        // item at a paragraph's start or end, so its text is required.
         const text = await dialogs.text({
-          title: `Insert paragraph ${PLACEMENT_WORDS[placement]}`,
+          title: `Insert ${created} ${PLACEMENT_WORDS[placement]}`,
           label: 'Text',
           multiline: true,
           required: true,

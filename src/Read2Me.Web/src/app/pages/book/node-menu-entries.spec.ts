@@ -63,14 +63,13 @@ describe('menuEntries matrix', () => {
     expect(entries[1]!.label).toBe('Split part');
   });
 
-  it('paragraph: no edit; split chapter, merges, insert paragraph before/after, delete', () => {
+  it('paragraph: no edit; split chapter, merges, insert paragraph before/after and item at start/end, delete', () => {
     const entries = menuEntries(target('paragraph'));
     expect(entries.map((e) => e.id)).toEqual([
       'split',
       'merge-previous',
       'merge-next',
-      'insert-node:Before',
-      'insert-node:After',
+      ...NODE_INSERT_IDS,
       'delete',
     ]);
     expect(entries[0]!.label).toBe('Split chapter');
@@ -99,7 +98,12 @@ describe('menuEntries matrix', () => {
       'Insert paragraph at start',
       'Insert paragraph at end',
     ]);
-    expect(inserts(target('paragraph'))).toEqual(['Insert paragraph before', 'Insert paragraph after']);
+    expect(inserts(target('paragraph'))).toEqual([
+      'Insert paragraph before',
+      'Insert paragraph after',
+      'Insert item at start',
+      'Insert item at end',
+    ]);
     expect(inserts(target('pause-paragraph'))).toEqual(['Insert paragraph before', 'Insert paragraph after']);
   });
 
@@ -299,6 +303,8 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
       ['merge-next', 'structure'],
       ['insert-node:Before', 'insert'],
       ['insert-node:After', 'insert'],
+      ['insert-node:AtStart', 'insert'],
+      ['insert-node:AtEnd', 'insert'],
       ['delete', 'delete'],
     ]);
     expect(entries[0]!.label).toBe('Release narration');
