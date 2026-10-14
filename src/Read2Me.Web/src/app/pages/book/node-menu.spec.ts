@@ -165,7 +165,7 @@ describe('r2m-node-menu', () => {
     expect(entries()).toEqual([]);
     locked.set(false);
     await open(trigger);
-    expect(entries()).toEqual(['edit-title', 'delete']);
+    expect(entries()).toEqual(['edit-title']);
   });
 
   describe('the shared instance (risk 2)', () => {

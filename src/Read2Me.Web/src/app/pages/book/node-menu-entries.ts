@@ -14,7 +14,11 @@ export interface NodeMenuTarget {
   id: string;
   /** The raw title (nodes), text (items) or pause label (pause paragraphs); null when untitled. */
   text: string | null;
-  /** Position among siblings: merge entries hide at the ends. */
+  /**
+   * Position among siblings: merge entries hide at the ends. A volume's siblings are every volume
+   * in the book, so a volume that is both first and last is the book's only one, and offers no
+   * Delete (a book keeps at least one volume).
+   */
   isFirst: boolean;
   isLast: boolean;
   /** Items only: a pause item anchors no item insert and has no delivery cue. */
@@ -193,14 +197,21 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
     }
   }
 
-  entries.push({
-    id: 'delete',
-    label: DELETE_LABEL[kind],
-    icon: 'delete',
-    group: 'delete',
-    destructive: true,
-  });
+  if (!isOnlyVolume(target)) {
+    entries.push({
+      id: 'delete',
+      label: DELETE_LABEL[kind],
+      icon: 'delete',
+      group: 'delete',
+      destructive: true,
+    });
+  }
   return entries;
+}
+
+/** The book's last volume, which the host refuses to delete. */
+function isOnlyVolume({ kind, isFirst, isLast }: NodeMenuTarget): boolean {
+  return kind === 'volume' && isFirst && isLast;
 }
 
 /** Add on an item without a delivery cue; Edit and Remove on one with a cue. */

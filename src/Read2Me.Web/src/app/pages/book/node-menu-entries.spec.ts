@@ -144,6 +144,22 @@ describe('menuEntries position', () => {
     expect(list).not.toContain('merge-next');
   });
 
+  it('a lone volume has no Delete: a book keeps at least one volume', () => {
+    expect(ids(target('volume', { isFirst: true, isLast: true }))).toEqual(['edit-title']);
+  });
+
+  it.each([
+    ['first', { isFirst: true }],
+    ['middle', {}],
+    ['last', { isLast: true }],
+  ])('a %s volume among several keeps Delete', (_, position) => {
+    expect(ids(target('volume', position))).toContain('delete');
+  });
+
+  it.each(kinds.filter((k) => k !== 'volume'))('%s: an only child keeps Delete', (kind) => {
+    expect(ids(target(kind, { isFirst: true, isLast: true }))).toContain('delete');
+  });
+
   it.each(kinds)('%s: an only child has no merge entries', (kind) => {
     const list = ids(target(kind, { isFirst: true, isLast: true }));
     expect(list).not.toContain('merge-previous');

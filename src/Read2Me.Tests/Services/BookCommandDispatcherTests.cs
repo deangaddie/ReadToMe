@@ -65,12 +65,28 @@ namespace Read2Me.Tests.Services
         public async Task DeleteVolumeCommand_RemovesVolume()
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);
-            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
+            await b.AddVolume("keep", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("kept", "Stays"))))
+                .AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
 
             await ExecuteAsync(new DeleteVolumeCommand(_folder, b.VolumeId("vol")));
 
             await using var verify = await OpenDbAsync();
             Assert.False(await verify.Volumes.AnyAsync(v => v.Id == b.VolumeId("vol")));
+        }
+
+        [Fact]
+        public async Task DeleteVolumeCommand_OnlyVolume_IsRefusedRatherThanAnsweredAsNull()
+        {
+            // The endpoint softens an unknown volume to a null id, but not this: an agent deleting
+            // the book's last volume gets a 422 saying why.
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter(configure: c => c.AddParagraph(configure: p => p.AddNarration("item", "Hello world")))).BuildAsync();
+
+            var outcome = await DispatchAsync(new DeleteVolumeCommand(_folder, b.VolumeId("vol")));
+
+            Assert.Equal(
+                BookMutationRejection.Validation,
+                Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
         }
 
         [Fact]

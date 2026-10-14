@@ -406,6 +406,10 @@ error for an unknown type lists every valid one. The project folder always comes
 from the URL — a `folderId` in the body is ignored. Split/create commands return
 `{ "newEntityId": "<guid>" }`.
 
+A book always keeps at least one volume: `DeleteVolume` on its only volume is **422**
+("A book must keep at least one volume.") and deletes nothing. An unknown volume still
+no-ops.
+
 `SetNarratorCharacter` is the one project-scoped command — it names the Character who
 narrates the book (Sherlock Holmes narrated by Dr. Watson), so narration and that
 character's dialog share one voice:

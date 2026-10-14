@@ -186,6 +186,41 @@ public class DestructiveStructuralMutationTests : ProjectDbTestBase
     // ── deletions ────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task DeleteVolume_TheBooksOnlyVolume_IsRefusedAndLeavesItInPlace()
+    {
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        await b.AddVolume("v1", v => v.AddChapter("c1", c => c.AddParagraph("pg1", g => g.AddNarration("i1", "Only"))))
+            .BuildAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new DeleteVolumeMutation(_folder, b.VolumeId("v1")));
+
+        var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
+        Assert.Equal(BookMutationRejection.Validation, rejected.Reason);
+        Assert.Contains("must keep at least one volume", rejected.Message);
+
+        await using var verify = await OpenDbAsync();
+        Assert.NotNull(await verify.Volumes.FindAsync(b.VolumeId("v1")));
+        Assert.NotNull(await verify.ParagraphItems.FindAsync(b.ItemId("i1")));
+    }
+
+    [Fact]
+    public async Task DeleteVolume_OneOfSeveral_TakesItsSubtreeAndReportsWholeProjectScope()
+    {
+        var b = await SeedTwoVolumesAsync();
+
+        var receipt = await CommitAsync(new DeleteVolumeMutation(_folder, b.VolumeId("v2")));
+
+        Assert.Equal(BookMutationScope.WholeProject, receipt.Effects.Scope);
+        Assert.True(receipt.Effects.Facets.HasFlag(BookFacets.Structure));
+
+        await using var verify = await OpenDbAsync();
+        Assert.Null(await verify.Volumes.FindAsync(b.VolumeId("v2")));
+        Assert.Null(await verify.ParagraphItems.FindAsync(b.ItemId("i2")));
+        Assert.NotNull(await verify.Volumes.FindAsync(b.VolumeId("v1")));
+    }
+
+    [Fact]
     public async Task DeleteChapter_TakesItsSubtreeAndReportsWholeProjectScope()
     {
         var b = await SeedTwoChaptersAsync();
