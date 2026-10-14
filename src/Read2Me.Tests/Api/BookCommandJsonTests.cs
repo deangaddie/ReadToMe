@@ -111,6 +111,25 @@ namespace Read2Me.Tests.Api
             Assert.Equal(PauseKind.ParagraphPause, command.PauseKind);
         }
 
+        [Theory]
+        [InlineData("Before", Placement.Before)]
+        [InlineData("After", Placement.After)]
+        [InlineData("AtStart", Placement.AtStart)]
+        [InlineData("AtEnd", Placement.AtEnd)]
+        public void InsertNode_binds_its_anchor_kind_and_placement_from_strings(string placement, Placement expected)
+        {
+            var anchorId = Guid.NewGuid();
+            var command = (InsertNodeCommand)Deserialize(
+                "InsertNode",
+                $$"""{ "anchorKind": "Chapter", "anchorId": "{{anchorId}}", "placement": "{{placement}}", "text": "A line." }""");
+
+            Assert.Equal(NodeKind.Chapter, command.AnchorKind);
+            Assert.Equal(anchorId, command.AnchorId);
+            Assert.Equal(expected, command.Placement);
+            Assert.Null(command.Title);
+            Assert.Equal("A line.", command.Text);
+        }
+
         [Fact]
         public void Parameterless_command_binds_from_empty_body()
         {

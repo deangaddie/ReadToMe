@@ -118,6 +118,27 @@ namespace Read2Me.Tests.Api
                 new InsertParagraphItemCommand(_folder, b.ItemId("i1"), InsertPosition.After, "   ")));
         }
 
+        /// <summary>
+        /// <c>InsertNode</c> answers with the new paragraph's id, and refuses an anchor the Book does
+        /// not contain rather than no-opping: an agent scripting a repair must not mistake it for success.
+        /// </summary>
+        [Fact]
+        public async Task InsertNode_AnswersWithTheNewParagraph_AndRefusesAnUnknownAnchor()
+        {
+            var b = await SeedAsync();
+
+            var created = IdOf(await PostAsync(new InsertNodeCommand(
+                _folder, NodeKind.Paragraph, b.ParagraphId("p1"), Placement.Before, Text: "Before all.")));
+
+            await using var verify = await OpenDbAsync();
+            Assert.Equal(b.ChapterId("ch1"), (await verify.Paragraphs.FindAsync(created))!.ChapterId);
+
+            Assert422(await PostAsync(new InsertNodeCommand(
+                _folder, NodeKind.Paragraph, Guid.NewGuid(), Placement.Before, Text: "Nowhere.")));
+            Assert422(await PostAsync(new InsertNodeCommand(
+                _folder, NodeKind.Chapter, b.ChapterId("ch1"), Placement.AtEnd, Text: "  ")));
+        }
+
         /// <summary>A valid command that changes nothing is a success that creates no revision.</summary>
         [Fact]
         public async Task ACommandThatChangesNothing_IsASuccessWithNoIdentity()

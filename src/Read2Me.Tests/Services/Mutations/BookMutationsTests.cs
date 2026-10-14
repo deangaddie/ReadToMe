@@ -282,6 +282,128 @@ public class BookMutationsTests : ProjectDbTestBase
             Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
     }
 
+    // ── node insertion ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task InsertNode_ParagraphAfter_PersistsInReadingOrder_AndTheReceiptNamesIt()
+    {
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+            .AddParagraph("p1", p => p.AddNarration("i1", "First."))
+            .AddParagraph("p2", p => p.AddNarration("i2", "Second."))))
+            .BuildAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, NodeKind.Paragraph, b.ParagraphId("p1"), Placement.After, null, "  A restored paragraph.  "));
+
+        var receipt = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
+        var created = receipt.Effects.CreatedId!.Value;
+        Assert.Equal(nameof(InsertNodeMutation), receipt.MutationName);
+        Assert.Equal(BookMutationScope.Exact, receipt.Effects.Scope);
+        Assert.Equal(BookFacets.Structure, receipt.Effects.Facets);
+        Assert.Equal(created, Assert.Single(receipt.Effects.ParagraphIds));
+
+        await using var verify = await OpenDbAsync();
+        var paragraphs = await verify.Paragraphs
+            .Where(p => p.ChapterId == b.ChapterId("ch"))
+            .OrderBy(p => p.Order)
+            .Select(p => p.Id)
+            .ToListAsync();
+        Assert.Equal([b.ParagraphId("p1"), created, b.ParagraphId("p2")], paragraphs);
+
+        var item = Assert.Single(await verify.ParagraphItems.Where(i => i.ParagraphId == created).ToListAsync());
+        Assert.Equal(Assert.Single(receipt.Effects.ParagraphItemIds), item.Id);
+        Assert.Equal(ParagraphItemType.Speech, item.ItemType);
+        Assert.Equal("A restored paragraph.", item.Text);
+        Assert.Null(item.CharacterId);
+        Assert.Null(item.VoiceInstructions);
+        Assert.Null(item.AudioFileName);
+
+        // Unattributed speech, so it raises the attribution-remaining count like any new dialog.
+        await using var scope = _root.CreateAsyncScope();
+        var counter = scope.ServiceProvider.GetRequiredService<IUnattributedItemCounter>();
+        Assert.Equal(1, await counter.CountUnattributedCharacterItemsAsync(_folder, created));
+    }
+
+    [Fact]
+    public async Task InsertNode_AtStartOfAnEmptyChapter_GivesItContent()
+    {
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        await b.AddVolume("vol", v => v
+            .AddChapter("full", c => c.AddParagraph("p1", p => p.AddNarration("i1", "First.")))
+            .AddChapter("empty"))
+            .BuildAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, NodeKind.Chapter, b.ChapterId("empty"), Placement.AtStart, null, "At last, a line."));
+
+        var created = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt.Effects.CreatedId!.Value;
+        await using var verify = await OpenDbAsync();
+        var paragraph = await verify.Paragraphs.FindAsync(created);
+        Assert.Equal(b.ChapterId("empty"), paragraph!.ChapterId);
+        Assert.Single(await verify.Paragraphs.Where(p => p.ChapterId == b.ChapterId("full")).ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task InsertNode_ParagraphWithBlankText_IsRejectedAsValidation(string? text)
+    {
+        var b = await SeedOneItemAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, NodeKind.Paragraph, b.ParagraphId("para"), Placement.After, null, text));
+
+        Assert.Equal(BookMutationRejection.Validation,
+            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
+        await using var verify = await OpenDbAsync();
+        Assert.Equal(1, await verify.Paragraphs.CountAsync());
+    }
+
+    [Theory]
+    [InlineData(NodeKind.ParagraphItem, Placement.After)]   // an item anchor creates nothing
+    [InlineData(NodeKind.ParagraphItem, Placement.AtEnd)]
+    [InlineData(NodeKind.Volume, Placement.After)]          // not yet supported
+    [InlineData(NodeKind.Chapter, Placement.Before)]
+    [InlineData(NodeKind.Paragraph, Placement.AtStart)]
+    public async Task InsertNode_ACombinationThatDoesNotMakeAParagraph_IsRejectedAsValidation(
+        NodeKind anchorKind, Placement placement)
+    {
+        var b = await SeedOneItemAsync();
+        var anchorId = anchorKind switch
+        {
+            NodeKind.Volume => b.VolumeId("vol"),
+            NodeKind.Chapter => b.ChapterId("ch"),
+            NodeKind.Paragraph => b.ParagraphId("para"),
+            _ => b.ItemId("item"),
+        };
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, anchorKind, anchorId, placement, "Title", "Text."));
+
+        Assert.Equal(BookMutationRejection.Validation,
+            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
+    }
+
+    [Theory]
+    [InlineData(NodeKind.Paragraph, Placement.Before)]
+    [InlineData(NodeKind.Chapter, Placement.AtEnd)]
+    public async Task InsertNode_AgainstAnUnknownAnchor_IsRejectedAsNotFound(NodeKind anchorKind, Placement placement)
+    {
+        await SeedOneItemAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, anchorKind, Guid.NewGuid(), placement, null, "Nowhere."));
+
+        Assert.Equal(BookMutationRejection.NotFound,
+            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
+    }
+
     [Fact]
     public async Task Commit_WhenCancelledBeforeTheCommitPoint_IsRejectedAsCancelled_AndRollsBack()
     {

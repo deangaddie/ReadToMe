@@ -581,4 +581,43 @@ describe('BookStore', () => {
       expect(store.currentChapterId()).toBe('c3');
     });
   });
+
+  describe('revealing an inserted paragraph (Node insertion)', () => {
+    it('a chapter not in the window is opened and scrolled to', async () => {
+      await store.open('dune');
+      await store.openFirstChapter();
+      api.on('GET', `${BASE}/nodes/chapter/c3/children`, paragraphs('new'));
+
+      await store.revealInsertedParagraph({ kind: 'chapter', id: 'c3' });
+
+      expect(store.window()).toEqual(['c3']);
+      expect(store.scrollRequest()).toMatchObject({ chapterId: 'c3' });
+      expect(store.chapters()[0]?.paragraphs.map((p) => p.id)).toEqual(['new']);
+    });
+
+    it('a loaded chapter off the visible one is read again in place, without scrolling', async () => {
+      await store.open('dune');
+      await store.openFirstChapter();
+      await store.loadNext();
+      const scroll = store.scrollRequest();
+      api.on('GET', `${BASE}/nodes/chapter/c2/children`, paragraphs('c', 'new'));
+
+      await store.revealInsertedParagraph({ kind: 'paragraph', id: 'c' });
+
+      expect(store.window()).toEqual(['c1', 'c2']);
+      expect(store.scrollRequest()).toBe(scroll);
+      expect(store.chapters()[1]?.paragraphs.map((p) => p.id)).toEqual(['c', 'new']);
+    });
+
+    it('a paragraph anchor the reader does not hold reveals nothing', async () => {
+      await store.open('dune');
+      await store.openFirstChapter();
+      const before = calls('/nodes/chapter/c1/children');
+
+      await store.revealInsertedParagraph({ kind: 'paragraph', id: 'elsewhere' });
+
+      expect(store.window()).toEqual(['c1']);
+      expect(calls('/nodes/chapter/c1/children')).toBe(before);
+    });
+  });
 });

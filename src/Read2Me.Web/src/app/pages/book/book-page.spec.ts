@@ -179,7 +179,7 @@ describe('r2m-book-page', () => {
     expect(page.querySelector('[aria-label="Show structure"]')).not.toBeNull();
   });
 
-  it('a pause paragraph row carries a node-menu trigger for its delete', async () => {
+  it('a pause paragraph row carries a node-menu trigger for its inserts and delete', async () => {
     api.on('GET', `${BASE}/nodes/chapter/c1/children`, {
       paragraphs: [
         DIALOG('p1'),
@@ -208,7 +208,11 @@ describe('r2m-book-page', () => {
     trigger.click();
     await page.rendered();
     const entries = Array.from(page.querySelectorAll<HTMLElement>('[role="menu"] [data-entry]'));
-    expect(entries.map((e) => e.dataset['entry'])).toEqual(['delete']);
+    expect(entries.map((e) => e.dataset['entry'])).toEqual([
+      'insert-node:Before',
+      'insert-node:After',
+      'delete',
+    ]);
   });
 
   it('a tree pick names the chapter in the URL', async () => {

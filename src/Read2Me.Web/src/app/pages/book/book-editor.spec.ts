@@ -19,6 +19,11 @@ class FakeStore {
     return { settled, cancel: () => this.cancelled++ };
   }
 
+  revealed: unknown[] = [];
+  async revealInsertedParagraph(anchor: unknown) {
+    this.revealed.push(anchor);
+  }
+
   async refresh() {
     this.refreshed++;
   }
@@ -162,5 +167,51 @@ describe('BookEditor', () => {
     store.settle(false);
     expect(await manual).toBe(true);
     expect(store.refreshed).toBe(1);
+  });
+});
+
+describe('BookEditor node insertion', () => {
+  let store: FakeStore;
+  let editor: BookEditor;
+  let answer: { newEntityId: string | null } | Error;
+
+  beforeEach(() => {
+    resetServices();
+    store = new FakeStore();
+    answer = { newEntityId: 'new-p' };
+    override(BookApi, {
+      execute: async () => {
+        if (answer instanceof Error) throw answer;
+        return answer;
+      },
+    } as unknown as BookApi);
+    override(ToastService, { problem: () => {} } as unknown as ToastService);
+    editor = new BookEditor(store as unknown as BookStore);
+  });
+
+  const insert = (anchorKind: 'Chapter' | 'Paragraph', anchorId: string) =>
+    ({ type: 'InsertNode', anchorKind, anchorId, placement: 'AtEnd', text: 'New.' }) as const;
+
+  it.each([
+    ['Chapter', 'c2', { kind: 'chapter', id: 'c2' }],
+    ['Paragraph', 'p1', { kind: 'paragraph', id: 'p1' }],
+  ] as const)('a committed paragraph insert against a %s reveals it in the reader', async (kind, id, anchor) => {
+    const run = editor.run(insert(kind, id));
+    await new Promise((r) => setTimeout(r, 0));
+    store.settle(true);
+    expect(await run).toBe(true);
+    expect(store.revealed).toEqual([anchor]);
+  });
+
+  it('a refused insert reveals nothing, and nor does any other command', async () => {
+    answer = new ApiError(422, 'No.');
+    expect(await editor.run(insert('Chapter', 'c2'))).toBe(false);
+
+    answer = { newEntityId: null };
+    const run = editor.run({ type: 'AddPauses' });
+    await new Promise((r) => setTimeout(r, 0));
+    store.settle(true);
+    await run;
+    expect(store.revealed).toEqual([]);
   });
 });

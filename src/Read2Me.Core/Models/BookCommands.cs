@@ -4,9 +4,20 @@ public enum MergeDirection { Previous, Next }
 
 /// <summary>
 /// Where a new node lands relative to the anchor node it is inserted against.
-/// Shared by every insertion command; the member names are also the JSON wire values.
+/// Shared by the item and pause insertion commands (<see cref="InsertNodeCommand"/> takes a
+/// <see cref="Placement"/>); the member names are also the JSON wire values.
 /// </summary>
 public enum InsertPosition { Before, After }
+
+/// <summary>
+/// Where an <see cref="InsertNodeCommand"/> puts its new node: <see cref="Before"/> / <see cref="After"/>
+/// name a sibling at the anchor's own level, <see cref="AtStart"/> / <see cref="AtEnd"/> a first or
+/// last child one level down — never two levels down. The member names are also the JSON wire values.
+/// </summary>
+public enum Placement { Before, After, AtStart, AtEnd }
+
+/// <summary>Which kind of node an <see cref="InsertNodeCommand"/> anchors on. Also the JSON wire values.</summary>
+public enum NodeKind { Volume, Part, Chapter, Paragraph, ParagraphItem }
 
 public abstract record BookCommand(ProjectFolderId FolderId);
 
@@ -140,6 +151,21 @@ public record AddChapterTitlesCommand(ProjectFolderId FolderId) : BookCommand(Fo
 /// looks attributed and never reaches the attribution queue.
 /// </summary>
 public record InsertParagraphItemCommand(ProjectFolderId FolderId, Guid AnchorItemId, InsertPosition Position, string Text) : BookCommand(FolderId);
+
+// Node insertion
+/// <summary>
+/// Creates one node beside or inside the anchor; its kind follows from the anchor and the
+/// <see cref="Placement"/>. A new Paragraph is born holding <c>Text</c> as one unattributed Speech
+/// item — never empty, because an empty Paragraph reads as a pause. <c>Title</c> is for a new
+/// Volume, Part or Chapter.
+/// </summary>
+public record InsertNodeCommand(
+    ProjectFolderId FolderId,
+    NodeKind AnchorKind,
+    Guid AnchorId,
+    Placement Placement,
+    string? Title = null,
+    string? Text = null) : BookCommand(FolderId);
 
 // Pause insertion
 public record AddPausesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);

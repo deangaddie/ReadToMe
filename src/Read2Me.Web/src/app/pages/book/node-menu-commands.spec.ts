@@ -215,6 +215,34 @@ describe('commandFor', () => {
       expect<unknown>(await commandFor('insert-before', target('item'), dialogs({ text: null }).fake)).toBeNull();
     });
 
+    it.each([
+      ['chapter', 'insert-node:AtStart', 'Chapter', 'AtStart', 'Insert paragraph at start'],
+      ['chapter', 'insert-node:AtEnd', 'Chapter', 'AtEnd', 'Insert paragraph at end'],
+      ['paragraph', 'insert-node:Before', 'Paragraph', 'Before', 'Insert paragraph before'],
+      ['paragraph', 'insert-node:After', 'Paragraph', 'After', 'Insert paragraph after'],
+      ['pause-paragraph', 'insert-node:Before', 'Paragraph', 'Before', 'Insert paragraph before'],
+      ['pause-paragraph', 'insert-node:After', 'Paragraph', 'After', 'Insert paragraph after'],
+    ] as const)('%s %s asks for required multiline text and posts InsertNode', async (kind, entry, anchorKind, placement, title) => {
+      const { fake, asked } = dialogs({ text: 'A new paragraph.' });
+      expect<unknown>(await commandFor(entry, target(kind), fake)).toEqual({
+        type: 'InsertNode',
+        anchorKind,
+        anchorId: 'n1',
+        placement,
+        text: 'A new paragraph.',
+      });
+      expect(asked.text).toEqual([
+        expect.objectContaining({ title, label: 'Text', required: true, multiline: true }),
+      ]);
+      expect(asked.text[0]!.initial ?? '').toBe('');
+    });
+
+    it('a cancelled paragraph insert sends nothing', async () => {
+      expect<unknown>(
+        await commandFor('insert-node:AtEnd', target('chapter'), dialogs({ text: null }).fake),
+      ).toBeNull();
+    });
+
     it('pauses post without a prompt', async () => {
       const { fake, asked } = dialogs();
       expect<unknown>(await commandFor('pause-before:ChapterPause', target('item'), fake)).toEqual({

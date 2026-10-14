@@ -660,6 +660,36 @@ namespace Read2Me.Tests.Services
         }
 
         // ---------------------------------------------------------------
+        // InsertNodeCommand — what it does to the Book is asserted in BookMutationsTests and
+        // BookHierarchyInsertNodeTests; here, only that the wire shape reaches it.
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task InsertNodeCommand_FromJsonPayload_PutsAParagraphAtTheEndOfAChapter()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddNarration("item", "Hello world"))))
+                .BuildAsync();
+
+            var body = JsonNode.Parse(
+                $$"""{ "type": "InsertNode", "anchorKind": "Chapter", "anchorId": "{{b.ChapterId("ch")}}", "placement": "AtEnd", "text": "Agent paragraph." }""")!.AsObject();
+            var ok = BookCommandJson.TryDeserialize("InsertNode", body, _folder, out var command, out var error);
+            Assert.True(ok, error);
+
+            var newId = await ExecuteAsync(command!);
+
+            await using var verify = await OpenDbAsync();
+            var order = await verify.Paragraphs
+                .Where(p => p.ChapterId == b.ChapterId("ch"))
+                .OrderBy(p => p.Order)
+                .Select(p => p.Id)
+                .ToListAsync();
+            Assert.Equal([b.ParagraphId("para"), newId!.Value], order);
+            Assert.Equal("Agent paragraph.", (await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == newId)).Text);
+        }
+
+        // ---------------------------------------------------------------
         // CreateCharacterCommand
         // ---------------------------------------------------------------
 

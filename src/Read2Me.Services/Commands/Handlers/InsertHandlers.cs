@@ -20,3 +20,16 @@ public sealed class InsertParagraphItemHandler(BookMutations mutations) : IComma
         mutations.ExecuteCommandAsync(
             new InsertParagraphItemMutation(c.FolderId, c.AnchorItemId, c.Position, c.Text), ct);
 }
+
+/// <summary>
+/// Creates one node beside or inside an anchor (Node insertion). A translation only (ADR 0007): the
+/// write lives in <see cref="Mutations.Implementations.InsertNodeMutationImplementation"/>. Strict
+/// on the wire — an agent scripting a structural repair is told about an unknown anchor rather than
+/// handed a quiet null it could mistake for a no-op.
+/// </summary>
+public sealed class InsertNodeHandler(BookMutations mutations) : ICommandHandler<InsertNodeCommand>
+{
+    public Task<BookCommandResult> HandleAsync(InsertNodeCommand c, CancellationToken ct) =>
+        mutations.ExecuteCommandStrictAsync(
+            new InsertNodeMutation(c.FolderId, c.AnchorKind, c.AnchorId, c.Placement, c.Title, c.Text), ct);
+}

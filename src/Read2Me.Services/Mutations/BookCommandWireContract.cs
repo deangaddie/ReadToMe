@@ -39,7 +39,7 @@ public static class BookCommandWireContract
 
     /// <summary>
     /// The strict shape: every expected refusal stays a refusal, so an agent sees a 422 rather than a
-    /// success-shaped null. <c>SetNarratorCharacter</c> and <c>SetItemDeliveryCue</c> are the
+    /// success-shaped null. <c>SetNarratorCharacter</c>, <c>SetItemDeliveryCue</c> and <c>InsertNode</c> are the
     /// commands written this way — <c>docs/agents/api.md</c> calls that out as what makes them unusual.
     /// </summary>
     public static Task<BookCommandResult> ExecuteCommandStrictAsync(

@@ -43,6 +43,18 @@ public sealed record InsertParagraphItemMutation(
     InsertPosition Position,
     string Text) : BookMutation(FolderId);
 
+/// <summary>
+/// Creates one node beside or inside the anchor, its kind following from the anchor and the
+/// placement; see <see cref="InsertNodeCommand"/>.
+/// </summary>
+public sealed record InsertNodeMutation(
+    ProjectFolderId FolderId,
+    NodeKind AnchorKind,
+    Guid AnchorId,
+    Placement Placement,
+    string? Title,
+    string? Text) : BookMutation(FolderId);
+
 // ── additive structural mutations ────────────────────────────────────────────
 // Every one of these creates nodes: a split makes a new parent beside the source, and the title
 // and pause additions make new Paragraphs. None of them deletes anything, which is what makes them

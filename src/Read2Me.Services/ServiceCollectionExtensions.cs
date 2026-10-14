@@ -86,6 +86,7 @@ public static class ServiceCollectionExtensions
 
         // Item insertion
         services.AddScoped<ICommandHandler<InsertParagraphItemCommand>, InsertParagraphItemHandler>();
+        services.AddScoped<ICommandHandler<InsertNodeCommand>, InsertNodeHandler>();
 
         // Pause
         services.AddScoped<ICommandHandler<AddPausesCommand>, AddPausesHandler>();
@@ -124,6 +125,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.InsertParagraphItemMutation>,
             Mutations.Implementations.InsertParagraphItemMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.InsertNodeMutation>,
+            Mutations.Implementations.InsertNodeMutationImplementation>();
         // Additive structural mutations
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SplitAtPartMutation>,

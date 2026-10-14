@@ -1,11 +1,13 @@
-import type { BookCommand, InsertPosition, MergeDirection } from '@app/api';
+import type { BookCommand, InsertPosition, MergeDirection, NodeKind } from '@app/api';
 import type { ConfirmOptions, TextPromptOptions } from '@app/ui/dialogs';
 import {
   HAS_CHILDREN,
   type MenuEntryId,
   type NodeMenuKind,
   type NodeMenuTarget,
+  PLACEMENT_WORDS,
   mergeDirectionOf,
+  nodeInsertOf,
   pauseInsertOf,
 } from './node-menu-entries';
 
@@ -122,10 +124,32 @@ export async function commandFor(
           pauseKind: pause.kind,
         };
       }
+      const placement = nodeInsertOf(entry);
+      if (placement) {
+        // A new paragraph is never empty — an empty one reads as a pause — so its text is required.
+        const text = await dialogs.text({
+          title: `Insert paragraph ${PLACEMENT_WORDS[placement]}`,
+          label: 'Text',
+          multiline: true,
+          required: true,
+        });
+        if (text === null) return null;
+        return { type: 'InsertNode', anchorKind: ANCHOR_KIND[kind], anchorId: id, placement, text };
+      }
       return null;
     }
   }
 }
+
+/** The anchor kind InsertNode is told; a pause paragraph is a Paragraph to the host. */
+const ANCHOR_KIND: Record<NodeMenuKind, NodeKind> = {
+  volume: 'Volume',
+  part: 'Part',
+  chapter: 'Chapter',
+  paragraph: 'Paragraph',
+  item: 'ParagraphItem',
+  'pause-paragraph': 'Paragraph',
+};
 
 /**
  * Sets or removes an item's cue. A real change discards the item's audio, so an item that has

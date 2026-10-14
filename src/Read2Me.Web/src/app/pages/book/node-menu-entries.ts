@@ -1,4 +1,4 @@
-import type { InsertPosition, MergeDirection, PauseKind } from '@app/api';
+import type { InsertPosition, MergeDirection, PauseKind, Placement } from '@app/api';
 import type { IconName } from '@app/ui/icons';
 
 /**
@@ -65,6 +65,7 @@ export type MenuEntryId =
   | 'merge-next'
   | 'insert-before'
   | 'insert-after'
+  | `insert-node:${Placement}`
   | `pause-${Lowercase<InsertPosition>}:${PauseKind}`
   | 'delete';
 
@@ -119,6 +120,27 @@ export const HAS_CHILDREN: Record<NodeMenuKind, boolean> = {
   paragraph: false,
   item: false,
   'pause-paragraph': false,
+};
+
+/**
+ * The InsertNode placements each kind offers — so far only those that create a paragraph: at the
+ * start or end of a chapter, and beside a paragraph or pause paragraph. An item's own inserts are
+ * the item insert entries.
+ */
+const NODE_INSERTS: Record<NodeMenuKind, readonly Placement[]> = {
+  volume: [],
+  part: [],
+  chapter: ['AtStart', 'AtEnd'],
+  paragraph: ['Before', 'After'],
+  item: [],
+  'pause-paragraph': ['Before', 'After'],
+};
+
+export const PLACEMENT_WORDS: Record<Placement, string> = {
+  Before: 'before',
+  After: 'after',
+  AtStart: 'at start',
+  AtEnd: 'at end',
 };
 
 const RELEASE_ENTRY: MenuEntry = {
@@ -177,6 +199,15 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
     }
   }
 
+  for (const placement of NODE_INSERTS[kind]) {
+    entries.push({
+      id: `insert-node:${placement}`,
+      label: `Insert paragraph ${PLACEMENT_WORDS[placement]}`,
+      icon: 'add',
+      group: 'insert',
+    });
+  }
+
   if (kind === 'item') {
     if (!target.isPause) {
       entries.push(
@@ -227,6 +258,12 @@ function cueEntries(cue: string | null | undefined): MenuEntry[] {
 /** The merge direction an entry names, or null for any other entry. */
 export function mergeDirectionOf(id: MenuEntryId): MergeDirection | null {
   return id === 'merge-previous' ? 'Previous' : id === 'merge-next' ? 'Next' : null;
+}
+
+/** The InsertNode placement an entry names, or null for any other entry. */
+export function nodeInsertOf(id: MenuEntryId): Placement | null {
+  const match = /^insert-node:(Before|After|AtStart|AtEnd)$/.exec(id);
+  return match ? (match[1] as Placement) : null;
 }
 
 /** The pause insertion an entry names, or null for any other entry. */

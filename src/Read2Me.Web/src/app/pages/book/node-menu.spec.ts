@@ -91,7 +91,14 @@ describe('r2m-node-menu', () => {
 
     await open(trigger);
     expect(menu.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe('Actions for One');
-    expect(entries()).toEqual(['edit-title', 'split', 'merge-next', 'delete']);
+    expect(entries()).toEqual([
+      'edit-title',
+      'split',
+      'merge-next',
+      'insert-node:AtStart',
+      'insert-node:AtEnd',
+      'delete',
+    ]);
 
     entry('edit-title').click();
     await settle();
@@ -179,7 +186,14 @@ describe('r2m-node-menu', () => {
       await open(second);
       expect(first.getAttribute('aria-expanded')).toBe('false');
       expect(first.hasAttribute('aria-controls')).toBe(false);
-      expect(entries()).toEqual(['edit-title', 'split', 'merge-previous', 'delete']);
+      expect(entries()).toEqual([
+        'edit-title',
+        'split',
+        'merge-previous',
+        'insert-node:AtStart',
+        'insert-node:AtEnd',
+        'delete',
+      ]);
       expect(second.style.getPropertyValue('anchor-name')).toBe('--r2m-node-menu');
       expect(first.style.getPropertyValue('anchor-name')).toBe('');
     });

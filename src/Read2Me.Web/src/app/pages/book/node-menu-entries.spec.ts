@@ -5,6 +5,7 @@ import {
   type NodeMenuTarget,
   menuEntries,
   mergeDirectionOf,
+  nodeInsertOf,
   pauseInsertOf,
 } from './node-menu-entries';
 
@@ -41,22 +42,47 @@ describe('menuEntries matrix', () => {
     expect(entries.at(-1)!.label).toBe('Delete part');
   });
 
-  it('chapter: edit title, split part, merges, delete', () => {
+  it('chapter: edit title, split part, merges, insert paragraph at start/end, delete', () => {
     const entries = menuEntries(target('chapter'));
     expect(entries.map((e) => e.id)).toEqual([
       'edit-title',
       'split',
       'merge-previous',
       'merge-next',
+      'insert-node:AtStart',
+      'insert-node:AtEnd',
       'delete',
     ]);
     expect(entries[1]!.label).toBe('Split part');
   });
 
-  it('paragraph: no edit; split chapter, merges, delete', () => {
+  it('paragraph: no edit; split chapter, merges, insert paragraph before/after, delete', () => {
     const entries = menuEntries(target('paragraph'));
-    expect(entries.map((e) => e.id)).toEqual(['split', 'merge-previous', 'merge-next', 'delete']);
+    expect(entries.map((e) => e.id)).toEqual([
+      'split',
+      'merge-previous',
+      'merge-next',
+      'insert-node:Before',
+      'insert-node:After',
+      'delete',
+    ]);
     expect(entries[0]!.label).toBe('Split chapter');
+  });
+
+  it('paragraph inserts sit in one flat Insert group, labelled with what they create and where', () => {
+    const inserts = (t: NodeMenuTarget) =>
+      menuEntries(t)
+        .filter((e) => e.group === 'insert')
+        .map((e) => e.label);
+    expect(inserts(target('chapter'))).toEqual(['Insert paragraph at start', 'Insert paragraph at end']);
+    expect(inserts(target('paragraph'))).toEqual(['Insert paragraph before', 'Insert paragraph after']);
+    expect(inserts(target('pause-paragraph'))).toEqual(['Insert paragraph before', 'Insert paragraph after']);
+  });
+
+  it('volume, part and item offer no paragraph inserts', () => {
+    for (const kind of ['volume', 'part', 'item'] as const) {
+      expect(ids(target(kind)).filter((id) => id.startsWith('insert-node:'))).toEqual([]);
+    }
   });
 
   it('item: edit text, add cue, split paragraph, merges, insert item before/after, five pauses each way, delete', () => {
@@ -115,10 +141,10 @@ describe('menuEntries matrix', () => {
     }
   });
 
-  it('pause paragraph: delete pause only', () => {
+  it('pause paragraph: insert paragraph before/after, delete pause', () => {
     const entries = menuEntries(target('pause-paragraph'));
-    expect(entries.map((e) => e.id)).toEqual(['delete']);
-    expect(entries[0]!.label).toBe('Delete pause');
+    expect(entries.map((e) => e.id)).toEqual(['insert-node:Before', 'insert-node:After', 'delete']);
+    expect(entries.at(-1)!.label).toBe('Delete pause');
   });
 
   it('only delete is destructive', () => {
@@ -182,6 +208,12 @@ describe('entry decoding', () => {
     expect(pauseInsertOf('pause-after:Pause')).toEqual({ position: 'After', kind: 'Pause' });
     expect(pauseInsertOf('insert-after')).toBeNull();
   });
+
+  it('reads node insert placements', () => {
+    expect(nodeInsertOf('insert-node:AtStart')).toBe('AtStart');
+    expect(nodeInsertOf('insert-node:After')).toBe('After');
+    expect(nodeInsertOf('insert-after')).toBeNull();
+  });
 });
 
 describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
@@ -240,6 +272,8 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
       ['split', 'structure'],
       ['merge-previous', 'structure'],
       ['merge-next', 'structure'],
+      ['insert-node:Before', 'insert'],
+      ['insert-node:After', 'insert'],
       ['delete', 'delete'],
     ]);
     expect(entries[0]!.label).toBe('Release narration');

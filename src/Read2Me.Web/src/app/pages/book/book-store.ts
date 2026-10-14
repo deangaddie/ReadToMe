@@ -256,6 +256,27 @@ export class BookStore {
   }
 
   /**
+   * Shows a paragraph just inserted at `anchor` (Node insertion): a chapter anchor not in the
+   * window is opened — an emptied chapter usually is not — and a chapter already loaded is read
+   * again in place, since the receipt names only the new paragraph and so rereads just the chapter
+   * on screen. A paragraph anchor the reader does not hold leaves nothing to reveal.
+   */
+  async revealInsertedParagraph(anchor: { kind: 'chapter' | 'paragraph'; id: string }): Promise<void> {
+    const chapterId = anchor.kind === 'chapter' ? anchor.id : this.chapterHolding(anchor.id);
+    if (!chapterId) return;
+    if (this._window().includes(chapterId)) {
+      await this.readOrMarkStale(() => this.loadChapter(chapterId));
+    } else {
+      await this.openChapter(chapterId);
+    }
+  }
+
+  private chapterHolding(paragraphId: string): string | undefined {
+    const paragraphs = this._paragraphs();
+    return this._window().find((id) => paragraphs[id]?.some((p) => p.id === paragraphId));
+  }
+
+  /**
    * Appends the chapter after the window, if there is one. `dropFar` false keeps the first chapter
    * even past {@link WINDOW_CAP}: the reader passes it while that chapter is still on screen.
    */

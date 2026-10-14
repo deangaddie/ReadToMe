@@ -216,6 +216,87 @@ namespace Read2Me.Services.Books
         }
 
         // ---------------------------------------------------------------
+        // InsertedKind: the kind of node an insert creates. Before/After make a
+        // sibling at the anchor's own level, AtStart/AtEnd a child one level down.
+        // Null for an item anchor: Before/After an item is the item insert, and
+        // an item has no children.
+        // ---------------------------------------------------------------
+        public static NodeKind? InsertedKind(NodeKind anchorKind, Placement placement)
+        {
+            if (anchorKind == NodeKind.ParagraphItem) return null;
+            var sibling = placement is Placement.Before or Placement.After;
+            return anchorKind switch
+            {
+                NodeKind.Volume => sibling ? NodeKind.Volume : NodeKind.Part,
+                NodeKind.Part => sibling ? NodeKind.Part : NodeKind.Chapter,
+                NodeKind.Chapter => sibling ? NodeKind.Chapter : NodeKind.Paragraph,
+                _ => sibling ? NodeKind.Paragraph : NodeKind.ParagraphItem,
+            };
+        }
+
+        // ---------------------------------------------------------------
+        // PlanInsertNode: create one node beside or inside the anchor. Only new
+        // rows are added — the order key goes between the neighbours, so no
+        // existing node is reordered, reparented or removed.
+        //
+        // A new Paragraph is born holding its first Speech item, unattributed:
+        // an empty Paragraph reads as a pause, and a new line has no speaker yet.
+        //
+        // Returns null for a combination it does not plan, an unknown anchor,
+        // or blank paragraph text.
+        // ---------------------------------------------------------------
+        public HierarchyMutation? PlanInsertNode(
+            NodeKind anchorKind, Guid anchorId, Placement placement, string? title, string? text)
+        {
+            if (InsertedKind(anchorKind, placement) != NodeKind.Paragraph) return null;
+
+            var trimmed = text?.Trim();
+            if (string.IsNullOrEmpty(trimmed)) return null;
+
+            Guid chapterId;
+            string? prevOrder, nextOrder;
+            if (anchorKind == NodeKind.Chapter)
+            {
+                if (!Chapters.Values.Any(cs => cs.Any(c => c.Id == anchorId))) return null;
+                chapterId = anchorId;
+                var children = Paragraphs.TryGetValue(chapterId, out var ps) ? ps : [];
+                (prevOrder, nextOrder) = placement == Placement.AtStart
+                    ? (null, children.Count > 0 ? children[0].Order : null)
+                    : (children.Count > 0 ? children[^1].Order : null, (string?)null);
+            }
+            else
+            {
+                var (parentId, siblings) = FindParentAndSiblings(Paragraphs, anchorId, p => p.Id);
+                if (parentId == null) return null;
+                chapterId = parentId.Value;
+                var idx = siblings.FindIndex(p => p.Id == anchorId);
+                (prevOrder, nextOrder) = placement == Placement.Before
+                    ? (idx > 0 ? siblings[idx - 1].Order : null, siblings[idx].Order)
+                    : (siblings[idx].Order, idx < siblings.Count - 1 ? siblings[idx + 1].Order : null);
+            }
+
+            var paragraph = new Paragraph
+            {
+                Id = Guid.NewGuid(),
+                ChapterId = chapterId,
+                Order = OrderHelper.GetBetween(prevOrder, nextOrder),
+            };
+            var item = new ParagraphItem
+            {
+                Id = Guid.NewGuid(),
+                ParagraphId = paragraph.Id,
+                ItemType = ParagraphItemType.Speech,
+                Text = trimmed,
+                CharacterId = null,
+                VoiceInstructions = null,
+                AudioFileName = null,
+                Order = OrderHelper.GetBetween(null, null),
+            };
+
+            return new HierarchyMutation(ToAdd: [paragraph, item], ToDelete: [], ToUpdate: []);
+        }
+
+        // ---------------------------------------------------------------
         // PlanMerge* — pure merge planning, no DB access.
         // Returns null when the operation is a no-op.
         //

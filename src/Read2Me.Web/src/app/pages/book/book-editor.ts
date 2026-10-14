@@ -47,7 +47,14 @@ export class BookEditor {
    * `newEntityId` (creating a character to assign it). Undefined when refused or not sent.
    */
   async execute(command: BookCommand): Promise<CommandResponse | undefined> {
-    return (await this.settle((folder) => this.book.execute(folder, command)))?.value;
+    const response = (await this.settle((folder) => this.book.execute(folder, command)))?.value;
+    if (response && command.type === 'InsertNode') {
+      // The receipt names only the new paragraph, which no loaded chapter holds yet, so the store
+      // is told where it went: an empty chapter is usually not open in the reader at all.
+      const kind = command.anchorKind === 'Chapter' ? 'chapter' : 'paragraph';
+      await this.store.revealInsertedParagraph({ kind, id: command.anchorId });
+    }
+    return response;
   }
 
   /**

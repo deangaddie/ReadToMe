@@ -3,9 +3,9 @@
  *
  * Hand-written from `src/Read2Me.Core/Models/BookCommands.cs`: `type` is the record name minus the
  * `Command` suffix, properties are the record's positional parameters camelCased, `folderId` comes
- * from the route and is never sent. String enums (`MergeDirection`, `InsertPosition`, `PauseKind`,
- * `RuleMoveDirection`, `VoiceAnchorLevel`, `BookEditTargetKind`, `NarrationReleaseScope`) travel as
- * their member names.
+ * from the route and is never sent. String enums (`MergeDirection`, `InsertPosition`, `Placement`,
+ * `NodeKind`, `PauseKind`, `RuleMoveDirection`, `VoiceAnchorLevel`, `BookEditTargetKind`,
+ * `NarrationReleaseScope`) travel as their member names.
  *
  * `BOOK_COMMAND_TYPES` is the runtime list; `book-commands.spec.ts` checks it against the host's
  * "Known types" 400 whenever a host is reachable, and the exhaustiveness check at the bottom fails
@@ -15,6 +15,9 @@ import type { Guid, NarrationReleaseScope } from './dtos';
 
 export type MergeDirection = 'Previous' | 'Next';
 export type InsertPosition = 'Before' | 'After';
+/** Where `InsertNode` puts its node: Before/After a sibling, AtStart/AtEnd a first or last child. */
+export type Placement = 'Before' | 'After' | 'AtStart' | 'AtEnd';
+export type NodeKind = 'Volume' | 'Part' | 'Chapter' | 'Paragraph' | 'ParagraphItem';
 export type RuleMoveDirection = 'Up' | 'Down';
 export type VoiceAnchorLevel = 'Volume' | 'Part' | 'Chapter' | 'Paragraph' | 'ParagraphItem';
 export type BookEditTargetKind = 'VolumeTitle' | 'PartTitle' | 'ChapterTitle' | 'ParagraphItemText';
@@ -292,6 +295,18 @@ export interface AddChapterTitles {
 export interface AddPauses {
   type: 'AddPauses';
 }
+/**
+ * Node insertion: one new node beside (Before/After) or inside (AtStart/AtEnd) the anchor, its kind
+ * following from both. A new paragraph needs `text`; `title` is for a new volume, part or chapter.
+ */
+export interface InsertNode {
+  type: 'InsertNode';
+  anchorKind: NodeKind;
+  anchorId: Guid;
+  placement: Placement;
+  title?: string | null;
+  text?: string | null;
+}
 export interface InsertParagraphItem {
   type: 'InsertParagraphItem';
   anchorItemId: Guid;
@@ -385,6 +400,7 @@ export type BookCommand =
   | AddPartTitles
   | AddChapterTitles
   | AddPauses
+  | InsertNode
   | InsertParagraphItem
   | InsertPauseParagraph
   | ClearBookContent
@@ -418,6 +434,7 @@ export const BOOK_COMMAND_TYPES = [
   'DeleteVoiceRule',
   'DeleteVolume',
   'DismissAudioReview',
+  'InsertNode',
   'InsertParagraphItem',
   'InsertPauseParagraph',
   'MergeChapter',

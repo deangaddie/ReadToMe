@@ -406,6 +406,26 @@ error for an unknown type lists every valid one. The project folder always comes
 from the URL — a `folderId` in the body is ignored. Split/create commands return
 `{ "newEntityId": "<guid>" }`.
 
+`InsertNode` creates one node beside or inside an anchor (**Node insertion**):
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' \
+  -d '{ "type": "InsertNode", "anchorKind": "Chapter", "anchorId": "<id>", "placement": "AtStart", "text": "A new paragraph." }'
+# → { "newEntityId": "<new paragraph id>" }
+```
+
+`anchorKind` is `Volume`, `Part`, `Chapter`, `Paragraph` or `ParagraphItem`; `placement` is
+`Before` / `After` (a sibling at the anchor's own level) or `AtStart` / `AtEnd` (a first or last
+child one level down). The new node's kind follows from both: a `Paragraph` anchor's Before/After
+and a `Chapter` anchor's AtStart/AtEnd make a **Paragraph** (pause paragraphs anchor too), born
+holding `text` as one unattributed speech item — no speaker, no delivery cue, no audio — so it
+joins the attribution queue. `text` is required and trimmed; `title` is reserved for new volumes,
+parts and chapters. Only paragraph-making combinations are accepted so far. Unlike most
+commands it rejects rather than no-ops: blank text, a combination that makes no
+paragraph (any `ParagraphItem` anchor included — use `InsertParagraphItem`), or an unknown anchor
+is **422**.
+
 A book always keeps at least one volume: `DeleteVolume` on its only volume is **422**
 ("A book must keep at least one volume.") and deletes nothing. An unknown volume still
 no-ops.
