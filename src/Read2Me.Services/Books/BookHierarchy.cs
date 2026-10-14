@@ -239,8 +239,10 @@ namespace Read2Me.Services.Books
         // rows are added — the order key goes between the neighbours, so no
         // existing node is reordered, reparented or removed.
         //
-        // A new Paragraph is born holding its first Speech item, unattributed:
-        // an empty Paragraph reads as a pause, and a new line has no speaker yet.
+        // A new Volume, Part or Chapter is born empty, its title optional: a
+        // blank one leaves it untitled. A new Paragraph is born holding its
+        // first Speech item, unattributed: an empty Paragraph reads as a pause,
+        // and a new item has no speaker yet.
         //
         // Returns null for a combination it does not plan, an unknown anchor,
         // or blank paragraph text.
@@ -248,38 +250,41 @@ namespace Read2Me.Services.Books
         public HierarchyMutation? PlanInsertNode(
             NodeKind anchorKind, Guid anchorId, Placement placement, string? title, string? text)
         {
-            if (InsertedKind(anchorKind, placement) != NodeKind.Paragraph) return null;
+            var beside = placement is Placement.Before or Placement.After;
+            (Guid ParentId, string? Prev, string? Next)? slot = (anchorKind, beside) switch
+            {
+                (NodeKind.Volume, true) => VolumeSlot(anchorId, placement),
+                (NodeKind.Volume, false) => SlotInside(Volumes.Any(v => v.Id == anchorId), anchorId, Parts, p => p.Order, placement),
+                (NodeKind.Part, true) => SlotBeside(Parts, anchorId, p => p.Id, p => p.Order, placement),
+                (NodeKind.Part, false) => SlotInside(Holds(Parts, anchorId, p => p.Id), anchorId, Chapters, c => c.Order, placement),
+                (NodeKind.Chapter, true) => SlotBeside(Chapters, anchorId, c => c.Id, c => c.Order, placement),
+                (NodeKind.Chapter, false) => SlotInside(Holds(Chapters, anchorId, c => c.Id), anchorId, Paragraphs, p => p.Order, placement),
+                (NodeKind.Paragraph, true) => SlotBeside(Paragraphs, anchorId, p => p.Id, p => p.Order, placement),
+                _ => null,
+            };
+            if (slot is not var (parentId, prev, next)) return null;
+
+            var order = OrderHelper.GetBetween(prev, next);
+            var newTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+            IBookEntity? created = InsertedKind(anchorKind, placement) switch
+            {
+                NodeKind.Volume => new Volume { Id = Guid.NewGuid(), Title = newTitle ?? string.Empty, Order = order },
+                NodeKind.Part => new Part { Id = Guid.NewGuid(), VolumeId = parentId, Title = newTitle, Order = order },
+                NodeKind.Chapter => new Chapter { Id = Guid.NewGuid(), PartId = parentId, Title = newTitle, Order = order },
+                NodeKind.Paragraph => null,
+                _ => throw new InvalidOperationException($"No slot is planned for {anchorKind} {placement}."),
+            };
+            if (created is not null)
+                return new HierarchyMutation(ToAdd: [created], ToDelete: [], ToUpdate: []);
 
             var trimmed = text?.Trim();
             if (string.IsNullOrEmpty(trimmed)) return null;
 
-            Guid chapterId;
-            string? prevOrder, nextOrder;
-            if (anchorKind == NodeKind.Chapter)
-            {
-                if (!Chapters.Values.Any(cs => cs.Any(c => c.Id == anchorId))) return null;
-                chapterId = anchorId;
-                var children = Paragraphs.TryGetValue(chapterId, out var ps) ? ps : [];
-                (prevOrder, nextOrder) = placement == Placement.AtStart
-                    ? (null, children.Count > 0 ? children[0].Order : null)
-                    : (children.Count > 0 ? children[^1].Order : null, (string?)null);
-            }
-            else
-            {
-                var (parentId, siblings) = FindParentAndSiblings(Paragraphs, anchorId, p => p.Id);
-                if (parentId == null) return null;
-                chapterId = parentId.Value;
-                var idx = siblings.FindIndex(p => p.Id == anchorId);
-                (prevOrder, nextOrder) = placement == Placement.Before
-                    ? (idx > 0 ? siblings[idx - 1].Order : null, siblings[idx].Order)
-                    : (siblings[idx].Order, idx < siblings.Count - 1 ? siblings[idx + 1].Order : null);
-            }
-
             var paragraph = new Paragraph
             {
                 Id = Guid.NewGuid(),
-                ChapterId = chapterId,
-                Order = OrderHelper.GetBetween(prevOrder, nextOrder),
+                ChapterId = parentId,
+                Order = order,
             };
             var item = new ParagraphItem
             {
@@ -295,6 +300,46 @@ namespace Read2Me.Services.Books
 
             return new HierarchyMutation(ToAdd: [paragraph, item], ToDelete: [], ToUpdate: []);
         }
+
+        // Insert slots: the parent a new node goes under and the order keys it
+        // goes between. Null when the anchor is not where its kind says it is.
+
+        // Volumes have no parent row; Guid.Empty stands in and is never read.
+        private (Guid, string?, string?)? VolumeSlot(Guid anchorId, Placement placement)
+        {
+            var idx = Volumes.FindIndex(v => v.Id == anchorId);
+            if (idx < 0) return null;
+            var (prev, next) = Beside(Volumes, idx, v => v.Order, placement);
+            return (Guid.Empty, prev, next);
+        }
+
+        private static (Guid, string?, string?)? SlotBeside<T>(
+            Dictionary<Guid, List<T>> byParent, Guid anchorId, Func<T, Guid> getId, Func<T, string> getOrder, Placement placement)
+        {
+            var (parentId, siblings) = FindParentAndSiblings(byParent, anchorId, getId);
+            if (parentId == null) return null;
+            var (prev, next) = Beside(siblings, siblings.FindIndex(s => getId(s) == anchorId), getOrder, placement);
+            return (parentId.Value, prev, next);
+        }
+
+        private static (Guid, string?, string?)? SlotInside<T>(
+            bool anchorExists, Guid anchorId, Dictionary<Guid, List<T>> childrenByParent, Func<T, string> getOrder, Placement placement)
+        {
+            if (!anchorExists) return null;
+            if (!childrenByParent.TryGetValue(anchorId, out var children) || children.Count == 0)
+                return (anchorId, null, null);
+            return placement == Placement.AtStart
+                ? (anchorId, null, getOrder(children[0]))
+                : (anchorId, getOrder(children[^1]), null);
+        }
+
+        private static (string?, string?) Beside<T>(List<T> siblings, int idx, Func<T, string> getOrder, Placement placement) =>
+            placement == Placement.Before
+                ? (idx > 0 ? getOrder(siblings[idx - 1]) : null, getOrder(siblings[idx]))
+                : (getOrder(siblings[idx]), idx < siblings.Count - 1 ? getOrder(siblings[idx + 1]) : null);
+
+        private static bool Holds<T>(Dictionary<Guid, List<T>> byParent, Guid childId, Func<T, Guid> getId) =>
+            FindParentAndSiblings(byParent, childId, getId).parentId != null;
 
         // ---------------------------------------------------------------
         // PlanMerge* — pure merge planning, no DB access.

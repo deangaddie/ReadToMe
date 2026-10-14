@@ -417,14 +417,30 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
 
 `anchorKind` is `Volume`, `Part`, `Chapter`, `Paragraph` or `ParagraphItem`; `placement` is
 `Before` / `After` (a sibling at the anchor's own level) or `AtStart` / `AtEnd` (a first or last
-child one level down). The new node's kind follows from both: a `Paragraph` anchor's Before/After
-and a `Chapter` anchor's AtStart/AtEnd make a **Paragraph** (pause paragraphs anchor too), born
-holding `text` as one unattributed speech item — no speaker, no delivery cue, no audio — so it
-joins the attribution queue. `text` is required and trimmed; `title` is reserved for new volumes,
-parts and chapters. Only paragraph-making combinations are accepted so far. Unlike most
-commands it rejects rather than no-ops: blank text, a combination that makes no
-paragraph (any `ParagraphItem` anchor included — use `InsertParagraphItem`), or an unknown anchor
-is **422**.
+child one level down). The new node's kind follows from both:
+
+| Anchor | Before / After | AtStart / AtEnd |
+| --- | --- | --- |
+| `Volume` | Volume | Part |
+| `Part` | Part | Chapter |
+| `Chapter` | Chapter | Paragraph |
+| `Paragraph` (pause paragraphs too) | Paragraph | not yet supported |
+
+A new **Volume, Part or Chapter** is born empty — fill it by inserting at its start or end, using
+the returned id as the next anchor. `title` is optional and trimmed; blank leaves it untitled
+(rename it later with `UpdateVolumeTitle` and friends). A new **Paragraph** is born holding `text` as
+one unattributed speech item — no speaker, no delivery cue, no audio — so it joins the
+attribution queue; `text` is required and trimmed. Unlike most commands it rejects rather than
+no-ops: blank paragraph text, a combination that makes no node (any `ParagraphItem` anchor
+included — use `InsertParagraphItem`), or an unknown anchor is **422**.
+
+```bash
+# An empty part at the end of a volume, then its first chapter
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' \
+  -d '{ "type": "InsertNode", "anchorKind": "Volume", "anchorId": "<id>", "placement": "AtEnd", "title": "Part Two" }'
+# → { "newEntityId": "<new part id>" }
+```
 
 A book always keeps at least one volume: `DeleteVolume` on its only volume is **422**
 ("A book must keep at least one volume.") and deletes nothing. An unknown volume still

@@ -122,19 +122,35 @@ export const HAS_CHILDREN: Record<NodeMenuKind, boolean> = {
   'pause-paragraph': false,
 };
 
+const EVERY_PLACEMENT: readonly Placement[] = ['Before', 'After', 'AtStart', 'AtEnd'];
+
 /**
- * The InsertNode placements each kind offers — so far only those that create a paragraph: at the
- * start or end of a chapter, and beside a paragraph or pause paragraph. An item's own inserts are
- * the item insert entries.
+ * The InsertNode placements each kind offers: a sibling before or after, and a first or last
+ * child one level down — never two. A paragraph's own start and end are not offered yet, and an
+ * item's inserts are the item insert entries.
  */
 const NODE_INSERTS: Record<NodeMenuKind, readonly Placement[]> = {
-  volume: [],
-  part: [],
-  chapter: ['AtStart', 'AtEnd'],
+  volume: EVERY_PLACEMENT,
+  part: EVERY_PLACEMENT,
+  chapter: EVERY_PLACEMENT,
   paragraph: ['Before', 'After'],
   item: [],
   'pause-paragraph': ['Before', 'After'],
 };
+
+/** The kind one level down from each container: what an at-start or at-end insert creates. */
+const CHILD_KIND: Partial<Record<NodeMenuKind, NodeMenuKind>> = {
+  volume: 'part',
+  part: 'chapter',
+  chapter: 'paragraph',
+};
+
+/** What an InsertNode from `kind` at `placement` creates: a sibling of its own kind, or its child. */
+export function insertedKind(kind: NodeMenuKind, placement: Placement): NodeMenuKind {
+  const beside = placement === 'Before' || placement === 'After';
+  if (kind === 'pause-paragraph') return 'paragraph';
+  return beside ? kind : (CHILD_KIND[kind] ?? kind);
+}
 
 export const PLACEMENT_WORDS: Record<Placement, string> = {
   Before: 'before',
@@ -202,7 +218,7 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
   for (const placement of NODE_INSERTS[kind]) {
     entries.push({
       id: `insert-node:${placement}`,
-      label: `Insert paragraph ${PLACEMENT_WORDS[placement]}`,
+      label: `Insert ${insertedKind(kind, placement)} ${PLACEMENT_WORDS[placement]}`,
       icon: 'add',
       group: 'insert',
     });

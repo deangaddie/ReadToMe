@@ -50,9 +50,14 @@ export class BookEditor {
     const response = (await this.settle((folder) => this.book.execute(folder, command)))?.value;
     if (response && command.type === 'InsertNode') {
       // The receipt names only the new paragraph, which no loaded chapter holds yet, so the store
-      // is told where it went: an empty chapter is usually not open in the reader at all.
-      const kind = command.anchorKind === 'Chapter' ? 'chapter' : 'paragraph';
-      await this.store.revealInsertedParagraph({ kind, id: command.anchorId });
+      // is told where it went: an empty chapter is usually not open in the reader at all. A new
+      // volume, part or chapter is empty, so the receipt's tree reload is all it needs.
+      const beside = command.placement === 'Before' || command.placement === 'After';
+      if (command.anchorKind === 'Chapter' && !beside) {
+        await this.store.revealInsertedParagraph({ kind: 'chapter', id: command.anchorId });
+      } else if (command.anchorKind === 'Paragraph' && beside) {
+        await this.store.revealInsertedParagraph({ kind: 'paragraph', id: command.anchorId });
+      }
     }
     return response;
   }

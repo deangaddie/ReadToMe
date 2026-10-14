@@ -95,6 +95,8 @@ describe('r2m-node-menu', () => {
       'edit-title',
       'split',
       'merge-next',
+      'insert-node:Before',
+      'insert-node:After',
       'insert-node:AtStart',
       'insert-node:AtEnd',
       'delete',
@@ -172,7 +174,7 @@ describe('r2m-node-menu', () => {
     expect(entries()).toEqual([]);
     locked.set(false);
     await open(trigger);
-    expect(entries()).toEqual(['edit-title']);
+    expect(entries()).toEqual(['edit-title', 'insert-node:Before', 'insert-node:After', 'insert-node:AtStart', 'insert-node:AtEnd']);
   });
 
   describe('the shared instance (risk 2)', () => {
@@ -190,6 +192,8 @@ describe('r2m-node-menu', () => {
         'edit-title',
         'split',
         'merge-previous',
+        'insert-node:Before',
+        'insert-node:After',
         'insert-node:AtStart',
         'insert-node:AtEnd',
         'delete',

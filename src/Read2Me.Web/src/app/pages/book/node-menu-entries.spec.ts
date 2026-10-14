@@ -15,42 +15,49 @@ function target(kind: NodeMenuKind, overrides: Partial<NodeMenuTarget> = {}): No
 
 const ids = (t: NodeMenuTarget): MenuEntryId[] => menuEntries(t).map((e) => e.id);
 const PAUSES = ['Pause', 'ParagraphPause', 'ChapterPause', 'PartPause', 'VolumePause'];
+const NODE_INSERT_IDS: MenuEntryId[] = [
+  'insert-node:Before',
+  'insert-node:After',
+  'insert-node:AtStart',
+  'insert-node:AtEnd',
+];
 const pauseIds = (position: 'before' | 'after'): MenuEntryId[] =>
   PAUSES.map((k) => `pause-${position}:${k}` as MenuEntryId);
 
 /** Research §3 "Node menu": the exact entry set per kind, with a middle sibling's merges. */
 describe('menuEntries matrix', () => {
-  it('volume: edit title, merge prev/next, delete', () => {
+  it('volume: edit title, merges, insert volume before/after and part at start/end, delete', () => {
     expect(ids(target('volume'))).toEqual([
       'edit-title',
       'merge-previous',
       'merge-next',
+      ...NODE_INSERT_IDS,
       'delete',
     ]);
   });
 
-  it('part: edit title, split volume, merges, delete', () => {
+  it('part: edit title, split volume, merges, insert part before/after and chapter at start/end, delete', () => {
     const entries = menuEntries(target('part'));
     expect(entries.map((e) => e.id)).toEqual([
       'edit-title',
       'split',
       'merge-previous',
       'merge-next',
+      ...NODE_INSERT_IDS,
       'delete',
     ]);
     expect(entries[1]!.label).toBe('Split volume');
     expect(entries.at(-1)!.label).toBe('Delete part');
   });
 
-  it('chapter: edit title, split part, merges, insert paragraph at start/end, delete', () => {
+  it('chapter: edit title, split part, merges, insert chapter before/after and paragraph at start/end, delete', () => {
     const entries = menuEntries(target('chapter'));
     expect(entries.map((e) => e.id)).toEqual([
       'edit-title',
       'split',
       'merge-previous',
       'merge-next',
-      'insert-node:AtStart',
-      'insert-node:AtEnd',
+      ...NODE_INSERT_IDS,
       'delete',
     ]);
     expect(entries[1]!.label).toBe('Split part');
@@ -69,20 +76,35 @@ describe('menuEntries matrix', () => {
     expect(entries[0]!.label).toBe('Split chapter');
   });
 
-  it('paragraph inserts sit in one flat Insert group, labelled with what they create and where', () => {
+  it('node inserts sit in one flat Insert group: own level beside, one level down inside, never two', () => {
     const inserts = (t: NodeMenuTarget) =>
       menuEntries(t)
         .filter((e) => e.group === 'insert')
         .map((e) => e.label);
-    expect(inserts(target('chapter'))).toEqual(['Insert paragraph at start', 'Insert paragraph at end']);
+    expect(inserts(target('volume'))).toEqual([
+      'Insert volume before',
+      'Insert volume after',
+      'Insert part at start',
+      'Insert part at end',
+    ]);
+    expect(inserts(target('part'))).toEqual([
+      'Insert part before',
+      'Insert part after',
+      'Insert chapter at start',
+      'Insert chapter at end',
+    ]);
+    expect(inserts(target('chapter'))).toEqual([
+      'Insert chapter before',
+      'Insert chapter after',
+      'Insert paragraph at start',
+      'Insert paragraph at end',
+    ]);
     expect(inserts(target('paragraph'))).toEqual(['Insert paragraph before', 'Insert paragraph after']);
     expect(inserts(target('pause-paragraph'))).toEqual(['Insert paragraph before', 'Insert paragraph after']);
   });
 
-  it('volume, part and item offer no paragraph inserts', () => {
-    for (const kind of ['volume', 'part', 'item'] as const) {
-      expect(ids(target(kind)).filter((id) => id.startsWith('insert-node:'))).toEqual([]);
-    }
+  it('an item offers no node inserts', () => {
+    expect(ids(target('item')).filter((id) => id.startsWith('insert-node:'))).toEqual([]);
   });
 
   it('item: edit text, add cue, split paragraph, merges, insert item before/after, five pauses each way, delete', () => {
@@ -170,8 +192,11 @@ describe('menuEntries position', () => {
     expect(list).not.toContain('merge-next');
   });
 
-  it('a lone volume has no Delete: a book keeps at least one volume', () => {
-    expect(ids(target('volume', { isFirst: true, isLast: true }))).toEqual(['edit-title']);
+  it('a lone volume has no Delete but keeps its inserts: a book keeps at least one volume', () => {
+    expect(ids(target('volume', { isFirst: true, isLast: true }))).toEqual([
+      'edit-title',
+      ...NODE_INSERT_IDS,
+    ]);
   });
 
   it.each([

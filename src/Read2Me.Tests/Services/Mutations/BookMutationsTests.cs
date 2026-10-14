@@ -366,10 +366,9 @@ public class BookMutationsTests : ProjectDbTestBase
     [Theory]
     [InlineData(NodeKind.ParagraphItem, Placement.After)]   // an item anchor creates nothing
     [InlineData(NodeKind.ParagraphItem, Placement.AtEnd)]
-    [InlineData(NodeKind.Volume, Placement.After)]          // not yet supported
-    [InlineData(NodeKind.Chapter, Placement.Before)]
-    [InlineData(NodeKind.Paragraph, Placement.AtStart)]
-    public async Task InsertNode_ACombinationThatDoesNotMakeAParagraph_IsRejectedAsValidation(
+    [InlineData(NodeKind.Paragraph, Placement.AtStart)]     // not yet supported
+    [InlineData(NodeKind.Paragraph, Placement.AtEnd)]
+    public async Task InsertNode_ACombinationThatMakesNoNode_IsRejectedAsValidation(
         NodeKind anchorKind, Placement placement)
     {
         var b = await SeedOneItemAsync();
@@ -392,6 +391,11 @@ public class BookMutationsTests : ProjectDbTestBase
     [Theory]
     [InlineData(NodeKind.Paragraph, Placement.Before)]
     [InlineData(NodeKind.Chapter, Placement.AtEnd)]
+    [InlineData(NodeKind.Chapter, Placement.Before)]
+    [InlineData(NodeKind.Part, Placement.After)]
+    [InlineData(NodeKind.Part, Placement.AtStart)]
+    [InlineData(NodeKind.Volume, Placement.Before)]
+    [InlineData(NodeKind.Volume, Placement.AtEnd)]
     public async Task InsertNode_AgainstAnUnknownAnchor_IsRejectedAsNotFound(NodeKind anchorKind, Placement placement)
     {
         await SeedOneItemAsync();
@@ -402,6 +406,75 @@ public class BookMutationsTests : ProjectDbTestBase
 
         Assert.Equal(BookMutationRejection.NotFound,
             Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
+    }
+
+    [Fact]
+    public async Task InsertNode_ChapterAfter_PersistsEmptyInReadingOrder_AndTheReceiptNamesIt()
+    {
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        await b.AddVolume("vol", v => v
+            .AddChapter("c1", c => c.AddParagraph("p1", p => p.AddNarration("i1", "First.")))
+            .AddChapter("c2", c => c.AddParagraph("p2", p => p.AddNarration("i2", "Second."))))
+            .BuildAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, NodeKind.Chapter, b.ChapterId("c1"), Placement.After, "  Interlude ", null));
+
+        var receipt = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
+        var created = receipt.Effects.CreatedId!.Value;
+        Assert.Equal(BookFacets.Structure, receipt.Effects.Facets);
+        Assert.Equal(created, Assert.Single(receipt.Effects.NodeIds));
+        Assert.Empty(receipt.Effects.ParagraphIds);
+
+        await using var verify = await OpenDbAsync();
+        var chapter = await verify.Chapters.FindAsync(created);
+        Assert.Equal("Interlude", chapter!.Title);
+        var chapters = await verify.Chapters
+            .Where(c => c.PartId == chapter.PartId)
+            .OrderBy(c => c.Order)
+            .Select(c => c.Id)
+            .ToListAsync();
+        Assert.Equal([b.ChapterId("c1"), created, b.ChapterId("c2")], chapters);
+        Assert.False(await verify.Paragraphs.AnyAsync(p => p.ChapterId == created));
+    }
+
+    [Fact]
+    public async Task InsertNode_VolumeBefore_WithABlankTitle_IsUntitledAndLandsFirst()
+    {
+        var b = await SeedOneItemAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
+            _folder, NodeKind.Volume, b.VolumeId("vol"), Placement.Before, "   ", null));
+
+        var created = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt.Effects.CreatedId!.Value;
+        await using var verify = await OpenDbAsync();
+        var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
+        Assert.Equal([created, b.VolumeId("vol")], volumes.Select(v => v.Id));
+        Assert.Equal("", volumes[0].Title);
+        Assert.False(await verify.Parts.AnyAsync(p => p.VolumeId == created));
+    }
+
+    [Fact]
+    public async Task InsertNode_AnEmptyPart_IsFilledByInsertingAtItsStart_AndSoIsItsChapter()
+    {
+        var b = await SeedOneItemAsync();
+        await using var caller = NewCaller();
+
+        async Task<Guid> Insert(NodeKind kind, Guid anchor, Placement placement, string? text = null) =>
+            Assert.IsType<BookMutationOutcome.Committed>(await caller.Mutations.CommitAsync(
+                new InsertNodeMutation(_folder, kind, anchor, placement, null, text))).Receipt.Effects.CreatedId!.Value;
+
+        var part = await Insert(NodeKind.Volume, b.VolumeId("vol"), Placement.AtEnd);
+        var chapter = await Insert(NodeKind.Part, part, Placement.AtStart);
+        var paragraph = await Insert(NodeKind.Chapter, chapter, Placement.AtStart, "A first line.");
+
+        await using var verify = await OpenDbAsync();
+        Assert.Equal(b.VolumeId("vol"), (await verify.Parts.FindAsync(part))!.VolumeId);
+        Assert.Equal(part, (await verify.Chapters.FindAsync(chapter))!.PartId);
+        Assert.Equal(chapter, (await verify.Paragraphs.FindAsync(paragraph))!.ChapterId);
+        Assert.Equal("A first line.", (await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == paragraph)).Text);
     }
 
     [Fact]

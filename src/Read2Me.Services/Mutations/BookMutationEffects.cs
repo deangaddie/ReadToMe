@@ -78,7 +78,8 @@ public sealed record BookMutationEffects
     // the list it needs as it lands; an empty list means "this mutation touched none", which is why
     // a family that cannot enumerate its effects says so through Scope instead of leaving them bare.
     /// <summary>
-    /// Volumes, Parts and Chapters whose own data — currently their title — changed. No reader
+    /// Volumes, Parts and Chapters whose own data — currently their title — changed, or that an
+    /// insert created (empty, so no paragraph or item names them). No reader
     /// refreshes from these: a title lives in a loaded hierarchy branch, not on a row, so
     /// <see cref="BookFacets.NodeTitle"/> rebuilds. They are on the receipt because a receipt states
     /// what a commit actually touched, not what a reader happens to be able to use.

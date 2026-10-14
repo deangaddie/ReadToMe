@@ -689,6 +689,27 @@ namespace Read2Me.Tests.Services
             Assert.Equal("Agent paragraph.", (await verify.ParagraphItems.SingleAsync(i => i.ParagraphId == newId)).Text);
         }
 
+        [Fact]
+        public async Task InsertNodeCommand_FromJsonPayload_PutsATitledEmptyChapterAfterAChapter()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b.AddVolume("vol", v => v.AddChapter("ch", c => c
+                .AddParagraph("para", p => p.AddNarration("item", "Hello world"))))
+                .BuildAsync();
+
+            var body = JsonNode.Parse(
+                $$"""{ "type": "InsertNode", "anchorKind": "Chapter", "anchorId": "{{b.ChapterId("ch")}}", "placement": "After", "title": "Epilogue" }""")!.AsObject();
+            var ok = BookCommandJson.TryDeserialize("InsertNode", body, _folder, out var command, out var error);
+            Assert.True(ok, error);
+
+            var newId = await ExecuteAsync(command!);
+
+            await using var verify = await OpenDbAsync();
+            var chapter = await verify.Chapters.SingleAsync(c => c.Id == newId);
+            Assert.Equal("Epilogue", chapter.Title);
+            Assert.False(await verify.Paragraphs.AnyAsync(p => p.ChapterId == newId));
+        }
+
         // ---------------------------------------------------------------
         // CreateCharacterCommand
         // ---------------------------------------------------------------

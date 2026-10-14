@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ApiError, BookApi, ProjectsApi } from '@app/api';
+import { ApiError, BookApi, type NodeKind, type Placement, ProjectsApi } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ToastService } from '@app/ui/toast';
@@ -189,18 +189,31 @@ describe('BookEditor node insertion', () => {
     editor = new BookEditor(store as unknown as BookStore);
   });
 
-  const insert = (anchorKind: 'Chapter' | 'Paragraph', anchorId: string) =>
-    ({ type: 'InsertNode', anchorKind, anchorId, placement: 'AtEnd', text: 'New.' }) as const;
+  const insert = (anchorKind: NodeKind, anchorId: string, placement: Placement = 'AtEnd') =>
+    ({ type: 'InsertNode', anchorKind, anchorId, placement, text: 'New.' }) as const;
 
   it.each([
-    ['Chapter', 'c2', { kind: 'chapter', id: 'c2' }],
-    ['Paragraph', 'p1', { kind: 'paragraph', id: 'p1' }],
-  ] as const)('a committed paragraph insert against a %s reveals it in the reader', async (kind, id, anchor) => {
-    const run = editor.run(insert(kind, id));
+    ['Chapter', 'AtEnd', 'c2', { kind: 'chapter', id: 'c2' }],
+    ['Paragraph', 'After', 'p1', { kind: 'paragraph', id: 'p1' }],
+  ] as const)('a committed paragraph insert against a %s reveals it in the reader', async (kind, placement, id, anchor) => {
+    const run = editor.run(insert(kind, id, placement));
     await new Promise((r) => setTimeout(r, 0));
     store.settle(true);
     expect(await run).toBe(true);
     expect(store.revealed).toEqual([anchor]);
+  });
+
+  it.each([
+    ['Volume', 'Before'],
+    ['Volume', 'AtEnd'],
+    ['Part', 'AtStart'],
+    ['Chapter', 'After'],
+  ] as const)('a committed %s %s insert makes an empty container, so there is no paragraph to reveal', async (kind, placement) => {
+    const run = editor.run({ type: 'InsertNode', anchorKind: kind, anchorId: 'n1', placement, title: null });
+    await new Promise((r) => setTimeout(r, 0));
+    store.settle(true);
+    expect(await run).toBe(true);
+    expect(store.revealed).toEqual([]);
   });
 
   it('a refused insert reveals nothing, and nor does any other command', async () => {

@@ -207,6 +207,237 @@ namespace Read2Me.Tests.Services.Books
             Assert.Null(b.H.PlanInsertNode(NodeKind.Chapter, b.First.Id, Placement.AtEnd, null, "New."));
         }
 
+        // ── volumes, parts and chapters ─────────────────────────────────────────
+
+        private sealed record Shelf(
+            BookHierarchy H, Volume First, Volume EmptyVolume, Part Full, Part EmptyPart, Chapter Opening, Chapter Closing);
+
+        /// <summary>
+        /// Two volumes: the first holds a part with two chapters and an empty part; the second is
+        /// empty. Every container a new node can land beside, at either end of, or inside while empty.
+        /// </summary>
+        private static Shelf MakeShelf()
+        {
+            var first = new Volume { Id = Guid.NewGuid(), Order = Key(), Title = "One" };
+            var emptyVolume = new Volume { Id = Guid.NewGuid(), Order = Key(first.Order), Title = "Two" };
+            var full = new Part { Id = Guid.NewGuid(), VolumeId = first.Id, Order = Key(), Title = "Part" };
+            var emptyPart = new Part { Id = Guid.NewGuid(), VolumeId = first.Id, Order = Key(full.Order) };
+            var opening = new Chapter { Id = Guid.NewGuid(), PartId = full.Id, Order = Key(), Title = "Opening" };
+            var closing = new Chapter { Id = Guid.NewGuid(), PartId = full.Id, Order = Key(opening.Order), Title = "Closing" };
+
+            var h = new BookHierarchy
+            {
+                Volumes = [first, emptyVolume],
+                Parts = { [first.Id] = [full, emptyPart] },
+                Chapters = { [full.Id] = [opening, closing] },
+            };
+            return new Shelf(h, first, emptyVolume, full, emptyPart, opening, closing);
+        }
+
+        /// <summary>The plan's one new node, after asserting it adds that node and nothing else — born empty.</summary>
+        private static T AddedNode<T>(HierarchyMutation? mutation)
+        {
+            Assert.NotNull(mutation);
+            Assert.Empty(mutation!.ToDelete);
+            Assert.Empty(mutation.ToUpdate);
+            return Assert.IsType<T>(Assert.Single(mutation.ToAdd));
+        }
+
+        [Fact]
+        public void VolumeBefore_TheFirst_LandsFirst()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Volume>(s.H.PlanInsertNode(NodeKind.Volume, s.First.Id, Placement.Before, null, null));
+
+            Assert.True(Before(added.Order, s.First.Order));
+        }
+
+        [Fact]
+        public void VolumeAfter_AVolume_LandsBetweenItAndTheNext()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Volume>(s.H.PlanInsertNode(NodeKind.Volume, s.First.Id, Placement.After, null, null));
+
+            Assert.True(Before(s.First.Order, added.Order));
+            Assert.True(Before(added.Order, s.EmptyVolume.Order));
+        }
+
+        [Fact]
+        public void VolumeAfter_TheLast_LandsLast()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Volume>(s.H.PlanInsertNode(NodeKind.Volume, s.EmptyVolume.Id, Placement.After, null, null));
+
+            Assert.True(Before(s.EmptyVolume.Order, added.Order));
+        }
+
+        [Fact]
+        public void PartAtStart_LandsBeforeTheVolumesFirstPart()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Part>(s.H.PlanInsertNode(NodeKind.Volume, s.First.Id, Placement.AtStart, null, null));
+
+            Assert.Equal(s.First.Id, added.VolumeId);
+            Assert.True(Before(added.Order, s.Full.Order));
+        }
+
+        [Fact]
+        public void PartAtEnd_LandsAfterTheVolumesLastPart()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Part>(s.H.PlanInsertNode(NodeKind.Volume, s.First.Id, Placement.AtEnd, null, null));
+
+            Assert.Equal(s.First.Id, added.VolumeId);
+            Assert.True(Before(s.EmptyPart.Order, added.Order));
+        }
+
+        [Theory]
+        [InlineData(Placement.AtStart)]
+        [InlineData(Placement.AtEnd)]
+        public void AnEmptyVolume_CanBeGivenItsFirstPart(Placement placement)
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Part>(s.H.PlanInsertNode(NodeKind.Volume, s.EmptyVolume.Id, placement, null, null));
+
+            Assert.Equal(s.EmptyVolume.Id, added.VolumeId);
+            Assert.False(string.IsNullOrEmpty(added.Order));
+        }
+
+        [Fact]
+        public void PartBefore_APart_LandsBetweenItAndThePrevious()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Part>(s.H.PlanInsertNode(NodeKind.Part, s.EmptyPart.Id, Placement.Before, null, null));
+
+            Assert.Equal(s.First.Id, added.VolumeId);
+            Assert.True(Before(s.Full.Order, added.Order));
+            Assert.True(Before(added.Order, s.EmptyPart.Order));
+        }
+
+        [Fact]
+        public void PartAfter_TheLast_LandsLastInTheSameVolume()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Part>(s.H.PlanInsertNode(NodeKind.Part, s.EmptyPart.Id, Placement.After, null, null));
+
+            Assert.Equal(s.First.Id, added.VolumeId);
+            Assert.True(Before(s.EmptyPart.Order, added.Order));
+        }
+
+        [Fact]
+        public void ChapterAtStart_LandsBeforeThePartsFirstChapter()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Chapter>(s.H.PlanInsertNode(NodeKind.Part, s.Full.Id, Placement.AtStart, null, null));
+
+            Assert.Equal(s.Full.Id, added.PartId);
+            Assert.True(Before(added.Order, s.Opening.Order));
+        }
+
+        [Fact]
+        public void ChapterAtEnd_LandsAfterThePartsLastChapter()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Chapter>(s.H.PlanInsertNode(NodeKind.Part, s.Full.Id, Placement.AtEnd, null, null));
+
+            Assert.Equal(s.Full.Id, added.PartId);
+            Assert.True(Before(s.Closing.Order, added.Order));
+        }
+
+        [Theory]
+        [InlineData(Placement.AtStart)]
+        [InlineData(Placement.AtEnd)]
+        public void AnEmptyPart_CanBeGivenItsFirstChapter(Placement placement)
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Chapter>(s.H.PlanInsertNode(NodeKind.Part, s.EmptyPart.Id, placement, null, null));
+
+            Assert.Equal(s.EmptyPart.Id, added.PartId);
+            Assert.False(string.IsNullOrEmpty(added.Order));
+        }
+
+        [Fact]
+        public void ChapterBefore_TheFirst_LandsFirstInTheSamePart()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Chapter>(s.H.PlanInsertNode(NodeKind.Chapter, s.Opening.Id, Placement.Before, null, null));
+
+            Assert.Equal(s.Full.Id, added.PartId);
+            Assert.True(Before(added.Order, s.Opening.Order));
+        }
+
+        [Fact]
+        public void ChapterAfter_AChapter_LandsBetweenItAndTheNext()
+        {
+            var s = MakeShelf();
+
+            var added = AddedNode<Chapter>(s.H.PlanInsertNode(NodeKind.Chapter, s.Opening.Id, Placement.After, null, null));
+
+            Assert.Equal(s.Full.Id, added.PartId);
+            Assert.True(Before(s.Opening.Order, added.Order));
+            Assert.True(Before(added.Order, s.Closing.Order));
+        }
+
+        [Fact]
+        public void ANewContainer_TakesTheTrimmedTitle()
+        {
+            var s = MakeShelf();
+
+            Assert.Equal("Prologue", AddedNode<Volume>(s.H.PlanInsertNode(NodeKind.Volume, s.First.Id, Placement.Before, "  Prologue ", null)).Title);
+            Assert.Equal("Book Two", AddedNode<Part>(s.H.PlanInsertNode(NodeKind.Volume, s.First.Id, Placement.AtEnd, "Book Two", null)).Title);
+            Assert.Equal("Interlude", AddedNode<Chapter>(s.H.PlanInsertNode(NodeKind.Chapter, s.Opening.Id, Placement.After, "Interlude", null)).Title);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void ABlankTitle_LeavesTheNewContainerUntitled(string? title)
+        {
+            var s = MakeShelf();
+
+            // A Volume's title is not nullable, so untitled is empty there; a Part's and a
+            // Chapter's is null, as an imported untitled one is.
+            Assert.Equal("", AddedNode<Volume>(s.H.PlanInsertNode(NodeKind.Volume, s.First.Id, Placement.After, title, null)).Title);
+            Assert.Null(AddedNode<Part>(s.H.PlanInsertNode(NodeKind.Part, s.Full.Id, Placement.After, title, null)).Title);
+            Assert.Null(AddedNode<Chapter>(s.H.PlanInsertNode(NodeKind.Part, s.Full.Id, Placement.AtStart, title, null)).Title);
+        }
+
+        [Theory]
+        [InlineData(NodeKind.Volume, Placement.Before)]
+        [InlineData(NodeKind.Volume, Placement.AtStart)]
+        [InlineData(NodeKind.Part, Placement.After)]
+        [InlineData(NodeKind.Part, Placement.AtEnd)]
+        [InlineData(NodeKind.Chapter, Placement.Before)]
+        public void AnUnknownContainerAnchor_IsRefused(NodeKind anchor, Placement placement)
+        {
+            var s = MakeShelf();
+
+            Assert.Null(s.H.PlanInsertNode(anchor, Guid.NewGuid(), placement, null, null));
+        }
+
+        [Fact]
+        public void AContainerAnchorOfTheWrongKind_IsRefused()
+        {
+            var s = MakeShelf();
+
+            Assert.Null(s.H.PlanInsertNode(NodeKind.Volume, s.Full.Id, Placement.After, null, null));
+            Assert.Null(s.H.PlanInsertNode(NodeKind.Part, s.First.Id, Placement.AtStart, null, null));
+            Assert.Null(s.H.PlanInsertNode(NodeKind.Chapter, s.Full.Id, Placement.Before, null, null));
+        }
+
         // ── which kind a combination creates ─────────────────────────────────────
 
         [Theory]

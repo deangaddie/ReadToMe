@@ -243,6 +243,44 @@ describe('commandFor', () => {
       ).toBeNull();
     });
 
+    it.each([
+      ['volume', 'insert-node:Before', 'Volume', 'Before', 'Insert volume before'],
+      ['volume', 'insert-node:After', 'Volume', 'After', 'Insert volume after'],
+      ['volume', 'insert-node:AtStart', 'Volume', 'AtStart', 'Insert part at start'],
+      ['volume', 'insert-node:AtEnd', 'Volume', 'AtEnd', 'Insert part at end'],
+      ['part', 'insert-node:Before', 'Part', 'Before', 'Insert part before'],
+      ['part', 'insert-node:After', 'Part', 'After', 'Insert part after'],
+      ['part', 'insert-node:AtStart', 'Part', 'AtStart', 'Insert chapter at start'],
+      ['part', 'insert-node:AtEnd', 'Part', 'AtEnd', 'Insert chapter at end'],
+      ['chapter', 'insert-node:Before', 'Chapter', 'Before', 'Insert chapter before'],
+      ['chapter', 'insert-node:After', 'Chapter', 'After', 'Insert chapter after'],
+    ] as const)('%s %s asks for an optional single-line title and posts InsertNode', async (kind, entry, anchorKind, placement, title) => {
+      const { fake, asked } = dialogs({ text: 'Interlude' });
+      expect<unknown>(await commandFor(entry, target(kind), fake)).toEqual({
+        type: 'InsertNode',
+        anchorKind,
+        anchorId: 'n1',
+        placement,
+        title: 'Interlude',
+      });
+      expect(asked.text).toEqual([expect.objectContaining({ title, label: 'Title' })]);
+      expect(asked.text[0]!.required).toBeFalsy();
+      expect(asked.text[0]!.multiline).toBeFalsy();
+      expect(asked.text[0]!.initial ?? '').toBe('');
+    });
+
+    it('a blank container title posts an untitled insert', async () => {
+      expect<unknown>(
+        await commandFor('insert-node:AtStart', target('part'), dialogs({ text: '' }).fake),
+      ).toEqual({ type: 'InsertNode', anchorKind: 'Part', anchorId: 'n1', placement: 'AtStart', title: null });
+    });
+
+    it('a cancelled container insert sends nothing', async () => {
+      expect<unknown>(
+        await commandFor('insert-node:Before', target('volume'), dialogs({ text: null }).fake),
+      ).toBeNull();
+    });
+
     it('pauses post without a prompt', async () => {
       const { fake, asked } = dialogs();
       expect<unknown>(await commandFor('pause-before:ChapterPause', target('item'), fake)).toEqual({

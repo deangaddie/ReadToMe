@@ -13,8 +13,8 @@ namespace Read2Me.Services.Mutations.Implementations;
 /// The commands endpoint dispatches this with no dialog in front of it, so every request it can
 /// see is checked here: a combination that creates no node or one not yet supported, and blank
 /// paragraph text, are <see cref="BookMutationRejection.Validation"/>; an anchor the Book does not
-/// contain is <see cref="BookMutationRejection.NotFound"/>. Only paragraph-producing combinations
-/// are accepted so far.
+/// contain is <see cref="BookMutationRejection.NotFound"/>. A new Volume, Part, Chapter or
+/// Paragraph is accepted; a speech item at a paragraph's start or end is not yet.
 /// </para>
 /// <para>
 /// Where the node lands and what it holds at birth stay in
@@ -32,19 +32,23 @@ public sealed class InsertNodeMutationImplementation : IBookMutationImplementati
             throw new BookMutationRejectedException(
                 BookMutationRejection.Validation,
                 "Nothing can be inserted against an item this way — use InsertParagraphItem beside it.");
-        if (kind != NodeKind.Paragraph)
+        if (kind == NodeKind.ParagraphItem)
             throw new BookMutationRejectedException(
                 BookMutationRejection.Validation,
                 $"Inserting a {kind} ({mutation.Placement} a {mutation.AnchorKind}) is not supported yet.");
 
-        if (string.IsNullOrWhiteSpace(mutation.Text))
+        if (kind == NodeKind.Paragraph && string.IsNullOrWhiteSpace(mutation.Text))
             throw new BookMutationRejectedException(
                 BookMutationRejection.Validation,
                 "A new paragraph needs text — an empty paragraph reads as a pause.");
 
-        var anchorExists = mutation.AnchorKind == NodeKind.Chapter
-            ? await db.Chapters.AnyAsync(c => c.Id == mutation.AnchorId, ct)
-            : await db.Paragraphs.AnyAsync(p => p.Id == mutation.AnchorId, ct);
+        var anchorExists = mutation.AnchorKind switch
+        {
+            NodeKind.Volume => await db.Volumes.AnyAsync(v => v.Id == mutation.AnchorId, ct),
+            NodeKind.Part => await db.Parts.AnyAsync(p => p.Id == mutation.AnchorId, ct),
+            NodeKind.Chapter => await db.Chapters.AnyAsync(c => c.Id == mutation.AnchorId, ct),
+            _ => await db.Paragraphs.AnyAsync(p => p.Id == mutation.AnchorId, ct),
+        };
         if (!anchorExists)
             throw new BookMutationRejectedException(
                 BookMutationRejection.NotFound,
@@ -58,7 +62,26 @@ public sealed class InsertNodeMutationImplementation : IBookMutationImplementati
 
         BookMutationApplier.StageMutation(db, planned);
 
-        var paragraph = (Paragraph)planned.ToAdd[0];
+        if (planned.ToAdd[0] is not Paragraph paragraph)
+        {
+            // An empty container: no paragraph or item, so nothing to attribute, but the tree a
+            // reader holds gains a node.
+            var nodeId = planned.ToAdd[0] switch
+            {
+                Volume v => v.Id,
+                Part p => p.Id,
+                Chapter c => c.Id,
+                var other => throw new InvalidOperationException($"Unexpected {other.GetType().Name} planned."),
+            };
+            return new BookMutationEffects
+            {
+                Scope = BookMutationScope.Exact,
+                Facets = BookFacets.Structure,
+                CreatedId = nodeId,
+                NodeIds = [nodeId],
+            };
+        }
+
         var item = (ParagraphItem)planned.ToAdd[1];
         return new BookMutationEffects
         {
