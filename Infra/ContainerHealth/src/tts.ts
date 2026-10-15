@@ -73,7 +73,7 @@ export function audioFilename(serviceId: ServiceId, now: Date = new Date()): str
 const DOCUMENTED_AUDIO_EXTENSIONS = [".wav", ".mp3"];
 const DOCUMENTED_AUDIO_TYPES = ["audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave", "audio/mpeg", "audio/mp3"];
 
-/** Chatterbox and Qwen document WAV/MP3 but their decoders are more permissive, so this only warns. */
+/** WAV and MP3 are the documented reference inputs; anything else only warns, so the service decides. */
 export function isDocumentedAudioFile(file: File): boolean {
   const name = file.name.toLowerCase();
   return DOCUMENTED_AUDIO_EXTENSIONS.some((extension) => name.endsWith(extension))

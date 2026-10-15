@@ -10,13 +10,9 @@ interface ServiceProxy {
 }
 
 const serviceProxies: readonly ServiceProxy[] = [
-  { id: "chatterbox-turbo", prefix: "/proxy/chatterbox-turbo", envKey: "CHD_TARGET_CHATTERBOX_TURBO", defaultTarget: "http://127.0.0.1:8001" },
-  { id: "qwen3-tts-base", prefix: "/proxy/qwen3-tts-base", envKey: "CHD_TARGET_QWEN3_TTS_BASE", defaultTarget: "http://127.0.0.1:8101" },
-  { id: "chatterbox", prefix: "/proxy/chatterbox", envKey: "CHD_TARGET_CHATTERBOX", defaultTarget: "http://127.0.0.1:8000" },
-  { id: "qwen3-tts", prefix: "/proxy/qwen3-tts", envKey: "CHD_TARGET_QWEN3_TTS", defaultTarget: "http://127.0.0.1:8100" },
   { id: "mpnet-base-v2", prefix: "/proxy/mpnet-base-v2", envKey: "CHD_TARGET_MPNET_BASE_V2", defaultTarget: "http://127.0.0.1:8201" },
   { id: "minilm-l6", prefix: "/proxy/minilm-l6", envKey: "CHD_TARGET_MINILM_L6", defaultTarget: "http://127.0.0.1:8200" },
-  { id: "voxcpm2", prefix: "/proxy/voxcpm2", envKey: "CHD_TARGET_VOXCPM2", defaultTarget: "http://127.0.0.1:8003" },
+  { id: "audiocpp", prefix: "/proxy/audiocpp", envKey: "CHD_TARGET_AUDIOCPP", defaultTarget: "http://127.0.0.1:8004" },
   { id: "whisper", prefix: "/proxy/whisper", envKey: "CHD_TARGET_WHISPER", defaultTarget: "http://127.0.0.1:9000" },
   { id: "llama", prefix: "/proxy/llama", envKey: "CHD_TARGET_LLAMA", defaultTarget: "http://127.0.0.1:8080" }
 ];

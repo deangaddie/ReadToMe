@@ -4,11 +4,7 @@ const READINESS_BODY_LIMIT = 64 * 1_024;
 
 export type ServiceId =
   | "llama"
-  | "chatterbox"
-  | "chatterbox-turbo"
-  | "qwen3-tts"
-  | "qwen3-tts-base"
-  | "voxcpm2"
+  | "audiocpp"
   | "whisper"
   | "minilm-l6"
   | "mpnet-base-v2";
@@ -26,7 +22,14 @@ export interface ServiceAdapter {
   readonly compute: ComputeKind;
   readonly probePath: "/health" | "/openapi.json";
   validateReadiness(payload: unknown): ReadinessState | undefined;
+  /** A best-effort second read made only after a Ready probe; it adds to the message and never changes the state. */
+  readonly readyDetail?: ReadyDetail;
   checkReadiness(fetcher?: typeof fetch, options?: ProbeOptions): Promise<ReadinessObservation>;
+}
+
+export interface ReadyDetail {
+  readonly path: string;
+  describe(payload: unknown): string | undefined;
 }
 
 export interface ReadinessObservation {
@@ -51,11 +54,7 @@ const browserClock: ReadinessClock = {
 
 export const SERVICE_ADAPTERS: readonly ServiceAdapter[] = [
   defineServiceAdapter({ id: "llama", name: "Llama router", shortName: "Llama", purpose: "Language model routing and completion", endpoint: "GET /health", port: 8080, compute: "GPU", probePath: "/health", validateReadiness: validateStatusOk }),
-  defineServiceAdapter({ id: "chatterbox", name: "Chatterbox TTS", shortName: "Chatterbox", purpose: "Expressive cloned-voice speech", endpoint: "GET /health", port: 8000, compute: "GPU", probePath: "/health", validateReadiness: validateDeviceHealth }),
-  defineServiceAdapter({ id: "chatterbox-turbo", name: "Chatterbox Turbo", shortName: "Turbo", purpose: "Tagged paralinguistic speech", endpoint: "GET /health", port: 8001, compute: "GPU", probePath: "/health", validateReadiness: validateDeviceHealth }),
-  defineServiceAdapter({ id: "qwen3-tts", name: "Qwen3 Voice Design", shortName: "Qwen Design", purpose: "Speech from a voice description", endpoint: "GET /health", port: 8100, compute: "GPU", probePath: "/health", validateReadiness: validateQwenHealth }),
-  defineServiceAdapter({ id: "qwen3-tts-base", name: "Qwen3 TTS Base", shortName: "Qwen Base", purpose: "Cloned-voice speech synthesis", endpoint: "GET /health", port: 8101, compute: "GPU", probePath: "/health", validateReadiness: validateQwenHealth }),
-  defineServiceAdapter({ id: "voxcpm2", name: "VoxCPM2", shortName: "VoxCPM2", purpose: "Streaming cloned-voice speech", endpoint: "GET /health", port: 8003, compute: "GPU", probePath: "/health", validateReadiness: validateVoxHealth }),
+  defineServiceAdapter({ id: "audiocpp", name: "audio.cpp TTS", shortName: "audio.cpp", purpose: "Speech and voice design for every TTS model", endpoint: "GET /health", port: 8004, compute: "GPU", probePath: "/health", validateReadiness: validateAudioCppHealth, readyDetail: { path: "/v1/models", describe: describeLoadedAudioCppModel } }),
   defineServiceAdapter({ id: "whisper", name: "Whisper.cpp", shortName: "Whisper", purpose: "Speech transcription and timings", endpoint: "GET /health", port: 9000, compute: "CPU", probePath: "/health", validateReadiness: validateStatusOk }),
   defineServiceAdapter({ id: "minilm-l6", name: "MiniLM-L6", shortName: "MiniLM", purpose: "Fast semantic similarity", endpoint: "GET /openapi.json", port: 8200, compute: "CPU", probePath: "/openapi.json", validateReadiness: validateFastApiOpenApi }),
   defineServiceAdapter({ id: "mpnet-base-v2", name: "MPNet Base v2", shortName: "MPNet", purpose: "High-quality semantic similarity", endpoint: "GET /openapi.json", port: 8201, compute: "CPU", probePath: "/openapi.json", validateReadiness: validateFastApiOpenApi })
@@ -118,18 +117,15 @@ function validateStatusOk(payload: unknown): ReadinessState | undefined {
   return isRecord(payload) && payload.status === "ok" ? "Ready" : undefined;
 }
 
-function validateDeviceHealth(payload: unknown): ReadinessState | undefined {
-  return isRecord(payload) && payload.status === "ok" && nonEmptyString(payload.device) ? "Ready" : undefined;
+function validateAudioCppHealth(payload: unknown): ReadinessState | undefined {
+  return isRecord(payload) && payload.status === "ok" && nonEmptyString(payload.backend) ? "Ready" : undefined;
 }
 
-function validateQwenHealth(payload: unknown): ReadinessState | undefined {
-  return isRecord(payload) && payload.status === "ok" && nonEmptyString(payload.device) && nonEmptyString(payload.model) ? "Ready" : undefined;
-}
-
-function validateVoxHealth(payload: unknown): ReadinessState | undefined {
-  if (!isRecord(payload) || payload.status !== "ok") return undefined;
-  if (payload.model_loaded === false) return "Loading";
-  return payload.model_loaded === true ? "Ready" : undefined;
+/** audio.cpp keeps at most one model resident, and having none loaded is normal under lazy load. */
+export function describeLoadedAudioCppModel(payload: unknown): string | undefined {
+  if (!isRecord(payload) || !Array.isArray(payload.data)) return undefined;
+  const loaded = payload.data.flatMap((item) => isRecord(item) && item.loaded === true && nonEmptyString(item.id) ? [item.id] : []);
+  return loaded.length === 0 ? "No model loaded." : `Loaded model: ${loaded.join(", ")}.`;
 }
 
 function validateFastApiOpenApi(payload: unknown): ReadinessState | undefined {
@@ -152,6 +148,23 @@ function stateMessage(adapter: ServiceAdapter, state: ReadinessState, status?: n
     case "Unavailable": return `No validated response through the local proxy for ${adapter.name}.`;
     case "Error": return `The service responded with HTTP ${status ?? "error"}.`;
     case "Unknown": return "The response did not match the expected readiness contract.";
+  }
+}
+
+async function readReadyDetail(adapter: ServiceAdapter, detail: ReadyDetail, fetcher: typeof fetch, signal: AbortSignal): Promise<{ readonly text: string; readonly diagnostic: string }> {
+  const unknown = "Loaded model unknown.";
+  try {
+    const response = await fetcher(`/proxy/${adapter.id}${detail.path}`, { headers: { accept: "application/json" }, signal });
+    const body = await readBoundedBody(response);
+    let payload: unknown;
+    if (response.ok && isJsonMediaType(response.headers.get("content-type")) && !body.truncated) {
+      try { payload = JSON.parse(body.text); } catch { payload = undefined; }
+    }
+    return { text: detail.describe(payload) ?? unknown, diagnostic: body.text };
+  } catch (error) {
+    // Only the shared deadline escalates; any other failure of the detail read leaves the probe Ready.
+    if (signal.aborted) throw error;
+    return { text: unknown, diagnostic: error instanceof Error ? `${error.name}: ${error.message}` : "Network request failed." };
   }
 }
 
@@ -194,6 +207,11 @@ async function performReadinessProbe(
       state = adapter.validateReadiness(payload) ?? "Unknown";
     }
     message = stateMessage(adapter, state, response.status);
+    if (state === "Ready" && adapter.readyDetail !== undefined) {
+      const detail = await readReadyDetail(adapter, adapter.readyDetail, fetcher, controller.signal);
+      message = `${message} ${detail.text}`;
+      diagnostic = boundDiagnostic(`${body.text}\n${adapter.readyDetail.path}:\n${detail.diagnostic}`);
+    }
   } catch (error) {
     state = "Unavailable";
     message = stateMessage(adapter, state);

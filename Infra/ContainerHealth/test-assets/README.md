@@ -2,8 +2,8 @@
 
 `read2me-acceptance.wav` contains the exact speech in `read2me-acceptance.txt`. It is a
 non-sensitive reference and transcription fixture for the dashboard's live acceptance pass
-(nine services when recorded; five of them have since been retired, see
-[../README.md](../README.md)).
+over its five services ([../README.md](../README.md)): the reference clip and transcript for
+audio.cpp's clone models, and the transcription input for Whisper.
 
 ## Provenance and license
 

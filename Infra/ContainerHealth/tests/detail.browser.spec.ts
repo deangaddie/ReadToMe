@@ -87,7 +87,7 @@ test("readiness may change while a similarity run continues independently", asyn
   await request.post("/proxy/llama/readiness-state?service=minilm-l6&state=error");
   await page.getByRole("button", { name: "Refresh readiness now" }).click();
   await request.post("/proxy/llama/readiness-release");
-  await expect(page.locator("[data-detail-state-text]")).toHaveText("Unavailable");
+  await expect(page.locator("[data-detail-state-text]")).toHaveText("Error");
   await expect(page.getByText("Latest readiness changed; the active test is still running.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel run" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel run" }).click();

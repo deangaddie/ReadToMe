@@ -5,11 +5,7 @@ import { resolve } from "node:path";
 
 const services = [
   ["LLAMA", "llama"],
-  ["CHATTERBOX", "chatterbox"],
-  ["CHATTERBOX_TURBO", "chatterbox-turbo"],
-  ["QWEN3_TTS", "qwen3-tts"],
-  ["QWEN3_TTS_BASE", "qwen3-tts-base"],
-  ["VOXCPM2", "voxcpm2"],
+  ["AUDIOCPP", "audiocpp"],
   ["WHISPER", "whisper"],
   ["MINILM_L6", "minilm-l6"],
   ["MPNET_BASE_V2", "mpnet-base-v2"]
@@ -33,10 +29,8 @@ const llamaRequests = [];
 
 function readinessPayload(service) {
   if (service === "llama" || service === "whisper") return { status: "ok" };
-  if (service === "voxcpm2") return { status: "ok", model_loaded: true };
-  if (service === "minilm-l6" || service === "mpnet-base-v2") return { openapi: "3.1.0", info: { title: service, version: "1.0.0" } };
-  if (service.startsWith("qwen3")) return { status: "ok", device: "cuda", model: service };
-  return { status: "ok", device: "cuda" };
+  if (service === "audiocpp") return { status: "ok", backend: "cuda", models: AUDIOCPP_MODELS.length, ui: true, ui_management: false };
+  return { openapi: "3.1.0", info: { title: service, version: "1.0.0" } };
 }
 
 function nextPendingInReverseOrder() {
@@ -111,23 +105,36 @@ function speechWavFixture(sampleRate = 24_000, seconds = 0.5) {
   return buffer;
 }
 
+const AUDIOCPP_MODELS = [
+  ["breeze-q8", "breeze_tts", "clon"], ["voxcpm2", "voxcpm2", "tts"], ["chatterbox", "chatterbox", "clon"],
+  ["qwen3-base", "qwen3_tts", "tts"], ["qwen3-design", "qwen3_tts", "vdes"], ["breeze-design", "breeze_tts", "tts"]
+];
 const ttsRequests = [];
+let audioCppLoaded = "breeze-q8";
+let audioCppModelCalls = 0;
 
-function ttsRoute(service, pathname) {
-  if (service === "chatterbox-turbo") return pathname === "/tts/turbo";
-  return pathname === "/tts" && (service === "chatterbox" || service === "qwen3-tts" || service === "qwen3-tts-base");
+function audioCppModelList() {
+  return { object: "list", data: AUDIOCPP_MODELS.map(([id, family, task]) => ({ id, object: "model", owned_by: "engine", family, task, mode: "offline", loaded: id === audioCppLoaded })) };
 }
 
 async function handleTts(service, request, response) {
   const body = await readBody(request);
   const contentType = request.headers["content-type"] ?? "";
-  ttsRequests.push({ service, contentType, body: body.toString("base64") });
-  const text = body.toString("latin1");
-  if (text.includes("fixture-http-error")) {
-    response.writeHead(422, { "content-type": "application/json" });
-    response.end(JSON.stringify({ detail: "fixture rejected the speech request" }));
+  ttsRequests.push({ service, contentType, body: body.toString("utf8") });
+  const text = body.toString("utf8");
+  let model;
+  try { model = JSON.parse(text).model; } catch { model = undefined; }
+  if (text.includes("fixture-busy")) {
+    response.writeHead(503, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: { message: `cannot load model '${model}': max_loaded_models=1 and every loaded model is busy; retry later`, type: "server_busy" } }));
     return;
   }
+  if (text.includes("fixture-http-error")) {
+    response.writeHead(500, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: { message: "model path does not exist", type: "server_error" } }));
+    return;
+  }
+  if (typeof model === "string") audioCppLoaded = model;
   if (text.includes("fixture-wrong-media")) {
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ audio: "not really" }));
@@ -265,103 +272,6 @@ async function handleWhisper(request, response) {
   response.end(JSON.stringify(format === "verbose_json" ? WHISPER_VERBOSE : { text: WHISPER_TRANSCRIPT }));
 }
 
-const voxUploads = [];
-const voxRequests = [];
-let voxUploadCount = 0;
-
-function voxFrame(type, payload) {
-  const header = Buffer.alloc(5);
-  header.writeUInt8(type, 0);
-  header.writeUInt32LE(payload.length, 1);
-  return Buffer.concat([header, payload]);
-}
-
-function voxControlFrame(value) {
-  return voxFrame(0, Buffer.from(JSON.stringify(value), "utf8"));
-}
-
-function voxPcmFrame(count, offset) {
-  const payload = Buffer.alloc(count * 4);
-  for (let index = 0; index < count; index += 1) {
-    payload.writeFloatLE(Math.sin(((index + offset) / 24_000) * 2 * Math.PI * 440) * 0.5, index * 4);
-  }
-  return voxFrame(1, payload);
-}
-
-/** Writes bytes in deliberately awkward pieces that never align with frame boundaries. */
-function writeDelayed(response, bytes, boundaries) {
-  const offsets = [...new Set([0, ...boundaries, bytes.length])].sort((a, b) => a - b);
-  let index = 0;
-  const writeNext = () => {
-    if (response.destroyed) return;
-    if (index >= offsets.length - 1) { response.end(); return; }
-    response.write(bytes.subarray(offsets[index], offsets[index + 1]));
-    index += 1;
-    setImmediate(writeNext);
-  };
-  setImmediate(writeNext);
-}
-
-async function handleVoxUpload(request, response) {
-  const body = await readBody(request);
-  const contentType = request.headers["content-type"] ?? "";
-  const text = body.toString("latin1");
-  voxUploads.push({ contentType, bytes: body.length, body: body.toString("base64") });
-  if (text.includes("fixture-upload-error")) {
-    response.writeHead(400, { "content-type": "application/json" });
-    response.end(JSON.stringify({ detail: "unsupported audio format" }));
-    return;
-  }
-  voxUploadCount += 1;
-  response.writeHead(200, { "content-type": "application/json" });
-  response.end(JSON.stringify({ file_id: `vox-file-${voxUploadCount}` }));
-}
-
-async function handleVoxStream(request, response) {
-  const body = await readBody(request);
-  let payload;
-  try { payload = JSON.parse(body.toString("utf8")); } catch { payload = undefined; }
-  voxRequests.push(payload);
-  const text = typeof payload?.text === "string" ? payload.text : "";
-  if (text.includes("fixture-http-error")) {
-    response.writeHead(422, { "content-type": "application/json" });
-    response.end(JSON.stringify({ detail: "invalid request: text is required" }));
-    return;
-  }
-  if (text.includes("fixture-wrong-media")) {
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ audio: "not framed" }));
-    return;
-  }
-  response.writeHead(200, { "content-type": "application/octet-stream" });
-  if (text.includes("fixture-framed-error")) {
-    response.end(voxControlFrame({ type: "error", message: "model not loaded" }));
-    return;
-  }
-  if (text.includes("fixture-protocol")) {
-    // Meta and audio, but the stream ends without the required done frame.
-    response.end(Buffer.concat([voxControlFrame({ type: "meta", sample_rate: 24_000 }), voxPcmFrame(16, 0)]));
-    return;
-  }
-  if (text.includes("fixture-slow")) {
-    request.on("aborted", observeAbort);
-    response.on("close", () => { if (!response.writableEnded) observeAbort(); });
-    response.write(voxControlFrame({ type: "meta", sample_rate: 24_000 }));
-    const timer = setTimeout(() => {
-      if (!response.destroyed) response.end(Buffer.concat([voxPcmFrame(16, 0), voxControlFrame({ type: "done", chunks: 1 })]));
-    }, 10_000);
-    response.on("close", () => clearTimeout(timer));
-    return;
-  }
-  const bytes = Buffer.concat([
-    voxControlFrame({ type: "meta", sample_rate: 24_000 }),
-    voxPcmFrame(1_200, 0), voxPcmFrame(1_200, 1_200), voxPcmFrame(1_200, 2_400),
-    voxControlFrame({ type: "done", chunks: 3 })
-  ]);
-  // Split mid-header and mid-payload so the client must buffer across arbitrary boundaries.
-  writeDelayed(response, bytes, [3, 7, 40, 41, 1_000, bytes.length - 9, bytes.length - 2]);
-}
-
 function wavFixture() {
   const buffer = Buffer.alloc(48);
   buffer.write("RIFF", 0);
@@ -396,21 +306,15 @@ async function handle(service, request, response, server) {
     return;
   }
   if (url.pathname === "/tts-events") {
-    if (url.searchParams.get("reset") === "1") ttsRequests.splice(0);
+    if (url.searchParams.get("reset") === "1") { ttsRequests.splice(0); audioCppLoaded = url.searchParams.get("loaded") ?? "breeze-q8"; audioCppModelCalls = 0; abortObserved = false; }
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ requests: ttsRequests }));
+    response.end(JSON.stringify({ requests: ttsRequests, loaded: audioCppLoaded, modelCalls: audioCppModelCalls }));
     return;
   }
   if (url.pathname === "/whisper-events") {
     if (url.searchParams.get("reset") === "1") { whisperRequests.splice(0); abortObserved = false; }
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ requests: whisperRequests }));
-    return;
-  }
-  if (url.pathname === "/vox-events") {
-    if (url.searchParams.get("reset") === "1") { voxUploads.splice(0); voxRequests.splice(0); voxUploadCount = 0; abortObserved = false; }
-    response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ uploads: voxUploads, requests: voxRequests }));
     return;
   }
   if (url.pathname === "/readiness-events") {
@@ -465,23 +369,21 @@ async function handle(service, request, response, server) {
     readinessBatchStarts.add(service);
     pendingReadiness.set(service, response);
     if (readinessBatchStarts.size === services.length) releaseReadinessRemainder();
-    else if (pendingReadiness.size >= 6) releaseOneReadiness();
+    else if (pendingReadiness.size >= 3) releaseOneReadiness();
     return;
   }
-  if (ttsRoute(service, url.pathname)) {
+  if (service === "audiocpp" && url.pathname === "/v1/models") {
+    audioCppModelCalls += 1;
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(audioCppModelList()));
+    return;
+  }
+  if (service === "audiocpp" && url.pathname === "/v1/audio/speech") {
     await handleTts(service, request, response);
     return;
   }
   if (service === "whisper" && url.pathname === "/inference") {
     await handleWhisper(request, response);
-    return;
-  }
-  if (service === "voxcpm2" && url.pathname === "/upload-audio") {
-    await handleVoxUpload(request, response);
-    return;
-  }
-  if (service === "voxcpm2" && url.pathname === "/api/stream") {
-    await handleVoxStream(request, response);
     return;
   }
   if (service === "llama" && url.pathname === "/v1/models") {

@@ -1,17 +1,20 @@
 # Container Health dashboard
 
-This local operator console observes and exercises Read2Me's nine AI services without
-starting the Read2Me host. It is local-only: Vite binds `127.0.0.1:5173`, exposes only the
-nine fixed proxy routes, and keeps inputs, diagnostics, and results in page memory. A
-reload discards them; there is no persistence, authentication, LAN hosting, or Docker
-control surface.
+This local operator console observes and exercises Read2Me's five AI services — `llama`
+(:8080), `audiocpp` (:8004), `whisper` (:9000), `minilm-l6` (:8200) and `mpnet-base-v2`
+(:8201) — without starting the Read2Me host. It is local-only: Vite binds `127.0.0.1:5173`,
+exposes only the five fixed proxy routes, and keeps inputs, diagnostics, and results in page
+memory. A reload discards them; there is no persistence, authentication, LAN hosting, or
+Docker control surface.
 
-> **Out of date.** The dashboard predates ADR 0010 (last code change 2026-07-16). Of its nine
-> targets only `llama` (:8080), `whisper` (:9000), `minilm-l6` (:8200) and `mpnet-base-v2`
-> (:8201) still exist. The five native TTS targets — `chatterbox` (:8000), `chatterbox-turbo`
-> (:8001), `qwen3-tts` (:8100), `qwen3-tts-base` (:8101) and `voxcpm2` (:8003) — were retired
-> in favour of `read2me-audiocpp` (:8004), which the dashboard does not cover yet. The TTS
-> results in [ACCEPTANCE.md](ACCEPTANCE.md) are historical.
+`audiocpp` is one service that serves every TTS and voice-design model (ADR 0010). Its card
+names the loaded model, and its workbench has a **Model** select prepared from
+`GET /v1/models`, which is cross-checked against the six default ids of
+`Infra/audiocpp/server.json`. The form shows only the fields the selected model takes, and
+each request uses that model family's shape from [Infra/README.md](../README.md), "audio.cpp
+(TTS)", with the app's default knobs fixed and listed in the input summary. Running a model
+that is not loaded shows a model-switch phase (9–31 s). A 503 `server_busy` ends the run
+as **Busy**, a neutral outcome rather than a failure, and there is no automatic retry.
 
 ## Set up and start
 

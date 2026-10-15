@@ -1,6 +1,7 @@
 import { ServiceFailure, type ProgressEmitter } from "./service-adapter";
 
-export type LlamaModelState = "loaded" | "loading" | "sleeping" | "unloaded" | "failed";
+/** Llama reports the first five; "unconfigured" and "unknown" come from audio.cpp's cross-check against its fixed model table. */
+export type LlamaModelState = "loaded" | "loading" | "sleeping" | "unloaded" | "failed" | "unconfigured" | "unknown";
 
 export interface LlamaModelOption {
   readonly id: string;

@@ -17,18 +17,13 @@ for (const scenario of [
   { name: "similarity success history and diagnostic", path: "/detail.html?service=minilm-l6", theme: "light", width: 390, mixed: false, run: "success" },
   { name: "similarity failure history and diagnostic", path: "/detail.html?service=minilm-l6", theme: "dark", width: 1440, mixed: false, run: "failure" },
   { name: "similarity cancelled history and diagnostic", path: "/detail.html?service=minilm-l6", theme: "light", width: 390, mixed: false, run: "cancelled" },
-  { name: "Chatterbox speech form idle", path: "/detail.html?service=chatterbox", theme: "light", width: 1440, mixed: false, tts: "idle" },
-  { name: "Turbo validation and warning states", path: "/detail.html?service=chatterbox-turbo", theme: "dark", width: 390, mixed: false, tts: "invalid" },
-  { name: "Qwen Voice Design audio result and diagnostic", path: "/detail.html?service=qwen3-tts", theme: "light", width: 1440, mixed: false, tts: "success" },
-  { name: "Qwen Base audio history narrow", path: "/detail.html?service=qwen3-tts-base", theme: "dark", width: 390, mixed: false, tts: "success" },
-  { name: "Chatterbox protocol failure detail", path: "/detail.html?service=chatterbox", theme: "dark", width: 1440, mixed: false, tts: "failure" },
-  { name: "VoxCPM2 upload form and Advanced groups idle", path: "/detail.html?service=voxcpm2", theme: "light", width: 1440, mixed: false, vox: "idle" },
-  { name: "VoxCPM2 validation states narrow", path: "/detail.html?service=voxcpm2", theme: "dark", width: 390, mixed: false, vox: "invalid" },
-  { name: "VoxCPM2 streaming run in progress", path: "/detail.html?service=voxcpm2", theme: "dark", width: 1440, mixed: false, vox: "running" },
-  { name: "VoxCPM2 assembled audio result and diagnostic", path: "/detail.html?service=voxcpm2", theme: "light", width: 1440, mixed: false, vox: "success" },
-  { name: "VoxCPM2 audio result narrow", path: "/detail.html?service=voxcpm2", theme: "dark", width: 390, mixed: false, vox: "success" },
-  { name: "VoxCPM2 framed error failure detail", path: "/detail.html?service=voxcpm2", theme: "dark", width: 1440, mixed: false, vox: "failure" },
-  { name: "VoxCPM2 cancelled run detail", path: "/detail.html?service=voxcpm2", theme: "light", width: 1440, mixed: false, vox: "cancelled" },
+  { name: "audio.cpp clone form idle", path: "/detail.html?service=audiocpp", theme: "light", width: 1440, mixed: false, tts: "idle" },
+  { name: "audio.cpp validation and warning states narrow", path: "/detail.html?service=audiocpp", theme: "dark", width: 390, mixed: false, tts: "invalid" },
+  { name: "audio.cpp voice design audio result and diagnostic", path: "/detail.html?service=audiocpp", theme: "light", width: 1440, mixed: false, tts: "success", model: "qwen3-design" },
+  { name: "audio.cpp clone audio history narrow", path: "/detail.html?service=audiocpp", theme: "dark", width: 390, mixed: false, tts: "success", model: "breeze-q8" },
+  { name: "audio.cpp model switch in progress", path: "/detail.html?service=audiocpp", theme: "dark", width: 1440, mixed: false, tts: "running", model: "voxcpm2" },
+  { name: "audio.cpp busy outcome", path: "/detail.html?service=audiocpp", theme: "light", width: 1440, mixed: false, tts: "busy", model: "chatterbox" },
+  { name: "audio.cpp protocol failure detail", path: "/detail.html?service=audiocpp", theme: "dark", width: 1440, mixed: false, tts: "failure", model: "chatterbox" },
   { name: "Whisper transcription form and Advanced groups idle", path: "/detail.html?service=whisper", theme: "light", width: 1440, mixed: false, whisper: "idle" },
   { name: "Whisper validation and warning states narrow", path: "/detail.html?service=whisper", theme: "dark", width: 390, mixed: false, whisper: "invalid" },
   { name: "Whisper transcription in progress", path: "/detail.html?service=whisper", theme: "dark", width: 1440, mixed: false, whisper: "running" },
@@ -42,19 +37,23 @@ for (const scenario of [
   test(`${scenario.name} has no WCAG 2.2 A/AA violations`, async ({ page, request }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
-    page.on("console", (message) => { if (message.type() === "error") browserErrors.push(message.text()); });
+    // The busy scenario's 503 is the response under test; Chromium still logs every failed load.
+    const expectedLoadFailure = "tts" in scenario && scenario.tts === "busy" ? "status of 503" : undefined;
+    page.on("console", (message) => {
+      if (message.type() === "error" && (expectedLoadFailure === undefined || !message.text().includes(expectedLoadFailure))) browserErrors.push(message.text());
+    });
     await page.setViewportSize({ width: scenario.width, height: 900 });
     await page.addInitScript((theme) => localStorage.setItem("chd.theme", theme), scenario.theme);
     if ("llamaRun" in scenario) await request.post(`/proxy/llama/llama-mode?mode=${scenario.llamaRun === "running" ? "slow" : scenario.llamaRun === "failure" ? "incomplete" : "success"}`);
     await page.goto(scenario.path);
     if (scenario.path === "/") {
-      await expect(page.locator('[data-service-card] [data-state="Ready"]')).toHaveCount(9);
+      await expect(page.locator('[data-service-card] [data-state="Ready"]')).toHaveCount(5);
       if (scenario.mixed) {
         await page.evaluate(() => {
           const assignments = [
             ["llama", "Error", "attention", "!"],
-            ["chatterbox", "Unknown", "attention", "?"],
-            ["voxcpm2", "Loading", "inactive", "↻"],
+            ["audiocpp", "Unknown", "attention", "?"],
+            ["minilm-l6", "Loading", "inactive", "↻"],
             ["whisper", "Unavailable", "inactive", "○"]
           ] as const;
           for (const [id, state, group, icon] of assignments) {
@@ -65,7 +64,7 @@ for (const scenario of [
             card.querySelector<HTMLElement>("[data-state-text]")!.textContent = state;
             document.querySelector<HTMLElement>(`[data-group="${group}"]`)!.append(card);
           }
-          document.querySelector<HTMLElement>('[data-service-card="voxcpm2"] [data-checking]')!.hidden = false;
+          document.querySelector<HTMLElement>('[data-service-card="minilm-l6"] [data-checking]')!.hidden = false;
         });
       }
     }
@@ -81,46 +80,29 @@ for (const scenario of [
         await expect(page.locator('[data-run-entry][data-outcome="cancelled"]')).toBeVisible();
       }
     }
-    if ("tts" in scenario && scenario.tts !== "idle") {
-      const clone = scenario.path.includes("chatterbox") || scenario.path.includes("qwen3-tts-base");
+    if ("tts" in scenario) {
+      await request.post("/proxy/llama/tts-events?reset=1&loaded=breeze-q8");
+      await expect(page.getByText("6 models prepared.")).toBeVisible();
+      await page.getByText("Advanced", { exact: true }).click();
       if (scenario.tts === "invalid") {
+        await page.getByRole("combobox", { name: "Model" }).selectOption("qwen3-base");
         await page.getByRole("button", { name: "Generate speech" }).click();
         await expect(page.getByText("Enter text to speak.")).toBeVisible();
         await page.setInputFiles("#field-reference_audio", { name: "reference.flac", mimeType: "audio/flac", buffer: REFERENCE_BYTES });
         await expect(page.getByText(/WAV and MP3 are the documented inputs/u)).toBeVisible();
-      } else {
-        await page.getByLabel("Text to speak").fill(scenario.tts === "failure" ? "fixture-malformed-wav" : "Accessible generated speech");
-        if (clone) await page.setInputFiles("#field-reference_audio", { name: "reference.wav", mimeType: "audio/wav", buffer: REFERENCE_BYTES });
-        if (scenario.path.includes("service=qwen3-tts&") || scenario.path.endsWith("service=qwen3-tts")) await page.getByLabel("Voice description").fill("A calm narrator");
-        if (scenario.path.includes("qwen3-tts-base")) await page.getByLabel("Reference transcript").fill("the exact spoken words");
+      } else if (scenario.tts !== "idle" && "model" in scenario) {
+        await page.getByRole("combobox", { name: "Model" }).selectOption(scenario.model);
+        const text = { success: "Accessible generated speech", running: "fixture-slow", busy: "fixture-busy", failure: "fixture-malformed-wav" }[scenario.tts];
+        await page.getByLabel("Text to speak").fill(text);
+        if (await page.locator("#field-reference_audio").isVisible()) await page.setInputFiles("#field-reference_audio", { name: "reference.wav", mimeType: "audio/wav", buffer: REFERENCE_BYTES });
+        if (await page.getByLabel("Reference transcript").isVisible()) await page.getByLabel("Reference transcript").fill("the exact spoken words");
+        if (await page.getByLabel("Design prompt").isVisible()) await page.getByLabel("Design prompt").fill("A calm narrator");
         await page.getByRole("button", { name: "Generate speech" }).click();
-        await expect(page.locator(`[data-run-entry][data-outcome="${scenario.tts === "failure" ? "failed" : "succeeded"}"]`)).toBeVisible();
-        await page.locator("[data-run-entry] details").evaluateAll((nodes) => { for (const node of nodes) (node as HTMLDetailsElement).open = true; });
-        await expect(page.locator("[data-run-entry] pre").first()).toBeVisible();
-      }
-    }
-    if ("vox" in scenario) {
-      await page.getByText("Advanced", { exact: true }).click();
-      if (scenario.vox === "invalid") {
-        await page.getByRole("button", { name: "Generate speech" }).click();
-        await expect(page.getByText("Enter text to speak.")).toBeVisible();
-        await page.getByLabel("Text to speak").fill("blocked");
-        await page.setInputFiles("#field-reference_audio", { name: "reference.aac", mimeType: "audio/aac", buffer: REFERENCE_BYTES });
-        await page.getByLabel("Minimum length").fill("5000");
-        await page.getByRole("button", { name: "Generate speech" }).click();
-        await expect(page.getByText("Choose a .wav, .mp3, .flac, .ogg, .m4a file.")).toBeVisible();
-        await expect(page.getByText("The minimum length cannot exceed the maximum length.")).toBeVisible();
-      } else if (scenario.vox !== "idle") {
-        const marker = scenario.vox === "failure" ? "fixture-framed-error"
-          : scenario.vox === "running" || scenario.vox === "cancelled" ? "fixture-slow" : "Accessible streamed speech";
-        await page.getByLabel("Text to speak").fill(marker);
-        await page.setInputFiles("#field-reference_audio", { name: "reference.wav", mimeType: "audio/wav", buffer: REFERENCE_BYTES });
-        await page.getByRole("button", { name: "Generate speech" }).click();
-        if (scenario.vox === "running") {
-          await expect(page.getByRole("button", { name: "Cancel run" })).toBeVisible();
+        if (scenario.tts === "running") {
+          await expect(page.locator("[data-run-progress]")).toContainText("Switching audio.cpp to voxcpm2");
         } else {
-          if (scenario.vox === "cancelled") await page.getByRole("button", { name: "Cancel run" }).click();
-          await expect(page.locator(`[data-run-entry][data-outcome="${scenario.vox === "success" ? "succeeded" : scenario.vox === "cancelled" ? "cancelled" : "failed"}"]`)).toBeVisible();
+          const outcome = { success: "succeeded", busy: "busy", failure: "failed" }[scenario.tts];
+          await expect(page.locator(`[data-run-entry][data-outcome="${outcome}"]`)).toBeVisible();
           await page.locator("[data-run-entry] details").evaluateAll((nodes) => { for (const node of nodes) (node as HTMLDetailsElement).open = true; });
           await expect(page.locator("[data-run-entry] pre").first()).toBeVisible();
         }
