@@ -1,8 +1,9 @@
 # Live acceptance speech fixture
 
 `read2me-acceptance.wav` contains the exact speech in `read2me-acceptance.txt`. It is a
-non-sensitive reference and transcription fixture for the dashboard's nine-service live
-acceptance pass.
+non-sensitive reference and transcription fixture for the dashboard's live acceptance pass
+(nine services when recorded; five of them have since been retired, see
+[../README.md](../README.md)).
 
 ## Provenance and license
 

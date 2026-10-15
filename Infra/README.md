@@ -12,6 +12,9 @@ duplicating the service contracts below.
 ```text
 Infra/
 ├── docker-compose.yml          # All AI service containers
+├── docker-compose.warmup.yml   # Model-cache warm-up services (see Model cache warm-up)
+├── warmup.ps1                  # Runs every warm-up service
+├── .env.example                # GGUF_MODELS_DIR override → copy to .env
 ├── Dockerfile.llama            # llama.cpp server (upstream v0.5.0, multi-model preset)
 ├── Dockerfile.whisper          # Whisper.CPP server (CPU)
 ├── Dockerfile.minilm-l6        # Semantic similarity (MiniLM-L6)
@@ -22,7 +25,12 @@ Infra/
 │       └── models.ini          # Model preset definitions
 ├── audiocpp/
 │   └── server.json             # audio.cpp model entries (every TTS model)
-└── models/                     # GGUF model files (bind-mounted, not committed)
+├── minilm-l6/, mpnet-base-v2/  # Similarity servers (app.py + locked requirements)
+├── scripts/                    # lock.ps1 (requirements locks), refresh-pins.ps1 (base-image digests)
+├── ContainerHealth/            # Standalone service dashboard (see its README)
+├── models/                     # GGUF files unless GGUF_MODELS_DIR is set, Whisper model + its sha256 manifest
+├── cache/                      # Similarity model caches, filled by warm-up (git-ignored)
+└── logs/                       # llama logs (git-ignored)
 ```
 
 ## Services
@@ -35,7 +43,7 @@ Infra/
 | MiniLM-L6            | `read2me-minilm-l6`         | 8200 | Semantic similarity — MiniLM-L6-v2                               |
 | MPNet-Base-v2        | `read2me-mpnet-base-v2`     | 8201 | Semantic similarity — all-mpnet-base-v2                          |
 
-On first run against a new workspace (no `app.db` yet) the app seeds a config for each service at these ports and makes it active. The LLM configs are the two qwen-28b presets and the gemma-12b Chapter preset, with `[gemma-12b · Chapter]` as the attribution chain. TTS and voice design get Breeze (active) and VoxCPM2, transcription gets Whisper, and similarity gets MPNet. Edit them under Settings afterwards. An existing `app.db` is never touched (`DefaultServiceConfigSeeder`).
+On first run against a new workspace (no `app.db` yet) the app seeds configs at these ports and makes one per service active. The LLM configs are two qwen-28b configs (attribution and thinking) and the gemma-12b Chapter config, with `[gemma-12b · Chapter]` as the attribution chain. TTS and voice design get Breeze (active) and VoxCPM2, transcription gets Whisper, and similarity gets MPNet (no MiniLM config is seeded). Edit them under Settings afterwards. An existing `app.db` is never touched (`DefaultServiceConfigSeeder`).
 
 ### Health checks
 
@@ -43,7 +51,8 @@ Every service defines its Docker health check in its image, except audio.cpp,
 which runs the upstream image unchanged and defines it in `docker-compose.yml`. Docker runs the
 container URL from inside the container; use the host URL for a manual check
 from the machine running Compose. All published ports are bound to
-`127.0.0.1`, and each probe succeeds on an HTTP `200` response.
+`127.0.0.1`. The llama, audio.cpp and Whisper probes use `curl --fail` (any status below 400);
+the semantic probes require exactly `200`.
 
 | Service | Docker probe inside container | Manual probe from host |
 | --- | --- | --- |
@@ -140,10 +149,12 @@ For example, `docker compose -f docker-compose.warmup.yml run --rm minilm-l6`
 downloads the pinned MiniLM snapshot into `cache/minilm-l6`. Likewise,
 `docker compose -f docker-compose.warmup.yml run --rm whisper` provisions the
 pinned Whisper artifact in `models/`, verifying its source revision, SHA-256,
-and byte length before an atomic replacement. The warm-up file is the
-executable model-pin table: changing a model revision is deliberately a
-two-step operation — update its warm-up service, run it, then start the normal
-service. Do not merge this file with `docker-compose.yml`; the hardened stack's
+and byte length before an atomic replacement. Changing a model revision is
+deliberately a two-step operation — update the pin, run its warm-up service,
+then start the normal service. The MiniLM and MPNet revisions are pinned twice,
+in the warm-up file and in `minilm-l6/app.py` / `mpnet-base-v2/app.py` (which
+load with `local_files_only`), so a bump edits both and rebuilds the image.
+Whisper's pin is `models/whisper-models.sha256`, which the warm-up reads. Do not merge this file with `docker-compose.yml`; the hardened stack's
 DNS policy must be absent while a model is being downloaded.
 
 ## llama.cpp
@@ -192,10 +203,11 @@ The app runs it through two LLM configs on the same preset, so escalating to the
 
 | Config | Thinking | temp / top-p / presence | Role |
 | --- | --- | --- | --- |
-| Qwen 28b vendor – attribution | off | 0.7 / 0.8 / 1.5 | attribution step 1; the active config (discovery, voice, book edits) |
-| Qwen 28b vendor – thinking | on | 1.0 / 0.95 / 1.5 | attribution chain's final step |
+| Qwen 28b – attribution | off | 0.7 / 0.8 / 1.5 | attribution step 1; the active config (discovery, voice, book edits) |
+| Qwen 28b – thinking | on | 1.0 / 0.95 / 1.5 | attribution chain's final step |
 
-Both set MaxTokens 8192, batch 4, Full prompt style. The chain is attribution → thinking, with self-consistency off.
+Both set MaxTokens 8192, batch 4, Full prompt style, with self-consistency off. A chain of attribution → thinking is
+available, but the seeded chain is the single `[gemma-12b · Chapter]` rung (below).
 
 ### Chapter-pass preset — `gemma-12b`
 
@@ -252,7 +264,7 @@ Port `8080`.
 
 `read2me-audiocpp` runs [audio.cpp](https://github.com/0xShug0/audio.cpp), a C++/ggml runtime, and serves every paragraph-TTS and voice-design model the app uses (ADR 0010). Port `8004` on the host, `8080` in the container.
 
-The upstream image `ghcr.io/0xshug0/audio.cpp:full-cuda12` runs unchanged — no Dockerfile of our own — pinned by its amd64 digest on the `image:` line in `docker-compose.yml`. `scripts/refresh-pins.ps1` covers only Dockerfile bases, so bump this pin by hand: resolve the tag (`docker buildx imagetools inspect ghcr.io/0xshug0/audio.cpp:full-cuda12`), rewrite the digest, and check each model still generates.
+The upstream image `ghcr.io/0xshug0/audio.cpp:full-cuda12` runs unchanged — no Dockerfile of our own — pinned by its amd64 digest on the `image:` line in `docker-compose.yml`. `scripts/refresh-pins.ps1` covers only the python and CUDA Dockerfile bases (not this image, nor Whisper's ubuntu base), so bump this pin by hand: resolve the tag (`docker buildx imagetools inspect ghcr.io/0xshug0/audio.cpp:full-cuda12`), rewrite the digest, and check each model still generates.
 
 ### Models — `audiocpp/server.json`
 

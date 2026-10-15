@@ -37,7 +37,7 @@ bundler does not see it until then.
   `define()`, `use`/`provide`/`token` services, the Navigation-API router and `<r2m-outlet>`,
   `openDialog`, `adoptStyles`, `Emitter`.
 - `src/app/ui/` — shared elements and partials: the measured list, speaker chip and menu, dialogs,
-  toast, tooltip, `icon()`, `statusChip()`, `emptyState()`, `countBadge()`. `icons.ts` holds the
+  toast, tooltip, `icon()`, `statusChip()`, `emptyState()`, `countBadge()`, `spinner()`. `icons.ts` holds the
   `IconName` union: `icon()` takes nothing else, and the committed icon font
   (`src/assets/fonts/MaterialSymbolsRounded.woff2`) is a subset holding only those names. To use a
   new icon, add its name to the union, run `bun run icons`, and commit the font and
@@ -46,10 +46,18 @@ bundler does not see it until then.
   the `BookCommand` union and the generated `schema.d.ts` (checked in).
 - `src/app/live/` — the `/hubs/live` client. `live-messages.spec.ts` reads the C# hub sources and
   fails when a family or `kind` string drifts.
+- `src/app/app.routes.ts`, `src/app/route-meta.ts` — the route table and per-route metadata.
 - `src/app/shell/`, `src/app/pages/` — the shell frame and the screens; an unknown path renders
   `pages/not-found-page.ts`.
+- `src/app/activity/` — the activity centre (bar pill, drawer, stream feed).
+- `src/app/ai-services/` — the store behind the AI services page and its docker controls.
+- `src/app/shared/` — non-element helpers shared across pages: config forms, preflight, the
+  settings schema, speaker colours, the unsaved-changes guard.
+- `src/app/theme/` — the theme service and theme CSS.
 - `src/styles/global.css` — design tokens, fonts and the global primitive CSS.
-- `src/testing/` — test helpers (a fake Navigation API for router-backed specs).
+- `src/testing/` — test helpers: fake Navigation API, API client, live hub and timers.
+- `scripts/` — `check-api-types.ts` (`api:check`) and `icons.ts` / `icon-manifest.ts`
+  (`icons`, `icons:check`); `icons.manifest.json` sits at the project root.
 
 ## Conventions
 

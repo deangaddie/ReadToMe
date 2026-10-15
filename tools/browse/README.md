@@ -52,9 +52,15 @@ R2M_WEB=http://localhost:5000 bun my-check.mjs                         # no dev 
 ```
 
 `openWeb` waits for `app-root *`. `openNodeMenu` / `chooseEntry` drive the shared
-`r2m-node-menu` popover (`#r2m-node-menu-panel`, entries by `data-entry`), `answerPrompt` and
+`r2m-node-menu` popover (`#r2m-node-menu-panel`; `chooseEntry` clicks `[role="menu"] [data-entry]`,
+so submenus work too), `answerPrompt` and
 `acceptConfirm` the `r2m-text-prompt-dialog` and `r2m-confirm-dialog`, and `waitForTreeTitles` the
-reader's structure tree. `browse.test.mjs` covers the `R2M_WEB` resolution: `bun test`.
+reader's structure tree. Also exported: `waitForServer`, `post`, `visibleText`, `sleep`, `stamp`,
+`resolveWeb` and the `HOST` / `WEB` / `APP` constants. `browse.test.mjs` covers the `R2M_WEB`
+resolution: `bun test`.
+
+The other `.mjs` files here (`native-*-verify.mjs`, `cutover-verify.mjs`, `shell-check.mjs`,
+`activity-check.mjs`, …) are earlier one-off checks, kept as examples; they are not a suite.
 
 Rules that keep runs honest:
 
@@ -62,6 +68,6 @@ Rules that keep runs honest:
 - Wait on the state you expect (`waitForTreeTitles`, `waitFor`, Playwright `waitForFunction`), never on a
   count that the stale DOM already satisfies, and never on a sleep alone.
 - Redirect the script's output to a file. Piping through `Select-Object` shows nothing until exit, so a
-  hung wait looks like silence; the launch watchdog exits after 240 s regardless.
+  hung wait looks like silence; the launch watchdog exits after 240 s regardless (exit code 2; an unhandled rejection exits 3).
 - `page.errors` collects failed API calls and console errors; `page.toasts` the web app's toasts. Print
   both at the end.
