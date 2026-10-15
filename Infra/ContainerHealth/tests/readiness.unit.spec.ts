@@ -23,11 +23,7 @@ class FakeClock implements ReadinessClock {
 
 const payloads: Record<ServiceId, unknown> = {
   llama: { status: "ok" },
-  chatterbox: { status: "ok", device: "cuda" },
-  "chatterbox-turbo": { status: "ok", device: "cuda" },
-  "qwen3-tts": { status: "ok", device: "cuda", model: "voice-design" },
-  "qwen3-tts-base": { status: "ok", device: "cuda", model: "base" },
-  voxcpm2: { status: "ok", model_loaded: true },
+  audiocpp: { status: "ok", backend: "cuda", models: 6, ui: true, ui_management: false },
   whisper: { status: "ok" },
   "minilm-l6": { openapi: "3.1.0", info: { title: "MiniLM", version: "1.0.0" } },
   "mpnet-base-v2": { openapi: "3.1.0", info: { title: "MPNet", version: "1.0.0" } }
@@ -40,7 +36,7 @@ function jsonResponse(body: unknown, status = 200, contentType = "application/js
   });
 }
 
-test("all nine Service Adapters accept their exact ready payload", async () => {
+test("all five Service Adapters accept their exact ready payload", async () => {
   for (const adapter of SERVICE_ADAPTERS) {
     const observation = await adapter.checkReadiness(async () => jsonResponse(payloads[adapter.id]));
     expect(observation.state, adapter.id).toBe("Ready");
@@ -52,11 +48,7 @@ test("all nine Service Adapters accept their exact ready payload", async () => {
 test("every Service Adapter rejects malformed or incomplete nominal success", async () => {
   const malformed: Record<ServiceId, unknown> = {
     llama: { status: "healthy" },
-    chatterbox: { status: "ok" },
-    "chatterbox-turbo": { status: "ok", device: "" },
-    "qwen3-tts": { status: "ok", device: "cuda", model: "" },
-    "qwen3-tts-base": { status: "ok", device: "", model: "base" },
-    voxcpm2: { status: "ok", model_loaded: "true" },
+    audiocpp: { status: "ok", backend: "" },
     whisper: { status: true },
     "minilm-l6": { openapi: "", info: { title: "MiniLM", version: "1.0.0" } },
     "mpnet-base-v2": { openapi: "3.1.0", info: { title: "MPNet" } }
@@ -67,11 +59,9 @@ test("every Service Adapter rejects malformed or incomplete nominal success", as
 });
 
 test("readiness maps explicit loading, reached errors, malformed success, and wrong media", async () => {
-  const vox = SERVICE_ADAPTERS.find(({ id }) => id === "voxcpm2")!;
   const whisper = SERVICE_ADAPTERS.find(({ id }) => id === "whisper")!;
   const llama = SERVICE_ADAPTERS.find(({ id }) => id === "llama")!;
 
-  await expect(vox.checkReadiness(async () => jsonResponse({ status: "ok", model_loaded: false }))).resolves.toMatchObject({ state: "Loading" });
   await expect(whisper.checkReadiness(async () => jsonResponse({ status: "loading" }, 503))).resolves.toMatchObject({ state: "Loading" });
   await expect(llama.checkReadiness(async () => jsonResponse({ detail: "reached" }, 418))).resolves.toMatchObject({ state: "Error" });
   await expect(llama.checkReadiness(async () => jsonResponse("{bad-json"))).resolves.toMatchObject({ state: "Unknown" });
@@ -106,4 +96,22 @@ test("diagnostics are bounded and explicitly marked when truncated", async () =>
   const observation = await adapter.checkReadiness(async () => jsonResponse({ detail: "x".repeat(READINESS_DIAGNOSTIC_LIMIT * 2) }, 500));
   expect(observation.diagnostic.length).toBeLessThanOrEqual(READINESS_DIAGNOSTIC_LIMIT + 32);
   expect(observation.diagnostic).toContain("[truncated]");
+});
+
+test("audio.cpp readiness names the loaded model without letting the model list change the state", async () => {
+  const audiocpp = SERVICE_ADAPTERS.find(({ id }) => id === "audiocpp")!;
+  const health = payloads.audiocpp;
+  const models = (loaded: string | undefined) => ({ object: "list", data: ["breeze-q8", "voxcpm2"].map((id) => ({ id, loaded: id === loaded })) });
+  const probe = (list: () => Response) => audiocpp.checkReadiness(async (input) => String(input) === "/proxy/audiocpp/health" ? jsonResponse(health) : list());
+
+  const loaded = await probe(() => jsonResponse(models("voxcpm2")));
+  expect(loaded).toMatchObject({ state: "Ready", message: "Validated response received. Loaded model: voxcpm2." });
+  expect(loaded.diagnostic).toContain("/v1/models:");
+  await expect(probe(() => jsonResponse(models(undefined)))).resolves.toMatchObject({ state: "Ready", message: "Validated response received. No model loaded." });
+  await expect(probe(() => jsonResponse({ detail: "x" }, 500))).resolves.toMatchObject({ state: "Ready", message: "Validated response received. Loaded model unknown." });
+  await expect(probe(() => { throw new TypeError("fetch failed"); })).resolves.toMatchObject({ state: "Ready", message: "Validated response received. Loaded model unknown." });
+
+  const requested: string[] = [];
+  await audiocpp.checkReadiness(async (input) => { requested.push(String(input)); return jsonResponse({ detail: "down" }, 500); });
+  expect(requested).toEqual(["/proxy/audiocpp/health"]);
 });

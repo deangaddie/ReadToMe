@@ -13,12 +13,12 @@ test.beforeEach(async ({ page, request }) => {
   await request.post("/proxy/llama/restart-service?service=mpnet-base-v2");
 });
 
-test("overview renders nine complete cards and commits reversed readiness independently", async ({ page, request }) => {
+test("overview renders five complete cards and commits reversed readiness independently", async ({ page, request }) => {
   await request.post("/proxy/llama/readiness-hold?service=llama");
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Service readiness" })).toBeVisible();
-  await expect(page.locator("[data-service-card]")) .toHaveCount(9);
-  await expect(page.locator("[data-service-link]")) .toHaveCount(9);
+  await expect(page.locator("[data-service-card]")) .toHaveCount(5);
+  await expect(page.locator("[data-service-link]")) .toHaveCount(5);
   for (const adapter of SERVICE_ADAPTERS) {
     const card = page.locator(`[data-service-card="${adapter.id}"]`);
     await expect(card).toContainText(adapter.name);
@@ -29,16 +29,16 @@ test("overview renders nine complete cards and commits reversed readiness indepe
     await expect(card.getByRole("link", { name: new RegExp(`Open ${adapter.name}`) })).toHaveAttribute("href", `/detail.html?service=${adapter.id}`);
   }
 
-  const fast = page.locator('[data-service-card="voxcpm2"]');
+  const fast = page.locator('[data-service-card="whisper"]');
   const slow = page.locator('[data-service-card="llama"]');
   await expect(fast.getByText("Ready", { exact: true })).toBeVisible();
   await expect(slow.getByText("Checking…", { exact: true })).toBeVisible();
   await request.post("/proxy/llama/readiness-release");
-  await expect(page.locator('[data-service-card] [data-state="Ready"]')).toHaveCount(9);
+  await expect(page.locator('[data-service-card] [data-state="Ready"]')).toHaveCount(5);
   const events = await page.request.get("/proxy/llama/readiness-events").then((response) => response.json()) as { starts: string[]; completions: string[] };
-  expect(new Set(events.starts).size).toBe(9);
+  expect(new Set(events.starts).size).toBe(5);
   expect(events.starts[0]).toBe("llama");
-  expect(events.completions[0]).toBe("voxcpm2");
+  expect(events.completions[0]).toBe("whisper");
   expect(events.completions.at(-1)).toBe("llama");
 });
 
@@ -88,12 +88,12 @@ test("theme preferences persist and valid or invalid detail links keep a safe se
   await expect(page.getByRole("heading", { name: "Llama router" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Functional test" })).toBeVisible();
   await expect(page.getByLabel("Prompt")).toBeVisible();
-  await expect(page.locator("[data-service-link]")).toHaveCount(9);
+  await expect(page.locator("[data-service-link]")).toHaveCount(5);
 
   await page.goto("/detail.html?service=not-a-service");
   await expect(page.getByRole("heading", { name: "Service not found" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Return to readiness overview" })).toBeVisible();
-  await expect(page.locator("[data-service-link]")).toHaveCount(9);
+  await expect(page.locator("[data-service-link]")).toHaveCount(5);
 });
 
 test("system theme, keyboard focus, and desktop or narrow layouts remain operator-usable", async ({ page }) => {

@@ -1,6 +1,7 @@
 import { ServiceFailure, type AudioResult, type FailureCategory, type InputSummaryItem, type ProgressEvent, type ServiceAdapter, type ServiceResult, type FormValues } from "./service-adapter";
 
-export type RunStatus = "idle" | "running" | "succeeded" | "failed" | "cancelled";
+/** "busy" is its own neutral outcome: the service was reached and is working, just not for this run. */
+export type RunStatus = "idle" | "running" | "succeeded" | "failed" | "busy" | "cancelled";
 export type RunOutcome = Exclude<RunStatus, "idle" | "running">;
 
 export interface ResourceOwner {
@@ -50,6 +51,7 @@ interface ActiveRun { readonly id: number; readonly controller: AbortController;
 
 function failurePresentation(adapter: ServiceAdapter, error: ServiceFailure): Pick<RunEntry, "title" | "message"> {
   if (error.category === "unavailable") return { title: "Unavailable", message: `The dashboard could not reach ${adapter.name} through the local proxy.` };
+  if (error.category === "busy") return { title: "Busy", message: error.message };
   if (error.category === "http") return { title: "HTTP failure", message: `HTTP ${error.status ?? "error"}${error.serviceMessage ? ` — ${error.serviceMessage}` : ""}` };
   return { title: "Protocol failure", message: error.message };
 }
@@ -121,9 +123,10 @@ export class DetailRunController {
       if (!this.isActive(active.id)) return "started";
       if (active.controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return "started";
       if (error instanceof ServiceFailure) {
-        if (this.claim(active.id, "failed")) {
+        const outcome = error.category === "busy" ? "busy" : "failed";
+        if (this.claim(active.id, outcome)) {
           const presentation = failurePresentation(this.adapter, error);
-          this.insert({ active, outcome: "failed", warnings: [], failureCategory: error.category, diagnostic: error.diagnostic, ...presentation });
+          this.insert({ active, outcome, warnings: [], failureCategory: error.category, diagnostic: error.diagnostic, ...presentation });
         }
       } else if (this.claim(active.id, "failed")) {
         console.error("Internal dashboard run error", error);

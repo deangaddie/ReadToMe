@@ -141,10 +141,15 @@ function advancedMarkup(fields: readonly FieldDefinition[]): string {
   }).join("")}</div>`;
 }
 
+function preparationNoun(adapter: FunctionalAdapter): string {
+  return adapter.preparationNoun ?? "model presets";
+}
+
 function workbenchMarkup(adapter: FunctionalAdapter): string {
   const common = adapter.fields.filter(({ group }) => group === "common").map(fieldMarkup).join("");
   const advanced = advancedMarkup(adapter.fields.filter(({ group }) => group === "advanced"));
-  const llamaPreparation = adapter.prepareForm === undefined ? "" : `<section class="model-preparation" aria-labelledby="model-preparation-heading"><h3 id="model-preparation-heading">Model presets</h3><p data-model-preparation-status aria-live="polite">Preparing model presets…</p><button class="secondary-button" type="button" data-model-preparation-retry hidden>Retry model preparation</button><details><summary>Model preparation diagnostic</summary><pre tabindex="0" data-model-preparation-diagnostic>No diagnostic yet.</pre></details></section>`;
+  const noun = preparationNoun(adapter);
+  const llamaPreparation = adapter.prepareForm === undefined ? "" : `<section class="model-preparation" aria-labelledby="model-preparation-heading"><h3 id="model-preparation-heading">${escapeHtml(`${noun[0]?.toUpperCase()}${noun.slice(1)}`)}</h3><p data-model-preparation-status aria-live="polite">Preparing ${escapeHtml(noun)}…</p><button class="secondary-button" type="button" data-model-preparation-retry hidden>Retry model preparation</button><details><summary>Model preparation diagnostic</summary><pre tabindex="0" data-model-preparation-diagnostic>No diagnostic yet.</pre></details></section>`;
   const liveOutput = adapter.resultKind === "llm" ? `<section class="live-output" data-live-output hidden aria-labelledby="live-output-heading"><h3 id="live-output-heading">Live completion</h3><h4>Thinking</h4><pre tabindex="0" data-testid="live-thinking"></pre><h4>Answer</h4><pre tabindex="0" data-testid="live-answer"></pre></section>` : "";
   return `<section class="functional-workbench" aria-labelledby="tests-heading"><div class="section-heading"><h2 id="tests-heading">Functional test</h2><p>Inputs and results remain in this page only.</p></div>${llamaPreparation}
     <form data-run-form novalidate><fieldset><legend>Common fields</legend>${common}</fieldset>
@@ -400,6 +405,21 @@ function renderWarnings(): void {
   }
 }
 
+/**
+ * Shows only the fields the selected model takes. A hidden control is also disabled, so it stays out of
+ * the tab order and the accessibility tree; its value is kept in case the operator switches back.
+ */
+function applyFieldVisibility(): void {
+  if (functionalAdapter === undefined || !functionalAdapter.fields.some(({ models }) => models !== undefined)) return;
+  const model = document.querySelector<HTMLSelectElement>("#field-model")?.value;
+  for (const field of functionalAdapter.fields) {
+    if (field.models === undefined) continue;
+    const shown = model !== undefined && field.models.includes(model);
+    element<HTMLElement>(`[data-field="${field.key}"]`).hidden = !shown;
+    element<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`#field-${field.key}`).disabled = !shown;
+  }
+}
+
 const modelPreparer = functionalAdapter?.prepareForm;
 const llamaPreparation = modelPreparer === undefined ? undefined : new LlamaPreparationController(modelPreparer);
 
@@ -409,10 +429,12 @@ function renderLlamaPreparation(snapshot: LlamaPreparationSnapshot): void {
   select.disabled = snapshot.status !== "prepared";
   select.innerHTML = snapshot.models.map((model) => `<option value="${escapeHtml(model.id)}"${model.runnable ? "" : " disabled"}>${escapeHtml(model.label)}</option>`).join("");
   if (snapshot.selectedModel !== undefined) select.value = snapshot.selectedModel;
+  applyFieldVisibility();
+  const noun = preparationNoun(functionalAdapter!);
   const status = element<HTMLElement>("[data-model-preparation-status]");
-  status.textContent = snapshot.status === "preparing" ? "Preparing model presets…"
-    : snapshot.status === "prepared" ? `${snapshot.models.length} model presets prepared.`
-    : snapshot.status === "failed" ? "Model preparation failed." : "Model presets are not prepared.";
+  status.textContent = snapshot.status === "preparing" ? `Preparing ${noun}…`
+    : snapshot.status === "prepared" ? `${snapshot.models.length} ${noun} prepared.`
+    : snapshot.status === "failed" ? "Model preparation failed." : `${noun[0]?.toUpperCase()}${noun.slice(1)} are not prepared.`;
   element<HTMLButtonElement>("[data-model-preparation-retry]").hidden = snapshot.status !== "failed";
   element<HTMLElement>("[data-model-preparation-diagnostic]").textContent = snapshot.diagnostic || "No diagnostic yet.";
   if (runController !== undefined) renderRun(runController.snapshot);
@@ -503,7 +525,10 @@ if (functionalAdapter !== undefined) {
     element<HTMLButtonElement>("[data-run-action]").focus();
   });
   if (llamaPreparation !== undefined) {
-    element<HTMLSelectElement>("#field-model").addEventListener("change", (event) => llamaPreparation.select((event.currentTarget as HTMLSelectElement).value));
+    element<HTMLSelectElement>("#field-model").addEventListener("change", (event) => {
+      llamaPreparation.select((event.currentTarget as HTMLSelectElement).value);
+      applyFieldVisibility();
+    });
     element<HTMLButtonElement>("[data-model-preparation-retry]").addEventListener("click", () => { void refreshLlamaPreparation(); });
     void refreshLlamaPreparation();
   }

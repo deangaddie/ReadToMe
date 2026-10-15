@@ -33,27 +33,27 @@ class ManualPollingClock implements PollingClock {
 
 test("controllers start concurrently, publish independently, retain observations, and skip overlaps", async () => {
   const llama = deferred<ReadinessObservation>();
-  const chatterbox = deferred<ReadinessObservation>();
+  const audiocpp = deferred<ReadinessObservation>();
   const retained = deferred<ReadinessObservation>();
   let llamaCalls = 0;
   const calls: string[] = [];
   const snapshots: Array<{ id: string; checking: boolean; state?: string }> = [];
   const controller = new ReadinessController(SERVICE_ADAPTERS.slice(0, 2), (adapter) => {
     calls.push(adapter.id);
-    if (adapter.id !== "llama") return chatterbox.promise;
+    if (adapter.id !== "llama") return audiocpp.promise;
     llamaCalls += 1;
     return llamaCalls === 1 ? llama.promise : retained.promise;
   }, (snapshot) => snapshots.push({ id: snapshot.adapter.id, checking: snapshot.checking, state: snapshot.observation?.state }));
 
   const first = controller.refreshAll();
-  expect(calls).toEqual(["llama", "chatterbox"]);
+  expect(calls).toEqual(["llama", "audiocpp"]);
   expect(controller.snapshot("llama")).toMatchObject({ checking: true });
   expect(controller.snapshot("llama").observation).toBeUndefined();
   await expect(controller.refreshService("llama")).resolves.toBe("skipped");
 
-  chatterbox.resolve(observation("Ready"));
+  audiocpp.resolve(observation("Ready"));
   await Promise.resolve();
-  expect(controller.snapshot("chatterbox")).toMatchObject({ checking: false, observation: { state: "Ready" } });
+  expect(controller.snapshot("audiocpp")).toMatchObject({ checking: false, observation: { state: "Ready" } });
   expect(controller.snapshot("llama")).toMatchObject({ checking: true });
 
   llama.resolve(observation("Unavailable"));

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const services = ["llama", "chatterbox", "chatterbox-turbo", "qwen3-tts", "qwen3-tts-base", "voxcpm2", "whisper", "minilm-l6", "mpnet-base-v2"] as const;
+const services = ["llama", "audiocpp", "whisper", "minilm-l6", "mpnet-base-v2"] as const;
 
 function failOnBrowserErrors(page: Page): void {
   page.on("pageerror", (error) => { throw error; });
@@ -19,7 +19,7 @@ test("the shell is served from IPv4 loopback", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Service readiness" })).toBeVisible();
 });
 
-test("all nine fixed prefixes rewrite to the target root without cross-matching", async ({ request }) => {
+test("all five fixed prefixes rewrite to the target root without cross-matching", async ({ request }) => {
   for (const service of services) {
     const response = await request.post(`/proxy/${service}/echo?marker=${service}`, { data: `body:${service}`, headers: { "content-type": "application/octet-stream" } });
     expect(response.ok()).toBeTruthy();
@@ -38,7 +38,7 @@ test("multipart uploads cross the proxy byte-for-byte", async ({ page }) => {
   const expected = Buffer.from("--read2me-boundary\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nhello proxy\r\n--read2me-boundary\r\nContent-Disposition: form-data; name=\"reference_audio\"; filename=\"voice.wav\"\r\nContent-Type: audio/wav\r\n\r\n\x00\x01\x02\x7f\x80\xff\r\n--read2me-boundary--\r\n", "binary");
   const result = await page.evaluate(async (base64Body) => {
     const body = Uint8Array.from(atob(base64Body), (character) => character.charCodeAt(0));
-    const response = await fetch("/proxy/chatterbox/echo", {
+    const response = await fetch("/proxy/audiocpp/echo", {
       method: "POST",
       headers: { "content-type": "multipart/form-data; boundary=read2me-boundary" },
       body
@@ -56,7 +56,7 @@ test("SSE, framed binary, and WAV responses retain bytes, media types, and heade
   expect(sse.headers()["x-fixture"]).toBe("sse");
   expect(await sse.body()).toEqual(Buffer.from("data: {\"part\":\"one\"}\n\ndata: [DONE]\n\n"));
 
-  const framed = await request.get("/proxy/voxcpm2/framed");
+  const framed = await request.get("/proxy/audiocpp/framed");
   expect(framed.headers()["content-type"]).toContain("application/octet-stream");
   expect(await framed.body()).toEqual(Buffer.from([0, 3, 0, 0, 0, 97, 98, 99, 1, 2, 0, 0, 0, 0, 255]));
 
@@ -72,7 +72,7 @@ test("SSE, framed binary, and WAV responses retain bytes, media types, and heade
 test("slow chunked responses complete through streaming backpressure", async ({ page }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const response = await fetch("/proxy/qwen3-tts/slow");
+    const response = await fetch("/proxy/audiocpp/slow");
     const reader = response.body?.getReader();
     if (!reader) throw new Error("Missing response stream");
     let bytes = 0;
@@ -93,8 +93,8 @@ test("browser abort closes the proxied upstream response", async ({ page }) => {
   await page.goto("/");
   const observed = await page.evaluate(async () => {
     const controller = new AbortController();
-    const observedPromise = fetch("/proxy/qwen3-tts-base/abort-status").then((item) => item.json()) as Promise<{ abortObserved: boolean }>;
-    const pending = fetch("/proxy/qwen3-tts-base/abort", { signal: controller.signal });
+    const observedPromise = fetch("/proxy/audiocpp/abort-status").then((item) => item.json()) as Promise<{ abortObserved: boolean }>;
+    const pending = fetch("/proxy/audiocpp/abort", { signal: controller.signal });
     const response = await pending;
     const reader = response.body?.getReader();
     await reader?.read();
