@@ -1,0 +1,326 @@
+diff --git a/dist/lib/ts.cjs b/dist/lib/ts.cjs
+index a5d4b8a11bb523e9970ec199a9f9047ef340aef5..be260825e83e764c761f5e24240c8937744dbfe3 100644
+--- a/dist/lib/ts.cjs
++++ b/dist/lib/ts.cjs
+@@ -1,7 +1,7 @@
+ 'use strict';
+ 
+ const refUtils_js = require('@redocly/openapi-core/lib/ref-utils.js');
+-const ts = require('typescript');
++const ts = require('@typescript/typescript6');
+ 
+ function _interopDefaultCompat (e) { return e && typeof e === 'object' && 'default' in e ? e.default : e; }
+ 
+diff --git a/dist/lib/ts.mjs b/dist/lib/ts.mjs
+index 8fa9e94fa4ecd8034e6c79912b27a5e3b067fa88..740fb258eaca2e6dc77aa201c5486e7648b354b9 100644
+--- a/dist/lib/ts.mjs
++++ b/dist/lib/ts.mjs
+@@ -1,5 +1,5 @@
+ import { parseRef } from '@redocly/openapi-core/lib/ref-utils.js';
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ 
+ const JS_PROPERTY_INDEX_RE = /^[A-Za-z_$][A-Za-z_$0-9]*$/;
+ const JS_ENUM_INVALID_CHARS_RE = /[^A-Za-z_$0-9]+(.)?/g;
+diff --git a/dist/lib/utils.cjs b/dist/lib/utils.cjs
+index 2e2eaa75ed3cfc59076c0850c958d947283cbd01..60e6d7a4300bc33620da382aecdc4e8d3ab1ccaf 100644
+--- a/dist/lib/utils.cjs
++++ b/dist/lib/utils.cjs
+@@ -3,7 +3,7 @@
+ const refUtils_js = require('@redocly/openapi-core/lib/ref-utils.js');
+ const c = require('ansi-colors');
+ const supportsColor = require('supports-color');
+-const ts = require('typescript');
++const ts = require('@typescript/typescript6');
+ const ts$1 = require('./ts.cjs');
+ 
+ function _interopDefaultCompat (e) { return e && typeof e === 'object' && 'default' in e ? e.default : e; }
+diff --git a/dist/lib/utils.mjs b/dist/lib/utils.mjs
+index c44709d4fa1e945a69259946f077bd222029cab8..98bb7e1d1c04b036aa4ac71105a70c59efc7a81f 100644
+--- a/dist/lib/utils.mjs
++++ b/dist/lib/utils.mjs
+@@ -2,7 +2,7 @@ import { parseRef, escapePointer } from '@redocly/openapi-core/lib/ref-utils.js'
+ import c from 'ansi-colors';
+ export { default as c } from 'ansi-colors';
+ import supportsColor from 'supports-color';
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { tsModifiers, tsPropertyIndex, tsLiteral } from './ts.mjs';
+ 
+ if (!supportsColor.stdout || supportsColor.stdout.hasBasic === false) {
+diff --git a/dist/transform/components-object.cjs b/dist/transform/components-object.cjs
+index 39868f9e7313b7d2bacf273bff2698677f5f66a2..3cec6f0a55d6b9878c61ee596f165c4e4d945c3e 100644
+--- a/dist/transform/components-object.cjs
++++ b/dist/transform/components-object.cjs
+@@ -4,7 +4,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
+ 
+ const node_perf_hooks = require('node:perf_hooks');
+ const changeCase = require('change-case');
+-const ts = require('typescript');
++const ts = require('@typescript/typescript6');
+ const ts$1 = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const headerObject = require('./header-object.cjs');
+diff --git a/dist/transform/components-object.mjs b/dist/transform/components-object.mjs
+index da850f3e2d46d4c259d6738db480272eaa4b5a36..8ec34f93d67f19caba37dddaebf7be0bbf6ae7bd 100644
+--- a/dist/transform/components-object.mjs
++++ b/dist/transform/components-object.mjs
+@@ -1,6 +1,6 @@
+ import { performance } from 'node:perf_hooks';
+ import * as changeCase from 'change-case';
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { tsModifiers, tsPropertyIndex, QUESTION_TOKEN, addJSDocComment, NEVER } from '../lib/ts.mjs';
+ import { getEntries, createRef, debug } from '../lib/utils.mjs';
+ import transformHeaderObject from './header-object.mjs';
+diff --git a/dist/transform/header-object.cjs b/dist/transform/header-object.cjs
+index 5b1bf99d719436d8cce5d084e9559249bdfb5730..7ed691d92c04bb9cd005ea65a3708f93cc7de1de 100644
+--- a/dist/transform/header-object.cjs
++++ b/dist/transform/header-object.cjs
+@@ -1,7 +1,7 @@
+ 'use strict';
+ 
+ const refUtils_js = require('@redocly/openapi-core/lib/ref-utils.js');
+-const ts = require('typescript');
++const ts = require('@typescript/typescript6');
+ const ts$1 = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const mediaTypeObject = require('./media-type-object.cjs');
+diff --git a/dist/transform/header-object.mjs b/dist/transform/header-object.mjs
+index cfd4204035cb2587bebb38d87bbf5aa34e5320bc..e5bff752d30c50aaeea5423259fbb1ec33b8aa3c 100644
+--- a/dist/transform/header-object.mjs
++++ b/dist/transform/header-object.mjs
+@@ -1,5 +1,5 @@
+ import { escapePointer } from '@redocly/openapi-core/lib/ref-utils.js';
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { tsModifiers, tsPropertyIndex, addJSDocComment, UNKNOWN } from '../lib/ts.mjs';
+ import { getEntries } from '../lib/utils.mjs';
+ import transformMediaTypeObject from './media-type-object.mjs';
+diff --git a/dist/transform/index.cjs b/dist/transform/index.cjs
+index c166fb9c8239552378e52f738e40b77b2d318bae..2e0843f25eb01ca0ce1bc0d5b99d6c437156f6e7 100644
+--- a/dist/transform/index.cjs
++++ b/dist/transform/index.cjs
+@@ -1,7 +1,7 @@
+ 'use strict';
+ 
+ const node_perf_hooks = require('node:perf_hooks');
+-const ts$1 = require('typescript');
++const ts$1 = require('@typescript/typescript6');
+ const ts = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const componentsObject = require('./components-object.cjs');
+diff --git a/dist/transform/index.mjs b/dist/transform/index.mjs
+index e08b18fb964a87157fb31c743d3b99d37e930670..32d9a8d058dd7e970277514f9fe96bc998b973e6 100644
+--- a/dist/transform/index.mjs
++++ b/dist/transform/index.mjs
+@@ -1,5 +1,5 @@
+ import { performance } from 'node:perf_hooks';
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { stringToAST, tsModifiers, tsRecord, NEVER, STRING } from '../lib/ts.mjs';
+ import { debug, createRef } from '../lib/utils.mjs';
+ import transformComponentsObject from './components-object.mjs';
+diff --git a/dist/transform/operation-object.cjs b/dist/transform/operation-object.cjs
+index bfd4a9f735d1cd171760b30bad276a0f9b2b341c..afc7d1dd455c3f114691aa2943f4baef6d68f901 100644
+--- a/dist/transform/operation-object.cjs
++++ b/dist/transform/operation-object.cjs
+@@ -2,7 +2,7 @@
+ 
+ Object.defineProperty(exports, '__esModule', { value: true });
+ 
+-const ts$1 = require('typescript');
++const ts$1 = require('@typescript/typescript6');
+ const ts = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const parametersArray = require('./parameters-array.cjs');
+diff --git a/dist/transform/operation-object.mjs b/dist/transform/operation-object.mjs
+index b141847a7c8958315768315fe6617bcfb840a33c..37b44f70ddfe160643c60e122e5044d780682ab9 100644
+--- a/dist/transform/operation-object.mjs
++++ b/dist/transform/operation-object.mjs
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { oapiRef, tsModifiers, tsPropertyIndex, QUESTION_TOKEN, addJSDocComment, NEVER } from '../lib/ts.mjs';
+ import { createRef } from '../lib/utils.mjs';
+ import { transformParametersArray } from './parameters-array.mjs';
+diff --git a/dist/transform/parameters-array.cjs b/dist/transform/parameters-array.cjs
+index 32f7bdcb20823b019bab8da72869190314a69f3c..80249f9c7097e4f99110fa73426ba3023a470ce7 100644
+--- a/dist/transform/parameters-array.cjs
++++ b/dist/transform/parameters-array.cjs
+@@ -1,6 +1,6 @@
+ 'use strict';
+ 
+-const ts$1 = require('typescript');
++const ts$1 = require('@typescript/typescript6');
+ const ts = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const parameterObject = require('./parameter-object.cjs');
+diff --git a/dist/transform/parameters-array.mjs b/dist/transform/parameters-array.mjs
+index dc20775ed4b8c4ca4e57ecd4a20b47ca4fcacfad..072dc1b6380c60114d535e13269072425e649c15 100644
+--- a/dist/transform/parameters-array.mjs
++++ b/dist/transform/parameters-array.mjs
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { oapiRef, tsModifiers, tsPropertyIndex, addJSDocComment, QUESTION_TOKEN, NEVER } from '../lib/ts.mjs';
+ import { createRef } from '../lib/utils.mjs';
+ import transformParameterObject from './parameter-object.mjs';
+diff --git a/dist/transform/path-item-object.cjs b/dist/transform/path-item-object.cjs
+index 574ffcd6a337418e7c4f9b2acabe0bbdd275dc92..c5be401de58ded21d0371118b19be54f9fe47e9f 100644
+--- a/dist/transform/path-item-object.cjs
++++ b/dist/transform/path-item-object.cjs
+@@ -1,6 +1,6 @@
+ 'use strict';
+ 
+-const ts = require('typescript');
++const ts = require('@typescript/typescript6');
+ const ts$1 = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const operationObject = require('./operation-object.cjs');
+diff --git a/dist/transform/path-item-object.mjs b/dist/transform/path-item-object.mjs
+index 1c449b58b9b815551a925965a1298b5d2b7d78ca..6b4c25aa6e6149e2849a1f68cca2dbbab1c48fc6 100644
+--- a/dist/transform/path-item-object.mjs
++++ b/dist/transform/path-item-object.mjs
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { tsModifiers, tsPropertyIndex, QUESTION_TOKEN, NEVER, oapiRef, addJSDocComment } from '../lib/ts.mjs';
+ import { createRef } from '../lib/utils.mjs';
+ import transformOperationObject, { injectOperationObject } from './operation-object.mjs';
+diff --git a/dist/transform/paths-object.cjs b/dist/transform/paths-object.cjs
+index 048e1116f1a3692ee71750fbf813ba13f08be864..7f9f695e93febe9bde86a2dee90cac3938e93a61 100644
+--- a/dist/transform/paths-object.cjs
++++ b/dist/transform/paths-object.cjs
+@@ -1,7 +1,7 @@
+ 'use strict';
+ 
+ const node_perf_hooks = require('node:perf_hooks');
+-const ts = require('typescript');
++const ts = require('@typescript/typescript6');
+ const ts$1 = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const pathItemObject = require('./path-item-object.cjs');
+diff --git a/dist/transform/paths-object.mjs b/dist/transform/paths-object.mjs
+index 5e898c380ffd47932b7694b249cba15b5838dde7..7fb877e5a910e14218dd9d51b22d059aeeb2c86a 100644
+--- a/dist/transform/paths-object.mjs
++++ b/dist/transform/paths-object.mjs
+@@ -1,5 +1,5 @@
+ import { performance } from 'node:perf_hooks';
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { tsModifiers, tsPropertyIndex, oapiRef, addJSDocComment, stringToAST } from '../lib/ts.mjs';
+ import { getEntries, createRef, debug } from '../lib/utils.mjs';
+ import transformPathItemObject from './path-item-object.mjs';
+diff --git a/dist/transform/request-body-object.cjs b/dist/transform/request-body-object.cjs
+index 75bdd3c9873ca9843c32786afa31dc952d3ba8b4..243f5d0b83bbd661a2df01741d35a4891c616c81 100644
+--- a/dist/transform/request-body-object.cjs
++++ b/dist/transform/request-body-object.cjs
+@@ -1,6 +1,6 @@
+ 'use strict';
+ 
+-const ts = require('typescript');
++const ts = require('@typescript/typescript6');
+ const ts$1 = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const mediaTypeObject = require('./media-type-object.cjs');
+diff --git a/dist/transform/request-body-object.mjs b/dist/transform/request-body-object.mjs
+index 0f6583f03382c26a842d1b70d93f3ec374d97696..d8e60c2d3a3bbadb3f37db79e7ab39f8a2fa1d05 100644
+--- a/dist/transform/request-body-object.mjs
++++ b/dist/transform/request-body-object.mjs
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { tsModifiers, tsPropertyIndex, addJSDocComment, QUESTION_TOKEN, NEVER } from '../lib/ts.mjs';
+ import { getEntries, createRef } from '../lib/utils.mjs';
+ import transformMediaTypeObject from './media-type-object.mjs';
+diff --git a/dist/transform/response-object.cjs b/dist/transform/response-object.cjs
+index 0f9e43485af6e3bbbd9dc248ad8805d48f4355a7..557fce6dd6fb9873a22295a6adba27706c834229 100644
+--- a/dist/transform/response-object.cjs
++++ b/dist/transform/response-object.cjs
+@@ -1,6 +1,6 @@
+ 'use strict';
+ 
+-const ts$1 = require('typescript');
++const ts$1 = require('@typescript/typescript6');
+ const ts = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const headerObject = require('./header-object.cjs');
+diff --git a/dist/transform/response-object.mjs b/dist/transform/response-object.mjs
+index 000851adc267f8e98338ffaa954a0aece28b9a47..d315538508f797fe0d8acb598796e33814e14de5 100644
+--- a/dist/transform/response-object.mjs
++++ b/dist/transform/response-object.mjs
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { QUESTION_TOKEN, oapiRef, tsModifiers, tsPropertyIndex, addJSDocComment, STRING, UNKNOWN, NEVER } from '../lib/ts.mjs';
+ import { getEntries, createRef } from '../lib/utils.mjs';
+ import transformHeaderObject from './header-object.mjs';
+diff --git a/dist/transform/responses-object.cjs b/dist/transform/responses-object.cjs
+index 7d23b9bc8089d7b826a836a1f55feb3c3d1c9d6d..819c8f27de9c197ba1eb5b558d6f6621d69a460e 100644
+--- a/dist/transform/responses-object.cjs
++++ b/dist/transform/responses-object.cjs
+@@ -1,6 +1,6 @@
+ 'use strict';
+ 
+-const ts$1 = require('typescript');
++const ts$1 = require('@typescript/typescript6');
+ const ts = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const responseObject = require('./response-object.cjs');
+diff --git a/dist/transform/responses-object.mjs b/dist/transform/responses-object.mjs
+index dafb268bbdc546dda686c1a6aa4f1797a7a3f983..3290138cfc7aeb9843205fa4b3f803c4a76f7b9c 100644
+--- a/dist/transform/responses-object.mjs
++++ b/dist/transform/responses-object.mjs
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { oapiRef, tsModifiers, tsPropertyIndex, addJSDocComment, NEVER } from '../lib/ts.mjs';
+ import { getEntries, createRef } from '../lib/utils.mjs';
+ import transformResponseObject from './response-object.mjs';
+diff --git a/dist/transform/schema-object.cjs b/dist/transform/schema-object.cjs
+index 7142e84a60d4856d42179e8d6dc80ec78ea6e881..f9da6c234942fe35f25d22bb33cb28a34ed54892 100644
+--- a/dist/transform/schema-object.cjs
++++ b/dist/transform/schema-object.cjs
+@@ -3,7 +3,7 @@
+ Object.defineProperty(exports, '__esModule', { value: true });
+ 
+ const refUtils_js = require('@redocly/openapi-core/lib/ref-utils.js');
+-const ts$1 = require('typescript');
++const ts$1 = require('@typescript/typescript6');
+ const ts = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ 
+diff --git a/dist/transform/schema-object.mjs b/dist/transform/schema-object.mjs
+index dc20a5c14b1320364a71a254b79415bd214f4416..64752b5ee28e1edbeb7de95dca1b7732dc858be2 100644
+--- a/dist/transform/schema-object.mjs
++++ b/dist/transform/schema-object.mjs
+@@ -1,5 +1,5 @@
+ import { parseRef } from '@redocly/openapi-core/lib/ref-utils.js';
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { NEVER, UNKNOWN, oapiRef, tsLiteral, tsEnum, tsUnion, NULL, tsArrayLiteralExpression, tsIntersection, tsIsPrimitive, tsRecord, STRING, tsNullable, UNDEFINED, NUMBER, BOOLEAN, QUESTION_TOKEN, tsModifiers, tsPropertyIndex, addJSDocComment, tsWithRequired, tsOmit } from '../lib/ts.mjs';
+ import { createRef, createDiscriminatorProperty, getEntries } from '../lib/utils.mjs';
+ 
+diff --git a/dist/transform/webhooks-object.cjs b/dist/transform/webhooks-object.cjs
+index 9c743c1141ef84578b7182f3c1710480f2086f65..7a5589c4dbec3911189622a9c0f932d1db7b439b 100644
+--- a/dist/transform/webhooks-object.cjs
++++ b/dist/transform/webhooks-object.cjs
+@@ -1,6 +1,6 @@
+ 'use strict';
+ 
+-const ts = require('typescript');
++const ts = require('@typescript/typescript6');
+ const ts$1 = require('../lib/ts.cjs');
+ const utils = require('../lib/utils.cjs');
+ const pathItemObject = require('./path-item-object.cjs');
+diff --git a/dist/transform/webhooks-object.mjs b/dist/transform/webhooks-object.mjs
+index f48a576635e02120fd0b66ef68d142e671f62dc2..02d3c4761b91a6e2087b55587e944a50d7c0bdf0 100644
+--- a/dist/transform/webhooks-object.mjs
++++ b/dist/transform/webhooks-object.mjs
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from '@typescript/typescript6';
+ import { tsModifiers, tsPropertyIndex } from '../lib/ts.mjs';
+ import { getEntries, createRef } from '../lib/utils.mjs';
+ import transformPathItemObject from './path-item-object.mjs';
