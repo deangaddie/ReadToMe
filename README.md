@@ -6,7 +6,7 @@ Converts text/epub book files into audiobooks via AI-powered character attributi
 
 - **.NET 10 SDK** — <https://dotnet.microsoft.com/download/dotnet/10.0>
 - **Docker** (with NVIDIA GPU support) — for AI inference services
-- **ffmpeg** — for audio normalisation and m4b assembly (path configured in app settings)
+- **ffmpeg** — for audio normalisation and m4b assembly (on `PATH`, or its path set on Settings → Audio processing)
 - **RTX 3070 or similar** — 8 GB VRAM minimum for GPU containers
 - **32 GB RAM**, with the Docker WSL2 VM set to `memory=16GB` in `.wslconfig` — llama keeps the offloaded model layers locked in the VM (see [Infra/README.md](Infra/README.md#host--wsl-memory))
 
@@ -59,35 +59,37 @@ See [Infra/README.md](Infra/README.md) for full service details, ports, and API 
 
 1. Import epub/text → parsed into Volume/Part/Chapter/Paragraph/ParagraphItem hierarchy
 2. LLM (`read2me-llama`) attributes each dialog item to a Character
-3. TTS service synthesises audio per ParagraphItem using the Character's voice + the item's optional voice instructions (followed by Breeze)
+3. TTS service synthesises audio per ParagraphItem using the Character's voice + the item's optional delivery cue (followed by Breeze)
 4. Whisper transcribes generated audio; WER + semantic similarity verify accuracy
 5. Verified items assembled into `.m4b` with chapter markers, cover art, and metadata
 
 ## First-time setup (in the app)
 
-After `dotnet run`, open <https://localhost:5001>. Configure the AI services from the left nav **before** processing a book — each settings page stores one or more named **configs** in `app.db`, with one marked **active**. Start the matching Docker container first (see [Infrastructure services](#infrastructure-services)).
+After `dotnet run`, open <https://localhost:5001>. Configure the AI services under **Settings** (bottom of the left rail) **before** processing a book. Each service page stores one or more named **configs** in `app.db`, with one marked **active**. Start the matching Docker container first, from the **AI services** page or with `docker compose` (see [Infrastructure services](#infrastructure-services)).
 
-| Nav page | Configure | Needs container |
-| -------- | --------- | --------------- |
-| **LLM** | LLM server URL + model preset for character attribution | `read2me-llama` |
-| **LLM Prompts** | Prompt templates for extraction / attribution | — |
-| **Transcription** | Whisper endpoint for accuracy scoring | `read2me-whisper` |
-| **Semantic Similarity** | Embedding endpoint + pass threshold for Semantic Rescue | `read2me-minilm-l6` / `read2me-mpnet-base-v2` |
-| **Voice Design** | Service for generating voices from a text description (Breeze / VoxCPM2 / Qwen3) | `read2me-audiocpp` |
+| Settings page | Configure | Needs container |
+| ------------- | --------- | --------------- |
+| **LLM** | LLM server URL + model preset for character attribution, and the attribution chain | `read2me-llama` |
+| **Prompts** | Prompt templates for extraction / attribution | — |
 | **Paragraph TTS** | TTS service(s) used to synthesise paragraph audio (Breeze / VoxCPM2 / Chatterbox / Qwen3 Base) | `read2me-audiocpp` |
-| **Audio Processing** | WER threshold, retry attempts, pause durations, sentence chunking, post-processing (consonant softening, silence trim), **ffmpeg path** | — |
+| **Voice design** | Service for generating voices from a text description (Breeze / VoxCPM2 / Qwen3) | `read2me-audiocpp` |
+| **Transcription** | Whisper endpoint for accuracy scoring | `read2me-whisper` |
+| **Similarity** | Embedding endpoint + pass threshold for Semantic Rescue | `read2me-minilm-l6` / `read2me-mpnet-base-v2` |
+| **Audio processing** | WER threshold, retry attempts, pause durations, sentence chunking, post-processing (consonant softening, silence trim), **ffmpeg path** | — |
+| **AI services** | Live status of each service's container, with start / restart / stop | — |
+| **Themes** | Colour themes | — |
 
-Set the **ffmpeg path** on the Audio Processing page — audio normalisation and m4b assembly fail without it.
+Audio processing is one settings record, not a list of configs. Leave its **ffmpeg path** blank to use `ffmpeg` from `PATH`; set it (and press **Test**) when ffmpeg is not on `PATH`.
 
 ## Using the app
 
-1. **Create a project** — Home → add a project, then import an `.epub` or `.txt`. The book is parsed into the Volume → Part → Chapter → Paragraph → ParagraphItem hierarchy and shown on the project's **Book** tab.
-2. **Attribute characters** — on the **Book** tab, switch the view mode to **Split: Attribution**. Select Character paragraphs (per node or whole chapters) and queue them. The Character Queue drains in the background, asking the LLM who speaks each line. Review/correct assignments on the **Characters** tab; add aliases there so alternate names resolve to one Character, and use **Discover characters** to build the roster up front.
+1. **Create a project** — on **Projects**, click **New project**, enter the book title, project title and author, and pick an `.epub` or `.txt`. On the project's **Overview**, the Import step's **Read book** parses it into the Volume → Part → Chapter → Paragraph → ParagraphItem hierarchy, shown on the **Book** tab.
+2. **Attribute characters** — on the **Book** tab, switch to **Speakers** mode. Select Character paragraphs and click **Attribute** in the selection bar. The Character Queue drains in the background, asking the LLM who speaks each line. Review/correct assignments on the **Cast** tab; add aliases there so alternate names resolve to one Character, and use **Discover** to build the roster up front.
 
-   Every speaker is set from the same picker, on the item chip or the paragraph chip. The narrator is pinned at the top of that list, so a line the splitter misread as narration can be given to a character — and a narrative aside it mistook for dialog can be handed back to the narrator. Assigning to the narrator also stops the queue re-asking that item; clearing a speaker puts it back in the queue as unattributed dialog. Arm **Bulk assign** in the dock bar to apply one pick across a whole selection; narration is never swept up by it.
-3. **Give each Character a voice** — on the **Characters** tab, add a voice per Character: upload a reference clip (up to 30 s; under 15 s clones best), or design one from a text description (the active Voice Design provider). Optionally add **Voice Rules** to switch voice over a position range. The batch buttons generate prompts/audio for all Characters at once. If a character in the book narrates it, link them to the narrator there — narration then reads in that character's voice while staying a distinct speaker from their dialog.
-4. **Generate audio** — back on the **Book** tab, switch to **Split: Audio**. Select items needing audio and queue them. Each item is synthesised, loudness-normalised, transcribed by Whisper, and verified (WER, with Semantic Rescue as fallback). The status bar streams per-item progress; failures surface as review items on the node badges.
-5. **Assemble the audiobook** — once every non-Pause item has audio, click **Assemble**. The app concatenates all clips (with per-kind pauses), adds chapter markers and cover art, and writes `{projectFolder}/output/{BookTitle}.m4b`.
+   Every speaker is set from the same picker, on the item chip or the paragraph chip. The narrator is pinned at the top of that list, so a line the splitter misread as narration can be given to a character — and a narrative aside it mistook for dialog can be handed back to the narrator. Assigning to the narrator also stops the queue re-asking that item; clearing a speaker puts it back in the queue as unattributed dialog. Use **Bulk assign speaker** in the selection bar to apply one pick across a whole selection; narration is never swept up by it.
+3. **Give each Character a voice** — on the **Cast** tab, add a voice per Character: upload a reference clip (up to 30 s; under 15 s clones best), or design one from a text description (the active Voice design provider). Optionally add **Voice rules** to switch voice over a position range. **Generate voice prompts** and **Generate audio** in the Cast toolbar work on every Character at once. If a character in the book narrates it, link them to the narrator there — narration then reads in that character's voice while staying a distinct speaker from their dialog.
+4. **Generate audio** — back on the **Book** tab, switch to **Audio** mode. Select items (or **Select needs audio**) and click **Generate audio** in the selection bar. Each item is synthesised, loudness-normalised, transcribed by Whisper, and verified (WER, with Semantic Rescue as fallback). The activity centre streams per-item progress; failures surface as review items on the node badges.
+5. **Assemble the audiobook** — on the **Export** tab, click **Assemble**. The app concatenates all clips (with per-kind pauses), adds chapter markers and cover art, and writes `{projectFolder}/output/{BookTitle}.m4b`. While some items still lack audio the button reads **Assemble…** and, after a confirm, builds a partial `{BookTitle}_partial_{yyyyMMdd}.m4b` instead.
 
 ## Driving it without the UI
 
@@ -103,7 +105,7 @@ The four long operations (attribution, audio, voice batch, assembly) return `202
 | Service              | Container                  | Use for                                                                                                                             |
 | -------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **llama.cpp**        | `read2me-llama`            | Character extraction and dialog attribution. Run this during the script-processing stage.                                           |
-| **audio.cpp**        | `read2me-audiocpp`         | Every TTS model, one loaded at a time: voice cloning for paragraph audio (Breeze TTS 2 — follows voice instructions — VoxCPM2, Chatterbox, Qwen3 Base) and voice design from a text description (Breeze, VoxCPM2, Qwen3 VoiceDesign). Breeze is research/non-commercial: personal use only. |
+| **audio.cpp**        | `read2me-audiocpp`         | Every TTS model, one loaded at a time: voice cloning for paragraph audio (Breeze TTS 2 — follows delivery cues — VoxCPM2, Chatterbox, Qwen3 Base) and voice design from a text description (Breeze, VoxCPM2, Qwen3 VoiceDesign). Breeze is research/non-commercial: personal use only. |
 | **Whisper.CPP**      | `read2me-whisper`          | CPU-only transcription of generated audio for accuracy scoring (WER) and word-level alignment. Run alongside the active TTS container. |
 | **MiniLM-L6**        | `read2me-minilm-l6`        | Semantic similarity check — rescues clips that fail WER but are semantically correct. CPU-only.                                     |
 | **MPNet-Base-v2**    | `read2me-mpnet-base-v2`    | Same as MiniLM-L6 but a larger model with a different score scale. CPU-only.                                                        |
@@ -123,7 +125,8 @@ Stored in the workspace root (`{Workspace.FolderPath}/app.db`). Shared across al
 - Voice design service configs
 - Transcription service configs (Whisper)
 - Semantic similarity service configs
-- Audio processing settings (WER threshold, retry attempts, pause durations, sentence chunking)
+- Audio processing settings (WER threshold, retry attempts, pause durations, sentence chunking, post-processing steps, ffmpeg path)
+- The attribution chain and the active config per service
 - Text preprocessing steps (substitutions, sentence-case rules)
 - App theme / UI settings
 

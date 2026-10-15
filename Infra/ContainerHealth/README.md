@@ -6,6 +6,13 @@ nine fixed proxy routes, and keeps inputs, diagnostics, and results in page memo
 reload discards them; there is no persistence, authentication, LAN hosting, or Docker
 control surface.
 
+> **Out of date.** The dashboard predates ADR 0010 (last code change 2026-07-16). Of its nine
+> targets only `llama` (:8080), `whisper` (:9000), `minilm-l6` (:8200) and `mpnet-base-v2`
+> (:8201) still exist. The five native TTS targets — `chatterbox` (:8000), `chatterbox-turbo`
+> (:8001), `qwen3-tts` (:8100), `qwen3-tts-base` (:8101) and `voxcpm2` (:8003) — were retired
+> in favour of `read2me-audiocpp` (:8004), which the dashboard does not cover yet. The TTS
+> results in [ACCEPTANCE.md](ACCEPTANCE.md) are historical.
+
 ## Set up and start
 
 Use Node 24 LTS `>=24.18.0 <25` and npm `>=11.16.0 <12`. Playwright Chromium is an explicit
@@ -18,8 +25,8 @@ npx playwright install chromium
 setup-dashboard.cmd
 ```
 
-`setup-dashboard.cmd` validates versions, repeats the frozen `npm ci`, and runs the complete
-deterministic gate.
+`setup-dashboard.cmd` validates versions, repeats the frozen `npm ci`, installs Playwright
+Chromium, and runs the complete deterministic gate.
 
 Start the long-running console with:
 
