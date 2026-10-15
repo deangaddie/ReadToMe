@@ -176,28 +176,15 @@ namespace Read2Me.Services.Books
             if (paragraphId == null) return NoAnchor(NodeKind.ParagraphItem, anchorItemId);
 
             var idx = siblings.FindIndex(i => i.Id == anchorItemId);
-            var (prev, next) = Beside(siblings, idx, i => i.Order,
-                position == InsertPosition.Before ? Placement.Before : Placement.After);
-            return PlanItem(paragraphId.Value, ParagraphItemKinds.IsPause(siblings[idx].ItemType), prev, next, text);
-        }
+            // Never beside a pause: Speech there is a structure the readers assume cannot exist.
+            if (ParagraphItemKinds.IsPause(siblings[idx].ItemType)) return PauseHoldsNoSpeech;
 
-        // ---------------------------------------------------------------
-        // InsertedKind: the kind of node an insert creates. Before/After make a
-        // sibling at the anchor's own level, AtStart/AtEnd a child one level down.
-        // Null for an item anchor: Before/After an item is the item insert, and
-        // an item has no children.
-        // ---------------------------------------------------------------
-        public static NodeKind? InsertedKind(NodeKind anchorKind, Placement placement)
-        {
-            if (anchorKind == NodeKind.ParagraphItem) return null;
-            var sibling = placement is Placement.Before or Placement.After;
-            return anchorKind switch
-            {
-                NodeKind.Volume => sibling ? NodeKind.Volume : NodeKind.Part,
-                NodeKind.Part => sibling ? NodeKind.Part : NodeKind.Chapter,
-                NodeKind.Chapter => sibling ? NodeKind.Chapter : NodeKind.Paragraph,
-                _ => sibling ? NodeKind.Paragraph : NodeKind.ParagraphItem,
-            };
+            var placement = position == InsertPosition.Before ? Placement.Before : Placement.After;
+            var allowed = StructureRules.For(StructureAnchor.ParagraphItem).Allows(placement)!;
+            if (RefuseBlank(allowed, text) is { } blank) return blank;
+
+            var (prev, next) = Beside(siblings, idx, i => i.Order, placement);
+            return PlanItem(paragraphId.Value, prev, next, text!);
         }
 
         // ---------------------------------------------------------------
@@ -205,40 +192,38 @@ namespace Read2Me.Services.Books
         // rows are added — the order key goes between the neighbours, so no
         // existing node is reordered, reparented or removed.
         //
-        // A new Volume, Part or Chapter is born empty, its title optional: a
-        // blank one leaves it untitled. A new Paragraph is born holding its
-        // first Speech item, unattributed: an empty Paragraph reads as a pause,
-        // and a new item has no speaker yet. A Speech item at a paragraph's
-        // start or end follows the Item insertion rules, first or last inside it.
+        // What the anchor allows, what each placement creates and whether it needs
+        // text are lookups in the Structure rules. A new Volume, Part or Chapter is
+        // born empty, its title optional: a blank one leaves it untitled. A new
+        // Paragraph is born holding its first Speech item, unattributed: a new item
+        // has no speaker yet. A Speech item at a paragraph's start or end follows the
+        // Item insertion rules, first or last inside it.
         //
-        // Refused: a combination that creates no node (Validation), an anchor the
-        // Book does not hold as that kind (NotFound), blank paragraph text, and
-        // the item rules' refusals.
+        // Refused: any item anchor (its inserts are InsertParagraphItem's), an anchor
+        // the Book does not hold as that kind (NotFound), a placement the anchor's
+        // rule does not allow, and blank text where the rule requires it (Validation).
         // ---------------------------------------------------------------
         public HierarchyPlan PlanInsertNode(
             NodeKind anchorKind, Guid anchorId, Placement placement, string? title, string? text)
         {
-            if (InsertedKind(anchorKind, placement) is not { } kind)
+            if (anchorKind == NodeKind.ParagraphItem)
                 return new HierarchyPlan.Refused(BookMutationRejection.Validation,
                     "Nothing can be inserted against an item this way — use InsertParagraphItem beside it.");
             if (!Holds(anchorKind, anchorId)) return NoAnchor(anchorKind, anchorId);
 
-            var (parentId, prev, next) = (anchorKind, kind == anchorKind) switch
-            {
-                (NodeKind.Volume, true) => VolumeSlot(anchorId, placement),
-                (NodeKind.Volume, false) => SlotInside(anchorId, Parts, p => p.Order, placement),
-                (NodeKind.Part, true) => SlotBeside(Parts, anchorId, p => p.Id, p => p.Order, placement),
-                (NodeKind.Part, false) => SlotInside(anchorId, Chapters, c => c.Order, placement),
-                (NodeKind.Chapter, true) => SlotBeside(Chapters, anchorId, c => c.Id, c => c.Order, placement),
-                (NodeKind.Chapter, false) => SlotInside(anchorId, Paragraphs, p => p.Order, placement),
-                (_, true) => SlotBeside(Paragraphs, anchorId, p => p.Id, p => p.Order, placement),
-                (_, false) => SlotInside(anchorId, Items, i => i.Order, placement),
-            };
+            var anchor = AnchorOf(anchorKind, anchorId);
+            if (StructureRules.For(anchor).Allows(placement) is not { } allowed)
+                return NotAllowed(anchor, placement);
+            if (RefuseBlank(allowed, text) is { } blank) return blank;
 
-            // The Item insertion rules, anchored on the paragraph rather than an item, so a
-            // leading or trailing pause item does not block it — but a pause paragraph does.
-            if (kind == NodeKind.ParagraphItem)
-                return PlanItem(parentId, IsPauseParagraph(parentId), prev, next, text);
+            var kind = allowed.Creates;
+            var (parentId, prev, next) = kind == anchorKind
+                ? SlotBeside(anchorKind, anchorId, placement)
+                : SlotInside(anchorKind, anchorId, placement);
+
+            // Anchored on the paragraph rather than an item, so a leading or trailing pause
+            // item does not block it.
+            if (kind == NodeKind.ParagraphItem) return PlanItem(parentId, prev, next, text!);
 
             var order = OrderHelper.GetBetween(prev, next);
             var newTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
@@ -254,48 +239,65 @@ namespace Read2Me.Services.Books
                     var chapter = new Chapter { Id = Guid.NewGuid(), PartId = parentId, Title = newTitle, Order = order };
                     return Created([chapter], new CreatedNode(NodeKind.Chapter, chapter.Id, NodeKind.Part, parentId));
                 default:
-                    if (string.IsNullOrWhiteSpace(text))
-                        return new HierarchyPlan.Refused(BookMutationRejection.Validation,
-                            "A new paragraph needs text — an empty paragraph reads as a pause.");
                     var paragraph = new Paragraph { Id = Guid.NewGuid(), ChapterId = parentId, Order = order };
-                    var first = UnattributedSpeech(paragraph.Id, OrderHelper.GetBetween(null, null), text.Trim());
+                    var first = UnattributedSpeech(paragraph.Id, OrderHelper.GetBetween(null, null), text!.Trim());
                     return Created([paragraph, first], new CreatedNode(NodeKind.Paragraph, paragraph.Id, NodeKind.Chapter, parentId));
             }
         }
 
-        private const int MinimumVolumes = 1;
-
         // ---------------------------------------------------------------
         // PlanDeleteVolume: remove one Volume and, by cascade, all it holds.
-        // A book always keeps one Volume, so there is always a node to insert
-        // from: deleting the last one is refused.
+        // A book keeps the Structure rules' minimum count of Volumes, so there is
+        // always a node to insert from: deleting down past it is refused.
         // ---------------------------------------------------------------
         public HierarchyPlan PlanDeleteVolume(Guid volumeId)
         {
             if (Volumes.Find(v => v.Id == volumeId) is not { } volume)
                 return new HierarchyPlan.Refused(BookMutationRejection.NotFound, $"No volume {volumeId} to remove.");
-            if (Volumes.Count <= MinimumVolumes)
+            if (Volumes.Count <= StructureRules.For(StructureAnchor.Volume).MinimumCount)
                 return new HierarchyPlan.Refused(BookMutationRejection.Validation, "A book must keep at least one volume.");
             return new HierarchyPlan.Planned(new HierarchyMutation(ToAdd: [], ToDelete: [volume], ToUpdate: []), Created: null);
         }
 
-        // The Item insertion rules, written once for both item routes. The new item stays within
-        // paragraphId, between prev and next. Never beside or inside a pause: Speech there is a
-        // structure the readers assume cannot exist. It needs text, and is born unattributed — no
-        // CharacterId, no VoiceInstructions, no AudioFileName — because the anchor held two
-        // speakers by construction, and an inherited speaker would be a confident wrong answer that
-        // never reaches the attribution queue.
-        private static HierarchyPlan PlanItem(Guid paragraphId, bool atPause, string? prev, string? next, string? text)
+        // The new item of the Item insertion rules, written once for both item routes; the anchor
+        // and the text are already checked. It stays within paragraphId, between prev and next, and
+        // is born unattributed — no CharacterId, no VoiceInstructions, no AudioFileName — because
+        // the anchor held two speakers by construction, and an inherited speaker would be a
+        // confident wrong answer that never reaches the attribution queue.
+        private static HierarchyPlan PlanItem(Guid paragraphId, string? prev, string? next, string text)
         {
-            if (atPause)
-                return new HierarchyPlan.Refused(BookMutationRejection.Validation,
-                    "A pause holds no speech — anchor on a speech item, or insert a paragraph before or after the pause.");
-            if (string.IsNullOrWhiteSpace(text))
-                return new HierarchyPlan.Refused(BookMutationRejection.Validation,
-                    "An inserted item needs text — whitespace alone is not an item.");
-
             var item = UnattributedSpeech(paragraphId, OrderHelper.GetBetween(prev, next), text.Trim());
             return Created([item], new CreatedNode(NodeKind.ParagraphItem, item.Id, NodeKind.Paragraph, paragraphId));
+        }
+
+        // The Structure rules entry a held anchor plans from: a pause paragraph has its own.
+        private StructureAnchor AnchorOf(NodeKind kind, Guid anchorId) => kind switch
+        {
+            NodeKind.Volume => StructureAnchor.Volume,
+            NodeKind.Part => StructureAnchor.Part,
+            NodeKind.Chapter => StructureAnchor.Chapter,
+            NodeKind.Paragraph => IsPauseParagraph(anchorId) ? StructureAnchor.PauseParagraph : StructureAnchor.Paragraph,
+            _ => StructureAnchor.ParagraphItem,
+        };
+
+        private static readonly HierarchyPlan.Refused PauseHoldsNoSpeech = new(BookMutationRejection.Validation,
+            "A pause holds no speech — anchor on a speech item, or insert a paragraph before or after the pause.");
+
+        // The one placement the table turns down for a held anchor today is a speech item at a
+        // pause paragraph's start or end.
+        private static HierarchyPlan.Refused NotAllowed(StructureAnchor anchor, Placement placement) =>
+            anchor == StructureAnchor.PauseParagraph
+                ? PauseHoldsNoSpeech
+                : new(BookMutationRejection.Validation, $"A {anchor} takes no insert {placement}.");
+
+        // Blank text where the placement's rule requires it: an empty paragraph reads as a pause,
+        // and whitespace alone is not an item.
+        private static HierarchyPlan.Refused? RefuseBlank(StructurePlacement allowed, string? text)
+        {
+            if (!allowed.TextRequired || !string.IsNullOrWhiteSpace(text)) return null;
+            return new(BookMutationRejection.Validation, allowed.Creates == NodeKind.Paragraph
+                ? "A new paragraph needs text — an empty paragraph reads as a pause."
+                : "An inserted item needs text — whitespace alone is not an item.");
         }
 
         private static HierarchyPlan.Planned Created(IBookEntity[] added, CreatedNode created) =>
@@ -333,6 +335,26 @@ namespace Read2Me.Services.Books
 
         // Insert slots: the parent a new node goes under and the order keys it
         // goes between. The anchor is known to exist.
+
+        // A sibling of the anchor, Before or After it.
+        private (Guid, string?, string?) SlotBeside(NodeKind anchorKind, Guid anchorId, Placement placement) =>
+            anchorKind switch
+            {
+                NodeKind.Volume => VolumeSlot(anchorId, placement),
+                NodeKind.Part => SlotBeside(Parts, anchorId, p => p.Id, p => p.Order, placement),
+                NodeKind.Chapter => SlotBeside(Chapters, anchorId, c => c.Id, c => c.Order, placement),
+                _ => SlotBeside(Paragraphs, anchorId, p => p.Id, p => p.Order, placement),
+            };
+
+        // A child of the anchor, AtStart or AtEnd of it.
+        private (Guid, string?, string?) SlotInside(NodeKind anchorKind, Guid anchorId, Placement placement) =>
+            anchorKind switch
+            {
+                NodeKind.Volume => SlotInside(anchorId, Parts, p => p.Order, placement),
+                NodeKind.Part => SlotInside(anchorId, Chapters, c => c.Order, placement),
+                NodeKind.Chapter => SlotInside(anchorId, Paragraphs, p => p.Order, placement),
+                _ => SlotInside(anchorId, Items, i => i.Order, placement),
+            };
 
         // Volumes have no parent row; Guid.Empty stands in and is never read.
         private (Guid, string?, string?) VolumeSlot(Guid anchorId, Placement placement)

@@ -47,6 +47,34 @@ public class BookApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     /// <summary>
+    /// The overview carries the Structure rules the node menu renders from: one entry per anchor
+    /// kind, with enums by name. The rules themselves are BookHierarchyStructureRulesTests.
+    /// </summary>
+    [Fact]
+    public async Task Overview_carries_the_structure_rules()
+    {
+        var folder = $"api-book-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "Book Rules", "Author A");
+
+        var rules = (await GetJsonAsync($"/api/projects/{folder}/book")).RootElement.GetProperty("structureRules");
+
+        Assert.Equal(
+            ["Volume", "Part", "Chapter", "Paragraph", "PauseParagraph", "ParagraphItem"],
+            rules.EnumerateArray().Select(r => r.GetProperty("anchor").GetString()));
+        var volume = rules[0];
+        Assert.Equal("Volume", volume.GetProperty("nodeKind").GetString());
+        Assert.Equal(1, volume.GetProperty("minimumCount").GetInt32());
+        var atStart = volume.GetProperty("placements")[2];
+        Assert.Equal("AtStart", atStart.GetProperty("placement").GetString());
+        Assert.Equal("Part", atStart.GetProperty("creates").GetString());
+        Assert.False(atStart.GetProperty("textRequired").GetBoolean());
+        var pause = rules[4];
+        Assert.Equal("Paragraph", pause.GetProperty("nodeKind").GetString());
+        Assert.Equal(["Before", "After"],
+            pause.GetProperty("placements").EnumerateArray().Select(p => p.GetProperty("placement").GetString()));
+    }
+
+    /// <summary>
     /// The roll-ups behind the web pipeline stepper and reader tree badges (ticket 09):
     /// <c>GET /api/projects/{folder}/status</c> and the per-node summary, read at the same revision
     /// as the overview. How a node rolls up is NodeStatusServiceTests; this is the endpoint's

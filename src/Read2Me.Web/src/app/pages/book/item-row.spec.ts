@@ -5,6 +5,8 @@ import { provide } from '@app/core/services';
 import { type ConfirmOptions, ConfirmService, PromptService, type TextPromptOptions } from '@app/ui/dialogs';
 import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
+import { BookStore } from './book-store';
+import { menuBookStore } from '../../../testing/structure-rules';
 import { itemRow } from './item-row';
 import { NODE_MENU_OPEN, type NodeMenuRequest } from './node-menu';
 import type { RowContext } from './reader-rows';
@@ -75,6 +77,7 @@ async function mount(context: RowContext, row: ParagraphItemDto) {
   provide(host, SpeakerAssigner, assigner as unknown as SpeakerAssigner);
   provide(host, AudioGenerator, generator as unknown as AudioGenerator);
   provide(host, BookEditor, editor as unknown as BookEditor);
+  provide(host, BookStore, menuBookStore());
   provide(host, PromptService, prompt as unknown as PromptService);
   provide(host, ConfirmService, confirm as unknown as ConfirmService);
   document.body.append(host);

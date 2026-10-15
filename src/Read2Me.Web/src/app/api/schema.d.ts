@@ -393,7 +393,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Book overview: volumes, characters and structure counts, and the book revision they were read at. hasContent=false means import has not run. */
+        /** Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run. */
         get: {
             parameters: {
                 query?: never;
@@ -410,7 +410,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["BookOverviewDto"];
+                    };
                 };
             };
         };
@@ -4960,8 +4962,31 @@ export interface components {
             /** Format: int32 */
             chunkPauseMs?: null | number | string;
         };
+        BookOverviewDto: {
+            hasContent: boolean;
+            volumes: components["schemas"]["NodeDto"][];
+            characters: components["schemas"]["CharacterDto"][];
+            /** Format: int32 */
+            totalParts: number | string;
+            /** Format: int32 */
+            totalChapters: number | string;
+            /** Format: int64 */
+            revision: number | string;
+            structureRules: components["schemas"]["StructureRuleDto"][];
+        };
         BulkAssignPreviewRequest: {
             paragraphIds: string[];
+        };
+        CharacterAliasDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        CharacterDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            aliases: components["schemas"]["CharacterAliasDto"][];
         };
         FfmpegTestRequest: {
             ffmpegPath?: null | string;
@@ -5023,6 +5048,11 @@ export interface components {
         NarratorOnlyModeRequest: {
             enabled: boolean;
         };
+        NodeDto: {
+            /** Format: uuid */
+            id: string;
+            title: null | string;
+        };
         NodeEnqueueRequest: {
             level: string;
             /** Format: uuid */
@@ -5030,6 +5060,8 @@ export interface components {
             /** @default true */
             unprocessedOnly: boolean;
         };
+        /** @enum {unknown} */
+        NodeKind: "Volume" | "Part" | "Chapter" | "Paragraph" | "ParagraphItem";
         ParagraphsEnqueueRequest: {
             paragraphIds: string[];
         };
@@ -5056,6 +5088,8 @@ export interface components {
             /** Format: int32 */
             pauseMs: number | string;
         };
+        /** @enum {unknown} */
+        Placement: "Before" | "After" | "AtStart" | "AtEnd";
         PlanBookEditRequest: {
             instruction: null | string;
             /** @default false */
@@ -5117,6 +5151,20 @@ export interface components {
         StepPreviewRequest: {
             sample: null | components["schemas"]["PreviewSampleRef"];
             settings: null | components["schemas"]["JsonElement"];
+        };
+        /** @enum {unknown} */
+        StructureAnchor: "Volume" | "Part" | "Chapter" | "Paragraph" | "PauseParagraph" | "ParagraphItem";
+        StructurePlacementDto: {
+            placement: components["schemas"]["Placement"];
+            creates: components["schemas"]["NodeKind"];
+            textRequired: boolean;
+        };
+        StructureRuleDto: {
+            anchor: components["schemas"]["StructureAnchor"];
+            nodeKind: components["schemas"]["NodeKind"];
+            placements: components["schemas"]["StructurePlacementDto"][];
+            /** Format: int32 */
+            minimumCount: number | string;
         };
         TextSubstitutionStep: {
             id?: string;

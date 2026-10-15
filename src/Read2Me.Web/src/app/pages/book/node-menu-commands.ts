@@ -1,15 +1,23 @@
-import type { BookCommand, InsertPosition, MergeDirection, NodeKind } from '@app/api';
+import type {
+  BookCommand,
+  InsertPosition,
+  MergeDirection,
+  NodeKind,
+  StructureRuleDto,
+} from '@app/api';
 import type { ConfirmOptions, TextPromptOptions } from '@app/ui/dialogs';
 import {
+  CREATED_WORD,
   HAS_CHILDREN,
   type MenuEntryId,
   type NodeMenuKind,
   type NodeMenuTarget,
   PLACEMENT_WORDS,
-  insertedKind,
   mergeDirectionOf,
   nodeInsertOf,
   pauseInsertOf,
+  placementFor,
+  ruleFor,
 } from './node-menu-entries';
 
 /** The two dialogs a menu flow may open — `PromptService.text` and `ConfirmService.confirm`. */
@@ -35,12 +43,14 @@ export const CUE_HINT = 'Followed by Breeze; VoxCPM2 only loosely; ignored by Ch
 /**
  * Turns a chosen menu entry into the command to post, asking whatever the entry needs first
  * (ticket 11, research §3). Null means nothing to send: the dialog was cancelled, or the answer
- * would change nothing (an unchanged title or text is not sent).
+ * would change nothing (an unchanged title or text is not sent). An insert's dialog, what it
+ * creates and the anchor kind it names come from the book's Structure rules.
  */
 export async function commandFor(
   entry: MenuEntryId,
   target: NodeMenuTarget,
   dialogs: MenuDialogs,
+  rules: readonly StructureRuleDto[],
 ): Promise<BookCommand | null> {
   const { kind, id } = target;
 
@@ -95,7 +105,7 @@ export async function commandFor(
         title: `Insert item ${position.toLowerCase()}`,
         label: 'Text',
         multiline: true,
-        required: true,
+        required: placementFor(rules, kind, position)?.textRequired ?? false,
       });
       if (text === null) return null;
       return { type: 'InsertParagraphItem', anchorItemId: id, position, text };
@@ -126,26 +136,34 @@ export async function commandFor(
         };
       }
       const placement = nodeInsertOf(entry);
-      if (placement) {
-        const created = insertedKind(kind, placement);
-        const anchor = { type: 'InsertNode', anchorKind: ANCHOR_KIND[kind], anchorId: id, placement } as const;
-        if (created !== 'paragraph' && created !== 'item') {
-          // A new volume, part or chapter is born empty; its title is optional, renamable later.
-          const title = await dialogs.text({
-            title: `Insert ${created} ${PLACEMENT_WORDS[placement]}`,
+      const rule = ruleFor(rules, kind);
+      const allowed = placement ? placementFor(rules, kind, placement) : undefined;
+      if (placement && rule && allowed) {
+        const created = allowed.creates;
+        const title = `Insert ${CREATED_WORD[created]} ${PLACEMENT_WORDS[placement]}`;
+        const anchor = {
+          type: 'InsertNode',
+          anchorKind: rule.nodeKind,
+          anchorId: id,
+          placement,
+        } as const;
+        if (!HOLDS_TEXT[created]) {
+          // A new volume, part or chapter is born empty, renamable later.
+          const answer = await dialogs.text({
+            title,
             label: 'Title',
-            placeholder: 'Leave blank for no title',
+            ...(allowed.textRequired
+              ? { required: true }
+              : { placeholder: 'Leave blank for no title' }),
           });
-          if (title === null) return null;
-          return { ...anchor, title: title || null };
+          if (answer === null) return null;
+          return { ...anchor, title: answer || null };
         }
-        // A new paragraph is never empty — an empty one reads as a pause — and nor is a speech
-        // item at a paragraph's start or end, so its text is required.
         const text = await dialogs.text({
-          title: `Insert ${created} ${PLACEMENT_WORDS[placement]}`,
+          title,
           label: 'Text',
           multiline: true,
-          required: true,
+          required: allowed.textRequired,
         });
         if (text === null) return null;
         return { ...anchor, text };
@@ -155,14 +173,13 @@ export async function commandFor(
   }
 }
 
-/** The anchor kind InsertNode is told; a pause paragraph is a Paragraph to the host. */
-const ANCHOR_KIND: Record<NodeMenuKind, NodeKind> = {
-  volume: 'Volume',
-  part: 'Part',
-  chapter: 'Chapter',
-  paragraph: 'Paragraph',
-  item: 'ParagraphItem',
-  'pause-paragraph': 'Paragraph',
+/** Whether a created kind's dialog asks for its text, rather than a title. */
+const HOLDS_TEXT: Record<NodeKind, boolean> = {
+  Volume: false,
+  Part: false,
+  Chapter: false,
+  Paragraph: true,
+  ParagraphItem: true,
 };
 
 /**

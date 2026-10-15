@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'bun:test';
 import type { ConfirmOptions, TextPromptOptions } from '@app/ui/dialogs';
-import { CUE_HINT, type MenuDialogs, commandFor, displayName } from './node-menu-commands';
-import type { NodeMenuKind, NodeMenuTarget } from './node-menu-entries';
+import type { StructureRuleDto } from '@app/api';
+import {
+  CUE_HINT,
+  type MenuDialogs,
+  commandFor as commandForRules,
+  displayName,
+} from './node-menu-commands';
+import type { MenuEntryId, NodeMenuKind, NodeMenuTarget } from './node-menu-entries';
+import { STRUCTURE_RULES, rule } from '../../../testing/structure-rules';
+
+/** The flows under the host's rules, unless a spec hands in another table. */
+const commandFor = (
+  entry: MenuEntryId,
+  t: NodeMenuTarget,
+  d: MenuDialogs,
+  rules: readonly StructureRuleDto[] = STRUCTURE_RULES,
+) => commandForRules(entry, t, d, rules);
 
 function target(kind: NodeMenuKind, overrides: Partial<NodeMenuTarget> = {}): NodeMenuTarget {
   return { kind, id: 'n1', text: 'Old', isFirst: false, isLast: false, ...overrides };
@@ -301,6 +316,49 @@ describe('commandFor', () => {
     it('a cancelled container insert sends nothing', async () => {
       expect<unknown>(
         await commandFor('insert-node:Before', target('volume'), dialogs({ text: null }).fake),
+      ).toBeNull();
+    });
+
+    it('requires the field exactly when the table says the new node needs text', async () => {
+      const asked = async (entry: MenuEntryId, kind: NodeMenuKind, rules: StructureRuleDto[]) => {
+        const d = dialogs({ text: 'x' });
+        await commandFor(entry, target(kind), d.fake, rules);
+        return d.asked.text[0]!;
+      };
+      const paragraphs = (textRequired: boolean) => [
+        rule('Chapter', 'Chapter', [['AtEnd', 'Paragraph', textRequired]]),
+      ];
+      expect((await asked('insert-node:AtEnd', 'chapter', paragraphs(true))).required).toBe(true);
+      expect((await asked('insert-node:AtEnd', 'chapter', paragraphs(false))).required).toBe(false);
+
+      const parts = (textRequired: boolean) => [
+        rule('Volume', 'Volume', [['AtStart', 'Part', textRequired]], 1),
+      ];
+      expect((await asked('insert-node:AtStart', 'volume', parts(true))).required).toBe(true);
+      expect((await asked('insert-node:AtStart', 'volume', parts(false))).required).toBeFalsy();
+
+      const items = (textRequired: boolean) => [
+        rule('ParagraphItem', 'ParagraphItem', [['Before', 'ParagraphItem', textRequired]]),
+      ];
+      expect((await asked('insert-before', 'item', items(true))).required).toBe(true);
+      expect((await asked('insert-before', 'item', items(false))).required).toBe(false);
+    });
+
+    it("names the anchor kind and the created kind the table gives, and sends nothing it doesn't allow", async () => {
+      const { fake, asked } = dialogs({ text: 'Said.' });
+      const rules = [rule('PauseParagraph', 'Paragraph', [['Before', 'Paragraph', true]])];
+      expect<unknown>(
+        await commandFor('insert-node:Before', target('pause-paragraph'), fake, rules),
+      ).toEqual({
+        type: 'InsertNode',
+        anchorKind: 'Paragraph',
+        anchorId: 'n1',
+        placement: 'Before',
+        text: 'Said.',
+      });
+      expect(asked.text[0]!.title).toBe('Insert paragraph before');
+      expect<unknown>(
+        await commandFor('insert-node:AtStart', target('pause-paragraph'), fake, rules),
       ).toBeNull();
     });
 

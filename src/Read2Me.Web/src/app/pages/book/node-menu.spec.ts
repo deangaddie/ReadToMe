@@ -4,7 +4,9 @@ import { override, provide, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { FakeTimers } from '../../../testing/fake-timers';
+import { menuBookStore } from '../../../testing/structure-rules';
 import { BookEditor } from './book-editor';
+import { BookStore } from './book-store';
 import { NODE_MENU_OPEN, type NodeMenu, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { NodeMenuTarget } from './node-menu-entries';
 import './node-menu';
@@ -26,6 +28,8 @@ let menu: NodeMenu;
 
 function newHost() {
   host = document.createElement('div');
+  // A one-volume book: a lone volume offers no Delete.
+  provide(host, BookStore, menuBookStore(1));
   provide(host, BookEditor, {
     locked,
     run: async (c: unknown) => (runs.push(c), true),

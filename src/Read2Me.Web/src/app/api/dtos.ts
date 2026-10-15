@@ -1,17 +1,18 @@
 /**
  * Wire shapes for the Agent API (spec D8, ticket 05).
  *
- * The host's OpenAPI document describes request bodies and the settings entities but declares no
- * response content (every endpoint returns `Results.Ok(...)` untyped), so `schema.d.ts` cannot
- * type what comes back. Response DTOs are therefore hand-written here, mirrored from the C# records
- * in `src/Read2Me.App/Api/*.cs`, and every shape that *does* exist in the generated schema is pinned
- * to it in `schema-pins.ts` so a renamed or removed field fails `bun run typecheck`.
+ * The host's OpenAPI document describes request bodies and the settings entities, but declares
+ * response content only for the book overview (every other endpoint returns `Results.Ok(...)`
+ * untyped), so `schema.d.ts` cannot type what comes back. Response DTOs are therefore hand-written
+ * here, mirrored from the C# records in `src/Read2Me.App/Api/*.cs`, and every shape that *does*
+ * exist in the generated schema is pinned to it in `schema-pins.ts` so a renamed or removed field
+ * fails `bun run typecheck`.
  *
  * Conventions: the host serialises with Minimal API defaults: camelCase names, `Guid` as string,
  * entity enums as their integer value, `ToString()`-ed enums as their member name.
  */
 import type { components } from './schema';
-import type { BookEditTargetKind, VoiceAnchorLevel } from './book-commands';
+import type { BookEditTargetKind, NodeKind, Placement, VoiceAnchorLevel } from './book-commands';
 
 /** Component schemas the host's OpenAPI document declares (request bodies + settings entities). */
 export type Schema = components['schemas'];
@@ -303,6 +304,33 @@ export interface BookOverviewDto {
   totalChapters: number;
   /** The book revision the read ran against: the reader's baseline for receipts and snapshots. */
   revision: number;
+  /** The Structure rules, one entry per anchor kind: what the node menu renders its inserts from. */
+  structureRules: StructureRuleDto[];
+}
+
+/** What a Structure rules entry is keyed by; a pause paragraph is a `Paragraph` to the commands. */
+export type StructureAnchor =
+  | 'Volume'
+  | 'Part'
+  | 'Chapter'
+  | 'Paragraph'
+  | 'PauseParagraph'
+  | 'ParagraphItem';
+
+/** One placement an anchor allows: the kind it creates, and whether that node needs text. */
+export interface StructurePlacementDto {
+  placement: Placement;
+  creates: NodeKind;
+  textRequired: boolean;
+}
+
+/** One Structure rules entry; `nodeKind` is what a command names the anchor as. */
+export interface StructureRuleDto {
+  anchor: StructureAnchor;
+  nodeKind: NodeKind;
+  placements: StructurePlacementDto[];
+  /** How many of this kind the book always keeps (Volume: 1). */
+  minimumCount: number;
 }
 
 // ---- Commands (`CommandEndpoints.cs`) --------------------------------------------------------------

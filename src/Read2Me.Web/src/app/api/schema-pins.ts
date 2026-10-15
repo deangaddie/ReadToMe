@@ -4,8 +4,8 @@
  * renames or drops fails `bun run typecheck` as soon as `bun run api:types` is re-run (and
  * `bun run api:check` fails `bun run check` while the checked-in schema is stale).
  *
- * Only shapes the host's document actually declares can be pinned: request bodies and the settings
- * entities. Response DTOs have no OpenAPI counterpart (see `dtos.ts`).
+ * Only shapes the host's document actually declares can be pinned: request bodies, the settings
+ * entities and the book overview. Other response DTOs have no OpenAPI counterpart (see `dtos.ts`).
  */
 import type {
   AppTheme,
@@ -13,6 +13,7 @@ import type {
   AttributionChainRequest,
   AudioPostProcessStepConfig,
   AudioProcessingUpdateRequest,
+  BookOverviewDto,
   BulkAssignPreviewRequest,
   FfmpegTestRequest,
   GenerateDesignPromptRequest,
@@ -37,6 +38,7 @@ import type {
   SimilarityTestRequest,
   SplitRuleRequest,
   StepPreviewRequest,
+  StructureRuleDto,
   TextSubstitutionStep,
   ThemeSelectionUpdate,
   ToSentenceCaseConfig,
@@ -86,4 +88,6 @@ export type SchemaPins = [
   Pin<VoiceDesignSampleTextRequest, Schema['VoiceDesignSampleTextRequest']>,
   Pin<VoiceDesignTestRequest, Schema['VoiceDesignTestRequest']>,
   Pin<SimilarityTestRequest, Schema['SimilarityTestRequest']>,
+  Pin<BookOverviewDto, Schema['BookOverviewDto']>,
+  Pin<StructureRuleDto, Schema['StructureRuleDto']>,
 ];

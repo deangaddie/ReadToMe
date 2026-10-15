@@ -8,6 +8,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Books;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Voice;
@@ -54,21 +55,44 @@ namespace Read2Me.App.Api
     public sealed record SpeechMarkerCountDto(string Marker, int Paragraphs);
     public sealed record CharacterAliasDto(Guid Id, string Name);
     public sealed record CharacterDto(Guid Id, string Name, IReadOnlyList<CharacterAliasDto> Aliases);
-    /// <summary><see cref="Revision"/>: the book revision the read ran against, a reader's baseline for receipts.</summary>
+    /// <summary>
+    /// <see cref="Revision"/>: the book revision the read ran against, a reader's baseline for receipts.
+    /// <see cref="StructureRules"/>: what may be inserted where — the node menu renders from it.
+    /// </summary>
     public sealed record BookOverviewDto(
         bool HasContent,
         IReadOnlyList<NodeDto> Volumes,
         IReadOnlyList<CharacterDto> Characters,
         int TotalParts,
         int TotalChapters,
-        long Revision);
+        long Revision,
+        IReadOnlyList<StructureRuleDto> StructureRules);
+
+    /// <summary><see cref="StructureRule"/> on the wire, its enums by name.</summary>
+    public sealed record StructureRuleDto(
+        [property: JsonConverter(typeof(JsonStringEnumConverter<StructureAnchor>))] StructureAnchor Anchor,
+        [property: JsonConverter(typeof(JsonStringEnumConverter<NodeKind>))] NodeKind NodeKind,
+        IReadOnlyList<StructurePlacementDto> Placements,
+        int MinimumCount)
+    {
+        public static StructureRuleDto From(StructureRule rule) => new(
+            rule.Anchor, rule.NodeKind,
+            rule.Placements.Select(p => new StructurePlacementDto(p.Placement, p.Creates, p.TextRequired)).ToList(),
+            rule.MinimumCount);
+    }
+
+    public sealed record StructurePlacementDto(
+        [property: JsonConverter(typeof(JsonStringEnumConverter<Placement>))] Placement Placement,
+        [property: JsonConverter(typeof(JsonStringEnumConverter<NodeKind>))] NodeKind Creates,
+        bool TextRequired);
 
     public static class BookEndpoints
     {
         public static void MapBookEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects/{folder}/book", GetOverviewAsync)
-                .WithSummary("Book overview: volumes, characters and structure counts, and the book revision they were read at. hasContent=false means import has not run.");
+                .Produces<BookOverviewDto>()
+                .WithSummary("Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/children", GetChildrenAsync)
                 .WithSummary("Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items.");
             endpoints.MapGet("/api/projects/{folder}/nodes/chapter/{id:guid}/voices", GetChapterVoicesAsync)
@@ -101,7 +125,8 @@ namespace Read2Me.App.Api
                 overview.Characters.Select(ToCharacterDto).ToList(),
                 overview.TotalParts,
                 overview.TotalChapters,
-                revision));
+                revision,
+                StructureRules.All.Select(StructureRuleDto.From).ToList()));
         }
 
         private static async Task<IResult> GetChildrenAsync(

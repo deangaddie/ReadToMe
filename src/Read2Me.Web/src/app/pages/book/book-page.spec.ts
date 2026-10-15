@@ -6,6 +6,7 @@ import type { QueueMessage } from '@app/live/live-messages';
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
+import { STRUCTURE_RULES } from '../../../testing/structure-rules';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
@@ -27,6 +28,7 @@ const OVERVIEW: BookOverviewDto = {
   totalParts: 1,
   totalChapters: 2,
   revision: 1,
+  structureRules: STRUCTURE_RULES,
 };
 
 const DIALOG = (id: string): ParagraphDto => ({

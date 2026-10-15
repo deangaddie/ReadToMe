@@ -7,9 +7,11 @@ import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { icon } from '@app/ui/partials';
 import { TypeAhead, rovingKeydown, typeAheadTarget } from '@app/ui/roving';
 import { BookEditor } from './book-editor';
+import { BookStore } from './book-store';
 import { commandFor } from './node-menu-commands';
 import {
   type ActionEntryId,
+  type MenuBook,
   type MenuEntry,
   type MenuEntryId,
   type NodeMenuTarget,
@@ -70,6 +72,12 @@ export function nodeMenuTrigger(
   </button>`;
 }
 
+/** What the menu reads of the open book: its Structure rules and volume count, from the overview. */
+function menuBook(store: BookStore): MenuBook {
+  const overview = store.overview();
+  return { rules: overview?.structureRules ?? [], volumeCount: overview?.volumes.length ?? 0 };
+}
+
 export function menuLabel(target: NodeMenuTarget): string {
   return `Actions for ${target.text?.trim() || target.kind}`;
 }
@@ -89,17 +97,21 @@ export async function runMenuEntry(
   if (editor.locked()) return;
   const prompt = use(PromptService, from);
   const confirm = use(ConfirmService, from);
-  const command = await commandFor(entry, target, {
-    text: (o) => prompt.text(o),
-    confirm: (o) => confirm.confirm(o),
-  });
+  const rules = use(BookStore, from).overview()?.structureRules ?? [];
+  const command = await commandFor(
+    entry,
+    target,
+    { text: (o) => prompt.text(o), confirm: (o) => confirm.confirm(o) },
+    rules,
+  );
   if (command) await editor.run(command);
 }
 
 /**
  * The node menu (ticket 11, design §6.3): one element for every level of the book, the entry set
- * decided by {@link menuEntries} from the target's kind and position. A chosen entry runs its
- * dialog flow and posts the command through {@link BookEditor}; nothing here patches the rows.
+ * decided by {@link menuEntries} from the target's kind and position and the book's Structure
+ * rules. A chosen entry runs its dialog flow and posts the command through {@link BookEditor};
+ * nothing here patches the rows.
  * The selection entries (ticket 12) are not commands: they go back to the opener as an action.
  *
  * One instance serves every trigger under its parent element (spec §7, risk 2): it listens for
@@ -110,6 +122,7 @@ export async function runMenuEntry(
  */
 export class NodeMenu extends R2mElement {
   private editor!: BookEditor;
+  private store!: BookStore;
 
   readonly #request = signal<NodeMenuRequest | null>(null);
   readonly #sub = signal<PauseSide | null>(null);
@@ -122,7 +135,7 @@ export class NodeMenu extends R2mElement {
 
   readonly #entries = computed(() => {
     const request = this.#request();
-    return request ? menuEntries(request.target) : [];
+    return request ? menuEntries(request.target, menuBook(this.store)) : [];
   });
   /** Everything but the pause submenus and the delete, which render in their own places. */
   readonly #main = computed(() =>
@@ -139,6 +152,7 @@ export class NodeMenu extends R2mElement {
 
   protected override connected(): void {
     this.editor = use(BookEditor, this);
+    this.store = use(BookStore, this);
     const scope = this.parentElement;
     if (scope) {
       const onOpen = (e: Event) => this.openFor((e as CustomEvent<NodeMenuRequest>).detail);

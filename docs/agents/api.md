@@ -143,7 +143,8 @@ It is echoed as `originId` on the mutation receipt the live hub publishes, so a 
 recognise its own commits among everyone else's. Absent or malformed, the receipt is unattributed.
 
 Inspect the result: `GET /api/projects/{folder}/book` (overview; its `revision` is the book
-revision the read ran against, stamped before it as `/status` stamps its own), then walk
+revision the read ran against, stamped before it as `/status` stamps its own;
+its `structureRules` are the **Structure rules** described under `InsertNode` below), then walk
 `GET /api/projects/{folder}/nodes/{level}/{id}/children` (volume → part → chapter;
 chapter children carry the paragraphs with their items). Each paragraph has
 `isPauseParagraph` (no items, or a single pause item); each item has `id`, `itemType`
@@ -426,6 +427,13 @@ child one level down). The new node's kind follows from both:
 | `Chapter` | Chapter | Paragraph |
 | `Paragraph` | Paragraph | Speech item |
 | `Paragraph` that is a pause paragraph | Paragraph | refused |
+
+The book overview (`GET /api/projects/{folder}/book`) carries this table as `structureRules`, one
+entry per anchor: `{ anchor, nodeKind, placements: [{ placement, creates, textRequired }], minimumCount }`,
+enums by name. `anchor` is `Volume`, `Part`, `Chapter`, `Paragraph`, `PauseParagraph` or
+`ParagraphItem` (whose `Before` / `After` are `InsertParagraphItem`'s); `nodeKind` is the `anchorKind`
+to send; `minimumCount` is how many of the kind a book keeps (Volume: 1, the others 0). The
+planner reads the same table, so an insert it lists is accepted and any other is refused.
 
 A new **Volume, Part or Chapter** is born empty — fill it by inserting at its start or end, using
 the returned id as the next anchor. `title` is optional and trimmed; blank leaves it untitled

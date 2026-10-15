@@ -1,10 +1,20 @@
-import type { InsertPosition, MergeDirection, PauseKind, Placement } from '@app/api';
+import type {
+  InsertPosition,
+  MergeDirection,
+  NodeKind,
+  PauseKind,
+  Placement,
+  StructureAnchor,
+  StructurePlacementDto,
+  StructureRuleDto,
+} from '@app/api';
 import type { IconName } from '@app/ui/icons';
 
 /**
- * The node menu's entry set (ticket 11, research §3 "Node menu"), as a pure table over the node's
- * kind and position. The component renders whatever this returns; the flows in
- * `node-menu-commands.ts` turn a chosen entry into a command. Tested as a matrix once here.
+ * The node menu's entry set (ticket 11, research §3 "Node menu"), as a pure function of the node's
+ * kind and position and the book's Structure rules. The component renders whatever this returns;
+ * the flows in `node-menu-commands.ts` turn a chosen entry into a command. The Insert group and the
+ * lone-volume Delete render from the rules; only labels, icons and dialog wording live here.
  */
 
 export type NodeMenuKind = 'volume' | 'part' | 'chapter' | 'paragraph' | 'item' | 'pause-paragraph';
@@ -14,14 +24,10 @@ export interface NodeMenuTarget {
   id: string;
   /** The raw title (nodes), text (items) or pause label (pause paragraphs); null when untitled. */
   text: string | null;
-  /**
-   * Position among siblings: merge entries hide at the ends. A volume's siblings are every volume
-   * in the book, so a volume that is both first and last is the book's only one, and offers no
-   * Delete (a book keeps at least one volume).
-   */
+  /** Position among siblings: merge entries hide at the ends. */
   isFirst: boolean;
   isLast: boolean;
-  /** Items only: a pause item anchors no item insert and has no delivery cue. */
+  /** Items only: a pause item anchors no item insert (the host refuses it) and has no delivery cue. */
   isPause?: boolean;
   /** Items only: the item's delivery cue, which decides Add versus Edit/Remove; null when none. */
   cue?: string | null;
@@ -122,35 +128,51 @@ export const HAS_CHILDREN: Record<NodeMenuKind, boolean> = {
   'pause-paragraph': false,
 };
 
-const EVERY_PLACEMENT: readonly Placement[] = ['Before', 'After', 'AtStart', 'AtEnd'];
-
 /**
- * The InsertNode placements each kind offers: a sibling before or after, and a first or last
- * child one level down — never two. A paragraph's start and end take a speech item, a pause
- * paragraph's take none, and an item's inserts are the item insert entries.
+ * What the menu knows of the book beyond the node: the host's Structure rules (from the overview)
+ * and how many volumes the book holds (the overview always lists them all). Every insert entry,
+ * what it creates, whether its dialog requires text and whether a node may be deleted comes from
+ * these — no rule is written in the menu.
  */
-const NODE_INSERTS: Record<NodeMenuKind, readonly Placement[]> = {
-  volume: EVERY_PLACEMENT,
-  part: EVERY_PLACEMENT,
-  chapter: EVERY_PLACEMENT,
-  paragraph: EVERY_PLACEMENT,
-  item: [],
-  'pause-paragraph': ['Before', 'After'],
+export interface MenuBook {
+  rules: readonly StructureRuleDto[];
+  volumeCount: number;
+}
+
+/** The Structure rules entry each menu kind renders from. */
+const RULE_ANCHOR: Record<NodeMenuKind, StructureAnchor> = {
+  volume: 'Volume',
+  part: 'Part',
+  chapter: 'Chapter',
+  paragraph: 'Paragraph',
+  item: 'ParagraphItem',
+  'pause-paragraph': 'PauseParagraph',
 };
 
-/** The kind one level down from each node: what an at-start or at-end insert creates. */
-const CHILD_KIND: Partial<Record<NodeMenuKind, NodeMenuKind>> = {
-  volume: 'part',
-  part: 'chapter',
-  chapter: 'paragraph',
-  paragraph: 'item',
+/** What the menu calls each kind a placement creates. */
+export const CREATED_WORD: Record<NodeKind, string> = {
+  Volume: 'volume',
+  Part: 'part',
+  Chapter: 'chapter',
+  Paragraph: 'paragraph',
+  ParagraphItem: 'item',
 };
 
-/** What an InsertNode from `kind` at `placement` creates: a sibling of its own kind, or its child. */
-export function insertedKind(kind: NodeMenuKind, placement: Placement): NodeMenuKind {
-  const beside = placement === 'Before' || placement === 'After';
-  if (kind === 'pause-paragraph') return 'paragraph';
-  return beside ? kind : (CHILD_KIND[kind] ?? kind);
+/** The rules entry for `kind`, or undefined when the table has none (not loaded yet). */
+export function ruleFor(
+  rules: readonly StructureRuleDto[],
+  kind: NodeMenuKind,
+): StructureRuleDto | undefined {
+  return rules.find((r) => r.anchor === RULE_ANCHOR[kind]);
+}
+
+/** The placement as `kind`'s rule allows it, or undefined when it does not. */
+export function placementFor(
+  rules: readonly StructureRuleDto[],
+  kind: NodeMenuKind,
+  placement: Placement,
+): StructurePlacementDto | undefined {
+  return ruleFor(rules, kind)?.placements.find((p) => p.placement === placement);
 }
 
 export const PLACEMENT_WORDS: Record<Placement, string> = {
@@ -171,7 +193,7 @@ export function isActionEntry(id: MenuEntryId): id is ActionEntryId {
   return (ACTION_ENTRIES as readonly string[]).includes(id);
 }
 
-export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
+export function menuEntries(target: NodeMenuTarget, book: MenuBook): MenuEntry[] {
   const { kind } = target;
   const entries: MenuEntry[] = [];
 
@@ -216,22 +238,18 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
     }
   }
 
-  for (const placement of NODE_INSERTS[kind]) {
+  // A pause item anchors no item insert: it is not a speech item to stand beside.
+  const rule = kind === 'item' && target.isPause ? undefined : ruleFor(book.rules, kind);
+  for (const { placement, creates } of rule?.placements ?? []) {
     entries.push({
-      id: `insert-node:${placement}`,
-      label: `Insert ${insertedKind(kind, placement)} ${PLACEMENT_WORDS[placement]}`,
+      id: insertEntryId(kind, placement),
+      label: `Insert ${CREATED_WORD[creates]} ${PLACEMENT_WORDS[placement]}`,
       icon: 'add',
       group: 'insert',
     });
   }
 
   if (kind === 'item') {
-    if (!target.isPause) {
-      entries.push(
-        { id: 'insert-before', label: 'Insert item before', icon: 'add', group: 'insert' },
-        { id: 'insert-after', label: 'Insert item after', icon: 'add', group: 'insert' },
-      );
-    }
     for (const position of ['Before', 'After'] as const) {
       const group: MenuGroup = position === 'Before' ? 'pause-before' : 'pause-after';
       for (const { kind: pauseKind, label } of PAUSE_KINDS) {
@@ -245,7 +263,7 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
     }
   }
 
-  if (!isOnlyVolume(target)) {
+  if (!atMinimumCount(kind, book)) {
     entries.push({
       id: 'delete',
       label: DELETE_LABEL[kind],
@@ -257,9 +275,19 @@ export function menuEntries(target: NodeMenuTarget): MenuEntry[] {
   return entries;
 }
 
-/** The book's last volume, which the host refuses to delete. */
-function isOnlyVolume({ kind, isFirst, isLast }: NodeMenuTarget): boolean {
-  return kind === 'volume' && isFirst && isLast;
+/**
+ * The book holds no more of this kind than its rule's minimum count, so the host refuses a delete.
+ * The volume count is the one the menu knows; no other kind has a minimum today.
+ */
+function atMinimumCount(kind: NodeMenuKind, book: MenuBook): boolean {
+  const minimum = ruleFor(book.rules, kind)?.minimumCount ?? 0;
+  return kind === 'volume' && book.volumeCount <= minimum;
+}
+
+/** An item's inserts are InsertParagraphItem's entries; every other kind's are InsertNode's. */
+function insertEntryId(kind: NodeMenuKind, placement: Placement): MenuEntryId {
+  if (kind === 'item') return placement === 'Before' ? 'insert-before' : 'insert-after';
+  return `insert-node:${placement}`;
 }
 
 /** Add on an item without a delivery cue; Edit and Remove on one with a cue. */
