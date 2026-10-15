@@ -8,6 +8,6 @@
     "test": "bun test browse.test.mjs"
   },
   "dependencies": {
-    "playwright-core": "1.61.0"
+    "playwright-core": "1.63.0"
   }
 }
