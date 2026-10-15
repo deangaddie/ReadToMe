@@ -23,12 +23,16 @@
   "devDependencies": {
     "@happy-dom/global-registrator": "20.14.5",
     "@types/bun": "1.4.2",
+    "@typescript/typescript6": "6.0.2",
     "eslint-plugin-lit": "2.3.1",
     "openapi-typescript": "7.13.0",
     "oxfmt": "0.73.0",
     "oxlint": "1.88.0",
     "oxlint-tsgolint": "7.0.2004",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
-  "packageManager": "bun@1.4.2"
+  "packageManager": "bun@1.4.2",
+  "patchedDependencies": {
+    "openapi-typescript@7.13.0": "patches/openapi-typescript@7.13.0.patch"
+  }
 }

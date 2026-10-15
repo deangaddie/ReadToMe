@@ -26,6 +26,12 @@ bun run icons        # rebuild the subset icon font and icons.manifest.json from
 bun run icons:check  # offline: fail if icons.manifest.json differs from the IconName union
 ```
 
+`tsc` is TypeScript 7, which has no JavaScript compiler API. openapi-typescript builds its
+output with the TypeScript 6 API, so the openapi-typescript patch in `patches/` points its
+`typescript` imports at `@typescript/typescript6`. `bun install` applies the patch. When you upgrade
+openapi-typescript, run `bun patch openapi-typescript` again, or drop the patch and the shim once
+openapi-typescript supports TypeScript 7.
+
 Restart `bun run dev` after adding a file that is reached through the `@app/*` alias: the dev
 bundler does not see it until then.
 
