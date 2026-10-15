@@ -12,8 +12,8 @@ It is a thin view over the agent API ([api.md](api.md)) and the live hub, and ho
 | Dev loop with HMR | host running on `:5000`, then `bun run dev` in `src/Read2Me.Web` → `http://localhost:4300/app/` (proxies `/api`, `/hubs`, `/workspace`, `/openapi`, `/audio-preview`, `/preview-source`). Restart it after adding a file reached through `@app/*` |
 | PR gate for the web project | `bun run check` (lint + typecheck + `api:check` + `icons:check` + `bun test` + build) or `pwsh scripts/build-web.ps1 -Check` |
 | One spec | `bun test src/app/core/router.spec.ts` |
-| Browser tests | build the bundle, then `dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web."` (the trailing dot keeps `WebHostingTests`, which opens no browser, out); without a bundle every browser test skips with the command to run |
-| The same suite in Firefox | `R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests` (the gate adds the browser-tests filter above: the API and host tests open no browser, so Chromium covers them) |
+| Browser tests | build the bundle, then `dotnet test src/Read2Me.E2eTests --filter-namespace 'Read2Me.E2eTests.Tests.Web*'`; without a bundle every browser test skips with the command to run |
+| The same suite in Firefox | `R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests` (the gate adds the browser-tests namespace filter above: the API and host tests open no browser, so Chromium covers them) |
 | Every CI stage, locally | `pwsh scripts/check.ps1` (web check and build, `dotnet build`, unit, E2E Chromium, E2E Firefox over the browser tests only; `-SkipInstall` once dependencies are current; a failing E2E stage keeps its traces and screenshots in `.artifacts/e2e/<time>-<browser>/`, newest runs only) |
 | API types after a host change | run the host, then `bun run api:types`; `api:check` fails the gate when `schema.d.ts` is stale (skips with a warning when the host is down) |
 | A new icon | add the name to the `IconName` union in `ui/icons.ts`, `bun run icons` (network), commit the font and `icons.manifest.json`; `icons:check` fails the gate offline when they drift |

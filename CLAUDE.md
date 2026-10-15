@@ -37,10 +37,11 @@ bun test src/app/core/router.spec.ts    # one spec file
 bun run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
 bun run icons                           # rebuild the subset icon font from the IconName union (network); icons:check gates offline
 
+# dotnet test runs on Microsoft Testing Platform (global.json): filter with xunit's --filter-class/--filter-namespace/--filter-method, not VSTest --filter
 # E2E tests: src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
 dotnet test src/Read2Me.E2eTests         # browser tests (Tests/Web) skip unless wwwroot/app holds a built bundle
-R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # whole suite in Firefox (default chromium); the gate runs only Tests.Web. there
-dotnet test src/Read2Me.E2eTests --filter "FullyQualifiedName~Tests.Web."   # only the browser suite (the trailing dot excludes WebHostingTests)
+R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # whole suite in Firefox (default chromium); the gate runs only Tests.Web there
+dotnet test src/Read2Me.E2eTests --filter-namespace 'Read2Me.E2eTests.Tests.Web*'   # only the browser suite (Tests/Web)
 # Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 
 # PR gate: every CI stage in order, stopping at the first failure (web check and build, dotnet build, unit, E2E Chromium, E2E Firefox browser tests only)
