@@ -1,0 +1,2 @@
+# The acceptance-fixture test compares this transcript byte-for-byte, LF included; a CRLF checkout fails it.
+Infra/ContainerHealth/test-assets/*.txt text eol=lf
