@@ -132,15 +132,15 @@ function Save-E2eArtifacts {
         Sort-Object Name -Descending | Select-Object -Skip $keptRunLimit | Remove-Item -Recurse -Force
 }
 
-# Runs the E2E suite in one browser; with -Filter (dotnet test --filter syntax), only the tests it selects.
+# Runs the E2E suite in one browser; with -Namespace (xunit's --filter-namespace, * wildcard), only the tests it selects.
 function Invoke-E2e {
-    param([string]$Browser, [string]$Filter)
+    param([string]$Browser, [string]$Namespace)
     $previous = $env:R2M_E2E_BROWSER
     $started = Get-Date
     $exitCode = 0
     try {
         $env:R2M_E2E_BROWSER = $Browser
-        $filterArgs = if ($Filter) { @('--filter', $Filter) } else { @() }
+        $filterArgs = if ($Namespace) { @('--filter-namespace', $Namespace) } else { @() }
         dotnet test $e2eTests --configuration $Configuration --no-build @filterArgs
         $exitCode = $LASTEXITCODE
     }
@@ -172,8 +172,8 @@ try {
         Install-MissingPlaywrightBrowsers -Browsers @('chromium', 'firefox')
     }
     Invoke-Stage 'E2E tests (Chromium)' { Invoke-E2e 'chromium' }
-    # The trailing dot keeps Tests.WebHostingTests (no browser) out of the filter.
-    Invoke-Stage 'E2E browser tests (Firefox)' { Invoke-E2e 'firefox' -Filter 'FullyQualifiedName~Tests.Web.' }
+    # Tests.Web and any sub-namespace; Tests.WebHostingTests (no browser) is a class in Tests, so it stays out.
+    Invoke-Stage 'E2E browser tests (Firefox)' { Invoke-E2e 'firefox' -Namespace 'Read2Me.E2eTests.Tests.Web*' }
 }
 catch {
     Write-Host ''

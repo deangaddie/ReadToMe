@@ -23,7 +23,8 @@ This repository is an ASP.NET Core API host with a web front end at `/app` (cust
 - Run: `dotnet run --project src/Read2Me.App`
 - App host: <https://localhost:5001> and <http://localhost:5000> by default.
 - Web app: `pwsh scripts/build-web.ps1` (or `bun install --frozen-lockfile` + `bun run build` in `src/Read2Me.Web`); dev server `bun run dev` on `:4300/app/`; gate `bun run check`; one spec `bun test <file>`. Bun 1.4.2 is pinned by `packageManager`; no Node.
-- Browser tests: `dotnet test src/Read2Me.E2eTests` — `Tests/Web` needs the `/app` bundle (without it they skip); `R2M_E2E_BROWSER=firefox` runs them in Firefox (the PR gate runs only `--filter "FullyQualifiedName~Tests.Web."` there).
+- Browser tests: `dotnet test src/Read2Me.E2eTests` — `Tests/Web` needs the `/app` bundle (without it they skip); `R2M_E2E_BROWSER=firefox` runs them in Firefox (the PR gate runs only `--filter-namespace 'Read2Me.E2eTests.Tests.Web*'` there).
+- Tests: `dotnet test` runs on Microsoft Testing Platform (`global.json`): filter with xunit's `--filter-class`/`--filter-namespace`/`--filter-method`, not VSTest `--filter`.
 - PR gate, every CI stage in order: `pwsh scripts/check.ps1` (`-SkipInstall` once dependencies are current).
 - Ad-hoc driving of a running host: `tools/browse` or the `verify` skill.
 
