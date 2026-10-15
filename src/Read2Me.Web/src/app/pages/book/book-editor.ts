@@ -20,7 +20,8 @@ export const OWN_RECEIPT_TIMEOUT_MS = 2000;
  * import, then waits for the hub to echo this tab's own receipt — which is what reloads the rows —
  * and only reloads by hand when no receipt arrives in time (a no-op commit, or a hub that is down).
  * A refusal (422) is shown verbatim as a toast; a success shows nothing, the change itself is the
- * feedback. `newEntityId` is ignored: the receipt-driven reload already covers what was created.
+ * feedback. `newEntityId` is ignored: the receipt-driven reload already covers what was created,
+ * and reveals a paragraph this tab created (see `planReceipt`).
  * Page-scoped like the store: the project shell provides one per project.
  */
 export class BookEditor {
@@ -47,20 +48,7 @@ export class BookEditor {
    * `newEntityId` (creating a character to assign it). Undefined when refused or not sent.
    */
   async execute(command: BookCommand): Promise<CommandResponse | undefined> {
-    const response = (await this.settle((folder) => this.book.execute(folder, command)))?.value;
-    if (response && command.type === 'InsertNode') {
-      // The receipt names only the new paragraph, which no loaded chapter holds yet, so the store
-      // is told where it went: an empty chapter is usually not open in the reader at all. A new
-      // volume, part or chapter is empty, so the receipt's tree reload is all it needs; an item at
-      // a paragraph's start or end is named with its paragraph, which the receipt rereads in place.
-      const beside = command.placement === 'Before' || command.placement === 'After';
-      if (command.anchorKind === 'Chapter' && !beside) {
-        await this.store.revealInsertedParagraph({ kind: 'chapter', id: command.anchorId });
-      } else if (command.anchorKind === 'Paragraph' && beside) {
-        await this.store.revealInsertedParagraph({ kind: 'paragraph', id: command.anchorId });
-      }
-    }
-    return response;
+    return (await this.settle((folder) => this.book.execute(folder, command)))?.value;
   }
 
   /**

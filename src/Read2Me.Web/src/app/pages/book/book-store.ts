@@ -256,27 +256,6 @@ export class BookStore {
   }
 
   /**
-   * Shows a paragraph just inserted at `anchor` (Node insertion): a chapter anchor not in the
-   * window is opened — an emptied chapter usually is not — and a chapter already loaded is read
-   * again in place, since the receipt names only the new paragraph and so rereads just the chapter
-   * on screen. A paragraph anchor the reader does not hold leaves nothing to reveal.
-   */
-  async revealInsertedParagraph(anchor: { kind: 'chapter' | 'paragraph'; id: string }): Promise<void> {
-    const chapterId = anchor.kind === 'chapter' ? anchor.id : this.chapterHolding(anchor.id);
-    if (!chapterId) return;
-    if (this._window().includes(chapterId)) {
-      await this.readOrMarkStale(() => this.loadChapter(chapterId));
-    } else {
-      await this.openChapter(chapterId);
-    }
-  }
-
-  private chapterHolding(paragraphId: string): string | undefined {
-    const paragraphs = this._paragraphs();
-    return this._window().find((id) => paragraphs[id]?.some((p) => p.id === paragraphId));
-  }
-
-  /**
    * Appends the chapter after the window, if there is one. `dropFar` false keeps the first chapter
    * even past {@link WINDOW_CAP}: the reader passes it while that chapter is still on screen.
    */
@@ -591,6 +570,12 @@ export class BookStore {
         ...voices.map((id) => this.loadVoices(id)),
       ]);
       if (plan.reloadOverview) await this.reconcileWindow();
+      // A paragraph this view created in a chapter it had not loaded (an empty chapter usually is
+      // not open): show it where it landed. A read of that chapter begun before the commit may
+      // have brought it into the window meanwhile, so it is read again rather than only scrolled to.
+      const reveal = plan.revealChapter;
+      if (reveal && this._window().includes(reveal)) await this.loadChapter(reveal);
+      if (reveal) await this.openChapter(reveal);
     } catch (error) {
       this._stale.set(messageOf(error));
     }
@@ -607,6 +592,7 @@ function refreshPlan(chapters: readonly string[]): ReceiptPlan {
     dropOtherChapters: false,
     toast: false,
     gap: true,
+    revealChapter: null,
   };
 }
 
@@ -620,6 +606,8 @@ function mergePlans(a: ReceiptPlan, b: ReceiptPlan): ReceiptPlan {
     dropOtherChapters: a.dropOtherChapters || b.dropOtherChapters,
     toast: a.toast || b.toast,
     gap: a.gap || b.gap,
+    // Opening a chapter replaces the window, so only one reveal can win: the later one.
+    revealChapter: b.revealChapter ?? a.revealChapter,
   };
 }
 
